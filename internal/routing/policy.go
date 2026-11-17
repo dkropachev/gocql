@@ -4,7 +4,7 @@
 package routing
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 
@@ -30,16 +30,16 @@ import (
 type PartitionKey struct{ state PartitionKeyState }
 
 func (k PartitionKey) Len() int64 { return PartitionKeyData(&k).chain.Len() }
-func (k PartitionKey) ForEach(fn func(cqltype.Bytes) error) error {
+func (k PartitionKey) ForEach(fn func(cql.Bytes) error) error {
 	if fn == nil {
-		return cqltype.TypeValidation("partition key", "nil visitor")
+		return cql.TypeValidation("partition key", "nil visitor")
 	}
 	return PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
 		c, e := wire.NewChain(s)
 		if e != nil {
 			return e
 		}
-		return fn(cqltype.BytesView(c, wire.Ref{}))
+		return fn(cql.BytesView(c, wire.Ref{}))
 	})
 }
 
@@ -55,14 +55,14 @@ var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return cqltype.TypeValidation("partition key", "invalid column index")
+			return cql.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State != cqltype.Null && c.State != cqltype.Unset && c.State != cqltype.Present {
-			return cqltype.TypeValidation("partition key", "invalid cell state")
+		if c.State != cql.Null && c.State != cql.Unset && c.State != cql.Present {
+			return cql.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
-			return cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+			return cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 		}
 	}
 	return nil
@@ -75,16 +75,16 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	missing := false
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
+			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State == cqltype.Null || c.State == cqltype.Unset {
+		if c.State == cql.Null || c.State == cql.Unset {
 			missing = true
-		} else if c.State != cqltype.Present {
-			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
+		} else if c.State != cql.Present {
+			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
-			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 		}
 	}
 	if missing {
@@ -93,18 +93,18 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	b := wire.NewBuilder(256)
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
+			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State == cqltype.Null || c.State == cqltype.Unset {
+		if c.State == cql.Null || c.State == cql.Unset {
 			return *NewPartitionKey(PartitionKeyState{}), false, nil
 		}
-		if c.State != cqltype.Present {
-			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
+		if c.State != cql.Present {
+			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 {
 			if c.Body.Len() > 65535 {
-				return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+				return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 			}
 			if e := b.Uint16(uint16(c.Body.Len())); e != nil {
 				return *NewPartitionKey(PartitionKeyState{}), false, e
@@ -122,11 +122,11 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	c, e := b.Freeze()
 	return *NewPartitionKey(PartitionKeyState{chain: c}), e == nil, e
 }
-func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p TokenPartitioner) (cqltype.Option[int64], error) {
+func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p TokenPartitioner) (cql.Option[int64], error) {
 	if _, builtin := p.(murmur3StreamingPartitioner); builtin {
 		for _, index := range indexes {
-			if index >= 0 && index < len(cells) && cells[index].State != cqltype.Present && cells[index].State != cqltype.Null && cells[index].State != cqltype.Unset {
-				return cqltype.Option[int64]{}, cqltype.TypeValidation("partition key", "invalid cell state")
+			if index >= 0 && index < len(cells) && cells[index].State != cql.Present && cells[index].State != cql.Null && cells[index].State != cql.Unset {
+				return cql.Option[int64]{}, cql.TypeValidation("partition key", "invalid cell state")
 			}
 		}
 		token, err := InternalRoutingToken(cells, indexes)
@@ -137,14 +137,14 @@ func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p Tok
 	}
 	if p == nil {
 		// No partitioner, no token: only validate, without building the key.
-		return cqltype.Option[int64]{}, validatePartitionKey(cells, indexes)
+		return cql.Option[int64]{}, validatePartitionKey(cells, indexes)
 	}
 	k, ok, e := InternalNewPartitionKey(cells, indexes)
 	if e != nil || !ok {
-		return cqltype.Option[int64]{}, e
+		return cql.Option[int64]{}, e
 	}
 	v, e := p.Token(k)
-	return cqltype.Option[int64]{Value: v, Set: e == nil}, e
+	return cql.Option[int64]{Value: v, Set: e == nil}, e
 }
 
 type cdcStreamingPartitioner struct{}
@@ -203,7 +203,7 @@ type InternalRoutingLatency struct {
 	InternalSamples int
 	mu              sync.Mutex
 }
-type InternalRoutingDecisions struct{ InternalSlow map[cqltype.UUID]time.Time }
+type InternalRoutingDecisions struct{ InternalSlow map[cql.UUID]time.Time }
 type InternalRoutingPolicy struct {
 	InternalDecisions atomic.Pointer[InternalRoutingDecisions]
 	updateAfter       atomic.Pointer[time.Time]
@@ -214,7 +214,7 @@ type InternalRoutingPolicy struct {
 	// a plan applies when replicas are not shuffled per request, which
 	// depends only on seed and the count.
 	fixed             *[17][16]uint8
-	InternalLatencies syncx.Map[cqltype.UUID, *InternalRoutingLatency]
+	InternalLatencies syncx.Map[cql.UUID, *InternalRoutingLatency]
 	InternalOptions   RoutingOptions
 	seed              uint64
 	round             atomic.Uint64
@@ -223,7 +223,7 @@ type InternalRoutingPolicy struct {
 
 func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 	if o.Rack != "" && o.Datacenter == "" {
-		return nil, cqltype.TypeValidation("routing rack", "requires a datacenter")
+		return nil, cql.TypeValidation("routing rack", "requires a datacenter")
 	}
 	if o.Latency.Enabled {
 		if o.Latency.ExclusionThreshold == 0 {
@@ -242,7 +242,7 @@ func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 			o.Latency.UpdateInterval = time.Second
 		}
 		if o.Latency.ExclusionThreshold < 1 || math.IsNaN(o.Latency.ExclusionThreshold) || math.IsInf(o.Latency.ExclusionThreshold, 0) || o.Latency.MinimumSamples < 1 || o.Latency.Scale <= 0 || o.Latency.RetryPeriod <= 0 || o.Latency.UpdateInterval <= 0 {
-			return nil, cqltype.TypeValidation("latency routing", "invalid configuration")
+			return nil, cql.TypeValidation("latency routing", "invalid configuration")
 		}
 	}
 	p := &InternalRoutingPolicy{InternalOptions: o, seed: rand.Uint64()}
@@ -261,7 +261,7 @@ var validateRackLookup func()
 
 func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	if m == nil {
-		return cqltype.TypeValidation("routing", "missing metadata")
+		return cql.TypeValidation("routing", "missing metadata")
 	}
 	if p.InternalOptions.Datacenter == "" {
 		return nil
@@ -287,14 +287,14 @@ func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 func (p *InternalRoutingPolicy) validateIndex(idx *InternalRoutingHostIndex) error {
 	o := &p.InternalOptions
 	if idx.enabledDC[o.Datacenter] <= 0 {
-		return cqltype.TypeValidation("routing datacenter", "%q has no eligible hosts", o.Datacenter)
+		return cql.TypeValidation("routing datacenter", "%q has no eligible hosts", o.Datacenter)
 	}
 	if o.Rack != "" {
 		if validateRackLookup != nil {
 			validateRackLookup()
 		}
 		if idx.enabledRack[routingLocality{o.Datacenter, o.Rack}] <= 0 {
-			return cqltype.TypeValidation("routing rack", "%q has no eligible hosts", o.Rack)
+			return cql.TypeValidation("routing rack", "%q has no eligible hosts", o.Rack)
 		}
 	}
 	return nil
@@ -341,7 +341,7 @@ type routingLocality struct{ dc, rack string }
 type InternalRoutingHostIndex struct {
 	enabledDC   map[string]int
 	enabledRack map[routingLocality]int
-	byID        map[cqltype.UUID]int
+	byID        map[cql.UUID]int
 	dc          map[string][]int
 	rack        map[routingLocality][]int
 	all         []int
@@ -349,14 +349,14 @@ type InternalRoutingHostIndex struct {
 	routes []*pool.HostRoute
 	// ids holds the hosts' IDs in host order when there are few enough
 	// that scanning them beats hashing an ID.
-	ids []cqltype.UUID
+	ids []cql.UUID
 }
 
 // smallHostIndex is the most hosts whose IDs a lookup scans.
 const smallHostIndex = 16
 
 // host returns the position of the host with id.
-func (x *InternalRoutingHostIndex) host(id cqltype.UUID) (int, bool) {
+func (x *InternalRoutingHostIndex) host(id cql.UUID) (int, bool) {
 	if x.ids != nil {
 		for i := range x.ids {
 			if x.ids[i] == id {
@@ -377,8 +377,8 @@ func InternalBuildRoutingHostIndex(hosts []HostSnapshot) *InternalRoutingHostInd
 
 // InternalBuildRoutingHostIndexWith indexes hosts with the routes route
 // returns for their IDs.
-func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(cqltype.UUID) *pool.HostRoute) *InternalRoutingHostIndex {
-	x := &InternalRoutingHostIndex{enabledDC: make(map[string]int), enabledRack: make(map[routingLocality]int), byID: make(map[cqltype.UUID]int, len(hosts)), dc: make(map[string][]int), rack: make(map[routingLocality][]int), routes: make([]*pool.HostRoute, len(hosts))}
+func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(cql.UUID) *pool.HostRoute) *InternalRoutingHostIndex {
+	x := &InternalRoutingHostIndex{enabledDC: make(map[string]int), enabledRack: make(map[routingLocality]int), byID: make(map[cql.UUID]int, len(hosts)), dc: make(map[string][]int), rack: make(map[routingLocality][]int), routes: make([]*pool.HostRoute, len(hosts))}
 	for i, h := range hosts {
 		perfAdd(2, 1)
 		x.byID[h.ID] = i
@@ -418,12 +418,12 @@ type InternalLazyRoutingPlan struct {
 	replicas                   []Target
 	permutation                []int // used only when replicas exceed the inline capacity
 	groups                     [3][]int
-	leader                     cqltype.Option[Target]
+	leader                     cql.Option[Target]
 	stage, cursor, latencyPass int
 	rotation                   int
 	token                      int64
 	smallPermutation           [16]uint8
-	shard                      cqltype.Option[uint32] // the request's own shard, for every host
+	shard                      cql.Option[uint32] // the request's own shard, for every host
 	pinned                     bool
 	tokenSet                   bool
 	// rotate says that the fallback tiers start at a rotating offset, taken
@@ -448,7 +448,7 @@ func (p *InternalRoutingPolicy) Pick(info model.RoutingInfo, m *MetadataSnapshot
 	if m == nil || info.HostID.Set || !o.ShuffleReplicas || !o.TokenAware || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return Route{}, false
 	}
-	if info.Conditional || info.Kind != cqltype.OrdinaryStatement || info.Consistency == cqltype.Serial || info.Consistency == cqltype.LocalSerial {
+	if info.Conditional || info.Kind != cql.OrdinaryStatement || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
 		return Route{}, false
 	}
 	if d := p.InternalDecisions.Load(); d != nil && len(d.InternalSlow) > 0 {
@@ -473,19 +473,19 @@ const smallReplicas = 16
 
 // leader is the replica that leads info's token range when leader-aware
 // routing applies to info.
-func (p *InternalRoutingPolicy) leader(info model.RoutingInfo, m *MetadataSnapshot, lookup *InternalTabletLookup) cqltype.Option[Target] {
+func (p *InternalRoutingPolicy) leader(info model.RoutingInfo, m *MetadataSnapshot, lookup *InternalTabletLookup) cql.Option[Target] {
 	o := &p.InternalOptions
-	if !o.LeaderAware || !o.TokenAware || !info.Token.Set || info.Consistency == cqltype.One || info.Consistency == cqltype.LocalOne {
-		return cqltype.Option[Target]{}
+	if !o.LeaderAware || !o.TokenAware || !info.Token.Set || info.Consistency == cql.One || info.Consistency == cql.LocalOne {
+		return cql.Option[Target]{}
 	}
 	if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks == nil || ks.ConsistencyMode != "global" {
-		return cqltype.Option[Target]{}
+		return cql.Option[Target]{}
 	}
 	_, r := m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
 	if r != nil && r.InternalVersion.Set && len(r.InternalSpan.Replicas) > 0 {
-		return cqltype.Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
+		return cql.Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
 	}
-	return cqltype.Option[Target]{}
+	return cql.Option[Target]{}
 }
 
 // preferred reports whether a pick may route to replica host h: h is
@@ -498,7 +498,7 @@ func (o *RoutingOptions) preferred(h *HostSnapshot) bool {
 // replicaRoute is the route to replica t of host h: to the request's shard
 // when it names one, else to the shard placement names, else to the shard
 // owning token.
-func replicaRoute(host *pool.HostRoute, t Target, h *HostSnapshot, shard cqltype.Option[uint32], token int64) Route {
+func replicaRoute(host *pool.HostRoute, t Target, h *HostSnapshot, shard cql.Option[uint32], token int64) Route {
 	if !shard.Set {
 		shard = t.ShardID
 	}
@@ -533,7 +533,7 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info model.RoutingInfo, m *Meta
 
 // planWith initializes plan; a plan that may pick tries Pick's route first.
 func (p *InternalRoutingPolicy) planWith(info model.RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup, mayPick bool) QueryPlan {
-	info.Conditional = info.Conditional || info.Kind != cqltype.OrdinaryStatement
+	info.Conditional = info.Conditional || info.Kind != cql.OrdinaryStatement
 	if m == nil {
 		return &InternalTargetPlan{}
 	}
@@ -551,7 +551,7 @@ func (p *InternalRoutingPolicy) planWith(info model.RoutingInfo, m *MetadataSnap
 		plan.pinned = true
 		// Pinned plans never traverse replica leaders. Keep only the captured
 		// destination in that slot instead of retaining all routing inputs.
-		plan.leader = cqltype.Option[Target]{Value: Target{HostID: info.HostID.Value}, Set: true}
+		plan.leader = cql.Option[Target]{Value: Target{HostID: info.HostID.Value}, Set: true}
 		return plan
 	}
 	o := &p.InternalOptions
@@ -568,7 +568,7 @@ func (p *InternalRoutingPolicy) planWith(info model.RoutingInfo, m *MetadataSnap
 	if o.TokenAware && info.Token.Set && info.Keyspace != "" && info.Table != "" {
 		plan.replicas, _ = m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
-	plan.conditional = info.Conditional || info.Consistency == cqltype.Serial || info.Consistency == cqltype.LocalSerial
+	plan.conditional = info.Conditional || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial
 	if o.LeaderAware {
 		plan.leader = p.leader(info, m, lookup)
 	}
@@ -811,7 +811,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 	if !p.pinned && p.metadata != nil && SnapshotData(p.metadata).InternalPlacementSignal != nil && SnapshotData(p.metadata).InternalPlacementEpoch != SnapshotData(p.metadata).InternalPlacementSignal.Load() {
 		p.replicas = nil
 		p.permutation = nil
-		p.leader = cqltype.Option[Target]{}
+		p.leader = cql.Option[Target]{}
 		if p.stage <= 3 {
 			p.stage = 4
 			p.cursor = 0
@@ -988,7 +988,7 @@ func (p *InternalRoutingPolicy) Observe(e AttemptEvent) {
 		}
 		v.mu.Unlock()
 	}
-	decisions := &InternalRoutingDecisions{InternalSlow: make(map[cqltype.UUID]time.Time)}
+	decisions := &InternalRoutingDecisions{InternalSlow: make(map[cql.UUID]time.Time)}
 	for key, v := range p.InternalLatencies.All() {
 		v.mu.Lock()
 		if v.InternalSamples >= p.InternalOptions.Latency.MinimumSamples && v.InternalValue > minimum*p.InternalOptions.Latency.ExclusionThreshold {
@@ -1021,20 +1021,20 @@ func SingleTargetRouting(t Target, strictShard bool) RoutingPolicy {
 }
 func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 	if (p.strict || p.target.StrictShard) && !p.target.ShardID.Set {
-		return cqltype.TypeValidation("routing shard", "strict target requires a shard ID")
+		return cql.TypeValidation("routing shard", "strict target requires a shard ID")
 	}
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
 				if (p.strict || p.target.StrictShard) && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
-					return cqltype.TypeValidation("routing shard", "unavailable shard")
+					return cql.TypeValidation("routing shard", "unavailable shard")
 				}
 				return nil
 			}
 		}
 	}
-	return cqltype.TypeValidation("routing host", "host is not eligible")
+	return cql.TypeValidation("routing host", "host is not eligible")
 }
 
 // Pick returns false: a single target's plan is already its first route.
@@ -1053,7 +1053,7 @@ func (p *singleTargetRouting) Fallback(_ model.RoutingInfo, m *MetadataSnapshot)
 					if t.StrictShard {
 						return &InternalTargetPlan{}
 					}
-					t.ShardID = cqltype.Option[uint32]{}
+					t.ShardID = cql.Option[uint32]{}
 				}
 				return &InternalTargetPlan{InternalTargets: []Target{t}, hosts: []*pool.HostRoute{m.routingIndex().routes[i]}}
 			}
@@ -1079,7 +1079,7 @@ func InternalRoutingLatencySample(err error) bool {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, runtimeerrors.ErrNoConnections) || errors.Is(err, runtimeerrors.ErrConnectionClosed) {
 		return false
 	}
-	if _, ok := errors.AsType[*cqltype.ValidationError](err); ok {
+	if _, ok := errors.AsType[*cql.ValidationError](err); ok {
 		return false
 	}
 	if _, ok := errors.AsType[net.Error](err); ok {

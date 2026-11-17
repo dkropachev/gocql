@@ -10,8 +10,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -22,7 +22,7 @@ import (
 func TestTopology(t *testing.T) {
 	t.Run("Contacts", func(t *testing.T) {
 		t.Run("DistinctIdentities", func(t *testing.T) {
-			ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
+			ids := []cql.UUID{cql.RandomUUID(), cql.RandomUUID()}
 			contacts := make([]string, 2)
 			for i := range contacts {
 				id := ids[i]

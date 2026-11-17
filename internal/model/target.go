@@ -3,10 +3,12 @@
 
 package model
 
-import "github.com/scylladb/gocql/v2/internal/cqltype"
+import (
+	"github.com/scylladb/gocql/v2/cql"
+)
 
 type Target struct {
 	StrictShard bool
-	HostID      cqltype.UUID
-	ShardID     cqltype.Option[uint32]
+	HostID      cql.UUID
+	ShardID     cql.Option[uint32]
 }

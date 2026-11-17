@@ -4,24 +4,21 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
-	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-
 	"encoding/binary"
 	"testing"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implModel "github.com/scylladb/gocql/v2/internal/model"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
+func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
 	t.Helper()
 	rs := make([]tablets.ReplicaInfo, len(replicas))
 	for i, r := range replicas {
@@ -87,14 +84,14 @@ func testDrain(s *cluster.Core) {
 	s.PublishTabletFeedback(p, updates, resync)
 }
 func hTarget(id byte, shard uint32) implModel.Target {
-	return implModel.Target{HostID: implCqltype.UUID{15: id}, ShardID: implCqltype.Option[uint32]{Value: shard, Set: true}}
+	return implModel.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 }
 
 func FuzzTabletPayload(f *testing.F) {
 	h, _ := tablets.NewTabletInfo("ks", "table", 0, 100, []tablets.ReplicaInfo{tablets.NewReplicaInfo(tablets.HostUUID{1}, 0)})
 	f.Add(testPayload(h.WithVersion(7)), true)
 	f.Fuzz(func(t *testing.T, data []byte, v2 bool) {
-		h, err := transport.InternalParseTypedTabletPayload(implCqltype.BorrowBytes(data), "ks", "table", v2)
+		h, err := transport.InternalParseTypedTabletPayload(cql.BorrowBytes(data), "ks", "table", v2)
 		if err == nil {
 			if h.FirstToken() >= h.LastToken() {
 				t.Fatal("invalid range")
@@ -115,10 +112,10 @@ type capturedPartitioner struct {
 
 func (p *capturedPartitioner) Token(key implRouting.PartitionKey) (int64, error) {
 	p.calls++
-	err := key.ForEach(func(b implCqltype.Bytes) error {
-		return cqltype.EachBytes(b, func(s wire.Span) error {
+	err := key.ForEach(func(b cql.Bytes) error {
+		return cql.EachBytes(b, func(s wire.Span) error {
 			if len(s.Bytes()) != len(p.expected) || len(p.expected) > 0 && &s.Bytes()[0] != &p.expected[0] {
-				return implCqltype.TypeValidation("partitioner", "payload was reencoded or copied")
+				return cql.TypeValidation("partitioner", "payload was reencoded or copied")
 			}
 			return nil
 		})

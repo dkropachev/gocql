@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -17,7 +17,7 @@ import (
 // Cold-path replica precomputation uses the same distinct-node/rack-budget
 // traversal for every factor, then retains its global ring order for LWT.
 func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metadata.KeyspaceMetadata) ([]routing.TokenRange, error) {
-	hosts := make(map[cqltype.UUID]*implEndpoint.HostInfo)
+	hosts := make(map[cql.UUID]*implEndpoint.HostInfo)
 	dcHosts := make(map[string]int)
 	dcRacks := make(map[string]map[string]bool)
 	for _, entry := range ring.InternalTokens {
@@ -37,7 +37,7 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 	factor := func(value string, cap int) (int, error) {
 		n, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return 0, cqltype.TypeValidation("replication factor", "invalid value %q", value)
+			return 0, cql.TypeValidation("replication factor", "invalid value %q", value)
 		}
 		if n > uint64(cap) {
 			return cap, nil
@@ -71,10 +71,10 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 	for i, entry := range ring.InternalTokens {
 		token, ok := entry.InternalToken.(implEndpoint.InternalInt64Token)
 		if !ok {
-			return nil, cqltype.TypeValidation("replica placement", "non-int64 token")
+			return nil, cql.TypeValidation("replica placement", "non-int64 token")
 		}
 		out[i].End = int64(token)
-		seen := make(map[cqltype.UUID]bool)
+		seen := make(map[cql.UUID]bool)
 		counts := make(map[string]int)
 		racks := make(map[string]map[string]bool)
 		repeats := make(map[string]int)

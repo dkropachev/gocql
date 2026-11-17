@@ -10,10 +10,9 @@ import (
 	"sync/atomic"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -45,7 +44,7 @@ type Batch struct {
 	// values holds the encoded values of every entry back to back.
 	values []byte
 	// exec is the request Session.ExecBatch admits; admission copies it.
-	exec Bound[codec.EmptyRecord]
+	exec Bound[cql.EmptyRow]
 	// state is the execution state lent to an execution while no earlier
 	// one may still read it.
 	state   batchState
@@ -58,7 +57,7 @@ type Batch struct {
 	shared bool
 	// Kind is the batch's kind, sent with every execution of the batch. The
 	// zero value is LoggedBatch.
-	Kind cqltype.BatchKind
+	Kind cql.BatchKind
 }
 
 // batchEntry is one statement of a batch. Its encoded values are
@@ -66,11 +65,11 @@ type Batch struct {
 type batchEntry struct {
 	source     statementSource
 	statement  string
-	columns    cqltype.Columns
+	columns    cql.Columns
 	start, end int
 	count      int
 	// kind is the statement's classification when it joined the batch.
-	kind cqltype.StatementKind
+	kind cql.StatementKind
 }
 
 // batchState is the batch an execution sends: a snapshot of the
@@ -82,7 +81,7 @@ type batchState struct {
 	// a concurrent speculative attempt builds its own.
 	attempt     model.TypedBatchRequest
 	attemptBusy atomic.Bool
-	kind        cqltype.BatchKind
+	kind        cql.BatchKind
 }
 
 // Len returns the number of statements in the batch.
@@ -136,7 +135,7 @@ func (b *Batch) begin() *batchState {
 // request returns the batch's request routing.
 func (b *Batch) requestRouting() model.RoutingInfo {
 	routing := b.routing
-	routing.Conditional = routing.Kind != cqltype.OrdinaryStatement
+	routing.Conditional = routing.Kind != cql.OrdinaryStatement
 	return routing
 }
 
@@ -145,16 +144,16 @@ func (b *Batch) requestRouting() model.RoutingInfo {
 // ignored: the options compiled for statements serve batches too.
 func validateBatch(s *implCluster.Core, batch *Batch) error {
 	if batch == nil {
-		return cqltype.TypeValidation("batch", "nil batch")
+		return cql.TypeValidation("batch", "nil batch")
 	}
 	if len(batch.entries) == 0 {
-		return cqltype.TypeValidation("batch", "empty")
+		return cql.TypeValidation("batch", "empty")
 	}
-	if kind := batch.Kind; kind != cqltype.LoggedBatch && kind != cqltype.UnloggedBatch && kind != cqltype.CounterBatch {
-		return cqltype.TypeValidation("batch kind", "unknown kind")
+	if kind := batch.Kind; kind != cql.LoggedBatch && kind != cql.UnloggedBatch && kind != cql.CounterBatch {
+		return cql.TypeValidation("batch kind", "unknown kind")
 	}
 	if batch.session != s {
-		return cqltype.TypeValidation("batch session", "statements belong to another session")
+		return cql.TypeValidation("batch session", "statements belong to another session")
 	}
 	return nil
 }
@@ -180,7 +179,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 // appends the statement. template is the statement's routing; the token is
 // computed from the encoded values. b.params keeps viewing the entry's bytes
 // until the next add; nothing reads them through it.
-func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *model.RoutingInfo, plan codec.ParamPlan[P], columns cqltype.Columns, value P, allowUnset bool) error {
+func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *model.RoutingInfo, plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) error {
 	if err := b.admit(s, template); err != nil {
 		return err
 	}
@@ -201,16 +200,16 @@ func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, sta
 // admit checks that a statement of session s with routing r may join b.
 func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 	if b == nil {
-		return cqltype.TypeValidation("batch", "nil batch")
+		return cql.TypeValidation("batch", "nil batch")
 	}
 	if len(b.entries) == implCluster.MaxBatchStatements {
-		return cqltype.TypeValidation("batch", "full (%d statements)", implCluster.MaxBatchStatements)
+		return cql.TypeValidation("batch", "full (%d statements)", implCluster.MaxBatchStatements)
 	}
 	if b.session != nil && b.session != s {
-		return cqltype.TypeValidation("batch session", "statements belong to different sessions")
+		return cql.TypeValidation("batch session", "statements belong to different sessions")
 	}
 	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
-		return cqltype.TypeValidation("batch keyspace", "members use different keyspaces")
+		return cql.TypeValidation("batch keyspace", "members use different keyspaces")
 	}
 	return nil
 }
@@ -227,7 +226,7 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		kind:      r.Kind,
 	})
 	if len(b.entries) == 1 {
-		b.routing.Kind = cqltype.OrdinaryStatement
+		b.routing.Kind = cql.OrdinaryStatement
 	}
 	b.session = s
 	if r.Keyspace != "" {
@@ -237,21 +236,21 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		b.routing.Token, b.routing.Table = r.Token, r.Table
 	}
 	switch {
-	case r.Kind == cqltype.ConditionalStatement:
-		b.routing.Kind = cqltype.ConditionalStatement
-	case r.Kind == cqltype.UnknownStatement && b.routing.Kind != cqltype.ConditionalStatement:
-		b.routing.Kind = cqltype.UnknownStatement
+	case r.Kind == cql.ConditionalStatement:
+		b.routing.Kind = cql.ConditionalStatement
+	case r.Kind == cql.UnknownStatement && b.routing.Kind != cql.ConditionalStatement:
+		b.routing.Kind = cql.UnknownStatement
 	}
 }
 
 // InternalAddBound appends bound's statement and values to batch.
 func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R]) error {
 	if bound == nil || bound.privateStorage.InternalRequest.InternalOwner == nil {
-		return cqltype.TypeValidation("batch item", "nil binding")
+		return cql.TypeValidation("batch item", "nil binding")
 	}
 	request := &bound.privateStorage.InternalRequest
 	if state := request.InternalPrepared(); state != nil && state.InternalSession != s {
-		return cqltype.TypeValidation("batch session", "prepared statement belongs to another session")
+		return cql.TypeValidation("batch session", "prepared statement belongs to another session")
 	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return err
@@ -266,17 +265,17 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState) {
 	state := b.begin()
 	b.lastQuery, b.lastGen = q, q.generation.Load()
-	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cqltype.CounterBatch}
+	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cql.CounterBatch}
 }
 
 // batchQueries returns the pool of queries that run rt's batches, created on
 // first use. A batch runs on a pooled query, as a prepared statement's
 // one-shot call does, so that sending a reused batch allocates nothing.
-func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, codec.EmptyRecord], error) {
+func (rt *InternalSessionRuntime) batchQueries() (*queryPool[cql.EmptyRow, cql.EmptyRow], error) {
 	rt.batchOnce.Do(func() {
 		s := rt.Core
-		rt.batchPool, rt.batchErr = newQueryPool(s, func(base *queryPoolBase) (*Query[codec.EmptyRecord, codec.EmptyRecord], error) {
-			q := &Query[codec.EmptyRecord, codec.EmptyRecord]{}
+		rt.batchPool, rt.batchErr = newQueryPool(s, func(base *queryPoolBase) (*Query[cql.EmptyRow, cql.EmptyRow], error) {
+			q := &Query[cql.EmptyRow, cql.EmptyRow]{}
 			q.bound.privateStorage.rows = &q.rows
 			if err := newQueryState(s, &q.state, q.retire, base); err != nil {
 				return nil, err
@@ -292,7 +291,7 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[codec.EmptyRecord, 
 // beginBatch validates a batch call on s and takes a pooled query that has
 // begun an execution for it. The caller releases the query's owner when the
 // execution no longer needs it.
-func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[codec.EmptyRecord, codec.EmptyRecord], error) {
+func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[cql.EmptyRow, cql.EmptyRow], error) {
 	if err := validateBatch(s, batch); err != nil {
 		return nil, err
 	}
@@ -305,7 +304,7 @@ func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[
 
 // sendBatchRows sends batch on s on a pooled query it holds until the rows
 // are closed, and returns the batch's storage the rows use.
-func sendBatchRows[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (*batchRows[R], Rows[R], error) {
+func sendBatchRows[R any](ctx context.Context, s *implCluster.Core, batch *Batch, decoder cql.RowDecoder[R], options CompiledOptions) (*batchRows[R], Rows[R], error) {
 	q, err := beginBatch(ctx, s, batch)
 	if err != nil {
 		return nil, Rows[R]{}, err
@@ -339,7 +338,7 @@ type batchRows[R any] struct {
 // reuses the storage of b's latest RunBatch with the same R once that
 // execution's rows are closed, keeping its compiled plans while decoder is
 // the same value.
-func (b *Batch) rowsFor[R any](decoder codec.RowDecoder[R]) *batchRows[R] {
+func (b *Batch) rowsFor[R any](decoder cql.RowDecoder[R]) *batchRows[R] {
 	r, ok := b.rows.(*batchRows[R])
 	if !ok || !r.idle() {
 		r = new(batchRows[R])
@@ -379,7 +378,7 @@ func (r *batchRows[R]) retag(rows Rows[R]) Rows[R] {
 // passed again matches; an equal decoder built anew may not, which only
 // costs a plan compile. Plain == would panic on decoders that are not
 // comparable, such as cql.Row's.
-func sameRowDecoder[R any](a, b codec.RowDecoder[R]) bool {
+func sameRowDecoder[R any](a, b cql.RowDecoder[R]) bool {
 	type iface struct{ tab, data unsafe.Pointer }
 	return *(*iface)(unsafe.Pointer(&a)) == *(*iface)(unsafe.Pointer(&b))
 }
@@ -448,5 +447,5 @@ func (s *InternalSessionRuntime) repairBatch(ctx context.Context, conn *transpor
 			return err
 		}
 	}
-	return &cqltype.ProtocolError{Stage: "batch unprepared", Err: fmt.Errorf("unknown statement ID")}
+	return &cql.ProtocolError{Stage: "batch unprepared", Err: fmt.Errorf("unknown statement ID")}
 }

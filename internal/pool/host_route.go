@@ -7,7 +7,7 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -22,14 +22,14 @@ const AnyShard int32 = -1
 type HostRoute struct {
 	owner *InternalPolicyConnPool // nil for a route made outside a session
 	pool  atomic.Pointer[InternalHostConnPool]
-	id    cqltype.UUID
+	id    cql.UUID
 }
 
 // NewHostRoute returns a route of id that belongs to no session; it has no
 // pool, and a request resolves it through its session's pools by ID.
-func NewHostRoute(id cqltype.UUID) *HostRoute { return &HostRoute{id: id} }
+func NewHostRoute(id cql.UUID) *HostRoute { return &HostRoute{id: id} }
 
-func (r *HostRoute) ID() cqltype.UUID { return r.id }
+func (r *HostRoute) ID() cql.UUID { return r.id }
 
 // Bound reports whether the route belongs to a session's pools.
 func (r *HostRoute) Bound() bool { return r.owner != nil }
@@ -46,7 +46,7 @@ func (r *HostRoute) Pool() *InternalHostConnPool {
 }
 
 // InternalRoute returns the session's route of a host, made on first use.
-func (p *InternalPolicyConnPool) InternalRoute(id cqltype.UUID) *HostRoute {
+func (p *InternalPolicyConnPool) InternalRoute(id cql.UUID) *HostRoute {
 	p.InternalMu.RLock()
 	r := p.routes[id]
 	p.InternalMu.RUnlock()
@@ -57,7 +57,7 @@ func (p *InternalPolicyConnPool) InternalRoute(id cqltype.UUID) *HostRoute {
 	defer p.InternalMu.Unlock()
 	if r = p.routes[id]; r == nil {
 		if p.routes == nil {
-			p.routes = make(map[cqltype.UUID]*HostRoute)
+			p.routes = make(map[cql.UUID]*HostRoute)
 		}
 		r = &HostRoute{owner: p, id: id}
 		if pool := p.InternalHostConnPools[id]; pool != nil {
@@ -81,7 +81,7 @@ func (p *InternalPolicyConnPool) bindRoute(r *HostRoute) *InternalHostConnPool {
 
 // routeChangedLocked tells a host's route, if it has one, that the host's
 // pool is now pool (nil once removed). Must be called with p.InternalMu held.
-func (p *InternalPolicyConnPool) routeChangedLocked(id cqltype.UUID, pool *InternalHostConnPool) {
+func (p *InternalPolicyConnPool) routeChangedLocked(id cql.UUID, pool *InternalHostConnPool) {
 	if r := p.routes[id]; r != nil {
 		r.pool.Store(pool)
 	}

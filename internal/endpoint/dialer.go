@@ -21,13 +21,11 @@ package endpoint
 
 import (
 	"context"
-
 	"net"
 	"net/netip"
-
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -37,7 +35,7 @@ type DialTarget struct {
 	LocalAddress     netip.AddrPort
 	Network, Address string
 	Host             model.HostSnapshot
-	ShardID          cqltype.Option[uint32]
+	ShardID          cql.Option[uint32]
 }
 
 type Dialer interface {
@@ -63,7 +61,7 @@ func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.
 	n := net.Dialer{Timeout: d.ConnectTimeout, KeepAlive: keepalive}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
-			return nil, cqltype.TypeValidation("local address", "source selection requires TCP")
+			return nil, cql.TypeValidation("local address", "source selection requires TCP")
 		}
 		n.LocalAddr = net.TCPAddrFromAddrPort(target.LocalAddress)
 	}

@@ -25,8 +25,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -38,7 +38,7 @@ func (c *Conn) InternalExecuteV2System(ctx context.Context, request *model.Attem
 	}
 	server := c.InternalCfg.TypedConfig.Metadata.ServerTimeout
 	if !server.Set && c.InternalIsScyllaConn() {
-		server = cqltype.Option[time.Duration]{Set: true, Value: 30 * time.Second}
+		server = cql.Option[time.Duration]{Set: true, Value: 30 * time.Second}
 	}
 	if server.Set && server.Value > 0 {
 		if !c.InternalIsScyllaConn() {

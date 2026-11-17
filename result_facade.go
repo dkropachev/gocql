@@ -3,10 +3,12 @@
 
 package gocql
 
-import model "github.com/scylladb/gocql/v2/internal/model"
+import (
+	"github.com/scylladb/gocql/v2/cql"
+)
 
-type Result = model.Result
+type Result = cql.Result
 
 // CQLTraceRef names a server-side CQL trace session and the attempt it
 // records; Result.CQLTraces lists them and package cqltrace reads them.
-type CQLTraceRef = model.CQLTraceRef
+type CQLTraceRef = cql.CQLTraceRef

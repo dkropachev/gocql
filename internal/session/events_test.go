@@ -27,9 +27,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -250,7 +250,7 @@ func TestEvents(t *testing.T) {
 							if !strings.Contains(query, "system.client_routes") {
 								return false
 							}
-							columns := []rowsCol{{"connection_id", optNative(cqltype.TypeVarchar)}, {"host_id", optNative(cqltype.TypeUUID)}, {"address", optNative(cqltype.TypeVarchar)}, {"port", optNative(cqltype.TypeInt)}, {"tls_port", optNative(cqltype.TypeInt)}}
+							columns := []rowsCol{{"connection_id", optNative(cql.TypeVarchar)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeVarchar)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
 							writeRows(response, stream, columns, [][][]byte{{[]byte("route"), testLocalHostID[:], []byte("127.0.0.1"), binary.BigEndian.AppendUint32(nil, uint32(srv.port())), nil}})
 							return true
 						}

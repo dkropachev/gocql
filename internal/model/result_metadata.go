@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 )
 
@@ -9,6 +9,6 @@ import (
 // its current shape is retained; live pages own previous selected plans.
 type ResultSchemaIdentity struct {
 	InternalTracker *schemafence.InternalPreparedSchemaTracker
-	InternalColumns cqltype.Columns
+	InternalColumns cql.Columns
 	InternalEpoch   schemafence.InternalPreparedSchemaStamp
 }

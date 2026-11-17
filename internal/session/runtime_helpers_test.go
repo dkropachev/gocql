@@ -6,14 +6,13 @@ package session
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // RunStream streams the rows of bound on session, as StreamQuery.Run does
 // for a captured query.
-func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder codec.StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
+func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *Bound[B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*RowStream[R], error) {
 	frozen, err := queryOptions(session, options.Options)
 	if err != nil {
 		return nil, err
@@ -23,7 +22,7 @@ func RunStream[B, R any](ctx context.Context, session *implCluster.Core, bound *
 
 // RunOne executes bound on s and decodes its first row into dst, reporting
 // whether a row existed; without one, dst is cleared.
-func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R) (bool, model.Result, error) {
+func RunOne[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions, dst *R) (bool, cql.Result, error) {
 	found, result, err := runtimeOf(s).each(ctx, b, options, dst, nil, new(eachScratch))
 	if !found && err == nil {
 		clearDestination(dst)

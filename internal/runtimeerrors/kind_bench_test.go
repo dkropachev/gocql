@@ -9,7 +9,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -29,7 +29,7 @@ func BenchmarkKindOf(b *testing.B) {
 		err  error
 	}{
 		{"server", fmt.Errorf("attempt: %w", unavailable)},
-		{"execution", NewExecutionError(unavailable, model.Result{}, 0, nil)},
+		{"execution", NewExecutionError(unavailable, cql.Result{}, 0, nil)},
 		{"net_timeout", &net.OpError{Op: "read", Err: benchTimeoutError{}}},
 		{"unknown", fmt.Errorf("wrap: %w", errors.New("x"))},
 	} {

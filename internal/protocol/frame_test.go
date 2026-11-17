@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	lz4mod "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
@@ -198,7 +198,7 @@ func writeRowsResultWithColumnType(fr *framer, customType string) {
 	fr.WriteString("gocql_test")
 	fr.WriteString("vectors")
 	fr.WriteString("vec")
-	fr.WriteShort(uint16(TypeCustom))
+	fr.WriteShort(uint16(cql.TypeCustom))
 	fr.WriteString(customType)
 	fr.WriteInt(0) // numRows
 }

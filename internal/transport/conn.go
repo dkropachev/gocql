@@ -31,20 +31,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/syncx"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
-
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
@@ -53,9 +41,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -229,7 +224,7 @@ type Conn struct {
 	// typedSettings is published once the framer cache is initialised, when
 	// every input to the native protocol settings is final.
 	typedSettings                             atomic.Pointer[protocol.Settings]
-	hostID                                    atomic.Pointer[cqltype.UUID] // InternalHost's ID once known
+	hostID                                    atomic.Pointer[cql.UUID] // InternalHost's ID once known
 	stopCloseOnCancel                         func() bool
 	typedWriter                               *submissionWriter
 	eventDone                                 chan struct{}
@@ -298,7 +293,7 @@ type Conn struct {
 	eventMu                     sync.Mutex
 	InternalPoolPolicy          InternalConnectionPoolPolicy
 	InternalMu                  sync.Mutex
-	InternalRequestedShard      cqltype.Option[uint32]
+	InternalRequestedShard      cql.Option[uint32]
 	// admission packs the shared-operation count with the closed and
 	// exclusive flags; see connection_state.go.
 	admission        atomic.Uint64
@@ -599,7 +594,7 @@ func (s *startupCoordinator) options(ctx context.Context, startupCompleted *atom
 
 	v, ok := frame.(*frm.SupportedFrame)
 	if !ok {
-		return cqltype.NewFrameError("Unknown type of response to startup frame: %T", frame)
+		return cql.NewFrameError("Unknown type of response to startup frame: %T", frame)
 	}
 
 	if config := s.conn.InternalCfg.TypedConfig; config != nil {
@@ -724,7 +719,7 @@ func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atom
 		startupCompleted.Store(true)
 		return s.authenticateHandshake(ctx, v, startupCompleted)
 	default:
-		return cqltype.NewFrameError("Unknown type of response to startup frame: %s", v)
+		return cql.NewFrameError("Unknown type of response to startup frame: %s", v)
 	}
 }
 
@@ -1857,7 +1852,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 
 		if v := resp.InternalFramer.Header.Version.Version(); v != c.InternalVersion {
 			c.InternalReleaseReadFramer(resp.InternalFramer)
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.NewFrameError("unexpected protocol version in response: got %d expected %d", v, c.InternalVersion), InternalPotentiallyExecuted: true})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cql.NewFrameError("unexpected protocol version in response: got %d expected %d", v, c.InternalVersion), InternalPotentiallyExecuted: true})
 		}
 
 		return resp.InternalFramer, nil
@@ -1973,7 +1968,7 @@ func (c *Conn) InternalUseKeyspaceContext(ctx context.Context, keyspace string) 
 	case *protocol.ErrorResponseFrame:
 		return x.Err
 	default:
-		return cqltype.NewFrameError("unknown frame in response to USE: %v", x)
+		return cql.NewFrameError("unknown frame in response to USE: %v", x)
 	}
 
 	c.setCurrentKeyspace(keyspace)

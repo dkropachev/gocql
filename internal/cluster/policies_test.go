@@ -36,7 +36,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -45,8 +45,8 @@ import (
 // tUUID returns a deterministic UUID for testing. Byte 0 is always set to
 // a non-zero sentinel (0xFE) so that even tUUID(0) is distinguishable from
 // the zero UUID, and the last two bytes encode n.
-func tUUID(n int) cqltype.UUID {
-	var u cqltype.UUID
+func tUUID(n int) cql.UUID {
+	var u cql.UUID
 	u[0] = 0xFE
 	u[14] = byte(n >> 8)
 	u[15] = byte(n)

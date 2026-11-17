@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -19,10 +19,10 @@ func TestLatency(t *testing.T) {
 			for _, test := range deadlineCases() {
 				t.Run(test.name, func(t *testing.T) {
 					policy := &InternalRoutingPolicy{InternalOptions: RoutingOptions{Latency: LatencyOptions{Enabled: true, MinimumSamples: 1, Scale: time.Millisecond, RetryPeriod: test.period, UpdateInterval: time.Hour}}}
-					host := cqltype.UUID{15: 1}
+					host := cql.UUID{15: 1}
 					sample := &InternalRoutingLatency{nextProbe: test.now.Add(-time.Nanosecond)}
 					policy.InternalLatencies.Store(host, sample)
-					decisions := &InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{host: test.now.Add(-time.Nanosecond)}}
+					decisions := &InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{host: test.now.Add(-time.Nanosecond)}}
 					start := make(chan struct{})
 					var group sync.WaitGroup
 					var probes atomic.Int32
@@ -136,10 +136,10 @@ func TestLatency(t *testing.T) {
 			}); got != 0 {
 				t.Fatal("warm publication allocated", got)
 			}
-			host := cqltype.UUID{15: 1}
+			host := cql.UUID{15: 1}
 			sample := &InternalRoutingLatency{nextProbe: now.Add(time.Minute)}
 			policy.InternalLatencies.Store(host, sample)
-			plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{host: now.Add(-time.Second)}}, InternalNow: now}
+			plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{host: now.Add(-time.Second)}}, InternalNow: now}
 			if got := testing.AllocsPerRun(1000, func() {
 				if !plan.InternalPenalty(Target{HostID: host}) {
 					t.Fatal("held probe claim lost")
@@ -164,16 +164,16 @@ func TestLatency(t *testing.T) {
 		t.Run("Reservation", func(t *testing.T) {
 			policy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Latency: LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Minute, UpdateInterval: time.Hour}})).(*InternalRoutingPolicy)
 			metadata := v2TestMetadata()
-			slow := cqltype.UUID{15: 1}
-			healthy := cqltype.UUID{15: 2}
+			slow := cql.UUID{15: 1}
+			healthy := cql.UUID{15: 2}
 			// Exactly one replica keeps first-target selection deterministic. A healthy
 			// nonreplica must be preferred while another plan owns the retry probe.
 			SnapshotData(metadata).InternalRanges["ks"][0].Replicas = []model.Target{{HostID: slow}}
 			policy.Observe(AttemptEvent{Target: model.Target{HostID: healthy}, Started: time.Now().Add(-2 * time.Minute), Latency: time.Millisecond})
 			policy.Observe(AttemptEvent{Target: model.Target{HostID: slow}, Started: time.Now().Add(-2 * time.Minute), Latency: 10 * time.Millisecond})
 			// Publish both real samples; the regular hourly updater is deliberately idle.
-			policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{slow: time.Now().Add(-time.Minute)}})
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true}, Kind: cqltype.OrdinaryStatement}
+			policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{slow: time.Now().Add(-time.Minute)}})
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cql.OrdinaryStatement}
 			// Constructing an abandoned plan must not reserve a probe.
 			_ = NewPlan(policy, info, metadata)
 			start := make(chan struct{})

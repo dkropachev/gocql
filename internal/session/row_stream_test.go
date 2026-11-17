@@ -17,17 +17,6 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 	"bytes"
 	"encoding/binary"
 	"net"
@@ -35,7 +24,15 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -45,7 +42,7 @@ func rowStreamSession(t *testing.T, proto byte, compressor implProtocol.Compress
 	c, peer := typedTestConn(t, proto, compressor)
 	c.InternalHost = func() *endpoint.HostInfo {
 		opaqueStorageValue := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cqltype.UUID{15: 1}
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cql.UUID{15: 1}
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalState.Store(endpoint.NodeUp)
 		return opaqueStorageValue
 	}()
@@ -93,7 +90,7 @@ type gatedDecoder struct {
 	resets  atomic.Int32
 }
 
-func (d *gatedDecoder) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *gatedDecoder) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	return d, nil
 }
 func (d *gatedDecoder) Reset(dst *[]byte) {
@@ -102,8 +99,8 @@ func (d *gatedDecoder) Reset(dst *[]byte) {
 	<-d.leave
 	*dst = (*dst)[:0]
 }
-func (d *gatedDecoder) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	plan, err := codec.StreamBlob.Compile(cqltype.BlobType)
+func (d *gatedDecoder) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
+	plan, err := cql.StreamBlob.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}
@@ -126,9 +123,9 @@ func (c *testReadTargets) Read(p []byte) (int, error) {
 
 type countStreamDecoder struct{ compiles atomic.Int32 }
 
-func (d *countStreamDecoder) Compile(columns cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *countStreamDecoder) Compile(columns cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	d.compiles.Add(1)
-	return codec.StreamOneColumn(codec.StreamBlob).Compile(columns)
+	return cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
 }
 func errorExtensions(frame []byte) []byte {
 	extension := make([]byte, 16)

@@ -38,7 +38,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -582,7 +582,7 @@ func TestFramer(t *testing.T) {
 					req := fixtureQueryFrame{
 						statement: strings.Repeat("SELECT * FROM system.local ", 32),
 						params: fixtureQueryParams{
-							consistency: Quorum,
+							consistency: cql.Quorum,
 							keyspace:    "gocql_test",
 						},
 					}
@@ -633,7 +633,7 @@ func TestFramer(t *testing.T) {
 			err = rf.ReadFrame(r, &head)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "no compressor available with compressed frame body")
-			var violation *ProtocolError
+			var violation *cql.ProtocolError
 			require.ErrorAs(t, err, &violation)
 			require.Equal(t, "frame", violation.Stage)
 			require.Equal(t, int64(-1), violation.Offset)
@@ -743,7 +743,7 @@ func TestFramer(t *testing.T) {
 					req := fixtureQueryFrame{
 						statement: "SELECT * FROM system.local",
 						params: fixtureQueryParams{
-							consistency: Quorum,
+							consistency: cql.Quorum,
 							keyspace:    "gocql_test",
 						},
 					}

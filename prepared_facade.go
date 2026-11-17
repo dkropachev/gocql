@@ -9,7 +9,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -141,7 +140,7 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 	default:
 		return nil, tooManyOptions()
 	}
-	page, err := p.internal().RunPage(ctx, value, model.PageState(state), pageSize, o)
+	page, err := p.internal().RunPage(ctx, value, cql.PageState(state), pageSize, o)
 	return (*Page[R])(page), err
 }
 

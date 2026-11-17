@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -745,9 +745,9 @@ func buildQueryDefaultsReport(cfg *InternalClusterSettings) queryDefaultsReport 
 // renders those as "UNKNOWN_CONS_0x..", which no consumer can interpret.
 // Nothing rejects such a value today; the fix belongs in clusterSettings.Validate
 // and is left to a follow-up.
-func consistencyName(c cqltype.Consistency) string {
+func consistencyName(c cql.Consistency) string {
 	switch c {
-	case cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial:
+	case cql.Any, cql.One, cql.Two, cql.Three, cql.Quorum, cql.All, cql.LocalQuorum, cql.EachQuorum, cql.LocalOne, cql.Serial, cql.LocalSerial:
 		return c.String()
 	default:
 		return ""

@@ -6,7 +6,7 @@ package protocol
 import (
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -23,7 +23,7 @@ func BenchmarkTypedFrame(b *testing.B) {
 			name   string
 			paging []byte
 		}{{"point", nil}, {"page", []byte("paging-state-token-0123456789")}} {
-			r := &model.AttemptRequest{PreparedID: []byte("0123456789abcdef"), Values: values, ValueCount: 2, Consistency: cqltype.LocalQuorum, PageSize: 5000, SerialConsistency: cqltype.LocalSerial, DefaultTimestamp: true, Timestamp: 1, PagingState: c.paging}
+			r := &model.AttemptRequest{PreparedID: []byte("0123456789abcdef"), Values: values, ValueCount: 2, Consistency: cql.LocalQuorum, PageSize: 5000, SerialConsistency: cql.LocalSerial, DefaultTimestamp: true, Timestamp: 1, PagingState: c.paging}
 			template, _ := NewParamsTemplate(r, 4)
 			for _, mode := range []string{"fields", "template"} {
 				b.Run(c.name+"/"+mode, func(b *testing.B) {

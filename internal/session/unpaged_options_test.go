@@ -6,7 +6,7 @@ package session
 import (
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -17,30 +17,30 @@ import (
 // session profile, resolves to a request without a page size, and that it
 // rejects an explicit prefetch.
 func TestUnpagedPageSize(t *testing.T) {
-	unpaged := Options{PageSize: cqltype.Some(cqltype.Unpaged)}
+	unpaged := Options{PageSize: cql.Some(cql.Unpaged)}
 	r, err := resolveOptionValues(nil, unpaged)
 	if err != nil || r.InternalProfile.PageSize != 0 {
 		t.Fatal("options", r.InternalProfile.PageSize, err)
 	}
 	profile := settings.InternalDefaultProfile()
-	profile.PageSize = cqltype.Unpaged
+	profile.PageSize = cql.Unpaged
 	if err := profile.ValidateProfile(); err != nil {
 		t.Fatal("profile", err)
 	}
 	if r, err = resolveOptionValues(&profile, Options{}); err != nil || r.InternalProfile.PageSize != 0 {
 		t.Fatal("session profile", r.InternalProfile.PageSize, err)
 	}
-	if r, err = resolveOptionValues(&profile, Options{PageSize: cqltype.Some[int32](100)}); err != nil || r.InternalProfile.PageSize != 100 {
+	if r, err = resolveOptionValues(&profile, Options{PageSize: cql.Some[int32](100)}); err != nil || r.InternalProfile.PageSize != 100 {
 		t.Fatal("override", r.InternalProfile.PageSize, err)
 	}
 	if r, err = resolveOptionValues(nil, Options{Profile: &profile}); err != nil || r.InternalProfile.PageSize != 0 {
 		t.Fatal("options profile", r.InternalProfile.PageSize, err)
 	}
-	unpaged.Prefetch = cqltype.Some(1)
+	unpaged.Prefetch = cql.Some(1)
 	if _, err := resolveOptionValues(nil, unpaged); !hasErrorType[*settings.UnsupportedSettingError](err) {
 		t.Fatal("prefetch", err)
 	}
-	unpaged.Prefetch = cqltype.Some(0)
+	unpaged.Prefetch = cql.Some(0)
 	if _, err := resolveOptionValues(nil, unpaged); err != nil {
 		t.Fatal("zero prefetch", err)
 	}

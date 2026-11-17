@@ -29,9 +29,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -245,7 +245,7 @@ func TestConnectionSetup(t *testing.T) {
 				opaqueStorageValuex := new(endpoint.HostInfo)
 				implEndpoint.HostInfoData(opaqueStorageValuex).InternalConnectAddress = net.ParseIP("127.0.0.1")
 				implEndpoint.HostInfoData(opaqueStorageValuex).InternalPort = 9042
-				implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cqltype.UUID{15: 1}
+				implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cql.UUID{15: 1}
 				return opaqueStorageValuex
 			}()
 			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 9042), ShardAware: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 19042)})
@@ -280,7 +280,7 @@ func TestConnectionSetup(t *testing.T) {
 				}()
 				implEndpoint.ScyllaConnectionFeaturesData(opaqueStorageValuexxx).InternalShard = 0
 				return opaqueStorageValuexxx
-			}(), InternalRequestedShard: cqltype.Option[uint32]{Value: 1, Set: true}, InternalStreams: streams.New()}
+			}(), InternalRequestedShard: cql.Option[uint32]{Value: 1, Set: true}, InternalStreams: streams.New()}
 			p := codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 			if p.Put(c) == nil {
 				t.Fatal("NAT wrong shard accepted")

@@ -10,8 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestEachStopIteration(t *testing.T) {
@@ -41,7 +40,7 @@ func TestEachStopIteration(t *testing.T) {
 			served := serve(pages...)
 			var dst []byte
 			calls := 0
-			result, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(*[]byte) error {
+			result, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(*[]byte) error {
 				calls++
 				if calls == tc.stopAt {
 					return tc.err
@@ -87,7 +86,7 @@ func TestEachStopIteration(t *testing.T) {
 			// The server expects the next request to be a new execution, not a
 			// continuation; successful stop must release the query's admission.
 			served = serve(runtimeRowsBody(nil, "next"))
-			found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			<-served
 			if err != nil || !found || string(dst) != "next" {
 				t.Fatalf("query reuse: %t %q %v", found, dst, err)
@@ -100,10 +99,10 @@ func TestEachStopIteration(t *testing.T) {
 // happens to be the same sentinel.
 type stopDecodeRows struct{}
 
-func (d stopDecodeRows) Compile(cqltype.Columns) (codec.RowPlan[[]byte], error) { return d, nil }
-func (d stopDecodeRows) Clone(v []byte) []byte                                  { return append([]byte(nil), v...) }
-func (stopDecodeRows) Decode(*codec.RowReader) ([]byte, error)                  { return nil, StopIteration }
-func (stopDecodeRows) DecodeInto(*codec.RowReader, *[]byte) error               { return StopIteration }
+func (d stopDecodeRows) Compile(cql.Columns) (cql.RowPlan[[]byte], error) { return d, nil }
+func (d stopDecodeRows) Clone(v []byte) []byte                            { return append([]byte(nil), v...) }
+func (stopDecodeRows) Decode(*cql.RowReader) ([]byte, error)              { return nil, StopIteration }
+func (stopDecodeRows) DecodeInto(*cql.RowReader, *[]byte) error           { return StopIteration }
 
 func TestEachStopIterationOnlyFromCallback(t *testing.T) {
 	q, serve := eachTestQuery(t)
@@ -112,7 +111,7 @@ func TestEachStopIterationOnlyFromCallback(t *testing.T) {
 	served := serve(runtimeRowsBody(nil, "a"))
 	var dst []byte
 	calls := 0
-	_, err := q.Each(context.Background(), codec.EmptyRecord{}, &dst, func(*[]byte) error { calls++; return nil })
+	_, err := q.Each(context.Background(), cql.EmptyRow{}, &dst, func(*[]byte) error { calls++; return nil })
 	<-served
 	if !errors.Is(err, StopIteration) || calls != 0 || q.state.runtime.errors.Load() != 1 {
 		t.Fatalf("decoder error was swallowed: calls=%d err=%v metric=%d", calls, err, q.state.runtime.errors.Load())

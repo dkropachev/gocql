@@ -23,7 +23,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 const (
@@ -60,7 +60,7 @@ type genField struct {
 // builtinType is a table entry with its type resolved by go/types.
 type builtinType struct {
 	typ types.Type
-	codec.BuiltinFieldType
+	cql.BuiltinFieldType
 }
 
 // generator type-checks one package and maps its structs with the table
@@ -280,7 +280,7 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 		scratch.Scope().Insert(types.NewPkgName(token.NoPos, scratch, name, pkg))
 	}
 	g := &generator{fset: fset, info: info, pkg: pkg, files: files, names: map[string]bool{}, imports: map[string]importRef{}}
-	resolve := func(table []codec.BuiltinFieldType) ([]builtinType, error) {
+	resolve := func(table []cql.BuiltinFieldType) ([]builtinType, error) {
 		out := make([]builtinType, len(table))
 		for i, b := range table {
 			tv, err := types.Eval(token.NewFileSet(), scratch, token.NoPos, b.TypeSrc)
@@ -294,10 +294,10 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 		}
 		return out, nil
 	}
-	if g.builtins, err = resolve(codec.BuiltinFieldTypes()); err != nil {
+	if g.builtins, err = resolve(cql.BuiltinFieldTypes()); err != nil {
 		return nil, err
 	}
-	if g.streams, err = resolve(codec.StreamBuiltinFieldTypes()); err != nil {
+	if g.streams, err = resolve(cql.StreamBuiltinFieldTypes()); err != nil {
 		return nil, err
 	}
 	g.cqlName, g.streamName = "cql", "stream"
@@ -351,11 +351,11 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 	st := g.pkg.Scope().Lookup(s.name).Type().Underlying().(*types.Struct)
 	type found struct {
 		v    *types.Var
-		tag  codec.FieldTag
+		tag  cql.FieldTag
 		path string
 	}
 	var fields []found
-	var candidates []codec.FieldCandidate
+	var candidates []cql.FieldCandidate
 	var walk func(st *types.Struct, prefix string, depth int) error
 	walk = func(st *types.Struct, prefix string, depth int) error {
 		for i := range st.NumFields() {
@@ -365,27 +365,27 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 				t := types.Unalias(v.Type())
 				_, pointer := t.(*types.Pointer)
 				inner, isStruct := t.Underlying().(*types.Struct)
-				embed, err := codec.EmbeddedField(v.Name(), tag, pointer, isStruct)
+				embed, err := cql.EmbeddedField(v.Name(), tag, pointer, isStruct)
 				if err != nil {
 					return fmt.Errorf("%s: %w", s.name, err)
 				}
-				if embed == codec.EmbedSkip {
+				if embed == cql.EmbedSkip {
 					continue
 				}
-				if embed == codec.EmbedFlatten {
+				if embed == cql.EmbedFlatten {
 					if err := walk(inner, path+".", depth+1); err != nil {
 						return err
 					}
 					continue
 				}
 			}
-			ft, ok, err := codec.ParseFieldTag(v.Name(), v.Exported(), tag)
+			ft, ok, err := cql.ParseFieldTag(v.Name(), v.Exported(), tag)
 			if err != nil {
 				return fmt.Errorf("%s: %w", s.name, err)
 			}
 			if ok {
 				fields = append(fields, found{v: v, tag: ft, path: path})
-				candidates = append(candidates, codec.FieldCandidate{Column: ft.Column, Path: path, Depth: depth})
+				candidates = append(candidates, cql.FieldCandidate{Column: ft.Column, Path: path, Depth: depth})
 			}
 		}
 		return nil
@@ -393,7 +393,7 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 	if err := walk(st, "", 0); err != nil {
 		return nil, false, false, err
 	}
-	keep, err := codec.ResolveFieldConflicts(candidates)
+	keep, err := cql.ResolveFieldConflicts(candidates)
 	if err != nil {
 		return nil, false, false, fmt.Errorf("%s: %w", s.name, err)
 	}
@@ -516,13 +516,13 @@ func (g *generator) fileOf(pos token.Pos) *ast.File {
 // codec picks a field's codec source from table: a built-in named by the tag,
 // else the tag's own Go expression, else the type's built-in default.
 func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, tag, key string) (enc, dec string, found bool, err error) {
-	var candidates []codec.BuiltinFieldType
+	var candidates []cql.BuiltinFieldType
 	for _, b := range table {
 		if types.Identical(types.Unalias(typ), b.typ) {
 			candidates = append(candidates, b.BuiltinFieldType)
 		}
 	}
-	if i, ok := codec.SelectBuiltin(candidates, tag); ok {
+	if i, ok := cql.SelectBuiltin(candidates, tag); ok {
 		return g.qualify(candidates[i].EncoderSrc), g.qualify(candidates[i].DecoderSrc), true, nil
 	}
 	if tag == "" {

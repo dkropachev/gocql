@@ -27,10 +27,12 @@ package cqltype
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type TypeInfo interface {
-	Type() Type
+	Type() cql.Type
 	Version() byte
 	Custom() string
 }
@@ -38,19 +40,19 @@ type TypeInfo interface {
 type NativeType struct {
 	//only used for TypeCustom
 	custom string
-	typ    Type
+	typ    cql.Type
 	proto  byte
 }
 
-func NewNativeType(proto byte, typ Type) NativeType {
+func NewNativeType(proto byte, typ cql.Type) NativeType {
 	return NativeType{proto: proto, typ: typ, custom: ""}
 }
 
-func NewCustomType(proto byte, typ Type, custom string) NativeType {
+func NewCustomType(proto byte, typ cql.Type, custom string) NativeType {
 	return NativeType{proto: proto, typ: typ, custom: custom}
 }
 
-func (t NativeType) Type() Type {
+func (t NativeType) Type() cql.Type {
 	return t.typ
 }
 
@@ -64,7 +66,7 @@ func (t NativeType) Custom() string {
 
 func (t NativeType) String() string {
 	switch t.typ {
-	case TypeCustom:
+	case cql.TypeCustom:
 		return fmt.Sprintf("%s(%s)", t.typ, t.custom)
 	default:
 		return t.typ.String()
@@ -96,11 +98,11 @@ type VectorType struct {
 // Zero returns the zero value for the vector CQL type.
 func (t CollectionType) String() string {
 	switch t.typ {
-	case TypeMap:
+	case cql.TypeMap:
 		return fmt.Sprintf("%s(%s, %s)", t.typ, t.Key, t.Elem)
-	case TypeList, TypeSet:
+	case cql.TypeList, cql.TypeSet:
 		return fmt.Sprintf("%s(%s)", t.typ, t.Elem)
-	case TypeCustom:
+	case cql.TypeCustom:
 		return fmt.Sprintf("%s(%s)", t.typ, t.custom)
 	default:
 		return t.typ.String()
@@ -130,7 +132,7 @@ type UDTField struct {
 
 func NewUDTType(proto byte, name, keySpace string, elems ...UDTField) UDTTypeInfo {
 	return UDTTypeInfo{
-		NativeType: NativeType{proto: proto, typ: TypeUDT, custom: ""},
+		NativeType: NativeType{proto: proto, typ: cql.TypeUDT, custom: ""},
 		Name:       name,
 		KeySpace:   keySpace,
 		Elements:   elems,
@@ -163,97 +165,4 @@ func (t UDTTypeInfo) String() string {
 	return buf.String()
 }
 
-// String returns a human readable name for the Cassandra datatype
-// described by t.
-// Type is the identifier of a Cassandra internal datatype.
-type Type int
-
-const (
-	TypeCustom    Type = 0x0000
-	TypeAscii     Type = 0x0001
-	TypeBigInt    Type = 0x0002
-	TypeBlob      Type = 0x0003
-	TypeBoolean   Type = 0x0004
-	TypeCounter   Type = 0x0005
-	TypeDecimal   Type = 0x0006
-	TypeDouble    Type = 0x0007
-	TypeFloat     Type = 0x0008
-	TypeInt       Type = 0x0009
-	TypeText      Type = 0x000A
-	TypeTimestamp Type = 0x000B
-	TypeUUID      Type = 0x000C
-	TypeVarchar   Type = 0x000D
-	TypeVarint    Type = 0x000E
-	TypeTimeUUID  Type = 0x000F
-	TypeInet      Type = 0x0010
-	TypeDate      Type = 0x0011
-	TypeTime      Type = 0x0012
-	TypeSmallInt  Type = 0x0013
-	TypeTinyInt   Type = 0x0014
-	TypeDuration  Type = 0x0015
-	TypeList      Type = 0x0020
-	TypeMap       Type = 0x0021
-	TypeSet       Type = 0x0022
-	TypeUDT       Type = 0x0030
-	TypeTuple     Type = 0x0031
-)
-
-// String returns the name of the identifier.
-func (t Type) String() string {
-	switch t {
-	case TypeCustom:
-		return "custom"
-	case TypeAscii:
-		return "ascii"
-	case TypeBigInt:
-		return "bigint"
-	case TypeBlob:
-		return "blob"
-	case TypeBoolean:
-		return "boolean"
-	case TypeCounter:
-		return "counter"
-	case TypeDecimal:
-		return "decimal"
-	case TypeDouble:
-		return "double"
-	case TypeFloat:
-		return "float"
-	case TypeInt:
-		return "int"
-	case TypeText:
-		return "text"
-	case TypeTimestamp:
-		return "timestamp"
-	case TypeUUID:
-		return "uuid"
-	case TypeVarchar:
-		return "varchar"
-	case TypeTimeUUID:
-		return "timeuuid"
-	case TypeInet:
-		return "inet"
-	case TypeDate:
-		return "date"
-	case TypeDuration:
-		return "duration"
-	case TypeTime:
-		return "time"
-	case TypeSmallInt:
-		return "smallint"
-	case TypeTinyInt:
-		return "tinyint"
-	case TypeList:
-		return "list"
-	case TypeMap:
-		return "map"
-	case TypeSet:
-		return "set"
-	case TypeVarint:
-		return "varint"
-	case TypeTuple:
-		return "tuple"
-	default:
-		return fmt.Sprintf("unknown_type_%d", t)
-	}
-}
+const ()

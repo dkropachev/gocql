@@ -13,9 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -83,7 +82,7 @@ func TestPreparedOneShot(t *testing.T) {
 				var wg sync.WaitGroup
 				errs := make(chan error, 32)
 				if workload == "pwrite" {
-					statement := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.ByteSliceCodec, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
+					statement := binding.Statement[loopbackRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: cql.Params(cql.ParamAt(0, cql.Int32Codec, func(r loopbackRow) int32 { return r.k }), cql.ParamAt(1, cql.ByteSliceCodec, func(r loopbackRow) []byte { return r.value })), Rows: cql.EmptyRowDecoder}
 					p := codecTestMust(Prepare(ctx, s, statement, PrepareOptions{}))
 					for w := range 32 {
 						wg.Go(func() {
@@ -147,18 +146,18 @@ func TestPreparedOneShot(t *testing.T) {
 			defer peers[0].Close()
 			requests := make(chan oneShotRequest, 1)
 			p := oneShotPrepare(t, s, peers[0], requests)
-			quorum := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Quorum}, PageSize: cqltype.Option[int32]{Set: true, Value: 7}})
-			two := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Two}})
+			quorum := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Quorum}, PageSize: cql.Option[int32]{Set: true, Value: 7}})
+			two := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Two}})
 			defaults := settings.InternalDefaultProfile()
 			for i, tc := range []struct {
 				options     CompiledOptions
-				consistency cqltype.Consistency
+				consistency cql.Consistency
 				pageSize    int32
 			}{
-				{quorum, cqltype.Quorum, 7},
-				{two, cqltype.Two, defaults.PageSize},
+				{quorum, cql.Quorum, 7},
+				{two, cql.Two, defaults.PageSize},
 				{CompiledOptions{}, defaults.Consistency, defaults.PageSize},
-				{quorum, cqltype.Quorum, 7},
+				{quorum, cql.Quorum, 7},
 			} {
 				errs := make(chan error, 1)
 				var dst []byte

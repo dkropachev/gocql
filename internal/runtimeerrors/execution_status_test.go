@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -105,7 +105,7 @@ func TestExecutionStatus(t *testing.T) {
 
 	t.Run("ExecutionStatusOf", func(t *testing.T) {
 		attempt := NewQueryError(QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
-		request := NewExecutionError(attempt, model.Result{}, cqltype.PartiallyExecuted, nil)
+		request := NewExecutionError(attempt, cql.Result{}, cqltype.PartiallyExecuted, nil)
 		for _, test := range []struct {
 			name string
 			err  error
@@ -115,8 +115,8 @@ func TestExecutionStatus(t *testing.T) {
 			{"request wins over attempt", fmt.Errorf("wrapped: %w", request), cqltype.PartiallyExecuted},
 			{"attempt", fmt.Errorf("wrapped: %w", attempt), cqltype.MaybeExecuted},
 			{"bare server error", protocol.NewOtherServerError(protocol.CodeOverloaded, ""), cqltype.NotExecuted},
-			{"validation", &cqltype.ValidationError{Field: "x", Err: errors.New("bad")}, cqltype.MaybeExecuted},
-			{"codec", &cqltype.CodecError{Stage: "decode", Err: errors.New("bad")}, cqltype.MaybeExecuted},
+			{"validation", &cql.ValidationError{Field: "x", Err: errors.New("bad")}, cqltype.MaybeExecuted},
+			{"codec", &cql.CodecError{Stage: "decode", Err: errors.New("bad")}, cqltype.MaybeExecuted},
 			{"schema changed", &SchemaChangedError{Statement: "s"}, cqltype.NotExecuted},
 			{"no connections", fmt.Errorf("pick: %w", ErrNoConnections), cqltype.NotExecuted},
 			{"unknown", errors.New("eof"), cqltype.MaybeExecuted},
@@ -130,15 +130,15 @@ func TestExecutionStatus(t *testing.T) {
 
 	t.Run("ExecutionErrorMessage", func(t *testing.T) {
 		attempt := NewQueryError(QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
-		same := NewExecutionError(attempt, model.Result{}, cqltype.MaybeExecuted, nil)
+		same := NewExecutionError(attempt, cql.Result{}, cqltype.MaybeExecuted, nil)
 		if got := same.Error(); strings.Count(got, "(maybe executed)") != 1 {
 			t.Fatalf("status repeated or missing: %q", got)
 		}
-		worse := NewExecutionError(attempt, model.Result{}, cqltype.PartiallyExecuted, nil)
+		worse := NewExecutionError(attempt, cql.Result{}, cqltype.PartiallyExecuted, nil)
 		if got := worse.Error(); !strings.HasSuffix(got, "(maybe executed) (partially executed)") {
 			t.Fatalf("aggregate status missing: %q", got)
 		}
-		clean := NewExecutionError(&cqltype.ValidationError{Field: "x", Err: errors.New("bad")}, model.Result{}, cqltype.NotExecuted, nil)
+		clean := NewExecutionError(&cql.ValidationError{Field: "x", Err: errors.New("bad")}, cql.Result{}, cqltype.NotExecuted, nil)
 		if strings.Contains(clean.Error(), "executed") {
 			t.Fatalf("not-executed status rendered: %q", clean.Error())
 		}
@@ -151,11 +151,11 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	timeout := NewQueryError(QueryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	attempts := []AttemptFailure{
 		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, Status: cqltype.NotExecuted},
-		{Err: timeout, Address: "10.0.0.2:9042", Shard: cqltype.Option[uint32]{Value: 3, Set: true}, Number: 2, Status: cqltype.MaybeExecuted},
+		{Err: timeout, Address: "10.0.0.2:9042", Shard: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, Status: cqltype.MaybeExecuted},
 	}
 
 	t.Run("LastAttemptIsCause", func(t *testing.T) {
-		err := NewExecutionError(timeout, model.Result{}, cqltype.MaybeExecuted, attempts)
+		err := NewExecutionError(timeout, cql.Result{}, cqltype.MaybeExecuted, attempts)
 		got := err.Error()
 		if strings.Count(got, "no response received") != 1 || !strings.Contains(got, "earlier attempts: #1 10.0.0.1:9042: overloaded") {
 			t.Fatalf("message %q", got)
@@ -163,7 +163,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	})
 
 	t.Run("Cancelled", func(t *testing.T) {
-		err := NewExecutionError(context.Canceled, model.Result{}, cqltype.MaybeExecuted, attempts)
+		err := NewExecutionError(context.Canceled, cql.Result{}, cqltype.MaybeExecuted, attempts)
 		got := err.Error()
 		if !strings.HasPrefix(got, "gocql: request: context canceled (maybe executed); earlier attempts: #1") || !strings.Contains(got, "#2 10.0.0.2:9042/shard3:") {
 			t.Fatalf("message %q", got)
@@ -181,7 +181,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		for i := range many {
 			many[i] = AttemptFailure{Err: overloaded, Address: "h", Number: i + 1}
 		}
-		got := NewExecutionError(context.Canceled, model.Result{}, cqltype.NotExecuted, many).Error()
+		got := NewExecutionError(context.Canceled, cql.Result{}, cqltype.NotExecuted, many).Error()
 		if !strings.Contains(got, "(7 not shown)") || strings.Count(got, "overloaded: overloaded") != 3 || !strings.Contains(got, "#10 h") {
 			t.Fatalf("message %q", got)
 		}

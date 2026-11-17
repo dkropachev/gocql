@@ -25,11 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -47,8 +44,8 @@ func TestPage(t *testing.T) {
 			if !pageObserved {
 				t.Fatal("page completion missing")
 			}
-			rows := func() Rows[implCqltype.Bytes] {
-				opaqueStorageValuexxxxxxxx := newRows[implCqltype.Bytes]()
+			rows := func() Rows[cql.Bytes] {
+				opaqueStorageValuexxxxxxxx := newRows[cql.Bytes]()
 				RowsData(opaqueStorageValuexxxxxxxx).page = testPage(t)
 				RowsData(opaqueStorageValuexxxxxxxx).ctx = context.Background()
 				return opaqueStorageValuexxxxxxxx
@@ -74,8 +71,8 @@ func TestPage(t *testing.T) {
 				t.Fatal("page release count", releases.Load())
 			}
 			var wg sync.WaitGroup
-			rows := func() Rows[implCqltype.Bytes] {
-				opaqueStorageValuexxxxxxxxx := newRows[implCqltype.Bytes]()
+			rows := func() Rows[cql.Bytes] {
+				opaqueStorageValuexxxxxxxxx := newRows[cql.Bytes]()
 				RowsData(opaqueStorageValuexxxxxxxxx).page = testPage(t)
 				RowsData(opaqueStorageValuexxxxxxxxx).ctx = context.Background()
 				return opaqueStorageValuexxxxxxxxx
@@ -97,14 +94,14 @@ func TestPage(t *testing.T) {
 		t.Run("MixedCurrentAndRetention", func(t *testing.T) {
 			p := testPage(t, "one", "two", "three")
 			defer p.Close()
-			var first, second implCqltype.Bytes
+			var first, second cql.Bytes
 			if !p.NextInto(&first) || string(first.OwnedBytes()) != "one" {
 				t.Fatal(p.Err())
 			}
 			retained := codecTestMust(p.Retain())
 			defer retained.Close()
 			original := first
-			first = implCqltype.BorrowBytes([]byte("edited"))
+			first = cql.BorrowBytes([]byte("edited"))
 			if string(codecTestMust(p.Clone()).OwnedBytes()) != "edited" {
 				t.Fatal("current destination not observed")
 			}
@@ -128,22 +125,22 @@ func TestPage(t *testing.T) {
 				t.Fatal("close lost retained page")
 			}
 			retained.Close()
-			if _, err := original.At(0); !errors.Is(err, implCqltype.ErrReleased) {
+			if _, err := original.At(0); !errors.Is(err, cql.ErrReleased) {
 				t.Fatal(err)
 			}
 		})
 
 		t.Run("PartialErrorClears", func(t *testing.T) {
-			integer := codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))
-			blob := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
+			integer := codecTestMust(cql.ScalarType(cql.TypeInt))
+			blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
 			type row struct {
 				Number int32
-				Value  implCqltype.Bytes
+				Value  cql.Bytes
 				Unused int
 			}
-			cols := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "n", Type: integer}, implCqltype.ColumnSpec{Name: "v", Type: blob})
+			cols := cql.NewColumns(cql.ColumnSpec{Name: "n", Type: integer}, cql.ColumnSpec{Name: "v", Type: blob})
 			body := typedTestChain(t, []byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 5, 1})
-			decoder := codec.Row(codec.Column("n", codec.Int32, func(r *row) *int32 { return &r.Number }), codec.Column("v", codec.BlobCodec, func(r *row) *implCqltype.Bytes { return &r.Value }))
+			decoder := cql.Row(cql.Column("n", cql.Int32Codec, func(r *row) *int32 { return &r.Number }), cql.Column("v", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.Value }))
 			p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: body, RowCount: 1, Owner: wire.NewLease(body, nil)}}, decoder, nil))
 			defer p.Close()
 			dst := row{Unused: 8}
@@ -157,7 +154,7 @@ func TestPage(t *testing.T) {
 				t.Run(mode, func(t *testing.T) {
 					p := testPage(t, "one")
 					defer p.Close()
-					dst := implCqltype.BorrowBytes([]byte("stale"))
+					dst := cql.BorrowBytes([]byte("stale"))
 					switch mode {
 					case "empty":
 						p = testPage(t)
@@ -166,7 +163,7 @@ func TestPage(t *testing.T) {
 						if p.NextInto(nil) {
 							t.Fatal("nil accepted")
 						}
-						if _, ok := errors.AsType[*implCqltype.ValidationError](p.Err()); !ok || PageData(p).index != 0 {
+						if _, ok := errors.AsType[*cql.ValidationError](p.Err()); !ok || PageData(p).index != 0 {
 							t.Fatal(p.Err())
 						}
 					case "closed":
@@ -204,9 +201,9 @@ func TestPage(t *testing.T) {
 					}()
 					b := runtimeQuery(t)
 					defer b.Close()
-					var dst implCqltype.Bytes
+					var dst cql.Bytes
 					if manual {
-						p := codecTestMust(RunPage(context.Background(), s, b, implModel.StartPage(), 0, CompiledOptions{}))
+						p := codecTestMust(RunPage(context.Background(), s, b, cql.StartPage, 0, CompiledOptions{}))
 						defer p.Close()
 						if !p.NextInto(&dst) {
 							t.Fatal(p.Err())
@@ -249,7 +246,7 @@ func TestPage(t *testing.T) {
 						_, _ = ps[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "retained")))
 					}()
 					b := runtimeQuery(t)
-					var view cqltype.Bytes
+					var view cql.Bytes
 					var advance func() bool
 					var closeRows func() error
 					var retain func() (*PageLease, error)
@@ -261,18 +258,18 @@ func TestPage(t *testing.T) {
 						if !r.NextInto(&view) {
 							t.Fatal(r.Err())
 						}
-						advance = func() bool { var next cqltype.Bytes; return r.NextInto(&next) }
+						advance = func() bool { var next cql.Bytes; return r.NextInto(&next) }
 						closeRows = r.Close
 						retain = r.Retain
 					} else {
-						p, err := RunPage(context.Background(), s, b, model.StartPage(), 0, CompiledOptions{})
+						p, err := RunPage(context.Background(), s, b, cql.StartPage, 0, CompiledOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}
 						if !p.NextInto(&view) {
 							t.Fatal(p.Err())
 						}
-						advance = func() bool { var next cqltype.Bytes; return p.NextInto(&next) }
+						advance = func() bool { var next cql.Bytes; return p.NextInto(&next) }
 						closeRows = p.Close
 						retain = p.Retain
 					}
@@ -314,7 +311,7 @@ func TestPage(t *testing.T) {
 	t.Run("State", func(t *testing.T) {
 		t.Run("EmptyContinuationSurvivesClose", func(t *testing.T) {
 			p := testPage(t)
-			PageData(p).response.State = implModel.PageStateFromToken(nil)
+			PageData(p).response.State = cql.PageStateFromToken(nil)
 			state := p.State()
 			p.Close()
 			if !state.More() || state.Complete() || state.Token() == nil || len(state.Token()) != 0 {

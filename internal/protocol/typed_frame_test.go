@@ -12,8 +12,7 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -25,7 +24,7 @@ func TestTypedFrame(t *testing.T) {
 		t.Run("EmptyContinuationIsPresent", func(t *testing.T) {
 			c := protocolSettings(4)
 
-			frame, err := c.BuildTypedRequest(&model.AttemptRequest{Statement: "q", Consistency: One, PagingState: []byte{}}, 2)
+			frame, err := c.BuildTypedRequest(&model.AttemptRequest{Statement: "q", Consistency: cql.One, PagingState: []byte{}}, 2)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,7 +60,7 @@ func TestTypedFrame(t *testing.T) {
 						bodySize += 3
 					}
 					settings.MaxFrameBytes = bodySize
-					request := &model.AttemptRequest{Statement: "q", Consistency: cqltype.One, Trace: true}
+					request := &model.AttemptRequest{Statement: "q", Consistency: cql.One, Trace: true}
 					chain, err := settings.BuildTypedRequest(request, 23)
 					if err != nil {
 						t.Fatalf("body exactly at limit: %v", err)
@@ -107,17 +106,17 @@ func TestTypedFrame(t *testing.T) {
 		now := int32(7)
 		shapes := map[string]func(v byte) *model.AttemptRequest{
 			"query": func(byte) *model.AttemptRequest {
-				return &model.AttemptRequest{Statement: "SELECT v FROM ks.t WHERE k=?", Values: values, ValueCount: 1, Consistency: cqltype.Quorum, PageSize: 100, PagingState: []byte("state"), Timestamp: 42, DefaultTimestamp: true}
+				return &model.AttemptRequest{Statement: "SELECT v FROM ks.t WHERE k=?", Values: values, ValueCount: 1, Consistency: cql.Quorum, PageSize: 100, PagingState: []byte("state"), Timestamp: 42, DefaultTimestamp: true}
 			},
 			"execute": func(v byte) *model.AttemptRequest {
-				r := &model.AttemptRequest{PreparedID: []byte("prepared-id"), ResultMetadataID: []byte("md"), Values: values, ValueCount: 1, Consistency: cqltype.One, TabletVersionBlock: 3}
+				r := &model.AttemptRequest{PreparedID: []byte("prepared-id"), ResultMetadataID: []byte("md"), Values: values, ValueCount: 1, Consistency: cql.One, TabletVersionBlock: 3}
 				if v == 5 {
 					r.Keyspace, r.HasNowInSeconds, r.NowInSeconds = "ks", true, now
 				}
 				return r
 			},
 			"batch": func(byte) *model.AttemptRequest {
-				return &model.AttemptRequest{Consistency: cqltype.One, Batch: &model.TypedBatchRequest{Items: []model.TypedBatchItem{{Statement: "INSERT", Values: values, ValueCount: 1}}}}
+				return &model.AttemptRequest{Consistency: cql.One, Batch: &model.TypedBatchRequest{Items: []model.TypedBatchItem{{Statement: "INSERT", Values: values, ValueCount: 1}}}}
 			},
 		}
 		scratch := wire.NewBuilderScratch(256, 16)
@@ -183,7 +182,7 @@ func TestTypedFrame(t *testing.T) {
 		t.Run("IdentityAndChangedValidation", func(t *testing.T) {
 			settings := protocolSettings(4)
 			settings.MetadataReuse = new(MetadataReuse)
-			parse := func(data []byte) (cqltype.Columns, error) {
+			parse := func(data []byte) (cql.Columns, error) {
 				// Fragment every byte to exercise comparison across span boundaries.
 				spans := make([]wire.Span, len(data))
 				for i := range data {
@@ -194,11 +193,11 @@ func TestTypedFrame(t *testing.T) {
 				defer lease.Release()
 				page, err := settings.ParseTypedResponse(frm.FrameHeader{Version: 0x84, Op: frm.OpResult}, chain, lease)
 				if page == nil {
-					return cqltype.Columns{}, err
+					return cql.Columns{}, err
 				}
 				return page.Columns, err
 			}
-			original := reuseMetadataBody("value", uint16(cqltype.TypeBlob))
+			original := reuseMetadataBody("value", uint16(cql.TypeBlob))
 			first, err := parse(original)
 			if err != nil {
 				t.Fatal(err)
@@ -207,10 +206,10 @@ func TestTypedFrame(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if &cqltype.ColumnSlice(first)[0] != &cqltype.ColumnSlice(second)[0] {
+			if &cql.ColumnSlice(first)[0] != &cql.ColumnSlice(second)[0] {
 				t.Fatal("matching validated metadata was reallocated")
 			}
-			changed, err := parse(reuseMetadataBody("other", uint16(cqltype.TypeInt)))
+			changed, err := parse(reuseMetadataBody("other", uint16(cql.TypeInt)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -229,7 +228,7 @@ func TestTypedFrame(t *testing.T) {
 		t.Run("ReturnsExpectedColumns", func(t *testing.T) {
 			settings := protocolSettings(4)
 			settings.MetadataReuse = new(MetadataReuse)
-			parse := func(data []byte, expect cqltype.Columns) cqltype.Columns {
+			parse := func(data []byte, expect cql.Columns) cql.Columns {
 				t.Helper()
 				chain, _ := wire.NewChain(wire.Borrow(data))
 				lease := wire.NewLease(chain, nil)
@@ -240,10 +239,10 @@ func TestTypedFrame(t *testing.T) {
 				}
 				return page.Columns
 			}
-			body := reuseMetadataBody("value", uint16(cqltype.TypeBlob))
-			parsed := parse(body, cqltype.Columns{})
-			blob := cqltype.BlobType
-			expect := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "table", Name: "value", Type: blob})
+			body := reuseMetadataBody("value", uint16(cql.TypeBlob))
+			parsed := parse(body, cql.Columns{})
+			blob := cql.BlobType
+			expect := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: "value", Type: blob})
 			if parsed.Same(expect) || !parsed.Equal(expect) {
 				t.Fatal("setup: expected columns must be equal, not the same")
 			}
@@ -255,15 +254,15 @@ func TestTypedFrame(t *testing.T) {
 				}
 			}
 			// Without expectations, or expecting other columns, the parsed ones return.
-			if got := parse(body, cqltype.Columns{}); !got.Same(parsed) {
+			if got := parse(body, cql.Columns{}); !got.Same(parsed) {
 				t.Fatal("metadata without expectation returned other columns")
 			}
-			other := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "table", Name: "other", Type: blob})
+			other := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: "other", Type: blob})
 			if got := parse(body, other); !got.Same(parsed) {
 				t.Fatal("unequal expected columns were returned")
 			}
 			// Changed metadata forgets the expected columns it matched before.
-			changed := parse(reuseMetadataBody("other", uint16(cqltype.TypeInt)), expect)
+			changed := parse(reuseMetadataBody("other", uint16(cql.TypeInt)), expect)
 			if changed.Equal(expect) {
 				t.Fatal("changed metadata returned the expected columns")
 			}
@@ -284,7 +283,7 @@ func TestTypedFrame(t *testing.T) {
 				if version < 5 && (bit(5) || bit(6)) {
 					continue // keyspace and now_in_seconds require v5
 				}
-				r := &model.AttemptRequest{Statement: "SELECT v FROM ks.t WHERE k=?", Consistency: cqltype.LocalQuorum, Timestamp: 0x0102030405060708}
+				r := &model.AttemptRequest{Statement: "SELECT v FROM ks.t WHERE k=?", Consistency: cql.LocalQuorum, Timestamp: 0x0102030405060708}
 				if bit(0) {
 					r.Statement, r.PreparedID, r.ResultMetadataID = "", []byte("prepared-id"), []byte("md")
 				}
@@ -295,7 +294,7 @@ func TestTypedFrame(t *testing.T) {
 					r.PageSize = 100
 				}
 				if bit(3) {
-					r.SerialConsistency = cqltype.LocalSerial
+					r.SerialConsistency = cql.LocalSerial
 				}
 				if bit(4) {
 					r.DefaultTimestamp = true
@@ -406,7 +405,7 @@ func TestTypedFrame(t *testing.T) {
 			e.Str("ks", false)
 			e.Str("tbl", false)
 			e.Str("v", false)
-			e.U16(uint16(TypeInt))
+			e.U16(uint16(cql.TypeInt))
 			e.U32(1)
 			e.U32(4)
 			e.U32(19)

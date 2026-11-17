@@ -31,10 +31,9 @@ import (
 	"time"
 	"unsafe"
 
+	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -131,12 +130,12 @@ func TestExecution(t *testing.T) {
 				for _, proto := range []byte{4, 5} {
 					for _, owned := range []bool{false, true} {
 						t.Run(fmt.Sprintf("bytes%d/v%d/owned%t", size, proto, owned), func(t *testing.T) {
-							typ := cqltype.BlobType
-							cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})
+							typ := implCql.BlobType
+							cols := implCql.NewColumns(implCql.ColumnSpec{Name: "v", Type: typ})
 							calls := 0
 							input := bytes.Repeat([]byte{0x71}, size)
-							statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: codec.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: codec.EmptyRowDecoder}
-							var bound *Bound[codec.EmptyRecord]
+							statement := binding.Statement[[]byte, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: implCql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: implCql.EmptyRowDecoder}
+							var bound *Bound[implCql.EmptyRow]
 							if owned {
 								bound = codecTestMust(BindUnpreparedOwned(statement, cols, input))
 							} else {
@@ -148,9 +147,9 @@ func TestExecution(t *testing.T) {
 							c.InternalInitFramerCache()
 							for _, batch := range []bool{false, true} {
 								for attempt := 0; attempt < 4; attempt++ {
-									request := &model.AttemptRequest{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1, Consistency: cqltype.One}
+									request := &model.AttemptRequest{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1, Consistency: implCql.One}
 									if batch {
-										request.Batch = &model.TypedBatchRequest{Kind: cqltype.LoggedBatch, Items: []model.TypedBatchItem{{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}, {Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}}}
+										request.Batch = &model.TypedBatchRequest{Kind: implCql.LoggedBatch, Items: []model.TypedBatchItem{{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}, {Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}}}
 									}
 									frame := codecTestMust(c.InternalBuildTypedRequest(request, attempt))
 									retained := int64(0)
@@ -192,13 +191,13 @@ func TestExecution(t *testing.T) {
 		})
 
 		t.Run("KindDeclarationAndServerRefinement", func(t *testing.T) {
-			for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
+			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
 				for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
-					b, err := BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: cql, Kind: kind, Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{})
+					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.EmptyParamsEncoder, Rows: implCql.EmptyRowDecoder}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}
-					if b.Routing().Kind != kind || b.Routing().Conditional != (kind != cqltype.OrdinaryStatement) {
+					if b.Routing().Kind != kind || b.Routing().Conditional != (kind != implCql.OrdinaryStatement) {
 						t.Fatal(cql, b.Routing())
 					}
 					b.Close()
@@ -207,8 +206,8 @@ func TestExecution(t *testing.T) {
 			s, cs, _ := runtimeTestSession(t, 1)
 			for _, test := range []struct {
 				negotiated, lwt bool
-				want            cqltype.StatementKind
-			}{{false, false, cqltype.UnknownStatement}, {true, false, cqltype.OrdinaryStatement}, {true, true, cqltype.ConditionalStatement}, {false, true, cqltype.ConditionalStatement}} {
+				want            implCql.StatementKind
+			}{{false, false, implCql.UnknownStatement}, {true, false, implCql.OrdinaryStatement}, {true, true, implCql.ConditionalStatement}, {false, true, implCql.ConditionalStatement}} {
 				cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 0
 				if test.negotiated {
 					cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 1 << 30
@@ -444,7 +443,7 @@ func TestExecution(t *testing.T) {
 
 		t.Run("VoidCompletionAndMetadata", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			trace := cqltype.UUID{15: 42}
+			trace := implCql.UUID{15: 42}
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -470,7 +469,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: observer}))
-			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (model.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
+			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
 			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
@@ -539,7 +538,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !rows.NextInto(&row) {
 				t.Fatal(rows.Err())
 			}
@@ -562,7 +561,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !rows.NextInto(&row) {
 				t.Fatal(rows.Err())
 			}
@@ -587,7 +586,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			for rows.NextInto(&row) {
 			}
 			if err := rows.Close(); err != nil {
@@ -645,11 +644,11 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !page.NextInto(&row) || string(row.OwnedBytes()) != "retried" {
 				t.Fatal("delayed retry result", page.Err())
 			}
@@ -679,7 +678,7 @@ func TestExecution(t *testing.T) {
 			bound := runtimeQuery(t)
 			finished := make(chan error, 1)
 			go func() {
-				page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
+				page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
 				if page != nil {
 					page.Close()
 				}
@@ -742,7 +741,7 @@ func TestExecution(t *testing.T) {
 			profile.Routing = policy
 			profile.Speculation = runtimeSpeculation{}
 			handle := new(profile)
-			id := cqltype.UUID{15: 5}
+			id := implCql.UUID{15: 5}
 			go func() {
 				stream := typedTestReadRequest(t, conns[1], peers[1])
 				frame := typedTestResponse(t, 4, stream, append(append([]byte{}, id[:]...), runtimeRowsBody(nil, "winner")...))
@@ -752,7 +751,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -775,8 +774,8 @@ func TestExecution(t *testing.T) {
 		})
 
 		t.Run("UnknownConditionalNever", func(t *testing.T) {
-			for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
-				t.Run(map[cqltype.StatementKind]string{cqltype.UnknownStatement: "unknown", cqltype.OrdinaryStatement: "ordinary", cqltype.ConditionalStatement: "conditional"}[kind], func(t *testing.T) {
+			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
+				t.Run(map[implCql.StatementKind]string{implCql.UnknownStatement: "unknown", implCql.OrdinaryStatement: "ordinary", implCql.ConditionalStatement: "conditional"}[kind], func(t *testing.T) {
 					s, cs, ps := runtimeTestSession(t, 1)
 					spec := &countSpeculation{}
 					profile := settings.InternalDefaultProfile()
@@ -795,10 +794,10 @@ func TestExecution(t *testing.T) {
 					}()
 					b := runtimeQuery(t)
 					BoundData(b).InternalRequest.routing.Kind = kind
-					BoundData(b).InternalRequest.routing.Conditional = kind != cqltype.OrdinaryStatement
+					BoundData(b).InternalRequest.routing.Conditional = kind != implCql.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true}))
 						if page != nil {
 							page.Close()
 						}
@@ -810,7 +809,7 @@ func TestExecution(t *testing.T) {
 						t.Fatal(err)
 					}
 					want := int32(0)
-					if kind == cqltype.OrdinaryStatement {
+					if kind == implCql.OrdinaryStatement {
 						want = 1
 					}
 					if spec.calls.Load() != want {

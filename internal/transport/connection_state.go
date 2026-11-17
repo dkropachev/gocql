@@ -30,8 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -264,17 +263,17 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		return nil, err
 	}
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("stream context", "nil context")
+		return nil, cql.TypeValidation("stream context", "nil context")
 	}
 	reader, ok := c.InternalR.(*InternalConnReader)
 	if !ok || reader.InternalConn == nil || reader.InternalR != nil && !reader.transferable {
-		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "connection has no transferable reader"}
+		return nil, &cql.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "connection has no transferable reader"}
 	}
 	if !c.InternalWire().Segments && c.InternalCompressor != nil {
-		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "frame compression has no incremental receive transform"}
+		return nil, &cql.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "frame compression has no incremental receive transform"}
 	}
 	if c.InternalWire().Segments && c.InternalCompressor != nil && c.InternalCompressor.Name() != "lz4" {
-		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "v5 streaming requires raw or LZ4 segments"}
+		return nil, &cql.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "v5 streaming requires raw or LZ4 segments"}
 	}
 	c.InternalMu.Lock()
 	if c.InternalClosed {
@@ -283,7 +282,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	}
 	if c.InternalCfg != nil && c.InternalCfg.InternalIsControlConn {
 		c.InternalMu.Unlock()
-		return nil, &codec.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "control connection cannot be reserved"}
+		return nil, &cql.StreamCapabilityError{Protocol: int(c.InternalVersion), Reason: "control connection cannot be reserved"}
 	}
 	if c.admission.Load()&admissionExclusive != 0 {
 		c.InternalMu.Unlock()

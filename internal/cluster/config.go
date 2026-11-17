@@ -5,23 +5,20 @@ package cluster
 
 import (
 	"context"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/wirecompress"
-
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
 func InternalConnectCluster(ctx context.Context, config implSettings.Config, initialize func(*Core, implSettings.Config) *implSettings.Config) (*Core, error) {
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("context", "nil context")
+		return nil, cql.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -76,7 +73,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	if config.Reconnect != nil {
 		delay, again := config.Reconnect.Delay(0)
 		if delay < 0 {
-			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
+			return nil, cql.TypeValidation("reconnect delay", "must not be negative")
 		}
 		if again {
 			legacy.ReconnectInterval = max(delay, time.Millisecond)
@@ -89,9 +86,9 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		legacy.SslOpts = &transport.SslOptions{Config: config.TLS, EnableHostVerification: !config.TLS.InsecureSkipVerify}
 	}
 	switch config.Compression {
-	case cqltype.LZ4Compression:
+	case cql.LZ4Compression:
 		legacy.Compressor = wirecompress.LZ4Compressor{}
-	case cqltype.SnappyCompression:
+	case cql.SnappyCompression:
 		legacy.Compressor = SnappyCompressor{}
 	}
 	if config.HostFilter != nil {
@@ -104,13 +101,13 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	legacy.HostDialer = hostDialer
 	var typedSession *Core
 	if path, _ := config.UnixContact(); path != "" {
-		hostDialer.InternalUnixHostID = func() cqltype.UUID {
+		hostDialer.InternalUnixHostID = func() cql.UUID {
 			if typedSession != nil && typedSession.privateStorage.InternalControl != nil {
 				if current := typedSession.privateStorage.InternalControl.InternalGetConn(); current != nil && current.InternalHost != nil {
 					return implEndpoint.InternalHostInfoHostUUID(current.InternalHost)
 				}
 			}
-			return cqltype.UUID{}
+			return cql.UUID{}
 		}
 		previous := legacy.HostFilter
 		legacy.HostFilter = HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
@@ -165,7 +162,7 @@ func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, in
 		attempt int
 		stopped bool
 	}
-	retries := make(map[cqltype.UUID]retryState)
+	retries := make(map[cql.UUID]retryState)
 	tick := min(max(initial, time.Millisecond), time.Second)
 	timer := time.NewTicker(tick)
 	defer timer.Stop()

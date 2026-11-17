@@ -20,12 +20,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-
 	"net"
 	"net/netip"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	implCodec "github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -44,8 +43,8 @@ type nativeResultFixture struct {
 	numRows int
 }
 
-func fixtureBody[T any](typ cqltype.DataType, codec implCodec.Encoder[T], v T) ([]byte, error) {
-	encoded, err := implCodec.EncodeValue(typ, codec, v)
+func fixtureBody[T any](typ cql.DataType, codec cql.Encoder[T], v T) ([]byte, error) {
+	encoded, err := cql.EncodeValue(typ, codec, v)
 	if err != nil {
 		return nil, err
 	}
@@ -61,57 +60,57 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	}
 	switch v := value.(type) {
 	case string:
-		if typ.Kind() == cqltype.TypeInet {
+		if typ.Kind() == cql.TypeInet {
 			ip, err := netip.ParseAddr(v)
 			if err != nil {
 				return nil, err
 			}
-			return fixtureBody(typ, implCodec.InetCodec, ip)
+			return fixtureBody(typ, cql.InetCodec, ip)
 		}
-		return fixtureBody(typ, implCodec.StringCodec, v)
+		return fixtureBody(typ, cql.StringCodec, v)
 	case net.IP:
 		ip, ok := netip.AddrFromSlice(v)
 		if !ok {
 			return nil, fmt.Errorf("invalid fixture IP")
 		}
-		return fixtureBody(typ, implCodec.InetCodec, ip.Unmap())
-	case cqltype.UUID:
-		return fixtureBody(typ, implCodec.UUIDCodec, v)
+		return fixtureBody(typ, cql.InetCodec, ip.Unmap())
+	case cql.UUID:
+		return fixtureBody(typ, cql.UUIDCodec, v)
 	case []byte:
-		return fixtureBody(typ, implCodec.BlobCodec, cqltype.BorrowBytes(v))
+		return fixtureBody(typ, cql.BlobCodec, cql.BorrowBytes(v))
 	case int8:
-		return fixtureBody(typ, implCodec.Int8, v)
+		return fixtureBody(typ, cql.Int8Codec, v)
 	case int16:
-		return fixtureBody(typ, implCodec.Int16, v)
+		return fixtureBody(typ, cql.Int16Codec, v)
 	case float32:
-		return fixtureBody(typ, implCodec.Float32, v)
+		return fixtureBody(typ, cql.Float32Codec, v)
 	case map[string][]byte:
-		entries := make([]implCodec.Entry[string, cqltype.Bytes], 0, len(v))
+		entries := make([]cql.Entry[string, cql.Bytes], 0, len(v))
 		for k, x := range v {
-			entries = append(entries, implCodec.Entry[string, cqltype.Bytes]{Key: k, Value: cqltype.BorrowBytes(x)})
+			entries = append(entries, cql.Entry[string, cql.Bytes]{Key: k, Value: cql.BorrowBytes(x)})
 		}
-		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringCodec, implCodec.BlobCodec), entries)
+		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.BlobCodec), entries)
 	case bool:
-		return fixtureBody(typ, implCodec.Bool, v)
+		return fixtureBody(typ, cql.BoolCodec, v)
 	case int:
-		return fixtureBody(typ, implCodec.Int32, int32(v))
+		return fixtureBody(typ, cql.Int32Codec, int32(v))
 	case int32:
-		return fixtureBody(typ, implCodec.Int32, v)
+		return fixtureBody(typ, cql.Int32Codec, v)
 	case int64:
-		return fixtureBody(typ, implCodec.Int64, v)
+		return fixtureBody(typ, cql.Int64Codec, v)
 	case float64:
-		return fixtureBody(typ, implCodec.Float64, v)
+		return fixtureBody(typ, cql.Float64Codec, v)
 	case []string:
-		if typ.Kind() == cqltype.TypeSet {
-			return fixtureBody(typ, implCodec.SetEncoder(implCodec.StringCodec), v)
+		if typ.Kind() == cql.TypeSet {
+			return fixtureBody(typ, cql.SetEncoder(cql.StringCodec), v)
 		}
-		return fixtureBody(typ, implCodec.ListEncoder(implCodec.StringCodec), v)
+		return fixtureBody(typ, cql.ListEncoder(cql.StringCodec), v)
 	case map[string]string:
-		entries := make([]implCodec.Entry[string, string], 0, len(v))
+		entries := make([]cql.Entry[string, string], 0, len(v))
 		for k, x := range v {
-			entries = append(entries, implCodec.Entry[string, string]{Key: k, Value: x})
+			entries = append(entries, cql.Entry[string, string]{Key: k, Value: x})
 		}
-		return fixtureBody(typ, implCodec.MapEncoder(implCodec.StringCodec, implCodec.StringCodec), entries)
+		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.StringCodec), entries)
 	default:
 		return nil, fmt.Errorf("unsupported explicit fixture value %T", value)
 	}
@@ -121,7 +120,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 func hostInfoFromFixture(f *nativeResultFixture, port int) (*endpoint.HostInfo, error) {
 	rows, err := readV2SystemRowsVia(context.Background(), 4, 0, func(_ context.Context, _ *model.AttemptRequest) (*transport.InternalResponsePage, error) {
 		return v2SchemaMockResponse(transport.InternalQrySystemLocal, f)
-	}, binding.Statement[implCodec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: implCodec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), implCodec.EmptyRecord{})
+	}, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
 	if err != nil {
 		return nil, err
 	}
@@ -139,7 +138,7 @@ func writeErrorResult(resp *protocol.Framer, stream int, code protocol.ErrorCode
 
 type testPreparedCol struct {
 	keyspace, table, name string
-	typ                   cqltype.Type
+	typ                   cql.Type
 }
 
 // testPrepared describes a RESULT/Prepared reply. keyspace/table set means a

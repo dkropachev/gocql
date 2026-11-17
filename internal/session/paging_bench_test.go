@@ -21,8 +21,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -33,12 +32,12 @@ import (
 func BenchmarkPaging(b *testing.B) {
 	b.Run("CallerDestination", func(b *testing.B) {
 		type row struct {
-			Value   cqltype.Bytes
+			Value   cql.Bytes
 			Padding [128]int64
 		}
-		typ := cqltype.BlobType
-		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
-		decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *row) *cqltype.Bytes { return &r.Value }))
+		typ := cql.BlobType
+		columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
+		decoder := cql.Row(cql.Column("value", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.Value }))
 		for _, fragments := range []int{1, 1024} {
 			b.Run(fmt.Sprintf("fragments=%d", fragments), func(b *testing.B) {
 				data := binary.BigEndian.AppendUint32(nil, 512000)
@@ -77,9 +76,9 @@ func BenchmarkPaging(b *testing.B) {
 		for _, count := range []int{1, 1024, 65536} {
 			b.Run(fmt.Sprint(count), func(b *testing.B) {
 				h := paging.InternalPagingHistory{InternalMaxCount: count, InternalMaxBytes: 16 << 20}
-				var state model.PageState
+				var state cql.PageState
 				for i := 0; i < count; i++ {
-					state = model.PageStateFromToken(binary.LittleEndian.AppendUint64(nil, uint64(i)))
+					state = cql.PageStateFromToken(binary.LittleEndian.AppendUint64(nil, uint64(i)))
 					if err := h.InternalAdd(state); err != nil {
 						b.Fatal(err)
 					}
@@ -96,11 +95,11 @@ func BenchmarkPaging(b *testing.B) {
 	})
 
 	b.Run("ResultPlanExactEntry", func(b *testing.B) {
-		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
+		columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: cql.BlobType})
 		entry := &model.ResultSchemaIdentity{InternalColumns: columns}
 		response := &transport.InternalResponsePage{InternalMetadata: entry, ResponseData: model.ResponseData{Columns: columns}}
-		cache := &InternalResultPlanCache[cqltype.Bytes]{}
-		decoder := codec.OneColumn(codec.BlobCodec)
+		cache := &InternalResultPlanCache[cql.Bytes]{}
+		decoder := cql.OneColumn(cql.BlobCodec)
 		if _, err := cache.InternalSelectPlan(response, decoder); err != nil {
 			b.Fatal(err)
 		}

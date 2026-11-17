@@ -4,26 +4,25 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type pageValidationDecoder struct{ compiles, resets, decodes int }
 type pageValidationPlan struct {
 	decoder *pageValidationDecoder
-	plan    codec.StreamRowPlan[[]byte]
+	plan    cql.StreamRowPlan[[]byte]
 }
 
-func (d *pageValidationDecoder) Compile(columns cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *pageValidationDecoder) Compile(columns cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	d.compiles++
-	plan, err := codec.StreamOneColumn(codec.StreamBlob).Compile(columns)
+	plan, err := cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
 	return pageValidationPlan{decoder: d, plan: plan}, err
 }
 func (p pageValidationPlan) Reset(dst *[]byte) {
 	p.decoder.resets++
 	p.plan.Reset(dst)
 }
-func (p pageValidationPlan) DecodeInto(reader *codec.StreamRowReader, dst *[]byte) error {
+func (p pageValidationPlan) DecodeInto(reader *cql.StreamRowReader, dst *[]byte) error {
 	p.decoder.decodes++
 	return p.plan.DecodeInto(reader, dst)
 }

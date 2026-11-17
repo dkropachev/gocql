@@ -64,17 +64,11 @@ var primitivePackages = map[string]bool{
 // a violation.
 var layerViolations = map[string]bool{
 	"auth -> internal/settings":          true,
-	"cql/dynamic -> internal/codec":      true,
-	"cqlerr -> internal/codec":           true,
 	"cqlerr -> internal/cqltype":         true,
 	"cqlerr -> internal/metadata":        true,
 	"cqlerr -> internal/protocol":        true,
 	"cqlerr -> internal/runtimeerrors":   true,
 	"cqlerr -> internal/transport":       true,
-	"cql -> internal/codec":              true,
-	"cql -> internal/cqltype":            true,
-	"cql -> internal/model":              true,
-	"cql/stream -> internal/codec":       true,
 	"endpoint -> internal/endpoint":      true,
 	"event -> internal/cluster":          true,
 	"internal/tablets -> internal/tests": true,

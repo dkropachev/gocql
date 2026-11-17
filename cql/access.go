@@ -1,0 +1,29 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package cql
+
+import (
+	"github.com/scylladb/gocql/v2/internal/wire"
+)
+
+// These accessors are internal contracts for codecs and native metadata readers.
+// Constructors take ownership of descriptor slices; consumers never mutate them.
+// Descriptors are shared: every ScalarType call and predeclared scalar such as
+// IntType returns the same descriptor for a kind, so writing through
+// DescriptorOf changes that type process-wide. Build a private descriptor with
+// TypeFromDescriptor instead.
+func DescriptorOf(t DataType) *DataTypeDescriptor { return t.descriptor }
+func TypeFromDescriptor(d *DataTypeDescriptor) DataType {
+	return DataType{descriptor: d}
+}
+func ColumnSlice(c Columns) []ColumnSpec               { return c.columns }
+func ColumnsOwned(c []ColumnSpec) Columns              { return Columns{columns: c} }
+func BytesChain(b Bytes) wire.Chain                    { return b.chain }
+func BytesLease(b Bytes) wire.Ref                      { return b.lease }
+func BytesView(c wire.Chain, l wire.Ref) Bytes         { return Bytes{chain: c, lease: l} }
+func TextView(b Bytes) Text                            { return Text{bytes: b} }
+func TextBytes(t Text) Bytes                           { return t.bytes }
+func CheckBytesAlive(b Bytes) error                    { return b.checkAlive() }
+func EachBytes(b Bytes, f func(wire.Span) error) error { return b.each(f) }
+func Fingerprint(t DataType) string                    { return t.fingerprint() }

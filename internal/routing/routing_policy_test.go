@@ -7,7 +7,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -22,7 +22,7 @@ func TestRoutingPolicy(t *testing.T) {
 			if err := policy.Validate(m); err != nil {
 				t.Fatal(err)
 			}
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true, Value: 1}, Conditional: true}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Conditional: true}
 			a, b := NewPlan(policy, info, m), NewPlan(policy, info, m)
 			want := []byte{1, 2, 3, 4}
 			if got := v2PlanIDs(a); !bytes.Equal(got, want) {
@@ -33,7 +33,7 @@ func TestRoutingPolicy(t *testing.T) {
 			}
 			for i := 0; i < 20; i++ {
 				info.Conditional = false
-				info.Consistency = cqltype.Serial
+				info.Consistency = cql.Serial
 				if got := v2PlanIDs(NewPlan(policy, info, m)); !bytes.Equal(got, want) {
 					t.Fatal("SERIAL order changed", got)
 				}
@@ -50,18 +50,18 @@ func TestRoutingPolicy(t *testing.T) {
 
 		t.Run("TabletMissAndStrictShard", func(t *testing.T) {
 			m := v2TestMetadata()
-			SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}] = []TokenRange{{Start: 10, End: 20, Replicas: []model.Target{{HostID: SnapshotData(m).InternalHosts[1].ID, ShardID: cqltype.Option[uint32]{Value: 2, Set: true}}}}}
+			SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}] = []TokenRange{{Start: 10, End: 20, Replicas: []model.Target{{HostID: SnapshotData(m).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 2, Set: true}}}}}
 			if got, err := m.Replicas("ks", "table", 30); err != nil || len(got) != 0 {
 				t.Fatal("tablet miss fell back to vnode", got, err)
 			}
-			single := SingleTargetRouting(model.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cqltype.Option[uint32]{Value: 9, Set: true}}, true)
+			single := SingleTargetRouting(model.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}}, true)
 			if err := single.Validate(m); err == nil {
 				t.Fatal("invalid strict shard accepted")
 			}
 			if _, ok := nextTarget(NewPlan(single, model.RoutingInfo{}, m)); ok {
 				t.Fatal("strict shard fell back")
 			}
-			single = SingleTargetRouting(model.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cqltype.Option[uint32]{Value: 9, Set: true}}, false)
+			single = SingleTargetRouting(model.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}}, false)
 			target, ok := nextTarget(NewPlan(single, model.RoutingInfo{}, m))
 			if !ok || target.ShardID.Set {
 				t.Fatal("hint fallback failed", target, ok)
@@ -78,19 +78,19 @@ func TestRoutingPolicy(t *testing.T) {
 			policy := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a"}))
 			tests := []struct {
 				host  byte
-				shard cqltype.Option[uint32]
+				shard cql.Option[uint32]
 				valid bool
 			}{
-				{1, cqltype.Option[uint32]{}, true},
-				{3, cqltype.Option[uint32]{Value: 0, Set: true}, true},
-				{1, cqltype.Option[uint32]{Value: 3, Set: true}, true},
-				{2, cqltype.Option[uint32]{}, false},
-				{99, cqltype.Option[uint32]{Value: 1, Set: true}, false},
+				{1, cql.Option[uint32]{}, true},
+				{3, cql.Option[uint32]{Value: 0, Set: true}, true},
+				{1, cql.Option[uint32]{Value: 3, Set: true}, true},
+				{2, cql.Option[uint32]{}, false},
+				{99, cql.Option[uint32]{Value: 1, Set: true}, false},
 			}
 			plans := make([]QueryPlan, len(tests))
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Set: true, Value: 1}, Consistency: cqltype.LocalQuorum}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.LocalQuorum}
 			for i, test := range tests {
-				info.HostID = cqltype.Option[cqltype.UUID]{Value: cqltype.UUID{15: test.host}, Set: true}
+				info.HostID = cql.Option[cql.UUID]{Value: cql.UUID{15: test.host}, Set: true}
 				info.ShardID = test.shard
 				plans[i] = NewPlan(policy, info, m)
 			}
@@ -99,7 +99,7 @@ func TestRoutingPolicy(t *testing.T) {
 			for i := len(plans) - 1; i >= 0; i-- {
 				test := tests[i]
 				target, ok := nextTarget(plans[i])
-				want := model.Target{HostID: cqltype.UUID{15: test.host}, ShardID: test.shard, StrictShard: test.shard.Set}
+				want := model.Target{HostID: cql.UUID{15: test.host}, ShardID: test.shard, StrictShard: test.shard.Set}
 				if ok != test.valid || ok && target != want {
 					t.Fatalf("host %d shard %+v: got %+v,%t; want %+v,%t", test.host, test.shard, target, ok, want, test.valid)
 				}
@@ -113,7 +113,7 @@ func TestRoutingPolicy(t *testing.T) {
 	t.Run("Pick", func(t *testing.T) {
 		t.Run("FirstRoute", func(t *testing.T) {
 			m := v2TestMetadata()
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 			t.Run("rack replica first", func(t *testing.T) {
 				p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true})).(*InternalRoutingPolicy)
 				var storage InternalLazyRoutingPlan
@@ -158,7 +158,7 @@ func TestRoutingPolicy(t *testing.T) {
 			m := v2TestMetadata()
 			hosts := m.HostRoutes()
 			t.Run("pick first, fallback on demand", func(t *testing.T) {
-				p := &pickFallbackPolicy{pick: cqltype.Option[Route]{Value: hosts[1], Set: true}, fallback: []Route{hosts[0], hosts[1], hosts[2], hosts[1]}}
+				p := &pickFallbackPolicy{pick: cql.Option[Route]{Value: hosts[1], Set: true}, fallback: []Route{hosts[0], hosts[1], hosts[2], hosts[1]}}
 				plan := NewPlan(p, model.RoutingInfo{}, m)
 				if r, ok := plan.Next(); !ok || r != hosts[1] || p.fallbacks != 0 {
 					t.Fatalf("first route %v %v after %d fallbacks, want the pick and no fallback", r.HostID(), ok, p.fallbacks)
@@ -181,7 +181,7 @@ func TestRoutingPolicy(t *testing.T) {
 				}
 			})
 			t.Run("shard of the picked host", func(t *testing.T) {
-				p := &pickFallbackPolicy{pick: cqltype.Option[Route]{Value: hosts[0].WithShard(1), Set: true}, fallback: []Route{hosts[0].WithShard(1), hosts[0]}}
+				p := &pickFallbackPolicy{pick: cql.Option[Route]{Value: hosts[0].WithShard(1), Set: true}, fallback: []Route{hosts[0].WithShard(1), hosts[0]}}
 				plan := NewPlan(p, model.RoutingInfo{}, m)
 				plan.Next()
 				if r, ok := plan.Next(); !ok || r != hosts[0] {
@@ -192,7 +192,7 @@ func TestRoutingPolicy(t *testing.T) {
 
 		t.Run("BuiltinFallback", func(t *testing.T) {
 			m := v2TestMetadata()
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 			p := codecTestMust(NewRoutingPolicy(RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true}))
 			picked := 0
 			for range 200 {

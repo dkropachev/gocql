@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/routing"
 )
@@ -27,11 +26,11 @@ func TestUnpreparedCalls(t *testing.T) {
 	t.Run("EachAndErrorsReleaseQueries", func(t *testing.T) {
 		core := loopbackTestSession(t, "pone")
 		s := InternalWrapSession(core)
-		statement := binding.Statement[int32, cqltype.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.OneColumn(codec.BlobCodec), BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})}
+		statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BlobCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
 		sentinel := errors.New("stop consumer")
 		for _, callbackError := range []error{nil, sentinel} {
-			var dst cqltype.Bytes
-			result, err := s.UnpreparedEach(context.Background(), statement, int32(1), &dst, func(row *cqltype.Bytes) error {
+			var dst cql.Bytes
+			result, err := s.UnpreparedEach(context.Background(), statement, int32(1), &dst, func(row *cql.Bytes) error {
 				if string(row.OwnedBytes()) != loopbackValue {
 					t.Error("bad borrowed value during callback")
 				}
@@ -40,14 +39,14 @@ func TestUnpreparedCalls(t *testing.T) {
 			if !errors.Is(err, callbackError) || result.Rows != 1 {
 				t.Fatal(result, err)
 			}
-			if _, err := dst.At(0); !errors.Is(err, cqltype.ErrReleased) {
+			if _, err := dst.At(0); !errors.Is(err, cql.ErrReleased) {
 				t.Fatalf("Each unexpectedly detached its borrowed row: %v", err)
 			}
 		}
-		if _, err := s.UnpreparedEach(context.Background(), statement, int32(1), new(cqltype.Bytes), nil); err == nil {
+		if _, err := s.UnpreparedEach(context.Background(), statement, int32(1), new(cql.Bytes), nil); err == nil {
 			t.Fatal("nil callback accepted")
 		}
-		if _, _, err := s.UnpreparedOne(context.Background(), statement, int32(1), new(cqltype.Bytes), Options{}, Options{}); err == nil {
+		if _, _, err := s.UnpreparedOne(context.Background(), statement, int32(1), new(cql.Bytes), Options{}, Options{}); err == nil {
 			t.Fatal("multiple options accepted")
 		}
 		deadline := time.Now().Add(5 * time.Second)
@@ -77,7 +76,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		defer cancel()
 		returned := make(chan error, 1)
 		go func() {
-			_, err := s.UnpreparedExec(ctx, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "INSERT INTO ks.tbl(k) VALUES(1)"}, codec.EmptyRecord{}, options)
+			_, err := s.UnpreparedExec(ctx, binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "INSERT INTO ks.tbl(k) VALUES(1)"}, cql.EmptyRow{}, options)
 			returned <- err
 		}()
 		<-entered

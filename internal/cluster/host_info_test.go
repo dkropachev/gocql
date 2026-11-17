@@ -30,7 +30,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
@@ -558,13 +558,13 @@ func TestHostInfo(t *testing.T) {
 			net.IPv4(192, 168, 100, 12),
 			"cluster",
 			"datacenter1",
-			cqltype.MustParseUUID("045859a7-6b9f-4efd-a5e7-acd64a295e13"),
+			cql.MustParseUUID("045859a7-6b9f-4efd-a5e7-acd64a295e13"),
 			net.IPv4(192, 168, 100, 12),
 			"org.apache.cassandra.dht.Murmur3Partitioner",
 			"rack1",
 			"3.0.8",
 			net.IPv4(192, 168, 100, 12),
-			cqltype.MustParseUUID("daf4df2c-b708-11ef-5c25-3004361afd71"),
+			cql.MustParseUUID("daf4df2c-b708-11ef-5c25-3004361afd71"),
 			[]string{"1"},
 		}
 		framer := &trackingMockFramer{
@@ -594,7 +594,7 @@ func TestHostInfo(t *testing.T) {
 			t.Parallel()
 
 			hostID := testLocalHostID
-			schema := cqltype.MustRandomUUID()
+			schema := cql.RandomUUID()
 			row := map[string]any{
 				"data_center":       "dc1",
 				"rack":              "r1",
@@ -689,7 +689,7 @@ func TestHostInfo(t *testing.T) {
 			opaqueStorageValue := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalDataCenter = "dc-new"
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalRack = "r-new"
-			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cqltype.MustRandomUUID()
+			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cql.RandomUUID()
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalPort = 19042
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalRpcAddress = net.ParseIP("10.0.0.2")
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalTokens = []string{"9"}
@@ -717,7 +717,7 @@ func TestHostInfo(t *testing.T) {
 			opaqueStorageValuexx := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalDataCenter = "dc-old"
 			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalRack = "r-old"
-			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalHostId = cqltype.MustRandomUUID()
+			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalHostId = cql.RandomUUID()
 			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalPort = 9042
 			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalRpcAddress = net.ParseIP("10.0.0.1")
 			implEndpoint.HostInfoData(opaqueStorageValuexx).InternalTokens = []string{"1"}

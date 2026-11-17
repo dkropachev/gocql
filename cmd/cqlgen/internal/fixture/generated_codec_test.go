@@ -11,7 +11,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -42,11 +41,11 @@ func TestGeneratedCodec(t *testing.T) {
 		v := value()
 		withPoint := cql.WithCodec[Fixture](PointCodec)
 		withAttrs := cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
-		reflectedParams, err := codec.ReflectParams(withPoint, withAttrs)
+		reflectedParams, err := cql.ReflectParams(withPoint, withAttrs)
 		if err != nil {
 			t.Fatal(err)
 		}
-		reflectedRows, err := codec.ReflectRow(withPoint, withAttrs)
+		reflectedRows, err := cql.ReflectRow(withPoint, withAttrs)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,7 +106,7 @@ func TestGeneratedCodec(t *testing.T) {
 			t.Fatal(err)
 		}
 		builder := wire.NewBuilder(8)
-		w := codec.NewParamWriter(builder, cols, true)
+		w := cql.NewParamWriter(builder, cols, true)
 		if err := plan.Encode(w, source{want.ID, want.Key, want.Payload, string(want.Name), want.Pieces, want.Tags, want.Maybe, want.At, want.Addr}); err != nil {
 			t.Fatal(err)
 		}
@@ -119,7 +118,7 @@ func TestGeneratedCodec(t *testing.T) {
 		if _, err := chain.CopyTo(data); err != nil {
 			t.Fatal(err)
 		}
-		reflected, err := codec.ReflectStreamRow[StreamFixture]()
+		reflected, err := cql.ReflectStreamRow[StreamFixture]()
 		if err != nil {
 			t.Fatal(err)
 		}

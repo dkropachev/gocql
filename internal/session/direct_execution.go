@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -51,9 +52,9 @@ func canUseDirectProfile(profile settings.Profile) bool {
 // outcome channel or per-attempt goroutine. Observers and latency-aware
 // routing are told about each attempt on this goroutine; speculation and
 // custom routing policies keep the general execution path.
-func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state model.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
+func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state cql.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
 	consistency := request.options.InternalProfile.Consistency
-	aggregate := model.Result{AchievedConsistency: consistency}
+	aggregate := cql.Result{AchievedConsistency: consistency}
 	var log *attemptLog // allocated on the first failed attempt
 	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
 	var conn *transport.Conn
@@ -122,7 +123,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.Latency += latency
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
-		mergeResponseResult(&aggregate, response, model.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
+		mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
 		trace := responseTraceID(response)
 		if err == nil {
 			// Attempts run one at a time here, and a failed attempt's response
@@ -132,9 +133,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			response.Result = aggregate
 			response.Result.Rows = int64(response.RowCount)
 			if response.PagingState != nil {
-				response.State = model.PageStateOwned(response.PagingState, 1)
+				response.State = cql.PageStateOwned(response.PagingState, 1)
 			} else {
-				response.State = model.CompletePageState()
+				response.State = cql.CompletePageState()
 			}
 			return response, nil
 		}
@@ -160,21 +161,21 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
-			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
+			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cql.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:
 		default:
-			return failure(cqltype.TypeValidation("retry", "unknown retry action"))
+			return failure(cql.TypeValidation("retry", "unknown retry action"))
 		}
 		if decision.Consistency.Set {
 			if !settings.InternalValidConsistency(decision.Consistency.Value) {
-				return failure(cqltype.TypeValidation("retry consistency", "invalid consistency"))
+				return failure(cql.TypeValidation("retry consistency", "invalid consistency"))
 			}
 			consistency = decision.Consistency.Value
 		}
 		if decision.Delay < 0 {
-			return failure(cqltype.TypeValidation("retry delay", "negative delay"))
+			return failure(cql.TypeValidation("retry delay", "negative delay"))
 		}
 		if decision.Delay > 0 {
 			timer := time.NewTimer(decision.Delay)
@@ -201,7 +202,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 // pinned connection: it omits that connection's host.
 type skipHostPlan struct {
 	plan routing.QueryPlan
-	host cqltype.UUID
+	host cql.UUID
 }
 
 func (p *skipHostPlan) Next() (routing.Route, bool) {
@@ -215,7 +216,7 @@ func (p *skipHostPlan) Next() (routing.Route, bool) {
 
 // mergeResponseResult adds a response's diagnostics to result. A trace
 // session the response names is recorded as attempt, with its ID filled in.
-func mergeResponseResult(result *model.Result, response *transport.InternalResponsePage, attempt model.CQLTraceRef) {
+func mergeResponseResult(result *cql.Result, response *transport.InternalResponsePage, attempt cql.CQLTraceRef) {
 	// Warnings, trace IDs and custom payload all live in the rare extras.
 	if response == nil || response.Extras == nil {
 		return
@@ -243,7 +244,7 @@ func routingObservesLatency(policy routing.RoutingPolicy) bool {
 func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) model.Target {
 	target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-		target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+		target.ShardID = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 	}
 	return target
 }

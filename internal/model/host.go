@@ -6,7 +6,7 @@ package model
 import (
 	"net/netip"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type HostSnapshot struct {
@@ -17,6 +17,6 @@ type HostSnapshot struct {
 	// ShardingIgnoreMSB is how many most significant token bits the host
 	// ignores when mapping a token to a shard.
 	ShardingIgnoreMSB      uint8
-	ID                     cqltype.UUID
+	ID                     cql.UUID
 	Enabled, Connected, Up bool
 }

@@ -5,14 +5,11 @@ package routing
 
 import (
 	"fmt"
-
-	codec "github.com/scylladb/gocql/v2/internal/codec"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	model "github.com/scylladb/gocql/v2/internal/model"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -72,7 +69,7 @@ func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Targ
 // statement's routing key is, and hashed with the table's partitioner. It
 // needs loaded schema metadata; a key of the wrong arity or type, or a null
 // component, is a validation error.
-func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (int64, error) {
+func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
 	if m == nil {
 		return 0, runtimeerrors.ErrNoKeyspace
 	}
@@ -97,14 +94,14 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
 	}
 	if len(columns) == 0 {
-		return 0, cqltype.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
+		return 0, cql.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
 	}
 	if len(key) != len(columns) {
-		return 0, cqltype.TypeValidation("partition key", "%s.%s takes %d components, got %d", keyspace, table, len(columns), len(key))
+		return 0, cql.TypeValidation("partition key", "%s.%s takes %d components, got %d", keyspace, table, len(columns), len(key))
 	}
 	p := data.InternalPartitioners[partitioner]
 	if p == nil {
-		return 0, cqltype.TypeValidation("partitioner", "no configured partitioner for %q", partitioner)
+		return 0, cql.TypeValidation("partitioner", "no configured partitioner for %q", partitioner)
 	}
 	cells := make([]model.EncodedCell, len(key))
 	indexes := make([]int, len(key))
@@ -113,14 +110,14 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}
-		if key[i].State() != cqltype.Present {
-			return 0, cqltype.TypeValidation("partition key", "column %q must have a value", column.Name)
+		if key[i].State() != cql.Present {
+			return 0, cql.TypeValidation("partition key", "column %q must have a value", column.Name)
 		}
-		encoded, err := codec.EncodeValueBorrowed(typ, codec.DynamicCodec, key[i])
+		encoded, err := cql.EncodeValueBorrowed(typ, cql.DynamicCodec, key[i])
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}
-		cells[i] = model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(encoded.Bytes()), State: encoded.State()}
+		cells[i] = model.EncodedCell{Typ: typ, Body: cql.BytesChain(encoded.Bytes()), State: encoded.State()}
 		indexes[i] = i
 	}
 	token, err := InternalComputeRoutingToken(cells, indexes, p)
@@ -128,7 +125,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 		return 0, err
 	}
 	if !token.Set {
-		return 0, cqltype.TypeValidation("partition key", "no token for %s.%s", keyspace, table)
+		return 0, cql.TypeValidation("partition key", "no token for %s.%s", keyspace, table)
 	}
 	return token.Value, nil
 }

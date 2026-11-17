@@ -8,10 +8,9 @@ import (
 	"fmt"
 	"math"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
-
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
@@ -171,14 +170,14 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 				continue
 			}
 			value := entry.Value.Value
-			if err := cqltype.CheckBytesAlive(value); err != nil {
+			if err := cql.CheckBytesAlive(value); err != nil {
 				return wire.Chain{}, false, err
 			}
 			if value.Len() > math.MaxInt32 {
 				return wire.Chain{}, false, ErrFrameTooBig
 			}
 			e.U32(uint32(value.Len()))
-			e.Chain(cqltype.BytesChain(value))
+			e.Chain(cql.BytesChain(value))
 		}
 	}
 	switch {

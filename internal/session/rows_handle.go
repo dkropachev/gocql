@@ -4,8 +4,7 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -90,19 +89,19 @@ func (r Rows[R]) Clone() (R, error) {
 }
 
 // Info returns the execution's result information so far.
-func (r Rows[R]) Info() model.Result {
+func (r Rows[R]) Info() cql.Result {
 	if impl := r.live(); impl != nil {
 		return impl.Info()
 	}
-	return model.Result{}
+	return cql.Result{}
 }
 
 // Columns returns the current page's actual physical result metadata.
-func (r Rows[R]) Columns() cqltype.Columns {
+func (r Rows[R]) Columns() cql.Columns {
 	if impl := r.live(); impl != nil {
 		return impl.Columns()
 	}
-	return cqltype.Columns{}
+	return cql.Columns{}
 }
 
 // rowsHolder is a Rows iterator with its first page, allocated together. A

@@ -26,18 +26,16 @@ package cluster
 
 import (
 	"fmt"
-
 	"log/slog"
+	"sync"
+	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
-	"sync"
-	"sync/atomic"
 )
 
 const hostInfoListMapThreshold = 20
@@ -45,8 +43,8 @@ const hostInfoListMapThreshold = 20
 // hostInfoList is an immutable host list snapshot with optional indexed lookup.
 type hostInfoList struct {
 	hosts     []*implEndpoint.HostInfo
-	hostsByID map[cqltype.UUID]*implEndpoint.HostInfo
-	hostIDs   []cqltype.UUID
+	hostsByID map[cql.UUID]*implEndpoint.HostInfo
+	hostIDs   []cql.UUID
 }
 
 func newHostInfoList(hosts []*implEndpoint.HostInfo) *hostInfoList {
@@ -56,7 +54,7 @@ func newHostInfoList(hosts []*implEndpoint.HostInfo) *hostInfoList {
 	}
 
 	if len(hosts) >= hostInfoListMapThreshold {
-		hostsByID := make(map[cqltype.UUID]*implEndpoint.HostInfo, len(hosts))
+		hostsByID := make(map[cql.UUID]*implEndpoint.HostInfo, len(hosts))
 		l.hostsByID = hostsByID
 		for _, host := range hosts {
 			hostID := implEndpoint.InternalHostInfoHostUUID(host)
@@ -70,7 +68,7 @@ func newHostInfoList(hosts []*implEndpoint.HostInfo) *hostInfoList {
 		return l
 	}
 
-	hostIDs := make([]cqltype.UUID, len(hosts))
+	hostIDs := make([]cql.UUID, len(hosts))
 	for i, host := range hosts {
 		hostIDs[i] = implEndpoint.InternalHostInfoHostUUID(host)
 	}
@@ -96,7 +94,7 @@ func (l *hostInfoList) InternalLen() int {
 }
 
 // hostByID finds a host in this snapshot by host_id.
-func (l *hostInfoList) hostByID(hostID cqltype.UUID) *implEndpoint.HostInfo {
+func (l *hostInfoList) hostByID(hostID cql.UUID) *implEndpoint.HostInfo {
 	if l == nil || hostID.IsEmpty() {
 		return nil
 	}

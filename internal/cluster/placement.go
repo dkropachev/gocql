@@ -6,11 +6,10 @@ package cluster
 import (
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
@@ -156,12 +155,12 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		ensureNext()
 		routing.SnapshotData(next).InternalDiagnostics = make([]error, 0, len(routing.SnapshotData(old).InternalDiagnostics)+1)
 		for _, diagnostic := range routing.SnapshotData(old).InternalDiagnostics {
-			if v, ok := errors.AsType[*cqltype.ValidationError](diagnostic); ok && v.Field == "tablet placement" {
+			if v, ok := errors.AsType[*cql.ValidationError](diagnostic); ok && v.Field == "tablet placement" {
 				continue
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)
 		}
-		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cqltype.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
+		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cql.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
 		for _, k := range known {
 			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && routing.SnapshotData(next).InternalPlacements.Get(k) == nil {
 				routing.SnapshotData(next).InternalPlacements = routing.SnapshotData(next).InternalPlacements.Put(k, routing.InternalTabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)})

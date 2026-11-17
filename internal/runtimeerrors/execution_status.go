@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -89,17 +89,17 @@ type AttemptFailure struct {
 	Err error
 	// Address is the host:port the attempt was sent to.
 	Address string
-	HostID  cqltype.UUID
+	HostID  cql.UUID
 	// Number is the 1-based attempt number.
 	Number int
 	// Shard is the shard of the connection, when the host is shard-aware.
-	Shard       cqltype.Option[uint32]
-	Consistency cqltype.Consistency
+	Shard       cql.Option[uint32]
+	Consistency cql.Consistency
 	Status      cqltype.ExecutionStatus
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
 	// error. Read it with package cqltrace.
-	CQLTraceID cqltype.Option[cqltype.UUID]
+	CQLTraceID cql.Option[cql.UUID]
 }
 
 func (a AttemptFailure) String() string {
@@ -125,13 +125,13 @@ type ExecutionError struct {
 	Err error
 	// Attempts lists the failed attempts in the order they finished.
 	Attempts []AttemptFailure
-	Result   model.Result
+	Result   cql.Result
 	status   cqltype.ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request whose attempts reached
 // status.
-func NewExecutionError(err error, result model.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func NewExecutionError(err error, result cql.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return &ExecutionError{Err: err, Result: result, status: status, Attempts: attempts}
 }
 

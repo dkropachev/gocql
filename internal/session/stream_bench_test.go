@@ -24,8 +24,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 )
 
@@ -68,7 +67,7 @@ func BenchmarkStream(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						if mode == "stream" {
-							cursor, err := RunStream(context.Background(), s, bound, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
+							cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -81,12 +80,12 @@ func BenchmarkStream(b *testing.B) {
 							}
 							cursor.Close()
 						} else {
-							rows, err := Run(context.Background(), s, bound, testOptions(Options{Prefetch: cqltype.Option[int]{Set: true, Value: 0}}))
+							rows, err := Run(context.Background(), s, bound, testOptions(Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 							if err != nil {
 								b.Fatal(err)
 							}
 							count := 0
-							var view cqltype.Bytes
+							var view cql.Bytes
 							for rows.NextInto(&view) {
 								if view.Len() != int64(shape.cell) {
 									b.Fatal("size")
@@ -148,7 +147,7 @@ func BenchmarkStream(b *testing.B) {
 					b.SetBytes(int64(shape.rows * shape.cell))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						cursor, err := RunStream(context.Background(), s, bound, codec.StreamOneColumn(codec.StreamBlob), StreamOptions{Incremental: true})
+						cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
 						if err != nil {
 							b.Fatal(err)
 						}

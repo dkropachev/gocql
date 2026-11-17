@@ -7,7 +7,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
@@ -20,8 +20,8 @@ type Profile struct {
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
 	PageSize             int32
-	SerialConsistency    cqltype.Option[cqltype.Consistency]
-	Consistency          cqltype.Consistency
+	SerialConsistency    cql.Option[cql.Consistency]
+	Consistency          cql.Consistency
 	// unbuilt marks a public Profile that ProfileBuilder.Build did not make,
 	// such as a struct literal: its unset fields are zero, not the driver's
 	// defaults, so validation rejects it.
@@ -36,31 +36,31 @@ func (p *Profile) InternalMarkUnbuilt() { p.unbuilt = true }
 func (p *Profile) InternalBuilt() bool { return !p.unbuilt }
 
 func InternalDefaultProfile() Profile {
-	return Profile{Consistency: cqltype.LocalQuorum, SerialConsistency: cqltype.Option[cqltype.Consistency]{Value: cqltype.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
+	return Profile{Consistency: cql.LocalQuorum, SerialConsistency: cql.Option[cql.Consistency]{Value: cql.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
 func (p Profile) ValidateProfile() error {
 	if p.unbuilt {
-		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
+		return cql.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
 	}
 	if !InternalValidConsistency(p.Consistency) {
-		return cqltype.TypeValidation("consistency", "invalid consistency")
+		return cql.TypeValidation("consistency", "invalid consistency")
 	}
-	if p.SerialConsistency.Set && p.SerialConsistency.Value != cqltype.Serial && p.SerialConsistency.Value != cqltype.LocalSerial {
-		return cqltype.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
+	if p.SerialConsistency.Set && p.SerialConsistency.Value != cql.Serial && p.SerialConsistency.Value != cql.LocalSerial {
+		return cql.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
 	}
 	if p.Timeout < 0 || p.PageTimeout < 0 {
-		return cqltype.TypeValidation("timeout", "must not be negative")
+		return cql.TypeValidation("timeout", "must not be negative")
 	}
 	if p.PageSize <= 0 {
-		return cqltype.TypeValidation("page size", "must be positive")
+		return cql.TypeValidation("page size", "must be positive")
 	}
 	if p.Prefetch < 0 || p.Prefetch > 1 {
-		return cqltype.TypeValidation("prefetch", "must be zero or one")
+		return cql.TypeValidation("prefetch", "must be zero or one")
 	}
 	return nil
 }
-func InternalValidConsistency(c cqltype.Consistency) bool {
-	return c >= cqltype.Any && c <= cqltype.LocalOne
+func InternalValidConsistency(c cql.Consistency) bool {
+	return c >= cql.Any && c <= cql.LocalOne
 }
 
 type SpeculationPolicy interface {
@@ -78,7 +78,7 @@ type RequestStart struct {
 	Started         time.Time
 	Statement       string
 	BatchStatements []string
-	Parameters      cqltype.Columns
+	Parameters      cql.Columns
 	Routing         model.RoutingInfo
 	ID              uint64
 	// CQLTrace reports that the request's attempts ask the cluster to record
@@ -89,8 +89,8 @@ type RequestEvent struct {
 	Err             error
 	Statement       string
 	BatchStatements []string
-	Parameters      cqltype.Columns
-	Result          model.Result
+	Parameters      cql.Columns
+	Result          cql.Result
 	Routing         model.RoutingInfo
 	ID              uint64
 }

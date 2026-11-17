@@ -14,8 +14,7 @@ import (
 	"testing"
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -43,7 +42,7 @@ func TestTypedConn(t *testing.T) {
 			for _, compressor := range []protocol.Compressor{lz4.LZ4Compressor{}, wirecompress.SnappyCompressor{}} {
 				c := &transport.Conn{InternalVersion: 4, InternalCompressor: compressor}
 				c.InternalInitFramerCache()
-				request := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: implCqltype.One}
+				request := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cql.One}
 				packet, err := c.InternalBuildTypedRequest(request, 8)
 				if err != nil {
 					t.Fatal(err)
@@ -79,14 +78,14 @@ func TestTypedConn(t *testing.T) {
 					t.Run(string(rune('0'+proto))+kind, func(t *testing.T) {
 						c := &transport.Conn{InternalVersion: proto}
 						c.InternalInitFramerCache()
-						r := &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (v) VALUES (?)", Consistency: implCqltype.Quorum, SerialConsistency: implCqltype.LocalSerial, Timestamp: 123456, DefaultTimestamp: true}
+						r := &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (v) VALUES (?)", Consistency: cql.Quorum, SerialConsistency: cql.LocalSerial, Timestamp: 123456, DefaultTimestamp: true}
 						if proto >= 5 {
 							r.Keyspace = "ks"
 							r.HasNowInSeconds, r.NowInSeconds = true, 123
 						}
 						f := c.InternalGetWriteFramer()
 						defer c.InternalReleaseWriteFramer(f)
-						params := fixtureQueryParams{consistency: implCqltype.Quorum, serialConsistency: implCqltype.LocalSerial, defaultTimestamp: true, defaultTimestampValue: 123456, keyspace: r.Keyspace}
+						params := fixtureQueryParams{consistency: cql.Quorum, serialConsistency: cql.LocalSerial, defaultTimestamp: true, defaultTimestampValue: 123456, keyspace: r.Keyspace}
 						if r.HasNowInSeconds {
 							now := int(r.NowInSeconds)
 							params.nowInSeconds = &now
@@ -106,8 +105,8 @@ func TestTypedConn(t *testing.T) {
 							empty := map[string][]byte(nil)
 							err = fixtureWriteExecute(f, 23, r.PreparedID, r.ResultMetadataID, &params, &empty)
 						case "batch":
-							r.Batch = &model.TypedBatchRequest{Kind: implCqltype.LoggedBatch, Items: []model.TypedBatchItem{{Statement: r.Statement, Values: values, ValueCount: 1}, {PreparedID: []byte{1, 2}, Values: values, ValueCount: 1}}}
-							err = (&fixtureBatchFrame{typ: implCqltype.LoggedBatch, statements: []fixtureBatchStatement{{statement: r.Statement, values: []fixtureQueryValue{{value: payload}}}, {preparedID: []byte{1, 2}, values: []fixtureQueryValue{{value: payload}}}}, consistency: implCqltype.Quorum, serialConsistency: implCqltype.LocalSerial, defaultTimestamp: true, defaultTimestampValue: 123456, keyspace: r.Keyspace, nowInSeconds: params.nowInSeconds}).BuildFrame(f, 23)
+							r.Batch = &model.TypedBatchRequest{Kind: cql.LoggedBatch, Items: []model.TypedBatchItem{{Statement: r.Statement, Values: values, ValueCount: 1}, {PreparedID: []byte{1, 2}, Values: values, ValueCount: 1}}}
+							err = (&fixtureBatchFrame{typ: cql.LoggedBatch, statements: []fixtureBatchStatement{{statement: r.Statement, values: []fixtureQueryValue{{value: payload}}}, {preparedID: []byte{1, 2}, values: []fixtureQueryValue{{value: payload}}}}, consistency: cql.Quorum, serialConsistency: cql.LocalSerial, defaultTimestamp: true, defaultTimestampValue: 123456, keyspace: r.Keyspace, nowInSeconds: params.nowInSeconds}).BuildFrame(f, 23)
 						}
 						if err != nil {
 							t.Fatal(err)
@@ -145,7 +144,7 @@ func TestTypedConn(t *testing.T) {
 			for _, proto := range []byte{4, 5} {
 				c := &transport.Conn{InternalVersion: proto}
 				c.InternalInitFramerCache()
-				request := &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Consistency: implCqltype.Quorum, SerialConsistency: implCqltype.LocalSerial, PageSize: 83, PagingState: []byte{1, 2, 3}, Timestamp: 78321, DefaultTimestamp: true, Trace: true}
+				request := &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Consistency: cql.Quorum, SerialConsistency: cql.LocalSerial, PageSize: 83, PagingState: []byte{1, 2, 3}, Timestamp: 78321, DefaultTimestamp: true, Trace: true}
 				if proto == 5 {
 					request.Keyspace = "ks"
 					request.HasNowInSeconds, request.NowInSeconds = true, 321
@@ -156,7 +155,7 @@ func TestTypedConn(t *testing.T) {
 				}
 				f := c.InternalGetWriteFramer()
 				f.Trace()
-				params := fixtureQueryParams{values: []fixtureQueryValue{{value: payload}}, consistency: implCqltype.Quorum, serialConsistency: implCqltype.LocalSerial, pageSize: 83, pagingState: request.PagingState, defaultTimestamp: true, defaultTimestampValue: 78321, keyspace: request.Keyspace}
+				params := fixtureQueryParams{values: []fixtureQueryValue{{value: payload}}, consistency: cql.Quorum, serialConsistency: cql.LocalSerial, pageSize: 83, pagingState: request.PagingState, defaultTimestamp: true, defaultTimestampValue: 78321, keyspace: request.Keyspace}
 				if request.HasNowInSeconds {
 					now := int(request.NowInSeconds)
 					params.nowInSeconds = &now
@@ -225,7 +224,7 @@ func TestTypedConn(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			out := make(chan error, 1)
 			go func() {
-				_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One})
+				_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One})
 				out <- err
 			}()
 			stream := typedTestReadRequest(t, c, server)
@@ -259,7 +258,7 @@ func TestTypedConn(t *testing.T) {
 			released := make(chan struct{})
 			owner := wire.NewLease(values, func() { close(released) })
 			go func() {
-				_, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Lease: owner, Consistency: implCqltype.One})
+				_, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "INSERT INTO ks.tbl (value) VALUES (?)", Values: values, ValueCount: 1, Lease: owner, Consistency: cql.One})
 				out <- err
 			}()
 			deadline := time.Now().Add(time.Second)
@@ -347,7 +346,7 @@ func TestTypedConn(t *testing.T) {
 									offset += n
 								}
 							}()
-							page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One, Timeout: 5 * time.Second})
+							page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One, Timeout: 5 * time.Second})
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -405,7 +404,7 @@ func TestTypedConn(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One, Timeout: time.Second})
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One, Timeout: time.Second})
 			if unprepared, ok := errors.AsType[*protocol.UnpreparedError](err); !ok || !bytes.Equal(unprepared.StatementID, []byte{1, 2}) {
 				t.Fatalf("wrong error %v", err)
 			}
@@ -416,7 +415,7 @@ func TestTypedConn(t *testing.T) {
 				t.Fatalf("wrong payload %q", got)
 			}
 			page.Owner.Release()
-			if _, err := page.Payload()[0].Value.Value.At(0); !errors.Is(err, implCqltype.ErrReleased) {
+			if _, err := page.Payload()[0].Value.Value.At(0); !errors.Is(err, cql.ErrReleased) {
 				t.Fatal("error payload owner did not expire")
 			}
 		})
@@ -429,7 +428,7 @@ func TestTypedConn(t *testing.T) {
 			go c.InternalServe(c.InternalCtx)
 			out := make(chan error, 1)
 			go func() {
-				_, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One})
+				_, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One})
 				out <- err
 			}()
 			typedTestReadRequest(t, c, server)
@@ -468,14 +467,14 @@ func TestTypedConn(t *testing.T) {
 			for split := 0; split <= len(body); split++ {
 				chain := typedTestChain(t, body[:split], body[split:])
 				owner := wire.NewLease(chain, nil)
-				_, err := transport.InternalParseTypedTabletHint(cqltype.BytesView(chain, wire.RefOf(owner)), "ks", "tbl")
+				_, err := transport.InternalParseTypedTabletHint(cql.BytesView(chain, wire.RefOf(owner)), "ks", "tbl")
 				owner.Release()
 				if err != nil {
 					t.Fatalf("split %d: %v", split, err)
 				}
 			}
 			bad := append(append([]byte(nil), body...), 0)
-			if _, err := transport.InternalParseTypedTabletHint(implCqltype.BorrowBytes(bad), "ks", "tbl"); err == nil {
+			if _, err := transport.InternalParseTypedTabletHint(cql.BorrowBytes(bad), "ks", "tbl"); err == nil {
 				t.Fatal("accepted trailing tablet bytes")
 			}
 		})
@@ -484,7 +483,7 @@ func TestTypedConn(t *testing.T) {
 	t.Run("ProtocolLimits", func(t *testing.T) {
 		t.Run("request", func(t *testing.T) {
 			c := &transport.Conn{InternalVersion: 4, InternalCfg: &transport.ConnConfig{TypedLimits: ProtocolLimits{MaxFrameBytes: 8}}}
-			if _, err := c.InternalBuildTypedRequest(&model.AttemptRequest{Statement: "SELECT value FROM table", Consistency: implCqltype.One}, 1); !errors.Is(err, protocol.ErrFrameTooBig) {
+			if _, err := c.InternalBuildTypedRequest(&model.AttemptRequest{Statement: "SELECT value FROM table", Consistency: cql.One}, 1); !errors.Is(err, protocol.ErrFrameTooBig) {
 				t.Fatalf("got %v", err)
 			}
 		})
@@ -496,9 +495,9 @@ func TestTypedConn(t *testing.T) {
 			e.Str("ks", false)
 			e.Str("tbl", false)
 			e.Str("v", false)
-			e.U16(uint16(implCqltype.TypeList))
-			e.U16(uint16(implCqltype.TypeList))
-			e.U16(uint16(implCqltype.TypeInt))
+			e.U16(uint16(cql.TypeList))
+			e.U16(uint16(cql.TypeList))
+			e.U16(uint16(cql.TypeInt))
 			e.U32(0)
 			body, _ := e.Freeze()
 			owner := wire.NewLease(body, nil)
@@ -522,7 +521,7 @@ func TestTypedConn(t *testing.T) {
 				response[1] = frm.FlagCompress
 				server.Write(response)
 			}()
-			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "q", Consistency: implCqltype.One, Timeout: time.Second})
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "q", Consistency: cql.One, Timeout: time.Second})
 			if page != nil {
 				page.Owner.Release()
 			}
@@ -550,7 +549,7 @@ func TestTypedConn(t *testing.T) {
 			out := make(chan result, 2)
 			for i := 0; i < 2; i++ {
 				go func() {
-					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: implCqltype.One, Timeout: time.Second})
+					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One, Timeout: time.Second})
 					out <- result{page, err}
 				}()
 			}

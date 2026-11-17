@@ -16,15 +16,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/exec"
-
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implCodec "github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -89,9 +86,9 @@ func TestWorkCountsPerf(t *testing.T) {
 		for _, count := range []int{1, 1000, 10000} {
 			t.Run(fmt.Sprint(count), func(t *testing.T) {
 				h := pagingHistory{InternalMaxCount: count + 4, InternalMaxBytes: 1 << 20}
-				tokens := make([]model.PageState, count)
+				tokens := make([]cql.PageState, count)
 				for i := range tokens {
-					tokens[i] = model.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)), 1)
+					tokens[i] = cql.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)), 1)
 					if e := h.InternalAdd(tokens[i]); e != nil {
 						t.Fatal(e)
 					}
@@ -107,16 +104,16 @@ func TestWorkCountsPerf(t *testing.T) {
 					}
 					t.Logf("history=%d token=%d counts=%+v", count, index, c)
 				}
-				empty := model.PageStateOwned([]byte{}, 1)
+				empty := cql.PageStateOwned([]byte{}, 1)
 				if e := h.InternalAdd(empty); e != nil {
 					t.Fatal(e)
 				}
 				if h.InternalAdd(empty) != cqlerr.ErrPagingNoProgress {
 					t.Fatal("empty")
 				}
-				collision := model.PageStateOwned([]byte("collision"), 1)
+				collision := cql.PageStateOwned([]byte("collision"), 1)
 				h.InternalSpill()
-				hash := maphash.Bytes(h.InternalSeed, model.PageToken(collision))
+				hash := maphash.Bytes(h.InternalSeed, cql.PageToken(collision))
 				h.InternalEntries[hash] = pagingHistoryEntry{InternalState: tokens[0]}
 				paging.ResetPerfCounters()
 				if e := h.InternalAdd(collision); e != nil {
@@ -130,7 +127,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(c)
 				}
 				entry := h.InternalEntries[hash]
-				if &model.PageToken(entry.InternalState)[0] != &model.PageToken(collision)[0] {
+				if &cql.PageToken(entry.InternalState)[0] != &cql.PageToken(collision)[0] {
 					t.Fatal("copied history token")
 				}
 				t.Logf("collision=%+v token_payload_bytes=%d", c, h.InternalBytes)
@@ -222,14 +219,14 @@ func TestWorkCountsPerf(t *testing.T) {
 			if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 				t.Fatal(e)
 			}
-			implCodec.ResetPerfCounters()
+			cql.ResetPerfCounters()
 			for i := 0; i < 10000; i++ {
 				if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 					t.Fatal(e)
 				}
 			}
-			comp, maps := implCodec.ReadPerfCounters()
-			if comp != 0 || maps != 0 || calls.Load() != 1 || implCodec.ReadPerfTypeChecks() != 0 {
+			comp, maps := cql.ReadPerfCounters()
+			if comp != 0 || maps != 0 || calls.Load() != 1 || cql.ReadPerfTypeChecks() != 0 {
 				t.Fatal(comp, maps, calls.Load())
 			}
 			changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: cql.BlobType})
@@ -242,7 +239,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			if calls.Load() != 2 || implCodec.ReadPerfTypeChecks() != 1 {
+			if calls.Load() != 2 || cql.ReadPerfTypeChecks() != 1 {
 				t.Fatal("changed entry compiled repeatedly", calls.Load())
 			}
 			t.Logf("warm pages=10000 compiles=0 name_maps=0 changed_candidate_compiles=%d", calls.Load()-1)

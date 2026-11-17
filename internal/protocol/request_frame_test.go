@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -48,13 +48,13 @@ func TestRequestFrame(t *testing.T) {
 			{
 				name:    "keyspace on v4",
 				proto:   protoVersion4,
-				opts:    fixtureQueryParams{consistency: Quorum, keyspace: "ks"},
+				opts:    fixtureQueryParams{consistency: cql.Quorum, keyspace: "ks"},
 				wantErr: "keyspace override can only be set with protocol v5 or higher",
 			},
 			{
 				name:    "nowInSeconds on v4",
 				proto:   protoVersion4,
-				opts:    fixtureQueryParams{consistency: Quorum, nowInSeconds: &nowInSeconds},
+				opts:    fixtureQueryParams{consistency: cql.Quorum, nowInSeconds: &nowInSeconds},
 				wantErr: "now_in_seconds can only be set with protocol v5 or higher",
 			},
 		}
@@ -108,18 +108,18 @@ func TestRequestFrame(t *testing.T) {
 			{
 				name:  "EXECUTE prepared id",
 				proto: protoVersion4,
-				build: &fixtureExecuteFrame{preparedID: tooLong, params: fixtureQueryParams{consistency: Quorum}},
+				build: &fixtureExecuteFrame{preparedID: tooLong, params: fixtureQueryParams{consistency: cql.Quorum}},
 			},
 			{
 				name:  "EXECUTE result metadata id on v5",
 				proto: protoVersion5,
-				build: &fixtureExecuteFrame{preparedID: ok, resultMetadataID: tooLong, params: fixtureQueryParams{consistency: Quorum}},
+				build: &fixtureExecuteFrame{preparedID: ok, resultMetadataID: tooLong, params: fixtureQueryParams{consistency: cql.Quorum}},
 			},
 			{
 				name:  "BATCH prepared id",
 				proto: protoVersion4,
 				build: &fixtureBatchFrame{
-					consistency: Quorum,
+					consistency: cql.Quorum,
 					statements:  []fixtureBatchStatement{{preparedID: tooLong}},
 				},
 			},
@@ -169,9 +169,9 @@ func TestRequestFrame(t *testing.T) {
 			framer.Buf = framer.Buf[9:]
 
 			assertDeepEqual(t, "customPayload", frame.customPayload, framer.ReadBytesMap())
-			assertDeepEqual(t, "typ", frame.typ, BatchKind(framer.ReadByteValue()))
+			assertDeepEqual(t, "typ", frame.typ, cql.BatchKind(framer.ReadByteValue()))
 			assertDeepEqual(t, "len(statements)", len(frame.statements), int(framer.ReadShort()))
-			assertDeepEqual(t, "consistency", frame.consistency, Consistency(framer.ReadShort()))
+			assertDeepEqual(t, "consistency", frame.consistency, cql.Consistency(framer.ReadShort()))
 
 			flags := framer.ReadInt()
 			if flags&int(frm.FlagWithNowInSeconds) != int(frm.FlagWithNowInSeconds) {
@@ -267,8 +267,8 @@ func TestRequestFrame(t *testing.T) {
 		t.Run("UnnamedValues", func(t *testing.T) {
 			framer := newFramer(nil, protoVersion5)
 			frame := fixtureBatchFrame{
-				typ:         LoggedBatch,
-				consistency: Quorum,
+				typ:         cql.LoggedBatch,
+				consistency: cql.Quorum,
 				statements: []fixtureBatchStatement{
 					{
 						statement: "INSERT INTO t (id, v) VALUES (?, ?)",
@@ -286,7 +286,7 @@ func TestRequestFrame(t *testing.T) {
 
 			// skipping header
 			framer.Buf = framer.Buf[9:]
-			assertDeepEqual(t, "typ", frame.typ, BatchKind(framer.ReadByteValue()))
+			assertDeepEqual(t, "typ", frame.typ, cql.BatchKind(framer.ReadByteValue()))
 			assertDeepEqual(t, "len(statements)", len(frame.statements), int(framer.ReadShort()))
 			assertDeepEqual(t, "kind", byte(0), framer.ReadByteValue()) // 0 = raw query string
 			assertDeepEqual(t, "statement", frame.statements[0].statement, framer.ReadLongString())
@@ -346,7 +346,7 @@ func TestRequestFrame(t *testing.T) {
 				// A non-zero consistency, so reading it back is an assertion that can
 				// actually fail: with the zero value on both sides a misaligned read of
 				// Consistency(ANY) would still compare equal.
-				params := fixtureQueryParams{consistency: Quorum}
+				params := fixtureQueryParams{consistency: cql.Quorum}
 				if tt.protoVersion >= protoVersion5 {
 					params.nowInSeconds = &nowInSeconds
 					params.keyspace = "test_keyspace"
@@ -375,7 +375,7 @@ func TestRequestFrame(t *testing.T) {
 					assertDeepEqual(t, "resultMetadataID", tt.wantResultMetadataID, framer.ReadShortBytesCopy())
 				}
 
-				assertDeepEqual(t, "constistency", frame.params.consistency, Consistency(framer.ReadShort()))
+				assertDeepEqual(t, "constistency", frame.params.consistency, cql.Consistency(framer.ReadShort()))
 
 				if tt.protoVersion >= protoVersion5 {
 					flags := framer.ReadInt()

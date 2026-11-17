@@ -8,8 +8,6 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/model"
-
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -81,7 +79,7 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 // server and by the configured frame and decompression limits. A negative
 // pageSize is rejected.
 func (q *Query[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*Page[R], error) {
-	page, err := q.internal().RunPage(ctx, value, model.PageState(state), pageSize)
+	page, err := q.internal().RunPage(ctx, value, cql.PageState(state), pageSize)
 	return (*Page[R])(page), err
 }
 

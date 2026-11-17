@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -61,7 +61,7 @@ func typedTestRowsBody(value []byte) []byte {
 		out = binary.BigEndian.AppendUint16(out, uint16(len(s)))
 		out = append(out, s...)
 	}
-	out = binary.BigEndian.AppendUint16(out, uint16(implCqltype.TypeBlob))
+	out = binary.BigEndian.AppendUint16(out, uint16(cql.TypeBlob))
 	out = binary.BigEndian.AppendUint32(out, 1)
 	out = binary.BigEndian.AppendUint32(out, uint32(len(value)))
 	return append(out, value...)

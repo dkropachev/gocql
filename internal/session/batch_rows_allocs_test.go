@@ -9,8 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // TestRunBatchAllocs checks that a batch sent again once its rows are closed
@@ -20,8 +19,8 @@ import (
 // race detector, whose instrumentation allocates on its own.
 func TestRunBatchAllocs(t *testing.T) {
 	session, batch := newRunBatch(t)
-	type borrowed struct{ V cqltype.Bytes }
-	decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *borrowed) *cqltype.Bytes { return &r.V }))
+	type borrowed struct{ V cql.Bytes }
+	decoder := cql.Row(cql.Column("value", cql.BlobCodec, func(r *borrowed) *cql.Bytes { return &r.V }))
 	var row borrowed
 	send := func() {
 		rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
@@ -45,9 +44,9 @@ func TestRunBatchAllocs(t *testing.T) {
 // values are borrowed, so decoding them allocates nothing either.
 func TestRunConditionalBatchAllocs(t *testing.T) {
 	session, batch := newCASBatch(t, casRowsBody(casBatchRow{true, "a"}, casBatchRow{true, "b"}))
-	type borrowed struct{ V cqltype.Bytes }
-	decoder := codec.CASRows(codec.Row(codec.Column("value", codec.BlobCodec, func(r *borrowed) *cqltype.Bytes { return &r.V })))
-	var row codec.CASResult[borrowed]
+	type borrowed struct{ V cql.Bytes }
+	decoder := cql.CASRows(cql.Row(cql.Column("value", cql.BlobCodec, func(r *borrowed) *cql.Bytes { return &r.V })))
+	var row cql.CASResult[borrowed]
 	plain := func() {
 		rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 		if err != nil {

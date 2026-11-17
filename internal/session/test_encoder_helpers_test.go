@@ -7,18 +7,17 @@ import (
 	"bytes"
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type countingBlobEncoder struct{ calls *int }
 
-func (c countingBlobEncoder) CheckType(t cqltype.DataType) error {
-	return codec.ByteSliceCodec.CheckType(t)
+func (c countingBlobEncoder) CheckType(t cql.DataType) error {
+	return cql.ByteSliceCodec.CheckType(t)
 }
-func (c countingBlobEncoder) Encode(w *codec.ValueWriter, b []byte) error {
+func (c countingBlobEncoder) Encode(w *cql.ValueWriter, b []byte) error {
 	*c.calls++
-	return codec.ByteSliceCodec.Encode(w, b)
+	return cql.ByteSliceCodec.Encode(w, b)
 }
 
 var errFailingBlob = errors.New("failing blob")
@@ -27,11 +26,11 @@ var errFailingBlob = errors.New("failing blob")
 // "fail" after writing it.
 type failingBlobEncoder struct{}
 
-func (failingBlobEncoder) CheckType(t cqltype.DataType) error {
-	return codec.ByteSliceCodec.CheckType(t)
+func (failingBlobEncoder) CheckType(t cql.DataType) error {
+	return cql.ByteSliceCodec.CheckType(t)
 }
-func (failingBlobEncoder) Encode(w *codec.ValueWriter, b []byte) error {
-	if err := codec.ByteSliceCodec.Encode(w, b); err != nil {
+func (failingBlobEncoder) Encode(w *cql.ValueWriter, b []byte) error {
+	if err := cql.ByteSliceCodec.Encode(w, b); err != nil {
 		return err
 	}
 	if bytes.Equal(b, []byte("fail")) {

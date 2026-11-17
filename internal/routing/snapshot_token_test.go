@@ -9,8 +9,7 @@ import (
 	"math"
 	"testing"
 
-	codec "github.com/scylladb/gocql/v2/internal/codec"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
@@ -40,23 +39,23 @@ func tokenTestSnapshot() *MetadataSnapshot {
 
 // routingCells encodes values with typed codecs, as a prepared statement's
 // parameters are encoded, for comparison with Token.
-func routingCell[T any](t *testing.T, typ cqltype.DataType, encoder codec.Encoder[T], value T) model.EncodedCell {
+func routingCell[T any](t *testing.T, typ cql.DataType, encoder cql.Encoder[T], value T) model.EncodedCell {
 	t.Helper()
-	encoded, err := codec.EncodeValue(typ, encoder, value)
+	encoded, err := cql.EncodeValue(typ, encoder, value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(encoded.Bytes()), State: encoded.State()}
+	return model.EncodedCell{Typ: typ, Body: cql.BytesChain(encoded.Bytes()), State: encoded.State()}
 }
 
 func TestSnapshotToken(t *testing.T) {
 	m := tokenTestSnapshot()
-	intType, _ := cqltype.ScalarType(cqltype.TypeInt)
-	textType, _ := cqltype.ScalarType(cqltype.TypeText)
+	intType, _ := cql.ScalarType(cql.TypeInt)
+	textType, _ := cql.ScalarType(cql.TypeText)
 
 	t.Run("SingleKeyMurmur3Vector", func(t *testing.T) {
 		for _, n := range []int32{0, 1, 42, -1, math.MaxInt32, math.MinInt32} {
-			got, err := m.Token("ks", "single", codec.IntValue(n))
+			got, err := m.Token("ks", "single", cql.IntValue(n))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -72,15 +71,15 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("MatchesPreparedRouting", func(t *testing.T) {
-		text, err := codec.TextValue("key")
+		text, err := cql.TextValue("key")
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := m.Token("ks", "composite", codec.IntValue(7), text)
+		got, err := m.Token("ks", "composite", cql.IntValue(7), text)
 		if err != nil {
 			t.Fatal(err)
 		}
-		cells := []model.EncodedCell{routingCell(t, intType, codec.Int32, int32(7)), routingCell(t, textType, codec.StringCodec, "key")}
+		cells := []model.EncodedCell{routingCell(t, intType, cql.Int32Codec, int32(7)), routingCell(t, textType, cql.StringCodec, "key")}
 		want, err := InternalComputeRoutingToken(cells, []int{0, 1}, Murmur3TokenPartitioner)
 		if err != nil || !want.Set {
 			t.Fatal(want, err)
@@ -90,12 +89,12 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("FrozenTuple", func(t *testing.T) {
-		tupleType, err := cqltype.TupleType(intType, textType)
+		tupleType, err := cql.TupleType(intType, textType)
 		if err != nil {
 			t.Fatal(err)
 		}
-		text, _ := codec.TextValue("x")
-		tuple, err := codec.TupleValue(tupleType.WithFrozen(true), []codec.Value{codec.IntValue(1), text})
+		text, _ := cql.TextValue("x")
+		tuple, err := cql.TupleValue(tupleType.WithFrozen(true), []cql.Value{cql.IntValue(1), text})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,22 +103,22 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("Errors", func(t *testing.T) {
-		text, _ := codec.TextValue("x")
+		text, _ := cql.TextValue("x")
 		for name, call := range map[string]func() error{
-			"arity":       func() error { _, err := m.Token("ks", "composite", codec.IntValue(1)); return err },
+			"arity":       func() error { _, err := m.Token("ks", "composite", cql.IntValue(1)); return err },
 			"type":        func() error { _, err := m.Token("ks", "single", text); return err },
-			"null":        func() error { _, err := m.Token("ks", "single", codec.NullValue(intType)); return err },
-			"partitioner": func() error { _, err := m.Token("ks", "custom", codec.IntValue(1)); return err },
+			"null":        func() error { _, err := m.Token("ks", "single", cql.NullValue(intType)); return err },
+			"partitioner": func() error { _, err := m.Token("ks", "custom", cql.IntValue(1)); return err },
 			"no key":      func() error { _, err := m.Token("ks", "nokey"); return err },
 		} {
 			if err := call(); err == nil {
 				t.Errorf("%s: no error", name)
 			}
 		}
-		if _, err := m.Token("ks", "missing", codec.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoTable) {
+		if _, err := m.Token("ks", "missing", cql.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoTable) {
 			t.Errorf("missing table: %v", err)
 		}
-		if _, err := m.Token("nope", "single", codec.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
+		if _, err := m.Token("nope", "single", cql.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
 			t.Errorf("missing keyspace: %v", err)
 		}
 	})

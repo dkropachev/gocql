@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -101,7 +101,7 @@ func TestExclusiveWaitsForQueuedTicket(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 		if page != nil {
 			page.Owner.Release()
 		}
@@ -144,7 +144,7 @@ func TestExclusiveWaitsForDeliveredButNotCleanedUp(t *testing.T) {
 		}
 		server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
 	}()
-	req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
+	req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}
 	x := typedExec{conn: c}
 	page, err := x.run(context.Background(), req, nil)
 	if err != nil {
@@ -180,7 +180,7 @@ func TestExclusiveWaitsForCallerCleanup(t *testing.T) {
 		}
 		server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
 	}()
-	page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+	page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestExclusiveWaitsForOrphan(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 		if page != nil {
 			page.Owner.Release()
 		}
@@ -284,7 +284,7 @@ func runMixedRequests(t *testing.T, c *Conn, server net.Conn) {
 	for w := range workers {
 		wg.Go(func() {
 			for i := range perWorker {
-				req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
+				req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}
 				ctx := context.Background()
 				var cancel context.CancelFunc
 				mode := (w + i) % 4
@@ -390,7 +390,7 @@ func TestCallerFreesDeliveredStream(t *testing.T) {
 		}
 		server.Write(invFrame(4, stream, typedTestRowsBody([]byte("v"))))
 	}()
-	req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
+	req := &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}
 	x := typedExec{conn: c}
 	page, err := x.run(context.Background(), req, nil)
 	if err != nil {
@@ -424,7 +424,7 @@ func TestTypedRequestTakesNoConnLock(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		for range 50 {
-			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				done <- err
 				return
@@ -474,7 +474,7 @@ func TestStreamFreeWakesWaitingReservation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+		page, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 		if page != nil {
 			page.Owner.Release()
 		}

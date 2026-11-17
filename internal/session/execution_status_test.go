@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -32,7 +31,7 @@ func serverError(t *testing.T, stream int, code protocol.ErrorCode, body []byte)
 }
 
 // tracedServerError is serverError carrying the CQL trace session id.
-func tracedServerError(t *testing.T, stream int, code protocol.ErrorCode, body []byte, id cqltype.UUID) []byte {
+func tracedServerError(t *testing.T, stream int, code protocol.ErrorCode, body []byte, id cql.UUID) []byte {
 	t.Helper()
 	b := append([]byte{}, id[:]...)
 	b = binary.BigEndian.AppendUint32(b, uint32(code))
@@ -110,7 +109,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		}()
 		bound := runtimeQuery(t)
 		defer bound.Close()
-		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}
@@ -172,7 +171,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 	t.Run("TracedAttemptsKeepTraceIDs", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		ids := []cqltype.UUID{{15: 1}, {15: 2}}
+		ids := []cql.UUID{{15: 1}, {15: 2}}
 		err := run(t, ctx, &recordingRetry{limit: 2}, func(attempt, stream int) []byte {
 			return tracedServerError(t, stream, protocol.CodeUnavailable, unavailableBody(), ids[attempt])
 		}, 2)
@@ -242,7 +241,7 @@ func TestExecutionStatusBeforeAttempt(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}

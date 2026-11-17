@@ -25,11 +25,6 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
 	"context"
 	"crypto/tls"
 	"crypto/x509"
@@ -47,7 +42,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func testCluster(proto frm.ProtoVersion, addresses ...string) *InternalClusterSettings {
@@ -601,8 +600,8 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("keyspace")
 			respFrame.WriteString("table")
 			// <col_spec_0>
-			respFrame.WriteString("col0")                     // <name>
-			respFrame.WriteShort(uint16(cqltype.TypeBoolean)) // <type>
+			respFrame.WriteString("col0")                 // <name>
+			respFrame.WriteShort(uint16(cql.TypeBoolean)) // <type>
 		case "batchmetadata":
 			respFrame.WriteHeader(0, frm.OpResult, head.Stream)
 			respFrame.WriteInt(frm.ResultKindPrepared)
@@ -619,12 +618,12 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("ks1")
 			respFrame.WriteString("tbl1")
 			respFrame.WriteString("col1")
-			respFrame.WriteShort(uint16(cqltype.TypeInt))
+			respFrame.WriteShort(uint16(cql.TypeInt))
 			// <col_spec_1>
 			respFrame.WriteString("ks2")
 			respFrame.WriteString("tbl2")
 			respFrame.WriteString("col2")
-			respFrame.WriteShort(uint16(cqltype.TypeInt))
+			respFrame.WriteShort(uint16(cql.TypeInt))
 			// <result_metadata>
 			respFrame.WriteInt(int32(frm.FlagNoMetaData))
 			respFrame.WriteInt(0)
@@ -650,8 +649,8 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("keyspace")
 			respFrame.WriteString("table")
 			// <col_spec_0>
-			respFrame.WriteString("col0")                     // <name>
-			respFrame.WriteShort(uint16(cqltype.TypeBoolean)) // <type>
+			respFrame.WriteString("col0")                 // <name>
+			respFrame.WriteShort(uint16(cql.TypeBoolean)) // <type>
 		default:
 			respFrame.WriteHeader(0, frm.OpError, head.Stream)
 			respFrame.WriteInt(0)

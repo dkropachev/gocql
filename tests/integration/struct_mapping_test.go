@@ -17,7 +17,6 @@ import (
 	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
 )
 
@@ -189,8 +188,8 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal("no generated StreamEvent stream mapping")
 		}
 		const columns = "bucket, id, name, blob, big, maybe, tags, scores, createdat, updatedat"
-		reflectedParams := codecTestMust(codec.ReflectParams[mapped.Event]())
-		reflectedRows := codecTestMust(codec.ReflectRow[mapped.Event]())
+		reflectedParams := codecTestMust(cql.ReflectParams[mapped.Event]())
+		reflectedRows := codecTestMust(cql.ReflectRow[mapped.Event]())
 		events := make([]mapped.Event, 2)
 		for i := range events {
 			r := smRecordAt(10, i)
@@ -244,7 +243,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), codecTestMust(codec.ReflectStreamRow[mapped.StreamEvent]())} {
+		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), codecTestMust(cql.ReflectStreamRow[mapped.StreamEvent]())} {
 			prepared, err := f.session.PrepareStream(ctx, stream.Statement[int32, mapped.StreamEvent]{
 				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
 				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,

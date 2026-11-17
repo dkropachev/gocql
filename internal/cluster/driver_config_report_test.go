@@ -19,8 +19,8 @@ import (
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -442,7 +442,7 @@ func TestDriverConfigReport(t *testing.T) {
 			}
 
 			cfg.PageSize = 1000
-			cfg.SerialConsistency = cqltype.LocalSerial
+			cfg.SerialConsistency = cql.LocalSerial
 			cfg.Timeout = 3 * time.Second
 			got = buildQueryDefaultsReport(&cfg)
 			if got.Page == nil || got.Page.Size != 1000 {
@@ -461,13 +461,13 @@ func TestDriverConfigReport(t *testing.T) {
 		// left in the field must not be reported there either.
 		t.Run("SerialConsistencyIsSerialOnly", func(t *testing.T) {
 			for _, tt := range []struct {
-				cons cqltype.Consistency
+				cons cql.Consistency
 				want string
 			}{
 				{0, ""},
-				{cqltype.Serial, "SERIAL"},
-				{cqltype.LocalSerial, "LOCAL_SERIAL"},
-				{cqltype.Quorum, ""},
+				{cql.Serial, "SERIAL"},
+				{cql.LocalSerial, "LOCAL_SERIAL"},
+				{cql.Quorum, ""},
 			} {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.SerialConsistency = tt.cons
@@ -671,14 +671,14 @@ func TestDriverConfigReport(t *testing.T) {
 	// value has no representation, and nothing rejects one today, so it must be
 	// omitted rather than emitted as a token no consumer can interpret.
 	t.Run("ConsistencyName", func(t *testing.T) {
-		for _, c := range []cqltype.Consistency{
-			cqltype.Any, cqltype.One, cqltype.Two, cqltype.Three, cqltype.Quorum, cqltype.All, cqltype.LocalQuorum, cqltype.EachQuorum, cqltype.LocalOne, cqltype.Serial, cqltype.LocalSerial,
+		for _, c := range []cql.Consistency{
+			cql.Any, cql.One, cql.Two, cql.Three, cql.Quorum, cql.All, cql.LocalQuorum, cql.EachQuorum, cql.LocalOne, cql.Serial, cql.LocalSerial,
 		} {
 			if got := consistencyName(c); got != c.String() {
 				t.Errorf("consistencyName(%v) = %q, want %q", c, got, c.String())
 			}
 		}
-		if got := consistencyName(cqltype.Consistency(0x42)); got != "" {
+		if got := consistencyName(cql.Consistency(0x42)); got != "" {
 			t.Errorf("consistencyName(0x42) = %q, want it omitted: outside the schema enum", got)
 		}
 	})
@@ -965,9 +965,9 @@ func TestDriverConfigReport(t *testing.T) {
 
 			for _, tt := range []struct {
 				name string
-				cons cqltype.Consistency
+				cons cql.Consistency
 			}{
-				{"unrecognized default consistency", cqltype.Consistency(0x42)},
+				{"unrecognized default consistency", cql.Consistency(0x42)},
 			} {
 				t.Run(tt.name, func(t *testing.T) {
 					report := buildCaseReport(t, func(c *InternalClusterSettings) { c.Consistency = tt.cons }, nil, false)

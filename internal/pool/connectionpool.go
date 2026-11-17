@@ -36,8 +36,8 @@ import (
 
 	"log/slog"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -63,8 +63,8 @@ type SetTablets interface {
 
 type InternalPolicyConnPool struct {
 	InternalServices      InternalPoolServices
-	InternalHostConnPools map[cqltype.UUID]*InternalHostConnPool
-	routes                map[cqltype.UUID]*HostRoute
+	InternalHostConnPools map[cql.UUID]*InternalHostConnPool
+	routes                map[cql.UUID]*HostRoute
 	InternalKeyspace      string
 	InternalPort          int
 	InternalNumConns      int
@@ -75,7 +75,7 @@ func (p *InternalPolicyConnPool) SetHosts(hosts []*implEndpoint.HostInfo) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 
-	toRemove := make(map[cqltype.UUID]struct{})
+	toRemove := make(map[cql.UUID]struct{})
 	for hostID := range p.InternalHostConnPools {
 		toRemove[hostID] = struct{}{}
 	}
@@ -156,7 +156,7 @@ func (p *InternalPolicyConnPool) InternalGetPool(host *implEndpoint.HostInfo) (p
 
 // Rare path (SetHostID/GetHostPoolByID); getPool is the hot path and skips this parse.
 func (p *InternalPolicyConnPool) InternalGetPoolByHostID(hostID string) (pool *InternalHostConnPool, ok bool) {
-	id, err := cqltype.ParseUUID(hostID)
+	id, err := cql.ParseUUID(hostID)
 	if err != nil {
 		return nil, false
 	}
@@ -220,7 +220,7 @@ func (p *InternalPolicyConnPool) InternalAddHost(host *implEndpoint.HostInfo) {
 	p.InternalEnsureHost(host).InternalFill_debounce()
 }
 
-func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cqltype.UUID) {
+func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cql.UUID) {
 	p.InternalMu.Lock()
 	pool, ok := p.InternalHostConnPools[hostID]
 	if !ok {
@@ -604,7 +604,7 @@ func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
 		return
 	}
 	snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-	convict := policy.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
+	convict := policy.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Shard: cql.Some(uint32(shard)), Source: connectivity.ConvictionPool})
 	pool.InternalMu.Lock()
 	if pool.failedShards == nil {
 		pool.failedShards = make(map[uint32]struct{})
@@ -627,7 +627,7 @@ func (pool *InternalHostConnPool) shardConnected(shard, shards int) {
 	pool.InternalMu.Unlock()
 	if failed {
 		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
+		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Shard: cql.Some(uint32(shard)), Source: connectivity.ConvictionPool})
 	}
 }
 
@@ -760,7 +760,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 			implEndpoint.HostInfoData(pool.InternalHost).InternalMu.Unlock()
 			pool.InternalMu.Unlock()
 			conn.Close()
-			return cqltype.TypeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
+			return cql.TypeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
 		}
 	}
 	// lazily initialize the connPicker when we know the required type

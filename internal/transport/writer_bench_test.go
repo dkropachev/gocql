@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
@@ -39,7 +39,7 @@ func BenchmarkWriter(b *testing.B) {
 							}
 						}
 						c.InternalInitFramerCache()
-						req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cqltype.One}
+						req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cql.One}
 						b.SetBytes(int64(size))
 						b.ReportAllocs()
 						b.ResetTimer()
@@ -66,7 +66,7 @@ func BenchmarkWriter(b *testing.B) {
 				values, _ := wire.NewChain(wire.Borrow(binary.BigEndian.AppendUint32(nil, 32)), wire.Borrow(payload))
 				c := &Conn{InternalVersion: proto}
 				c.InternalInitFramerCache()
-				req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cqltype.One}
+				req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cql.One}
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
@@ -243,7 +243,7 @@ func TestBuildRequestIntoV5Allocs(t *testing.T) {
 	values, _ := wire.NewChain(wire.Borrow(binary.BigEndian.AppendUint32(nil, 32)), wire.Borrow(payload))
 	c := &Conn{InternalVersion: 5}
 	c.InternalInitFramerCache()
-	req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cqltype.One}
+	req := &model.AttemptRequest{Statement: "INSERT INTO tbl (v) VALUES (?)", Values: values, ValueCount: 1, Consistency: cql.One}
 	proto := c.nativeProtocol()
 	// A held scratch, not the pool: sync.Pool drops items under -race.
 	scratch := wire.NewBuilderScratch(256, 16)

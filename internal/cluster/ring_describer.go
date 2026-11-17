@@ -6,12 +6,11 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -55,7 +54,7 @@ func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn trans
 		return nil, fmt.Errorf("could not retrieve local host info: %w", err)
 	}
 	if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() || implEndpoint.InternalHostInfoInvalidConnectAddr(hosts[0]) {
-		return nil, cqltype.TypeValidation("local topology", "expected one valid local identity")
+		return nil, cql.TypeValidation("local topology", "expected one valid local identity")
 	}
 	return hosts[0], nil
 }
@@ -77,7 +76,7 @@ func (r *InternalRingDescriber) getClusterPeerInfo(ctx context.Context, c transp
 			valid = append(valid, h)
 			continue
 		}
-		cause := cqltype.TypeValidation("peer topology", "incomplete peer %s", h.HostID())
+		cause := cql.TypeValidation("peer topology", "incomplete peer %s", h.HostID())
 		r.mu.Lock()
 		known := r.InternalHosts[h.HostID()] != nil
 		for _, old := range r.prevHosts {
@@ -196,10 +195,10 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 
 	hosts := []*implEndpoint.HostInfo{localHost}
 	hosts = append(hosts, peerHosts...)
-	seen := make(map[cqltype.UUID]bool, len(hosts))
+	seen := make(map[cql.UUID]bool, len(hosts))
 	for _, h := range hosts {
 		if seen[implEndpoint.InternalHostInfoHostUUID(h)] {
-			return previous, partitionerBefore, cqltype.TypeValidation("topology", "duplicate host identity %s", h.HostID())
+			return previous, partitionerBefore, cql.TypeValidation("topology", "duplicate host identity %s", h.HostID())
 		}
 		seen[implEndpoint.InternalHostInfoHostUUID(h)] = true
 	}
@@ -212,7 +211,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.eventEpoch != epoch {
-		return previous, partitionerBefore, cqltype.TypeValidation("topology generation", "topology changed during read")
+		return previous, partitionerBefore, cql.TypeValidation("topology generation", "topology changed during read")
 	}
 	filtered := hosts[:0]
 	for _, host := range hosts {

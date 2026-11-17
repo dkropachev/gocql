@@ -21,12 +21,10 @@ import (
 	"time"
 	"weak"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -43,11 +41,11 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
-func testOwnedQuery(t testing.TB) *Query[[]byte, codec.EmptyRecord] {
+func testOwnedQuery(t testing.TB) *Query[[]byte, cql.EmptyRow] {
 	t.Helper()
 	s, _ := attachmentSession()
-	typ := cqltype.BlobType
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	typ := cql.BlobType
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,9 +102,9 @@ func loopbackTestSession(t testing.TB, workload string) *cluster.Core {
 	s := new(cluster.Core)
 	implCluster.SessionData(s).InternalLogger = logging.Nop()
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
-	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[implCqltype.UUID]*pool.InternalHostConnPool{}}
+	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cql.UUID]*pool.InternalHostConnPool{}}
 	conn := transporttestkit.NewDialedConn(t, 4, addr)
-	id := implCqltype.UUID{15: 1}
+	id := cql.UUID{15: 1}
 	host := new(endpoint.HostInfo)
 	implEndpoint.HostInfoData(host).InternalHostId = id
 	implEndpoint.HostInfoData(host).InternalState.Store(endpoint.NodeUp)
@@ -308,7 +306,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			cancelExec()
-			request.InternalLogical.InternalFinish(model.Result{}, context.Canceled)
+			request.InternalLogical.InternalFinish(cql.Result{}, context.Canceled)
 			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
 			// The next execution waits for the drain within its context;
@@ -360,7 +358,7 @@ func TestQuery(t *testing.T) {
 			}
 			request.InternalLogical.installStop(stopFunc(func() { t.Error("retired stop callback invoked") }))
 			cancel()
-			request.InternalLogical.InternalFinish(model.Result{}, nil)
+			request.InternalLogical.InternalFinish(cql.Result{}, nil)
 			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
 			if q.state.inlineLogical.lifetime.stop != nil || q.state.request.InternalValues.Framed.Len() != 0 || q.state.request.InternalLogical != nil {
@@ -476,13 +474,13 @@ func TestQuery(t *testing.T) {
 			stop := errors.New("stop")
 			calls := 0
 			dst := make([]byte, 0, 8)
-			_, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(*[]byte) error { calls++; return stop })
+			_, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(*[]byte) error { calls++; return stop })
 			<-served
 			if !errors.Is(err, stop) || calls != 1 {
 				t.Fatal(calls, err)
 			}
 			served = serve(runtimeRowsBody(nil, "next"))
-			if found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst); err != nil || !found || string(dst) != "next" {
+			if found, _, err := q.One(ctx, cql.EmptyRow{}, &dst); err != nil || !found || string(dst) != "next" {
 				t.Fatal("query not reusable after a callback error", found, err)
 			}
 			<-served
@@ -495,7 +493,7 @@ func TestQuery(t *testing.T) {
 			served := serve(runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c"))
 			var got []string
 			dst := make([]byte, 0, 8)
-			result, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error {
+			result, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(row *[]byte) error {
 				got = append(got, string(*row))
 				return nil
 			})
@@ -505,7 +503,7 @@ func TestQuery(t *testing.T) {
 			}
 			// The query is reusable at once: no Close or Wait obligation.
 			served = serve(runtimeRowsBody(nil, "d"))
-			found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			<-served
 			if err != nil || !found || string(dst) != "d" {
 				t.Fatal(found, string(dst), err)
@@ -545,12 +543,12 @@ func TestQuery(t *testing.T) {
 			ctx := context.Background()
 			dst := make([]byte, 0, 8)
 			started := time.Now()
-			_, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(*[]byte) error { return nil })
+			_, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(*[]byte) error { return nil })
 			if !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > 2*time.Second {
 				t.Fatal("page timeout", err, time.Since(started))
 			}
 			var got string
-			_, err = q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error { got += string(*row); return nil })
+			_, err = q.Each(ctx, cql.EmptyRow{}, &dst, func(row *[]byte) error { got += string(*row); return nil })
 			<-served
 			if err != nil || got != "cdef" {
 				t.Fatal("each page should get a fresh budget", got, err)
@@ -560,10 +558,10 @@ func TestQuery(t *testing.T) {
 		// Cancelling the caller's context interrupts a retry delay.
 		t.Run("ParentCancelInterruptsRetryDelay", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
-			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+			statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 			profile := settings.InternalDefaultProfile()
 			profile.Retry = eachRetryAfterDelay{}
-			q := codecTestMust(unpreparedQuery(s, statement, Options{Profile: new(profile), Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
+			q := codecTestMust(unpreparedQuery(s, statement, Options{Profile: new(profile), Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Minute}}))
 			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
@@ -579,7 +577,7 @@ func TestQuery(t *testing.T) {
 			}()
 			dst := make([]byte, 0, 8)
 			started := time.Now()
-			_, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			_, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			if !errors.Is(err, context.Canceled) || time.Since(started) > 2*time.Second {
 				t.Fatal("parent cancellation did not end the retry delay", err, time.Since(started))
 			}
@@ -589,8 +587,8 @@ func TestQuery(t *testing.T) {
 		// although the execution context registers no watcher on it.
 		t.Run("ParentCancelInterruptsWait", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
-			statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
-			q := codecTestMust(unpreparedQuery(s, statement, Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
+			statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+			q := codecTestMust(unpreparedQuery(s, statement, Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}}))
 			t.Cleanup(q.Close)
 			ctx, cancel := context.WithCancel(context.Background())
 			go func() {
@@ -601,7 +599,7 @@ func TestQuery(t *testing.T) {
 			}()
 			dst := make([]byte, 0, 8)
 			started := time.Now()
-			found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			if found || !errors.Is(err, context.Canceled) || time.Since(started) > time.Second {
 				t.Fatal("parent cancellation did not end the wait", found, err, time.Since(started))
 			}
@@ -627,7 +625,7 @@ func TestQuery(t *testing.T) {
 			}()
 			dst := make([]byte, 0, 8)
 			started := time.Now()
-			_, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(*[]byte) error { return nil })
+			_, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(*[]byte) error { return nil })
 			if !errors.Is(err, context.Canceled) || time.Since(started) > 90*time.Millisecond {
 				t.Fatal("parent cancellation did not reach the page", err, time.Since(started))
 			}
@@ -644,7 +642,7 @@ func TestQuery(t *testing.T) {
 			served := serve(runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2, 2, 2}, "b", "c", "d"), runtimeRowsBody([]byte{3}), runtimeRowsBody(nil, "e"))
 			var got []string
 			dst := make([]byte, 0, 8)
-			result, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error {
+			result, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(row *[]byte) error {
 				got = append(got, string(*row))
 				return nil
 			})
@@ -654,7 +652,7 @@ func TestQuery(t *testing.T) {
 			}
 			got = got[:0]
 			served = serve(runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2, 2}, "b"), runtimeRowsBody([]byte{1}, "c"))
-			_, err = q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error {
+			_, err = q.Each(ctx, cql.EmptyRow{}, &dst, func(row *[]byte) error {
 				got = append(got, string(*row))
 				return nil
 			})
@@ -663,7 +661,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(got, err)
 			}
 			served = serve(runtimeRowsBody(nil, "next"))
-			if found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst); err != nil || !found || string(dst) != "next" {
+			if found, _, err := q.One(ctx, cql.EmptyRow{}, &dst); err != nil || !found || string(dst) != "next" {
 				t.Fatal("query not reusable after a paging failure", found, err)
 			}
 			<-served
@@ -675,16 +673,16 @@ func TestQuery(t *testing.T) {
 		t.Run("UnpreparedContinuationRepairs", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			typ := cqltype.BlobType
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
+			typ := cql.BlobType
+			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 			state, old := preparedState(t, s, columns)
 			state.InternalParameters = columns
 			state.InternalInfo.PartitionKeyIndexes = []int{0}
-			handle := new(Prepared[[]byte, cqltype.Bytes])
+			handle := new(Prepared[[]byte, cql.Bytes])
 			PreparedData(handle).InternalState = state
-			PreparedData(handle).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
-			PreparedData(handle).rows = codec.OneColumn(codec.BlobCodec)
-			PreparedData(handle).plans = &InternalResultPlanCache[cqltype.Bytes]{}
+			PreparedData(handle).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
+			PreparedData(handle).rows = cql.OneColumn(cql.BlobCodec)
+			PreparedData(handle).plans = &InternalResultPlanCache[cql.Bytes]{}
 			q := codecTestMust(handle.Query(Options{}))
 			defer q.Close()
 			serverDone := make(chan error, 1)
@@ -716,9 +714,9 @@ func TestQuery(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			var dst cqltype.Bytes
+			var dst cql.Bytes
 			var values []string
-			result, err := q.Each(ctx, []byte("key"), &dst, func(row *cqltype.Bytes) error {
+			result, err := q.Each(ctx, []byte("key"), &dst, func(row *cql.Bytes) error {
 				values = append(values, string(row.OwnedBytes()))
 				return nil
 			})
@@ -736,7 +734,7 @@ func TestQuery(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			entered, release := make(chan struct{}), make(chan struct{})
 			observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-			query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
+			query := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 			defer query.Close()
 			served := make(chan struct{})
 			go func() {
@@ -751,7 +749,7 @@ func TestQuery(t *testing.T) {
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
-			go func() { _, err := query.Exec(ctx, codec.EmptyRecord{}); done <- err }()
+			go func() { _, err := query.Exec(ctx, cql.EmptyRow{}); done <- err }()
 			<-entered
 			cancel()
 			if err := <-done; !errors.Is(err, context.Canceled) {
@@ -761,10 +759,10 @@ func TestQuery(t *testing.T) {
 			// next execution waits for it within its context.
 			wait, stop := context.WithTimeout(context.Background(), time.Millisecond)
 			defer stop()
-			if _, err := query.Exec(wait, codec.EmptyRecord{}); !errors.Is(err, context.DeadlineExceeded) {
+			if _, err := query.Exec(wait, cql.EmptyRow{}); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
-			if _, err := query.Routing(codec.EmptyRecord{}); err != nil {
+			if _, err := query.Routing(cql.EmptyRow{}); err != nil {
 				t.Fatal(err)
 			}
 			observer.mu.Lock()
@@ -773,7 +771,7 @@ func TestQuery(t *testing.T) {
 			close(release)
 			joined, finish := context.WithTimeout(context.Background(), time.Second)
 			defer finish()
-			if _, err := query.Exec(joined, codec.EmptyRecord{}); err != nil {
+			if _, err := query.Exec(joined, cql.EmptyRow{}); err != nil {
 				t.Fatal(err)
 			}
 			<-served
@@ -783,8 +781,8 @@ func TestQuery(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			entered := make(chan struct{})
 			conns[0].InternalW = &transport.InternalDeadlineContextWriter{InternalW: &acceptedWriter{Conn: conns[0].InternalR.(*transport.InternalConnReader).InternalConn, entered: entered}, InternalSemaphore: make(chan struct{}, 1), InternalQuit: make(chan struct{})}
-			typ := cqltype.BlobType
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})}, Options{}))
+			typ := cql.BlobType
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})}, Options{}))
 			defer q.Close()
 			input := bytes.Repeat([]byte{31}, 128<<10)
 			ctx, cancel := context.WithCancel(context.Background())
@@ -859,11 +857,11 @@ func TestQuery(t *testing.T) {
 				return body
 			}
 		}
-		key := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeInt))})
-		value := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))})
+		key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cql.ScalarType(cql.TypeInt))})
+		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
 		prepared := preparedBody([]byte("loopback"), key, value, 0)
 		if workload == "pwrite" {
-			prepared = preparedBody([]byte("loopback"), implCqltype.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), implCqltype.NewColumns(), 0)
+			prepared = preparedBody([]byte("loopback"), cql.NewColumns(append(cql.ColumnSlice(key), cql.ColumnSlice(value)...)...), cql.NewColumns(), 0)
 		}
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {
@@ -881,7 +879,7 @@ func TestQuery(t *testing.T) {
 	t.Run("NewUnpreparedQuery", func(t *testing.T) {
 		t.Run("DefaultsEmptyCodecs", func(t *testing.T) {
 			s, _ := attachmentSession()
-			q, err := unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
+			q, err := unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "TRUNCATE ks.t"}, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -889,7 +887,7 @@ func TestQuery(t *testing.T) {
 			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
+			if _, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)"}, Options{}); err == nil {
 				t.Fatal("typed parameters without an encoder accepted")
 			}
 		})
@@ -902,7 +900,7 @@ func TestQuery(t *testing.T) {
 			defer cancel()
 			served := serve(runtimeRowsBody(nil))
 			dst := []byte("stale")
-			found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			<-served
 			if err != nil || found || dst != nil {
 				t.Fatal(found, dst, err)
@@ -916,7 +914,7 @@ func TestQuery(t *testing.T) {
 			// Only one page is served: One must not request the continuation.
 			served := serve(runtimeRowsBody([]byte{1}, "first", "second"))
 			dst := make([]byte, 0, 8)
-			found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+			found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 			<-served
 			if err != nil || !found || string(dst) != "first" {
 				t.Fatal(found, string(dst), err)
@@ -1003,9 +1001,9 @@ func TestQuery(t *testing.T) {
 		})
 
 		t.Run("SkipHostPlanOmitsPinnedHost", func(t *testing.T) {
-			a, b, c := cqltype.UUID{15: 1}, cqltype.UUID{15: 2}, cqltype.UUID{15: 3}
+			a, b, c := cql.UUID{15: 1}, cql.UUID{15: 2}, cql.UUID{15: 3}
 			plan := &skipHostPlan{plan: &slicePlan{{HostID: b}, {HostID: a}, {HostID: b}, {HostID: c}}, host: b}
-			var got []cqltype.UUID
+			var got []cql.UUID
 			for {
 				target, ok := plan.Next()
 				if !ok {
@@ -1026,7 +1024,7 @@ func TestQuery(t *testing.T) {
 		// close.
 		t.Run("HandleGoesStaleOnNextExecution", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, Options{}))
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, Options{}))
 			defer q.Close()
 			served := make(chan struct{})
 			go func() {
@@ -1040,8 +1038,8 @@ func TestQuery(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			first := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
-			var row cqltype.Bytes
+			first := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
+			var row cql.Bytes
 			if !first.NextInto(&row) || string(row.OwnedBytes()) != "first" {
 				t.Fatal(first.Err())
 			}
@@ -1049,9 +1047,9 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			// The next execution waits for the closed one to drain.
-			second := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
+			second := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
 			// The stale handle reports nothing and leaves the new execution alone.
-			if first.NextInto(new(cqltype.Bytes)) {
+			if first.NextInto(new(cql.Bytes)) {
 				t.Fatal("stale handle advanced")
 			}
 			if !errors.Is(first.Err(), ErrStaleRows) {
@@ -1079,7 +1077,7 @@ func TestQuery(t *testing.T) {
 				t.Fatal(err)
 			}
 			<-served
-			var zero Rows[cqltype.Bytes]
+			var zero Rows[cql.Bytes]
 			if zero.NextInto(&row) || zero.Err() != nil || zero.Close() != nil {
 				t.Fatal("zero Rows is not empty")
 			}
@@ -1088,8 +1086,8 @@ func TestQuery(t *testing.T) {
 		t.Run("OwnedPreserveDestination", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			type output struct{ Value []byte }
-			decoder := codec.RowInto(func(*output) {}, codec.Column("value", codec.ByteSliceCodec, func(v *output) *[]byte { return &v.Value }))
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, output]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: decoder}, Options{}))
+			decoder := cql.RowInto(func(*output) {}, cql.Column("value", cql.ByteSliceCodec, func(v *output) *[]byte { return &v.Value }))
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, output]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: decoder}, Options{}))
 			defer q.Close()
 			served := make(chan struct{})
 			go func() {
@@ -1102,7 +1100,7 @@ func TestQuery(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			rows := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
+			rows := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
 			defer rows.Close()
 			dst := output{Value: make([]byte, 0, 8)}
 			backing := &dst.Value[:cap(dst.Value)][0]
@@ -1125,7 +1123,7 @@ func TestQuery(t *testing.T) {
 			for _, mode := range modes {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := fixtureStreamSession(t, mode)
-					query := codecTestMust(unpreparedStreamQuery(s, StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}, StreamOptions{}))
+					query := codecTestMust(unpreparedStreamQuery(s, StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.StreamOneColumn(cql.StreamBlob)}, StreamOptions{}))
 					defer query.Close()
 					served := make(chan struct{})
 					go func() {
@@ -1151,7 +1149,7 @@ func TestQuery(t *testing.T) {
 					}()
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					cursor := codecTestMust(query.Run(ctx, codec.EmptyRecord{}))
+					cursor := codecTestMust(query.Run(ctx, cql.EmptyRow{}))
 					defer cursor.Close()
 					dst := make([]byte, 0, 16)
 					if !cursor.NextInto(&dst) || string(dst) != "complete" || cursor.NextInto(&dst) || cursor.Err() != nil {
@@ -1164,7 +1162,7 @@ func TestQuery(t *testing.T) {
 
 		t.Run("MultiplexAndReuseSeededStorage", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			statement := StreamStatement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.StreamOneColumn(codec.StreamBlob)}
+			statement := StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.StreamOneColumn(cql.StreamBlob)}
 			q := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
 			other := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
 			defer q.Close()
@@ -1182,11 +1180,11 @@ func TestQuery(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			first := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
-			if _, err := q.Run(ctx, codec.EmptyRecord{}); !errors.Is(err, ErrBusy) {
+			first := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
+			if _, err := q.Run(ctx, cql.EmptyRow{}); !errors.Is(err, ErrBusy) {
 				t.Fatal(err)
 			}
-			second := codecTestMust(other.Run(ctx, codec.EmptyRecord{})) // shares the one connection
+			second := codecTestMust(other.Run(ctx, cql.EmptyRow{})) // shares the one connection
 			output := make([]byte, 0, 16)
 			backing := &output[:cap(output)][0]
 			if !first.NextInto(&output) || string(output) != "one" {
@@ -1207,7 +1205,7 @@ func TestQuery(t *testing.T) {
 			}
 			// The exhausted first stream finished its execution; the next Run
 			// waits for its drain although first is not closed yet.
-			reused := codecTestMust(q.Run(ctx, codec.EmptyRecord{}))
+			reused := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
 			if err := first.Close(); err != nil {
 				t.Fatal(err)
 			} // stale cursor cannot cancel reuse
@@ -1229,8 +1227,8 @@ func TestQuery(t *testing.T) {
 
 	t.Run("Validation", func(t *testing.T) {
 		t.Run("Uninitialized", func(t *testing.T) {
-			var q Query[codec.EmptyRecord, codec.EmptyRecord]
-			if _, err := q.Exec(context.Background(), codec.EmptyRecord{}); err == nil {
+			var q Query[cql.EmptyRow, cql.EmptyRow]
+			if _, err := q.Exec(context.Background(), cql.EmptyRow{}); err == nil {
 				t.Fatal("zero query executed")
 			}
 			q.Close()

@@ -25,7 +25,7 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -44,7 +44,7 @@ func (s *Core) ScheduleV2PreparedRefresh(keyspace string) error {
 	}
 	if _, exists := p.InternalPreparedRefreshScopes[keyspace]; !exists && len(p.InternalPreparedRefreshScopes) >= InternalMaxPreparedRefreshScopes {
 		p.InternalMu.Unlock()
-		return &cqltype.ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
+		return &cql.ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
 	}
 	if p.InternalPreparedRefreshScopes == nil {
 		p.InternalPreparedRefreshScopes = make(map[string]uint64)
@@ -67,7 +67,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 		}
 		for _, row := range rows {
 			if row.InternalName == "" {
-				return cqltype.TypeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
+				return cql.TypeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
 			}
 			if err := s.reconcileV2PreparedScope(ctx, row.InternalName); err != nil {
 				return err

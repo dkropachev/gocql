@@ -25,43 +25,43 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalCheckedV2PoolBudget(options connectivity.PoolOptions, shards int) (int, error) {
 	if shards < 1 || shards > math.MaxUint16 {
-		return 0, cqltype.TypeValidation("shard count", "must be 1..65535")
+		return 0, cql.TypeValidation("shard count", "must be 1..65535")
 	}
 	if options.ConnectionsPerHost < 0 || options.ConnectionsPerShard < 0 || options.MaxExcessPerShard < 0 {
-		return 0, cqltype.TypeValidation("pool counts", "must not be negative")
+		return 0, cql.TypeValidation("pool counts", "must not be negative")
 	}
 	if options.ConnectionsPerHost > 0 {
 		return options.ConnectionsPerHost, nil
 	}
 	if options.ConnectionsPerShard == 0 {
-		return 0, cqltype.TypeValidation("pool target", "per-host or per-shard count required")
+		return 0, cql.TypeValidation("pool target", "per-host or per-shard count required")
 	}
 	if options.ConnectionsPerShard > math.MaxInt/shards || options.MaxExcessPerShard > math.MaxInt/shards {
-		return 0, cqltype.TypeValidation("pool target", "connection/excess count arithmetic overflow")
+		return 0, cql.TypeValidation("pool target", "connection/excess count arithmetic overflow")
 	}
 	target := options.ConnectionsPerShard * shards
 	excess := options.MaxExcessPerShard * shards
 	if excess > math.MaxInt-target {
-		return 0, cqltype.TypeValidation("pool target", "combined target/excess count arithmetic overflow")
+		return 0, cql.TypeValidation("pool target", "combined target/excess count arithmetic overflow")
 	}
 	return target, nil
 }
 func InternalValidateV2ConnectionSharding(info implEndpoint.ScyllaConnectionFeatures) error {
 	if implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards == 0 {
 		if implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard != 0 || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalMsbIgnore != 0 {
-			return cqltype.TypeValidation("sharding", "unsharded connection has shard-specific parameters")
+			return cql.TypeValidation("sharding", "unsharded connection has shard-specific parameters")
 		}
 		return nil
 	}
 	if implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards < 1 || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards > math.MaxUint16 || implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard < 0 || implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard >= implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalMsbIgnore > 63 {
-		return cqltype.TypeValidation("sharding", "invalid count, shard ID or ignored MSB count")
+		return cql.TypeValidation("sharding", "invalid count, shard ID or ignored MSB count")
 	}
 	return nil
 }
@@ -82,30 +82,30 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 		for _, key := range keys {
 			v, ok := values[key]
 			if !ok || len(v) != 1 || v[0] == "" {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("missing/ambiguous %s", key)}
+				return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("missing/ambiguous %s", key)}
 			}
 		}
 		count, err := strconv.ParseUint(values["SCYLLA_NR_SHARDS"][0], 10, 16)
 		if err != nil || count == 0 {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("invalid 16-bit nonzero shard count")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("invalid 16-bit nonzero shard count")}
 		}
 		shard, err := strconv.ParseUint(values["SCYLLA_SHARD"][0], 10, 16)
 		if err != nil || shard >= count {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("shard ID outside advertised count")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("shard ID outside advertised count")}
 		}
 		msb, err := strconv.ParseUint(values["SCYLLA_SHARDING_IGNORE_MSB"][0], 10, 6)
 		if err != nil || msb > 63 {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("ignored MSB count outside 0..63")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("ignored MSB count outside 0..63")}
 		}
 		shards = int(count)
 	}
 	for _, key := range []string{"SCYLLA_SHARD_AWARE_PORT", "SCYLLA_SHARD_AWARE_PORT_SSL"} {
 		if v, ok := values[key]; ok {
 			if len(v) != 1 {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED port", Err: fmt.Errorf("missing/ambiguous %s", key)}
+				return &cql.ProtocolError{Stage: "SUPPORTED port", Err: fmt.Errorf("missing/ambiguous %s", key)}
 			}
 			if _, err := strconv.ParseUint(v[0], 10, 16); err != nil {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED port", Err: err}
+				return &cql.ProtocolError{Stage: "SUPPORTED port", Err: err}
 			}
 		}
 	}
@@ -116,15 +116,15 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 				continue
 			}
 			if !ok || value == "" {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: fmt.Errorf("invalid %s", param)}
+				return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: fmt.Errorf("invalid %s", param)}
 			}
 			if key == implEndpoint.InternalLwtAddMetadataMarkKey {
 				if _, err := strconv.ParseUint(value, 10, 32); err != nil {
-					return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: err}
+					return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: err}
 				}
 			} else {
 				if _, err := strconv.ParseInt(value, 10, 32); err != nil {
-					return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: err}
+					return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: err}
 				}
 			}
 		}

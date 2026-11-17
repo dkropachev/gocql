@@ -7,8 +7,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -26,7 +25,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	decoder := InternalV2SchemaRows[v2ScyllaKeyspaceRow]{initialize: func() *v2ScyllaKeyspaceRow { return &v2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[v2ScyllaKeyspaceRow]{
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.name }),
-		InternalV2SchemaColumn("initial_tablets", codec.Int32, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
+		InternalV2SchemaColumn("initial_tablets", cql.Int32Codec, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
 		InternalV2SchemaColumn("consistency", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.consistency }),
 	}}
 	stmt := `SELECT * FROM system_schema.scylla_keyspaces`
@@ -45,7 +44,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	seen := make(map[string]bool, len(rows))
 	for _, r := range rows {
 		if seen[r.name] {
-			return cqltype.TypeValidation("scylla keyspace schema", "duplicate identity %q", r.name)
+			return cql.TypeValidation("scylla keyspace schema", "duplicate identity %q", r.name)
 		}
 		seen[r.name] = true
 		if ks := keyspaces[r.name]; ks != nil {

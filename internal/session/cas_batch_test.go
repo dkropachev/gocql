@@ -8,9 +8,8 @@ import (
 	"encoding/binary"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -33,8 +32,8 @@ func casRowsBody(rows ...casBatchRow) []byte {
 	}
 	for _, c := range []struct {
 		name string
-		typ  cqltype.Type
-	}{{"[applied]", cqltype.TypeBoolean}, {"value", cqltype.TypeBlob}} {
+		typ  cql.Type
+	}{{"[applied]", cql.TypeBoolean}, {"value", cql.TypeBlob}} {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(c.name)))
 		b = append(b, c.name...)
 		b = binary.BigEndian.AppendUint16(b, uint16(c.typ))
@@ -53,14 +52,14 @@ func casRowsBody(rows ...casBatchRow) []byte {
 	return b
 }
 
-var casBatchDecoder = codec.CASRows(batchRowA)
+var casBatchDecoder = cql.CASRows(batchRowA)
 
 // newCASBatch returns a session answering every request with a RESULT of
 // body, and a batch of one conditional member.
 func newCASBatch(t testing.TB, body []byte) (*Session, *Batch) {
 	t.Helper()
 	return newServedBatchOf(t, body, func(s *implCluster.Core, batch *Batch) error {
-		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cqltype.ConditionalStatement}, model.EncodedValues{})
+		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cql.ConditionalStatement}, model.EncodedValues{})
 	})
 }
 
@@ -94,7 +93,7 @@ func TestRunConditionalBatch(t *testing.T) {
 			session, batch := newCASBatch(t, tc.body)
 			rows := runCASBatch(t, session, batch)
 			defer rows.Close()
-			var row codec.CASResult[batchRow]
+			var row cql.CASResult[batchRow]
 			for i := 0; i < tc.read; i++ {
 				if !rows.NextInto(&row) {
 					t.Fatalf("row %d: %v", i, rows.Err())
@@ -116,7 +115,7 @@ func TestRunConditionalBatch(t *testing.T) {
 	t.Run("ClosedEarly", func(t *testing.T) {
 		session, batch := newCASBatch(t, applied)
 		rows := runCASBatch(t, session, batch)
-		var row codec.CASResult[batchRow]
+		var row cql.CASResult[batchRow]
 		if !rows.NextInto(&row) {
 			t.Fatal(rows.Err())
 		}
@@ -152,7 +151,7 @@ func TestRunConditionalBatch(t *testing.T) {
 		}
 		current := runCASBatch(t, session, batch)
 		defer current.Close()
-		var row codec.CASResult[batchRow]
+		var row cql.CASResult[batchRow]
 		if old.NextInto(&row) {
 			t.Fatal("stale handle read a row")
 		}
@@ -172,7 +171,7 @@ func TestRunConditionalBatch(t *testing.T) {
 	t.Run("ClosedAfterLastRow", func(t *testing.T) {
 		session, batch := newCASBatch(t, applied)
 		rows := runCASBatch(t, session, batch)
-		var row codec.CASResult[batchRow]
+		var row cql.CASResult[batchRow]
 		for range 2 {
 			if !rows.NextInto(&row) {
 				t.Fatal(rows.Err())
@@ -189,7 +188,7 @@ func TestRunConditionalBatch(t *testing.T) {
 	// A batch known to have no condition is rejected before it is sent.
 	t.Run("Ordinary", func(t *testing.T) {
 		session, batch := newServedBatch(t, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
-		if _, err := session.RunConditionalBatch(context.Background(), batch, casBatchDecoder, CompiledOptions{}); !hasErrorType[*cqltype.ValidationError](err) {
+		if _, err := session.RunConditionalBatch(context.Background(), batch, casBatchDecoder, CompiledOptions{}); !hasErrorType[*cql.ValidationError](err) {
 			t.Fatalf("ordinary batch: %v", err)
 		}
 		if m := session.Core().Metrics(); m.Requests != 0 {

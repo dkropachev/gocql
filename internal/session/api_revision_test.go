@@ -10,9 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -33,7 +32,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 				<-release
 			}
 		}}
-		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
+		query := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 		t.Cleanup(query.Close)
 		served := make(chan struct{})
 		go func() {
@@ -48,27 +47,27 @@ func TestQueryDrainAdmission(t *testing.T) {
 		}()
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
-		go func() { _, err := query.Exec(ctx, codec.EmptyRecord{}); done <- err }()
+		go func() { _, err := query.Exec(ctx, cql.EmptyRow{}); done <- err }()
 		<-entered
 		cancel()
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
 		// Routing uses scratch of its own, so a drain does not block it.
-		if _, err := query.Routing(codec.EmptyRecord{}); err != nil {
+		if _, err := query.Routing(cql.EmptyRow{}); err != nil {
 			t.Fatal("Routing during drain:", err)
 		}
 		// An execution waits for the drain, bounded by its own context.
 		short, stopShort := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer stopShort()
-		if _, err := query.Exec(short, codec.EmptyRecord{}); !errors.Is(err, context.DeadlineExceeded) {
+		if _, err := query.Exec(short, cql.EmptyRow{}); !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatal("Exec during drain with an expiring context:", err)
 		}
 		next := make(chan error, 1)
 		go func() {
 			joined, finish := context.WithTimeout(context.Background(), 5*time.Second)
 			defer finish()
-			_, err := query.Exec(joined, codec.EmptyRecord{})
+			_, err := query.Exec(joined, cql.EmptyRow{})
 			next <- err
 		}()
 		select {
@@ -89,7 +88,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		s, conns, peers := runtimeTestSession(t, 1)
 		entered, release := make(chan struct{}), make(chan struct{})
 		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
-		query := codecTestMust(unpreparedQuery(s, binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
+		query := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 		go func() {
 			stream := typedTestReadRequest(t, conns[0], peers[0])
 			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, []byte{0, 0, 0, frm.ResultKindVoid})); err != nil {
@@ -98,7 +97,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		}()
 		ctx, cancel := context.WithCancel(context.Background())
 		done := make(chan error, 1)
-		go func() { _, err := query.Exec(ctx, codec.EmptyRecord{}); done <- err }()
+		go func() { _, err := query.Exec(ctx, cql.EmptyRow{}); done <- err }()
 		<-entered
 		cancel()
 		<-done
@@ -115,7 +114,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		if err := query.Wait(joined); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := query.Exec(joined, codec.EmptyRecord{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if _, err := query.Exec(joined, cql.EmptyRow{}); !errors.Is(err, runtimeerrors.ErrClosed) {
 			t.Fatal("Exec after Close:", err)
 		}
 	})

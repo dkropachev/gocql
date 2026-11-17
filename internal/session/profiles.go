@@ -6,8 +6,7 @@ package session
 import (
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
@@ -22,15 +21,15 @@ type Options struct {
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
 	Keyspace             string
-	CustomPayload        []model.PayloadEntry
-	Timeout, PageTimeout cqltype.Option[time.Duration]
-	Prefetch             cqltype.Option[int]
-	Timestamp            cqltype.Option[int64]
-	PageSize             cqltype.Option[int32]
-	NowInSeconds         cqltype.Option[int32]
-	ShardID              cqltype.Option[uint32]
-	Consistency          cqltype.Option[cqltype.Consistency]
-	HostID               cqltype.Option[cqltype.UUID]
+	CustomPayload        []cql.PayloadEntry
+	Timeout, PageTimeout cql.Option[time.Duration]
+	Prefetch             cql.Option[int]
+	Timestamp            cql.Option[int64]
+	PageSize             cql.Option[int32]
+	NowInSeconds         cql.Option[int32]
+	ShardID              cql.Option[uint32]
+	Consistency          cql.Option[cql.Consistency]
+	HostID               cql.Option[cql.UUID]
 	// SerialConsistency overrides the profile's serial consistency.
 	SerialConsistency SerialOverride
 	IncludeMetadata   bool
@@ -80,13 +79,13 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	switch options.SerialConsistency {
 	case SerialInherit:
 	case SerialSerial:
-		p.SerialConsistency = cqltype.Some(cqltype.Serial)
+		p.SerialConsistency = cql.Some(cql.Serial)
 	case SerialLocal:
-		p.SerialConsistency = cqltype.Some(cqltype.LocalSerial)
+		p.SerialConsistency = cql.Some(cql.LocalSerial)
 	case SerialOmit:
-		p.SerialConsistency = cqltype.Option[cqltype.Consistency]{}
+		p.SerialConsistency = cql.Option[cql.Consistency]{}
 	default:
-		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
+		return InternalResolvedOptions{}, cql.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
 	if options.Timeout.Set {
 		p.Timeout = options.Timeout.Value
@@ -104,15 +103,15 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p.Retry = options.Retry
 	}
 	if options.Consistency.Set && !settings.InternalValidConsistency(p.Consistency) {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("consistency", "invalid consistency")
+		return InternalResolvedOptions{}, cql.TypeValidation("consistency", "invalid consistency")
 	}
 	if options.Timeout.Set && p.Timeout < 0 || options.PageTimeout.Set && p.PageTimeout < 0 {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")
+		return InternalResolvedOptions{}, cql.TypeValidation("timeout", "must not be negative")
 	}
 	if options.PageSize.Set && p.PageSize <= 0 {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive")
+		return InternalResolvedOptions{}, cql.TypeValidation("page size", "must be positive")
 	}
-	if p.PageSize == cqltype.Unpaged {
+	if p.PageSize == cql.Unpaged {
 		if options.Prefetch.Set && options.Prefetch.Value != 0 {
 			return InternalResolvedOptions{}, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "an unpaged result has no next page"}
 		}
@@ -120,22 +119,22 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p.PageSize = 0
 	}
 	if options.Prefetch.Set && (p.Prefetch < 0 || p.Prefetch > 1) {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("prefetch", "must be zero or one")
+		return InternalResolvedOptions{}, cql.TypeValidation("prefetch", "must be zero or one")
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("host ID", "empty UUID")
+		return InternalResolvedOptions{}, cql.TypeValidation("host ID", "empty UUID")
 	}
 	if options.ShardID.Set && !options.HostID.Set {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("shard", "requires a host ID")
+		return InternalResolvedOptions{}, cql.TypeValidation("shard", "requires a host ID")
 	}
 	keys := make(map[string]bool, len(options.CustomPayload))
 	for _, entry := range options.CustomPayload {
 		if len(entry.Key) > 65535 || keys[entry.Key] {
-			return InternalResolvedOptions{}, cqltype.TypeValidation("custom payload", "invalid or duplicate key")
+			return InternalResolvedOptions{}, cql.TypeValidation("custom payload", "invalid or duplicate key")
 		}
 		keys[entry.Key] = true
 		if entry.Value.Valid {
-			if err := cqltype.CheckBytesAlive(entry.Value.Value); err != nil {
+			if err := cql.CheckBytesAlive(entry.Value.Value); err != nil {
 				return InternalResolvedOptions{}, err
 			}
 		}

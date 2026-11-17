@@ -8,7 +8,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -22,7 +22,7 @@ func BenchmarkTablets(b *testing.B) {
 	b.Run("FeedbackCaptureParallel", func(b *testing.B) {
 		s := testSession(b)
 		m := s.Metadata()
-		info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
+		info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
 		b.ReportAllocs()
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
@@ -42,7 +42,7 @@ func BenchmarkTablets(b *testing.B) {
 				stamp := s.CaptureTabletFeedback(info, s.Metadata())
 				hints := make([]InternalV2PendingTabletFeedback, ranges)
 				for i := range hints {
-					hints[i].InternalHint = testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{}, hTarget(1, 0))
+					hints[i].InternalHint = testHint(b, int64(i*2), int64(i*2+1), cql.Option[uint64]{}, hTarget(1, 0))
 				}
 				b.ReportAllocs()
 				b.ResetTimer()
@@ -56,9 +56,9 @@ func BenchmarkTablets(b *testing.B) {
 	// BenchmarkTablets/HintParse parses a tablets-routing-v2 custom payload of a
 	// tablet with three replicas, as each response carrying a hint does.
 	b.Run("HintParse", func(b *testing.B) {
-		h := testHint(b, -100, 100, cqltype.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 1), hTarget(3, 2))
+		h := testHint(b, -100, 100, cql.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 1), hTarget(3, 2))
 		raw := testPayload(h)
-		value := cqltype.BorrowBytes(raw)
+		value := cql.BorrowBytes(raw)
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
@@ -82,7 +82,7 @@ func BenchmarkTablets(b *testing.B) {
 					var root *implRouting.InternalTabletRangeTree
 					for i := 0; i < count; i++ {
 						first := math.MinInt64 + int64(uint64(i)*step)
-						root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, first, first+int64(step), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
+						root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, first, first+int64(step), cql.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0)))
 					}
 					k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 					routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root}))
@@ -102,7 +102,7 @@ func BenchmarkTablets(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum}
+						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum}
 						stamp := s.CaptureTabletFeedback(info, m)
 						tablet := routing.InternalLookupTabletCached(m, info, &cache)
 						block := tablet.VersionBlock(info)
@@ -127,7 +127,7 @@ func BenchmarkTablets(b *testing.B) {
 						m := s.Metadata()
 						var root *implRouting.InternalTabletRangeTree
 						for i := 0; i < ranges; i++ {
-							root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, int64(i*2), int64(i*2+1), cqltype.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0)))
+							root, _ = implRouting.InternalUpdateTabletRange(root, testHint(b, int64(i*2), int64(i*2+1), cql.Option[uint64]{Value: uint64(i), Set: true}, hTarget(1, 0)))
 						}
 						k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1", InternalRanges: root})
@@ -136,7 +136,7 @@ func BenchmarkTablets(b *testing.B) {
 							routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, implRouting.InternalTabletPlacement{InternalRanges: root})
 						}
 						info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
-						h := testHint(b, 0, 1, cqltype.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))
+						h := testHint(b, 0, 1, cql.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))
 						updates := make(map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, 1)
 						b.ReportAllocs()
 						b.ResetTimer()

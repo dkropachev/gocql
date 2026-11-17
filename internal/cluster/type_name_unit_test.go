@@ -19,6 +19,7 @@ package cluster
 import (
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
@@ -26,33 +27,33 @@ type MyPointerMarshaler struct{}
 
 var typeLookupTest = []struct {
 	TypeName     string
-	ExpectedType cqltype.Type
+	ExpectedType cql.Type
 }{
-	{"AsciiType", cqltype.TypeAscii},
-	{"LongType", cqltype.TypeBigInt},
-	{"BytesType", cqltype.TypeBlob},
-	{"BooleanType", cqltype.TypeBoolean},
-	{"CounterColumnType", cqltype.TypeCounter},
-	{"DecimalType", cqltype.TypeDecimal},
-	{"DoubleType", cqltype.TypeDouble},
-	{"FloatType", cqltype.TypeFloat},
-	{"Int32Type", cqltype.TypeInt},
-	{"DateType", cqltype.TypeTimestamp},
-	{"TimestampType", cqltype.TypeTimestamp},
-	{"UUIDType", cqltype.TypeUUID},
-	{"UTF8Type", cqltype.TypeVarchar},
-	{"IntegerType", cqltype.TypeVarint},
-	{"TimeUUIDType", cqltype.TypeTimeUUID},
-	{"InetAddressType", cqltype.TypeInet},
-	{"MapType", cqltype.TypeMap},
-	{"ListType", cqltype.TypeList},
-	{"SetType", cqltype.TypeSet},
-	{"unknown", cqltype.TypeCustom},
-	{"ShortType", cqltype.TypeSmallInt},
-	{"ByteType", cqltype.TypeTinyInt},
+	{"AsciiType", cql.TypeAscii},
+	{"LongType", cql.TypeBigInt},
+	{"BytesType", cql.TypeBlob},
+	{"BooleanType", cql.TypeBoolean},
+	{"CounterColumnType", cql.TypeCounter},
+	{"DecimalType", cql.TypeDecimal},
+	{"DoubleType", cql.TypeDouble},
+	{"FloatType", cql.TypeFloat},
+	{"Int32Type", cql.TypeInt},
+	{"DateType", cql.TypeTimestamp},
+	{"TimestampType", cql.TypeTimestamp},
+	{"UUIDType", cql.TypeUUID},
+	{"UTF8Type", cql.TypeVarchar},
+	{"IntegerType", cql.TypeVarint},
+	{"TimeUUIDType", cql.TypeTimeUUID},
+	{"InetAddressType", cql.TypeInet},
+	{"MapType", cql.TypeMap},
+	{"ListType", cql.TypeList},
+	{"SetType", cql.TypeSet},
+	{"unknown", cql.TypeCustom},
+	{"ShortType", cql.TypeSmallInt},
+	{"ByteType", cql.TypeTinyInt},
 }
 
-func testType(t *testing.T, cassType string, expectedType cqltype.Type) {
+func testType(t *testing.T, cassType string, expectedType cql.Type) {
 	if computedType := getApacheCassandraType(cqltype.ApacheCassandraTypePrefix + cassType); computedType != expectedType {
 		t.Errorf("Cassandra custom type lookup for %s failed. Expected %s, got %s.", cassType, expectedType.String(), computedType.String())
 	}

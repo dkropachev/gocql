@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
@@ -60,7 +60,7 @@ func TestClientRoutes(t *testing.T) {
 
 	t.Run("Connect", func(t *testing.T) {
 		t.Run("DNSAndFallbackShareDeadline", func(t *testing.T) {
-			ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
+			ids := []cql.UUID{cql.RandomUUID(), cql.RandomUUID(), cql.RandomUUID()}
 			srv := newControlTestServer(t, func(srv *controlTestServer) {
 				srv.queries = func(query string, stream int, resp *protocol.Framer) bool {
 					if !strings.Contains(query, "system.client_routes") {
@@ -69,7 +69,7 @@ func TestClientRoutes(t *testing.T) {
 					_, port, _ := net.SplitHostPort(srv.Address)
 					var goodPort int
 					fmt.Sscan(port, &goodPort)
-					columns := []rowsCol{{"connection_id", optNative(cqltype.TypeUUID)}, {"host_id", optNative(cqltype.TypeUUID)}, {"address", optNative(cqltype.TypeVarchar)}, {"port", optNative(cqltype.TypeInt)}, {"tls_port", optNative(cqltype.TypeInt)}}
+					columns := []rowsCol{{"connection_id", optNative(cql.TypeUUID)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeVarchar)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
 					var rows [][][]byte
 					for i, id := range ids {
 						port := 1
@@ -132,7 +132,7 @@ func TestClientRoutes(t *testing.T) {
 			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.Nop())
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxxxx := new(endpoint.HostInfo)
-				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalHostId = cqltype.MustRandomUUID()
+				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalHostId = cql.RandomUUID()
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalConnectAddress = net.IPv4(127, 0, 0, 1)
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalPort = 9042
 				return opaqueStorageValuexxxxxxxxxxx

@@ -7,7 +7,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestSimpleConvictionPolicy(t *testing.T) {
@@ -18,7 +18,7 @@ func TestSimpleConvictionPolicy(t *testing.T) {
 			t.Fatal("whole-host failure not convicted", source)
 		}
 	}
-	if p.AddFailure(ConvictionEvent{Err: cause, Shard: cqltype.Some(uint32(3)), Source: ConvictionPool}) {
+	if p.AddFailure(ConvictionEvent{Err: cause, Shard: cql.Some(uint32(3)), Source: ConvictionPool}) {
 		t.Fatal("single-shard failure convicted the host")
 	}
 }

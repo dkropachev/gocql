@@ -11,8 +11,8 @@ import (
 	"net"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -47,13 +47,13 @@ func referenceKindOf(err error) Kind {
 		return protocol.CodeKind(server.Code())
 	}
 	switch {
-	case has(ErrClosed, ErrSessionClosed, ErrStaleRows, cqltype.ErrReleased):
+	case has(ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased):
 		return KindClosed
-	case hasType[*cqltype.ValidationError](err), hasType[*cqltype.CodecError](err), hasType[*SchemaChangedError](err),
+	case hasType[*cql.ValidationError](err), hasType[*cql.CodecError](err), hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete):
 		return KindInvalid
-	case hasType[*cqltype.ProtocolError](err), has(protocol.ErrFrameTooBig):
+	case hasType[*cql.ProtocolError](err), has(protocol.ErrFrameTooBig):
 		return KindProtocol
 	case has(ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout):
 		return KindTimeout
@@ -110,15 +110,15 @@ func classifiedLeaves() []error {
 	leaves := []error{
 		errors.New("unclassified"),
 		context.Canceled, context.DeadlineExceeded,
-		ErrClosed, ErrSessionClosed, ErrStaleRows, cqltype.ErrReleased,
+		ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased,
 		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		protocol.ErrFrameTooBig, ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout,
 		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNotFound, ErrNoRows, ErrPagingStateLimit,
-		&cqltype.ValidationError{Field: "f", Err: errors.New("bad")},
-		&cqltype.CodecError{Stage: "decode", Err: errors.New("bad")},
-		&cqltype.ProtocolError{Stage: "rows", Err: errors.New("bad")},
-		cqltype.NewFrameError("unknown opcode"),
+		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
+		&cql.CodecError{Stage: "decode", Err: errors.New("bad")},
+		&cql.ProtocolError{Stage: "rows", Err: errors.New("bad")},
+		cql.NewFrameError("unknown opcode"),
 		&SchemaChangedError{Statement: "s"},
 		&UnsupportedSettingError{Setting: "s", Reason: "r"},
 		&ServerMismatchError{Want: "ScyllaDB", Got: "Cassandra"},
@@ -162,7 +162,7 @@ func TestKindOfMatchesReference(t *testing.T) {
 			fmt.Errorf("wrapped: %w", a),
 			NewQueryError(QueryErrorState{InternalErr: a}),
 			NewQueryError(QueryErrorState{InternalErr: a, InternalPotentiallyExecuted: true}),
-			NewExecutionError(a, model.Result{}, cqltype.PartiallyExecuted, nil),
+			NewExecutionError(a, cql.Result{}, cqltype.PartiallyExecuted, nil),
 			&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h", Err: a}}},
 		)
 		for _, b := range leaves {
@@ -170,7 +170,7 @@ func TestKindOfMatchesReference(t *testing.T) {
 				errors.Join(a, b),
 				fmt.Errorf("%w: %w", a, fmt.Errorf("inner: %w", b)),
 				&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h1", Err: a}, {Address: "h2", Err: b}}},
-				NewExecutionError(a, model.Result{}, cqltype.MaybeExecuted, []AttemptFailure{{Err: b}}),
+				NewExecutionError(a, cql.Result{}, cqltype.MaybeExecuted, []AttemptFailure{{Err: b}}),
 			)
 		}
 	}

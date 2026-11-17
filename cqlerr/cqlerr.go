@@ -26,7 +26,7 @@
 package cqlerr
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -181,11 +181,11 @@ const (
 // Driver errors.
 
 type (
-	CodecError              = cqltype.CodecError
-	ProtocolError           = cqltype.ProtocolError
-	ValidationError         = cqltype.ValidationError
-	StreamCapabilityError   = codec.StreamCapabilityError
-	StreamCapacityError     = codec.StreamCapacityError
+	CodecError              = cql.CodecError
+	ProtocolError           = cql.ProtocolError
+	ValidationError         = cql.ValidationError
+	StreamCapabilityError   = cql.StreamCapabilityError
+	StreamCapacityError     = cql.StreamCapacityError
 	UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
 	NoHostsError            = metadata.NoHostsError
 	PartialRefreshError     = metadata.PartialRefreshError
@@ -221,7 +221,7 @@ var (
 	ErrPagingNoProgress             = runtimeerrors.ErrPagingNoProgress
 	ErrPagingStateLimit             = runtimeerrors.ErrPagingStateLimit
 	ErrReadHeaderTimeout            = protocol.ErrReadHeaderTimeout
-	ErrReleased                     = cqltype.ErrReleased
+	ErrReleased                     = cql.ErrReleased
 	ErrScyllaSourcePortAlreadyInUse = transport.ErrScyllaSourcePortAlreadyInUse
 	ErrSessionClosed                = runtimeerrors.ErrSessionClosed
 	ErrSessionNotReady              = runtimeerrors.ErrSessionNotReady

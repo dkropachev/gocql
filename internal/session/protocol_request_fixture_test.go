@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
@@ -41,8 +41,8 @@ type fixtureQueryParams struct {
 	pagingState           []byte
 	pageSize              int
 	defaultTimestampValue int64
-	consistency           cqltype.Consistency
-	serialConsistency     cqltype.Consistency
+	consistency           cql.Consistency
+	serialConsistency     cql.Consistency
 	skipMeta              bool
 	defaultTimestamp      bool
 }

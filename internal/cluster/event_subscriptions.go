@@ -4,19 +4,17 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
-
 	"net"
 	"net/netip"
 	"slices"
 	"time"
 
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-
+	"github.com/scylladb/gocql/v2/cql"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 type EventKind uint8
@@ -35,7 +33,7 @@ type Event struct {
 	Change, Target, Keyspace, Object string
 	ArgumentTypes                    []string
 	Generation                       uint64
-	HostID                           cqltype.UUID
+	HostID                           cql.UUID
 	Kind                             EventKind
 }
 type EventFilter struct {
@@ -127,14 +125,14 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 		return nil, runtimeerrors.ErrClosed
 	}
 	if filter.Capacity < 0 {
-		return nil, cqltype.TypeValidation("subscription capacity", "must not be negative")
+		return nil, cql.TypeValidation("subscription capacity", "must not be negative")
 	}
 	if filter.Capacity == 0 {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
 		if kind > OverflowEvent {
-			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
+			return nil, cql.TypeValidation("event filter", "unknown event kind")
 		}
 	}
 	filter.Kinds = append([]EventKind(nil), filter.Kinds...)
@@ -242,7 +240,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		e.Kind = ControlEvent
 		e.Change = "RECONNECTED"
 		e.Address = eventV2Address(v.NewHost.Host, v.NewHost.Port)
-		e.HostID, _ = cqltype.ParseUUID(v.NewHost.HostID)
+		e.HostID, _ = cql.ParseUUID(v.NewHost.HostID)
 	default:
 		return
 	}
@@ -299,7 +297,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	if !deliver {
 		return
 	}
-	if e.HostID == (cqltype.UUID{}) && e.Address.IsValid() {
+	if e.HostID == (cql.UUID{}) && e.Address.IsValid() {
 		for _, host := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if host.Address == e.Address {
 				e.HostID = host.ID

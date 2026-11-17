@@ -25,11 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implPaging "github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -40,7 +36,7 @@ func TestPaging(t *testing.T) {
 	t.Run("History", func(t *testing.T) {
 		t.Run("CyclesLimitsAndTokenIdentity", func(t *testing.T) {
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 4}
-			a, b := implModel.PageStateFromToken([]byte("a")), implModel.PageStateFromToken([]byte("b"))
+			a, b := cql.PageStateFromToken([]byte("a")), cql.PageStateFromToken([]byte("b"))
 			if h.InternalAdd(a) != nil || h.InternalAdd(b) != nil || !errors.Is(h.InternalAdd(a), runtimeerrors.ErrPagingNoProgress) {
 				t.Fatal("nonconsecutive cycle")
 			}
@@ -50,17 +46,17 @@ func TestPaging(t *testing.T) {
 			entry := h.InternalEntries
 			found := false
 			for _, v := range entry {
-				if bytes.Equal(model.PageToken(v.InternalState), model.PageToken(a)) {
-					found = &model.PageToken(v.InternalState)[0] == &model.PageToken(a)[0]
+				if bytes.Equal(cql.PageToken(v.InternalState), cql.PageToken(a)) {
+					found = &cql.PageToken(v.InternalState)[0] == &cql.PageToken(a)[0]
 				}
 			}
 			if !found {
 				t.Fatal("history copied payload")
 			}
-			if h.InternalAdd(implModel.PageStateFromToken(nil)) != nil || !errors.Is(h.InternalAdd(implModel.PageStateFromToken([]byte{})), runtimeerrors.ErrPagingNoProgress) {
+			if h.InternalAdd(cql.PageStateFromToken(nil)) != nil || !errors.Is(h.InternalAdd(cql.PageStateFromToken([]byte{})), runtimeerrors.ErrPagingNoProgress) {
 				t.Fatal("empty cycle")
 			}
-			if !errors.Is(h.InternalAdd(implModel.PageStateFromToken([]byte("long"))), runtimeerrors.ErrPagingStateLimit) || h.InternalCount != 3 {
+			if !errors.Is(h.InternalAdd(cql.PageStateFromToken([]byte("long"))), runtimeerrors.ErrPagingStateLimit) || h.InternalCount != 3 {
 				t.Fatal("byte limit")
 			}
 			h = implPaging.InternalPagingHistory{InternalMaxCount: 1, InternalMaxBytes: 100}
@@ -70,11 +66,11 @@ func TestPaging(t *testing.T) {
 		})
 
 		t.Run("HashCollisionComparesFullBytes", func(t *testing.T) {
-			a, b := implModel.PageStateFromToken([]byte("a")), implModel.PageStateFromToken([]byte("b"))
+			a, b := cql.PageStateFromToken([]byte("a")), cql.PageStateFromToken([]byte("b"))
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 8}
 			_ = h.InternalAdd(b)
 			h.InternalSpill()
-			hash := maphash.Bytes(h.InternalSeed, model.PageToken(b))
+			hash := maphash.Bytes(h.InternalSeed, cql.PageToken(b))
 			h.InternalEntries[hash] = implPaging.InternalPagingHistoryEntry{InternalState: a}
 			h.InternalCount = 1
 			h.InternalBytes = 1
@@ -92,8 +88,8 @@ func TestPaging(t *testing.T) {
 		// The inline history and its spill into the hashed map detect the same
 		// repeats and enforce the same limits on either side of the spill.
 		t.Run("InlineSpill", func(t *testing.T) {
-			token := func(i int) implModel.PageState { return implModel.PageStateFromToken([]byte{byte(i), 0xff}) }
-			inline := new([paging.InternalInlineHistory]implModel.PageState)
+			token := func(i int) cql.PageState { return cql.PageStateFromToken([]byte{byte(i), 0xff}) }
+			inline := new([paging.InternalInlineHistory]cql.PageState)
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000, InternalInline: inline}
 			for i := 0; i < 12; i++ {
 				if err := h.InternalAdd(token(i)); err != nil {
@@ -112,12 +108,12 @@ func TestPaging(t *testing.T) {
 				t.Fatal(h.InternalCount, h.InternalBytes)
 			}
 			for _, held := range inline {
-				if model.PageToken(held) != nil {
+				if cql.PageToken(held) != nil {
 					t.Fatal("spilled history kept an inline token")
 				}
 			}
 			for _, limit := range []int{3, paging.InternalInlineHistory, paging.InternalInlineHistory + 2} {
-				h = implPaging.InternalPagingHistory{InternalMaxCount: limit, InternalMaxBytes: 1000, InternalInline: new([paging.InternalInlineHistory]implModel.PageState)}
+				h = implPaging.InternalPagingHistory{InternalMaxCount: limit, InternalMaxBytes: 1000, InternalInline: new([paging.InternalInlineHistory]cql.PageState)}
 				for i := 0; i < limit; i++ {
 					if err := h.InternalAdd(token(i)); err != nil {
 						t.Fatal(limit, i, err)
@@ -126,7 +122,7 @@ func TestPaging(t *testing.T) {
 				if !errors.Is(h.InternalAdd(token(limit)), runtimeerrors.ErrPagingStateLimit) || !errors.Is(h.InternalAdd(token(0)), runtimeerrors.ErrPagingNoProgress) {
 					t.Fatal("count limit", limit)
 				}
-				h = implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: int64(2 * limit), InternalInline: new([paging.InternalInlineHistory]implModel.PageState)}
+				h = implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: int64(2 * limit), InternalInline: new([paging.InternalInlineHistory]cql.PageState)}
 				for i := 0; i < limit; i++ {
 					if err := h.InternalAdd(token(i)); err != nil {
 						t.Fatal(limit, i, err)
@@ -139,7 +135,7 @@ func TestPaging(t *testing.T) {
 			h = implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000, InternalInline: inline}
 			_ = h.InternalAdd(token(0))
 			h.InternalClear()
-			if h.InternalCount != 0 || h.InternalEntries != nil || model.PageToken(inline[0]) != nil || h.InternalAdd(token(0)) != nil {
+			if h.InternalCount != 0 || h.InternalEntries != nil || cql.PageToken(inline[0]) != nil || h.InternalAdd(token(0)) != nil {
 				t.Fatal("clear")
 			}
 			// Without inline storage every token goes to the map.
@@ -162,7 +158,7 @@ func TestPaging(t *testing.T) {
 			if c.Validate() == nil {
 				t.Fatal("negative byte budget")
 			}
-			if _, err := RunPage[codec.EmptyRecord](nil, nil, nil, implModel.CompletePageState(), 0, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+			if _, err := RunPage[cql.EmptyRow](nil, nil, nil, cql.CompletePageState(), 0, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 				t.Fatal("complete admitted", err)
 			}
 		})
@@ -182,7 +178,7 @@ func TestPaging(t *testing.T) {
 			if rows.NextInto(nil) {
 				t.Fatal("nil accepted")
 			}
-			if _, ok := errors.AsType[*implCqltype.ValidationError](rows.Err()); !ok {
+			if _, ok := errors.AsType[*cql.ValidationError](rows.Err()); !ok {
 				t.Fatal(rows.Err())
 			}
 			if PageData(RowsData(rows).page).index != 0 {
@@ -221,7 +217,7 @@ func TestPaging(t *testing.T) {
 							RowsData(rows).history.InternalMaxCount = 1
 						}
 						count := 0
-						var row implCqltype.Bytes
+						var row cql.Bytes
 						for rows.NextInto(&row) {
 							count++
 						}
@@ -259,7 +255,7 @@ func TestPaging(t *testing.T) {
 			defer b.Close()
 			rows := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
 			defer rows.Close()
-			var dst implCqltype.Bytes
+			var dst cql.Bytes
 			if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
 				t.Fatal(rows.Err())
 			}
@@ -304,8 +300,8 @@ func TestPaging(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{
-				PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
+			page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{
+				PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
 			}))
 			if page != nil {
 				page.Close()
@@ -355,7 +351,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal("profile changed after admission")
 			}
 			bound.Close()
-			var view cqltype.Bytes
+			var view cql.Bytes
 			if !rows.NextInto(&view) || string(view.OwnedBytes()) != "row" {
 				t.Fatal(rows.Err())
 			}
@@ -363,7 +359,7 @@ func TestPaging(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var tail cqltype.Bytes
+			var tail cql.Bytes
 			if rows.NextInto(&tail) {
 				t.Fatal("unexpected row")
 			}
@@ -398,7 +394,7 @@ func TestPaging(t *testing.T) {
 			}
 			defer rows.Close()
 			count := 0
-			var row cqltype.Bytes
+			var row cql.Bytes
 			for rows.NextInto(&row) {
 				count++
 			}

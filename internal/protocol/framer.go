@@ -25,11 +25,6 @@
 package protocol
 
 import (
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/wirecompress"
-
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -38,11 +33,15 @@ import (
 	"net"
 	"strconv"
 	"strings"
-
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
+	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/segment"
+	"github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
 const (
@@ -250,7 +249,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 
 	if !VersionFor(f.Proto).Segments && head.Flags&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
-			return cqltype.NewFrameError("no compressor available with compressed frame body")
+			return cql.NewFrameError("no compressor available with compressed frame body")
 		}
 
 		if decoder, ok := wirecompress.FrameDecoderWithLimit(f.Compressor, f.decompressedLimit()); ok {
@@ -331,7 +330,7 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 	defer func() { RecoverMalformedFrame(recover(), &err) }()
 
 	if f.Header.Version.Request() {
-		return nil, cqltype.NewFrameError("got a request frame from server: %v", f.Header.Version)
+		return nil, cql.NewFrameError("got a request frame from server: %v", f.Header.Version)
 	}
 
 	if f.Header.Flags&frm.FlagTracing == frm.FlagTracing {
@@ -365,7 +364,7 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 	case frm.OpEvent:
 		frame = f.ParseEventFrame()
 	default:
-		return nil, cqltype.NewFrameError("unknown op in frame header: %s", f.Header.Op)
+		return nil, cql.NewFrameError("unknown op in frame header: %s", f.Header.Op)
 	}
 
 	return
@@ -533,22 +532,22 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 	id := f.ReadShort()
 
 	simple := cqltype.NewCustomType(f.Proto,
-		Type(id), "")
+		cql.Type(id), "")
 
 	// Fast path for simple native types (through TypeDuration).
-	if id > 0 && id <= uint16(TypeDuration) {
+	if id > 0 && id <= uint16(cql.TypeDuration) {
 		return simple
 	}
 
-	if cqltype.NativeKind(simple) == TypeCustom {
+	if cqltype.NativeKind(simple) == cql.TypeCustom {
 		simple = NewCustomType(simple.Version(), simple.Type(), f.ReadString())
-		if cassType := cqltype.GetApacheCassandraType(cqltype.NativeCustom(simple)); cassType != TypeCustom {
+		if cassType := cqltype.GetApacheCassandraType(cqltype.NativeCustom(simple)); cassType != cql.TypeCustom {
 			simple = NewCustomType(simple.Version(), cassType, simple.Custom())
 		}
 	}
 
 	switch cqltype.NativeKind(simple) {
-	case TypeTuple:
+	case cql.TypeTuple:
 		n := f.ReadShort()
 		tuple := TupleTypeInfo{
 			NativeType: simple,
@@ -561,7 +560,7 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 
 		return tuple
 
-	case TypeUDT:
+	case cql.TypeUDT:
 		udt := UDTTypeInfo{
 			NativeType: simple,
 		}
@@ -577,19 +576,19 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 		}
 
 		return udt
-	case TypeMap, TypeList, TypeSet:
+	case cql.TypeMap, cql.TypeList, cql.TypeSet:
 		collection := CollectionType{
 			NativeType: simple,
 		}
 
-		if cqltype.NativeKind(simple) == TypeMap {
+		if cqltype.NativeKind(simple) == cql.TypeMap {
 			collection.Key = f.ReadTypeInfo()
 		}
 
 		collection.Elem = f.ReadTypeInfo()
 
 		return collection
-	case TypeCustom:
+	case cql.TypeCustom:
 		vectorTypePrefix := ApacheCassandraTypePrefix + "VectorType"
 		if strings.HasPrefix(cqltype.NativeCustom(simple), vectorTypePrefix) {
 			return f.readVectorTypeInfo(simple, vectorTypePrefix)
@@ -892,7 +891,7 @@ func (f *Framer) parseResultFrame() (Frame, error) {
 		return f.parseResultSchemaChange(), nil
 	}
 
-	return nil, cqltype.NewFrameError("unknown result kind: %x", kind)
+	return nil, cql.NewFrameError("unknown result kind: %x", kind)
 }
 
 type ResultRowsFrame struct {
@@ -1335,8 +1334,8 @@ func (f *Framer) readInet() (net.IP, int) {
 	return f.readInetAdressOnly(), f.ReadInt()
 }
 
-func (f *Framer) ReadConsistency() Consistency {
-	return Consistency(f.ReadShort())
+func (f *Framer) ReadConsistency() cql.Consistency {
+	return cql.Consistency(f.ReadShort())
 }
 
 func (f *Framer) ReadBytesMap() map[string][]byte {
@@ -1493,7 +1492,7 @@ func (f *Framer) WriteShortBytes(p []byte) error {
 	return nil
 }
 
-func (f *Framer) WriteConsistency(cons Consistency) {
+func (f *Framer) WriteConsistency(cons cql.Consistency) {
 	f.WriteShort(uint16(cons))
 }
 
@@ -1597,7 +1596,7 @@ type UseKeyspaceFrame struct{ Statement string }
 func (w *UseKeyspaceFrame) BuildFrame(f *Framer, streamID int) error {
 	f.WriteHeader(f.Flags, frm.OpQuery, streamID)
 	f.WriteLongString(w.Statement)
-	f.WriteConsistency(One)
+	f.WriteConsistency(cql.One)
 	if VersionFor(f.Proto).WideFlags {
 		f.WriteUint(0)
 	} else {

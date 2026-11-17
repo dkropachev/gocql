@@ -35,7 +35,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -58,7 +58,7 @@ func TestClusterSettings(t *testing.T) {
 			tests.AssertEqual(t, "cluster config timeout", 11*time.Second, cfg.Timeout)
 			tests.AssertEqual(t, "cluster config port", 0, cfg.Port)
 			tests.AssertEqual(t, "cluster config num-conns", 2, cfg.NumConns)
-			tests.AssertEqual(t, "cluster config consistency", cqltype.Quorum, cfg.Consistency)
+			tests.AssertEqual(t, "cluster config consistency", cql.Quorum, cfg.Consistency)
 			tests.AssertEqual(t, "cluster config max prepared statements", defaultMaxPreparedStmts, cfg.MaxPreparedStmts)
 			tests.AssertEqual(t, "cluster config max routing key info", 1000, cfg.MaxRoutingKeyInfo)
 			tests.AssertEqual(t, "cluster config page-size", 5000, cfg.PageSize)
@@ -116,7 +116,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("AcceptsBoundaryValues", func(t *testing.T) {
 			t.Parallel()
 
-			for _, serial := range []cqltype.Consistency{cqltype.Serial, cqltype.LocalSerial} {
+			for _, serial := range []cql.Consistency{cql.Serial, cql.LocalSerial} {
 				cfg := InternalNewClusterSettings("10.0.0.1")
 				cfg.Logger = logging.Nop()
 				cfg.SerialConsistency = serial
@@ -424,7 +424,7 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeWriteCoalesceWaitTime", func(c *InternalClusterSettings) { c.WriteCoalesceWaitTime = -time.Second }, "WriteCoalesceWaitTime"},
 				{"NegativeReconnectInterval", func(c *InternalClusterSettings) { c.ReconnectInterval = -time.Second }, "ReconnectInterval"},
 				{"NegativeMaxWaitSchemaAgreement", func(c *InternalClusterSettings) { c.MaxWaitSchemaAgreement = -time.Second }, "MaxWaitSchemaAgreement"},
-				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cqltype.Quorum }, "SERIAL or LOCAL_SERIAL"},
+				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cql.Quorum }, "SERIAL or LOCAL_SERIAL"},
 				{"NilDNSResolver", func(c *InternalClusterSettings) { c.DNSResolver = nil }, "invalid DNSResolver"},
 				{"NegativeMaxExcessShardConnectionsRate", func(c *InternalClusterSettings) { c.MaxExcessShardConnectionsRate = -1 }, "MaxExcessShardConnectionsRate"},
 				{"ClientRoutesWithAddressTranslator", func(c *InternalClusterSettings) {
@@ -450,7 +450,7 @@ func TestClusterSettings(t *testing.T) {
 					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 						t.Fatalf("Validate() = %v, want an error containing %q", err, tc.wantErr)
 					}
-					if _, ok := errors.AsType[*cqltype.ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
+					if _, ok := errors.AsType[*cql.ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
 						t.Fatalf("Validate() = %T, want a *ValidationError", err)
 					}
 				})

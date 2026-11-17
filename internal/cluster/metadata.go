@@ -4,23 +4,6 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/metrics"
-
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"context"
 	"errors"
 	"fmt"
@@ -28,12 +11,25 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
-
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/binding"
+	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	model "github.com/scylladb/gocql/v2/internal/model"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metrics"
 )
 
 type v2LatencySummary struct{ p50, p95, p99 time.Duration }
@@ -287,7 +283,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 				for i, e := range entries {
 					r[i] = routing.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
 					for _, replica := range e.ReplicasUnsafe() {
-						r[i].Replicas = append(r[i].Replicas, model.Target{HostID: cqltype.UUID(replica.HostUUIDValue()), ShardID: cqltype.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
+						r[i].Replicas = append(r[i].Replicas, model.Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
 					}
 				}
 				routing.SnapshotData(m).InternalTablets[routing.InternalMetadataTable{InternalKeyspace: ks, InternalTable: table}] = r
@@ -364,7 +360,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 				routing.SnapshotData(m).InternalRanges[ks] = ranges
 			}
 		} else {
-			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "no configured int64 partitioner for %q", routing.SnapshotData(m).InternalPartitioner))
+			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "no configured int64 partitioner for %q", routing.SnapshotData(m).InternalPartitioner))
 		}
 	}
 	routing.SnapshotData(m).InternalPlacementEpoch = p.InternalPlacementEpoch.Load()
@@ -372,12 +368,12 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
 	if config.Metadata.Mode != settings.MetadataSchemaFull {
-		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
+		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
 	for keyspace, ks := range routing.SnapshotData(m).InternalKeyspaces {
 		for table, t := range ks.Tables {
 			if t != nil && t.Options.Partitioner != "" && config.Partitioners[t.Options.Partitioner] == nil {
-				routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "unknown partitioner %q for %s.%s; token routing disabled", t.Options.Partitioner, keyspace, table))
+				routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "unknown partitioner %q for %s.%s; token routing disabled", t.Options.Partitioner, keyspace, table))
 			}
 		}
 	}
@@ -451,7 +447,7 @@ func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
 // context. Metadata queries themselves use the session metadata timeout.
 func (s *Core) RefreshMetadata(ctx context.Context) error {
 	if ctx == nil {
-		return cqltype.TypeValidation("context", "nil context")
+		return cql.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -490,15 +486,15 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 
 // readV2SystemRows is the context-bound typed control-query seam. It detaches
 // metadata values before releasing each page and never invokes legacy Scan.
-func InternalReadV2SystemRows[P, R any](ctx context.Context, conn *transport.Conn, statement binding.Statement[P, R], columns cqltype.Columns, value P) ([]R, error) {
+func InternalReadV2SystemRows[P, R any](ctx context.Context, conn *transport.Conn, statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if conn == nil {
-		return nil, cqltype.TypeValidation("system query", "nil connection")
+		return nil, cql.TypeValidation("system query", "nil connection")
 	}
 	return readV2SystemRowsVia(ctx, conn.InternalVersion, conn.InternalGetSystemRequestState().InternalTimeout, conn.InternalExecuteV2System, statement, columns, value)
 }
-func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error), statement binding.Statement[P, R], columns cqltype.Columns, value P) ([]R, error) {
+func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error), statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if ctx == nil || execute == nil {
-		return nil, cqltype.TypeValidation("system query", "nil context or connection")
+		return nil, cql.TypeValidation("system query", "nil context or connection")
 	}
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
@@ -513,29 +509,29 @@ func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout ti
 }
 
 type agreementPeer struct {
-	id      cqltype.Nullable[cqltype.UUID]
-	version cqltype.Nullable[cqltype.UUID]
+	id      cql.Nullable[cql.UUID]
+	version cql.Nullable[cql.UUID]
 }
 
 func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 	if ctx == nil {
-		return cqltype.TypeValidation("schema agreement context", "nil context")
+		return cql.TypeValidation("schema agreement context", "nil context")
 	}
 	if s == nil || s.Closed() {
 		return runtimeerrors.ErrClosed
 	}
-	return s.awaitV2SchemaAgreementUsing(ctx, nil, cqltype.UUID{})
+	return s.awaitV2SchemaAgreementUsing(ctx, nil, cql.UUID{})
 }
 func (s *Core) AwaitV2SchemaAgreementOn(ctx context.Context, conn *transport.Conn) error {
 	if ctx == nil || conn == nil || conn.InternalHost == nil {
-		return cqltype.TypeValidation("schema agreement", "nil context or coordinator")
+		return cql.TypeValidation("schema agreement", "nil context or coordinator")
 	}
 	if s == nil || s.Closed() {
 		return runtimeerrors.ErrClosed
 	}
 	return s.awaitV2SchemaAgreementUsing(ctx, conn, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 }
-func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *transport.Conn, required cqltype.UUID) error {
+func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *transport.Conn, required cql.UUID) error {
 	p := s.Peripheral()
 	if !p.admitMetadataWork() {
 		return runtimeerrors.ErrClosed
@@ -566,7 +562,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		}
 		// Retain one immutable scope for this check. A missing/down enabled host
 		// prevents agreement; each retry takes a fresh snapshot.
-		scope := make(map[cqltype.UUID][]*transport.Conn)
+		scope := make(map[cql.UUID][]*transport.Conn)
 		for _, h := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if h.Enabled {
 				scope[h.ID] = s.v2AgreementConnections(h.ID)
@@ -580,18 +576,18 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		}
 		type observation struct {
 			err     error
-			version cqltype.UUID
+			version cql.UUID
 		}
 		results := make(chan observation, len(scope))
 		// Fixed worker count bounds goroutines even with large topologies.
 		jobs := make(chan struct {
 			conns []*transport.Conn
-			id    cqltype.UUID
+			id    cql.UUID
 		}, len(scope))
 		for id, conns := range scope {
 			jobs <- struct {
 				conns []*transport.Conn
-				id    cqltype.UUID
+				id    cql.UUID
 			}{conns: conns, id: id}
 		}
 		close(jobs)
@@ -609,7 +605,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		workers.Wait()
 		close(results)
 		complete := true
-		versions := make(map[cqltype.UUID]bool)
+		versions := make(map[cql.UUID]bool)
 		var terminal error
 		for result := range results {
 			if result.err != nil {
@@ -636,8 +632,8 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		}
 	}
 }
-func readV2AgreementHost(ctx context.Context, id cqltype.UUID, conns []*transport.Conn) (cqltype.UUID, error) {
-	stmt := binding.Statement[codec.EmptyRecord, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: codec.EmptyParamsEncoder, Rows: codec.Row(codec.Column("host_id", codec.NullableCodec(codec.UUIDCodec), func(r *agreementPeer) *cqltype.Nullable[cqltype.UUID] { return &r.id }), codec.Column("schema_version", codec.NullableCodec(codec.UUIDCodec), func(r *agreementPeer) *cqltype.Nullable[cqltype.UUID] { return &r.version }))}
+func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Conn) (cql.UUID, error) {
+	stmt := binding.Statement[cql.EmptyRow, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: cql.EmptyParamsEncoder, Rows: cql.Row(cql.Column("host_id", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.id }), cql.Column("schema_version", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.version }))}
 	var last error = runtimeerrors.ErrNoConnections
 	for _, conn := range conns {
 		if conn == nil || conn.Closed() {
@@ -647,26 +643,26 @@ func readV2AgreementHost(ctx context.Context, id cqltype.UUID, conns []*transpor
 		if conn.InternalCfg != nil && conn.InternalCfg.TypedConfig != nil {
 			timeout = conn.InternalCfg.TypedConfig.Metadata.RequestTimeout
 		}
-		rows, err := readV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, cqltype.NewColumns(), codec.EmptyRecord{})
+		rows, err := readV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, cql.NewColumns(), cql.EmptyRow{})
 		if err != nil {
 			if terminalV2AgreementError(err) {
-				return cqltype.UUID{}, err
+				return cql.UUID{}, err
 			}
 			last = err
 			continue
 		}
 		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsEmpty() {
-			return cqltype.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
+			return cql.UUID{}, cql.TypeValidation("schema agreement", "missing/mismatched host identity or version")
 		}
 		return rows[0].version.Value, nil
 	}
-	return cqltype.UUID{}, last
+	return cql.UUID{}, last
 }
 func terminalV2AgreementError(err error) bool {
-	if _, ok := errors.AsType[*cqltype.ProtocolError](err); ok {
+	if _, ok := errors.AsType[*cql.ProtocolError](err); ok {
 		return true
 	}
-	if _, ok := errors.AsType[*cqltype.ValidationError](err); ok {
+	if _, ok := errors.AsType[*cql.ValidationError](err); ok {
 		return true
 	}
 	if server, ok := errors.AsType[protocol.ServerError](err); ok {
@@ -678,7 +674,7 @@ func terminalV2AgreementError(err error) bool {
 	}
 	return false
 }
-func (s *Core) v2AgreementConnections(id cqltype.UUID) []*transport.Conn {
+func (s *Core) v2AgreementConnections(id cql.UUID) []*transport.Conn {
 	if s.privateStorage.InternalPool == nil {
 		return nil
 	}
@@ -726,7 +722,7 @@ func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request
 	}
 	conn, ok := h.InternalConn.(*transport.Conn)
 	if !ok {
-		return nil, cqltype.TypeValidation("system query", "connection does not support typed requests")
+		return nil, cql.TypeValidation("system query", "connection does not support typed requests")
 	}
 	return conn.InternalExecuteV2System(ctx, request)
 }
@@ -762,10 +758,10 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	}
 	for _, row := range rows {
 		if row.InternalName == "" {
-			return cqltype.TypeValidation("keyspace schema", "missing keyspace identity")
+			return cql.TypeValidation("keyspace schema", "missing keyspace identity")
 		}
 		if _, ok := keyspaces[row.InternalName]; ok {
-			return cqltype.TypeValidation("keyspace schema", "duplicate identity %q", row.InternalName)
+			return cql.TypeValidation("keyspace schema", "duplicate identity %q", row.InternalName)
 		}
 		if len(allowed) > 0 && !allowed[row.InternalName] {
 			continue
@@ -836,7 +832,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 					break
 				}
 				if current.StrategyClass != base.StrategyClass || !maps.Equal(current.StrategyOptions, base.StrategyOptions) {
-					failures[name] = cqltype.TypeValidation("schema refresh", "replication changed during refresh")
+					failures[name] = cql.TypeValidation("schema refresh", "replication changed during refresh")
 					continue
 				}
 			}

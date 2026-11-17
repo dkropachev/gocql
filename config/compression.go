@@ -4,13 +4,13 @@
 package config
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
-type Compression = cqltype.Compression
+type Compression = cql.Compression
 
-const LZ4Compression = cqltype.LZ4Compression
+const LZ4Compression = cql.LZ4Compression
 
-const NoCompression = cqltype.NoCompression
+const NoCompression = cql.NoCompression
 
-const SnappyCompression = cqltype.SnappyCompression
+const SnappyCompression = cql.SnappyCompression

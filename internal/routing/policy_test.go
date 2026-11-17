@@ -1,13 +1,13 @@
 package routing
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 func v2TestHost(id byte, dc, rack string) model.HostSnapshot {
-	var uuid cqltype.UUID
+	var uuid cql.UUID
 	uuid[15] = id
 	return model.HostSnapshot{ID: uuid, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
 }
@@ -46,7 +46,7 @@ func planHosts(plan QueryPlan) []byte {
 // pickFallbackPolicy picks pick, when set, and falls back to fallback,
 // counting Fallback calls.
 type pickFallbackPolicy struct {
-	pick      cqltype.Option[Route]
+	pick      cql.Option[Route]
 	fallback  []Route
 	fallbacks int
 }

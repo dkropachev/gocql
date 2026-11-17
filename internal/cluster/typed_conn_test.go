@@ -30,8 +30,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -98,7 +97,7 @@ func TestTypedConn(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan error, 1)
 			go func() {
-				_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "INSERT INTO ks.tbl(value) VALUES(?)", Values: values, ValueCount: 1, Consistency: cqltype.One, Lease: owner})
+				_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "INSERT INTO ks.tbl(value) VALUES(?)", Values: values, ValueCount: 1, Consistency: cql.One, Lease: owner})
 				done <- err
 			}()
 			<-entered
@@ -140,14 +139,14 @@ func TestTypedConn(t *testing.T) {
 				server.Write(frame[:len(frame)-7])
 				close(entered)
 			}()
-			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 16)
 			done := make(chan error)
 			go func() { _, err := transport.InternalDecodeStreamRow(response, plan, &dst); done <- err }()
@@ -174,7 +173,7 @@ func TestTypedConn(t *testing.T) {
 				stream := typedTestReadRequest(t, c, server)
 				writeResponse(t, c, server, stream, typedTestRowsBody(bytes.Repeat([]byte("value"), 30000)))
 			}()
-			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -182,7 +181,7 @@ func TestTypedConn(t *testing.T) {
 				t.Fatal(err)
 			}
 			dst := make([]byte, 0, 150000)
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 			if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
 				t.Fatal(ok, err)
 			}
@@ -238,7 +237,7 @@ func TestTypedConn(t *testing.T) {
 							}
 						}
 					}()
-					_, err = r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					_, err = r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err == nil || !c.Closed() {
 						consumer.InternalMu.Unlock()
 						t.Fatal("control overflow remained reusable", err)
@@ -359,14 +358,14 @@ func TestTypedConn(t *testing.T) {
 					t.Error(err)
 				}
 			}()
-			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 32)
 			if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || string(dst) != "first" {
 				t.Fatal(ok, err, string(dst))
@@ -399,14 +398,14 @@ func TestTypedConn(t *testing.T) {
 						stream := typedTestReadRequest(t, c, server)
 						writeResponse(t, c, server, stream, typedTestRowsBody(payload))
 					}()
-					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cqltype.One})
+					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One})
 					if err != nil {
 						t.Fatal(err)
 					}
 					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 						t.Fatal(err)
 					}
-					plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 					dst := make([]byte, 0, len(payload))
 					backing := &dst[:cap(dst)][0]
 					ok, err := transport.InternalDecodeStreamRow(response, plan, &dst)
@@ -430,7 +429,7 @@ func TestTypedConn(t *testing.T) {
 						stream := typedTestReadRequest(t, c, server)
 						writeResponse(t, c, server, stream, typedTestRowsBody([]byte("shared")))
 					}()
-					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -468,14 +467,14 @@ func TestTypedConn(t *testing.T) {
 						stream := typedTestReadRequest(t, c, server)
 						writeResponse(t, c, server, stream, typedTestRowsBody(payload))
 					}()
-					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {
 						t.Fatal(err)
 					}
 					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 						t.Fatal(err)
 					}
-					plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 					dst := make([]byte, 0, len(payload))
 					if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || !bytes.Equal(dst, payload) {
 						t.Fatal("TLS stream", ok, err)
@@ -508,7 +507,7 @@ func TestTypedConn(t *testing.T) {
 						packet := codecTestMust(segment.EncodeSpans(typedTestChain(t, result, control), true, false))
 						server.Write(typedTestBytes(t, packet))
 					}()
-					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -516,7 +515,7 @@ func TestTypedConn(t *testing.T) {
 						t.Fatal(err)
 					}
 					dst := make([]byte, 0, 8)
-					plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 					if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
 						t.Fatal(ok, err)
 					}
@@ -548,7 +547,7 @@ func TestTypedConn(t *testing.T) {
 			}()
 			done := make(chan error)
 			go func() {
-				_, err := c.InternalExecuteTyped(requestCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+				_, err := c.InternalExecuteTyped(requestCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 				done <- err
 			}()
 			<-requested
@@ -603,7 +602,7 @@ func TestTypedConn(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				done := make(chan error)
 				go func() {
-					_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT", Consistency: cqltype.One})
+					_, err := c.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: "SELECT", Consistency: cql.One})
 					done <- err
 				}()
 				select {
@@ -636,7 +635,7 @@ func TestTypedConn(t *testing.T) {
 				}
 			}()
 			pageCtx, cancelPage := context.WithCancel(r.InternalCtx)
-			first, err := r.InternalExchange(pageCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			first, err := r.InternalExchange(pageCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -644,7 +643,7 @@ func TestTypedConn(t *testing.T) {
 			if err = first.InternalInstallColumns(first.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(first.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(first.InternalColumns))
 			dst := make([]byte, 0, 16)
 			if ok, err := transport.InternalDecodeStreamRow(first, plan, &dst); !ok || err != nil {
 				t.Fatal(ok, err)
@@ -653,7 +652,7 @@ func TestTypedConn(t *testing.T) {
 			cancelPage()
 			secondCtx, cancelSecond := context.WithCancel(r.InternalCtx)
 			defer cancelSecond()
-			second, err := r.InternalExchange(secondCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			second, err := r.InternalExchange(secondCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal("old page context canceled new page", err)
 			}
@@ -672,7 +671,7 @@ func TestTypedConn(t *testing.T) {
 				t.Fatal(err)
 			}
 			r.InternalCancelIOGeneration(oldGeneration, context.Canceled)
-			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal("delayed callback reached shared reuse", err)
 			}
@@ -696,14 +695,14 @@ func TestTypedConn(t *testing.T) {
 				server.Read(b[:])
 			}()
 			pageCtx, cancelPage := context.WithCancel(r.InternalCtx)
-			response, err := r.InternalExchange(pageCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+			response, err := r.InternalExchange(pageCtx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 			if err != nil {
 				t.Fatal(err)
 			}
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 16)
 			done := make(chan error, 1)
 			go func() { _, err := transport.InternalDecodeStreamRow(response, plan, &dst); done <- err }()
@@ -820,7 +819,7 @@ func TestTypedConn(t *testing.T) {
 		}
 		config := settings.DefaultConfig("localhost")
 		config.Protocol = 5
-		config.Compression = cqltype.SnappyCompression
+		config.Compression = cql.SnappyCompression
 		err := config.Validate()
 		if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
 			t.Fatal("known protocol/compressor incompatibility not explicit", err)
@@ -861,7 +860,7 @@ func TestTypedConn(t *testing.T) {
 				owner := wire.NewLease(values, func() { released.Store(true) })
 				result := make(chan error, 1)
 				go func() {
-					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "INSERT INTO ks.tbl(value) VALUES(?)", Values: values, ValueCount: 1, Consistency: cqltype.One, Lease: owner})
+					page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "INSERT INTO ks.tbl(value) VALUES(?)", Values: values, ValueCount: 1, Consistency: cql.One, Lease: owner})
 					if page != nil {
 						page.Owner.Release()
 					}

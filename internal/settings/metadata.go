@@ -6,7 +6,7 @@ package settings
 import (
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type LifecycleObserver interface{ ObserveLifecycle(LifecycleEvent) }
@@ -15,5 +15,5 @@ type LifecycleEvent struct {
 	Err         error
 	Kind, Stage string
 	Stream      int16
-	HostID      cqltype.UUID
+	HostID      cql.UUID
 }

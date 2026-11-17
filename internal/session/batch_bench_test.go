@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func BenchmarkBatch(b *testing.B) {
@@ -53,7 +52,7 @@ func BenchmarkBatch(b *testing.B) {
 				session := InternalWrapSession(s)
 				ctx := context.Background()
 				value := []byte("0123456789abcdef0123456789abcdef")
-				batch := Batch{Kind: cqltype.UnloggedBatch}
+				batch := Batch{Kind: cql.UnloggedBatch}
 				b.ReportAllocs()
 				for b.Loop() {
 					batch.Reset()
@@ -76,8 +75,8 @@ func BenchmarkBatch(b *testing.B) {
 		q := batchTestQuery(b, s)
 		session := InternalWrapSession(s)
 		ctx := context.Background()
-		type row struct{ V cqltype.Bytes }
-		decoder := codec.Row(codec.Column("value", codec.BlobCodec, func(r *row) *cqltype.Bytes { return &r.V }))
+		type row struct{ V cql.Bytes }
+		decoder := cql.Row(cql.Column("value", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.V }))
 		var batch Batch
 		if err := q.AddToBatch(&batch, []byte("0123456789abcdef")); err != nil {
 			b.Fatal(err)

@@ -7,6 +7,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -142,7 +143,7 @@ func (o *inputOwner) InternalClose() {
 func (o *inputOwner) InternalWait(ctx context.Context) error {
 	done := o.done
 	if !o.closed() {
-		return cqltype.TypeValidation("binding", "Wait requires Close first")
+		return cql.TypeValidation("binding", "Wait requires Close first")
 	}
 	select {
 	case <-done:
@@ -239,6 +240,6 @@ func (r *InternalExecutionRequest) optionsScratch() *InternalResolvedOptions {
 
 type ExecutionError = runtimeerrors.ExecutionError
 
-func newExecutionError(err error, result model.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func newExecutionError(err error, result cql.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return runtimeerrors.NewExecutionError(err, result, status, attempts)
 }

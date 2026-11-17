@@ -11,7 +11,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cql/stream"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -54,7 +53,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 		t.Fatal("mapping options leaked into shared registration")
 	}
 	// Compare against reflection with the custom-expression types supplied explicitly.
-	reflected, err := codec.ReflectParams(first, cql.WithCodec[Fixture](PointCodec), cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
+	reflected, err := cql.ReflectParams(first, cql.WithCodec[Fixture](PointCodec), cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -126,7 +125,7 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	builder := wire.NewBuilder(8)
-	if err := plan.Encode(codec.NewParamWriter(builder, cols, false), StreamFixture{ID: 7, Tags: []int32{1, 2}, Maybe: cql.Nullable[int64]{Value: 5, Valid: true}}); err != nil {
+	if err := plan.Encode(cql.NewParamWriter(builder, cols, false), StreamFixture{ID: 7, Tags: []int32{1, 2}, Maybe: cql.Nullable[int64]{Value: 5, Valid: true}}); err != nil {
 		t.Fatal(err)
 	}
 	chain, err := builder.Freeze()
@@ -146,7 +145,7 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		reader, err := codec.NewStreamRowReader(cols, scope)
+		reader, err := cql.NewStreamRowReader(cols, scope)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -6,7 +6,7 @@ package routing
 import (
 	"math"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 )
@@ -42,9 +42,9 @@ func InternalRouteOf(t Target) Route {
 func (r Route) InternalHost() *pool.HostRoute { return r.host }
 
 // HostID returns the ID of the route's host.
-func (r Route) HostID() cqltype.UUID {
+func (r Route) HostID() cql.UUID {
 	if r.host == nil {
-		return cqltype.UUID{}
+		return cql.UUID{}
 	}
 	return r.host.ID()
 }
@@ -53,7 +53,7 @@ func (r Route) HostID() cqltype.UUID {
 func (r Route) Target() Target {
 	t := Target{HostID: r.HostID()}
 	if r.Shard >= 0 {
-		t.ShardID = cqltype.Option[uint32]{Value: uint32(r.Shard), Set: true}
+		t.ShardID = cql.Option[uint32]{Value: uint32(r.Shard), Set: true}
 	}
 	return t
 }

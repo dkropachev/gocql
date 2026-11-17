@@ -14,8 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 )
 
@@ -185,12 +184,12 @@ func await(t testing.TB, ch <-chan struct{}) {
 
 type decoderError struct{ cause error }
 
-func (d decoderError) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d decoderError) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	return d, nil
 }
 func (d decoderError) Reset(dst *[]byte) { *dst = (*dst)[:0] }
-func (d decoderError) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	p, err := codec.StreamBlob.Compile(cqltype.BlobType)
+func (d decoderError) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
+	p, err := cql.StreamBlob.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}

@@ -26,31 +26,29 @@ package cluster
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-
+	"io"
 	"log/slog"
+	mrand "math/rand/v2"
+	"sync/atomic"
+	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/events"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/wire"
-
-	mrand "math/rand/v2"
-	"sync/atomic"
-	"time"
-
-	"github.com/scylladb/gocql/v2/internal/debounce"
-	"github.com/scylladb/gocql/v2/internal/eventbus"
-	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // Core owns cluster metadata, pooled connections and typed executions. It
@@ -177,9 +175,20 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 // (golang/go#66821). Since RandomUUID's signature still admits an error,
 // handling it costs little and keeps the id unconditional whatever a future
 // implementation does.
+// randomUUID returns a version 4 UUID, or the error of the random source.
+func randomUUID() (cql.UUID, error) {
+	var u cql.UUID
+	if _, err := io.ReadFull(rand.Reader, u[:]); err != nil {
+		return u, err
+	}
+	u[6] = u[6]&0x0F | 0x40 // version 4
+	u[8] = u[8]&0x3F | 0x80 // IETF variant
+	return u, nil
+}
+
 func newSessionID(logger *slog.Logger) string {
 	logger = logging.Or(logger)
-	id, err := cqltype.RandomUUID()
+	id, err := randomUUID()
 	if err != nil {
 		logger.Warn("unable to generate a random session id; falling back to a pseudo-random one", logging.Err(err))
 		id = pseudoRandomUUID()
@@ -192,8 +201,8 @@ func newSessionID(logger *slog.Logger) string {
 // aborting the process. A session id merely correlates the connections of one
 // session in system.clients and is never a security token, so a weaker source
 // of randomness is preferable to no id at all.
-func pseudoRandomUUID() cqltype.UUID {
-	var u cqltype.UUID
+func pseudoRandomUUID() cql.UUID {
+	var u cql.UUID
 	binary.BigEndian.PutUint64(u[:8], mrand.Uint64())
 	binary.BigEndian.PutUint64(u[8:], mrand.Uint64())
 	u[6] = u[6]&0x0F | 0x40 // set version to 4 (random uuid)
@@ -318,7 +327,7 @@ func (s *Core) init() error {
 		// For testing purposes we populate host ids
 		for _, host := range hosts {
 			if implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() {
-				implEndpoint.HostInfoData(host).InternalHostId = cqltype.MustRandomUUID()
+				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}
 	}

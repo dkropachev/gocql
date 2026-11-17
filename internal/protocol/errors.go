@@ -25,10 +25,10 @@
 package protocol
 
 import (
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"fmt"
 
+	"github.com/scylladb/gocql/v2/cql"
+	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -180,7 +180,7 @@ func (e *serverError) text(code ErrorCode) string {
 // request. Nothing was applied.
 type UnavailableError struct {
 	serverError
-	Consistency Consistency
+	Consistency cql.Consistency
 	Required    int
 	Alive       int
 }
@@ -202,7 +202,7 @@ type WriteTimeoutError struct {
 	serverError
 	Received    int
 	BlockFor    int
-	Consistency Consistency
+	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteTimeout.
@@ -220,7 +220,7 @@ type WriteFailureError struct {
 	Received    int
 	BlockFor    int
 	NumFailures int
-	Consistency Consistency
+	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteFailure.
@@ -245,7 +245,7 @@ type ReadTimeoutError struct {
 	serverError
 	Received    int
 	BlockFor    int
-	Consistency Consistency
+	Consistency cql.Consistency
 	// DataPresent reports whether the replica asked for data answered.
 	DataPresent bool
 }
@@ -291,7 +291,7 @@ type ReadFailureError struct {
 	Received    int
 	BlockFor    int
 	NumFailures int
-	Consistency Consistency
+	Consistency cql.Consistency
 	DataPresent bool
 }
 
@@ -320,7 +320,7 @@ func (e *FunctionFailureError) Kind() Kind           { return KindInvalid }
 // for the check that also covers protocol 4 and ScyllaDB.
 type CASWriteUnknownError struct {
 	serverError
-	Consistency Consistency
+	Consistency cql.Consistency
 	Received    int
 	BlockFor    int
 }
@@ -468,17 +468,17 @@ func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode
 	if int(code) == wire {
 		switch code {
 		case CodeUnavailable:
-			return &UnavailableError{serverError: base, Consistency: Consistency(r.U16()), Required: r.I32(), Alive: r.I32()}
+			return &UnavailableError{serverError: base, Consistency: cql.Consistency(r.U16()), Required: r.I32(), Alive: r.I32()}
 		case CodeWriteTimeout:
-			return &WriteTimeoutError{serverError: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), WriteType: r.Str()}
+			return &WriteTimeoutError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), WriteType: r.Str()}
 		case CodeReadTimeout:
-			return &ReadTimeoutError{serverError: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), DataPresent: r.U8() != 0}
+			return &ReadTimeoutError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), DataPresent: r.U8() != 0}
 		case CodeAlreadyExists:
 			return &AlreadyExistsError{serverError: base, Keyspace: r.Str(), Table: r.Str()}
 		case CodeUnprepared:
 			return &UnpreparedError{serverError: base, StatementID: r.shortBytes()}
 		case CodeReadFailure:
-			e := &ReadFailureError{serverError: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+			e := &ReadFailureError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
 			if VersionFor(proto).FailureReasonMap {
 				e.ErrorMap = r.errorMap()
 				e.NumFailures = len(e.ErrorMap)
@@ -488,7 +488,7 @@ func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode
 			e.DataPresent = r.U8() != 0
 			return e
 		case CodeWriteFailure:
-			e := &WriteFailureError{serverError: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+			e := &WriteFailureError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
 			if VersionFor(proto).FailureReasonMap {
 				e.ErrorMap = r.errorMap()
 				e.NumFailures = len(e.ErrorMap)
@@ -502,7 +502,7 @@ func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode
 		case CodeCDCWriteFailure:
 			return &CDCWriteFailureError{serverError: base}
 		case CodeCASWriteUnknown:
-			return &CASWriteUnknownError{serverError: base, Consistency: Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
+			return &CASWriteUnknownError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
 		}
 	}
 	if rateLimitCode != 0 && wire == rateLimitCode {

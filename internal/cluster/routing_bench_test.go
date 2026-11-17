@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -32,10 +32,10 @@ func BenchmarkRouting(b *testing.B) {
 							routing.SnapshotData(m).InternalHosts[i] = h
 						}
 						routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
-						h := testHint(b, 0, 100, cqltype.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+						h := testHint(b, 0, 100, cql.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 						root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 						p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
 						var storage routing.InternalLazyRoutingPlan
 						b.ReportAllocs()
@@ -65,10 +65,10 @@ func BenchmarkRouting(b *testing.B) {
 						routing.SnapshotData(m).InternalHosts[i] = h
 					}
 					routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
-					h := testHint(b, 0, 100, cqltype.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
+					h := testHint(b, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 					root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 					routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
-					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: 1, Set: true}, Consistency: cqltype.Quorum}
+					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
 					options := implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
 					if kind == "lwt" {
 						info.Conditional = true
@@ -80,11 +80,11 @@ func BenchmarkRouting(b *testing.B) {
 						options.Latency.Enabled = true
 					}
 					if kind == "pinned" {
-						info.HostID = cqltype.Option[cqltype.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
+						info.HostID = cql.Option[cql.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
 					}
 					p := codecTestMust(implRouting.NewRoutingPolicy(options))
 					if kind == "latency" {
-						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cqltype.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 					}
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -130,7 +130,7 @@ func BenchmarkRouting(b *testing.B) {
 						i := 0
 						for pb.Next() {
 							m := s.Metadata()
-							info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cqltype.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cqltype.Quorum, Kind: cqltype.OrdinaryStatement}
+							info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 							i++
 							tablet := routing.InternalLookupTabletCached(m, info, &cache)
 							conn, err := s.SelectTypedConn(ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))

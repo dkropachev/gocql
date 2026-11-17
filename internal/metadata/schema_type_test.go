@@ -6,7 +6,7 @@ package metadata
 import (
 	"testing"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestSchemaDataType(t *testing.T) {
@@ -35,7 +35,7 @@ func TestSchemaDataType(t *testing.T) {
 		}
 	}
 	addr, _ := InternalSchemaDataType(ks, "addr")
-	if addr.Kind() != cqltype.TypeUDT || addr.Fields().Len() != 2 {
+	if addr.Kind() != cql.TypeUDT || addr.Fields().Len() != 2 {
 		t.Errorf("addr fields: %v", addr)
 	}
 	for _, bad := range []string{"", "nosuch", "list<int, int>", "map<int>", "'org.Custom'", "other.addr", "int>", "vector<float, 0>"} {

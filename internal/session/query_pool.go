@@ -12,9 +12,8 @@ import (
 	"sync/atomic"
 	"weak"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -185,7 +184,7 @@ func (p *queryPool[P, R]) takeIdle() []*queryState {
 // query may already serve another call.
 func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("context", "nil context")
+		return nil, cql.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -213,7 +212,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 // query's owner.
 func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("context", "nil context")
+		return nil, cql.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -235,7 +234,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 
 // exec executes value with options, which are frozen, so the execution can
 // outlive a cancelled call without copying them.
-func (p *queryPool[P, R]) exec(ctx context.Context, value P, options CompiledOptions) (model.Result, error) {
+func (p *queryPool[P, R]) exec(ctx context.Context, value P, options CompiledOptions) (cql.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -245,7 +244,7 @@ func (p *queryPool[P, R]) exec(ctx context.Context, value P, options CompiledOpt
 	return result, err
 }
 
-func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (bool, model.Result, error) {
+func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (bool, cql.Result, error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -279,7 +278,7 @@ func (p *queryPool[P, R]) run(ctx context.Context, value P, options CompiledOpti
 
 // runPage executes one page of value with options on a pooled query and
 // returns a page that holds the query until it is closed.
-func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	q, err := p.capture(ctx, value)
 	if err != nil {
 		return nil, err
@@ -293,7 +292,7 @@ func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state model.Page
 // pool returns p's query pool, created on first use.
 func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, cqltype.TypeValidation("prepared", "nil handle")
+		return nil, cql.TypeValidation("prepared", "nil handle")
 	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
@@ -310,10 +309,10 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 // on p, but a Batch is not: append to one batch from one goroutine at a time.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
-		return cqltype.TypeValidation("batch", "nil batch")
+		return cql.TypeValidation("batch", "nil batch")
 	}
 	if p == nil || p.privateStorage.InternalState == nil {
-		return cqltype.TypeValidation("prepared", "nil handle")
+		return cql.TypeValidation("prepared", "nil handle")
 	}
 	state := p.privateStorage.InternalState
 	s := state.InternalSession
@@ -329,7 +328,7 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 // uses the session's default profile. Exec is safe for concurrent use: it runs
 // on a query the statement keeps for one-shot calls, so it allocates no
 // per-call execution state.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOptions) (model.Result, error) {
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOptions) (cql.Result, error) {
 	pool, err := p.pool()
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -341,7 +340,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOpti
 // into dst, reporting whether a row existed; without one, dst is cleared.
 // Borrowed fields are detached before response storage is released. Options
 // are as for Exec. One is safe for concurrent use.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options CompiledOptions) (bool, model.Result, error) {
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options CompiledOptions) (bool, cql.Result, error) {
 	pool, err := p.pool()
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -358,7 +357,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options Compi
 // response storage are valid only until fn returns. A non-nil error from fn
 // stops the iteration and is returned. Options are as for Exec. Each is safe
 // for concurrent use.
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (model.Result, error) {
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options CompiledOptions) (cql.Result, error) {
 	if fn == nil {
 		return nilEachCallback()
 	}
@@ -412,7 +411,7 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options CompiledOptio
 // state, as Query.RunPage does with pageSize. The page holds one of the
 // statement's pooled queries until it is closed, as Run's rows do. Options are
 // as for Exec. RunPage is safe for concurrent use; each Page is not.
-func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	pool, err := p.pool()
 	if err != nil {
 		return nil, err

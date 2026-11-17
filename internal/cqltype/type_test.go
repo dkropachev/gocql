@@ -5,11 +5,13 @@ package cqltype
 
 import (
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
-func FoundationScalar(t *testing.T, kind Type) DataType {
+func FoundationScalar(t *testing.T, kind cql.Type) cql.DataType {
 	t.Helper()
-	d, err := ScalarType(kind)
+	d, err := cql.ScalarType(kind)
 	if err != nil {
 		t.Fatal(err)
 	}

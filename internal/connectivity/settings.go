@@ -12,14 +12,14 @@ import (
 	"net/netip"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
-type Option[T any] = cqltype.Option[T]
-type Nullable[T any] = cqltype.Nullable[T]
-type Bytes = cqltype.Bytes
+type Option[T any] = cql.Option[T]
+type Nullable[T any] = cql.Nullable[T]
+type Bytes = cql.Bytes
 type HostSnapshot = model.HostSnapshot
 type PoolOptions struct {
 	ConnectionsPerHost, ConnectionsPerShard int

@@ -8,7 +8,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -59,13 +59,13 @@ func TestPartitionKey(t *testing.T) {
 		second := []byte{3}
 		a, _ := wire.NewChain(wire.Borrow(first))
 		b, _ := wire.NewChain(wire.Borrow(second))
-		cells := []model.EncodedCell{{State: cqltype.Present, Body: a}, {State: cqltype.Present, Body: b}}
+		cells := []model.EncodedCell{{State: cql.Present, Body: a}, {State: cql.Present, Body: b}}
 		key, complete, err := InternalNewPartitionKey(cells, []int{1, 0})
 		if err != nil || !complete {
 			t.Fatal(complete, err)
 		}
 		var output bytes.Buffer
-		err = key.ForEach(func(b cqltype.Bytes) error { _, err := b.WriteTo(&output); return err })
+		err = key.ForEach(func(b cql.Bytes) error { _, err := b.WriteTo(&output); return err })
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -75,11 +75,11 @@ func TestPartitionKey(t *testing.T) {
 		// Input payload spans are reused; the caller's borrowing contract is real.
 		first[0] = 9
 		output.Reset()
-		_ = key.ForEach(func(b cqltype.Bytes) error { _, err := b.WriteTo(&output); return err })
+		_ = key.ForEach(func(b cql.Bytes) error { _, err := b.WriteTo(&output); return err })
 		if output.Bytes()[6] != 9 {
 			t.Fatal("partition payload copied")
 		}
-		cells[0].State = cqltype.Null
+		cells[0].State = cql.Null
 		if _, ok, err := InternalNewPartitionKey(cells, []int{0, 1}); err != nil || ok {
 			t.Fatal("null key must disable token routing")
 		}
@@ -87,7 +87,7 @@ func TestPartitionKey(t *testing.T) {
 			t.Fatal("invalid key index accepted")
 		}
 		large, _ := wire.NewChain(wire.Borrow(make([]byte, 65536)))
-		cells[0] = model.EncodedCell{State: cqltype.Present, Body: large}
+		cells[0] = model.EncodedCell{State: cql.Present, Body: large}
 		if _, _, err := InternalNewPartitionKey(cells, []int{0, 1}); err == nil {
 			t.Fatal("oversized composite accepted")
 		}

@@ -8,16 +8,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
-func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies ...[]byte) chan struct{}) {
+func eachTestQuery(t *testing.T) (*Query[cql.EmptyRow, []byte], func(bodies ...[]byte) chan struct{}) {
 	t.Helper()
 	s, conns, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(unpreparedQuery(s, statement, Options{}))
 	t.Cleanup(q.Close)
 	serve := func(bodies ...[]byte) chan struct{} {
@@ -39,11 +38,11 @@ func eachTestQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], func(bodies
 
 // eachPageTimeoutQuery is eachTestQuery with a page timeout below the
 // execution timeout, so pages run under the query's reused page context.
-func eachPageTimeoutQuery(t *testing.T) (*Query[codec.EmptyRecord, []byte], net.Conn) {
+func eachPageTimeoutQuery(t *testing.T) (*Query[cql.EmptyRow, []byte], net.Conn) {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
-	options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cqltype.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
+	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+	options := testOptions(Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 5 * time.Second}, PageTimeout: cql.Option[time.Duration]{Set: true, Value: 100 * time.Millisecond}})
 	q := codecTestMust(unpreparedQuery(s, statement, options.Values()))
 	t.Cleanup(q.Close)
 	return q, peers[0]

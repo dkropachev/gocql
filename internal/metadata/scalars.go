@@ -6,23 +6,22 @@ package metadata
 import (
 	"maps"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
-func (InternalV2MetadataText) CheckType(t cqltype.DataType) error {
-	if t.Kind() == cqltype.TypeAscii {
-		return codec.ASCIICodec.CheckType(t)
+func (InternalV2MetadataText) CheckType(t cql.DataType) error {
+	if t.Kind() == cql.TypeAscii {
+		return cql.ASCIICodec.CheckType(t)
 	}
-	return codec.TextCodec.CheckType(t)
+	return cql.TextCodec.CheckType(t)
 }
-func (InternalV2MetadataText) Decode(r codec.ValueReader) (string, error) {
-	var text cqltype.Text
+func (InternalV2MetadataText) Decode(r cql.ValueReader) (string, error) {
+	var text cql.Text
 	var err error
-	if r.Type().Kind() == cqltype.TypeAscii {
-		text, err = codec.ASCIICodec.Decode(r)
+	if r.Type().Kind() == cql.TypeAscii {
+		text, err = cql.ASCIICodec.Decode(r)
 	} else {
-		text, err = codec.TextCodec.Decode(r)
+		text, err = cql.TextCodec.Decode(r)
 	}
 	if err != nil {
 		return "", err
@@ -31,11 +30,11 @@ func (InternalV2MetadataText) Decode(r codec.ValueReader) (string, error) {
 }
 func (InternalV2MetadataText) Clone(v string) string { return v }
 
-func (InternalV2MetadataUUIDString) CheckType(t cqltype.DataType) error {
-	return codec.UUIDCodec.CheckType(t)
+func (InternalV2MetadataUUIDString) CheckType(t cql.DataType) error {
+	return cql.UUIDCodec.CheckType(t)
 }
-func (InternalV2MetadataUUIDString) Decode(r codec.ValueReader) (string, error) {
-	v, e := codec.UUIDCodec.Decode(r)
+func (InternalV2MetadataUUIDString) Decode(r cql.ValueReader) (string, error) {
+	v, e := cql.UUIDCodec.Decode(r)
 	if e != nil {
 		return "", e
 	}
@@ -43,17 +42,17 @@ func (InternalV2MetadataUUIDString) Decode(r codec.ValueReader) (string, error) 
 }
 func (InternalV2MetadataUUIDString) Clone(v string) string { return v }
 
-func (InternalV2MetadataInt) CheckType(t cqltype.DataType) error { return codec.Int32.CheckType(t) }
-func (InternalV2MetadataInt) Decode(r codec.ValueReader) (int, error) {
-	v, e := codec.Int32.Decode(r)
+func (InternalV2MetadataInt) CheckType(t cql.DataType) error { return cql.Int32Codec.CheckType(t) }
+func (InternalV2MetadataInt) Decode(r cql.ValueReader) (int, error) {
+	v, e := cql.Int32Codec.Decode(r)
 	return int(v), e
 }
 func (InternalV2MetadataInt) Clone(v int) int { return v }
 
-func (v2MetadataKind) CheckType(t cqltype.DataType) error {
+func (v2MetadataKind) CheckType(t cql.DataType) error {
 	return (InternalV2MetadataText{}).CheckType(t)
 }
-func (v2MetadataKind) Decode(r codec.ValueReader) (ColumnKind, error) {
+func (v2MetadataKind) Decode(r cql.ValueReader) (ColumnKind, error) {
 	v, e := (InternalV2MetadataText{}).Decode(r)
 	if e != nil {
 		return 0, e
@@ -62,16 +61,16 @@ func (v2MetadataKind) Decode(r codec.ValueReader) (ColumnKind, error) {
 }
 func (v2MetadataKind) Clone(v ColumnKind) ColumnKind { return v }
 
-func (v2MetadataStrings) CheckType(t cqltype.DataType) error {
-	if t.Kind() == cqltype.TypeSet {
-		return codec.SetDecoder[cqltype.Text](codec.TextCodec).CheckType(t)
+func (v2MetadataStrings) CheckType(t cql.DataType) error {
+	if t.Kind() == cql.TypeSet {
+		return cql.SetDecoder[cql.Text](cql.TextCodec).CheckType(t)
 	}
-	return codec.ListDecoder[cqltype.Text](codec.TextCodec).CheckType(t)
+	return cql.ListDecoder[cql.Text](cql.TextCodec).CheckType(t)
 }
-func (v2MetadataStrings) Decode(r codec.ValueReader) ([]string, error) {
-	decoder := codec.ListDecoder[cqltype.Text](codec.TextCodec)
-	if r.Type().Kind() == cqltype.TypeSet {
-		decoder = codec.SetDecoder[cqltype.Text](codec.TextCodec)
+func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
+	decoder := cql.ListDecoder[cql.Text](cql.TextCodec)
+	if r.Type().Kind() == cql.TypeSet {
+		decoder = cql.SetDecoder[cql.Text](cql.TextCodec)
 	}
 	v, err := decoder.Decode(r)
 	if err != nil {
@@ -85,11 +84,11 @@ func (v2MetadataStrings) Decode(r codec.ValueReader) ([]string, error) {
 }
 func (v2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
 
-func (v2MetadataStringMap) CheckType(t cqltype.DataType) error {
-	return codec.MapDecoder[cqltype.Text, cqltype.Text](codec.TextCodec, codec.TextCodec).CheckType(t)
+func (v2MetadataStringMap) CheckType(t cql.DataType) error {
+	return cql.MapDecoder[cql.Text, cql.Text](cql.TextCodec, cql.TextCodec).CheckType(t)
 }
-func (v2MetadataStringMap) Decode(r codec.ValueReader) (map[string]string, error) {
-	v, err := codec.MapDecoder[cqltype.Text, cqltype.Text](codec.TextCodec, codec.TextCodec).Decode(r)
+func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) {
+	v, err := cql.MapDecoder[cql.Text, cql.Text](cql.TextCodec, cql.TextCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +96,7 @@ func (v2MetadataStringMap) Decode(r codec.ValueReader) (map[string]string, error
 	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
-			return nil, cqltype.TypeValidation("schema map", "duplicate key %q", key)
+			return nil, cql.TypeValidation("schema map", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.String()
 	}
@@ -105,11 +104,11 @@ func (v2MetadataStringMap) Decode(r codec.ValueReader) (map[string]string, error
 }
 func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
-func (v2MetadataExtensions) CheckType(t cqltype.DataType) error {
-	return codec.MapDecoder[cqltype.Text, cqltype.Bytes](codec.TextCodec, codec.BlobCodec).CheckType(t)
+func (v2MetadataExtensions) CheckType(t cql.DataType) error {
+	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).CheckType(t)
 }
-func (v2MetadataExtensions) Decode(r codec.ValueReader) (map[string][]byte, error) {
-	v, err := codec.MapDecoder[cqltype.Text, cqltype.Bytes](codec.TextCodec, codec.BlobCodec).Decode(r)
+func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error) {
+	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +116,7 @@ func (v2MetadataExtensions) Decode(r codec.ValueReader) (map[string][]byte, erro
 	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
-			return nil, cqltype.TypeValidation("schema extensions", "duplicate key %q", key)
+			return nil, cql.TypeValidation("schema extensions", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.OwnedBytes()
 	}

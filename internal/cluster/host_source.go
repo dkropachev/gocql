@@ -31,7 +31,7 @@ import (
 	"net"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -44,7 +44,7 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	}
 	backend, ok := control.(v2SystemQueryer)
 	if !ok {
-		return false, cqltype.TypeValidation("schema discovery", "control connection does not support typed queries")
+		return false, cql.TypeValidation("schema discovery", "control connection does not support typed queries")
 	}
 	ctx := context.Background()
 	timeout := 60 * time.Second
@@ -56,7 +56,7 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	page, err := backend.InternalQueryV2System(ctx, &model.AttemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: cqltype.One, PageSize: 1, Timeout: timeout})
+	page, err := backend.InternalQueryV2System(ctx, &model.AttemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: cql.One, PageSize: 1, Timeout: timeout})
 	if page != nil && page.Owner != nil {
 		defer page.Owner.Release()
 	}
@@ -97,7 +97,7 @@ func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInf
 				return nil, fmt.Errorf(assertErrorMsg, "rack")
 			}
 		case "host_id":
-			hostId, ok := value.(cqltype.UUID)
+			hostId, ok := value.(cql.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "host_id")
 			}
@@ -166,7 +166,7 @@ func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInf
 				return nil, fmt.Errorf(assertErrorMsg, "tokens")
 			}
 		case "schema_version":
-			schemaVersion, ok := value.(cqltype.UUID)
+			schemaVersion, ok := value.(cql.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "schema_version")
 			}
@@ -225,7 +225,7 @@ func (s *Core) refreshRing() error {
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {
 		r.mu.Unlock()
-		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cqltype.TypeValidation("topology generation", "topology changed during refresh")}
+		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cql.TypeValidation("topology generation", "topology changed during refresh")}
 	}
 	before := r.InternalHosts
 	next := make(map[string]*implEndpoint.HostInfo, len(hosts))

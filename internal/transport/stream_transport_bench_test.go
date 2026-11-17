@@ -29,8 +29,7 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -133,7 +132,7 @@ func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 		defer r.InternalClose(false)
 		r.InternalLimits.MaxMetadataBytes = 2048
 		r.InternalMetadataBudget.SetLimit(2048)
-		response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT", Consistency: cqltype.One})
+		response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT", Consistency: cql.One})
 		if err != nil {
 			if response != nil {
 				response.InternalReleaseMetadata()
@@ -144,11 +143,11 @@ func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 		if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 			return
 		}
-		plan, err := codec.StreamRowInto(func(*codec.EmptyRecord) {}).Compile(response.InternalColumns)
+		plan, err := cql.StreamRowInto(func(*cql.EmptyRow) {}).Compile(response.InternalColumns)
 		if err != nil {
 			return
 		}
-		var dst codec.EmptyRecord
+		var dst cql.EmptyRow
 		for i := 0; i < 16; i++ {
 			ok, err := InternalDecodeStreamRow(response, plan, &dst)
 			if err != nil || !ok {
@@ -249,8 +248,8 @@ func BenchmarkStreamTransport(b *testing.B) {
 					r := memoryReservation(mode.version, mode.compressor, source)
 					defer r.InternalClose(true)
 					dst := make([]byte, 0, size)
-					request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}
-					var plan codec.StreamRowPlan[[]byte]
+					request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}
+					var plan cql.StreamRowPlan[[]byte]
 					run := func() {
 						source.source.Reset(encoded)
 						source.closed = false
@@ -272,7 +271,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 							b.Fatal(err)
 						}
 						if plan == nil {
-							plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+							plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -316,11 +315,11 @@ func BenchmarkStreamTransport(b *testing.B) {
 				defer r.InternalClose(true)
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				var plan codec.StreamRowPlan[[]byte]
+				var plan cql.StreamRowPlan[[]byte]
 				dst := make([]byte, 0, 1)
 				run := func() {
 					source.source.Reset(encoded)
-					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -328,7 +327,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 						b.Fatal(err)
 					}
 					if plan == nil {
-						plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+						plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -402,9 +401,9 @@ func BenchmarkStreamTransport(b *testing.B) {
 				dst := make([]byte, 0, size)
 				plain.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
 				plain.end = plain.start + uintptr(size)
-				var plan codec.StreamRowPlan[[]byte]
+				var plan cql.StreamRowPlan[[]byte]
 				run := func() {
-					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {
 						b.Fatal(err)
 					}
@@ -412,7 +411,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 						b.Fatal(err)
 					}
 					if plan == nil {
-						plan, err = codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns)
+						plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
 						if err != nil {
 							b.Fatal(err)
 						}

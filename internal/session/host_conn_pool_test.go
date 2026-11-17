@@ -32,8 +32,6 @@ import (
 	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -120,7 +118,7 @@ func TestHostConnPool(t *testing.T) {
 						opaqueStorageValuexxxxxxxxxxxxx := new(endpoint.HostInfo)
 						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxxx).InternalConnectAddress = net.ParseIP("127.0.0.1")
 						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxxx).InternalPort = 9042
-						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxxx).InternalHostId = cqltype.UUID{15: 1}
+						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxxx).InternalHostId = implCql.UUID{15: 1}
 						return opaqueStorageValuexxxxxxxxxxxxx
 					}()
 					s := func() *cluster.Core {
@@ -267,7 +265,7 @@ func TestHostConnPool(t *testing.T) {
 					implCluster.SessionData(s).InternalCfg.ReconnectionPolicy = &implPool.NoReconnectionPolicy{}
 					h := func() *endpoint.HostInfo {
 						opaqueStorageValuexxxxxxxxxxxx := new(endpoint.HostInfo)
-						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalHostId = cqltype.UUID{15: 1}
+						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalHostId = implCql.UUID{15: 1}
 						implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxxx).InternalState.Store(endpoint.NodeUp)
 						return opaqueStorageValuexxxxxxxxxxxx
 					}()
@@ -280,7 +278,7 @@ func TestHostConnPool(t *testing.T) {
 					pool.InternalConnPicker = codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 					pool.InternalConnPicker.Put(c)
 					implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{h.HostID(): h}}
-					implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(h): pool}}
+					implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: map[implCql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(h): pool}}
 					pool.HandleError(c, io.EOF, true)
 					for i := 0; i < 10; i++ {
 						pool.Pick(nil)
@@ -313,7 +311,7 @@ func TestHostConnPool(t *testing.T) {
 			pinned := implEndpoint.InternalHostInfoHostUUID(cs[0].InternalHost)
 			other := implEndpoint.InternalHostInfoHostUUID(cs[1].InternalHost)
 			plan := &routing.InternalTargetPlan{InternalTargets: []model.Target{{HostID: other}}}
-			if conn, err := s.SelectTypedConn(context.Background(), model.RoutingInfo{HostID: implCql.Option[cqltype.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, implRuntimeerrors.ErrNoConnections) {
+			if conn, err := s.SelectTypedConn(context.Background(), model.RoutingInfo{HostID: implCql.Option[implCql.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, implRuntimeerrors.ErrNoConnections) {
 				t.Fatal("host pin escaped", conn, err)
 			}
 		})
@@ -337,13 +335,13 @@ func TestHostConnPool(t *testing.T) {
 			_ = p.Put(a)
 			_ = p.Put(b)
 			a.InternalSetExclusive(true)
-			if got := p.InternalPickTarget(implModel.Target{ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != b {
+			if got := p.InternalPickTarget(implModel.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != b {
 				t.Fatal("advisory hint could not use free capacity")
 			}
-			if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != a {
+			if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, implModel.RoutingInfo{}); got != a {
 				t.Fatal("strict target relaxed while reserved")
 			}
-			if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCqltype.Option[uint32]{Value: math.MaxUint32, Set: true}}, implModel.RoutingInfo{}); got != nil {
+			if got := p.InternalPickTarget(implModel.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: math.MaxUint32, Set: true}}, implModel.RoutingInfo{}); got != nil {
 				t.Fatal("invalid strict target relaxed")
 			}
 		})
@@ -366,11 +364,11 @@ func TestHostConnPool(t *testing.T) {
 			p.Put(first)
 			p.Put(second)
 			first.InternalSetExclusive(true)
-			routing := model.RoutingInfo{Token: cqltype.Option[int64]{Value: math.MinInt64, Set: true}}
+			routing := model.RoutingInfo{Token: implCql.Option[int64]{Value: math.MinInt64, Set: true}}
 			if got := p.InternalPickTarget(model.Target{}, routing); got != second {
 				t.Fatal("non-strict selection waited despite idle eligible connection")
 			}
-			if got := p.InternalPickTarget(model.Target{StrictShard: true, ShardID: cqltype.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
+			if got := p.InternalPickTarget(model.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
 				t.Fatal("strict shard was not preserved")
 			}
 		})
@@ -391,7 +389,7 @@ func TestHostConnPool(t *testing.T) {
 			pool.InternalConnPicker = codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 			pool.InternalConnPicker.Put(c)
 			c.InternalErrorHandler = pool
-			target := implModel.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: implCqltype.Option[uint32]{Value: 0, Set: true}, StrictShard: true}
+			target := implModel.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: implCql.Option[uint32]{Value: 0, Set: true}, StrictShard: true}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			first := codecTestMust(pool.InternalReserveStream(ctx, target, implModel.RoutingInfo{}))
@@ -455,7 +453,7 @@ func TestHostConnPool(t *testing.T) {
 			defer bound.Close()
 			done := make(chan error, 1)
 			go func() {
-				rows, err := Run(ctx, s, bound, testOptions(Options{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+				rows, err := Run(ctx, s, bound, testOptions(Options{HostID: implCql.Option[implCql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 				rows.Close()
 				done <- err
 			}()
@@ -486,7 +484,7 @@ func TestHostConnPool(t *testing.T) {
 			defer r.InternalClose(true)
 			wait, cancelWait := context.WithTimeout(context.Background(), 10*time.Millisecond)
 			defer cancelWait()
-			_, err := Run(wait, s, bound, testOptions(Options{HostID: cqltype.Option[cqltype.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
+			_, err := Run(wait, s, bound, testOptions(Options{HostID: implCql.Option[implCql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), Set: true}}))
 			if !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("waiting ignored caller cancellation", err)
 			}

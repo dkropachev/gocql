@@ -6,7 +6,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
@@ -95,7 +95,7 @@ func routePeer(hostID string) endpoint.Peer {
 	if hostID == "" {
 		return endpoint.Peer{}
 	}
-	return endpoint.Peer{HostID: cqltype.MustParseUUID(hostID)}
+	return endpoint.Peer{HostID: cql.MustParseUUID(hostID)}
 }
 
 // sameIP reports whether addr carries ip.

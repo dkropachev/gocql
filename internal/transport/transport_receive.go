@@ -10,7 +10,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -34,7 +34,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		}
 	} else if src.owner != nil {
 		if !src.owner.Retain() {
-			err = cqltype.ErrReleased
+			err = cql.ErrReleased
 		} else {
 			owner = src.owner
 			body = src.chain

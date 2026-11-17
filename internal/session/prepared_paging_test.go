@@ -17,37 +17,32 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/retry"
-
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"encoding/binary"
 	"io"
 	"net"
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implModel "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
-func testPage(t *testing.T, values ...string) *Page[implCqltype.Bytes] {
+func testPage(t *testing.T, values ...string) *Page[cql.Bytes] {
 	t.Helper()
-	typ := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
-	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Name: "value", Type: typ})
+	typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
 	var body []byte
 	for _, v := range values {
 		body = binary.BigEndian.AppendUint32(body, uint32(len(v)))
 		body = append(body, v...)
 	}
 	chain := typedTestChain(t, body)
-	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: implModel.CompletePageState()}}, codec.OneColumn(codec.BlobCodec), nil))
+	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: cql.CompletePageState()}}, cql.OneColumn(cql.BlobCodec), nil))
 }
 
 type countingDecoder struct {
@@ -55,30 +50,30 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c implCqltype.Columns) (codec.RowPlan[implCqltype.Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()
 	}
-	return codec.OneColumn(codec.BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BlobCodec).Compile(c)
 }
-func (d countingDecoder) Clone(v implCqltype.Bytes) implCqltype.Bytes { return v.Clone() }
-func preparedState(t *testing.T, s *cluster.Core, columns implCqltype.Columns) (*InternalPreparedState, *InternalHostPrepared) {
+func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
+func preparedState(t *testing.T, s *cluster.Core, columns cql.Columns) (*InternalPreparedState, *InternalHostPrepared) {
 	t.Helper()
 	tracker := InternalRuntimeFor(s).InternalSchemaTracker()
-	dependencies := tracker.InternalDependencies("ks", implCqltype.NewColumns(), columns)
+	dependencies := tracker.InternalDependencies("ks", cql.NewColumns(), columns)
 	epoch := dependencies.InternalSnapshot()
 	result := &implModel.ResultSchemaIdentity{InternalColumns: columns, InternalEpoch: epoch, InternalTracker: tracker}
 	hp := &InternalHostPrepared{InternalId: []byte("id"), InternalMetadataID: []byte("meta"), InternalColumns: columns, InternalResult: result, InternalEpoch: epoch, InternalRevision: 1}
-	state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: implCqltype.NewColumns(), InternalColumns: columns, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
-	newTestPreparedState(state, map[implCqltype.UUID]*InternalHostPrepared{{15: 1}: hp}, result, implCqltype.UUID{15: 1})
+	state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl", InternalKeyspace: "ks", InternalParameters: cql.NewColumns(), InternalColumns: columns, InternalDependencies: dependencies, InternalInitialEpoch: epoch, InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl"}}
+	newTestPreparedState(state, map[cql.UUID]*InternalHostPrepared{{15: 1}: hp}, result, cql.UUID{15: 1})
 	return state, hp
 }
-func preparedBody(id []byte, parameters, columns implCqltype.Columns, pk ...int) []byte {
+func preparedBody(id []byte, parameters, columns cql.Columns, pk ...int) []byte {
 	b := binary.BigEndian.AppendUint32(nil, 4)
 	b = binary.BigEndian.AppendUint16(b, uint16(len(id)))
 	b = append(b, id...)
-	for part, c := range []implCqltype.Columns{parameters, columns} {
+	for part, c := range []cql.Columns{parameters, columns} {
 		b = binary.BigEndian.AppendUint32(b, 0)
 		b = binary.BigEndian.AppendUint32(b, uint32(c.Len()))
 		if part == 0 {
@@ -87,7 +82,7 @@ func preparedBody(id []byte, parameters, columns implCqltype.Columns, pk ...int)
 				b = binary.BigEndian.AppendUint16(b, uint16(i))
 			}
 		}
-		for _, col := range cqltype.ColumnSlice(c) {
+		for _, col := range cql.ColumnSlice(c) {
 			for _, text := range []string{col.Keyspace, col.Table, col.Name} {
 				b = binary.BigEndian.AppendUint16(b, uint16(len(text)))
 				b = append(b, text...)

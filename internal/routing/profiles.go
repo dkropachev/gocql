@@ -6,7 +6,7 @@ package routing
 import (
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	model "github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -52,6 +52,6 @@ type AttemptEvent struct {
 	Target    Target
 	// CQLTraceID is the CQL trace session the attempt's response named, when
 	// the execution ran with CQL tracing and a response arrived.
-	CQLTraceID             cqltype.Option[cqltype.UUID]
+	CQLTraceID             cql.Option[cql.UUID]
 	Cancelled, Speculative bool
 }

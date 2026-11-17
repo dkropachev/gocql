@@ -31,7 +31,7 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -93,7 +93,7 @@ func TestAddressTranslation(t *testing.T) {
 
 			translatedIP := netip.MustParseAddr("192.0.2.10")
 			wantPeer := endpoint.Peer{
-				HostID:            cqltype.MustParseUUID("a0000000-0000-0000-0000-000000000001"),
+				HostID:            cql.MustParseUUID("a0000000-0000-0000-0000-000000000001"),
 				Datacenter:        "dc1",
 				Rack:              "r1",
 				RPCAddress:        netip.MustParseAddr("10.0.1.1"),

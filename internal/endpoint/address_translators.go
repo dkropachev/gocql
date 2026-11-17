@@ -29,7 +29,7 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // AddressTranslator translates node addresses (and ports) that are discovered
@@ -64,7 +64,7 @@ type Peer struct {
 	// addresses the node advertises.
 	RPCAddress, BroadcastAddress, ListenAddress, PreferredIP netip.Addr
 	Datacenter, Rack                                         string
-	HostID                                                   cqltype.UUID
+	HostID                                                   cql.UUID
 	// Port is the node's CQL port. ShardAwarePort and ShardAwarePortTLS are
 	// its ScyllaDB shard-aware ports, zero when not advertised. Compare the
 	// port being translated with them to tell the endpoints apart.

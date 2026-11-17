@@ -4,7 +4,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -92,34 +92,34 @@ func errorFrameCases() []errorFrameCase {
 		errorFrameCase{
 			name: "Unavailable", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeUnavailable, "unavail", func(f *Framer) {
-				f.WriteConsistency(cqltype.LocalQuorum)
+				f.WriteConsistency(cql.LocalQuorum)
 				f.WriteInt(3)
 				f.WriteInt(1)
 			}),
 			want: response(ProtoVersion4, &UnavailableError{serverError: base("unavail"),
-				Consistency: cqltype.LocalQuorum, Required: 3, Alive: 1}),
+				Consistency: cql.LocalQuorum, Required: 3, Alive: 1}),
 		},
 		errorFrameCase{
 			name: "WriteTimeout", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeWriteTimeout, "wt", func(f *Framer) {
-				f.WriteConsistency(cqltype.Quorum)
+				f.WriteConsistency(cql.Quorum)
 				f.WriteInt(1)
 				f.WriteInt(2)
 				f.WriteString("BATCH_LOG")
 			}),
 			want: response(ProtoVersion4, &WriteTimeoutError{serverError: base("wt"),
-				Consistency: cqltype.Quorum, Received: 1, BlockFor: 2, WriteType: "BATCH_LOG"}),
+				Consistency: cql.Quorum, Received: 1, BlockFor: 2, WriteType: "BATCH_LOG"}),
 		},
 		errorFrameCase{
 			name: "ReadTimeout", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeReadTimeout, "rt", func(f *Framer) {
-				f.WriteConsistency(cqltype.One)
+				f.WriteConsistency(cql.One)
 				f.WriteInt(0)
 				f.WriteInt(1)
 				f.WriteByteValue(1)
 			}),
 			want: response(ProtoVersion4, &ReadTimeoutError{serverError: base("rt"),
-				Consistency: cqltype.One, Received: 0, BlockFor: 1, DataPresent: true}),
+				Consistency: cql.One, Received: 0, BlockFor: 1, DataPresent: true}),
 		},
 		errorFrameCase{
 			name: "AlreadyExists", proto: ProtoVersion4,
@@ -143,64 +143,64 @@ func errorFrameCases() []errorFrameCase {
 		errorFrameCase{
 			name: "ReadFailureV4", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeReadFailure, "rf", func(f *Framer) {
-				f.WriteConsistency(cqltype.All)
+				f.WriteConsistency(cql.All)
 				f.WriteInt(1)
 				f.WriteInt(3)
 				f.WriteInt(2)
 				f.WriteByteValue(0)
 			}),
 			want: response(ProtoVersion4, &ReadFailureError{serverError: base("rf"),
-				Consistency: cqltype.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: false}),
+				Consistency: cql.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: false}),
 		},
 		errorFrameCase{
 			name: "ReadFailureV5", proto: ProtoVersion5,
 			body: errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
-				f.WriteConsistency(cqltype.All)
+				f.WriteConsistency(cql.All)
 				f.WriteInt(1)
 				f.WriteInt(3)
 				writeErrMap(f, errMapEntry{"10.0.0.1", 1}, errMapEntry{"2001:db8::1", 2})
 				f.WriteByteValue(1)
 			}),
 			want: response(ProtoVersion5, &ReadFailureError{serverError: base("rf"),
-				Consistency: cqltype.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: true,
+				Consistency: cql.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: true,
 				ErrorMap: ErrorMap{"10.0.0.1": 1, "2001:db8::1": 2}}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV4", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeWriteFailure, "wf", func(f *Framer) {
-				f.WriteConsistency(cqltype.Two)
+				f.WriteConsistency(cql.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				f.WriteInt(1)
 				f.WriteString("SIMPLE")
 			}),
 			want: response(ProtoVersion4, &WriteFailureError{serverError: base("wf"),
-				Consistency: cqltype.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE"}),
+				Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE"}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5", proto: ProtoVersion5,
 			body: errBody(ProtoVersion5, CodeWriteFailure, "wf", func(f *Framer) {
-				f.WriteConsistency(cqltype.Two)
+				f.WriteConsistency(cql.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				writeErrMap(f, errMapEntry{"10.0.0.2", 3})
 				f.WriteString("SIMPLE")
 			}),
 			want: response(ProtoVersion5, &WriteFailureError{serverError: base("wf"),
-				Consistency: cqltype.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE",
+				Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE",
 				ErrorMap: ErrorMap{"10.0.0.2": 3}}),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5EmptyMap", proto: ProtoVersion5,
 			body: errBody(ProtoVersion5, CodeWriteFailure, "wf", func(f *Framer) {
-				f.WriteConsistency(cqltype.Two)
+				f.WriteConsistency(cql.Two)
 				f.WriteInt(0)
 				f.WriteInt(2)
 				writeErrMap(f)
 				f.WriteString("SIMPLE")
 			}),
 			want: response(ProtoVersion5, &WriteFailureError{serverError: base("wf"),
-				Consistency: cqltype.Two, BlockFor: 2, WriteType: "SIMPLE", ErrorMap: ErrorMap{}}),
+				Consistency: cql.Two, BlockFor: 2, WriteType: "SIMPLE", ErrorMap: ErrorMap{}}),
 		},
 		errorFrameCase{
 			name: "FunctionFailure", proto: ProtoVersion4,
@@ -220,12 +220,12 @@ func errorFrameCases() []errorFrameCase {
 		errorFrameCase{
 			name: "CASWriteUnknown", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, CodeCASWriteUnknown, "cas", func(f *Framer) {
-				f.WriteConsistency(cqltype.Serial)
+				f.WriteConsistency(cql.Serial)
 				f.WriteInt(1)
 				f.WriteInt(2)
 			}),
 			want: response(ProtoVersion4, &CASWriteUnknownError{serverError: base("cas"),
-				Consistency: cqltype.Serial, Received: 1, BlockFor: 2}),
+				Consistency: cql.Serial, Received: 1, BlockFor: 2}),
 		},
 		errorFrameCase{
 			name: "RateLimitReached", proto: ProtoVersion4, rateLimitCode: scyllaRateLimitCode,

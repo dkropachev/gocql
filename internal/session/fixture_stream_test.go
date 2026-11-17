@@ -4,24 +4,21 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
 	"crypto/tls"
 	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/testkit"
-
+	"github.com/scylladb/gocql/v2/internal/transport"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
 
@@ -61,7 +58,7 @@ func fixtureStreamSession(t testing.TB, mode fixtureMode, spy ...bool) (*cluster
 	}
 	c.InternalHost = func() *endpoint.HostInfo {
 		opaqueStorageValue := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cqltype.UUID{15: 1}
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cql.UUID{15: 1}
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalState.Store(endpoint.NodeUp)
 		return opaqueStorageValue
 	}()
@@ -93,12 +90,12 @@ type finalAccess struct {
 	writes         atomic.Int32
 }
 
-func (d *finalAccess) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (d *finalAccess) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	return d, nil
 }
 func (d *finalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }
-func (d *finalAccess) DecodeInto(r *codec.StreamRowReader, dst *[]byte) error {
-	plan, err := codec.StreamBlob.Compile(cqltype.BlobType)
+func (d *finalAccess) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
+	plan, err := cql.StreamBlob.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}

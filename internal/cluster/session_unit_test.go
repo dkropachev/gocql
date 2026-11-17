@@ -27,7 +27,7 @@ package cluster
 import (
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -78,7 +78,7 @@ func (h staticSelectedHost) Token() endpoint.Token    { return nil }
 func (h staticSelectedHost) Mark(error)               {}
 
 type consistencyRetryPolicy struct {
-	consistency cqltype.Consistency
+	consistency cql.Consistency
 }
 
 type synchronizedRetryPolicy struct {

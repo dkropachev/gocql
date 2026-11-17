@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -16,25 +16,25 @@ import (
 
 // routingToken hashes precisely the encoded components later sent to the server.
 // It never invokes an application encoder or materializes a composite key.
-func InternalRoutingToken(cells []model.EncodedCell, indexes []int) (cqltype.Option[int64], error) {
+func InternalRoutingToken(cells []model.EncodedCell, indexes []int) (cql.Option[int64], error) {
 	if len(indexes) == 0 {
-		return cqltype.Option[int64]{}, nil
+		return cql.Option[int64]{}, nil
 	}
 	missing := false
 	for _, index := range indexes {
 		if index < 0 || index >= len(cells) {
-			return cqltype.Option[int64]{}, fmt.Errorf("gocql: partition key index %d outside %d bound values", index, len(cells))
+			return cql.Option[int64]{}, fmt.Errorf("gocql: partition key index %d outside %d bound values", index, len(cells))
 		}
 		cell := cells[index]
-		if cell.State == cqltype.Null || cell.State == cqltype.Unset {
+		if cell.State == cql.Null || cell.State == cql.Unset {
 			missing = true
 		}
 		if len(indexes) > 1 && cell.Body.Len() > math.MaxUint16 {
-			return cqltype.Option[int64]{}, fmt.Errorf("gocql: composite partition component %d exceeds 65535 bytes", index)
+			return cql.Option[int64]{}, fmt.Errorf("gocql: composite partition component %d exceeds 65535 bytes", index)
 		}
 	}
 	if missing {
-		return cqltype.Option[int64]{}, nil
+		return cql.Option[int64]{}, nil
 	}
 	var hash murmur.Stream
 	var prefix [2]byte
@@ -46,11 +46,11 @@ func InternalRoutingToken(cells []model.EncodedCell, indexes []int) (cqltype.Opt
 			hash.Write(prefix[:])
 		}
 		if err := cell.Body.Each(func(span wire.Span) error { _, err := hash.Write(span.Bytes()); return err }); err != nil {
-			return cqltype.Option[int64]{}, err
+			return cql.Option[int64]{}, err
 		}
 		if len(indexes) > 1 {
 			hash.Write(zero[:])
 		}
 	}
-	return cqltype.Option[int64]{Value: hash.Sum64(), Set: true}, nil
+	return cql.Option[int64]{Value: hash.Sum64(), Set: true}, nil
 }

@@ -4,18 +4,16 @@
 package cluster
 
 import (
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
-	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	implModel "github.com/scylladb/gocql/v2/internal/model"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
-func testHint(t testing.TB, first, last int64, version implCqltype.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
+func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
 	t.Helper()
 	rs := make([]tablets.ReplicaInfo, len(replicas))
 	for i, r := range replicas {
@@ -55,5 +53,5 @@ func testSession(t testing.TB) *Core {
 }
 
 func hTarget(id byte, shard uint32) implModel.Target {
-	return implModel.Target{HostID: implCqltype.UUID{15: id}, ShardID: implCqltype.Option[uint32]{Value: shard, Set: true}}
+	return implModel.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 }

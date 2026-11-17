@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
@@ -87,7 +88,7 @@ func serverKind(err protocol.ServerError) Kind {
 // a comparable value, so the comparison cannot panic.
 func sentinelKind(err error) Kind {
 	switch err {
-	case ErrClosed, ErrSessionClosed, ErrStaleRows, cqltype.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
+	case ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
 		return KindClosed
 	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete:
 		return KindInvalid
@@ -135,10 +136,10 @@ func (w *kindWalk) visit(err error) bool {
 	k := sentinelKind(err)
 	if k == KindUnknown {
 		switch typed := err.(type) { //nolint:errorlint // one node of a tree walkErrors walks
-		case *cqltype.ValidationError, *cqltype.CodecError:
+		case *cql.ValidationError, *cql.CodecError:
 			// Package cql defines them and cannot name Kind.
 			k = KindInvalid
-		case *cqltype.ProtocolError:
+		case *cql.ProtocolError:
 			k = KindProtocol
 		case kinded:
 			k = typed.Kind()

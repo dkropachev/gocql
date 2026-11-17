@@ -1,20 +1,6 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/retry"
-
 	"context"
 	"encoding/binary"
 	"errors"
@@ -23,7 +9,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, []net.Conn) {
@@ -34,12 +32,12 @@ func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, 
 		return opaqueStorageValue
 	}()
 	implCluster.SessionData(s).InternalHostSource = &cluster.InternalRingDescriber{InternalHosts: map[string]*endpoint.HostInfo{}}
-	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*pool.InternalHostConnPool{}}
+	implCluster.SessionData(s).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cql.UUID]*pool.InternalHostConnPool{}}
 	var conns []*transport.Conn
 	var peers []net.Conn
 	for i := 0; i < n; i++ {
 		conn, peer := typedTestConn(t, 4, nil)
-		id := cqltype.UUID{15: byte(i + 1)}
+		id := cql.UUID{15: byte(i + 1)}
 		host := func() *endpoint.HostInfo {
 			opaqueStorageValuex := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = id
@@ -74,7 +72,7 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(name)))
 		b = append(b, name...)
 	}
-	b = binary.BigEndian.AppendUint16(b, uint16(cqltype.TypeBlob))
+	b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
 	b = binary.BigEndian.AppendUint32(b, uint32(len(values)))
 	for _, value := range values {
 		b = binary.BigEndian.AppendUint32(b, uint32(len(value)))
@@ -82,9 +80,9 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 	}
 	return b
 }
-func runtimeQuery(t testing.TB) *Bound[cqltype.Bytes] {
+func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
 	t.Helper()
-	b, err := BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{})
+	b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, cql.NewColumns(), cql.EmptyRow{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,11 +123,11 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CustomPayload: []model.PayloadEntry{{Key: "borrowed", Value: cqltype.Nullable[cqltype.Bytes]{Valid: true, Value: cqltype.BorrowBytes([]byte("per-call-payload"))}}}}))
+	page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, CustomPayload: []cql.PayloadEntry{{Key: "borrowed", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte("per-call-payload"))}}}}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var row cqltype.Bytes
+	var row cql.Bytes
 	if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
 		t.Fatal(page.Err())
 	}

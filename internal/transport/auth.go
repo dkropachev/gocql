@@ -5,11 +5,10 @@ package transport
 
 import (
 	"context"
-
 	"sync"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -31,13 +30,13 @@ func (a *v2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
 	if err := a.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	var response cqltype.Nullable[[]byte]
+	var response cql.Nullable[[]byte]
 	var err error
 	if !a.started {
 		a.started = true
 		a.exchange, response, err = a.provider.Start(a.ctx, a.host, string(req))
 		if err == nil && a.exchange == nil {
-			err = cqltype.TypeValidation("authentication", "provider returned a nil exchange")
+			err = cql.TypeValidation("authentication", "provider returned a nil exchange")
 		}
 	} else {
 		response, err = a.exchange.Challenge(a.ctx, nullableAuthBytes(req))
@@ -58,7 +57,7 @@ func (a *v2Authenticator) Success(data []byte) error {
 		return err
 	}
 	if a.exchange == nil {
-		return cqltype.TypeValidation("authentication", "success before exchange")
+		return cql.TypeValidation("authentication", "success before exchange")
 	}
 	return a.exchange.Success(a.ctx, nullableAuthBytes(data))
 }
@@ -69,9 +68,9 @@ func (a *v2Authenticator) Close() {
 		}
 	})
 }
-func nullableAuthBytes(data []byte) cqltype.Nullable[cqltype.Bytes] {
+func nullableAuthBytes(data []byte) cql.Nullable[cql.Bytes] {
 	if data == nil {
-		return cqltype.Nullable[cqltype.Bytes]{}
+		return cql.Nullable[cql.Bytes]{}
 	}
-	return cqltype.Nullable[cqltype.Bytes]{Value: cqltype.BorrowBytes(data), Valid: true}
+	return cql.Nullable[cql.Bytes]{Value: cql.BorrowBytes(data), Valid: true}
 }

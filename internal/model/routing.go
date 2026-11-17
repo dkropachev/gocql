@@ -4,15 +4,15 @@
 package model
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type RoutingInfo struct {
 	Keyspace, Table string
-	Token           cqltype.Option[int64]
-	Kind            cqltype.StatementKind
+	Token           cql.Option[int64]
+	Kind            cql.StatementKind
 	Conditional     bool
-	Consistency     cqltype.Consistency
-	HostID          cqltype.Option[cqltype.UUID]
-	ShardID         cqltype.Option[uint32]
+	Consistency     cql.Consistency
+	HostID          cql.Option[cql.UUID]
+	ShardID         cql.Option[uint32]
 }

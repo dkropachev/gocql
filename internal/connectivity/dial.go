@@ -26,14 +26,14 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
 
 func typeValidation(field, message string, args ...any) error {
-	return cqltype.TypeValidation(field, message, args...)
+	return cql.TypeValidation(field, message, args...)
 }
 
 // CloneTLSConfig snapshots mutable certificate/trust containers and wire bytes.

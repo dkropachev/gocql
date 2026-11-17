@@ -1,7 +1,7 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
@@ -9,7 +9,7 @@ import (
 )
 
 func v2TestHost(id byte, dc, rack string) model.HostSnapshot {
-	var uuid cqltype.UUID
+	var uuid cql.UUID
 	uuid[15] = id
 	return model.HostSnapshot{ID: uuid, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
 }

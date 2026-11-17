@@ -7,27 +7,26 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func InternalEncodeParameters[P any](plan codec.ParamPlan[P], columns cqltype.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
+func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
-		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
+		return model.EncodedValues{}, cql.TypeValidation("parameters", "maximum count is 65535")
 	}
 	// Parameters usually contain a few scalar fields and borrowed payload spans.
 	// Avoid retaining a 4 KiB slab just to frame a small partition key. The builder
 	// allocates larger slabs when an individual encoded scalar needs them.
 	b := wire.NewBuilder(256)
-	writer := codec.NewParamWriter(b, columns, allowUnset)
-	codec.SetParamOwnership(writer, owned)
+	writer := cql.NewParamWriter(b, columns, allowUnset)
+	cql.SetParamOwnership(writer, owned)
 	if err := plan.Encode(writer, value); err != nil {
 		return model.EncodedValues{}, err
 	}
-	if err := codec.FinishParamWriter(writer); err != nil {
+	if err := cql.FinishParamWriter(writer); err != nil {
 		return model.EncodedValues{}, err
 	}
 	framed, err := b.Freeze()
@@ -38,11 +37,11 @@ func InternalEncodeParameters[P any](plan codec.ParamPlan[P], columns cqltype.Co
 	cells := make([]model.EncodedCell, columns.Len())
 	for i := range cells {
 		column, _ := columns.At(i)
-		v, err := codec.ReadValue(cursor, column.Type, nil, allowUnset)
+		v, err := cql.ReadValue(cursor, column.Type, nil, allowUnset)
 		if err != nil {
 			return model.EncodedValues{}, err
 		}
-		cells[i] = model.EncodedCell{Typ: column.Type, State: v.State(), Body: cqltype.BytesChain(v.Bytes())}
+		cells[i] = model.EncodedCell{Typ: column.Type, State: v.State(), Body: cql.BytesChain(v.Bytes())}
 	}
 	if err := cursor.RequireEnd(); err != nil {
 		return model.EncodedValues{}, fmt.Errorf("gocql: parameter framing: %w", err)
@@ -56,23 +55,23 @@ func InternalEncodeParameters[P any](plan codec.ParamPlan[P], columns cqltype.Co
 // without preparation; prepared statements take them from the server, so
 // Prepare ignores it.
 type Statement[P, R any] struct {
-	Params      codec.ParamEncoder[P]
-	Rows        codec.RowDecoder[R]
+	Params      cql.ParamEncoder[P]
+	Rows        cql.RowDecoder[R]
 	CQL         string
-	BindMarkers cqltype.Columns
-	Kind        cqltype.StatementKind
+	BindMarkers cql.Columns
+	Kind        cql.StatementKind
 }
 
 // statementDefaults fills a nil Params or Rows that has an empty
 // default.
 func statementDefaults[P, R any](s *Statement[P, R]) {
 	if s.Params == nil {
-		if e, ok := any(codec.EmptyParamsEncoder).(codec.ParamEncoder[P]); ok {
+		if e, ok := any(cql.EmptyParamsEncoder).(cql.ParamEncoder[P]); ok {
 			s.Params = e
 		}
 	}
 	if s.Rows == nil {
-		if d, ok := any(codec.EmptyRowDecoder).(codec.RowDecoder[R]); ok {
+		if d, ok := any(cql.EmptyRowDecoder).(cql.RowDecoder[R]); ok {
 			s.Rows = d
 		}
 	}
@@ -85,17 +84,17 @@ func ValidateStatement[P, R any](s *Statement[P, R]) error {
 }
 
 func validateStatement[P, R any](s Statement[P, R]) error {
-	if s.Kind > cqltype.ConditionalStatement {
-		return cqltype.TypeValidation("statement kind", "unknown classification")
+	if s.Kind > cql.ConditionalStatement {
+		return cql.TypeValidation("statement kind", "unknown classification")
 	}
 	if strings.TrimSpace(s.CQL) == "" {
-		return cqltype.TypeValidation("statement", "empty CQL")
+		return cql.TypeValidation("statement", "empty CQL")
 	}
 	if InternalFirstCQLWord(s.CQL) == "USE" {
 		return runtimeerrors.ErrUseStmt
 	}
 	if s.Params == nil || s.Rows == nil {
-		return cqltype.TypeValidation("statement", "parameter and row codecs are required")
+		return cql.TypeValidation("statement", "parameter and row codecs are required")
 	}
 	return nil
 }

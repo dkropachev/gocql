@@ -4,26 +4,25 @@
 package transport
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"encoding/binary"
 	"fmt"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // parseTypedTabletHint consumes the tuple<bigint,bigint,list<tuple<uuid,int>>>
 // custom payload without materializing a potentially fragmented payload.
-func InternalParseTypedTabletHint(value cqltype.Bytes, keyspace, table string) (tablets.TabletInfo, error) {
+func InternalParseTypedTabletHint(value cql.Bytes, keyspace, table string) (tablets.TabletInfo, error) {
 	return InternalParseTypedTabletPayload(value, keyspace, table, false)
 }
 
-func InternalParseTypedTabletPayload(value cqltype.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
-	if err := cqltype.CheckBytesAlive(value); err != nil {
+func InternalParseTypedTabletPayload(value cql.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
+	if err := cql.CheckBytesAlive(value); err != nil {
 		return tablets.TabletInfo{}, err
 	}
-	if raw, ok := cqltype.BytesChain(value).Contiguous(); ok {
+	if raw, ok := cql.BytesChain(value).Contiguous(); ok {
 		if hint, ok, err := parseContiguousTabletPayload(raw, keyspace, table, v2); ok {
 			return hint, err
 		}
@@ -31,7 +30,7 @@ func InternalParseTypedTabletPayload(value cqltype.Bytes, keyspace, table string
 	}
 	// Cursors are held by value and the first error returns at once, so a
 	// hint allocates only its replicas.
-	p := wire.CursorOver(cqltype.BytesChain(value))
+	p := wire.CursorOver(cql.BytesChain(value))
 	first, err := tabletHintBigint(&p)
 	if err != nil {
 		return tablets.TabletInfo{}, err
