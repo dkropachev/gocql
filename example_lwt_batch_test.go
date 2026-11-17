@@ -99,3 +99,56 @@ func ExampleSession_RunBatch_conditional() {
 		log.Fatal(err)
 	}
 }
+
+// ExampleSession_RunConditionalBatch reports whether a conditional batch applied.
+func ExampleSession_RunConditionalBatch() {
+	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
+	// PRIMARY KEY(pk, ck)), with rows (pk1,ck1) and (pk1,ck2) at version 2.
+	ctx := context.Background()
+	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer session.Close()
+	type update struct {
+		PK, CK, Value string
+		Version       int32
+	}
+	statement := cql.Statement[update, cql.CASResult[cql.EmptyRow]]{
+		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
+		Params: cql.Params(
+			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
+			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
+			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
+			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),
+		),
+		Rows: cql.CASRows(cql.Row[cql.EmptyRow]()),
+	}
+	queryPrepared, err := session.Prepare(ctx, statement)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var batch gocql.Batch
+	for _, value := range []update{
+		{PK: "pk1", CK: "ck1", Value: "c", Version: 2},
+		{PK: "pk1", CK: "ck2", Value: "C", Version: 2},
+	} {
+		if err := queryPrepared.AddToBatch(&batch, value); err != nil {
+			log.Fatal(err)
+		}
+	}
+	rows, err := session.RunConditionalBatch(ctx, &batch, statement.Rows)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+	applied, err := rows.Applied()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("applied:", applied)
+}

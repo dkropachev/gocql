@@ -435,16 +435,6 @@ func TestBatch(t *testing.T) {
 					batch.queryExec(&request, &sender.state)
 					return sender.state.owner.InternalRelease
 				}},
-				{"session", func(batch *Batch) func() {
-					owner := InternalNewInputOwner()
-					if err := owner.InternalAdmit(); err != nil {
-						t.Fatal(err)
-					}
-					owner.InternalClose()
-					batch.begin()
-					batch.lastOwner, batch.lastQuery = owner, nil
-					return owner.InternalRelease
-				}},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					var batch Batch

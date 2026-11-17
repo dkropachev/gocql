@@ -88,14 +88,30 @@ Open gaps:
 |---|---|---|
 | Applied | One row, `[applied]` only | One row per statement, in statement order, with previous values |
 | Not applied | One row per CQL row read from the partition, presumably in clustering order (**unverified**), each with `[applied] = false` | One row per statement, in statement order |
-| Not applied, partition absent | One row, `[applied]` only | Not documented (**unverified**) |
-| Non-conditional members | Not reported separately | One row each, `[applied] = true` and all-NULL condition columns |
-| Columns | Primary key, then the union of condition columns in statement order. Every column if any member uses `IF EXISTS` / `IF NOT EXISTS` | Union of the condition columns of all conditional statements |
+| Not applied, partition absent | One row, `[applied]` only | One row per statement, every column but `[applied]` NULL |
+| Non-conditional members | Not reported separately | One row each, with the batch's `[applied]` and previous values looked up as for any member, from a read that skips the member unless its update reads the row |
+| Columns | Primary key, then the union of condition columns in statement order. Every column if any member uses `IF EXISTS` / `IF NOT EXISTS` | `[applied]`, the primary key, then the union of the members' condition columns, in schema order. Every column if any member uses `IF EXISTS` / `IF NOT EXISTS` (`batch_statement::build_cas_result_set_metadata`) |
 
 A batch is applied only when all its conditions hold, so on both servers it was
-applied if and only if every returned row has `[applied] = true`. ScyllaDB does
-not document whether a row's `[applied]` reports the batch or its own
-statement, and the rule above holds either way.
+applied if and only if every returned row has `[applied] = true`. On ScyllaDB
+every row carries the same batch-wide flag
+(`cas_request::build_cas_result_set`), and the server stops evaluating
+conditions at the first that fails (`cas_request::applies_to`), so there is no
+per-statement applied flag. What is per statement is the previous values. Row
+i holds every result column (the batch-wide set above) taken from the row
+ScyllaDB found for statement i (`cas_request::find_old_row`): its clustering
+row if the batch's read contains it, and otherwise, unless the statement is
+`IF EXISTS` / `IF NOT EXISTS`, the partition's static row if the read
+returned one, with the partition key set and the clustering columns NULL. The
+read returns a static row only for a table with static columns whose
+partition it found (`prefetch_data_builder::accept_partition_end`). Every
+column but `[applied]` is NULL when no row was found. One read serves the
+whole batch (`cas_request::read_command`): it skips the clustering range of a
+member whose update does not read the row and that has no condition or only
+conditions on static columns, so whether such a member's own row is found
+depends on the rest of the batch and on the partition.
+The driver does not parse CQL, so working out which condition failed means
+evaluating the conditional members' previous values in the application.
 
 The rows map to statements only on ScyllaDB. On Cassandra they map to rows of
 the partition.
@@ -103,20 +119,31 @@ the partition.
 Driver handling:
 
 - The same `CASRows` path as a single statement, run through
-  `Session.RunBatch`, which returns `Rows`. `ExecBatch` rejects a batch known
-  to be conditional before sending it (`cqlerr.ErrConditionalExec`).
-- `scylla.BatchStatement` (package `scylla`) maps row i to member i of the
-  batch (`Batch.InternalConditionalStatement`): ScyllaDB answers every
-  member, conditional or not. It takes a `*Session[ScyllaV4]`, so it does not
-  compile for Cassandra, whose rows map to partition rows. The all-NULL
-  previous row of a member without a condition decodes as no previous row.
+  `Session.RunBatch`, which returns `Rows`, or `Session.RunConditionalBatch`,
+  which returns `CASBatchRows` whose `Applied` applies the rule above
+  (`internal/session/cas_batch.go`). `ExecBatch` rejects a batch known
+  to be conditional before sending it (`cqlerr.ErrConditionalExec`), and
+  `RunConditionalBatch` one known to have no conditional member, whose VOID
+  result has no `[applied]`.
+- On ScyllaDB row i is member i, so the caller's row counter is the member
+  index; the driver adds no mapping API. The `CASBatchRows` and `RunBatch`
+  docs state the rule and that it does not hold on Cassandra. An all-NULL
+  previous row, which ScyllaDB sends when no row was found, decodes as no
+  previous row. A found row carries at least its partition key, so it decodes
+  as one, with NULL clustering columns when it is the static row.
 
 `tests/integration/lwt_dialect_test.go` asserts the shapes per dialect: the
 row count of applied and not-applied batches, `Previous.Set` on applied
 single statements, the previous value of a not-applied one, and no previous
-row for a missing one. It runs against ScyllaDB in CI (2026.3), which
-confirmed the per-statement batch rows; the Cassandra **unverified** marks
-stay until it runs against Cassandra.
+row for a missing one. On ScyllaDB (2026.3.6) it also asserts that every row
+of a not-applied batch, the ordinary member's included, has `[applied] =
+false`, and that `RunConditionalBatch`'s `Applied` agrees with the rows on
+both servers. It passes against ScyllaDB 2026.3.6 and Cassandra 5.0.9. It
+asserts the ScyllaDB batch row counts exactly, but only that Cassandra's
+not-applied batch has rows. No test covers a batch on an absent partition:
+those rows rest on the server sources cited below. The remaining
+**unverified** marks are the order of Cassandra's not-applied rows and the
+columns of single statements with other conditions on ScyllaDB.
 
 ### Prepared metadata
 
@@ -179,6 +206,16 @@ negotiation or metadata does not drop one.
 - ScyllaDB paging: https://github.com/scylladb/scylladb/blob/master/docs/dev/paged-queries.md
 - ScyllaDB protocol extensions:
   https://github.com/scylladb/scylladb/blob/master/docs/dev/protocol-extensions.md
+- ScyllaDB CAS result sets: `cas_request::read_command`, `applies_to`,
+  `find_old_row` and `build_cas_result_set`,
+  `batch_statement::build_cas_result_set_metadata`, and the static-row entry
+  of `prefetch_data_builder::accept_partition_end`:
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L60-L80
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L100-L112
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L124-L155
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L157-L215
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/batch_statement.cc#L192-L220
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/update_parameters.cc#L156-L178
 - Cassandra CAS result sets: `ModificationStatement.buildCasResultSet` and
   `buildCasFailureResultSet`, and `BatchStatement.makeCasRequest`, in
   https://github.com/apache/cassandra (trunk)

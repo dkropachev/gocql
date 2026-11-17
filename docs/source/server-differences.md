@@ -44,12 +44,26 @@ Write portable code this way:
 
 A batch is applied only when all its conditions hold. The portable test is: the
 batch was applied if and only if every row reports `Applied`.
+`session.RunConditionalBatch` returns `CASBatchRows`, whose `Applied` makes
+that test for you, reading any rows you have not, and returns an error rather
+than an answer when it cannot tell, for example after the rows were closed
+early. It rejects a batch whose members are all known not to be conditional
+before sending it.
 
-On ScyllaDB, row `i` belongs to member `i` of the batch; a member without a
-condition reports `Applied` with no previous row.
-`scylla.BatchStatement(session, &batch, i)` returns that member. It takes a
-`*gocql.Session[gocql.ScyllaV4]`, so it does not compile for a Cassandra
-session, whose rows belong to table rows, not statements.
+On ScyllaDB, row `i` belongs to member `i` of the batch. Every row carries the
+same batch-wide `Applied`: there is no per-statement flag, and the server stops
+checking conditions at the first that fails. What row `i` adds is `Previous`:
+every result column, read from the row ScyllaDB found for member `i`. That is
+its clustering row if the batch's read contains it, and otherwise, unless the
+member is `IF EXISTS` / `IF NOT EXISTS`, the partition's static row, whose
+clustering columns are NULL. Only a table with static columns has one.
+`Previous` is unset when no row was found. The read skips a member whose
+update does not read the row and that has no condition or only conditions on
+static columns, so whether its own row is found depends on the rest of the
+batch and on the partition. To find the condition that
+failed, compare the conditional members' `Previous` with your conditions.
+Count rows as you read them: the count is the member index. This holds only
+on ScyllaDB; on Cassandra the rows belong to table rows, not statements.
 
 ## Paging
 

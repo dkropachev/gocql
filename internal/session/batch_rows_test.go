@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/binding"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -46,10 +47,25 @@ func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder codec.Ro
 // newRunBatch returns a session answering every request with rows "a" and
 // "b", and a batch of one member.
 func newRunBatch(t *testing.T) (*Session, *Batch) {
-	s := batchServeSession(t, runtimeRowsBody(nil, "a", "b"))
-	q := batchTestQuery(t, s)
+	return newServedBatch(t, runtimeRowsBody(nil, "a", "b"))
+}
+
+// newServedBatch returns a session answering every request with a RESULT of
+// body, and a batch of one member.
+func newServedBatch(t testing.TB, body []byte) (*Session, *Batch) {
+	t.Helper()
+	return newServedBatchOf(t, body, func(s *implCluster.Core, batch *Batch) error {
+		return batchTestQuery(t, s).AddToBatch(batch, []byte("v"))
+	})
+}
+
+// newServedBatchOf returns a session answering every request with a RESULT
+// of body, and a batch holding what add appends.
+func newServedBatchOf(t testing.TB, body []byte, add func(*implCluster.Core, *Batch) error) (*Session, *Batch) {
+	t.Helper()
+	s := batchServeSession(t, body)
 	var batch Batch
-	if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+	if err := add(s, &batch); err != nil {
 		t.Fatal(err)
 	}
 	return InternalWrapSession(s), &batch

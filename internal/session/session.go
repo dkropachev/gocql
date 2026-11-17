@@ -97,20 +97,8 @@ func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cod
 	if decoder == nil {
 		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
-	core := s.Core()
-	q, err := beginBatch(ctx, core, batch)
-	if err != nil {
-		return Rows[R]{}, err
-	}
-	r := batch.rowsFor(decoder)
-	batch.queryExec(&r.bound.privateStorage.InternalRequest, &q.state)
-	q.hold()
-	rows, err := q.state.runtime.run(ctx, &r.bound, options)
-	q.state.owner.InternalRelease()
-	if err != nil {
-		return Rows[R]{}, err
-	}
-	return r.retag(rows), nil
+	_, rows, err := sendBatchRows(ctx, s.Core(), batch, decoder, options)
+	return rows, err
 }
 
 // UnpreparedAddToBatch appends statement with value to batch without

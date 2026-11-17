@@ -48,6 +48,10 @@ parameter schemas and observation remain typed. Batches do not speculate.
 with `decoder`, like `prepared.Run`. Close the rows when done: until then they
 hold one of the session's pooled queries. Once they are closed, sending the
 batch again with the same decoder reuses their storage. See
-[lightweight transactions](lightweight-transactions.md). The rows of a conditional batch
-differ between Cassandra and ScyllaDB. See
+[lightweight transactions](lightweight-transactions.md).
+`session.RunConditionalBatch(ctx, &batch, decoder)` takes a `cql.CASRows`
+decoder and returns `CASBatchRows`: the same rows, plus `Applied`, which
+reports whether the batch applied without you checking every row. It rejects
+a batch whose members are all known not to be conditional, before sending it.
+The rows of a conditional batch differ between Cassandra and ScyllaDB. See
 [Cassandra and ScyllaDB differences](../server-differences.md).
