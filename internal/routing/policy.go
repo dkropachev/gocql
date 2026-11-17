@@ -7,6 +7,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/link"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 
@@ -100,7 +101,7 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (routing2
 	return *NewPartitionKey(PartitionKeyState{chain: c}), e == nil, e
 }
 func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p routing2.TokenPartitioner) (cql.Option[int64], error) {
-	if p == routing2.Murmur3TokenPartitioner {
+	if isMurmur3Partitioner(p) {
 		for _, index := range indexes {
 			if index >= 0 && index < len(cells) && cells[index].State != cql.Present && cells[index].State != cql.Null && cells[index].State != cql.Unset {
 				return cql.Option[int64]{}, cqltype.TypeValidation("partition key", "invalid cell state")
@@ -1015,3 +1016,5 @@ func InternalRoutingLatencySample(err error) bool {
 func preferred(o *routing2.Options, h *HostSnapshot) bool {
 	return h.Enabled && h.Connected && h.Up && (o.Datacenter == "" || h.Datacenter == o.Datacenter) && (o.Rack == "" || h.Rack == o.Rack)
 }
+
+var isMurmur3Partitioner = link.Get[func(routing2.TokenPartitioner) bool](link.IsMurmur3Partitioner)

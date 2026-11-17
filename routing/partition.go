@@ -8,6 +8,7 @@ import (
 	"math"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/link"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -47,6 +48,16 @@ var Murmur3TokenPartitioner TokenPartitioner = murmur3Partitioner{}
 var CDCTokenPartitioner TokenPartitioner = cdcPartitioner{}
 
 type murmur3Partitioner struct{}
+
+// The engine hashes keys of the built-in Murmur3 partitioner itself, without
+// building a PartitionKey; it asks through internal/link whether a
+// partitioner is that one.
+func init() {
+	link.Set(link.IsMurmur3Partitioner, func(p TokenPartitioner) bool {
+		_, ok := p.(murmur3Partitioner)
+		return ok
+	})
+}
 
 func (murmur3Partitioner) Token(k PartitionKey) (int64, error) {
 	var hash murmur.Stream

@@ -166,17 +166,6 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	return s, nil
 }
 
-// newSessionID generates a globally unique identifier for a session.
-//
-// Every connection reports one, so this always returns an id rather than
-// propagating a failure to generate it.
-//
-// The fallback is defensive rather than reachable: RandomUUID reads from
-// crypto/rand, which since Go 1.24 terminates the process instead of
-// returning an error when the system entropy source fails
-// (golang/go#66821). Since RandomUUID's signature still admits an error,
-// handling it costs little and keeps the id unconditional whatever a future
-// implementation does.
 // randomUUID returns a version 4 UUID, or the error of the random source.
 func randomUUID() (cql.UUID, error) {
 	var u cql.UUID
@@ -188,6 +177,17 @@ func randomUUID() (cql.UUID, error) {
 	return u, nil
 }
 
+// newSessionID generates a globally unique identifier for a session.
+//
+// Every connection reports one, so this always returns an id rather than
+// propagating a failure to generate it.
+//
+// The fallback is defensive rather than reachable: RandomUUID reads from
+// crypto/rand, which since Go 1.24 terminates the process instead of
+// returning an error when the system entropy source fails
+// (golang/go#66821). Since RandomUUID's signature still admits an error,
+// handling it costs little and keeps the id unconditional whatever a future
+// implementation does.
 func newSessionID(logger *slog.Logger) string {
 	logger = logging.Or(logger)
 	id, err := randomUUID()

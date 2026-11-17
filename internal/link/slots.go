@@ -129,3 +129,7 @@ var (
 // NewSubscription holds func(events <-chan event.Event, close func())
 // *event.Subscription: package event's handle on a session's subscription.
 var NewSubscription = NewSlot("event.newSubscription")
+
+// IsMurmur3Partitioner holds func(routing.TokenPartitioner) bool: whether a
+// partitioner is routing's built-in Murmur3 one.
+var IsMurmur3Partitioner = NewSlot("routing.isMurmur3Partitioner")
