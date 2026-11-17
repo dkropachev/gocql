@@ -145,7 +145,7 @@ func validateBatch(s *implCluster.Core, batch *Batch) error {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(batch.entries) == 0 {
-		return cqltype.TypeValidation("batch", "batch is empty")
+		return cqltype.TypeValidation("batch", "empty")
 	}
 	if kind := batch.Kind; kind != cqltype.LoggedBatch && kind != cqltype.UnloggedBatch && kind != cqltype.CounterBatch {
 		return cqltype.TypeValidation("batch kind", "unknown kind")
@@ -201,7 +201,7 @@ func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(b.entries) == implCluster.MaxBatchStatements {
-		return cqltype.TypeValidation("batch", "batch is full (65535 statements)")
+		return cqltype.TypeValidation("batch", "full (%d statements)", implCluster.MaxBatchStatements)
 	}
 	if b.session != nil && b.session != s {
 		return cqltype.TypeValidation("batch session", "statements belong to different sessions")

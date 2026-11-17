@@ -89,7 +89,7 @@ Open gaps:
 | Applied | One row, `[applied]` only | One row per statement, in statement order, with previous values |
 | Not applied | One row per CQL row read from the partition, presumably in clustering order (**unverified**), each with `[applied] = false` | One row per statement, in statement order |
 | Not applied, partition absent | One row, `[applied]` only | One row per statement, every column but `[applied]` NULL |
-| Non-conditional members | Not reported separately | One row each, with the batch's `[applied]` and the condition columns of the member's row, NULL when the row does not exist |
+| Non-conditional members | Not reported separately | One row each, with the batch's `[applied]` and the condition columns of the member's row, as for a conditional member |
 | Columns | Primary key, then the union of condition columns in statement order. Every column if any member uses `IF EXISTS` / `IF NOT EXISTS` | Union of the condition columns of all conditional statements |
 
 A batch is applied only when all its conditions hold, so on both servers it was
@@ -97,8 +97,12 @@ applied if and only if every returned row has `[applied] = true`. On ScyllaDB
 every row carries the same batch-wide flag (`cas_request::build_cas_result_set`),
 and the server stops evaluating conditions at the first that fails
 (`cas_request::applies_to`), so there is no per-statement applied flag. What is
-per statement is the previous values: the driver does not parse CQL, so working
-out which condition failed means evaluating it against them in the application.
+per statement is the previous values: the row the statement's condition is
+checked against, which is its clustering row, or the partition's static row
+when that row is absent and the statement is not `IF EXISTS` / `IF NOT EXISTS`
+(`cas_request::find_old_row`); all NULL when neither exists. The driver does
+not parse CQL, so working out which condition failed means evaluating it
+against them in the application.
 
 The rows map to statements only on ScyllaDB. On Cassandra they map to rows of
 the partition.

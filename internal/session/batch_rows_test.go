@@ -46,7 +46,14 @@ func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder codec.Ro
 // newRunBatch returns a session answering every request with rows "a" and
 // "b", and a batch of one member.
 func newRunBatch(t *testing.T) (*Session, *Batch) {
-	s := batchServeSession(t, runtimeRowsBody(nil, "a", "b"))
+	return newServedBatch(t, runtimeRowsBody(nil, "a", "b"))
+}
+
+// newServedBatch returns a session answering every request with a RESULT of
+// body, and a batch of one member.
+func newServedBatch(t testing.TB, body []byte) (*Session, *Batch) {
+	t.Helper()
+	s := batchServeSession(t, body)
 	q := batchTestQuery(t, s)
 	var batch Batch
 	if err := q.AddToBatch(&batch, []byte("v")); err != nil {

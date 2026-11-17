@@ -51,6 +51,7 @@ batch again with the same decoder reuses their storage. See
 [lightweight transactions](lightweight-transactions.md).
 `session.RunConditionalBatch(ctx, &batch, decoder)` takes a `cql.CASRows`
 decoder and returns `CASBatchRows`: the same rows, plus `Applied`, which
-reports whether the batch applied without you checking every row. The rows of a conditional batch
-differ between Cassandra and ScyllaDB. See
+reports whether the batch applied without you checking every row. It rejects
+a batch whose members are all known not to be conditional, before sending it.
+The rows of a conditional batch differ between Cassandra and ScyllaDB. See
 [Cassandra and ScyllaDB differences](../server-differences.md).

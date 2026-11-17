@@ -152,7 +152,9 @@ func (s *Session[D]) RunBatch[R any](ctx context.Context, batch *Batch, decoder 
 // its rows as CASBatchRows, whose Applied reports whether the batch applied.
 // decoder is a cql.CASRows decoder, typically the Rows of a member's
 // statement; it maps the previous values of the columns it names and skips
-// the rest. Options, ownership and reuse are as for RunBatch.
+// the rest. A batch whose members are all known not to be conditional is
+// rejected before it is sent: it has no [applied] to report, so send it with
+// ExecBatch. Options, ownership and reuse are as for RunBatch.
 func (s *Session[D]) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (CASBatchRows[X], error) {
 	var o implSession.CompiledOptions
 	switch len(options) {

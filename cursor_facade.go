@@ -51,8 +51,10 @@ func (r Rows[R]) Info() Result { return (implSession.Rows[R])(r).Info() }
 // Session.RunConditionalBatch. Each row reports whether the batch applied, and
 // Applied reports it over all of them, which is the same rule on Cassandra and
 // ScyllaDB. Which rows the server returns differs: on ScyllaDB row i belongs
-// to statement i and holds its row's previous values, while on Cassandra rows
-// belong to rows of the partition. Ownership and staleness are as for Rows. CASBatchRows must not be used concurrently.
+// to statement i and its Previous holds the row that statement's condition
+// was checked against, while on Cassandra rows belong to rows of the
+// partition. Ownership and staleness are as for Rows. CASBatchRows must not
+// be used concurrently.
 type CASBatchRows[X any] implSession.CASBatchRows[X]
 
 // NextInto decodes the next row into dst, reporting whether one exists.
@@ -62,8 +64,9 @@ func (r CASBatchRows[X]) NextInto(dst *cql.CASResult[X]) bool {
 
 // Applied reports whether the batch applied: whether every row reports it.
 // It reads the rows NextInto has not, so it may be called with or without
-// iterating first. Rows closed before they were read to their end return an
-// error, as do rows whose iteration failed.
+// iterating first. Rows closed before NextInto or Applied reported their end
+// return an error, even if the last row had been read, as do rows whose
+// iteration failed.
 func (r CASBatchRows[X]) Applied() (bool, error) { return (implSession.CASBatchRows[X])(r).Applied() }
 
 // Err returns the terminal iteration error, if any.

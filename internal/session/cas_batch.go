@@ -57,7 +57,8 @@ func (r CASBatchRows[X]) NextInto(dst *codec.CASResult[X]) bool {
 // Applied reports whether the batch applied: on Cassandra and ScyllaDB alike,
 // it applied if and only if every row reports it. It reads the rows NextInto
 // has not, so it can be called without iterating, or after. Rows closed
-// before they were read to their end cannot tell, and return an error.
+// before NextInto or Applied reported their end cannot tell, even when the
+// last row was read, and return an error.
 func (r CASBatchRows[X]) Applied() (bool, error) {
 	if r.tally == nil {
 		return false, cqltype.TypeValidation("CASBatchRows", "zero rows handle")
@@ -65,6 +66,9 @@ func (r CASBatchRows[X]) Applied() (bool, error) {
 	if !r.rows.stale() && !r.tally.done && !r.tally.closed {
 		for r.NextInto(&r.tally.scratch) {
 		}
+		// The scratch row may borrow the response page; drop it.
+		var zero codec.CASResult[X]
+		r.tally.scratch = zero
 	}
 	if err := r.rows.Err(); err != nil {
 		return false, err
@@ -101,13 +105,22 @@ func (r CASBatchRows[X]) Info() model.Result { return r.rows.Info() }
 
 // RunConditionalBatch sends batch as RunBatch does and returns its rows as
 // CASBatchRows, whose Applied reports whether the batch applied. decoder is
-// a CASRows decoder, typically the Rows of a member's statement.
+// a CASRows decoder, typically the Rows of a member's statement. A batch
+// whose members are all known not to be conditional is rejected before it is
+// sent; one of unknown kind that has no condition fails on its result, which
+// has no [applied] column.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder codec.RowDecoder[codec.CASResult[X]], options CompiledOptions) (CASBatchRows[X], error) {
 	if s == nil {
 		return CASBatchRows[X]{}, cqltype.TypeValidation("session", "nil session")
 	}
 	if decoder == nil {
 		return CASBatchRows[X]{}, cqltype.TypeValidation("batch rows", "nil decoder")
+	}
+	// A batch known to hold no condition gets a VOID result, which has no
+	// [applied] to report: reject it before sending, as ExecBatch rejects a
+	// conditional one.
+	if batch != nil && len(batch.entries) > 0 && batch.routing.Kind == cqltype.OrdinaryStatement {
+		return CASBatchRows[X]{}, cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch")
 	}
 	r, rows, err := sendBatchRows(ctx, s.Core(), batch, decoder, options)
 	if err != nil {

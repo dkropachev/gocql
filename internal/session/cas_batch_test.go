@@ -11,6 +11,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -53,12 +54,13 @@ func casRowsBody(rows ...casBatchRow) []byte {
 
 var casBatchDecoder = codec.CASRows(batchRowA)
 
+// newCASBatch returns a session answering every request with a RESULT of
+// body, and a batch of one conditional member.
 func newCASBatch(t testing.TB, body []byte) (*Session, *Batch) {
 	t.Helper()
 	s := batchServeSession(t, body)
-	q := batchTestQuery(t, s)
 	var batch Batch
-	if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+	if err := batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cqltype.ConditionalStatement}, model.EncodedValues{}); err != nil {
 		t.Fatal(err)
 	}
 	return InternalWrapSession(s), &batch
@@ -164,6 +166,44 @@ func TestRunConditionalBatch(t *testing.T) {
 		}
 		if got, err := current.Applied(); err != nil || got {
 			t.Fatalf("current Applied = %v, %v", got, err)
+		}
+	})
+
+	// Reading the last row does not end the rows: only a NextInto that
+	// returns false does. Closing before that cannot tell.
+	t.Run("ClosedAfterLastRow", func(t *testing.T) {
+		session, batch := newCASBatch(t, applied)
+		rows := runCASBatch(t, session, batch)
+		var row codec.CASResult[batchRow]
+		for range 2 {
+			if !rows.NextInto(&row) {
+				t.Fatal(rows.Err())
+			}
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := rows.Applied(); err == nil {
+			t.Fatalf("Applied after Close before the end = %v", got)
+		}
+	})
+
+	// A batch known to have no condition is rejected before it is sent.
+	t.Run("Ordinary", func(t *testing.T) {
+		session, batch := newServedBatch(t, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
+		if _, err := session.RunConditionalBatch(context.Background(), batch, casBatchDecoder, CompiledOptions{}); !hasErrorType[*cqltype.ValidationError](err) {
+			t.Fatalf("ordinary batch: %v", err)
+		}
+		if m := session.Core().Metrics(); m.Requests != 0 {
+			t.Fatalf("a rejected batch counted a request: %+v", m)
+		}
+	})
+
+	// A result without [applied] fails the call: there is nothing to tally.
+	t.Run("NotCAS", func(t *testing.T) {
+		session, batch := newCASBatch(t, runtimeRowsBody(nil, "a"))
+		if _, err := session.RunConditionalBatch(context.Background(), batch, casBatchDecoder, CompiledOptions{}); err == nil {
+			t.Fatal("rows without [applied] were accepted")
 		}
 	})
 
