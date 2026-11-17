@@ -14,30 +14,31 @@ import (
 
 // The package layers of docs/package-layout.md. A package may import only
 // packages of its own layer or of a lower one, with two refinements: layer 1
-// may import layer 0 and internal/link but no other internal package, and
-// layer 0 imports no public package.
+// may import layer 0 but no other internal package, and layer 0 imports no
+// public package. Code outside the library (commands, tests) may import
+// anything; examples are user code and import only the public API.
 const (
 	layerPrimitive  = 0 // internal primitives
 	layerVocabulary = 1 // public types, interfaces and thin logic
 	layerEngine     = 2 // internal engine
 	layerSurface    = 3 // public entry points that wire layer 1 to layer 2
+	layerTool       = 4 // commands and tests outside the library: unchecked
+	layerExample    = 5 // examples: user code, public packages only
 )
 
 const modulePath = "github.com/scylladb/gocql/v2"
 
-var vocabularyPackages = map[string]bool{
-	"auth":     true,
-	"cql":      true,
-	"cqlerr":   true,
-	"endpoint": true,
-	"event":    true,
-	"metadata": true,
-	"metrics":  true,
-	"observe":  true,
-	"retry":    true,
-	"routing":  true,
+// surfacePackages are the public layer-3 packages; every other public
+// package is layer 1.
+var surfacePackages = map[string]bool{
+	"":         true, // the root package, gocql
+	"config":   true,
+	"exec":     true,
+	"cqltrace": true,
 }
 
+// primitivePackages are the internal layer-0 packages; every other internal
+// package is layer 2.
 var primitivePackages = map[string]bool{
 	"internal/crc":          true,
 	"internal/cqlproto":     true,
@@ -55,26 +56,25 @@ var primitivePackages = map[string]bool{
 	"internal/wirecompress": true,
 }
 
-// layerViolations lists the imports that break the layering today. Each
-// entry is "importer -> imported". Remove entries as the code is fixed; the
-// test fails on any violation missing here and on any entry that is no longer
-// a violation.
-var layerViolations = map[string]bool{}
-
-func layerOf(rel string) (int, bool) {
+// layerOf returns the layer of the module package at rel, its path inside the
+// module. Every module package has one, so a new package lands in a layer
+// without being listed: a public one in layer 1, an internal one in layer 2.
+func layerOf(rel string) int {
 	switch {
+	case strings.HasPrefix(rel, "cmd/"), strings.HasPrefix(rel, "tests/"), strings.HasPrefix(rel, "ci/"),
+		strings.HasPrefix(rel, "docs/"), strings.HasPrefix(rel, "internal/testkit"),
+		strings.HasPrefix(rel, "internal/tests"):
+		return layerTool
+	case strings.HasPrefix(rel, "examples/"):
+		return layerExample
 	case primitivePackages[rel]:
-		return layerPrimitive, true
-	case vocabularyPackages[rel]:
-		return layerVocabulary, true
-	case strings.HasPrefix(rel, "internal/testkit"), strings.HasPrefix(rel, "internal/tests"):
-		return 0, false
+		return layerPrimitive
 	case strings.HasPrefix(rel, "internal/"):
-		return layerEngine, true
-	case rel == "", rel == "config", rel == "exec", rel == "scylla", rel == "cqltrace":
-		return layerSurface, true
+		return layerEngine
+	case surfacePackages[rel]:
+		return layerSurface
 	}
-	return 0, false
+	return layerVocabulary
 }
 
 func allowedImport(fromLayer, toLayer int) bool {
@@ -84,11 +84,18 @@ func allowedImport(fromLayer, toLayer int) bool {
 	case layerVocabulary:
 		return toLayer == layerVocabulary || toLayer == layerPrimitive
 	case layerEngine:
-		return toLayer != layerSurface
+		return toLayer != layerSurface && toLayer != layerTool && toLayer != layerExample
+	case layerSurface:
+		return toLayer != layerTool && toLayer != layerExample
+	case layerExample:
+		return toLayer == layerVocabulary || toLayer == layerSurface
 	}
 	return true
 }
 
+// TestPackageLayers checks the imports of every package of the module
+// against the layers. A package's non-test imports must follow them; its
+// tests may also use test helpers.
 func TestPackageLayers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -104,40 +111,25 @@ func TestPackageLayers(t *testing.T) {
 			continue
 		}
 		from = strings.TrimPrefix(from, "/")
-		fromLayer, ok := layerOf(from)
-		if !ok {
-			continue
-		}
+		fromLayer := layerOf(from)
 		for _, imp := range fields[1:] {
 			to, ok := strings.CutPrefix(imp, modulePath)
 			if !ok {
 				continue
 			}
 			to = strings.TrimPrefix(to, "/")
-			toLayer, ok := layerOf(to)
-			if !ok || !allowedImport(fromLayer, toLayer) {
+			if !allowedImport(fromLayer, layerOf(to)) {
 				found[displayPackage(from)+" -> "+displayPackage(to)] = true
 			}
 		}
 	}
-	var unexpected, stale []string
+	violations := make([]string, 0, len(found))
 	for v := range found {
-		if !layerViolations[v] {
-			unexpected = append(unexpected, v)
-		}
+		violations = append(violations, v)
 	}
-	for v := range layerViolations {
-		if !found[v] {
-			stale = append(stale, v)
-		}
-	}
-	sort.Strings(unexpected)
-	sort.Strings(stale)
-	for _, v := range unexpected {
+	sort.Strings(violations)
+	for _, v := range violations {
 		t.Errorf("layer violation: %s (see docs/package-layout.md)", v)
-	}
-	for _, v := range stale {
-		t.Errorf("layerViolations entry is fixed, remove it: %s", v)
 	}
 }
 

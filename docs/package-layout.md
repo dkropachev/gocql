@@ -22,14 +22,21 @@ Packages fall into four layers. A package imports only from its own layer
 
 | Layer | Packages | Holds |
 |---|---|---|
-| 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, and the link registry. Knows nothing about CQL types or the public API. |
+| 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap`, `internal/cqlproto`, `internal/debounce`, `internal/eventbus`, `internal/streams` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, and the link registry. Knows nothing about CQL types or the public API. |
 | 1. Vocabulary (public) | `cql`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
-| 2. Engine (internal) | `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata`, `internal/session`, `internal/tablets` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
+| 2. Engine (internal) | every other `internal/` package, such as `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata` and `internal/session` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
 | 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
 
 Layer-1 packages depend on each other in this order, lowest first: `cql`;
 `cqlerr`; `retry`; `metadata`; `routing`;
 `endpoint`, `auth` and `event`; `observe`. `metrics` depends on nothing.
+A new public package is layer 1 unless it is added to the layer-3 list in
+`layout_test.go`.
+
+Code outside the library is not layered: commands (`cmd/`), tests
+(`tests/`, `internal/testkit`, `internal/tests`) and CI tools may import
+anything. Examples (`examples/`) are user code and import only layers 1
+and 3.
 
 Rules that follow from the table:
 
@@ -71,8 +78,8 @@ two mechanisms, both in the dependency-free `internal/link`:
   `cqlerr` and `metadata` types) have an internal mirror struct with an identical
   layout. The engine converts a pointer to the public type into a pointer to
   its mirror with `unsafe`, at no run-time cost. A test compares the field
-  offsets, sizes and types of each pair, so a layout change fails the build
-  of the tests instead of corrupting memory.
+  offsets, sizes and types of each pair, so a layout change fails that test
+  instead of corrupting memory.
 
 Neither mechanism exports anything: a user sees only the public type and its
 documented methods.
@@ -321,14 +328,17 @@ own module and does not reuse `internal/testkit`.
 ## Enforcement
 
 - `TestPackageLayers` (`layout_test.go`) runs `go list` and fails when a
-  package imports outside its layer. Known violations are listed in the test
-  and may only be removed.
+  package's non-test imports leave its layer. Every module package has a
+  layer, so a new package is checked without being listed, and there is no
+  list of allowed exceptions.
 - `TestPublicAPI` (`api_golden_test.go`) writes every exported name of every
-  public package, with fields and method sets, to `testdata/api.txt`, and
-  fails on any difference. API changes then show up as reviewed diffs; run
-  `go test -run TestPublicAPI -update-api .` after a deliberate change. It
-  also keeps `testdata/internal_aliases.txt`, the public names that still
-  alias internal types, which may only shrink.
+  public package to `testdata/api.txt`: constants with their values, and
+  types with their exported fields (promoted ones included) and method sets.
+  Any difference fails the test, so API changes show up as reviewed diffs;
+  run `go test -run TestPublicAPI -update-api .` after a deliberate change.
+  It fails outright when an internal type appears anywhere in the public
+  API. It describes the default build only: declarations behind build tags
+  are not covered.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
 ## Where the code stands today

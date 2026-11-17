@@ -3,8 +3,8 @@
 
 package link
 
-// The slots, by the public package that fills them. Each comment names the
-// function type the slot holds.
+// The slots, grouped by the API they serve. Each comment names the function
+// type the slot holds, and says who fills it when the engine does.
 var (
 	// ConfigResolve holds func(config.Config) (settings.Config, error).
 	ConfigResolve = NewSlot("config.Config.resolve")
