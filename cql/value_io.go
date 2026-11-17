@@ -264,8 +264,12 @@ func (r ValueReader) Cursor() *ValueCursor {
 	c := r.cursorValue()
 	return &c
 }
-func (r ValueReader) cursorValue() ValueCursor {
-	return ValueCursor{cursor: *wire.NewCursor(r.body), initialized: true, lease: r.lease, initial: r.body.Len(), err: r.err}
+func (r ValueReader) cursorValue() ValueCursor { return cursorFor(&r) }
+
+// cursorFor reads r through a pointer, so a caller holding the reader on its
+// stack does not copy it again.
+func cursorFor(r *ValueReader) ValueCursor {
+	return ValueCursor{cursor: wire.CursorOver(r.body), initialized: true, lease: r.lease, initial: r.body.Len(), err: r.err}
 }
 
 // ValueCursor reads checked network scalars and nested cells across spans. A

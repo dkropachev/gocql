@@ -72,16 +72,50 @@ func requirePresent(r ValueReader) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() != Present {
-		return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %d", r.Type().Kind(), r.State())
+	if r.state != Present {
+		return cellStateError(r)
 	}
-	return checkBytesAlive(r.Bytes())
+	if !r.lease.IsZero() && !r.lease.Alive() {
+		return ErrReleased
+	}
+	return nil
 }
-func fixedCursor(r ValueReader, width int64) (ValueCursor, error) {
-	if r.Bytes().Len() != width {
-		return ValueCursor{}, fmt.Errorf("gocql: %s requires %d bytes, got %d", r.Type().Kind(), width, r.Bytes().Len())
+
+//go:noinline
+func cellStateError(r ValueReader) error {
+	return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %d", r.typ.Kind(), r.state)
+}
+
+// fixedValue loads a contiguous fixed-width body without building a cursor.
+// Callers run after requirePresent, which checked the lease.
+func fixedValue(r ValueReader, width int) (uint64, bool) {
+	data, ok := r.body.Contiguous()
+	if !ok || len(data) != width {
+		return 0, false
 	}
-	return r.cursorValue(), nil
+	switch width {
+	case 1:
+		return uint64(data[0]), true
+	case 2:
+		return uint64(binary.BigEndian.Uint16(data)), true
+	case 4:
+		return uint64(binary.BigEndian.Uint32(data)), true
+	default:
+		return binary.BigEndian.Uint64(data), true
+	}
+}
+
+func fixedCursor(r ValueReader, width int64) (c ValueCursor, err error) {
+	if n := r.body.Len(); n != width {
+		return ValueCursor{}, fixedWidthError(r, width, n)
+	}
+	c = cursorFor(&r)
+	return c, nil
+}
+
+//go:noinline
+func fixedWidthError(r ValueReader, width, got int64) error {
+	return fmt.Errorf("gocql: %s requires %d bytes, got %d", r.typ.Kind(), width, got)
 }
 
 type signedScalar interface {
@@ -170,6 +204,18 @@ func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
 			}
 		},
 		decode: func(r ValueReader) (T, error) {
+			if v, ok := fixedValue(r, int(width)); ok {
+				switch width {
+				case 1:
+					return T(int8(v)), nil
+				case 2:
+					return T(int16(v)), nil
+				case 4:
+					return T(int32(v)), nil
+				default:
+					return T(int64(v)), nil
+				}
+			}
 			c, err := fixedCursor(r, width)
 			if err != nil {
 				return 0, err
@@ -202,6 +248,9 @@ var (
 	Float32Codec Codec[float32] = scalarCodec[float32]{kind: TypeFloat,
 		encode: func(w *ValueWriter, v float32) error { return w.Uint32(math.Float32bits(v)) },
 		decode: func(r ValueReader) (float32, error) {
+			if v, ok := fixedValue(r, 4); ok {
+				return math.Float32frombits(uint32(v)), nil
+			}
 			c, e := fixedCursor(r, 4)
 			if e != nil {
 				return 0, e
@@ -213,6 +262,9 @@ var (
 	Float64Codec Codec[float64] = scalarCodec[float64]{kind: TypeDouble,
 		encode: func(w *ValueWriter, v float64) error { return w.Uint64(math.Float64bits(v)) },
 		decode: func(r ValueReader) (float64, error) {
+			if v, ok := fixedValue(r, 8); ok {
+				return math.Float64frombits(v), nil
+			}
 			c, e := fixedCursor(r, 8)
 			if e != nil {
 				return 0, e
@@ -247,13 +299,17 @@ func encodeBool(w *ValueWriter, v bool) error {
 	return w.Uint8(0)
 }
 func decodeBool(r ValueReader) (bool, error) {
-	c, e := fixedCursor(r, 1)
-	if e != nil {
-		return false, e
-	}
-	v, e := c.Uint8()
-	if e != nil {
-		return false, e
+	v, ok := fixedValue(r, 1)
+	if !ok {
+		c, e := fixedCursor(r, 1)
+		if e != nil {
+			return false, e
+		}
+		b, e := c.Uint8()
+		if e != nil {
+			return false, e
+		}
+		v = uint64(b)
 	}
 	if v > 1 {
 		return false, errors.New("gocql: boolean must be 0 or 1")

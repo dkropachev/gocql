@@ -16,6 +16,9 @@ const nanosecondsPerDay int64 = 24 * 60 * 60 * 1_000_000_000
 var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
 	encode: func(w *ValueWriter, v Date) error { return w.Uint32(uint32(v) ^ 0x80000000) },
 	decode: func(r ValueReader) (Date, error) {
+		if v, ok := fixedValue(r, 4); ok {
+			return Date(int32(uint32(v) ^ 0x80000000)), nil
+		}
 		c, e := fixedCursor(r, 4)
 		if e != nil {
 			return 0, e
@@ -32,13 +35,15 @@ var TimeCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 		return w.Uint64(uint64(v))
 	},
 	decode: func(r ValueReader) (TimeOfDay, error) {
-		c, e := fixedCursor(r, 8)
-		if e != nil {
-			return 0, e
-		}
-		v, e := c.Uint64()
-		if e != nil {
-			return 0, e
+		v, ok := fixedValue(r, 8)
+		if !ok {
+			c, e := fixedCursor(r, 8)
+			if e != nil {
+				return 0, e
+			}
+			if v, e = c.Uint64(); e != nil {
+				return 0, e
+			}
 		}
 		if v >= uint64(nanosecondsPerDay) {
 			return 0, errors.New("gocql: time outside one day")
