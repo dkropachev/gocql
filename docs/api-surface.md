@@ -169,7 +169,8 @@ and no options.
     (`batchRows`), reused once the previous rows are closed, while `R` and
     the decoder stay the same. A warm `RunBatch` allocates only the held-query
     registration that `Prepared.Run` also pays (`TestRunBatchAllocs`).
-    `RunConditionalBatch` keeps its applied tally in the same storage and
+    `RunConditionalBatch` reuses that storage, and the `Batch` keeps the
+    applied tally of its latest one, tied to that storage, so a warm send
     allocates no more (`TestRunConditionalBatchAllocs`).
   - The wire batch of an attempt reuses the batch's item storage. Only a
     concurrent speculative attempt builds its own.

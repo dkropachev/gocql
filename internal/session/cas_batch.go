@@ -12,9 +12,10 @@ import (
 )
 
 // casTally is what a CASBatchRows has learned from the rows read so far. A
-// Batch keeps one per rows storage, owner, and resets it for each
-// RunConditionalBatch, so tracking it allocates nothing once warm and costs
-// RunBatch nothing. scratch is the destination Applied decodes the rows the
+// Batch keeps the tally of its latest RunConditionalBatch, tied to the rows
+// storage owner, and resets it when the next one reuses that storage, so
+// tracking it allocates nothing once warm and costs RunBatch nothing. An
+// earlier handle on other storage keeps its own tally through its pointer. scratch is the destination Applied decodes the rows the
 // caller did not read into.
 type casTally[X any] struct {
 	owner   *batchRows[codec.CASResult[X]]
