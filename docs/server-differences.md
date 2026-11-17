@@ -94,19 +94,22 @@ Open gaps:
 
 A batch is applied only when all its conditions hold, so on both servers it was
 applied if and only if every returned row has `[applied] = true`. On ScyllaDB
-every row carries the same batch-wide flag (`cas_request::build_cas_result_set`),
-and the server stops evaluating conditions at the first that fails
-(`cas_request::applies_to`), so there is no per-statement applied flag. What is
-per statement is the previous values. Row i holds every result column (the
-batch-wide set above) taken from the row ScyllaDB found for statement i
-(`cas_request::find_old_row`): its clustering row if the batch's read
-contains it, and otherwise, unless the statement is `IF EXISTS` /
-`IF NOT EXISTS`, the partition's static row, with the partition key set and
-the clustering columns NULL. Every column but `[applied]` is NULL when no row
-was found. One read serves the whole batch (`cas_request::read_command`): it
-skips the clustering range of a member without a condition, unless its update
-reads the row, and of a member whose conditions are only on static columns,
-so whether such a member's own row is found depends on the other members.
+every row carries the same batch-wide flag
+(`cas_request::build_cas_result_set`), and the server stops evaluating
+conditions at the first that fails (`cas_request::applies_to`), so there is no
+per-statement applied flag. What is per statement is the previous values. Row
+i holds every result column (the batch-wide set above) taken from the row
+ScyllaDB found for statement i (`cas_request::find_old_row`): its clustering
+row if the batch's read contains it, and otherwise, unless the statement is
+`IF EXISTS` / `IF NOT EXISTS`, the partition's static row if the read
+returned one, with the partition key set and the clustering columns NULL. The
+read returns a static row only for a table with static columns whose
+partition it found (`prefetch_data_builder::accept_partition_end`). Every
+column but `[applied]` is NULL when no row was found. One read serves the
+whole batch (`cas_request::read_command`): it skips the clustering range of a
+member whose update does not read the row and that has no condition or only
+conditions on static columns, so whether such a member's own row is found
+depends on the rest of the batch and on the partition.
 The driver does not parse CQL, so working out which condition failed means
 evaluating the conditional members' previous values in the application.
 
@@ -204,13 +207,15 @@ negotiation or metadata does not drop one.
 - ScyllaDB protocol extensions:
   https://github.com/scylladb/scylladb/blob/master/docs/dev/protocol-extensions.md
 - ScyllaDB CAS result sets: `cas_request::read_command`, `applies_to`,
-  `find_old_row` and `build_cas_result_set`, and
-  `batch_statement::build_cas_result_set_metadata`:
+  `find_old_row` and `build_cas_result_set`,
+  `batch_statement::build_cas_result_set_metadata`, and the static-row entry
+  of `prefetch_data_builder::accept_partition_end`:
   https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L60-L80
   https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L100-L112
   https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L124-L155
   https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/cas_request.cc#L157-L215
   https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/statements/batch_statement.cc#L192-L220
+  https://github.com/scylladb/scylladb/blob/3df4785b3e439072c5cb11318f3726bdad47c01a/cql3/update_parameters.cc#L156-L178
 - Cassandra CAS result sets: `ModificationStatement.buildCasResultSet` and
   `buildCasFailureResultSet`, and `BatchStatement.makeCasRequest`, in
   https://github.com/apache/cassandra (trunk)

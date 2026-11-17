@@ -74,7 +74,11 @@ func TestRunConditionalBatchAllocs(t *testing.T) {
 		}
 	}
 	send()
-	if n := testing.AllocsPerRun(50, send); n > baseline {
+	n := testing.AllocsPerRun(50, send)
+	if n > baseline {
 		t.Fatalf("RunConditionalBatch allocates %v times per send, RunBatch %v", n, baseline)
+	}
+	if n > heldQueryAllocs {
+		t.Fatalf("RunConditionalBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
 	}
 }

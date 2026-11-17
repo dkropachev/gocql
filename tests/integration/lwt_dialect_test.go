@@ -113,8 +113,9 @@ func TestLWTDialect(t *testing.T) {
 			for _, u := range updates {
 				require.NoError(t, conditional.AddToBatch(&batch, u))
 			}
-			// An ordinary member gets a row too on ScyllaDB; its row is not
-			// read, so the row has no previous values.
+			// An ordinary member gets a row too on ScyllaDB. The read skips
+			// its row, which no other member covers, and the table has no
+			// static row to fall back to, so it has no previous values.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)

@@ -152,9 +152,10 @@ and no options.
     one outcome test that holds on Cassandra and ScyllaDB alike. A batch
     whose members are all known not to be conditional is rejected before
     it is sent, the mirror of `ExecBatch`'s rule. It is a separate method
-    because a method on `Rows[R]` cannot require `R` to be a `CASResult`. The driver offers no API mapping rows to statements: on
-    ScyllaDB the row counter is the statement index, and on Cassandra rows
-    are partition rows, so the mapping is documented, not computed.
+    because a method on `Rows[R]` cannot require `R` to be a `CASResult`.
+    The driver offers no API mapping rows to statements: on ScyllaDB the
+    row counter is the statement index, and on Cassandra rows are partition
+    rows, so the mapping is documented, not computed.
 - **Options.** As for the shared form: an optional `exec.CompiledOptions`, so the
   send resolves nothing per call. Paging options are ignored, so options
   compiled for statements serve batches too.

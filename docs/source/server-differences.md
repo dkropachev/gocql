@@ -56,10 +56,11 @@ checking conditions at the first that fails. What row `i` adds is `Previous`:
 every result column, read from the row ScyllaDB found for member `i`. That is
 its clustering row if the batch's read contains it, and otherwise, unless the
 member is `IF EXISTS` / `IF NOT EXISTS`, the partition's static row, whose
-clustering columns are NULL. `Previous` is unset when no row was found. The
-read skips members without a condition (unless their update reads the row)
-and members whose conditions are only on static columns, so whether their own
-row is found depends on the rest of the batch. To find the condition that
+clustering columns are NULL. Only a table with static columns has one.
+`Previous` is unset when no row was found. The read skips a member whose
+update does not read the row and that has no condition or only conditions on
+static columns, so whether its own row is found depends on the rest of the
+batch and on the partition. To find the condition that
 failed, compare the conditional members' `Previous` with your conditions.
 Count rows as you read them: the count is the member index. This holds only
 on ScyllaDB; on Cassandra the rows belong to table rows, not statements.
