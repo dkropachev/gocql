@@ -12,8 +12,14 @@ import (
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
+
+// paramWriters reuses parameter writers. The writer is cql's and reached
+// through internal/link, so it escapes to the heap; reusing it keeps binding
+// a statement free of a writer allocation.
+var paramWriters = syncx.NewPool(func() *cql.ParamWriter { return new(cql.ParamWriter) })
 
 func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
@@ -23,12 +29,17 @@ func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns,
 	// Avoid retaining a 4 KiB slab just to frame a small partition key. The builder
 	// allocates larger slabs when an individual encoded scalar needs them.
 	b := wire.NewBuilder(256)
-	writer := codec.NewParamWriter(b, columns, allowUnset)
+	writer := paramWriters.Get()
+	codec.ResetParamWriter(writer, b, columns, allowUnset)
 	codec.SetParamOwnership(writer, owned)
-	if err := plan.Encode(writer, value); err != nil {
-		return model.EncodedValues{}, err
+	err := plan.Encode(writer, value)
+	if err == nil {
+		err = codec.FinishParamWriter(writer)
 	}
-	if err := codec.FinishParamWriter(writer); err != nil {
+	// Drop the builder and columns before the writer goes back to the pool.
+	codec.ResetParamWriter(writer, nil, cql.Columns{}, false)
+	paramWriters.Put(writer)
+	if err != nil {
 		return model.EncodedValues{}, err
 	}
 	framed, err := b.Freeze()
