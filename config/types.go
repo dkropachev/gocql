@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/link"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -115,5 +116,7 @@ func publicProfile(p implSettings.Profile) Profile {
 }
 
 func init() {
-	implSettings.InternalLinkPublic(Config.resolved, internalProfile, publicProfile)
+	link.Set(link.ConfigResolve, Config.resolved)
+	link.Set(link.ProfileToEngine, internalProfile)
+	link.Set(link.ProfileFromEngine, publicProfile)
 }
