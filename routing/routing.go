@@ -11,8 +11,10 @@
 package routing
 
 import (
+	"errors"
 	"sync"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/link"
 	"github.com/scylladb/gocql/v2/metadata"
 )
@@ -65,19 +67,36 @@ func SingleTarget(target metadata.Target, strictShard bool) Policy {
 // NewPlan returns the routes policy would try for a request described by
 // info, given snapshot.
 func NewPlan(policy Policy, info Info, snapshot *metadata.Snapshot) Plan {
-	return link.Get[func(Policy, Info, *metadata.Snapshot) Plan](link.NewPlan)(policy, info, snapshot)
+	newPlan, ok := link.Lookup[func(Policy, Info, *metadata.Snapshot) Plan](link.NewPlan)
+	if !ok {
+		return emptyPlan{}
+	}
+	return newPlan(policy, info, snapshot)
 }
 
 // HostRoutes returns a route to every host of snapshot, to any shard.
 func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
-	return link.Get[func(*metadata.Snapshot) []metadata.Route](link.HostRoutes)(snapshot)
+	hostRoutes, ok := link.Lookup[func(*metadata.Snapshot) []metadata.Route](link.HostRoutes)
+	if !ok {
+		return nil
+	}
+	return hostRoutes(snapshot)
 }
 
 // ReplicaRoutes returns routes to the replicas of the request info describes:
 // to its token's replicas, or to every host when info has no token.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
-	return link.Get[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)(snapshot, info)
+	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
+	if !ok {
+		return nil
+	}
+	return replicaRoutes(snapshot, info)
 }
+
+// emptyPlan is the plan of a program without a session: it has no routes.
+type emptyPlan struct{}
+
+func (emptyPlan) Next() (metadata.Route, bool) { return metadata.Route{}, false }
 
 // builtinPolicy is a policy the session implements. It builds the session's
 // policy on first use, so a policy made during package initialization works
@@ -101,22 +120,47 @@ func init() {
 	})
 }
 
+// policy returns the session's policy, or nil in a program without a
+// session, whose package internal/routing fills link.BuildPolicy.
 func (b *builtinPolicy) policy() Policy {
-	b.once.Do(func() {
-		build := link.Get[func(single bool, options Options, target metadata.Target, strict bool) Policy](link.BuildPolicy)
-		b.impl = build(b.single, b.options, b.target, b.strict)
-	})
+	build, ok := link.Lookup[func(single bool, options Options, target metadata.Target, strict bool) Policy](link.BuildPolicy)
+	if !ok {
+		return nil
+	}
+	b.once.Do(func() { b.impl = build(b.single, b.options, b.target, b.strict) })
 	return b.impl
 }
 
-func (b *builtinPolicy) Validate(m *metadata.Snapshot) error { return b.policy().Validate(m) }
+// errNoSession is what a built-in policy reports in a program without a
+// session.
+var errNoSession = &cql.ValidationError{Field: "routing", Err: errors.New("the built-in policies need a session")}
+
+func (b *builtinPolicy) Validate(m *metadata.Snapshot) error {
+	p := b.policy()
+	if p == nil {
+		return errNoSession
+	}
+	return p.Validate(m)
+}
 
 func (b *builtinPolicy) Pick(info Info, m *metadata.Snapshot) (metadata.Route, bool) {
-	return b.policy().Pick(info, m)
+	p := b.policy()
+	if p == nil {
+		return metadata.Route{}, false
+	}
+	return p.Pick(info, m)
 }
 
 func (b *builtinPolicy) Fallback(info Info, m *metadata.Snapshot) Plan {
-	return b.policy().Fallback(info, m)
+	p := b.policy()
+	if p == nil {
+		return emptyPlan{}
+	}
+	return p.Fallback(info, m)
 }
 
-func (b *builtinPolicy) Observe(e AttemptEvent) { b.policy().Observe(e) }
+func (b *builtinPolicy) Observe(e AttemptEvent) {
+	if p := b.policy(); p != nil {
+		p.Observe(e)
+	}
+}

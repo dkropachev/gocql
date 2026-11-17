@@ -51,3 +51,13 @@ func Get[F any](s *Slot) F {
 	}
 	return f
 }
+
+// Lookup returns the function in s and true, or false when s is empty: the
+// package that fills s is not part of the program.
+func Lookup[F any](s *Slot) (F, bool) {
+	if s.fn == nil {
+		var zero F
+		return zero, false
+	}
+	return Get[F](s), true
+}

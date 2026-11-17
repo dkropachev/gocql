@@ -62,12 +62,13 @@ two mechanisms, both in the dependency-free `internal/link`:
 - **Hooks, for behavior.** A public package registers unexported functions
   (constructors, accessors, plan compilers) in `init`, and the engine calls
   them through `internal/link`. A hook is looked up when it is called, never
-  during a user's package initialization, so a public function that needs one
-  runs only after a `Session` exists or fails cleanly when the hook is
-  missing.
+  during a user's package initialization, and a public function that needs
+  one returns an empty result or an error, never panics, when the program
+  links no session.
 - **Layout mirrors, for hot representations.** Value types read on every
-  request (`cql.Bytes`, `Text`, `Varint`, `Columns`, `DataType`, `PageState`,
-  `routing.PartitionKey`) have an internal mirror struct with an identical
+  request (`cql.Bytes`, `Columns`, `DataType`, `PageState`,
+  `metadata.Route`, `routing.PartitionKey`, and the state of some
+  `cqlerr` and `metadata` types) have an internal mirror struct with an identical
   layout. The engine converts a pointer to the public type into a pointer to
   its mirror with `unsafe`, at no run-time cost. A test compares the field
   offsets, sizes and types of each pair, so a layout change fails the build

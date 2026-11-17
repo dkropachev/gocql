@@ -17,6 +17,12 @@ func TestSlot(t *testing.T) {
 	}
 	assertPanics(t, "holds", func() { Get[func(string) int](s) })
 	assertPanics(t, "registered twice", func() { Set(s, func(v int) int { return v }) })
+	if f, ok := Lookup[func(int) int](s); !ok || f(1) != 2 {
+		t.Fatal("Lookup misses a filled slot")
+	}
+	if _, ok := Lookup[func(int) int](NewSlot("test.empty")); ok {
+		t.Fatal("Lookup found an empty slot")
+	}
 }
 
 func assertPanics(t *testing.T, want string, fn func()) {

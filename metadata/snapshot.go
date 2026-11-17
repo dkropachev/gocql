@@ -4,6 +4,8 @@
 package metadata
 
 import (
+	"errors"
+
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/link"
 )
@@ -38,17 +40,35 @@ func init() {
 
 // Generation identifies the snapshot: a later snapshot of the same session
 // has a greater generation.
-func (s *Snapshot) Generation() uint64 { return s.src.Generation() }
+func (s *Snapshot) Generation() uint64 {
+	if s.empty() {
+		return 0
+	}
+	return s.src.Generation()
+}
 
 // Hosts returns the hosts of the cluster the session knows of.
-func (s *Snapshot) Hosts() []HostSnapshot { return s.src.Hosts() }
+func (s *Snapshot) Hosts() []HostSnapshot {
+	if s.empty() {
+		return nil
+	}
+	return s.src.Hosts()
+}
 
 // Keyspace returns the schema of the named keyspace, as far as Mode loads it.
-func (s *Snapshot) Keyspace(name string) (*Keyspace, bool) { return s.src.Keyspace(name) }
+func (s *Snapshot) Keyspace(name string) (*Keyspace, bool) {
+	if s.empty() {
+		return nil, false
+	}
+	return s.src.Keyspace(name)
+}
 
 // Replicas returns the replicas of token in keyspace.table, from the token
 // ring or, for a tablet table, from its tablets.
 func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
+	if s.empty() {
+		return nil, errNoSnapshot
+	}
 	return s.src.Replicas(keyspace, table, token)
 }
 
@@ -59,14 +79,33 @@ func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, erro
 // needs loaded schema metadata; a key of the wrong arity or type, or a null
 // component, is a validation error.
 func (s *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
+	if s.empty() {
+		return 0, errNoSnapshot
+	}
 	return s.src.Token(keyspace, table, key...)
 }
 
 // TokenRanges returns the token ranges of keyspace.table with their replicas.
 func (s *Snapshot) TokenRanges(keyspace, table string) ([]TokenRange, error) {
+	if s.empty() {
+		return nil, errNoSnapshot
+	}
 	return s.src.TokenRanges(keyspace, table)
 }
 
 // Diagnostics returns the errors that made the snapshot incomplete, such as a
 // schema table that failed to load.
-func (s *Snapshot) Diagnostics() []error { return s.src.Diagnostics() }
+func (s *Snapshot) Diagnostics() []error {
+	if s.empty() {
+		return nil
+	}
+	return s.src.Diagnostics()
+}
+
+// errNoSnapshot is the error of a nil or zero Snapshot, which knows no
+// cluster.
+var errNoSnapshot = &cql.ValidationError{Field: "metadata", Err: errors.New("empty snapshot")}
+
+// empty reports whether s is nil or the zero Snapshot, which a session never
+// returns.
+func (s *Snapshot) empty() bool { return s == nil || s.src == nil }
