@@ -18,7 +18,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -34,7 +34,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 	if err := s.AwaitSchemaAgreement(ctx); err != nil {
 		t.Fatal("namespace observation schema agreement", err)
 	}
-	value, err := dynamic.Text(namespace)
+	value, err := cql.TextValue(namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var row dynamic.Row
+	var row cql.DynamicRow
 	present := rows.NextInto(&row)
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)

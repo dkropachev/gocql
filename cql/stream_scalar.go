@@ -247,6 +247,8 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 	return r.RequireEnd()
 }
 
+// StreamDecimalValue is a decimal decoded into caller storage: the unscaled
+// two's-complement big-endian integer and the scale.
 type StreamDecimalValue struct {
 	Unscaled []byte
 	Scale    int32
@@ -301,6 +303,7 @@ type streamNullablePlan[T any] struct {
 	typ  DataType
 }
 
+// StreamNullable preserves NULL while decoding valid values into caller storage with base.
 func StreamNullable[T any](base StreamDecoder[T]) StreamDecoder[Nullable[T]] {
 	return streamNullableCodec[T]{base}
 }
@@ -347,7 +350,8 @@ type streamEmptyPlan[T any] struct {
 	typ  DataType
 }
 
-func EmptyStream[T any](base StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
+// StreamEmpty adds empty-cell decoding to base while preserving caller buffer capacity.
+func StreamEmpty[T any](base StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
 	return streamEmptyCodec[T]{base}
 }
 func (c streamEmptyCodec[T]) Compile(t DataType) (StreamValuePlan[EmptyValueOf[T]], error) {

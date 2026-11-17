@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -193,7 +192,7 @@ func streamDecode(t *testing.T, cols cql.Columns, rows cql.StreamRowDecoder[Stre
 // by reflection.
 func reflectStreamDecode(t *testing.T, cols cql.Columns, data []byte) StreamFixture {
 	t.Helper()
-	rows, err := stream.RowOf[reflectedStreamFixture]()
+	rows, err := cql.StreamRowOf[reflectedStreamFixture]()
 	if err != nil {
 		t.Fatal(err)
 	}

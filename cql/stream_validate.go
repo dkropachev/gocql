@@ -222,6 +222,8 @@ func (r *StreamValueReader) failIf(err error) error {
 	return nil
 }
 
+// StreamEncodedValue is a validated cell of any type decoded into caller storage:
+// its type, state and body bytes.
 type StreamEncodedValue struct {
 	Type  DataType
 	Bytes []byte
@@ -230,6 +232,8 @@ type StreamEncodedValue struct {
 type streamEncodedCodec struct{}
 type streamEncodedPlan struct{ validation *streamValidationPlan }
 
+// StreamEncoded decodes a cell of any type, validated against its metadata,
+// into an EncodedValue.
 var StreamEncoded StreamDecoder[StreamEncodedValue] = streamEncodedCodec{}
 
 func (streamEncodedCodec) Compile(t DataType) (StreamValuePlan[StreamEncodedValue], error) {

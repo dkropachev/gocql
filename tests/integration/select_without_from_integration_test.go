@@ -12,7 +12,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -82,7 +81,7 @@ func createSessionWithoutKeyspace(t testing.TB) *gocql.Session[testDialect] {
 	}
 	return session
 }
-func noFromOne(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) dynamic.Row {
+func noFromOne(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.DynamicRow {
 	t.Helper()
 	row, err := v2ReadOne(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -90,7 +89,7 @@ func noFromOne(t testing.TB, s *gocql.Session[testDialect], stmt string, values 
 	}
 	return row
 }
-func noFromValue(t testing.TB, row dynamic.Row, index int) dynamic.Value {
+func noFromValue(t testing.TB, row cql.DynamicRow, index int) cql.Value {
 	t.Helper()
 	value, err := row.At(index)
 	if err != nil {
@@ -98,7 +97,7 @@ func noFromValue(t testing.TB, row dynamic.Row, index int) dynamic.Value {
 	}
 	return value
 }
-func noFromInt(t testing.TB, row dynamic.Row, index int) int64 {
+func noFromInt(t testing.TB, row cql.DynamicRow, index int) int64 {
 	t.Helper()
 	n, err := noFromValue(t, row, index).Signed()
 	if err != nil {
@@ -106,7 +105,7 @@ func noFromInt(t testing.TB, row dynamic.Row, index int) int64 {
 	}
 	return n
 }
-func noFromText(t testing.TB, row dynamic.Row, index int) string {
+func noFromText(t testing.TB, row cql.DynamicRow, index int) string {
 	t.Helper()
 	value, err := noFromValue(t, row, index).Text()
 	if err != nil {
@@ -114,7 +113,7 @@ func noFromText(t testing.TB, row dynamic.Row, index int) string {
 	}
 	return value.String()
 }
-func noFromRows(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...dynamic.Value) gocql.Rows[dynamic.Row] {
+func noFromRows(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) gocql.Rows[cql.DynamicRow] {
 	t.Helper()
 	rows, err := v2Query(context.Background(), s, stmt, values...)
 	if err != nil {

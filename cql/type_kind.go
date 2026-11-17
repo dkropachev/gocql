@@ -7,64 +7,39 @@ import (
 	"fmt"
 )
 
-// String returns a human readable name for the Cassandra datatype
-// described by t.
-// Type is the identifier of a Cassandra internal datatype.
+// Type is the kind of a CQL data type, as the native protocol numbers it.
 type Type int
 
-const TypeCustom Type = 0x0000
-
-const TypeAscii Type = 0x0001
-
-const TypeBigInt Type = 0x0002
-
-const TypeBlob Type = 0x0003
-
-const TypeBoolean Type = 0x0004
-
-const TypeCounter Type = 0x0005
-
-const TypeDecimal Type = 0x0006
-
-const TypeDouble Type = 0x0007
-
-const TypeFloat Type = 0x0008
-
-const TypeInt Type = 0x0009
-
-const TypeText Type = 0x000A
-
-const TypeTimestamp Type = 0x000B
-
-const TypeUUID Type = 0x000C
-
-const TypeVarchar Type = 0x000D
-
-const TypeVarint Type = 0x000E
-
-const TypeTimeUUID Type = 0x000F
-
-const TypeInet Type = 0x0010
-
-const TypeDate Type = 0x0011
-
-const TypeTime Type = 0x0012
-
-const TypeSmallInt Type = 0x0013
-
-const TypeTinyInt Type = 0x0014
-
-const TypeDuration Type = 0x0015
-
-const TypeList Type = 0x0020
-
-const TypeMap Type = 0x0021
-
-const TypeSet Type = 0x0022
-
-const TypeUDT Type = 0x0030
-
-const TypeTuple Type = 0x0031
+// The kinds of CQL data types.
+const (
+	TypeCustom    Type = 0x0000
+	TypeAscii     Type = 0x0001
+	TypeBigInt    Type = 0x0002
+	TypeBlob      Type = 0x0003
+	TypeBoolean   Type = 0x0004
+	TypeCounter   Type = 0x0005
+	TypeDecimal   Type = 0x0006
+	TypeDouble    Type = 0x0007
+	TypeFloat     Type = 0x0008
+	TypeInt       Type = 0x0009
+	TypeText      Type = 0x000A
+	TypeTimestamp Type = 0x000B
+	TypeUUID      Type = 0x000C
+	TypeVarchar   Type = 0x000D
+	TypeVarint    Type = 0x000E
+	TypeTimeUUID  Type = 0x000F
+	TypeInet      Type = 0x0010
+	TypeDate      Type = 0x0011
+	TypeTime      Type = 0x0012
+	TypeSmallInt  Type = 0x0013
+	TypeTinyInt   Type = 0x0014
+	TypeDuration  Type = 0x0015
+	TypeList      Type = 0x0020
+	TypeMap       Type = 0x0021
+	TypeSet       Type = 0x0022
+	TypeUDT       Type = 0x0030
+	TypeTuple     Type = 0x0031
+)
 
 // String returns the name of the identifier.
 func (t Type) String() string {

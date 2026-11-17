@@ -40,7 +40,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/retry"
@@ -64,7 +63,7 @@ func TestBatch(t *testing.T) {
 			cassandraAdd(t, batch, prepared, ClusteredKeyValue{4000, 5000, "bar"})
 			cassandraBatch(t, session, batch, exec.Options{})
 			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id,cluster,value FROM %s WHERE id=? AND cluster=?", table), exec.PrepareOptions{})
-			row := cassandraReadOne(t, session, read, []dynamic.Value{dynamic.Int(4000), dynamic.Int(5000)}, exec.Options{})
+			row := cassandraReadOne(t, session, read, []cql.Value{cql.IntValue(4000), cql.IntValue(5000)}, exec.Options{})
 			require.Equal(t, "bar", cassandraText(t, row, "value"))
 			require.Equal(t, int64(4000), cassandraInt(t, row, "id"))
 			require.Equal(t, int64(5000), cassandraInt(t, row, "cluster"))
@@ -81,7 +80,7 @@ func TestBatch(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
 			stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			for _, values := range [][]dynamic.Value{{dynamic.Int(1), dynamic.Int(1), dynamic.Unset(codecTestMust(dynamic.Text("")).Type())}, {dynamic.Int(1), dynamic.Unset(dynamic.Int(0).Type()), codecTestMust(dynamic.Text(""))}, {dynamic.Int(2), dynamic.Int(2), dynamic.Unset(codecTestMust(dynamic.Text("")).Type())}} {
+			for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetValue(codecTestMust(cql.TextValue("")).Type())}, {cql.IntValue(1), cql.UnsetValue(cql.IntValue(0).Type()), codecTestMust(cql.TextValue(""))}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetValue(codecTestMust(cql.TextValue("")).Type())}} {
 				cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), values)
 			}
 			info := cassandraBatch(t, session, batch, exec.Options{})
@@ -128,8 +127,8 @@ func TestBatch(t *testing.T) {
 			require.Zero(t, (gocql.Result{}).Latency)
 			for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
 				batch := &gocql.Batch{Kind: kind}
-				cassandraAdd(t, batch, insert, []dynamic.Value{dynamic.Int(1)})
-				cassandraAdd(t, batch, insert, []dynamic.Value{dynamic.Int(2)})
+				cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1)})
+				cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(2)})
 				require.Equal(t, 2, batch.Len())
 				result, err := session.ExecBatch(ctx, batch, bindOptions(session, options))
 				require.NoError(t, err)
@@ -145,7 +144,7 @@ func TestBatch(t *testing.T) {
 				require.Len(t, request.BatchStatements, 2)
 			}
 			for _, id := range []int32{1, 2} {
-				row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), dynamic.Int(id))
+				row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(id))
 				require.NoError(t, err)
 				require.Equal(t, int64(id), sessionTestInt(t, row, "id"))
 			}
@@ -167,7 +166,7 @@ func TestBatch(t *testing.T) {
 			query := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
 			fullQuery := strings.Join([]string{begin, query, end}, "\n")
 			prepared := cassandraWritePrepared(t, session, fullQuery, exec.PrepareOptions{})
-			if _, err := prepared.Exec(context.Background(), []dynamic.Value{dynamic.Int(5)}, bindOptions(session, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.Quorum, Set: true}})); err != nil {
+			if _, err := prepared.Exec(context.Background(), []cql.Value{cql.IntValue(5)}, bindOptions(session, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.Quorum, Set: true}})); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -197,11 +196,11 @@ func TestBatch(t *testing.T) {
 			// the batch itself rather than a preceding PREPARE operation.
 			inet := cql.InetType
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			require.NoError(t, session.UnpreparedAddToBatch(batch, cql.Statement[[]dynamic.Value, cql.EmptyRow]{
+			require.NoError(t, session.UnpreparedAddToBatch(batch, cql.Statement[[]cql.Value, cql.EmptyRow]{
 				CQL:    fmt.Sprintf(("SELECT * FROM " + fixtureKeyspace("") + ".%s WHERE id=2 AND val=?"), table),
-				Params: dynamic.Params, Rows: cql.EmptyRowDecoder,
+				Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder,
 				BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "val", Type: inet}),
-			}, []dynamic.Value{dynamic.Null(inet)}))
+			}, []cql.Value{cql.NullValue(inet)}))
 			_, err := session.ExecBatch(ctx, batch)
 			require.Error(t, err, "expected to get error for invalid query in batch")
 			var server cqlerr.ServerError
@@ -219,9 +218,9 @@ func TestBatch(t *testing.T) {
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
 			before := session.Metrics()
 			for range 65535 {
-				cassandraAdd(t, batch, prepared, []dynamic.Value{dynamic.Int(1)})
+				cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(1)})
 			}
-			err := prepared.AddToBatch(batch, []dynamic.Value{dynamic.Int(1)})
+			err := prepared.AddToBatch(batch, []cql.Value{cql.IntValue(1)})
 			require.Error(t, err, "the statement past the limit must be refused when added")
 			require.Contains(t, err.Error(), "65535")
 			require.Equal(t, before.Requests, session.Metrics().Requests, "oversized batches must be rejected before submission")
@@ -255,18 +254,18 @@ func TestBatch(t *testing.T) {
 			require.NoError(t, v2CreateTable(ctx, session, "CREATE TABLE IF NOT EXISTS "+keyspace+".batch_keyspace(id int, value text, PRIMARY KEY (id))"))
 			// Explicit prepare keyspace and execution keyspace must agree. Unqualified
 			// member CQL still exercises the v5 BATCH keyspace flag.
-			prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: dynamic.Params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{Keyspace: keyspace})
+			prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{Keyspace: keyspace})
 			require.NoError(t, err)
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, prepared, []dynamic.Value{dynamic.Int(1), codecTestMust(dynamic.Text("val1"))})
-			cassandraAdd(t, batch, prepared, []dynamic.Value{dynamic.Int(2), codecTestMust(dynamic.Text("val2"))})
+			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val1"))})
+			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(2), codecTestMust(cql.TextValue("val2"))})
 			_, err = session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Keyspace: keyspace}))
 			require.NoError(t, err)
 			rows, err := v2Query(ctx, session, "SELECT id, value FROM "+keyspace+".batch_keyspace")
 			require.NoError(t, err)
 			defer rows.Close()
 			got := map[int64]string{}
-			var row dynamic.Row
+			var row cql.DynamicRow
 			for rows.NextInto(&row) {
 				value, err := row.Get("value")
 				require.NoError(t, err)
@@ -288,7 +287,7 @@ func TestBatch(t *testing.T) {
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s (id int primary key, val text)`, table)))
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id, val) VALUES (?, ?) USING TTL 20", table), exec.PrepareOptions{}), []dynamic.Value{dynamic.Int(1), codecTestMust(dynamic.Text("val"))})
+			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id, val) VALUES (?, ?) USING TTL 20", table), exec.PrepareOptions{}), []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val"))})
 			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{NowInSeconds: cql.Option[int32]{Value: 0, Set: true}}))
 			require.NoError(t, err)
 
@@ -313,12 +312,12 @@ func TestBatch(t *testing.T) {
 			micros := time.Now().UnixMicro() - 1000
 			insert := cassandraWritePrepared(t, session, fmt.Sprintf(("INSERT INTO "+fixtureKeyspace("")+".%s (id, val) VALUES (?, ?)"), table), exec.PrepareOptions{})
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, insert, []dynamic.Value{dynamic.Int(1), codecTestMust(dynamic.Text("val"))})
-			cassandraAdd(t, batch, insert, []dynamic.Value{dynamic.Int(2), codecTestMust(dynamic.Text("val"))})
+			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val"))})
+			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(2), codecTestMust(cql.TextValue("val"))})
 			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Timestamp: cql.Option[int64]{Value: micros, Set: true}}))
 			require.NoError(t, err)
 			for _, id := range []int32{1, 2} {
-				row, err := v2ReadOne(ctx, session, fmt.Sprintf((`SELECT writetime(val) AS written FROM `+fixtureKeyspace("")+`.%s WHERE id = ?`), table), dynamic.Int(id))
+				row, err := v2ReadOne(ctx, session, fmt.Sprintf((`SELECT writetime(val) AS written FROM `+fixtureKeyspace("")+`.%s WHERE id = ?`), table), cql.IntValue(id))
 				require.NoError(t, err)
 				require.Equal(t, micros, sessionTestInt(t, row, "written"))
 			}
@@ -334,7 +333,7 @@ func TestBatch(t *testing.T) {
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 		batch := &gocql.Batch{Kind: cql.LoggedBatch}
 		for _, id := range []int32{1, 2} {
-			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), exec.PrepareOptions{}), []dynamic.Value{dynamic.Int(id)})
+			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), exec.PrepareOptions{}), []cql.Value{cql.IntValue(id)})
 		}
 		info := cassandraBatch(t, session, batch, exec.Options{})
 		require.Positive(t, info.Attempts)

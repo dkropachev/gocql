@@ -31,12 +31,19 @@ type streamSequencePlan[T any] struct {
 	width        int64
 }
 
+// StreamList decodes a list into seeded slice slots using child. Seed each nested buffer too.
+// NULL decodes as an empty slice while preserving capacity; Nullable preserves NULL.
 func StreamList[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeList, element: child}
 }
+
+// StreamSet decodes a set into seeded slice slots using child, preserving server order.
+// NULL decodes as an empty slice while preserving capacity; Nullable preserves NULL.
 func StreamSet[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeSet, element: child}
 }
+
+// StreamVector decodes a vector into seeded slice storage using child.
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeCustom, element: child}
 }
@@ -134,6 +141,8 @@ type streamMapPlan[K, V any] struct {
 	keyValidation, valueValidation *streamValidationPlan
 }
 
+// StreamMap decodes a map into seeded entry slots using key and value decoders.
+// NULL decodes as an empty slice while preserving capacity; Nullable preserves NULL.
 func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return streamMapCodec[K, V]{key, value}
 }

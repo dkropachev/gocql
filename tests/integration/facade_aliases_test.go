@@ -14,7 +14,6 @@ import (
 	"github.com/scylladb/gocql/v2/exec"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	binding "github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 
@@ -92,7 +91,7 @@ func getV2CreateStatements(a0 context.Context, a1 implMetadata.Source, a2 string
 
 type driverConn = implTransport.Conn
 
-func decodeStreamRow[R any](a0 *streamResponse, a1 stream.RowPlan[R], a2 *R) (bool, error) {
+func decodeStreamRow[R any](a0 *streamResponse, a1 cql.StreamRowPlan[R], a2 *R) (bool, error) {
 	return implTransport.InternalDecodeStreamRow[R](a0, a1, a2)
 }
 

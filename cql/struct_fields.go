@@ -121,14 +121,14 @@ func fieldColumn[R, V any](dec Decoder[V]) func(string, uintptr) OutputField[R] 
 	}
 }
 
-// StructOption configures ParamsOf, RowOf and stream.RowOf. Each option
+// StructOption configures ParamsOf, RowOf and cql.StreamRowOf. Each option
 // affects only some of them, and the others ignore it:
 //
-//   - WithCodec: ParamsOf and RowOf. stream.RowOf decodes with stream
-//     decoders, so it ignores WithCodec; use stream.WithCodec.
-//   - stream.WithCodec: stream.RowOf only.
+//   - WithCodec: ParamsOf and RowOf. cql.StreamRowOf decodes with stream
+//     decoders, so it ignores WithCodec; use cql.WithStreamCodec.
+//   - cql.WithStreamCodec: cql.StreamRowOf only.
 //   - ReuseBuffers: RowOf only. ParamsOf has no destination, and
-//     stream.RowOf always reuses its slice storage.
+//     cql.StreamRowOf always reuses its slice storage.
 //
 // Each call builds an independent mapping; options never change a generated
 // mapping in place.
@@ -155,11 +155,11 @@ func (o codecOption[P, V]) apply(c *structConfig[P]) {
 // with no built-in codec, such as a UDT, or a replacement for V's default.
 // Recognized built-in codec tags take precedence. The option also applies to
 // generated mappings; other generated custom-expression codecs remain defaults.
-// It affects ParamsOf and RowOf; stream.RowOf ignores it.
+// It affects ParamsOf and RowOf; cql.StreamRowOf ignores it.
 func WithCodec[P, V any](codec Codec[V]) StructOption[P] { return codecOption[P, V]{codec: codec} }
 
 // structFields is a struct's buffered mapping as cmd/cqlgen generates it
-// (StructFields), or as stream.RowOf generates it (StreamColumns).
+// (StructFields), or as cql.StreamRowOf generates it (StreamColumns).
 type structFields[P any] struct {
 	Params        []InputField[P]
 	Columns       []OutputField[P]
@@ -324,7 +324,7 @@ func (reuseBuffersOption[P]) apply(c *structConfig[P]) { c.reuseBuffers = true }
 // []byte and lists, between rows decoded into the same destination, as
 // RowInto does. The next row overwrites that storage, so copy a field that
 // must outlive its row. Other fields, maps included, are zeroed as usual.
-// It affects RowOf only: ParamsOf has no destination, and stream.RowOf
+// It affects RowOf only: ParamsOf has no destination, and cql.StreamRowOf
 // always reuses slice storage.
 func ReuseBuffers[P any]() StructOption[P] { return reuseBuffersOption[P]{} }
 
@@ -519,7 +519,7 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
 	add(streamBuiltin[P](StreamInet, "netip.Addr", "Inet", true)...)
 	add(streamBuiltin[P](StreamCounter, "cql.Counter", "Counter", true)...)
-	add(streamBuiltin[P](StreamDecimal, "stream.DecimalValue", "Decimal", true)...)
+	add(streamBuiltin[P](StreamDecimal, "cql.StreamDecimalValue", "Decimal", true)...)
 	add(streamBuiltin[P](StreamDate, "cql.Date", "Date", true)...)
 	add(streamBuiltin[P](StreamTime, "cql.TimeOfDay", "Time", true)...)
 	add(streamBuiltin[P](StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
@@ -535,17 +535,17 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
 		}}
 	}
-	src := "stream." + name
+	src := "cql.Stream" + name
 	return []streamBuiltinField[P]{
 		entry(reflect.TypeFor[V](), typeSrc, src, []string{name}, def, fieldStreamColumn[P](dec)),
-		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "stream.Nullable("+src+")",
+		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",
 			[]string{name}, def, fieldStreamColumn[P](StreamNullable(dec))),
 		// A list or set takes its element's default decoder.
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.List("+src+")",
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
 			[]string{"List"}, def, fieldStreamColumn[P](StreamList(dec))),
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.Set("+src+")",
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSet("+src+")",
 			[]string{"Set"}, false, fieldStreamColumn[P](StreamSet(dec))),
-		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "stream.Vector("+src+")",
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",
 			[]string{"Vector"}, false, fieldStreamColumn[P](StreamVector(dec))),
 	}
 }
@@ -575,15 +575,17 @@ func (o streamCodecOption[P, V]) apply(c *structConfig[P]) {
 	c.streams[reflect.TypeFor[[]V]()] = streamBuiltinField[P]{column: fieldStreamColumn[P](StreamList(o.decoder))}
 }
 
-// WithStreamCodec maps P's fields of type V, Nullable[V] and []V (as a list)
-// with decoder in StreamRowOf, like WithCodec does for ParamsOf and RowOf.
+// WithStreamCodec maps P's fields of type V, cql.Nullable[V] and []V (as a list)
+// with decoder in RowOf. Recognized built-in stream tags take precedence,
+// including in generated mappings. It affects RowOf only; cql.ParamsOf and
+// cql.RowOf ignore it.
 func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 	return streamCodecOption[P, V]{decoder: decoder}
 }
 
 // GeneratedStreamRow decodes streamed rows with the generated stream
 // columns, with opts applied to them, or reflects R when columns is nil.
-func GeneratedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+func generatedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	fields := structFields[R]{StreamColumns: columns}
 	if fields.StreamColumns == nil {
 		return reflectStreamRow(opts...)
@@ -612,7 +614,7 @@ func reflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], erro
 	builtins := streamBuiltinFields[R]()
 	var columns []StreamOutputField[R]
 	err = eachStructField(t, func(sf reflect.StructField, tag structmap.FieldTag) error {
-		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "stream.WithCodec")
+		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "cql.WithStreamCodec")
 		if err == nil {
 			columns = append(columns, entry.column(tag.Column, sf.Offset))
 		}

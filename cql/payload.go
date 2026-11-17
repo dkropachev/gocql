@@ -3,6 +3,8 @@
 
 package cql
 
+// PayloadEntry is one entry of a custom payload: a name and an optional value
+// the server or an extension attaches to a request or a response.
 type PayloadEntry struct {
 	Key   string
 	Value Nullable[Bytes]

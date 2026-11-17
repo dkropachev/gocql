@@ -19,7 +19,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -291,8 +290,8 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 // v2Exec, v2Query and v2ReadOne accept only explicitly typed dynamic values.
 // Statements with values are prepared; v2Exec and v2ReadOne run statements
 // without values unprepared.
-func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}
+func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Result, error) {
+	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	if len(values) == 0 {
 		return session.UnpreparedExec(ctx, statement, values)
 	}
@@ -304,21 +303,21 @@ func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt strin
 }
 
 // v2Query prepares stmt, because only prepared statements return a cursor.
-func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
-	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {
-		return gocql.Rows[dynamic.Row]{}, err
+		return gocql.Rows[cql.DynamicRow]{}, err
 	}
 	return prepared.Run(ctx, values)
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (dynamic.Row, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
 	if len(values) == 0 {
-		statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
-		var row, cur dynamic.Row
+		statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
+		var row, cur cql.DynamicRow
 		count := 0
-		if _, err := session.UnpreparedEach(ctx, statement, values, &cur, func(r *dynamic.Row) error {
+		if _, err := session.UnpreparedEach(ctx, statement, values, &cur, func(r *cql.DynamicRow) error {
 			count++
 			if count > 1 {
 				return errMultipleRows
@@ -326,34 +325,34 @@ func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt st
 			row = r.Clone()
 			return nil
 		}); err != nil {
-			return dynamic.Row{}, err
+			return cql.DynamicRow{}, err
 		}
 		if count == 0 {
-			return dynamic.Row{}, cqlerr.ErrNoRows
+			return cql.DynamicRow{}, cqlerr.ErrNoRows
 		}
 		return row, nil
 	}
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
-	var cur dynamic.Row
+	var cur cql.DynamicRow
 	if !rows.NextInto(&cur) {
 		if err := rows.Err(); err != nil {
-			return dynamic.Row{}, err
+			return cql.DynamicRow{}, err
 		}
-		return dynamic.Row{}, cqlerr.ErrNoRows
+		return cql.DynamicRow{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&cur) {
-		return dynamic.Row{}, errMultipleRows
+		return cql.DynamicRow{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	return row, rows.Close()
 }

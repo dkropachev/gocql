@@ -17,8 +17,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
@@ -70,16 +68,16 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
-	statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
+	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
 	prepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
 	type output struct {
 		ID    int32
 		Value []byte
 	}
-	decoder := stream.RowInto(func(*output) {}, stream.Column("id", stream.Int32, func(r *output) *int32 { return &r.ID }), stream.Column("value", stream.Blob, func(r *output) *[]byte { return &r.Value }))
+	decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
 	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
-	streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
+	streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
 	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: streamOptions})
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +116,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		probe, probeErr := prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, probeOptions))
 		if probeErr == nil {
 			n := 0
-			var row dynamic.Row
+			var row cql.DynamicRow
 			for probe.NextInto(&row) {
 				n++
 			}

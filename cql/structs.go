@@ -10,7 +10,7 @@ package cql
 //
 // which ParamsOf and RowOf call instead of reflecting T. A nil slice means
 // that direction reflects T, and reports a field it cannot map. The
-// streaming mapping is a separate CQLStreamColumns method; see stream.RowOf.
+// streaming mapping is a separate CQLStreamColumns method; see cql.StreamRowOf.
 type StructFields[P any] struct {
 	Params  []InputField[P]
 	Columns []OutputField[P]

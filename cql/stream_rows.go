@@ -23,6 +23,8 @@ import (
 // StreamOutputField is an immutable typed field declaration. It never boxes a
 // field value and never retains the application destination supplied later.
 
+// StreamOutputField is one column of a streamed row mapping, built with Column or
+// ColumnAt.
 type StreamOutputField[R any] struct {
 	compile         func(DataType) (streamFieldPlan[R], error)
 	resetMissing    func(*R)
@@ -34,9 +36,13 @@ type streamFieldPlan[R any] struct {
 	decode func(*StreamRowReader, *R) error
 }
 
+// StreamColumn maps a named result column into caller storage returned by field.
+// Seed buffer capacity before decoding; stream decoders do not grow payload buffers.
 func StreamColumn[R, V any](name string, decoder StreamDecoder[V], field func(*R) *V) StreamOutputField[R] {
 	return makeStreamColumn(fieldLocation{name: name}, decoder, field)
 }
+
+// StreamColumnAt maps a zero-based result column into seeded caller storage returned by field.
 func StreamColumnAt[R, V any](index int, decoder StreamDecoder[V], field func(*R) *V) StreamOutputField[R] {
 	return makeStreamColumn(fieldLocation{index: index, positional: true}, decoder, field)
 }
@@ -81,6 +87,8 @@ type streamRowsPlan[R any] struct {
 	columns Columns
 }
 
+// StreamRowInto maps result columns into caller storage. reset clears application state before
+// each row and must preserve mapped buffer capacity. Only a successful NextInto publishes a row.
 func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
 	return streamRowsCodec[R]{reset: reset, fields: append([]StreamOutputField[R](nil), fields...)}
 }
@@ -170,6 +178,7 @@ type streamOneColumnPlan[T any] struct {
 	columns Columns
 }
 
+// StreamOneColumn decodes one result column into seeded caller storage with decoder.
 func StreamOneColumn[T any](decoder StreamDecoder[T]) StreamRowDecoder[T] {
 	return streamOneColumn[T]{decoder}
 }
@@ -219,9 +228,12 @@ type streamRecordPlan[R any] struct {
 	validations []*streamValidationPlan
 }
 
+// StreamTuple decodes tuple fields into caller storage with decoder.
 func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: TypeTuple, decoder: decoder}
 }
+
+// StreamUDT decodes UDT fields into caller storage with decoder and explicit matching options.
 func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: TypeUDT, options: options, decoder: decoder}
 }

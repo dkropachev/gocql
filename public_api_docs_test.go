@@ -45,17 +45,17 @@ func TestPublicMethodDocumentation(t *testing.T) {
 		{"github.com/scylladb/gocql/v2/exec.Options.CQLTrace", "server-side"},
 		{"github.com/scylladb/gocql/v2/metrics.Snapshot", "Requests"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
-		{"github.com/scylladb/gocql/v2/cql/stream.Statement.Rows", "Rows"},
+		{"github.com/scylladb/gocql/v2/cql.StreamStatement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.BindMarkers", "BindMarkers"},
 		{"github.com/scylladb/gocql/v2/cql.StructFields.Columns", "Columns"},
 		{"github.com/scylladb/gocql/v2/cql.Encoder", "CheckType"},
 		{"github.com/scylladb/gocql/v2/cql.Decoder", "Clone"},
 		{"github.com/scylladb/gocql/v2/cql.ParamEncoder", "Compile"},
 		{"github.com/scylladb/gocql/v2/cql.RowDecoder", "Compile"},
-		{"github.com/scylladb/gocql/v2/cql/stream.Decoder", "Compile"},
-		{"github.com/scylladb/gocql/v2/cql/stream.RowDecoder", "Compile"},
-		{"github.com/scylladb/gocql/v2/cql/dynamic.Value", "Elements"},
-		{"github.com/scylladb/gocql/v2/cql/dynamic.Row", "Get"},
+		{"github.com/scylladb/gocql/v2/cql.StreamDecoder", "Compile"},
+		{"github.com/scylladb/gocql/v2/cql.StreamRowDecoder", "Compile"},
+		{"github.com/scylladb/gocql/v2/cql.Value", "Elements"},
+		{"github.com/scylladb/gocql/v2/cql.DynamicRow", "Get"},
 	} {
 		t.Run(check.symbol, func(t *testing.T) {
 			out, err := exec.CommandContext(ctx, "go", "doc", check.symbol).CombinedOutput()

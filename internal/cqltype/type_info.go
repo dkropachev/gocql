@@ -117,3 +117,9 @@ func ColumnsFromInfo(info []ColumnInfo) (cql.Columns, error) {
 	}
 	return ColumnsOwned(columns), nil
 }
+
+// NativeKind returns n's type kind.
+func NativeKind(n NativeType) cql.Type { return n.Type() }
+
+// NativeCustom returns n's custom class name, for a custom type.
+func NativeCustom(n NativeType) string { return n.Custom() }

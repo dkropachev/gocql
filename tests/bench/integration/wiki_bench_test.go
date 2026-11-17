@@ -35,7 +35,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 
 	inf "gopkg.in/inf.v0"
 )
@@ -146,11 +145,11 @@ func (w *WikiTest) InsertPage(page *WikiPage) error {
 	return serializationExec(w.session, fmt.Sprintf("INSERT INTO %s (title,revid,body,views,protected,modified,rating,tags,attachments) VALUES(?,?,?,?,?,?,?,?,?)", w.table), wikiParams, *page)
 }
 func (w *WikiTest) SelectPage(page *WikiPage, title string, revid cql.TimeUUID) error {
-	revision, err := dynamic.TimeUUID(revid)
+	revision, err := cql.TimeUUIDValue(revid)
 	if err != nil {
 		return err
 	}
-	result, err := serializationOne(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s WHERE title=? AND revid=? LIMIT 1", w.table), wikiRows, codecTestMust(dynamic.Text(title)), revision)
+	result, err := serializationOne(w.session, fmt.Sprintf("SELECT title,revid,body,views,protected,modified,tags,attachments,rating FROM %s WHERE title=? AND revid=? LIMIT 1", w.table), wikiRows, codecTestMust(cql.TextValue(title)), revision)
 	if err == nil {
 		*page = result
 	}

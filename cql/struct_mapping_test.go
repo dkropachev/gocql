@@ -557,7 +557,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal("unmapped streaming column accepted")
 			}
 			type text struct{ Name string }
-			if _, err := reflectStreamRow[text](); err == nil || !strings.Contains(err.Error(), "stream.WithCodec") {
+			if _, err := reflectStreamRow[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamCodec") {
 				t.Fatalf("string field: %v", err)
 			}
 			type badTag struct {
@@ -590,10 +590,4 @@ func TestStructMapping(t *testing.T) {
 			}
 		})
 	})
-}
-
-// MustStreamRowOf reflects R, as stream.MustRowOf does for a struct without
-// a generated mapping.
-func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
-	return CodecTestMust(reflectStreamRow(opts...))
 }

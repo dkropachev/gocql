@@ -23,12 +23,12 @@ Packages fall into four layers. A package imports only from its own layer
 | Layer | Packages | Holds |
 |---|---|---|
 | 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, and the link registry. Knows nothing about CQL types or the public API. |
-| 1. Vocabulary (public) | `cql`, `cql/dynamic`, `cql/stream`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
+| 1. Vocabulary (public) | `cql`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
 | 2. Engine (internal) | `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata`, `internal/session`, `internal/tablets` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
 | 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
 
 Layer-1 packages depend on each other in this order, lowest first: `cql`;
-`cql/dynamic` and `cql/stream`; `cqlerr`; `retry`; `metadata`; `routing`;
+`cqlerr`; `retry`; `metadata`; `routing`;
 `endpoint`, `auth` and `event`; `observe`. `metrics` depends on nothing.
 
 Rules that follow from the table:
@@ -187,19 +187,16 @@ documented methods.
   `Date`, `Timestamp`, `Decimal`, `Varint`, `Bytes`, `Text`, `Nullable`,
   `Option`), `PageState`, `PayloadEntry`, `Result` and `CQLTraceRef`,
   `ValidationError` and `CodecError`, codec interfaces and built-in codecs,
-  and the struct mapping (`ParamsOf`, `RowOf`). The codec implementations
-  live here; type-agnostic reflection helpers live in `internal/structmap`.
+  the struct mapping (`ParamsOf`, `RowOf`), the dynamic values (`Value`,
+  `DynamicRows`) and the streaming decoders (`StreamRowOf`,
+  `StreamStatement`, ...). The codec implementations live here;
+  type-agnostic reflection helpers live in `internal/structmap`. Dynamic and
+  streaming codecs share the core codecs' readers, writers and validation
+  plans, so they are not separate packages.
 - **Must not contain:** anything that talks to a server, server error types
   (those go in `cqlerr`), or routing.
 - **Future:** `encoding` interfaces on value types (#433), new CQL types,
   value compression (#218).
-
-### `cql/dynamic` and `cql/stream` (layer 1)
-
-- **Contains:** run-time-typed values and rows (`dynamic`), and
-  caller-storage streaming decoders (`stream`). Both build on `cql` only.
-- **Must not contain:** execution entry points. Streaming execution is
-  `Session.PrepareStream` in the root package.
 
 ### `cqlerr` (layer 1)
 

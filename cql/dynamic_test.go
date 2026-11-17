@@ -132,7 +132,7 @@ func TestDynamic(t *testing.T) {
 			}
 			unsetPlan := dynamicTestMust(DynamicParams.Compile(NewColumns(ColumnSpec{Name: "x", Type: integer})))
 			w := newParamWriter(wire.NewBuilder(0), NewColumns(ColumnSpec{Name: "x", Type: integer}), false)
-			if err := unsetPlan.Encode(w, []Value{UnsetDynamic(integer)}); err == nil || w.builder.Len() != 0 {
+			if err := unsetPlan.Encode(w, []Value{UnsetValue(integer)}); err == nil || w.builder.Len() != 0 {
 				t.Fatal("v3 unset accepted or did not roll back")
 			}
 			// Repeated names still validate each physical marker's actual type.
@@ -562,7 +562,7 @@ func TestDynamic(t *testing.T) {
 		})
 		t.Run("ChecksTypeWithoutPayload", func(t *testing.T) {
 			invalid := DataType{}
-			for _, value := range []Value{NullValue(invalid), UnsetDynamic(invalid)} {
+			for _, value := range []Value{NullValue(invalid), UnsetValue(invalid)} {
 				if _, err := EncodeValueBorrowed(dynamicTestType(TypeInt), DynamicCodec, value); err == nil {
 					t.Fatal("invalid descriptor accepted for payload-free value")
 				}
@@ -572,7 +572,7 @@ func TestDynamic(t *testing.T) {
 			if err := DynamicCodec.CheckType(tooWide); err == nil {
 				t.Fatal("vector aggregate width overflow was accepted")
 			}
-			for _, value := range []Value{NullValue(tooWide), UnsetDynamic(tooWide)} {
+			for _, value := range []Value{NullValue(tooWide), UnsetValue(tooWide)} {
 				if _, err := EncodeValueBorrowed(tooWide, DynamicCodec, value); err == nil {
 					t.Fatal("invalid vector type bypassed by null/unset")
 				}
@@ -773,7 +773,7 @@ func TestDynamic(t *testing.T) {
 				if err != nil || decoded.State() != Null {
 					t.Fatal("null state lost", err)
 				}
-				unset, err := EncodeValueBorrowed(typ, DynamicCodec, UnsetDynamic(typ))
+				unset, err := EncodeValueBorrowed(typ, DynamicCodec, UnsetValue(typ))
 				if err != nil || unset.State() != Unset {
 					t.Fatal("standalone unset failed", err)
 				}
@@ -799,7 +799,7 @@ func TestDynamic(t *testing.T) {
 				dynamicTestRoundTrip(t, value, "")
 			}
 			dynamicTestRoundTrip(t, dynamicTestMust(ListValue(list, nil)), "00000000")
-			if _, err := ListValue(list, []Value{UnsetDynamic(integer)}); err == nil {
+			if _, err := ListValue(list, []Value{UnsetValue(integer)}); err == nil {
 				t.Fatal("nested unset accepted")
 			}
 			if _, err := ListValue(list, []Value{NullValue(integer)}); err == nil {
@@ -817,7 +817,7 @@ func TestDynamic(t *testing.T) {
 			if err != nil || len(fields) != 2 || fields[0].Value.State() != Null || fields[1].Value.State() != Null {
 				t.Fatal("omitted UDT trailing fields", err)
 			}
-			if _, err := TupleValue(tuple, []Value{IntValue(1), UnsetDynamic(text)}); err == nil {
+			if _, err := TupleValue(tuple, []Value{IntValue(1), UnsetValue(text)}); err == nil {
 				t.Fatal("unset tuple member accepted")
 			}
 		})

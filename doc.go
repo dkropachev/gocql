@@ -63,7 +63,7 @@
 // reports whether the batch applied, and rejects a batch known to have no
 // conditional member.
 //
-// Session.PrepareStream prepares a stream.Statement directly for caller
+// Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A
 // StreamQuery decodes into seeded caller storage and buffers one response page
 // on normal multiplexed connections by default. exec.StreamOptions.Incremental opts into bounded

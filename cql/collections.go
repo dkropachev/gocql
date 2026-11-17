@@ -18,8 +18,10 @@ type Entry[K, V any] struct {
 	Value V
 }
 
-// ValueIterator is a bounded cursor. A failed Next permanently stops iteration;
-// Value never exposes the partially decoded value which caused that failure.
+// ValueIterator walks the members of a collection Value. Next advances and
+// reports whether a member is available, Value returns it, and Err reports
+// the failure that stopped iteration. Collect reads the remaining members
+// into a slice, detached from the page.
 type ValueIterator[T any] struct {
 	value        T
 	err          error

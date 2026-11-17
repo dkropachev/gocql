@@ -26,18 +26,16 @@ const (
 const modulePath = "github.com/scylladb/gocql/v2"
 
 var vocabularyPackages = map[string]bool{
-	"auth":        true,
-	"cql":         true,
-	"cql/dynamic": true,
-	"cql/stream":  true,
-	"cqlerr":      true,
-	"endpoint":    true,
-	"event":       true,
-	"metadata":    true,
-	"metrics":     true,
-	"observe":     true,
-	"retry":       true,
-	"routing":     true,
+	"auth":     true,
+	"cql":      true,
+	"cqlerr":   true,
+	"endpoint": true,
+	"event":    true,
+	"metadata": true,
+	"metrics":  true,
+	"observe":  true,
+	"retry":    true,
+	"routing":  true,
 }
 
 var primitivePackages = map[string]bool{

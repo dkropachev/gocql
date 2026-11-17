@@ -16,6 +16,13 @@ import (
 // input descriptors are borrowed; Clone detaches them. The type and state select
 // the active payload; no payload is stored in an interface.
 
+// Value is an explicitly typed CQL value: a type, a cell state (present,
+// NULL, UNSET or empty) and the payload that type selects. Type and State
+// report the first two. The accessors Bool, Signed, Float, Text, Bytes, UUID,
+// Inet, Duration, Varint and Decimal return the payload of a present scalar
+// of a matching type and an error otherwise; Elements, Entries and Fields
+// iterate a collection, map, tuple or UDT. Clone detaches a decoded value
+// from its page. The zero Value has no type and binds nowhere.
 type Value struct {
 	inet        netip.Addr
 	typ         DataType
@@ -34,10 +41,14 @@ type Value struct {
 	encoded     bool
 }
 
+// ValueField is one named field of a UDT Value, or one named parameter of
+// NamedParams.
 type ValueField struct {
 	Name  string
 	Value Value
 }
+
+// ValueEntry is one key and value of a map Value.
 type ValueEntry struct{ Key, Value Value }
 
 func (v Value) Type() DataType   { return v.typ }
@@ -52,8 +63,14 @@ var dynamicScalarTypes = func() [TypeDuration + 1]DataType {
 }()
 
 func dynamicScalar(kind Type) Value { return Value{typ: dynamicScalarTypes[kind]} }
-func NullValue(t DataType) Value    { return Value{typ: t, state: Null} }
-func UnsetDynamic(t DataType) Value { return Value{typ: t, state: Unset} }
+
+// NullValue constructs a NULL cell of t.
+func NullValue(t DataType) Value { return Value{typ: t, state: Null} }
+
+// UnsetValue constructs an UNSET parameter of t; UNSET is not a valid result or nested value.
+func UnsetValue(t DataType) Value { return Value{typ: t, state: Unset} }
+
+// EmptyValue constructs an empty cell of t, rejecting types that cannot represent it.
 func EmptyValue(t DataType) (Value, error) {
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
@@ -63,6 +80,8 @@ func EmptyValue(t DataType) (Value, error) {
 	}
 	return Value{typ: t, state: EmptyCell}, nil
 }
+
+// BoolValue constructs a dynamic CQL boolean value.
 func BoolValue(b bool) Value {
 	v := dynamicScalar(TypeBoolean)
 	if b {
@@ -70,33 +89,49 @@ func BoolValue(b bool) Value {
 	}
 	return v
 }
+
+// TinyIntValue constructs a dynamic CQL tinyint value.
 func TinyIntValue(n int8) Value {
 	v := dynamicScalar(TypeTinyInt)
 	v.bits = uint64(n)
 	return v
 }
+
+// SmallIntValue constructs a dynamic CQL smallint value.
 func SmallIntValue(n int16) Value {
 	v := dynamicScalar(TypeSmallInt)
 	v.bits = uint64(n)
 	return v
 }
-func IntValue(n int32) Value    { v := dynamicScalar(TypeInt); v.bits = uint64(n); return v }
+
+// IntValue constructs a dynamic CQL int value.
+func IntValue(n int32) Value { v := dynamicScalar(TypeInt); v.bits = uint64(n); return v }
+
+// BigIntValue constructs a dynamic CQL bigint value.
 func BigIntValue(n int64) Value { v := dynamicScalar(TypeBigInt); v.bits = uint64(n); return v }
+
+// CounterValue constructs a dynamic CQL counter value.
 func CounterValue(n Counter) Value {
 	v := dynamicScalar(TypeCounter)
 	v.bits = uint64(n)
 	return v
 }
+
+// FloatValue constructs a dynamic CQL float value.
 func FloatValue(n float32) Value {
 	v := dynamicScalar(TypeFloat)
 	v.bits = uint64(math.Float32bits(n))
 	return v
 }
+
+// DoubleValue constructs a dynamic CQL double value.
 func DoubleValue(n float64) Value {
 	v := dynamicScalar(TypeDouble)
 	v.bits = math.Float64bits(n)
 	return v
 }
+
+// TextValue constructs a dynamic CQL text value, rejecting invalid UTF-8.
 func TextValue(s string) (Value, error) {
 	text, err := BorrowText(s)
 	if err != nil {
@@ -106,6 +141,8 @@ func TextValue(s string) (Value, error) {
 	v.bytes = text.Bytes()
 	return v, nil
 }
+
+// ASCIIValue constructs a dynamic CQL ascii value, rejecting non-ASCII bytes.
 func ASCIIValue(s string) (Value, error) {
 	v := dynamicScalar(TypeAscii)
 	// ASCII validation is also UTF-8 validation; avoid a panicking text constructor.
@@ -116,12 +153,19 @@ func ASCIIValue(s string) (Value, error) {
 	}
 	return v, nil
 }
+
+// BlobValue constructs a dynamic CQL blob value. It borrows b until parameter capture; keep b immutable until then.
 func BlobValue(b []byte) Value {
 	v := dynamicScalar(TypeBlob)
 	v.bytes = BorrowBytes(b)
 	return v
 }
+
+// UUIDValue constructs a dynamic CQL uuid value.
 func UUIDValue(u UUID) Value { v := dynamicScalar(TypeUUID); v.uuid = u; return v }
+
+// TimeUUIDValue constructs a dynamic CQL timeuuid value, rejecting a UUID that is
+// not version 1.
 func TimeUUIDValue(u TimeUUID) (Value, error) {
 	if UUID(u).Version() != 1 {
 		return Value{}, typeValidation("timeuuid", "must have version 1")
@@ -130,6 +174,9 @@ func TimeUUIDValue(u TimeUUID) (Value, error) {
 	v.uuid = UUID(u)
 	return v, nil
 }
+
+// InetValue constructs a dynamic CQL inet value, rejecting an invalid address or
+// one with a zone.
 func InetValue(a netip.Addr) (Value, error) {
 	if !a.IsValid() || a.Zone() != "" {
 		return Value{}, typeValidation("inet", "requires a valid address without a zone")
@@ -138,7 +185,11 @@ func InetValue(a netip.Addr) (Value, error) {
 	v.inet = a
 	return v, nil
 }
+
+// DateValue constructs a dynamic CQL date value.
 func DateValue(n Date) Value { v := dynamicScalar(TypeDate); v.bits = uint64(n); return v }
+
+// TimeValue constructs a dynamic CQL time value, rejecting a time outside the day.
 func TimeValue(n TimeOfDay) (Value, error) {
 	if n < 0 || int64(n) >= nanosecondsPerDay {
 		return Value{}, typeValidation("time", "outside one day")
@@ -147,11 +198,16 @@ func TimeValue(n TimeOfDay) (Value, error) {
 	v.bits = uint64(n)
 	return v, nil
 }
+
+// TimestampValue constructs a dynamic CQL timestamp value.
 func TimestampValue(n Timestamp) Value {
 	v := dynamicScalar(TypeTimestamp)
 	v.bits = uint64(n)
 	return v
 }
+
+// DurationValue constructs a dynamic CQL duration value, rejecting components
+// with mixed signs.
 func DurationValue(d Duration) (Value, error) {
 	if !durationSignsValid(d) {
 		return Value{}, typeValidation("duration", "components must have compatible signs")
@@ -160,11 +216,15 @@ func DurationValue(d Duration) (Value, error) {
 	v.duration = d
 	return v, nil
 }
+
+// VarintValue constructs a dynamic CQL varint value.
 func VarintValue(n Varint) Value {
 	v := dynamicScalar(TypeVarint)
 	v.bytes = varintBytes(n)
 	return v
 }
+
+// DecimalValue constructs a dynamic CQL decimal value.
 func DecimalValue(n Decimal) Value {
 	v := dynamicScalar(TypeDecimal)
 	v.scale = n.Scale
@@ -273,7 +333,8 @@ func (v Value) Clone() Value {
 	return v
 }
 
-// DynamicCodec checks and serializes the explicit variant selected by Value.Type.
+// DynamicCodec checks and serializes the explicit variant selected by
+// Value.Type, and decodes any cell into a Value.
 var DynamicCodec Codec[Value] = dynamicCodec{}
 
 type dynamicCodec struct{}
@@ -421,18 +482,32 @@ func dynamicAggregateChecked(t DataType, kind Type, values []Value) (Value, erro
 	}
 	return Value{typ: t, values: values, count: len(values)}, nil
 }
+
+// ListValue constructs a dynamic list value, validating its elements against t.
+// The input slice and borrowed elements must remain immutable until captured; Clone detaches them.
 func ListValue(t DataType, v []Value) (Value, error) {
 	return dynamicAggregate(t, TypeList, v)
 }
+
+// SetValue constructs a dynamic set value, validating its elements against t.
+// The input slice and borrowed elements must remain immutable until captured; Clone detaches them.
 func SetValue(t DataType, v []Value) (Value, error) {
 	return dynamicAggregate(t, TypeSet, v)
 }
+
+// TupleValue constructs a dynamic tuple value, validating its members against t.
+// Input storage is borrowed until captured; Clone recursively detaches it.
 func TupleValue(t DataType, v []Value) (Value, error) {
 	return dynamicAggregate(t, TypeTuple, v)
 }
+
+// VectorValue constructs a dynamic vector value, checking its dimension and element types.
 func VectorValue(t DataType, v []Value) (Value, error) {
 	return dynamicAggregate(t, TypeCustom, v)
 }
+
+// MapValue constructs a dynamic map value, validating its members against t.
+// Input storage is borrowed until captured; Clone recursively detaches it.
 func MapValue(t DataType, entries []ValueEntry) (Value, error) {
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
@@ -456,6 +531,9 @@ func mapValueChecked(t DataType, entries []ValueEntry) (Value, error) {
 	}
 	return Value{typ: t, entries: entries, count: len(entries)}, nil
 }
+
+// UDTValue constructs a dynamic UDT value, validating its members against t.
+// Input storage is borrowed until captured; Clone recursively detaches it.
 func UDTValue(t DataType, fields []ValueField) (Value, error) {
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
@@ -915,7 +993,8 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 var DynamicParams ParamEncoder[[]Value] = dynamicParamsCodec{}
 
 // NamedDynamicParams maps unique input names to server marker order. Repeated
-// server markers reuse one input field; duplicate or unused input names fail.
+// server markers reuse one input field; duplicate or unused input names
+// fail.
 var NamedDynamicParams ParamEncoder[[]ValueField] = namedDynamicParamsCodec{}
 
 type dynamicParamsCodec struct{}
@@ -1042,7 +1121,7 @@ func (p namedDynamicParamsPlan) Encode(w *ParamWriter, fields []ValueField) erro
 	return nil
 }
 
-// DynamicRows compiles a lazy row decoder retaining actual ordered metadata.
+// DynamicRows compiles a lazy row decoder retaining the actual ordered metadata.
 var DynamicRows RowDecoder[DynamicRow] = dynamicRowsCodec{}
 
 type dynamicRowsCodec struct{}
@@ -1055,8 +1134,10 @@ type dynamicRowsPlan struct {
 	columns Columns
 }
 
-// DynamicRow stores one encoded physical row. Its immutable name index is shared
-// with the compiled plan. Copied rows share one immutable lazy physical index.
+// DynamicRow holds columns and metadata-driven values. Columns returns the result
+// metadata, At and Get return a column's Value by position and name, and
+// Clone detaches the row. Cursor and Each values may borrow the response;
+// One detaches the row before returning.
 type DynamicRow struct {
 	physical     *dynamicRowIndex
 	lookup       map[string]int

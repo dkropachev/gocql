@@ -75,5 +75,5 @@ var (
 
 // BuiltinFieldTypes holds func(stream bool) []structmap.BuiltinFieldType: the
 // Go field types package cql maps without configuration, for RowOf and
-// ParamsOf, or for stream.RowOf. cmd/cqlgen reads it.
+// ParamsOf, or for cql.StreamRowOf. cmd/cqlgen reads it.
 var BuiltinFieldTypes = NewSlot("cql.builtinFieldTypes")

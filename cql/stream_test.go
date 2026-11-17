@@ -198,7 +198,7 @@ func TestStream(t *testing.T) {
 				func() error { _, e := StreamList(nilStreamValue{}).Compile(list); return e },
 				func() error { _, e := StreamMap(nilStreamValue{}, StreamInt32).Compile(m); return e },
 				func() error { _, e := StreamNullable(nilStreamValue{}).Compile(integer); return e },
-				func() error { _, e := EmptyStream(nilStreamValue{}).Compile(integer); return e },
+				func() error { _, e := StreamEmpty(nilStreamValue{}).Compile(integer); return e },
 				func() error { _, e := StreamTuple(nilStreamRows{}).Compile(tuple); return e },
 				func() error { return TupleDecoder(nilBufferedRows{}).CheckType(tuple) },
 				func() error { return TupleEncoder(nilBufferedParams{}).CheckType(tuple) },
@@ -550,7 +550,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("zero tuple", err)
 			}
 			wrapped := EmptyValueOf[EmptyRow]{}
-			if err := StreamDecodeFixture(t, zero, EmptyStream(StreamTuple(StreamRowInto(func(*EmptyRow) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
+			if err := StreamDecodeFixture(t, zero, StreamEmpty(StreamTuple(StreamRowInto(func(*EmptyRow) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
 				t.Fatal("zero tuple Empty", err)
 			}
 		})
@@ -632,10 +632,10 @@ func TestStream(t *testing.T) {
 				t.Fatal("unset result accepted")
 			}
 			empty := EmptyValueOf[int32]{Value: 1}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeInt), EmptyStream(StreamInt32), StreamCell(nil), &empty, 1); err != nil || !empty.Empty {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeInt), StreamEmpty(StreamInt32), StreamCell(nil), &empty, 1); err != nil || !empty.Empty {
 				t.Fatal("logical Empty", err)
 			}
-			if _, err := EmptyStream(StreamText).Compile(typ); err == nil {
+			if _, err := StreamEmpty(StreamText).Compile(typ); err == nil {
 				t.Fatal("text Empty accepted")
 			}
 		})

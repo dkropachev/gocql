@@ -13,7 +13,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -165,6 +164,6 @@ func TestTooManyOptions(t *testing.T) {
 	}
 	_, err = s.Prepare(ctx, cql.Statement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
 	checkPrepare("Prepare", err)
-	_, err = s.PrepareStream(ctx, stream.Statement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
+	_, err = s.PrepareStream(ctx, cql.StreamStatement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
 	checkPrepare("PrepareStream", err)
 }

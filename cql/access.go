@@ -7,12 +7,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// These accessors are internal contracts for codecs and native metadata readers.
-// Constructors take ownership of descriptor slices; consumers never mutate them.
-// Descriptors are shared: every ScalarType call and predeclared scalar such as
-// IntType returns the same descriptor for a kind, so writing through
-// DescriptorOf changes that type process-wide. Build a private descriptor with
-// TypeFromDescriptor instead.
+// These accessors give the codecs of this package the representation of the
+// value types. Constructors take ownership of descriptor slices; consumers
+// never mutate them. Descriptors are shared: every ScalarType call and
+// predeclared scalar such as IntType returns the same descriptor for a kind,
+// so writing through descriptorOf changes that type process-wide. Build a
+// private descriptor with typeFromDescriptor instead. The engine reads the same
+// representation through the mirrors in internal/cqltype.
 func descriptorOf(t DataType) *dataTypeDescriptor { return t.descriptor }
 func typeFromDescriptor(d *dataTypeDescriptor) DataType {
 	return DataType{descriptor: d}

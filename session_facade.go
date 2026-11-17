@@ -8,7 +8,6 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -47,7 +46,7 @@ func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statem
 // decoder against server metadata when available; conditional result metadata
 // unavailable during preparation is checked on execution. At most one
 // exec.PrepareOptions may be supplied.
-func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement stream.Statement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
+func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
 	case 0:

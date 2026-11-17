@@ -103,7 +103,7 @@ package gocql
 		method (*T) Metadata() *metadata.Snapshot
 		method (*T) Metrics() metrics.Snapshot
 		method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
-		method (*T) PrepareStream[P, R any](ctx context.Context, statement cql/stream.Statement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
+		method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
 		method (*T) RefreshMetadata(ctx context.Context) error
 		method (*T) RunBatch[R any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[R], options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
@@ -450,7 +450,6 @@ package cql
 	var cql.EmptyParamsEncoder cql.ParamEncoder[cql.EmptyRow]
 	type cql.EmptyRow struct
 	var cql.EmptyRowDecoder cql.RowDecoder[cql.EmptyRow]
-	func cql.EmptyStream[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.EmptyValueOf[T]]
 	func cql.EmptyValue(t cql.DataType) (cql.Value, error)
 	type cql.EmptyValueOf[T any] struct
 		field Value T
@@ -473,7 +472,6 @@ package cql
 	var cql.Float64Codec cql.Codec[float64]
 	var cql.FloatType cql.DataType
 	func cql.FloatValue(n float32) cql.Value
-	func cql.GeneratedStreamRow[R any](columns []cql.StreamOutputField[R], opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
 	func cql.GoMapCodec[K comparable, V any](key cql.Codec[K], value cql.Codec[V]) cql.Codec[map[K]V]
 	func cql.IgnoreColumn[R any](name string) cql.OutputField[R]
 	var cql.InetCodec cql.Codec[net/netip.Addr]
@@ -508,6 +506,7 @@ package cql
 	func cql.MustParseTimeUUID(input string) cql.TimeUUID
 	func cql.MustParseUUID(input string) cql.UUID
 	func cql.MustRowOf[R any](opts ...cql.StructOption[R]) cql.RowDecoder[R]
+	func cql.MustStreamRowOf[R any](opts ...cql.StructOption[R]) cql.StreamRowDecoder[R]
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NamedScalar[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
@@ -631,6 +630,7 @@ package cql
 	type cql.StreamDecoder[T any] interface
 		method Compile(cql.DataType) (cql.StreamValuePlan[T], error)
 	var cql.StreamDuration cql.StreamDecoder[cql.Duration]
+	func cql.StreamEmpty[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.EmptyValueOf[T]]
 	var cql.StreamEncoded cql.StreamDecoder[cql.StreamEncodedValue]
 	type cql.StreamEncodedValue struct
 		field Type cql.DataType
@@ -653,6 +653,7 @@ package cql
 	type cql.StreamRowDecoder[R any] interface
 		method Compile(cql.Columns) (cql.StreamRowPlan[R], error)
 	func cql.StreamRowInto[R any](reset func(*R), fields ...cql.StreamOutputField[R]) cql.StreamRowDecoder[R]
+	func cql.StreamRowOf[R any](opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
 	type cql.StreamRowPlan[R any] interface
 		method DecodeInto(*cql.StreamRowReader, *R) error
 		method Reset(*R)
@@ -662,6 +663,11 @@ package cql
 		method (*T) RequireEnd() error
 		method (*T) SkipColumn() error
 	func cql.StreamSet[T any](child cql.StreamDecoder[T]) cql.StreamDecoder[[]T]
+	type cql.StreamStatement[P any, R any] struct
+		field Params cql.ParamEncoder[P]
+		field Rows cql.StreamRowDecoder[R]
+		field CQL string
+		field Kind cql.StatementKind
 	var cql.StreamText cql.StreamDecoder[[]byte]
 	var cql.StreamTime cql.StreamDecoder[cql.TimeOfDay]
 	var cql.StreamTimeUUID cql.StreamDecoder[cql.TimeUUID]
@@ -799,7 +805,7 @@ package cql
 	const cql.UnloggedBatch cql.BatchKind
 	const cql.Unpaged int32
 	const cql.Unset cql.CellState
-	func cql.UnsetDynamic(t cql.DataType) cql.Value
+	func cql.UnsetValue(t cql.DataType) cql.Value
 	type cql.ValidationError struct
 		field Err error
 		field Field string
@@ -878,155 +884,6 @@ package cql
 	func cql.VectorValue(t cql.DataType, v []cql.Value) (cql.Value, error)
 	func cql.WithCodec[P, V any](codec cql.Codec[V]) cql.StructOption[P]
 	func cql.WithStreamCodec[P, V any](decoder cql.StreamDecoder[V]) cql.StructOption[P]
-
-package cql/dynamic
-	func cql/dynamic.ASCII(s string) (cql/dynamic.Value, error)
-	func cql/dynamic.BigInt(n int64) cql/dynamic.Value
-	func cql/dynamic.Blob(b []byte) cql/dynamic.Value
-	func cql/dynamic.Bool(b bool) cql/dynamic.Value
-	var cql/dynamic.Codec cql.Codec[cql/dynamic.Value]
-	func cql/dynamic.Counter(n cql.Counter) cql/dynamic.Value
-	func cql/dynamic.Date(n cql.Date) cql/dynamic.Value
-	func cql/dynamic.Decimal(n cql.Decimal) cql/dynamic.Value
-	func cql/dynamic.Double(n float64) cql/dynamic.Value
-	func cql/dynamic.Duration(d cql.Duration) (cql/dynamic.Value, error)
-	func cql/dynamic.Empty(t cql.DataType) (cql/dynamic.Value, error)
-	type cql/dynamic.Entry = cql.ValueEntry
-		field Key cql.Value
-		field Value cql.Value
-	type cql/dynamic.Field = cql.ValueField
-		field Name string
-		field Value cql.Value
-	func cql/dynamic.Float(n float32) cql/dynamic.Value
-	func cql/dynamic.Inet(a net/netip.Addr) (cql/dynamic.Value, error)
-	func cql/dynamic.Int(n int32) cql/dynamic.Value
-	type cql/dynamic.Iterator[T any] = cql.ValueIterator[T]
-		method (*T) Collect() ([]T, error)
-		method (*T) Err() error
-		method (*T) Next() bool
-		method (*T) Value() T
-	func cql/dynamic.List(t cql.DataType, v []cql/dynamic.Value) (cql/dynamic.Value, error)
-	func cql/dynamic.Map(t cql.DataType, entries []cql/dynamic.Entry) (cql/dynamic.Value, error)
-	var cql/dynamic.NamedParams cql.ParamEncoder[[]cql/dynamic.Field]
-	func cql/dynamic.Null(t cql.DataType) cql/dynamic.Value
-	var cql/dynamic.Params cql.ParamEncoder[[]cql/dynamic.Value]
-	type cql/dynamic.Row = cql.DynamicRow
-		method (T) At(index int) (cql.Value, error)
-		method (T) Clone() cql.DynamicRow
-		method (T) Columns() cql.Columns
-		method (T) Get(name string) (cql.Value, error)
-	var cql/dynamic.Rows cql.RowDecoder[cql/dynamic.Row]
-	func cql/dynamic.Set(t cql.DataType, v []cql/dynamic.Value) (cql/dynamic.Value, error)
-	func cql/dynamic.SmallInt(n int16) cql/dynamic.Value
-	func cql/dynamic.Text(s string) (cql/dynamic.Value, error)
-	func cql/dynamic.Time(n cql.TimeOfDay) (cql/dynamic.Value, error)
-	func cql/dynamic.TimeUUID(u cql.TimeUUID) (cql/dynamic.Value, error)
-	func cql/dynamic.Timestamp(n cql.Timestamp) cql/dynamic.Value
-	func cql/dynamic.TinyInt(n int8) cql/dynamic.Value
-	func cql/dynamic.Tuple(t cql.DataType, v []cql/dynamic.Value) (cql/dynamic.Value, error)
-	func cql/dynamic.UDT(t cql.DataType, fields []cql/dynamic.Field) (cql/dynamic.Value, error)
-	func cql/dynamic.UUID(u cql.UUID) cql/dynamic.Value
-	func cql/dynamic.Unset(t cql.DataType) cql/dynamic.Value
-	type cql/dynamic.Value = cql.Value
-		method (T) Bool() (bool, error)
-		method (T) Bytes() (cql.Bytes, error)
-		method (T) Clone() cql.Value
-		method (T) Decimal() (cql.Decimal, error)
-		method (T) Duration() (cql.Duration, error)
-		method (T) Elements() (*cql.ValueIterator[cql.Value], error)
-		method (T) Entries() (*cql.ValueIterator[cql.ValueEntry], error)
-		method (T) Fields() (*cql.ValueIterator[cql.ValueField], error)
-		method (T) Float() (float64, error)
-		method (T) Inet() (net/netip.Addr, error)
-		method (T) Signed() (int64, error)
-		method (T) State() cql.CellState
-		method (T) Text() (cql.Text, error)
-		method (T) Type() cql.DataType
-		method (T) UUID() (cql.UUID, error)
-		method (T) Varint() (cql.Varint, error)
-	func cql/dynamic.Varint(n cql.Varint) cql/dynamic.Value
-	func cql/dynamic.Vector(t cql.DataType, v []cql/dynamic.Value) (cql/dynamic.Value, error)
-
-package cql/stream
-	var cql/stream.ASCII cql/stream.Decoder[[]byte]
-	var cql/stream.Blob cql/stream.Decoder[[]byte]
-	var cql/stream.Bool cql/stream.Decoder[bool]
-	func cql/stream.Column[R, V any](name string, decoder cql/stream.Decoder[V], field func(*R) *V) cql/stream.OutputField[R]
-	func cql/stream.ColumnAt[R, V any](index int, decoder cql/stream.Decoder[V], field func(*R) *V) cql/stream.OutputField[R]
-	var cql/stream.Counter cql/stream.Decoder[cql.Counter]
-	var cql/stream.Date cql/stream.Decoder[cql.Date]
-	var cql/stream.Decimal cql/stream.Decoder[cql/stream.DecimalValue]
-	type cql/stream.DecimalValue = cql.StreamDecimalValue
-		field Unscaled []byte
-		field Scale int32
-	type cql/stream.Decoder[T any] interface
-		method Compile(cql.DataType) (cql/stream.ValuePlan[T], error)
-	var cql/stream.Duration cql/stream.Decoder[cql.Duration]
-	func cql/stream.Empty[T any](base cql/stream.Decoder[T]) cql/stream.Decoder[cql.EmptyValueOf[T]]
-	var cql/stream.Encoded cql/stream.Decoder[cql/stream.EncodedValue]
-	type cql/stream.EncodedValue = cql.StreamEncodedValue
-		field Type cql.DataType
-		field Bytes []byte
-		field State cql.CellState
-	var cql/stream.Float32 cql/stream.Decoder[float32]
-	var cql/stream.Float64 cql/stream.Decoder[float64]
-	var cql/stream.Inet cql/stream.Decoder[net/netip.Addr]
-	var cql/stream.Int16 cql/stream.Decoder[int16]
-	var cql/stream.Int32 cql/stream.Decoder[int32]
-	var cql/stream.Int64 cql/stream.Decoder[int64]
-	var cql/stream.Int8 cql/stream.Decoder[int8]
-	func cql/stream.List[T any](child cql/stream.Decoder[T]) cql/stream.Decoder[[]T]
-	func cql/stream.Map[K, V any](key cql/stream.Decoder[K], value cql/stream.Decoder[V]) cql/stream.Decoder[[]cql.Entry[K, V]]
-	func cql/stream.MustRowOf[R any](opts ...cql.StructOption[R]) cql/stream.RowDecoder[R]
-	func cql/stream.Nullable[T any](base cql/stream.Decoder[T]) cql/stream.Decoder[cql.Nullable[T]]
-	func cql/stream.OneColumn[T any](decoder cql/stream.Decoder[T]) cql/stream.RowDecoder[T]
-	type cql/stream.OutputField[R any] = cql.StreamOutputField[R]
-	type cql/stream.Resetter[T any] interface
-		method Reset(*T)
-	type cql/stream.RowDecoder[R any] interface
-		method Compile(cql.Columns) (cql/stream.RowPlan[R], error)
-	func cql/stream.RowInto[R any](reset func(*R), fields ...cql/stream.OutputField[R]) cql/stream.RowDecoder[R]
-	func cql/stream.RowOf[R any](opts ...cql.StructOption[R]) (cql/stream.RowDecoder[R], error)
-	type cql/stream.RowPlan[R any] = cql.StreamRowPlan[R]
-		method DecodeInto(*cql.StreamRowReader, *R) error
-		method Reset(*R)
-	type cql/stream.RowReader = cql.StreamRowReader
-		method (*T) Context() context.Context
-		method (*T) ReadColumn[T any](plan cql.StreamValuePlan[T], dst *T) error
-		method (*T) RequireEnd() error
-		method (*T) SkipColumn() error
-	func cql/stream.Set[T any](child cql/stream.Decoder[T]) cql/stream.Decoder[[]T]
-	type cql/stream.Statement[P any, R any] struct
-		field Params cql.ParamEncoder[P]
-		field Rows cql/stream.RowDecoder[R]
-		field CQL string
-		field Kind cql.StatementKind
-	var cql/stream.Text cql/stream.Decoder[[]byte]
-	var cql/stream.Time cql/stream.Decoder[cql.TimeOfDay]
-	var cql/stream.TimeUUID cql/stream.Decoder[cql.TimeUUID]
-	var cql/stream.Timestamp cql/stream.Decoder[cql.Timestamp]
-	func cql/stream.Tuple[R any](decoder cql/stream.RowDecoder[R]) cql/stream.Decoder[R]
-	func cql/stream.UDT[R any](decoder cql/stream.RowDecoder[R], options cql.UDTOptions) cql/stream.Decoder[R]
-	var cql/stream.UUID cql/stream.Decoder[cql.UUID]
-	type cql/stream.ValuePlan[T any] = cql.StreamValuePlan[T]
-		method DecodeInto(*cql.StreamValueReader, *T) error
-		method Reset(*T)
-	type cql/stream.ValueReader = cql.StreamValueReader
-		method (*T) Child(typ cql.DataType, fn func(*cql.StreamValueReader) error) error
-		method (*T) Context() context.Context
-		method (*T) Read(p []byte) (int, error)
-		method (*T) Remaining() int64
-		method (*T) RequireEnd() error
-		method (*T) Skip() error
-		method (*T) State() cql.CellState
-		method (*T) Type() cql.DataType
-		method (*T) Uint16() (uint16, error)
-		method (*T) Uint32() (uint32, error)
-		method (*T) Uint64() (uint64, error)
-		method (*T) Uint8() (uint8, error)
-	var cql/stream.Varint cql/stream.Decoder[[]byte]
-	func cql/stream.Vector[T any](child cql/stream.Decoder[T]) cql/stream.Decoder[[]T]
-	func cql/stream.WithCodec[P, V any](decoder cql/stream.Decoder[V]) cql.StructOption[P]
 
 package cqlerr
 	type cqlerr.AlreadyExistsError = internal/protocol.AlreadyExistsError

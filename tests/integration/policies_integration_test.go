@@ -6,7 +6,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -87,14 +86,14 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s.%s (pk int PRIMARY KEY, v int)", keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), dynamic.Int(7), dynamic.Int(9)); err != nil {
+	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), cql.IntValue(7), cql.IntValue(9)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: dynamic.Params, Rows: dynamic.Rows}, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := []dynamic.Value{dynamic.Int(7)}
+	key := []cql.Value{cql.IntValue(7)}
 	query, err := prepared.Query(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +130,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		if err != nil {
 			t.Fatal(err)
 		}
-		var row dynamic.Row
+		var row cql.DynamicRow
 		if !rows.NextInto(&row) {
 			rows.Close()
 			t.Fatalf("missing routed row: %v", rows.Err())

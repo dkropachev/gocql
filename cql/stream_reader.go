@@ -49,21 +49,29 @@ func (e *StreamCapabilityError) Error() string {
 	return fmt.Sprintf("gocql: streaming protocol %d/compression %d: %s", e.Protocol, e.Compression, e.Reason)
 }
 
-// StreamResetter supplies declaration reset for application fields absent from metadata.
-// It preserves caller payload capacity without inventing a database type.
+// StreamResetter resets a field absent from metadata while preserving buffer capacity.
 type StreamResetter[T any] interface{ Reset(*T) }
 
-// StreamDecoder compiles against actual metadata, including absent payloads.
+// StreamDecoder compiles a value decoder that writes into seeded caller storage.
 type StreamDecoder[T any] interface {
 	Compile(DataType) (StreamValuePlan[T], error)
 }
+
+// StreamValuePlan decodes one value of a compiled column type into caller storage.
+// Reset clears the logical value while keeping buffer capacity, and
+// DecodeInto reads the value from a ValueReader into the destination.
 type StreamValuePlan[T any] interface {
 	Reset(*T)
 	DecodeInto(*StreamValueReader, *T) error
 }
+
+// StreamRowDecoder compiles row mappings that decode into seeded caller storage.
 type StreamRowDecoder[R any] interface {
 	Compile(Columns) (StreamRowPlan[R], error)
 }
+
+// StreamRowPlan decodes rows of compiled metadata into caller storage through a
+// RowReader.
 type StreamRowPlan[R any] interface {
 	Reset(*R)
 	DecodeInto(*StreamRowReader, *R) error
@@ -104,8 +112,7 @@ func (s *streamDecodeState) fail(err error) error {
 	return s.err
 }
 
-// StreamValueReader is synchronous and limited to the current cell body.
-// A custom plan may not retain it, its destination, or any scratch after return.
+// StreamValueReader is a scoped, limited reader over one streamed value.
 type StreamValueReader struct {
 	scope        *wire.Stream
 	typ          DataType
@@ -377,8 +384,9 @@ func (r *StreamValueReader) vectorLength() (int64, error) {
 	return int64(n), nil
 }
 
-// StreamRowReader visits physical columns in wire order. Runtime owners reuse
-// it between rows; RequireEnd checks columns, not a complete multi-row envelope.
+// StreamRowReader is a scoped, checked reader over one streamed row. Custom plans
+// read each column with its ReadColumn method and skip one with SkipColumn;
+// it never exposes retained byte views.
 type StreamRowReader struct {
 	scope        *wire.Stream
 	shared       *streamDecodeState

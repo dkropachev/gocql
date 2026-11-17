@@ -14,7 +14,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
@@ -245,8 +244,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), reflectedStreamRows{stream.MustRowOf[reflectedStreamEvent]()}} {
-			prepared, err := f.session.PrepareStream(ctx, stream.Statement[int32, mapped.StreamEvent]{
+		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), reflectedStreamRows{cql.MustStreamRowOf[reflectedStreamEvent]()}} {
+			prepared, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, mapped.StreamEvent]{
 				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
 				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,
 			})
@@ -593,8 +592,8 @@ func TestStructMapping(t *testing.T) {
 			}
 		}
 		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, createdat, updatedat FROM "
-		read, err := f.session.PrepareStream(ctx, stream.Statement[int32, smStream]{
-			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: stream.MustRowOf[smStream](),
+		read, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, smStream]{
+			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustStreamRowOf[smStream](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -760,10 +759,10 @@ type (
 // reflectedStreamRows decodes a mapped.StreamEvent with reflectedStreamEvent's
 // reflected stream mapping.
 type reflectedStreamRows struct {
-	rows stream.RowDecoder[reflectedStreamEvent]
+	rows cql.StreamRowDecoder[reflectedStreamEvent]
 }
 
-func (r reflectedStreamRows) Compile(columns cql.Columns) (stream.RowPlan[mapped.StreamEvent], error) {
+func (r reflectedStreamRows) Compile(columns cql.Columns) (cql.StreamRowPlan[mapped.StreamEvent], error) {
 	plan, err := r.rows.Compile(columns)
 	if err != nil {
 		return nil, err
@@ -772,13 +771,13 @@ func (r reflectedStreamRows) Compile(columns cql.Columns) (stream.RowPlan[mapped
 }
 
 type reflectedStreamPlan struct {
-	plan stream.RowPlan[reflectedStreamEvent]
+	plan cql.StreamRowPlan[reflectedStreamEvent]
 }
 
 func (p reflectedStreamPlan) Reset(dst *mapped.StreamEvent) {
 	p.plan.Reset((*reflectedStreamEvent)(dst))
 }
 
-func (p reflectedStreamPlan) DecodeInto(r *stream.RowReader, dst *mapped.StreamEvent) error {
+func (p reflectedStreamPlan) DecodeInto(r *cql.StreamRowReader, dst *mapped.StreamEvent) error {
 	return p.plan.DecodeInto(r, (*reflectedStreamEvent)(dst))
 }

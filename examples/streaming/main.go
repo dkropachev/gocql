@@ -24,7 +24,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 )
@@ -220,12 +219,12 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 			return err
 		}
 	}
-	decoder := stream.RowInto(func(r *record) { r.ApplicationState = "" },
-		stream.Column("id", stream.Int32, func(r *record) *int32 { return &r.ID }),
-		stream.Column("payload", stream.Blob, func(r *record) *[]byte { return &r.Payload }),
-		stream.Column("pieces", stream.List(stream.Blob), func(r *record) *[][]byte { return &r.Pieces }),
+	decoder := cql.StreamRowInto(func(r *record) { r.ApplicationState = "" },
+		cql.StreamColumn("id", cql.StreamInt32, func(r *record) *int32 { return &r.ID }),
+		cql.StreamColumn("payload", cql.StreamBlob, func(r *record) *[]byte { return &r.Payload }),
+		cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *record) *[][]byte { return &r.Pieces }),
 	)
-	prepared, err := s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, record]{
+	prepared, err := s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, record]{
 		CQL:  "SELECT id,payload,pieces FROM " + table,
 		Rows: decoder,
 	})

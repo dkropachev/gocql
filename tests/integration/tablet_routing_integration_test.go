@@ -8,7 +8,6 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/exec"
 	routing "github.com/scylladb/gocql/v2/routing"
 
@@ -33,17 +32,17 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		Table cql.UUID
 		Token int64
 	}
-	statement := cql.Statement[parameters, dynamic.Row]{
+	statement := cql.Statement[parameters, cql.DynamicRow]{
 		CQL:    "SELECT last_token,replicas,new_replicas,stage FROM system.tablets WHERE table_id=? AND last_token>=? LIMIT 1",
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64Codec, func(p parameters) int64 { return p.Token })),
-		Rows:   dynamic.Rows,
+		Rows:   cql.DynamicRows,
 	}
 	statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		var rows []dynamic.Row
-		var cur dynamic.Row
-		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *dynamic.Row) error {
+		var rows []cql.DynamicRow
+		var cur cql.DynamicRow
+		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *cql.DynamicRow) error {
 			rows = append(rows, r.Clone())
 			return nil
 		}, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})

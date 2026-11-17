@@ -50,7 +50,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
@@ -65,7 +64,7 @@ import (
 	"github.com/scylladb/gocql/v2/retry"
 )
 
-func sessionTestInt(t testing.TB, row dynamic.Row, name string) int64 {
+func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	t.Helper()
 	value, err := row.Get(name)
 	if err != nil {
@@ -436,7 +435,7 @@ func TestSession(t *testing.T) {
 
 				rows, err := v2Query(context.Background(), s, "select * from system.peers")
 				if err == nil {
-					var row dynamic.Row
+					var row cql.DynamicRow
 					for rows.NextInto(&row) {
 					}
 					err = rows.Err()
