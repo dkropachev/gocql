@@ -119,10 +119,9 @@ func ExampleSession_RunConditionalBatch() {
 		Version       int32
 	}
 	statement := cql.Statement[update, cql.CASResult[cql.EmptyRow]]{
-		CQL: "UPDATE example.my_lwt_batch_table SET value=?, version=? WHERE pk=? AND ck=? IF version=?",
+		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
 		Params: cql.Params(
 			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
-			cql.Param("new_version", cql.Int32Codec, func(v update) int32 { return v.Version + 1 }),
 			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
 			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
 			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),

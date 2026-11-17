@@ -131,10 +131,11 @@ func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...exe
 // with decoder: the rows of a conditional batch report whether it applied.
 // Which rows the server returns differs between Cassandra and ScyllaDB: on
 // ScyllaDB row i belongs to statement i, on Cassandra rows belong to rows of
-// the partition. The batch applied if and only if every row reports it. The rows hold a pooled
-// query until they are closed, as Prepared.Run's do. exec.CompiledOptions and batch
-// ownership are as for ExecBatch. Once its rows are closed, a batch sent again
-// with the same R and decoder reuses their storage and allocates nothing.
+// the partition. The batch applied if and only if every row reports it. The
+// rows hold a pooled query until they are closed, as Prepared.Run's do.
+// exec.CompiledOptions and batch ownership are as for ExecBatch. Once its rows
+// are closed, a batch sent again with the same R and decoder reuses their
+// storage and allocates nothing.
 func (s *Session[D]) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options ...exec.CompiledOptions) (Rows[R], error) {
 	var o implSession.CompiledOptions
 	switch len(options) {

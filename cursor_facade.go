@@ -51,10 +51,10 @@ func (r Rows[R]) Info() Result { return (implSession.Rows[R])(r).Info() }
 // Session.RunConditionalBatch. Each row reports whether the batch applied, and
 // Applied reports it over all of them, which is the same rule on Cassandra and
 // ScyllaDB. Which rows the server returns differs: on ScyllaDB row i belongs
-// to statement i and, for a conditional statement, its Previous holds the key
-// and condition columns of the row the condition was checked against, while
-// on Cassandra rows belong to rows of the partition. Ownership and staleness
-// are as for Rows. CASBatchRows must not be used concurrently.
+// to statement i, and its Previous comes from the row the server found for
+// that statement, while on Cassandra rows belong to rows of the partition;
+// see the server differences documentation. Ownership and staleness are as
+// for Rows. CASBatchRows must not be used concurrently.
 type CASBatchRows[X any] implSession.CASBatchRows[X]
 
 // NextInto decodes the next row into dst, reporting whether one exists.

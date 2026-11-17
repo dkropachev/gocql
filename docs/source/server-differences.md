@@ -53,16 +53,16 @@ before sending it.
 On ScyllaDB, row `i` belongs to member `i` of the batch. Every row carries the
 same batch-wide `Applied`: there is no per-statement flag, and the server stops
 checking conditions at the first that fails. What row `i` adds is `Previous`:
-the key and condition columns of the row member `i`'s condition was checked
-against. That is its clustering row if found, and otherwise, unless the member
-is `IF EXISTS` / `IF NOT EXISTS`, the partition's static row; a member whose
-conditions are only on static columns always gets the static row. `Previous`
-is unset when no row was found. A member without a condition is not read
-unless its update reads the row, so its `Previous` says nothing reliable about
-its row. To find the condition that failed, compare the conditional members'
-`Previous` with your conditions. Count rows as you read them: the count is the member index.
-This holds only on ScyllaDB; on Cassandra the rows belong to table rows, not
-statements.
+every result column, read from the row ScyllaDB found for member `i`. That is
+its clustering row if the batch's read contains it, and otherwise, unless the
+member is `IF EXISTS` / `IF NOT EXISTS`, the partition's static row, whose
+clustering columns are NULL. `Previous` is unset when no row was found. The
+read skips members without a condition (unless their update reads the row)
+and members whose conditions are only on static columns, so whether their own
+row is found depends on the rest of the batch. To find the condition that
+failed, compare the conditional members' `Previous` with your conditions.
+Count rows as you read them: the count is the member index. This holds only
+on ScyllaDB; on Cassandra the rows belong to table rows, not statements.
 
 ## Paging
 

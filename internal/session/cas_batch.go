@@ -15,10 +15,11 @@ import (
 // Batch keeps the tally of its latest RunConditionalBatch, tied to the rows
 // storage owner, and resets it when the next one reuses that storage, so
 // tracking it allocates nothing once warm and costs RunBatch nothing. An
-// earlier handle on other storage keeps its own tally through its pointer. scratch is the destination Applied decodes the rows the
-// caller did not read into.
+// earlier handle on other storage keeps its own tally through its pointer.
 type casTally[X any] struct {
-	owner   *batchRows[codec.CASResult[X]]
+	owner *batchRows[codec.CASResult[X]]
+	// scratch is the destination Applied decodes the rows the caller did not
+	// read into.
 	scratch codec.CASResult[X]
 	// rows reports that a row was read; notApplied, that one had Applied
 	// false.
