@@ -71,7 +71,7 @@ func streamReaderFixture(t testing.TB, columns Columns, source io.Reader, size i
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := NewStreamRowReader(columns, scope)
+	r, err := newStreamRowReader(columns, scope)
 	if err != nil {
 		t.Fatal(err)
 	}

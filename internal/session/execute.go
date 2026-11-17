@@ -16,6 +16,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
@@ -220,7 +221,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	wireKeyspace := keyspace
 	if !conn.InternalWire().QueryKeyspace {
 		if keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !qualifiedForKeyspace(statement, keyspace) {
-			return nil, cql.TypeValidation("prepare keyspace", "protocol v4 requires the session keyspace")
+			return nil, cqltype.TypeValidation("prepare keyspace", "protocol v4 requires the session keyspace")
 		}
 		wireKeyspace = ""
 	}
@@ -545,7 +546,7 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	}
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
-		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: cql.CloneResult(result), Err: err}
+		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
 		rt.ObserveSafely(func() { end(event) })
 	}
 }
@@ -609,7 +610,7 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 
 func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	if ctx == nil || rt == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
-		return nil, nil, nil, cql.TypeValidation("execution", "nil context, session or binding")
+		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, nil, nil, err
@@ -645,10 +646,10 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		request.connection = values.privateStorage.InternalConnection
 	}
 	if state := request.InternalPrepared(); state != nil && state.InternalSession != s {
-		return nil, nil, nil, cql.TypeValidation("session", "prepared statement belongs to another session")
+		return nil, nil, nil, cqltype.TypeValidation("session", "prepared statement belongs to another session")
 	}
 	if request.connection != nil && !implCluster.InternalConnectionOwnedBy(request.connection, s) {
-		return nil, nil, nil, cql.TypeValidation("connection", "connection belongs to another session")
+		return nil, nil, nil, cqltype.TypeValidation("connection", "connection belongs to another session")
 	}
 	request.keyspace = values.Keyspace
 	if request.keyspace == "" {
@@ -658,7 +659,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		}
 	}
 	if values.Keyspace != "" && request.routing.Keyspace != "" && values.Keyspace != request.routing.Keyspace {
-		return nil, nil, nil, cql.TypeValidation("keyspace", "override differs from bound statement")
+		return nil, nil, nil, cqltype.TypeValidation("keyspace", "override differs from bound statement")
 	}
 	if request.routing.Keyspace == "" {
 		request.routing.Keyspace = values.Keyspace
@@ -823,7 +824,7 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 		return nil, runtimeerrors.ErrPagingComplete
 	}
 	if pageSize < 0 {
-		return nil, cql.TypeValidation("page size", "must not be negative")
+		return nil, cqltype.TypeValidation("page size", "must not be negative")
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"}
@@ -888,7 +889,7 @@ func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 
 func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (cql.Result, error) {
 	if b == nil {
-		return cql.Result{}, cql.TypeValidation("binding", "nil binding")
+		return cql.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
 	if b.privateStorage.InternalRequest.routing.Kind == cql.ConditionalStatement {
 		return conditionalExec()
@@ -1382,9 +1383,9 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				response.Result = aggregate
 				response.Result.Rows = int64(response.RowCount)
 				if response.PagingState != nil {
-					response.State = cql.PageStateOwned(response.PagingState, 1)
+					response.State = cqltype.PageStateOwned(response.PagingState)
 				} else {
-					response.State = cql.CompletePageState()
+					response.State = cqltype.CompletePageState()
 				}
 				return response, nil
 			}
@@ -1405,7 +1406,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
-				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cql.CompletePageState(), Result: aggregate}}, nil
+				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {
@@ -1414,17 +1415,17 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				continue
 			}
 			if decision.Action != retry.Same && decision.Action != retry.Next {
-				return nil, log.error(cql.TypeValidation("retry", "unknown retry action"), aggregate)
+				return nil, log.error(cqltype.TypeValidation("retry", "unknown retry action"), aggregate)
 			}
 			consistency := outcome.consistency
 			if decision.Consistency.Set {
 				if !settings.InternalValidConsistency(decision.Consistency.Value) {
-					return nil, log.error(cql.TypeValidation("retry consistency", "invalid consistency"), aggregate)
+					return nil, log.error(cqltype.TypeValidation("retry consistency", "invalid consistency"), aggregate)
 				}
 				consistency = decision.Consistency.Value
 			}
 			if decision.Delay < 0 {
-				return nil, log.error(cql.TypeValidation("retry delay", "negative delay"), aggregate)
+				return nil, log.error(cqltype.TypeValidation("retry delay", "negative delay"), aggregate)
 			}
 			conn := outcome.conn
 			if decision.Action == retry.Next {
@@ -1458,17 +1459,17 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	opts := &request.options.InternalOptions
 	version := conn.InternalWire()
 	if !version.QueryKeyspace && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !requestQualifiedForKeyspace(request, request.keyspace) {
-		return cql.TypeValidation("keyspace", "protocol v4 requires the session keyspace")
+		return cqltype.TypeValidation("keyspace", "protocol v4 requires the session keyspace")
 	}
 	if opts.NowInSeconds.Set && !version.NowInSeconds {
-		return cql.TypeValidation("now in seconds", "requires protocol v5")
+		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
 	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.CQLTrace, Payload: opts.CustomPayload}
 	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}
 	if state.More() {
-		w.PagingState = cql.PageToken(state)
+		w.PagingState = cqltype.PageToken(state)
 	}
 	if request.options.InternalProfile.SerialConsistency.Set {
 		w.SerialConsistency = request.options.InternalProfile.SerialConsistency.Value
@@ -1619,7 +1620,7 @@ func attemptBytesWritten(err error) bool {
 // hasCounterColumn reports whether columns, a statement's parameters, include
 // a counter: executing the statement is then a counter write.
 func hasCounterColumn(columns cql.Columns) bool {
-	for _, column := range cql.ColumnSlice(columns) {
+	for _, column := range cqltype.ColumnSlice(columns) {
 		if column.Type.Kind() == cql.TypeCounter {
 			return true
 		}

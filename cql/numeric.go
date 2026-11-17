@@ -24,10 +24,10 @@ func VarintFromBytes(b []byte) (Varint, error) {
 	if len(b) == 0 {
 		return Varint{}, errors.New("gocql: varint requires at least one byte")
 	}
-	return CanonicalVarint(BorrowBytes(b))
+	return varintFromCanonical(BorrowBytes(b))
 }
-func CanonicalVarint(b Bytes) (Varint, error) {
-	if err := CheckBytesAlive(b); err != nil {
+func varintFromCanonical(b Bytes) (Varint, error) {
+	if err := checkBytesAlive(b); err != nil {
 		return Varint{}, err
 	}
 	if b.Len() == 0 {
@@ -37,7 +37,7 @@ func CanonicalVarint(b Bytes) (Varint, error) {
 	seen := false
 	var trim int64
 	done := false
-	err := EachBytes(b, func(s wire.Span) error {
+	err := eachBytes(b, func(s wire.Span) error {
 		if done {
 			return nil
 		}
@@ -99,7 +99,7 @@ func VarintFromBigInt(v *big.Int) Varint {
 // BigInt explicitly materializes an independent arbitrary precision integer.
 func (v Varint) BigInt() *big.Int {
 	if v.bytes.Len() == 0 {
-		if err := CheckBytesAlive(v.bytes); err != nil {
+		if err := checkBytesAlive(v.bytes); err != nil {
 			panic(err)
 		}
 		return new(big.Int)
@@ -116,5 +116,5 @@ func (v Varint) BigInt() *big.Int {
 	return n.Neg(n)
 }
 
-func VarintBytes(v Varint) Bytes { return v.bytes }
-func VarintView(b Bytes) Varint  { return Varint{bytes: b} }
+func varintBytes(v Varint) Bytes { return v.bytes }
+func varintView(b Bytes) Varint  { return Varint{bytes: b} }

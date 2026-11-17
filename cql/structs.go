@@ -37,13 +37,13 @@ type StructFields[P any] struct {
 // through P's method set, so a package-level variable built with
 // MustParamsOf sees it whatever the initialization order.
 func ParamsOf[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
-	return GeneratedParams(generatedFields[P](), opts...)
+	return generatedParams(generatedFields[P](), opts...)
 }
 
 // RowOf decodes rows into struct P by column name, mapped like ParamsOf. A
 // field whose column is not selected stays zero.
 func RowOf[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
-	return GeneratedRow(generatedFields[R](), opts...)
+	return generatedRow(generatedFields[R](), opts...)
 }
 
 // MustParamsOf is ParamsOf that panics on error, for package-level variables.

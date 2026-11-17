@@ -93,7 +93,7 @@ func interfaceOnlyRows[R any](plan RowPlan[R]) RowPlan[R] {
 
 type encoded struct {
 	bytes []byte
-	cells []ParamCell
+	cells []paramCell
 	err   string
 	index int
 }
@@ -104,10 +104,10 @@ func encodeWith[P any](t *testing.T, plan ParamPlan[P], columns Columns, value P
 	if owned {
 		builder.BeginOwned(nil)
 	}
-	w := NewParamWriter(builder, columns, true)
-	SetParamOwnership(w, owned)
-	cells := make([]ParamCell, columns.Len())
-	CaptureParamCells(w, cells)
+	w := newParamWriter(builder, columns, true)
+	setParamOwnership(w, owned)
+	cells := make([]paramCell, columns.Len())
+	captureParamCells(w, cells)
 	var out encoded
 	if err := plan.Encode(w, value); err != nil {
 		out.err = err.Error()

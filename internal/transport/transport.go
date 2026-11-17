@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -118,7 +119,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 		x.inputHeld = true
 	}
 	for _, entry := range req.Payload {
-		if owner := cql.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
+		if owner := cqltype.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
 			if !owner.Retain() {
 				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cql.ErrReleased})
 			}

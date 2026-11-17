@@ -47,7 +47,7 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 		}
 	}, compile: func(t DataType) (streamFieldPlan[R], error) {
 		if decoder == nil || field == nil {
-			return streamFieldPlan[R]{}, TypeValidation("stream field", "nil codec or accessor")
+			return streamFieldPlan[R]{}, typeValidation("stream field", "nil codec or accessor")
 		}
 		plan, err := compileStreamValuePlan(decoder, t)
 		if err != nil {
@@ -60,7 +60,7 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 		}, decode: func(reader *StreamRowReader, dst *R) error {
 			ptr := field(dst)
 			if ptr == nil {
-				return TypeValidation("stream field", "accessor returned nil")
+				return typeValidation("stream field", "accessor returned nil")
 			}
 			return reader.ReadColumn(plan, ptr)
 		}}, nil
@@ -89,7 +89,7 @@ func (c streamRowsCodec[R]) Compile(columns Columns) (StreamRowPlan[R], error) {
 }
 func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOptions) (StreamRowPlan[R], error) {
 	if c.reset == nil {
-		return nil, TypeValidation("stream row", "nil application reset callback")
+		return nil, typeValidation("stream row", "nil application reset callback")
 	}
 	if err := checkDynamicColumns(columns); err != nil {
 		return nil, err
@@ -97,7 +97,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 	locations := make([]fieldLocation, len(c.fields))
 	for i, f := range c.fields {
 		if f.compile == nil || f.resetMissing == nil || f.canResetMissing == nil {
-			return nil, TypeValidation("stream field", "uninitialized declaration")
+			return nil, typeValidation("stream field", "uninitialized declaration")
 		}
 		locations[i] = f.loc
 	}
@@ -120,7 +120,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 	}
 	for i, f := range c.fields {
 		if !matched[i] && !f.canResetMissing() {
-			return nil, TypeValidation("stream reset", "absent application field %q needs metadata-independent StreamResetter", f.loc.name)
+			return nil, typeValidation("stream reset", "absent application field %q needs metadata-independent StreamResetter", f.loc.name)
 		}
 		plan.resets[i] = f.resetMissing
 	}
@@ -129,9 +129,9 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 			plan.ordered[index] = streamFieldPlan[R]{decode: func(r *StreamRowReader, _ *R) error { return r.SkipColumn() }}
 			continue
 		}
-		compiled, err := c.fields[field].compile(ColumnSlice(columns)[index].Type)
+		compiled, err := c.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: streaming column %d (%s): %w", index, ColumnSlice(columns)[index].Name, err)
+			return nil, fmt.Errorf("gocql: streaming column %d (%s): %w", index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 		plan.resets[field] = compiled.reset
@@ -148,13 +148,13 @@ func (p streamRowsPlan[R]) Reset(dst *R) {
 }
 func (p streamRowsPlan[R]) DecodeInto(r *StreamRowReader, dst *R) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil stream row destination")
+		return typeValidation("destination", "nil stream row destination")
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if r.index != 0 || !r.matches(p.columns) {
-		return r.shared.fail(TypeValidation("stream metadata", "row shape differs from compiled plan"))
+		return r.shared.fail(typeValidation("stream metadata", "row shape differs from compiled plan"))
 	}
 	for _, field := range p.ordered {
 		if err := field.decode(r, dst); err != nil {
@@ -175,12 +175,12 @@ func StreamOneColumn[T any](decoder StreamDecoder[T]) StreamRowDecoder[T] {
 }
 func (c streamOneColumn[T]) Compile(columns Columns) (StreamRowPlan[T], error) {
 	if columns.Len() != 1 {
-		return nil, TypeValidation("stream row", "expected one column, got %d", columns.Len())
+		return nil, typeValidation("stream row", "expected one column, got %d", columns.Len())
 	}
 	if c.decoder == nil {
-		return nil, TypeValidation("stream codec", "nil decoder")
+		return nil, typeValidation("stream codec", "nil decoder")
 	}
-	p, e := compileStreamValuePlan(c.decoder, ColumnSlice(columns)[0].Type)
+	p, e := compileStreamValuePlan(c.decoder, columnSlice(columns)[0].Type)
 	if e != nil {
 		return nil, e
 	}
@@ -193,13 +193,13 @@ func (p streamOneColumnPlan[T]) Reset(dst *T) {
 }
 func (p streamOneColumnPlan[T]) DecodeInto(r *StreamRowReader, dst *T) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil stream row destination")
+		return typeValidation("destination", "nil stream row destination")
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if r.index != 0 || !r.matches(p.columns) {
-		return r.shared.fail(TypeValidation("stream metadata", "single column shape changed"))
+		return r.shared.fail(typeValidation("stream metadata", "single column shape changed"))
 	}
 	if err := r.ReadColumn(p.plan, dst); err != nil {
 		return err
@@ -231,7 +231,7 @@ func (c streamRecordCodec[R]) Compile(t DataType) (StreamValuePlan[R], error) {
 		return nil, err
 	}
 	if c.decoder == nil {
-		return nil, TypeValidation("stream codec", "nil record decoder")
+		return nil, typeValidation("stream codec", "nil record decoder")
 	}
 	if c.kind == TypeUDT {
 		if err := checkUDTIdentity(t, c.options); err != nil {
@@ -251,7 +251,7 @@ func (c streamRecordCodec[R]) Compile(t DataType) (StreamValuePlan[R], error) {
 		return nil, err
 	}
 	validations := make([]*streamValidationPlan, columns.Len())
-	for i, c := range ColumnSlice(columns) {
+	for i, c := range columnSlice(columns) {
 		validations[i], err = compileStreamValidation(c.Type, 0)
 		if err != nil {
 			return nil, err
@@ -266,13 +266,13 @@ func (p streamRecordPlan[R]) Reset(dst *R) {
 }
 func (p streamRecordPlan[R]) DecodeInto(r *StreamValueReader, dst *R) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil record destination"))
+		return r.fail(typeValidation("destination", "nil record destination"))
 	}
 	if err := r.present(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled record metadata changed"))
+		return r.fail(typeValidation("type", "compiled record metadata changed"))
 	}
 	row := r.shared.row(r.depth + 1)
 	*row = StreamRowReader{columns: p.columns, scope: r.scope, shared: r.shared, validations: p.validations, depth: r.depth + 1, allowMissing: true, active: true, capture: r.capture}
@@ -289,7 +289,7 @@ func (p streamRecordPlan[R]) DecodeInto(r *StreamValueReader, dst *R) error {
 func streamFieldMapping(columns Columns, locations []fieldLocation, extra, missing bool) ([]int, error) {
 	mapping, err := mapColumnFields(columns, locations, false, missing, extra)
 	if err != nil {
-		return nil, TypeValidation("stream field", "%v", err)
+		return nil, typeValidation("stream field", "%v", err)
 	}
 	return mapping, nil
 }

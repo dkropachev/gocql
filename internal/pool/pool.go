@@ -29,6 +29,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -159,7 +160,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 	if check && p.generation != expected {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return cql.TypeValidation("pool generation", "opening attempt belongs to superseded sharder")
+		return cqltype.TypeValidation("pool generation", "opening attempt belongs to superseded sharder")
 	}
 	if p.closed {
 		p.publishLocked()
@@ -171,12 +172,12 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 	if initial && p.InternalCount() > 0 && (shards != p.InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore != p.msbIgnore) {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return cql.TypeValidation("pool generation", "late initial opening conflicts with installed sharder")
+		return cqltype.TypeValidation("pool generation", "late initial opening conflicts with installed sharder")
 	}
 	if shard < 0 || shard >= shards {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return cql.TypeValidation("shard", "server reported invalid shard")
+		return cqltype.TypeValidation("shard", "server reported invalid shard")
 	}
 	var retired []*transport.Conn
 	if shards != p.InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalMsbIgnore != p.msbIgnore {
@@ -196,7 +197,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return cql.TypeValidation("shard target", "source-port/NAT mapping assigned shard %d instead of %d; ordinary-port fallback enabled", shard, c.InternalRequestedShard.Value)
+		return cqltype.TypeValidation("shard target", "source-port/NAT mapping assigned shard %d instead of %d; ordinary-port fallback enabled", shard, c.InternalRequestedShard.Value)
 	}
 	if p.options.ConnectionsPerHost > 0 && p.InternalCount() >= p.InternalTarget() {
 		p.retired = append(p.retired, retired...)
@@ -359,7 +360,7 @@ func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, tar
 }
 func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target model.Target, routing model.RoutingInfo, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
 	if ctx == nil {
-		return nil, cql.TypeValidation("stream context", "nil context")
+		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
 	if (!target.HostID.IsEmpty() && target.HostID != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)) || routing.HostID.Set && routing.HostID.Value != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) {
 		return nil, runtimeerrors.ErrNoConnections

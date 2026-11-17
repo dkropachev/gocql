@@ -249,7 +249,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 
 	if !VersionFor(f.Proto).Segments && head.Flags&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
-			return cql.NewFrameError("no compressor available with compressed frame body")
+			return NewFrameError("no compressor available with compressed frame body")
 		}
 
 		if decoder, ok := wirecompress.FrameDecoderWithLimit(f.Compressor, f.decompressedLimit()); ok {
@@ -330,7 +330,7 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 	defer func() { RecoverMalformedFrame(recover(), &err) }()
 
 	if f.Header.Version.Request() {
-		return nil, cql.NewFrameError("got a request frame from server: %v", f.Header.Version)
+		return nil, NewFrameError("got a request frame from server: %v", f.Header.Version)
 	}
 
 	if f.Header.Flags&frm.FlagTracing == frm.FlagTracing {
@@ -364,7 +364,7 @@ func (f *Framer) ParseFrame() (frame Frame, err error) {
 	case frm.OpEvent:
 		frame = f.ParseEventFrame()
 	default:
-		return nil, cql.NewFrameError("unknown op in frame header: %s", f.Header.Op)
+		return nil, NewFrameError("unknown op in frame header: %s", f.Header.Op)
 	}
 
 	return
@@ -891,7 +891,7 @@ func (f *Framer) parseResultFrame() (Frame, error) {
 		return f.parseResultSchemaChange(), nil
 	}
 
-	return nil, cql.NewFrameError("unknown result kind: %x", kind)
+	return nil, NewFrameError("unknown result kind: %x", kind)
 }
 
 type ResultRowsFrame struct {

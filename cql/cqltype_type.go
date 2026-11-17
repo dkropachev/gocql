@@ -11,8 +11,8 @@ import (
 )
 
 // DataType is an immutable, complete CQL type descriptor. Its zero value is invalid.
-type DataType struct{ descriptor *DataTypeDescriptor }
-type DataTypeDescriptor struct {
+type DataType struct{ descriptor *dataTypeDescriptor }
+type dataTypeDescriptor struct {
 	Element, Key   DataType
 	Keyspace, Name string
 	Fields         Columns
@@ -34,7 +34,7 @@ type Columns struct{ columns []ColumnSpec }
 // scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
 var scalarTypes = func() (t [TypeDuration + 1]DataType) {
 	for k := TypeAscii; k <= TypeDuration; k++ {
-		t[k] = DataType{descriptor: &DataTypeDescriptor{Kind: k}}
+		t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
 	}
 	return t
 }()
@@ -70,16 +70,16 @@ var (
 // fails only for non-scalar kinds; use the predeclared values such as TextType
 // when the kind is known at compile time.
 func ScalarType(kind Type) (DataType, error) {
-	if err := ValidateScalarKind(kind); err != nil {
+	if err := validateScalarKind(kind); err != nil {
 		return DataType{}, err
 	}
 	return scalarTypes[kind], nil
 }
 
 // ValidateScalarKind checks scalar support without constructing a descriptor.
-func ValidateScalarKind(kind Type) error {
+func validateScalarKind(kind Type) error {
 	if kind < TypeAscii || kind > TypeDuration {
-		return TypeValidation("kind", "unsupported scalar kind %v", kind)
+		return typeValidation("kind", "unsupported scalar kind %v", kind)
 	}
 	return nil
 }
@@ -90,71 +90,71 @@ func ListType(element DataType) (DataType, error) { return collectionDataType(Ty
 // SetType constructs a CQL set type with the supplied element type.
 func SetType(element DataType) (DataType, error) { return collectionDataType(TypeSet, element) }
 func collectionDataType(kind Type, element DataType) (DataType, error) {
-	if err := ValidateDataType(element); err != nil {
+	if err := validateDataType(element); err != nil {
 		return DataType{}, err
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: kind, Element: element}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: kind, Element: element}}, nil
 }
 
 // MapType constructs a CQL Map type from its complete type description.
 func MapType(key, value DataType) (DataType, error) {
-	if err := ValidateDataType(key); err != nil {
+	if err := validateDataType(key); err != nil {
 		return DataType{}, err
 	}
-	if err := ValidateDataType(value); err != nil {
+	if err := validateDataType(value); err != nil {
 		return DataType{}, err
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: TypeMap, Key: key, Element: value}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeMap, Key: key, Element: value}}, nil
 }
 
 // TupleType constructs a CQL Tuple type from its complete type description.
 func TupleType(fields ...DataType) (DataType, error) {
 	if len(fields) > math.MaxUint16 {
-		return DataType{}, TypeValidation("fields", "tuple requires 0..65535 fields")
+		return DataType{}, typeValidation("fields", "tuple requires 0..65535 fields")
 	}
 	columns := make([]ColumnSpec, len(fields))
 	for i, t := range fields {
-		if err := ValidateDataType(t); err != nil {
+		if err := validateDataType(t); err != nil {
 			return DataType{}, fmt.Errorf("tuple field %d: %w", i, err)
 		}
 		columns[i].Type = t
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: TypeTuple, Fields: Columns{columns: columns}}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeTuple, Fields: Columns{columns: columns}}}, nil
 }
 
 // UDTType constructs a CQL UDT type from its complete type description.
 func UDTType(keyspace, name string, fields ...ColumnSpec) (DataType, error) {
 	if keyspace == "" || name == "" {
-		return DataType{}, TypeValidation("identity", "UDT keyspace and name must not be empty")
+		return DataType{}, typeValidation("identity", "UDT keyspace and name must not be empty")
 	}
 	if len(fields) > math.MaxUint16 {
-		return DataType{}, TypeValidation("fields", "UDT has too many fields")
+		return DataType{}, typeValidation("fields", "UDT has too many fields")
 	}
 	seen := make(map[string]struct{}, len(fields))
 	for i, c := range fields {
 		if c.Name == "" {
-			return DataType{}, TypeValidation("fields", "UDT field %d has no name", i)
+			return DataType{}, typeValidation("fields", "UDT field %d has no name", i)
 		}
 		if _, ok := seen[c.Name]; ok {
-			return DataType{}, TypeValidation("fields", "duplicate UDT field %q", c.Name)
+			return DataType{}, typeValidation("fields", "duplicate UDT field %q", c.Name)
 		}
 		seen[c.Name] = struct{}{}
-		if err := ValidateDataType(c.Type); err != nil {
+		if err := validateDataType(c.Type); err != nil {
 			return DataType{}, fmt.Errorf("UDT field %q: %w", c.Name, err)
 		}
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: TypeUDT, Keyspace: keyspace, Name: name, Fields: NewColumns(fields...)}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeUDT, Keyspace: keyspace, Name: name, Fields: NewColumns(fields...)}}, nil
 }
 
 // VectorType constructs a vector type with an element type and fixed nonzero dimension.
 func VectorType(element DataType, dimension uint16) (DataType, error) {
-	if err := ValidateDataType(element); err != nil {
+	if err := validateDataType(element); err != nil {
 		return DataType{}, err
 	}
 	if dimension == 0 {
-		return DataType{}, TypeValidation("dimension", "vector dimension must be positive")
+		return DataType{}, typeValidation("dimension", "vector dimension must be positive")
 	}
-	return DataType{descriptor: &DataTypeDescriptor{Kind: TypeCustom, Element: element, Dimension: dimension}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeCustom, Element: element, Dimension: dimension}}, nil
 }
 
 // NewColumns snapshots column specifications into immutable metadata.
@@ -254,7 +254,7 @@ func (t DataType) Equal(other DataType) bool {
 	return equalDataTypes(t, other, make(map[typeDescriptorPair]bool))
 }
 
-type typeDescriptorPair struct{ a, b *DataTypeDescriptor }
+type typeDescriptorPair struct{ a, b *dataTypeDescriptor }
 
 func equalDataTypes(t, other DataType, seen map[typeDescriptorPair]bool) bool {
 	if t.descriptor == other.descriptor {
@@ -345,13 +345,13 @@ func (t DataType) String() string {
 	}
 	return s
 }
-func ValidateDataType(t DataType) error {
+func validateDataType(t DataType) error {
 	if t.descriptor == nil {
-		return TypeValidation("type", "invalid zero DataType")
+		return typeValidation("type", "invalid zero DataType")
 	}
 	return nil
 }
-func TypeValidation(field, format string, args ...any) error {
+func typeValidation(field, format string, args ...any) error {
 	return &ValidationError{Field: field, Err: fmt.Errorf(format, args...)}
 }
 

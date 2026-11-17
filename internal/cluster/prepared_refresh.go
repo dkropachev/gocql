@@ -26,6 +26,7 @@ import (
 	"slices"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -67,7 +68,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 		}
 		for _, row := range rows {
 			if row.InternalName == "" {
-				return cql.TypeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
+				return cqltype.TypeValidation("keyspace schema", "missing keyspace identity in required reconciliation")
 			}
 			if err := s.reconcileV2PreparedScope(ctx, row.InternalName); err != nil {
 				return err

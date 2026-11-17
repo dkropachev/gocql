@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -44,7 +45,7 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	}
 	backend, ok := control.(v2SystemQueryer)
 	if !ok {
-		return false, cql.TypeValidation("schema discovery", "control connection does not support typed queries")
+		return false, cqltype.TypeValidation("schema discovery", "control connection does not support typed queries")
 	}
 	ctx := context.Background()
 	timeout := 60 * time.Second
@@ -225,7 +226,7 @@ func (s *Core) refreshRing() error {
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {
 		r.mu.Unlock()
-		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cql.TypeValidation("topology generation", "topology changed during refresh")}
+		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cqltype.TypeValidation("topology generation", "topology changed during refresh")}
 	}
 	before := r.InternalHosts
 	next := make(map[string]*implEndpoint.HostInfo, len(hosts))

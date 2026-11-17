@@ -14,6 +14,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -184,7 +185,7 @@ func (p *queryPool[P, R]) takeIdle() []*queryState {
 // query may already serve another call.
 func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cql.TypeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -212,7 +213,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 // query's owner.
 func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cql.TypeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -292,7 +293,7 @@ func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state cql.PageSt
 // pool returns p's query pool, created on first use.
 func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, cql.TypeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
@@ -309,10 +310,10 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 // on p, but a Batch is not: append to one batch from one goroutine at a time.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	if batch == nil {
-		return cql.TypeValidation("batch", "nil batch")
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if p == nil || p.privateStorage.InternalState == nil {
-		return cql.TypeValidation("prepared", "nil handle")
+		return cqltype.TypeValidation("prepared", "nil handle")
 	}
 	state := p.privateStorage.InternalState
 	s := state.InternalSession

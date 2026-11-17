@@ -24,7 +24,7 @@ type UDTOptions struct {
 func UDTOptionsFor(typ DataType) (UDTOptions, error) {
 	keyspace, name, ok := typ.UDTName()
 	if !ok {
-		return UDTOptions{}, TypeValidation("type", "%s is not a UDT", typ)
+		return UDTOptions{}, typeValidation("type", "%s is not a UDT", typ)
 	}
 	return UDTOptions{Keyspace: keyspace, Name: name}, nil
 }
@@ -48,15 +48,15 @@ func UDTEncoder[T any](codec ParamEncoder[T], options UDTOptions) Encoder[T] {
 	return recordEncoder[T]{kind: TypeUDT, codec: codec, options: options}
 }
 func recordColumns(typ DataType, kind Type) (Columns, error) {
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		return Columns{}, err
 	}
 	if typ.Kind() != kind {
-		return Columns{}, TypeValidation("type", "expected %s, got %s", kind, typ)
+		return Columns{}, typeValidation("type", "expected %s, got %s", kind, typ)
 	}
 	// The descriptor is immutable, so a compiled plan can retain its columns
 	// without rebuilding the public defensive copy on every value.
-	return DescriptorOf(typ).Fields, nil
+	return descriptorOf(typ).Fields, nil
 }
 func (c recordEncoder[T]) CheckType(typ DataType) error {
 	perfCheckType()
@@ -75,13 +75,13 @@ func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) 
 		return nil, err
 	}
 	if c.codec == nil {
-		return nil, TypeValidation("encoder", "nil tuple/UDT parameter encoder")
+		return nil, typeValidation("encoder", "nil tuple/UDT parameter encoder")
 	}
 	var plan ParamPlan[T]
 	if c.kind == TypeUDT {
 		plan, err = compileUDTParamEncoder(c.codec, columns, c.options)
 	} else {
-		plan, err = CompileParamPlan(c.codec, columns)
+		plan, err = compileParamPlan(c.codec, columns)
 	}
 	if err != nil {
 		return nil, err
@@ -98,17 +98,17 @@ func (c recordEncoder[T]) Encode(w *ValueWriter, value T) error {
 		return bound.Encode(w, value)
 	}
 	if !c.typ.Equal(w.Type()) {
-		return TypeValidation("type", "tuple/UDT identity or fields changed after compilation")
+		return typeValidation("type", "tuple/UDT identity or fields changed after compilation")
 	}
 	if err := w.payload(); err != nil {
 		return err
 	}
-	params := NewParamWriter(w.builder, c.columns, false)
+	params := newParamWriter(w.builder, c.columns, false)
 	params.ownBorrowed = w.ownBorrowed
 	if err := c.plan.Encode(params, value); err != nil {
 		return w.fail(err)
 	}
-	return w.fail(FinishParamWriter(params))
+	return w.fail(finishParamWriter(params))
 }
 
 type recordDecoder[T any] struct {
@@ -154,13 +154,13 @@ func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) 
 		return nil, err
 	}
 	if c.codec == nil {
-		return nil, TypeValidation("decoder", "nil tuple/UDT row decoder")
+		return nil, typeValidation("decoder", "nil tuple/UDT row decoder")
 	}
 	var plan RowPlan[T]
 	if c.kind == TypeUDT {
 		plan, err = compileUDTRowDecoder(c.codec, columns, c.options)
 	} else {
-		plan, err = CompileRowPlan(c.codec, columns)
+		plan, err = compileRowPlan(c.codec, columns)
 	}
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (c recordDecoder[T]) Decode(r ValueReader) (T, error) {
 }
 func (c recordDecoder[T]) DecodeInto(r ValueReader, dst *T) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil record destination")
+		return typeValidation("destination", "nil record destination")
 	}
 	if c.plan == nil {
 		bound, err := c.compileValueDecoder(r.Type())
@@ -201,7 +201,7 @@ func (c recordDecoder[T]) DecodeInto(r ValueReader, dst *T) error {
 		return bound.(valueIntoDecoder[T]).DecodeInto(r, dst)
 	}
 	if !c.typ.Equal(r.Type()) {
-		return TypeValidation("type", "tuple/UDT identity or fields changed after compilation")
+		return typeValidation("type", "tuple/UDT identity or fields changed after compilation")
 	}
 	if err := requirePresent(r); err != nil {
 		return err
@@ -214,7 +214,7 @@ func (c recordDecoder[T]) DecodeInto(r ValueReader, dst *T) error {
 	state.reader = RowReader{columns: c.columns, cursor: &state.cursor, lease: r.lease, allowMissing: true}
 	err := c.plan.DecodeInto(&state.reader, dst)
 	if err == nil {
-		err = FinishRowReader(&state.reader)
+		err = finishRowReader(&state.reader)
 	}
 	if err == nil {
 		err = state.cursor.RequireEnd()
@@ -229,7 +229,7 @@ func (c recordDecoder[T]) Clone(value T) T {
 
 func validateRecordBody(r ValueReader, columns Columns) error {
 	cursor := r.cursorValue()
-	for index, column := range ColumnSlice(columns) {
+	for index, column := range columnSlice(columns) {
 		if cursor.Remaining() == 0 {
 			break
 		}
@@ -248,15 +248,15 @@ func udtFieldMapping(columns Columns, locations []fieldLocation, options UDTOpti
 		mapping[i] = -1
 	}
 	names := make(map[string]int, columns.Len())
-	for index, column := range ColumnSlice(columns) {
+	for index, column := range columnSlice(columns) {
 		if _, duplicate := names[column.Name]; duplicate {
-			return nil, TypeValidation("field", "duplicate database UDT field %q", column.Name)
+			return nil, typeValidation("field", "duplicate database UDT field %q", column.Name)
 		}
 		names[column.Name] = index
 	}
 	for field, location := range locations {
 		if !location.positional && location.name == "" {
-			return nil, TypeValidation("field", "empty UDT field name")
+			return nil, typeValidation("field", "empty UDT field name")
 		}
 		index, found := names[location.name]
 		if location.positional {
@@ -264,18 +264,18 @@ func udtFieldMapping(columns Columns, locations []fieldLocation, options UDTOpti
 		}
 		if !found {
 			if !options.AllowMissingFields {
-				return nil, TypeValidation("field", "application field %q at index %d is absent from UDT", location.name, location.index)
+				return nil, typeValidation("field", "application field %q at index %d is absent from UDT", location.name, location.index)
 			}
 			continue
 		}
 		if mapping[index] != -1 {
-			return nil, TypeValidation("field", "multiple accessors for UDT field %q", ColumnSlice(columns)[index].Name)
+			return nil, typeValidation("field", "multiple accessors for UDT field %q", columnSlice(columns)[index].Name)
 		}
 		mapping[index] = field
 	}
 	for index, field := range mapping {
 		if field == -1 && !options.AllowExtraDatabaseFields {
-			return nil, TypeValidation("field", "no accessor for UDT field %q", ColumnSlice(columns)[index].Name)
+			return nil, typeValidation("field", "no accessor for UDT field %q", columnSlice(columns)[index].Name)
 		}
 	}
 	return mapping, nil
@@ -288,14 +288,14 @@ func (f nullUDTField[T]) compile(DataType) (InputField[T], error) { return f, ni
 func (f nullUDTField[T]) encode(w *ParamWriter, _ T) error {
 	column, ok := w.columns.At(w.index)
 	if !ok {
-		return TypeValidation("field", "UDT has no field at index %d", w.index)
+		return typeValidation("field", "UDT has no field at index %d", w.index)
 	}
-	child := NewValueWriter(w.builder, column.Type, false)
+	child := newValueWriter(w.builder, column.Type, false)
 	if err := child.Null(); err != nil {
 		abortValueWriter(child)
 		return err
 	}
-	if err := FinishValueWriter(child); err != nil {
+	if err := finishValueWriter(child); err != nil {
 		return err
 	}
 	w.index++
@@ -305,7 +305,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
-			return nil, TypeValidation("field", "nil UDT input field")
+			return nil, typeValidation("field", "nil UDT input field")
 		}
 		locations[i] = field.location()
 	}
@@ -319,9 +319,9 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 			plan.ordered[index] = nullUDTField[T]{}
 			continue
 		}
-		compiled, err := codec.fields[field].compile(ColumnSlice(columns)[index].Type)
+		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: UDT field %q: %w", ColumnSlice(columns)[index].Name, err)
+			return nil, fmt.Errorf("gocql: UDT field %q: %w", columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -332,7 +332,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
-			return nil, TypeValidation("field", "nil UDT output field")
+			return nil, typeValidation("field", "nil UDT output field")
 		}
 		locations[i] = field.location()
 	}
@@ -346,9 +346,9 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 			plan.ordered[index] = ignoredField[T]{}
 			continue
 		}
-		compiled, err := codec.fields[field].compile(ColumnSlice(columns)[index].Type)
+		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: UDT field %q: %w", ColumnSlice(columns)[index].Name, err)
+			return nil, fmt.Errorf("gocql: UDT field %q: %w", columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -367,21 +367,21 @@ type udtRowCompiler[T any] interface {
 
 func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, options UDTOptions) (ParamPlan[T], error) {
 	if codec == nil {
-		return nil, TypeValidation("encoder", "nil UDT parameter encoder")
+		return nil, typeValidation("encoder", "nil UDT parameter encoder")
 	}
 	if compiler, ok := codec.(udtParamCompiler[T]); ok {
 		return compiler.compileUDT(columns, options)
 	}
-	return CompileParamPlan(codec, columns)
+	return compileParamPlan(codec, columns)
 }
 func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options UDTOptions) (RowPlan[T], error) {
 	if codec == nil {
-		return nil, TypeValidation("decoder", "nil UDT row decoder")
+		return nil, typeValidation("decoder", "nil UDT row decoder")
 	}
 	if compiler, ok := codec.(udtRowCompiler[T]); ok {
 		return compiler.compileUDT(columns, options)
 	}
-	return CompileRowPlan(codec, columns)
+	return compileRowPlan(codec, columns)
 }
 func (c paramsCodec[T]) compileUDT(columns Columns, options UDTOptions) (ParamPlan[T], error) {
 	return compileUDTParams(c, columns, options)
@@ -398,7 +398,7 @@ func (c singleColumnRows[T]) compileUDT(columns Columns, options UDTOptions) (Ro
 }
 func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (ParamPlan[A], error) {
 	if c.mapValue == nil {
-		return nil, TypeValidation("encoder", "nil UDT parameter mapping")
+		return nil, typeValidation("encoder", "nil UDT parameter mapping")
 	}
 	plan, err := compileUDTParamEncoder(c.codec, columns, options)
 	if err != nil {
@@ -408,7 +408,7 @@ func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Par
 }
 func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPlan[B], error) {
 	if c.mapValue == nil || c.cloneValue == nil {
-		return nil, TypeValidation("decoder", "nil UDT row mapping")
+		return nil, typeValidation("decoder", "nil UDT row mapping")
 	}
 	plan, err := compileUDTRowDecoder(c.codec, columns, options)
 	if err != nil {
@@ -450,10 +450,10 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPl
 func checkUDTIdentity(typ DataType, options UDTOptions) error {
 	ks, name, ok := typ.UDTName()
 	if !ok || options.Keyspace == "" || options.Name == "" {
-		return TypeValidation("UDT identity", "expected keyspace and name are required")
+		return typeValidation("UDT identity", "expected keyspace and name are required")
 	}
 	if ks != options.Keyspace || name != options.Name {
-		return TypeValidation("UDT identity", "expected %s.%s, got %s.%s", options.Keyspace, options.Name, ks, name)
+		return typeValidation("UDT identity", "expected %s.%s, got %s.%s", options.Keyspace, options.Name, ks, name)
 	}
 	return nil
 }

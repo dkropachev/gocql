@@ -188,8 +188,10 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal("no generated StreamEvent stream mapping")
 		}
 		const columns = "bucket, id, name, blob, big, maybe, tags, scores, createdat, updatedat"
-		reflectedParams := codecTestMust(cql.ReflectParams[mapped.Event]())
-		reflectedRows := codecTestMust(cql.ReflectRow[mapped.Event]())
+		reflectedParams := cql.ConvertParams(cql.MustParamsOf[reflectedEvent](), func(v mapped.Event) reflectedEvent { return reflectedEvent(v) })
+		reflectedEventRows := cql.MustRowOf[reflectedEvent]()
+		reflectedRows := cql.ConvertRows(reflectedEventRows, func(v reflectedEvent) mapped.Event { return mapped.Event(v) },
+			func(v mapped.Event) mapped.Event { return mapped.Event(reflectedEventRows.Clone(reflectedEvent(v))) })
 		events := make([]mapped.Event, 2)
 		for i := range events {
 			r := smRecordAt(10, i)
@@ -243,7 +245,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), codecTestMust(cql.ReflectStreamRow[mapped.StreamEvent]())} {
+		for _, decoder := range []stream.RowDecoder[mapped.StreamEvent]{stream.MustRowOf[mapped.StreamEvent](), reflectedStreamRows{stream.MustRowOf[reflectedStreamEvent]()}} {
 			prepared, err := f.session.PrepareStream(ctx, stream.Statement[int32, mapped.StreamEvent]{
 				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, createdat, updatedat FROM " + f.table + " WHERE bucket = ?",
 				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,
@@ -745,4 +747,38 @@ func TestStructMapping(t *testing.T) {
 		}
 		requireRecord(t, got, r)
 	})
+}
+
+// reflectedEvent and reflectedStreamEvent have the fields of mapped.Event and
+// mapped.StreamEvent but not their generated mapping methods, so
+// cql.ParamsOf, cql.RowOf and stream.RowOf map them by reflection.
+type (
+	reflectedEvent       mapped.Event
+	reflectedStreamEvent mapped.StreamEvent
+)
+
+// reflectedStreamRows decodes a mapped.StreamEvent with reflectedStreamEvent's
+// reflected stream mapping.
+type reflectedStreamRows struct {
+	rows stream.RowDecoder[reflectedStreamEvent]
+}
+
+func (r reflectedStreamRows) Compile(columns cql.Columns) (stream.RowPlan[mapped.StreamEvent], error) {
+	plan, err := r.rows.Compile(columns)
+	if err != nil {
+		return nil, err
+	}
+	return reflectedStreamPlan{plan}, nil
+}
+
+type reflectedStreamPlan struct {
+	plan stream.RowPlan[reflectedStreamEvent]
+}
+
+func (p reflectedStreamPlan) Reset(dst *mapped.StreamEvent) {
+	p.plan.Reset((*reflectedStreamEvent)(dst))
+}
+
+func (p reflectedStreamPlan) DecodeInto(r *stream.RowReader, dst *mapped.StreamEvent) error {
+	return p.plan.DecodeInto(r, (*reflectedStreamEvent)(dst))
 }

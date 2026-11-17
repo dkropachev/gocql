@@ -29,7 +29,7 @@ type streamValidationPlan struct {
 	typ          DataType
 	scalar       func(*StreamValueReader) error
 	element, key *streamValidationPlan
-	children     map[*DataTypeDescriptor]*streamValidationPlan
+	children     map[*dataTypeDescriptor]*streamValidationPlan
 	fields       []*streamValidationPlan
 	width        int64
 	height       int
@@ -37,27 +37,27 @@ type streamValidationPlan struct {
 }
 
 func compileStreamValidation(t DataType, depth int) (*streamValidationPlan, error) {
-	return compileStreamValidationMemo(t, depth, make(map[*DataTypeDescriptor]*streamValidationPlan))
+	return compileStreamValidationMemo(t, depth, make(map[*dataTypeDescriptor]*streamValidationPlan))
 }
-func compileStreamValidationMemo(t DataType, depth int, memo map[*DataTypeDescriptor]*streamValidationPlan) (*streamValidationPlan, error) {
-	if err := ValidateDataType(t); err != nil {
+func compileStreamValidationMemo(t DataType, depth int, memo map[*dataTypeDescriptor]*streamValidationPlan) (*streamValidationPlan, error) {
+	if err := validateDataType(t); err != nil {
 		return nil, err
 	}
 	if depth > 128 {
-		return nil, TypeValidation("type", "streaming type nesting exceeds 128")
+		return nil, typeValidation("type", "streaming type nesting exceeds 128")
 	}
-	if p := memo[DescriptorOf(t)]; p != nil {
+	if p := memo[descriptorOf(t)]; p != nil {
 		if p.building {
-			return nil, TypeValidation("type", "cyclic streaming descriptor")
+			return nil, typeValidation("type", "cyclic streaming descriptor")
 		}
 		if depth+p.height > 128 {
-			return nil, TypeValidation("type", "streaming type nesting exceeds 128")
+			return nil, typeValidation("type", "streaming type nesting exceeds 128")
 		}
 		return p, nil
 	}
 	p := &streamValidationPlan{typ: t, building: true}
-	memo[DescriptorOf(t)] = p
-	d := DescriptorOf(t)
+	memo[descriptorOf(t)] = p
+	d := descriptorOf(t)
 	child := func(t DataType) (*streamValidationPlan, error) {
 		return compileStreamValidationMemo(t, depth+1, memo)
 	}
@@ -70,7 +70,7 @@ func compileStreamValidationMemo(t DataType, depth int, memo map[*DataTypeDescri
 		}
 		if t.Kind() == TypeCustom {
 			if d.Dimension == 0 {
-				return nil, TypeValidation("dimension", "zero vector dimension")
+				return nil, typeValidation("dimension", "zero vector dimension")
 			}
 			p.width, err = vectorFixedWidth(d.Element)
 		}
@@ -81,17 +81,17 @@ func compileStreamValidationMemo(t DataType, depth int, memo map[*DataTypeDescri
 		}
 	case TypeTuple, TypeUDT:
 		if t.Kind() == TypeUDT && (d.Keyspace == "" || d.Name == "") {
-			return nil, TypeValidation("UDT identity", "incomplete descriptor")
+			return nil, typeValidation("UDT identity", "incomplete descriptor")
 		}
 		p.fields = make([]*streamValidationPlan, d.Fields.Len())
-		for i, c := range ColumnSlice(d.Fields) {
+		for i, c := range columnSlice(d.Fields) {
 			p.fields[i], err = child(c.Type)
 			if err != nil {
 				return nil, err
 			}
 		}
 	default:
-		err = ValidateScalarKind(t.Kind())
+		err = validateScalarKind(t.Kind())
 		if err == nil {
 			p.scalar, err = compileStreamScalarValidation(t)
 		}
@@ -100,22 +100,22 @@ func compileStreamValidationMemo(t DataType, depth int, memo map[*DataTypeDescri
 		return nil, err
 	}
 	if p.element != nil || p.key != nil || len(p.fields) > 0 {
-		p.children = make(map[*DataTypeDescriptor]*streamValidationPlan)
+		p.children = make(map[*dataTypeDescriptor]*streamValidationPlan)
 	}
 	if p.element != nil {
-		p.children[DescriptorOf(p.element.typ)] = p.element
+		p.children[descriptorOf(p.element.typ)] = p.element
 	}
 	if p.key != nil {
-		p.children[DescriptorOf(p.key.typ)] = p.key
+		p.children[descriptorOf(p.key.typ)] = p.key
 	}
 	for _, child := range p.fields {
-		p.children[DescriptorOf(child.typ)] = child
+		p.children[descriptorOf(child.typ)] = child
 	}
 	for _, child := range p.children {
 		p.height = max(p.height, child.height+1)
 	}
 	if depth+p.height > 128 {
-		return nil, TypeValidation("type", "streaming type nesting exceeds 128")
+		return nil, typeValidation("type", "streaming type nesting exceeds 128")
 	}
 	p.building = false
 	return p, nil
@@ -125,7 +125,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "validation metadata changed"))
+		return r.fail(typeValidation("type", "validation metadata changed"))
 	}
 	if r.state == Null && allowNull {
 		return r.RequireEnd()
@@ -146,7 +146,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 			minimum = 5
 		}
 		if r.Remaining() < minimum {
-			return r.fail(TypeValidation("length", "invalid %s length", p.typ))
+			return r.fail(typeValidation("length", "invalid %s length", p.typ))
 		}
 		return r.rawSkip(nil)
 	case TypeText, TypeVarchar, TypeAscii:
@@ -184,9 +184,9 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 			}
 		}
 	case TypeCustom:
-		count := int(DescriptorOf(p.typ).Dimension)
+		count := int(descriptorOf(p.typ).Dimension)
 		if p.width > 0 && r.Remaining() != int64(count)*p.width {
-			return r.fail(TypeValidation("dimension", "incorrect fixed vector body width"))
+			return r.fail(typeValidation("dimension", "incorrect fixed vector body width"))
 		}
 		if p.width == 0 && r.Remaining() < int64(count) {
 			return r.fail(wire.ErrLimit)
@@ -206,7 +206,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 		}
 	default:
 		if p.scalar == nil {
-			return r.fail(TypeValidation("type", "missing scalar validation plan"))
+			return r.fail(typeValidation("type", "missing scalar validation plan"))
 		}
 		if err := p.scalar(r); err != nil {
 			return err
@@ -248,13 +248,13 @@ func (streamEncodedPlan) Reset(dst *StreamEncodedValue) {
 }
 func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamEncodedValue) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil encoded destination"))
+		return r.fail(typeValidation("destination", "nil encoded destination"))
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.validation.typ) {
-		return r.fail(TypeValidation("type", "encoded metadata changed"))
+		return r.fail(typeValidation("type", "encoded metadata changed"))
 	}
 	if err := r.capacity(r.Remaining(), cap(dst.Bytes)); err != nil {
 		return err
@@ -289,7 +289,7 @@ func streamScalarValidation[T any](typ DataType, codec StreamDecoder[T]) (func(*
 	}
 	native, ok := plan.(streamScalarPlan[T])
 	if !ok {
-		return nil, TypeValidation("stream scalar", "requires native scalar validation")
+		return nil, typeValidation("stream scalar", "requires native scalar validation")
 	}
 	return func(r *StreamValueReader) error { var value T; return native.DecodeInto(r, &value) }, nil
 }
@@ -329,6 +329,6 @@ func compileStreamScalarValidation(t DataType) (func(*StreamValueReader) error, 
 	case TypeBlob, TypeVarint, TypeDecimal, TypeText, TypeVarchar, TypeAscii:
 		return nil, nil
 	default:
-		return nil, TypeValidation("type", "unsupported scalar validation %s", t)
+		return nil, typeValidation("type", "unsupported scalar validation %s", t)
 	}
 }

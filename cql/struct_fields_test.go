@@ -142,12 +142,12 @@ func decodeTestRow[R any](t testing.TB, columns Columns, rows RowDecoder[R], cha
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := NewRowReader(columns, chain, wire.NewLease(chain, nil))
+	reader := newRowReader(columns, chain, wire.NewLease(chain, nil))
 	row, err := plan.Decode(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := FinishRowReader(reader); err != nil {
+	if err := finishRowReader(reader); err != nil {
 		t.Fatal(err)
 	}
 	return row

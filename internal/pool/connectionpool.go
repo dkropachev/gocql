@@ -38,6 +38,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -760,7 +761,7 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 			implEndpoint.HostInfoData(pool.InternalHost).InternalMu.Unlock()
 			pool.InternalMu.Unlock()
 			conn.Close()
-			return cql.TypeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
+			return cqltype.TypeValidation("pool generation", "opening attempt belongs to superseded endpoint/route")
 		}
 	}
 	// lazily initialize the connPicker when we know the required type

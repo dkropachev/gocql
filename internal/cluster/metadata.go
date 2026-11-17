@@ -18,6 +18,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
@@ -360,7 +361,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 				routing.SnapshotData(m).InternalRanges[ks] = ranges
 			}
 		} else {
-			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "no configured int64 partitioner for %q", routing.SnapshotData(m).InternalPartitioner))
+			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "no configured int64 partitioner for %q", routing.SnapshotData(m).InternalPartitioner))
 		}
 	}
 	routing.SnapshotData(m).InternalPlacementEpoch = p.InternalPlacementEpoch.Load()
@@ -368,12 +369,12 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
 	if config.Metadata.Mode != settings.MetadataSchemaFull {
-		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
+		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
 	for keyspace, ks := range routing.SnapshotData(m).InternalKeyspaces {
 		for table, t := range ks.Tables {
 			if t != nil && t.Options.Partitioner != "" && config.Partitioners[t.Options.Partitioner] == nil {
-				routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cql.TypeValidation("partitioner", "unknown partitioner %q for %s.%s; token routing disabled", t.Options.Partitioner, keyspace, table))
+				routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "unknown partitioner %q for %s.%s; token routing disabled", t.Options.Partitioner, keyspace, table))
 			}
 		}
 	}
@@ -447,7 +448,7 @@ func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
 // context. Metadata queries themselves use the session metadata timeout.
 func (s *Core) RefreshMetadata(ctx context.Context) error {
 	if ctx == nil {
-		return cql.TypeValidation("context", "nil context")
+		return cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -488,13 +489,13 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 // metadata values before releasing each page and never invokes legacy Scan.
 func InternalReadV2SystemRows[P, R any](ctx context.Context, conn *transport.Conn, statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if conn == nil {
-		return nil, cql.TypeValidation("system query", "nil connection")
+		return nil, cqltype.TypeValidation("system query", "nil connection")
 	}
 	return readV2SystemRowsVia(ctx, conn.InternalVersion, conn.InternalGetSystemRequestState().InternalTimeout, conn.InternalExecuteV2System, statement, columns, value)
 }
 func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error), statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if ctx == nil || execute == nil {
-		return nil, cql.TypeValidation("system query", "nil context or connection")
+		return nil, cqltype.TypeValidation("system query", "nil context or connection")
 	}
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return nil, err
@@ -515,7 +516,7 @@ type agreementPeer struct {
 
 func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 	if ctx == nil {
-		return cql.TypeValidation("schema agreement context", "nil context")
+		return cqltype.TypeValidation("schema agreement context", "nil context")
 	}
 	if s == nil || s.Closed() {
 		return runtimeerrors.ErrClosed
@@ -524,7 +525,7 @@ func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 }
 func (s *Core) AwaitV2SchemaAgreementOn(ctx context.Context, conn *transport.Conn) error {
 	if ctx == nil || conn == nil || conn.InternalHost == nil {
-		return cql.TypeValidation("schema agreement", "nil context or coordinator")
+		return cqltype.TypeValidation("schema agreement", "nil context or coordinator")
 	}
 	if s == nil || s.Closed() {
 		return runtimeerrors.ErrClosed
@@ -652,7 +653,7 @@ func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Co
 			continue
 		}
 		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsEmpty() {
-			return cql.UUID{}, cql.TypeValidation("schema agreement", "missing/mismatched host identity or version")
+			return cql.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
 		}
 		return rows[0].version.Value, nil
 	}
@@ -722,7 +723,7 @@ func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request
 	}
 	conn, ok := h.InternalConn.(*transport.Conn)
 	if !ok {
-		return nil, cql.TypeValidation("system query", "connection does not support typed requests")
+		return nil, cqltype.TypeValidation("system query", "connection does not support typed requests")
 	}
 	return conn.InternalExecuteV2System(ctx, request)
 }
@@ -758,10 +759,10 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	}
 	for _, row := range rows {
 		if row.InternalName == "" {
-			return cql.TypeValidation("keyspace schema", "missing keyspace identity")
+			return cqltype.TypeValidation("keyspace schema", "missing keyspace identity")
 		}
 		if _, ok := keyspaces[row.InternalName]; ok {
-			return cql.TypeValidation("keyspace schema", "duplicate identity %q", row.InternalName)
+			return cqltype.TypeValidation("keyspace schema", "duplicate identity %q", row.InternalName)
 		}
 		if len(allowed) > 0 && !allowed[row.InternalName] {
 			continue
@@ -832,7 +833,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 					break
 				}
 				if current.StrategyClass != base.StrategyClass || !maps.Equal(current.StrategyOptions, base.StrategyOptions) {
-					failures[name] = cql.TypeValidation("schema refresh", "replication changed during refresh")
+					failures[name] = cqltype.TypeValidation("schema refresh", "replication changed during refresh")
 					continue
 				}
 			}

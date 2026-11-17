@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"sync"
 	"unsafe"
+
+	"github.com/scylladb/gocql/v2/internal/structmap"
 )
 
 type goMapCodec[K comparable, V any] struct {
@@ -41,11 +43,11 @@ func (c goMapCodec[K, V]) CheckType(typ DataType) error {
 
 func (c goMapCodec[K, V]) compile(typ DataType) (goMapCodec[K, V], error) {
 	if c.key == nil || c.value == nil {
-		return c, TypeValidation("codec", "nil map key or value codec")
+		return c, typeValidation("codec", "nil map key or value codec")
 	}
 	kt, vt, ok := typ.KeyValue()
 	if !ok {
-		return c, TypeValidation("type", "expected map, got %s", typ)
+		return c, typeValidation("type", "expected map, got %s", typ)
 	}
 	var err error
 	if c.keyEncoder, err = compileValueEncoder(Encoder[K](c.key), kt); err == nil {
@@ -74,11 +76,11 @@ func (c goMapCodec[K, V]) compileValueDecoder(typ DataType) (Decoder[map[K]V], e
 
 // bound returns c compiled for typ, compiling it now when it was not.
 func (c goMapCodec[K, V]) bound(typ DataType) (goMapCodec[K, V], error) {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.compile(typ)
 	}
 	if !c.typ.Equal(typ) {
-		return c, TypeValidation("type", "map metadata changed after compilation")
+		return c, typeValidation("type", "map metadata changed after compilation")
 	}
 	return c, nil
 }
@@ -89,7 +91,7 @@ func (c goMapCodec[K, V]) Encode(w *ValueWriter, m map[K]V) error {
 		return err
 	}
 	if uint64(len(m)) > math.MaxInt32 {
-		return TypeValidation("count", "map has too many entries")
+		return typeValidation("count", "map has too many entries")
 	}
 	if err := w.Uint32(uint32(len(m))); err != nil {
 		return err
@@ -116,14 +118,14 @@ func (c goMapCodec[K, V]) Decode(r ValueReader) (map[K]V, error) {
 
 func (c goMapCodec[K, V]) DecodeInto(r ValueReader, dst *map[K]V) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil map destination")
+		return typeValidation("destination", "nil map destination")
 	}
 	c, err := c.bound(r.Type())
 	if err != nil {
 		return err
 	}
 	if r.err == nil && r.State() == Null {
-		if err := CheckBytesAlive(r.Bytes()); err != nil {
+		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
 		clear(*dst)
@@ -140,7 +142,7 @@ func (c goMapCodec[K, V]) DecodeInto(r ValueReader, dst *map[K]V) error {
 		clear(m)
 	}
 	kt, vt, _ := c.typ.KeyValue()
-	cursor := ValueReader{body: BytesChain(body), lease: BytesLease(body)}.cursorValue()
+	cursor := ValueReader{body: bytesChain(body), lease: bytesLease(body)}.cursorValue()
 	for i := range count {
 		var k K
 		var v V
@@ -160,7 +162,7 @@ func (c goMapCodec[K, V]) DecodeInto(r ValueReader, dst *map[K]V) error {
 		}
 		m[k] = v
 		if len(m) != i+1 {
-			return TypeValidation("map", "key %d repeats an earlier key", i)
+			return typeValidation("map", "key %d repeats an earlier key", i)
 		}
 	}
 	*dst = m
@@ -282,7 +284,7 @@ func (f goMapColumn[R]) detachField(row *R) { f.m.detach(unsafe.Add(unsafe.Point
 // goMapBuiltin is one built-in map[K]V field type of the struct-mapping table.
 type goMapBuiltin struct {
 	m goMapField
-	BuiltinFieldType
+	structmap.BuiltinFieldType
 }
 
 type mapElement[T any] struct {
@@ -335,7 +337,7 @@ func pair[K comparable, V any](out *[]goMapBuiltin, key mapElement[K], value map
 	src := "cql.GoMapCodec(cql." + key.src + ", cql." + value.src + ")"
 	*out = append(*out, goMapBuiltin{
 		m: erasedGoMap[K, V]{codec: goMapCodec[K, V]{key: key.codec, value: value.codec}},
-		BuiltinFieldType: BuiltinFieldType{
+		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type:       reflect.TypeFor[map[K]V](),
 			TypeSrc:    "map[" + key.typeSrc + "]" + value.typeSrc,
 			EncoderSrc: src, DecoderSrc: src,

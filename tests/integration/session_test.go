@@ -56,6 +56,7 @@ import (
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -279,13 +280,13 @@ func TestSession(t *testing.T) {
 			}
 			lease := codecTestMust(rows.Retain())
 			defer lease.Close()
-			owner := cql.BytesLease(old)
+			owner := cqltype.BytesLease(old)
 			if owner.IsZero() {
 				t.Fatal("missing physical owner")
 			}
 			rows.Close()
 			firstAddress := uintptr(0)
-			cql.BytesChain(old).Each(func(span wire.Span) error {
+			cqltype.BytesChain(old).Each(func(span wire.Span) error {
 				if firstAddress == 0 && span.Len() > 0 {
 					firstAddress = uintptr(unsafe.Pointer(unsafe.SliceData(span.Bytes())))
 				}
@@ -298,7 +299,7 @@ func TestSession(t *testing.T) {
 				if !freshRows.NextInto(&view) {
 					t.Fatal(freshRows.Err())
 				}
-				cql.BytesChain(view).Each(func(span wire.Span) error {
+				cqltype.BytesChain(view).Each(func(span wire.Span) error {
 					if span.Len() > 0 && uintptr(unsafe.Pointer(unsafe.SliceData(span.Bytes()))) == firstAddress {
 						t.Fatal("live retained backing reused")
 					}

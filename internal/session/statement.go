@@ -11,6 +11,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -92,7 +94,7 @@ type preparedStatement[P any] struct {
 func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statement *binding.Statement[P, R], options PrepareOptions) (preparedStatement[P], error) {
 	var empty preparedStatement[P]
 	if ctx == nil || s == nil {
-		return empty, cql.TypeValidation("prepare", "nil context or session")
+		return empty, cqltype.TypeValidation("prepare", "nil context or session")
 	}
 	if err := ctx.Err(); err != nil {
 		return empty, err
@@ -101,10 +103,10 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 		return empty, runtimeerrors.ErrClosed
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
-		return empty, cql.TypeValidation("prepare host", "empty UUID")
+		return empty, cqltype.TypeValidation("prepare host", "empty UUID")
 	}
 	if options.privateStorage.InternalConnection != nil && !implCluster.InternalConnectionOwnedBy(options.privateStorage.InternalConnection, s) {
-		return empty, cql.TypeValidation("prepare connection", "connection belongs to another session")
+		return empty, cqltype.TypeValidation("prepare connection", "connection belongs to another session")
 	}
 	if err := binding.ValidateStatement(statement); err != nil {
 		return empty, err
@@ -121,7 +123,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	parameters, columns := state.InternalParameters, state.InternalColumns
 	confirmedKind := state.InternalInfo.Kind
 	state.InternalMu.RUnlock()
-	plan, err := cql.CompileParamPlan(statement.Params, parameters)
+	plan, err := codec.CompileParamPlan(statement.Params, parameters)
 	if err != nil {
 		return empty, err
 	}
@@ -148,7 +150,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	// as on Cassandra, so Exec rejects it with ErrConditionalExec instead of
 	// Prepare failing on the [applied] column.
 	if columns.Len() != 0 || kind == cql.OrdinaryStatement {
-		rows, err = cql.CompileRowPlan(statement.Rows, columns)
+		rows, err = codec.CompileRowPlan(statement.Rows, columns)
 		if err != nil && kind != cql.ConditionalStatement {
 			return nil, err
 		}
@@ -200,7 +202,7 @@ func BindOwned[P, R any](p *Prepared[P, R], value P) (*Bound[R], error) {
 }
 func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, cql.TypeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	p.privateStorage.InternalState.InternalMu.RLock()
 	columns := p.privateStorage.InternalState.InternalParameters
@@ -234,7 +236,7 @@ func bindUnprepared[P, R any](s binding.Statement[P, R], columns cql.Columns, va
 	if err := binding.ValidateStatement(&s); err != nil {
 		return nil, err
 	}
-	plan, err := cql.CompileParamPlan(s.Params, columns)
+	plan, err := codec.CompileParamPlan(s.Params, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -258,10 +260,10 @@ func (b *Bound[R]) Close() {
 }
 func (b *Bound[R]) Wait(ctx context.Context) error {
 	if b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
-		return cql.TypeValidation("binding", "nil binding")
+		return cqltype.TypeValidation("binding", "nil binding")
 	}
 	if ctx == nil {
-		return cql.TypeValidation("context", "nil context")
+		return cqltype.TypeValidation("context", "nil context")
 	}
 	return b.privateStorage.InternalRequest.InternalOwner.InternalWait(ctx)
 }

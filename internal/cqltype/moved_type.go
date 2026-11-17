@@ -16,36 +16,36 @@ func DataTypeFromInfo(info TypeInfo) (cql.DataType, error) { return dataTypeFrom
 
 func dataTypeFromInfoDepth(info TypeInfo, depth int) (cql.DataType, error) {
 	if info == nil {
-		return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+		return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 	}
 	if depth > 128 {
-		return cql.DataType{}, cql.TypeValidation("type", "protocol descriptor nesting exceeds 128")
+		return cql.DataType{}, TypeValidation("type", "protocol descriptor nesting exceeds 128")
 	}
 	child := func(t TypeInfo) (cql.DataType, error) { return dataTypeFromInfoDepth(t, depth+1) }
 	switch t := info.(type) {
 	case *NativeType:
 		if t == nil {
-			return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+			return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 		}
 		return child(*t)
 	case *CollectionType:
 		if t == nil {
-			return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+			return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 		}
 		return child(*t)
 	case *TupleTypeInfo:
 		if t == nil {
-			return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+			return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 		}
 		return child(*t)
 	case *UDTTypeInfo:
 		if t == nil {
-			return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+			return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 		}
 		return child(*t)
 	case *VectorType:
 		if t == nil {
-			return cql.DataType{}, cql.TypeValidation("type", "nil protocol descriptor")
+			return cql.DataType{}, TypeValidation("type", "nil protocol descriptor")
 		}
 		return child(*t)
 	case CollectionType:
@@ -65,10 +65,10 @@ func dataTypeFromInfoDepth(info TypeInfo, depth int) (cql.DataType, error) {
 			}
 			return cql.MapType(k, e)
 		}
-		return cql.DataType{}, cql.TypeValidation("type", "invalid collection kind %v", t.Type())
+		return cql.DataType{}, TypeValidation("type", "invalid collection kind %v", t.Type())
 	case TupleTypeInfo:
 		if len(t.Elems) > math.MaxUint16 {
-			return cql.DataType{}, cql.TypeValidation("fields", "too many tuple fields")
+			return cql.DataType{}, TypeValidation("fields", "too many tuple fields")
 		}
 		fields := make([]cql.DataType, len(t.Elems))
 		for i, f := range t.Elems {
@@ -81,7 +81,7 @@ func dataTypeFromInfoDepth(info TypeInfo, depth int) (cql.DataType, error) {
 		return cql.TupleType(fields...)
 	case UDTTypeInfo:
 		if len(t.Elements) > math.MaxUint16 {
-			return cql.DataType{}, cql.TypeValidation("fields", "too many UDT fields")
+			return cql.DataType{}, TypeValidation("fields", "too many UDT fields")
 		}
 		fields := make([]cql.ColumnSpec, len(t.Elements))
 		for i, f := range t.Elements {
@@ -94,7 +94,7 @@ func dataTypeFromInfoDepth(info TypeInfo, depth int) (cql.DataType, error) {
 		return cql.UDTType(t.KeySpace, t.Name, fields...)
 	case VectorType:
 		if t.Dimensions <= 0 || t.Dimensions > math.MaxUint16 {
-			return cql.DataType{}, cql.TypeValidation("dimension", "invalid vector dimension %d", t.Dimensions)
+			return cql.DataType{}, TypeValidation("dimension", "invalid vector dimension %d", t.Dimensions)
 		}
 		e, err := child(t.SubType)
 		if err != nil {
@@ -115,5 +115,5 @@ func ColumnsFromInfo(info []ColumnInfo) (cql.Columns, error) {
 		}
 		columns[i] = cql.ColumnSpec{Keyspace: c.Keyspace, Table: c.Table, Name: c.Name, Type: t}
 	}
-	return cql.ColumnsOwned(columns), nil
+	return ColumnsOwned(columns), nil
 }

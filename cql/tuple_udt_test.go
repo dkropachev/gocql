@@ -37,15 +37,15 @@ func TestTupleUDT(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		lease := wire.NewLease(BytesChain(encoded.body), nil)
-		encoded.body = BytesView(BytesChain(encoded.body), wire.RefOf(lease))
+		lease := wire.NewLease(bytesChain(encoded.body), nil)
+		encoded.body = bytesView(bytesChain(encoded.body), wire.RefOf(lease))
 		value, err := DecodeValue(decoder, encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
 		clone := decoder.Clone(value)
 		lease.Release()
-		if err := CheckBytesAlive(TextBytes(value[0])); !errors.Is(err, ErrReleased) {
+		if err := checkBytesAlive(textBytes(value[0])); !errors.Is(err, ErrReleased) {
 			t.Fatal("released nested element survived")
 		}
 		if clone[1].String() != "second" {
@@ -71,7 +71,7 @@ func TestTupleUDT(t *testing.T) {
 				go func() {
 					defer group.Done()
 					for range 30 {
-						got, err := plan.Decode(NewRowReader(columns, chain, nil))
+						got, err := plan.Decode(newRowReader(columns, chain, nil))
 						if err != nil || got != 9 {
 							t.Errorf("got=%v err=%v", got, err)
 							return
@@ -142,7 +142,7 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			row, err := plan.Decode(NewRowReader(columns, chain, nil))
+			row, err := plan.Decode(newRowReader(columns, chain, nil))
 			if err != nil || row.First.ID != 7 || row.Second != 9 {
 				t.Fatalf("physical tuple row=%+v err=%v", row, err)
 			}
@@ -241,8 +241,8 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			other, _ := UDTType("other", "record", ColumnSlice(typ.Fields())...)
-			if _, err := bound.Decode(NewValueReader(other, Present, BytesChain(encoded.body), nil)); err == nil {
+			other, _ := UDTType("other", "record", columnSlice(typ.Fields())...)
+			if _, err := bound.Decode(valueReaderFromLease(other, Present, bytesChain(encoded.body), nil)); err == nil {
 				t.Fatal("compiled UDT accepted different identity")
 			}
 		})

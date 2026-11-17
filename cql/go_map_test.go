@@ -14,7 +14,7 @@ func TestGoMapCodec(t *testing.T) {
 	typ := CodecTestMust(MapType(TextType, BigIntType))
 	codec := GoMapCodec(StringCodec, Int64Codec)
 	reader := func(v EncodedValue) ValueReader {
-		return newValueReader(v.Type(), v.State(), BytesChain(v.Bytes()), BytesLease(v.Bytes()))
+		return newValueReader(v.Type(), v.State(), bytesChain(v.Bytes()), bytesLease(v.Bytes()))
 	}
 	t.Run("RoundTrip", func(t *testing.T) {
 		want := map[string]int64{"a": 1, "b": -2, "c": 3}
@@ -102,18 +102,18 @@ func TestGoMapStructMapping(t *testing.T) {
 	}
 	plan := CodecTestMust(rows.Compile(columns))
 	detached := got
-	DetachRow(plan, &detached)
+	detachRowFor(plan, &detached)
 	if !reflect.DeepEqual(detached, want) {
 		t.Fatalf("detached %+v", detached)
 	}
 	// A map with no built-in pair, such as one of borrowed views, still needs
 	// a codec.
 	type viewRow struct{ Views map[string]Text }
-	if _, err := ReflectRow[viewRow](); err == nil {
+	if _, err := reflectRow[viewRow](); err == nil {
 		t.Fatal("reflection mapped a map of views")
 	}
 	found := false
-	for _, b := range BuiltinFieldTypes() {
+	for _, b := range builtinFieldTypes() {
 		if b.Type == reflect.TypeFor[map[string]int64]() {
 			found = b.Default && b.EncoderSrc == "cql.GoMapCodec(cql.StringCodec, cql.Int64Codec)" && b.TypeSrc == "map[string]int64"
 		}

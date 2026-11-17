@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -125,14 +126,14 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 		return nil, runtimeerrors.ErrClosed
 	}
 	if filter.Capacity < 0 {
-		return nil, cql.TypeValidation("subscription capacity", "must not be negative")
+		return nil, cqltype.TypeValidation("subscription capacity", "must not be negative")
 	}
 	if filter.Capacity == 0 {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
 		if kind > OverflowEvent {
-			return nil, cql.TypeValidation("event filter", "unknown event kind")
+			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
 		}
 	}
 	filter.Kinds = append([]EventKind(nil), filter.Kinds...)

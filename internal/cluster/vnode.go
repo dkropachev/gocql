@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -37,7 +38,7 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 	factor := func(value string, cap int) (int, error) {
 		n, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
-			return 0, cql.TypeValidation("replication factor", "invalid value %q", value)
+			return 0, cqltype.TypeValidation("replication factor", "invalid value %q", value)
 		}
 		if n > uint64(cap) {
 			return cap, nil
@@ -71,7 +72,7 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 	for i, entry := range ring.InternalTokens {
 		token, ok := entry.InternalToken.(implEndpoint.InternalInt64Token)
 		if !ok {
-			return nil, cql.TypeValidation("replica placement", "non-int64 token")
+			return nil, cqltype.TypeValidation("replica placement", "non-int64 token")
 		}
 		out[i].End = int64(token)
 		seen := make(map[cql.UUID]bool)

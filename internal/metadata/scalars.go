@@ -7,6 +7,7 @@ import (
 	"maps"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
@@ -96,7 +97,7 @@ func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) 
 	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
-			return nil, cql.TypeValidation("schema map", "duplicate key %q", key)
+			return nil, cqltype.TypeValidation("schema map", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.String()
 	}
@@ -116,7 +117,7 @@ func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error)
 	for _, entry := range v {
 		key := entry.Key.String()
 		if _, ok := out[key]; ok {
-			return nil, cql.TypeValidation("schema extensions", "duplicate key %q", key)
+			return nil, cqltype.TypeValidation("schema extensions", "duplicate key %q", key)
 		}
 		out[key] = entry.Value.OwnedBytes()
 	}

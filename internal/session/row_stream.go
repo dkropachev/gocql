@@ -28,6 +28,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -67,14 +68,14 @@ type RowStream[R any] struct {
 
 func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound *Bound[B], decoder cql.StreamRowDecoder[R], options CompiledOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
-		return nil, cql.TypeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
 	limits, err := transport.InternalCheckedStreamLimits(streamLimits)
 	if err != nil {
 		return nil, err
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, cql.TypeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
 	runctx, cancel, request, err := rt.admit(ctx, bound, options)
 	if err != nil {
@@ -178,7 +179,7 @@ func (s *RowStream[R]) Info() StreamInfo {
 	s.privateStorage.mu.Lock()
 	defer s.privateStorage.mu.Unlock()
 	info := s.privateStorage.info
-	info.Result = cql.CloneResult(info.Result)
+	info.Result = codec.CloneResult(info.Result)
 	return info
 }
 func (s *RowStream[R]) Columns() cql.Columns {
@@ -331,7 +332,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		s.privateStorage.mu.Lock()
 		active := !s.privateStorage.terminal
 		if active && s.privateStorage.err == nil {
-			s.privateStorage.err = cql.TypeValidation("stream advance", "concurrent NextInto")
+			s.privateStorage.err = cqltype.TypeValidation("stream advance", "concurrent NextInto")
 		}
 		s.privateStorage.mu.Unlock()
 		if active {
@@ -354,7 +355,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		return false
 	}
 	if dst == nil {
-		rowStreamFail(s, cql.TypeValidation("stream destination", "nil destination"))
+		rowStreamFail(s, cqltype.TypeValidation("stream destination", "nil destination"))
 		rowStreamCleanup(s, false)
 		return false
 	}
@@ -394,7 +395,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 				return false
 			}
 		}
-		next := cql.CompletePageState()
+		next := cqltype.CompletePageState()
 		if s.privateStorage.response.InternalMetadata.PagingState != nil {
 			next = cql.PageStateFromToken(s.privateStorage.response.InternalMetadata.PagingState)
 		}
@@ -490,7 +491,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 					return err
 				}
 				if plan == nil {
-					return cql.TypeValidation("stream plan", "decoder returned nil plan")
+					return cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 				}
 				s.privateStorage.plan = plan
 				s.rememberPlan(prepared.InternalColumns, plan)
@@ -647,7 +648,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			trace.HostID, trace.Attempt, trace.Failed = target.HostID, attempt, err != nil
 			all = append(all, trace)
 		}
-		s.privateStorage.info.Result.SetDiagnostics(warnings, all, payload)
+		codec.SetDiagnostics(&s.privateStorage.info.Result, warnings, all, payload)
 		s.privateStorage.mu.Unlock()
 		// Latest failed-attempt extensions remain budgeted until replacement or
 		// terminal cleanup, including while another attempt allocates metadata.
@@ -662,7 +663,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				if s.privateStorage.plan == nil || !s.privateStorage.columns.Equal(page.columns) {
 					s.privateStorage.plan, err = s.privateStorage.decoder.Compile(page.columns)
 					if err == nil && s.privateStorage.plan == nil {
-						err = cql.TypeValidation("stream plan", "decoder returned nil plan")
+						err = cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 					}
 					if err == nil {
 						s.rememberPlan(page.columns, s.privateStorage.plan)
@@ -728,14 +729,14 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			return err
 		}
 		if decision.Action != retry.Same && decision.Action != retry.Next {
-			return cql.TypeValidation("stream retry", "requires retry same, next or stop")
+			return cqltype.TypeValidation("stream retry", "requires retry same, next or stop")
 		}
 		if decision.Delay < 0 {
-			return cql.TypeValidation("retry delay", "negative delay")
+			return cqltype.TypeValidation("retry delay", "negative delay")
 		}
 		if decision.Consistency.Set {
 			if !settings.InternalValidConsistency(decision.Consistency.Value) {
-				return cql.TypeValidation("retry consistency", "invalid consistency")
+				return cqltype.TypeValidation("retry consistency", "invalid consistency")
 			}
 			consistency = decision.Consistency.Value
 		}

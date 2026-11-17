@@ -487,7 +487,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		}
 		columns[i] = cql.ColumnSpec{Keyspace: keyspace, Table: table, Name: p.Str(), Type: p.dataType(0)}
 	}
-	result := cql.ColumnsOwned(columns)
+	result := ColumnsOwned(columns)
 	if buffered && !prepared && p.reuse != nil && p.Err == nil {
 		n := checkpoint.Remaining() - cursor.Remaining()
 		if n > 0 && n <= 64<<10 {
@@ -533,7 +533,7 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 					break
 				}
 				value := p.Take(int64(length))
-				entry.Value = cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BytesView(value, wire.RefOf(owner))}
+				entry.Value = cql.Nullable[cql.Bytes]{Valid: true, Value: BytesView(value, wire.RefOf(owner))}
 			}
 		}
 	}

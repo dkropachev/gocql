@@ -36,7 +36,7 @@ type RowPlan[R any] interface {
 type ParamWriter struct {
 	builder     *wire.Builder
 	columns     Columns
-	capture     []ParamCell
+	capture     []paramCell
 	cell        ValueWriter // reused for each parameter; never retained by encoders
 	index       int
 	allowUnset  bool
@@ -45,25 +45,25 @@ type ParamWriter struct {
 
 // ParamCell records framing while encoding, avoiding a second parse of the
 // request. Offsets refer to the final contiguous owned parameter buffer.
-type ParamCell struct {
+type paramCell struct {
 	Start, End int64
 	State      CellState
 }
 
 // CaptureParamCells enables framing capture into exactly one slot per column.
-func CaptureParamCells(w *ParamWriter, cells []ParamCell) { w.capture = cells }
+func captureParamCells(w *ParamWriter, cells []paramCell) { w.capture = cells }
 
-func NewParamWriter(builder *wire.Builder, columns Columns, allowUnset bool) *ParamWriter {
+func newParamWriter(builder *wire.Builder, columns Columns, allowUnset bool) *ParamWriter {
 	return &ParamWriter{builder: builder, columns: columns, allowUnset: allowUnset}
 }
 
 // ResetParamWriter prepares caller-owned writer storage for a new binding, so a
 // reusable binding allocates no writer.
-func ResetParamWriter(w *ParamWriter, builder *wire.Builder, columns Columns, allowUnset bool) {
+func resetParamWriter(w *ParamWriter, builder *wire.Builder, columns Columns, allowUnset bool) {
 	*w = ParamWriter{builder: builder, columns: columns, allowUnset: allowUnset}
 }
 
-func FinishParamWriter(w *ParamWriter) error {
+func finishParamWriter(w *ParamWriter) error {
 	if w.index != w.columns.Len() {
 		return fmt.Errorf("gocql: encoded %d parameters, expected %d", w.index, w.columns.Len())
 	}
@@ -88,7 +88,7 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 		abortValueWriter(cell)
 		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, err)
 	}
-	if err := FinishValueWriter(cell); err != nil {
+	if err := finishValueWriter(cell); err != nil {
 		abortValueWriter(cell)
 		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, err)
 	}
@@ -100,7 +100,7 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 		if state == EmptyCell {
 			state = Present
 		} // empty has a zero-length present wire body
-		w.capture[w.index] = ParamCell{Start: cell.start + 4, End: w.builder.Len(), State: state}
+		w.capture[w.index] = paramCell{Start: cell.start + 4, End: w.builder.Len(), State: state}
 	}
 	w.index++
 	return nil
@@ -115,11 +115,11 @@ type RowReader struct {
 	allowMissing bool
 }
 
-func NewRowReader(columns Columns, body wire.Chain, lease *wire.Lease) *RowReader {
+func newRowReader(columns Columns, body wire.Chain, lease *wire.Lease) *RowReader {
 	return &RowReader{columns: columns, cursor: wire.NewCursor(body), lease: wire.RefOf(lease)}
 }
 
-func FinishRowReader(r *RowReader) error {
+func finishRowReader(r *RowReader) error {
 	if r.index != r.columns.Len() {
 		return fmt.Errorf("gocql: decoded %d columns, expected %d", r.index, r.columns.Len())
 	}
@@ -412,10 +412,6 @@ func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
 	return rowCodec[R]{fields: append([]OutputField[R](nil), fields...), reset: reset}
 }
 func (p rowPlan[R]) preserveDestination() bool { return p.reset != nil }
-func PreservesRowDestination[R any](plan RowPlan[R]) bool {
-	p, ok := plan.(interface{ preserveDestination() bool })
-	return ok && p.preserveDestination()
-}
 
 // rowDestinationManager marks a built-in row plan whose DecodeInto zeroes, or
 // resets, the whole destination before it decodes, so the caller need not
@@ -426,9 +422,9 @@ type rowDestinationManager interface{ managesRowDestination() }
 // ManagedRowDestination gives a built-in row plan outside this package the
 // rowDestinationManager marker when embedded. Embed it only in a plan whose
 // DecodeInto overwrites the whole destination.
-type ManagedRowDestination struct{}
+type managedRowDestination struct{}
 
-func (ManagedRowDestination) managesRowDestination() {}
+func (managedRowDestination) managesRowDestination() {}
 
 func (rowPlan[R]) managesRowDestination()          {}
 func (singleColumnPlan[T]) managesRowDestination() {}
@@ -436,14 +432,6 @@ func (mappedRowPlan[A, B]) managesRowDestination() {}
 func (pairedRowPlan[A, B]) managesRowDestination() {}
 func (casRowPlan[R]) managesRowDestination()       {}
 func (dynamicRowsPlan) managesRowDestination()     {}
-
-// ManagesRowDestination reports whether plan clears, or resets, the whole
-// destination itself before decoding a row. Callers check it once per plan,
-// not per row.
-func ManagesRowDestination[R any](plan RowPlan[R]) bool {
-	_, ok := plan.(rowDestinationManager)
-	return ok
-}
 func (c rowCodec[R]) Clone(source R) R {
 	dst := source
 	for _, field := range c.fields {
@@ -507,7 +495,7 @@ func (p rowPlan[R]) Decode(reader *RowReader) (R, error) {
 }
 func (p rowPlan[R]) DecodeInto(reader *RowReader, dst *R) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil row destination")
+		return typeValidation("destination", "nil row destination")
 	}
 	if p.reset != nil {
 		p.reset(dst)
@@ -567,7 +555,7 @@ func (p singleColumnPlan[T]) Decode(reader *RowReader) (T, error) {
 }
 func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil row destination")
+		return typeValidation("destination", "nil row destination")
 	}
 	var zero T
 	*dst = zero
@@ -596,7 +584,7 @@ func (c mappedParams[A, B]) Compile(columns Columns) (ParamPlan[A], error) {
 	if c.codec == nil || c.mapValue == nil {
 		return nil, fmt.Errorf("gocql: nil parameter mapping")
 	}
-	plan, err := CompileParamPlan(c.codec, columns)
+	plan, err := compileParamPlan(c.codec, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +620,7 @@ func (c mappedRows[A, B]) Compile(columns Columns) (RowPlan[B], error) {
 	if c.codec == nil || c.mapValue == nil || c.cloneValue == nil {
 		return nil, fmt.Errorf("gocql: nil row mapping")
 	}
-	plan, err := CompileRowPlan(c.codec, columns)
+	plan, err := compileRowPlan(c.codec, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -648,7 +636,7 @@ func (p mappedRowPlan[A, B]) Decode(reader *RowReader) (B, error) {
 }
 func (p mappedRowPlan[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil row destination")
+		return typeValidation("destination", "nil row destination")
 	}
 	var zero B
 	*dst = zero
@@ -755,11 +743,11 @@ func (c pairedParams[A, B]) Compile(columns Columns) (ParamPlan[Pair[A, B]], err
 	if err != nil {
 		return nil, err
 	}
-	a, err := CompileParamPlan(c.a, left)
+	a, err := compileParamPlan(c.a, left)
 	if err != nil {
 		return nil, err
 	}
-	b, err := CompileParamPlan(c.b, right)
+	b, err := compileParamPlan(c.b, right)
 	if err != nil {
 		return nil, err
 	}
@@ -778,14 +766,14 @@ func (p pairedParamPlan[A, B]) Encode(w *ParamWriter, value Pair[A, B]) error {
 	w.columns, w.index = p.left, 0
 	err := p.a.Encode(w, value.First)
 	if err == nil {
-		err = FinishParamWriter(w)
+		err = finishParamWriter(w)
 	}
 	w.columns, w.index = p.right, 0
 	if err == nil {
 		err = p.b.Encode(w, value.Second)
 	}
 	if err == nil {
-		err = FinishParamWriter(w)
+		err = finishParamWriter(w)
 	}
 	if err != nil {
 		w.builder.Rollback(mark)
@@ -824,11 +812,11 @@ func (c pairedRows[A, B]) Compile(columns Columns) (RowPlan[Pair[A, B]], error) 
 	if err != nil {
 		return nil, err
 	}
-	a, err := CompileRowPlan(c.a, left)
+	a, err := compileRowPlan(c.a, left)
 	if err != nil {
 		return nil, err
 	}
-	b, err := CompileRowPlan(c.b, right)
+	b, err := compileRowPlan(c.b, right)
 	if err != nil {
 		return nil, err
 	}
@@ -844,7 +832,7 @@ func (p pairedRowPlan[A, B]) Decode(r *RowReader) (Pair[A, B], error) {
 }
 func (p pairedRowPlan[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil row destination")
+		return typeValidation("destination", "nil row destination")
 	}
 	*dst = Pair[A, B]{}
 	columns, index := r.columns, r.index
@@ -858,7 +846,7 @@ func (p pairedRowPlan[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	r.columns, r.index = p.left, 0
 	err := p.a.DecodeInto(r, &dst.First)
 	if err == nil {
-		err = FinishRowReader(r)
+		err = finishRowReader(r)
 	}
 	if err != nil {
 		return err
@@ -866,7 +854,7 @@ func (p pairedRowPlan[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	r.columns, r.index = p.right, 0
 	err = p.b.DecodeInto(r, &dst.Second)
 	if err == nil {
-		err = FinishRowReader(r)
+		err = finishRowReader(r)
 	}
 	if err != nil {
 		return err
@@ -895,7 +883,7 @@ func compileValueDecoder[T any](decoder Decoder[T], typ DataType) (Decoder[T], e
 	if compiled, ok := decoder.(compiledValueDecoder[T]); ok {
 		value, err := compiled.compileValueDecoder(typ)
 		if err == nil && value == nil {
-			err = TypeValidation("decoder", "Compile returned a nil value decoder")
+			err = typeValidation("decoder", "Compile returned a nil value decoder")
 		}
 		return value, err
 	}
@@ -912,7 +900,7 @@ func compileValueEncoder[T any](encoder Encoder[T], typ DataType) (Encoder[T], e
 	if compiled, ok := encoder.(compiledValueEncoder[T]); ok {
 		value, err := compiled.compileValueEncoder(typ)
 		if err == nil && value == nil {
-			err = TypeValidation("encoder", "Compile returned a nil value encoder")
+			err = typeValidation("encoder", "Compile returned a nil value encoder")
 		}
 		return value, err
 	}
@@ -928,7 +916,7 @@ type valueIntoDecoder[T any] interface{ DecodeInto(ValueReader, *T) error }
 
 func decodeValueInto[T any](decoder Decoder[T], reader ValueReader, dst *T) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil value destination")
+		return typeValidation("destination", "nil value destination")
 	}
 	if direct, ok := decoder.(valueIntoDecoder[T]); ok {
 		return direct.DecodeInto(reader, dst)
@@ -941,7 +929,7 @@ func decodeValueInto[T any](decoder Decoder[T], reader ValueReader, dst *T) erro
 }
 func readColumnInto[T any](r *RowReader, decoder Decoder[T], dst *T) error {
 	if decoder == nil {
-		return TypeValidation("decoder", "nil column decoder")
+		return typeValidation("decoder", "nil column decoder")
 	}
 	if direct, ok := decoder.(rowValueIntoDecoder[T]); ok && dst != nil {
 		return direct.decodeColumnInto(r, dst)
@@ -953,23 +941,23 @@ func readColumnInto[T any](r *RowReader, decoder Decoder[T], dst *T) error {
 	return err
 }
 
-func CompileRowPlan[R any](decoder RowDecoder[R], columns Columns) (RowPlan[R], error) {
+func compileRowPlan[R any](decoder RowDecoder[R], columns Columns) (RowPlan[R], error) {
 	if decoder == nil {
-		return nil, TypeValidation("decoder", "nil row decoder")
+		return nil, typeValidation("decoder", "nil row decoder")
 	}
 	plan, err := decoder.Compile(columns)
 	if err == nil && plan == nil {
-		err = TypeValidation("decoder", "Compile returned a nil row plan")
+		err = typeValidation("decoder", "Compile returned a nil row plan")
 	}
 	return plan, err
 }
-func CompileParamPlan[P any](encoder ParamEncoder[P], columns Columns) (ParamPlan[P], error) {
+func compileParamPlan[P any](encoder ParamEncoder[P], columns Columns) (ParamPlan[P], error) {
 	if encoder == nil {
-		return nil, TypeValidation("encoder", "nil parameter encoder")
+		return nil, typeValidation("encoder", "nil parameter encoder")
 	}
 	plan, err := encoder.Compile(columns)
 	if err == nil && plan == nil {
-		err = TypeValidation("encoder", "Compile returned a nil parameter plan")
+		err = typeValidation("encoder", "Compile returned a nil parameter plan")
 	}
 	return plan, err
 }

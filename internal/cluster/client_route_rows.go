@@ -15,6 +15,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -57,7 +58,7 @@ func (v2RouteParams) Compile(c cql.Columns) (cql.ParamPlan[[][]string], error) {
 }
 func (p v2RouteParams) Encode(w *cql.ParamWriter, values [][]string) error {
 	if len(values) != p.columns.Len() {
-		return cql.TypeValidation("route query", "wrong argument count")
+		return cqltype.TypeValidation("route query", "wrong argument count")
 	}
 	for i, vs := range values {
 		c, _ := p.columns.At(i)
@@ -86,7 +87,7 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 	}
 	backend, ok := c.(v2SystemQueryer)
 	if !ok {
-		return nil, cql.TypeValidation("client routes", "control does not support typed queries")
+		return nil, cqltype.TypeValidation("client routes", "control does not support typed queries")
 	}
 	columns := make([]cql.ColumnSpec, len(bounds))
 	for i, vs := range bounds {
@@ -114,7 +115,7 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 	for _, r := range rows {
 		key := InternalPair{r.connection, r.host}
 		if r.connection == "" || r.host == "" || seen[key] || r.address == "" || r.port < 0 || r.port > 65535 || r.tlsPort < 0 || r.tlsPort > 65535 {
-			return nil, cql.TypeValidation("client route", "invalid/duplicate record %s/%s", r.connection, r.host)
+			return nil, cqltype.TypeValidation("client route", "invalid/duplicate record %s/%s", r.connection, r.host)
 		}
 		seen[key] = true
 		port := r.port
@@ -122,7 +123,7 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 			port = r.tlsPort
 		}
 		if port == 0 {
-			return nil, cql.TypeValidation("client route", "record %s/%s missing required port", r.connection, r.host)
+			return nil, cqltype.TypeValidation("client route", "record %s/%s missing required port", r.connection, r.host)
 		}
 		result = append(result, InternalClientRoute{r.connection, r.host, r.address, uint16(port)})
 	}
@@ -177,7 +178,7 @@ func (p *ClientRoutesHandler) BindRoute(route InternalClientRoute) bool {
 }
 func (p *ClientRoutesHandler) resolveRoute(ctx context.Context, route InternalClientRoute) ([]netip.AddrPort, error) {
 	if route.InternalPort == 0 {
-		return nil, cql.TypeValidation("client route", "missing required port")
+		return nil, cqltype.TypeValidation("client route", "missing required port")
 	}
 	name := route.InternalAddress
 	if override := p.privateStorage.addrOverrides[route.InternalConnectionID]; override != "" {
@@ -358,26 +359,26 @@ func (p *ClientRoutesHandler) routeGeneration() uint64 {
 }
 func getV2RoutesConnections(ctx context.Context, c InternalControlConnection, table string, ids []string, tls bool) ([]InternalClientRoute, error) {
 	if len(ids) == 0 {
-		return nil, cql.TypeValidation("routes", "connection IDs cannot be empty")
+		return nil, cqltype.TypeValidation("routes", "connection IDs cannot be empty")
 	}
 	if table == "" {
 		table = "system.client_routes"
 	}
 	if !validV2RouteTable(table) {
-		return nil, cql.TypeValidation("routes table", "invalid qualified identifier")
+		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")
 	}
 	stmt := fmt.Sprintf("select connection_id, host_id, address, port, tls_port from %s where connection_id in ?", table)
 	return readV2ClientRoutes(ctx, c, table, stmt, [][]string{ids}, tls)
 }
 func getV2RoutesPairs(ctx context.Context, c InternalControlConnection, table string, pairs []InternalPair, tls bool) ([]InternalClientRoute, error) {
 	if len(pairs) == 0 {
-		return nil, cql.TypeValidation("routes", "pairs cannot be empty")
+		return nil, cqltype.TypeValidation("routes", "pairs cannot be empty")
 	}
 	if table == "" {
 		table = "system.client_routes"
 	}
 	if !validV2RouteTable(table) {
-		return nil, cql.TypeValidation("routes table", "invalid qualified identifier")
+		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")
 	}
 	ids, hosts := make([]string, len(pairs)), make([]string, len(pairs))
 	for i, p := range pairs {
@@ -478,7 +479,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 				return nil, err
 			}
 			if !p.routeMatches(route, epochs) {
-				return nil, cql.TypeValidation("route generation", "route changed while opening")
+				return nil, cqltype.TypeValidation("route generation", "route changed while opening")
 			}
 			implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, implEndpoint.InternalTranslatedAddresses{CQL: endpoint})
 			conn, err := sessionDialWithoutObserver(s, ctx, host, cfg, handler, 0, 0)
@@ -489,7 +490,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 			prior := conn.InternalValidateTarget
 			conn.InternalValidateTarget = func(ctx context.Context) error {
 				if !p.routeMatches(route, epochs) {
-					return cql.TypeValidation("route generation", "route changed while opening")
+					return cqltype.TypeValidation("route generation", "route changed while opening")
 				}
 				if prior != nil {
 					return prior(ctx)
@@ -499,7 +500,7 @@ func (s *Core) dialV2Routes(ctx context.Context, host *implEndpoint.HostInfo, cf
 			if !p.routeMatches(route, epochs) || !p.BindRoute(route) {
 				conn.Close()
 				conn.InternalWaitEventDispatch()
-				return nil, cql.TypeValidation("route generation", "route superseded during opening")
+				return nil, cqltype.TypeValidation("route generation", "route superseded during opening")
 			}
 			return conn, nil
 		}

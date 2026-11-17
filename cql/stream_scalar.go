@@ -53,17 +53,17 @@ func (p streamScalarPlan[T]) Reset(dst *T) {
 }
 func (p streamScalarPlan[T]) DecodeInto(r *StreamValueReader, dst *T) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil scalar destination"))
+		return r.fail(typeValidation("destination", "nil scalar destination"))
 	}
 	if err := r.present(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled streaming scalar metadata changed"))
+		return r.fail(typeValidation("type", "compiled streaming scalar metadata changed"))
 	}
 	n := r.Remaining()
 	if n < p.minimum || n > p.maximum {
-		return r.fail(TypeValidation("length", "%s requires %d..%d bytes, got %d", r.typ, p.minimum, p.maximum, n))
+		return r.fail(typeValidation("length", "%s requires %d..%d bytes, got %d", r.typ, p.minimum, p.maximum, n))
 	}
 	value, err := p.decode(r)
 	if err != nil {
@@ -134,7 +134,7 @@ func streamReadDuration(r *StreamValueReader) (Duration, error) {
 var (
 	StreamBool StreamDecoder[bool] = streamFixed(TypeBoolean, 1, func(b []byte) (bool, error) {
 		if b[0] > 1 {
-			return false, TypeValidation("boolean", "must be 0 or 1")
+			return false, typeValidation("boolean", "must be 0 or 1")
 		}
 		return b[0] == 1, nil
 	})
@@ -150,7 +150,7 @@ var (
 	StreamTime      = streamFixed(TypeTime, 8, func(b []byte) (TimeOfDay, error) {
 		v := binary.BigEndian.Uint64(b)
 		if v >= uint64(nanosecondsPerDay) {
-			return 0, TypeValidation("time", "outside one day")
+			return 0, typeValidation("time", "outside one day")
 		}
 		return TimeOfDay(v), nil
 	})
@@ -160,14 +160,14 @@ var (
 		var v TimeUUID
 		copy(v[:], b)
 		if UUID(v).Version() != 1 {
-			return TimeUUID{}, TypeValidation("timeuuid", "must have version 1")
+			return TimeUUID{}, typeValidation("timeuuid", "must have version 1")
 		}
 		return v, nil
 	})
 	StreamInet StreamDecoder[netip.Addr] = streamScalarCodec[netip.Addr]{kind: TypeInet, minimum: 4, maximum: 16, decode: func(r *StreamValueReader) (netip.Addr, error) {
 		n := r.Remaining()
 		if n != 4 && n != 16 {
-			return netip.Addr{}, TypeValidation("inet", "requires 4 or 16 bytes")
+			return netip.Addr{}, typeValidation("inet", "requires 4 or 16 bytes")
 		}
 		b := r.shared.scalar[:int(n)]
 		if err := r.readFull(b); err != nil {
@@ -186,7 +186,7 @@ type streamBytesCodec struct{ kind Type }
 type streamBytesPlan struct{ typ DataType }
 
 func (c streamBytesCodec) Compile(t DataType) (StreamValuePlan[[]byte], error) {
-	if err := ValidateDataType(t); err != nil {
+	if err := validateDataType(t); err != nil {
 		return nil, err
 	}
 	if c.kind == TypeText {
@@ -194,7 +194,7 @@ func (c streamBytesCodec) Compile(t DataType) (StreamValuePlan[[]byte], error) {
 			return nil, err
 		}
 	} else if t.Kind() != c.kind {
-		return nil, TypeValidation("type", "streaming %s cannot decode %s", c.kind, t)
+		return nil, typeValidation("type", "streaming %s cannot decode %s", c.kind, t)
 	}
 	return streamBytesPlan{typ: t}, nil
 }
@@ -205,17 +205,17 @@ func (p streamBytesPlan) Reset(dst *[]byte) {
 }
 func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil byte destination"))
+		return r.fail(typeValidation("destination", "nil byte destination"))
 	}
 	if err := r.present(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled byte metadata changed"))
+		return r.fail(typeValidation("type", "compiled byte metadata changed"))
 	}
 	n := r.Remaining()
 	if p.typ.Kind() == TypeVarint && n == 0 {
-		return r.fail(TypeValidation("varint", "requires nonempty signed bytes"))
+		return r.fail(typeValidation("varint", "requires nonempty signed bytes"))
 	}
 	if err := r.capacity(n, cap(*dst)); err != nil {
 		return err
@@ -270,17 +270,17 @@ func (streamDecimalPlan) Reset(dst *StreamDecimalValue) {
 }
 func (p streamDecimalPlan) DecodeInto(r *StreamValueReader, dst *StreamDecimalValue) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil decimal destination"))
+		return r.fail(typeValidation("destination", "nil decimal destination"))
 	}
 	if err := r.present(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled decimal metadata changed"))
+		return r.fail(typeValidation("type", "compiled decimal metadata changed"))
 	}
 	n := r.Remaining()
 	if n < 5 {
-		return r.fail(TypeValidation("decimal", "requires scale and nonempty integer"))
+		return r.fail(typeValidation("decimal", "requires scale and nonempty integer"))
 	}
 	// Capacity rejection precedes even the scale bytes of this value.
 	if err := r.capacity(n-4, cap(dst.Unscaled)); err != nil {
@@ -306,7 +306,7 @@ func StreamNullable[T any](base StreamDecoder[T]) StreamDecoder[Nullable[T]] {
 }
 func (c streamNullableCodec[T]) Compile(t DataType) (StreamValuePlan[Nullable[T]], error) {
 	if c.base == nil {
-		return nil, TypeValidation("stream codec", "nil nullable child")
+		return nil, typeValidation("stream codec", "nil nullable child")
 	}
 	p, e := compileStreamValuePlan(c.base, t)
 	if e != nil {
@@ -322,13 +322,13 @@ func (p streamNullablePlan[T]) Reset(dst *Nullable[T]) {
 }
 func (p streamNullablePlan[T]) DecodeInto(r *StreamValueReader, dst *Nullable[T]) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil nullable destination"))
+		return r.fail(typeValidation("destination", "nil nullable destination"))
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled nullable metadata changed"))
+		return r.fail(typeValidation("type", "compiled nullable metadata changed"))
 	}
 	p.Reset(dst)
 	if r.state == Null {
@@ -352,14 +352,14 @@ func EmptyStream[T any](base StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
 }
 func (c streamEmptyCodec[T]) Compile(t DataType) (StreamValuePlan[EmptyValueOf[T]], error) {
 	if c.base == nil {
-		return nil, TypeValidation("stream codec", "nil empty child")
+		return nil, typeValidation("stream codec", "nil empty child")
 	}
 	p, e := compileStreamValuePlan(c.base, t)
 	if e != nil {
 		return nil, e
 	}
 	if !emptySupported(t) {
-		return nil, TypeValidation("type", "%s does not support Empty", t)
+		return nil, typeValidation("type", "%s does not support Empty", t)
 	}
 	return streamEmptyPlan[T]{base: p, typ: t}, nil
 }
@@ -371,13 +371,13 @@ func (p streamEmptyPlan[T]) Reset(dst *EmptyValueOf[T]) {
 }
 func (p streamEmptyPlan[T]) DecodeInto(r *StreamValueReader, dst *EmptyValueOf[T]) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil empty destination"))
+		return r.fail(typeValidation("destination", "nil empty destination"))
 	}
 	if err := r.present(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled empty metadata changed"))
+		return r.fail(typeValidation("type", "compiled empty metadata changed"))
 	}
 	p.Reset(dst)
 	if r.Remaining() == 0 {

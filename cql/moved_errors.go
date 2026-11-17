@@ -48,11 +48,6 @@ type ProtocolError struct {
 	Offset int64
 }
 
-// NewFrameError returns the ProtocolError of a frame violation.
-func NewFrameError(format string, args ...any) *ProtocolError {
-	return &ProtocolError{Stage: "frame", Offset: -1, Err: fmt.Errorf(format, args...)}
-}
-
 func (e *ProtocolError) Error() string {
 	if e.Offset < 0 {
 		return fmt.Sprintf("gocql: %s: %v", e.Stage, e.Err)

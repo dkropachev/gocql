@@ -9,6 +9,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // UnpreparedExec executes one CQL text command and owns its query's cleanup.
@@ -69,7 +70,7 @@ func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], opt
 	case 1:
 		values = options[0]
 	default:
-		return nil, cql.TypeValidation("options", "at most one Options")
+		return nil, cqltype.TypeValidation("options", "at most one Options")
 	}
 	o, err := queryOptions(s.Core(), values)
 	if err != nil {

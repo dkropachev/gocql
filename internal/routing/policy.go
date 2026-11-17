@@ -5,6 +5,7 @@ package routing
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 
@@ -32,14 +33,14 @@ type PartitionKey struct{ state PartitionKeyState }
 func (k PartitionKey) Len() int64 { return PartitionKeyData(&k).chain.Len() }
 func (k PartitionKey) ForEach(fn func(cql.Bytes) error) error {
 	if fn == nil {
-		return cql.TypeValidation("partition key", "nil visitor")
+		return cqltype.TypeValidation("partition key", "nil visitor")
 	}
 	return PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
 		c, e := wire.NewChain(s)
 		if e != nil {
 			return e
 		}
-		return fn(cql.BytesView(c, wire.Ref{}))
+		return fn(cqltype.BytesView(c, wire.Ref{}))
 	})
 }
 
@@ -55,14 +56,14 @@ var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return cql.TypeValidation("partition key", "invalid column index")
+			return cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
 		if c.State != cql.Null && c.State != cql.Unset && c.State != cql.Present {
-			return cql.TypeValidation("partition key", "invalid cell state")
+			return cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
-			return cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+			return cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 		}
 	}
 	return nil
@@ -75,16 +76,16 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	missing := false
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid column index")
+			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
 		if c.State == cql.Null || c.State == cql.Unset {
 			missing = true
 		} else if c.State != cql.Present {
-			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid cell state")
+			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
-			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 		}
 	}
 	if missing {
@@ -93,18 +94,18 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	b := wire.NewBuilder(256)
 	for _, idx := range indexes {
 		if idx < 0 || idx >= len(cells) {
-			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid column index")
+			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
 		if c.State == cql.Null || c.State == cql.Unset {
 			return *NewPartitionKey(PartitionKeyState{}), false, nil
 		}
 		if c.State != cql.Present {
-			return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "invalid cell state")
+			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 {
 			if c.Body.Len() > 65535 {
-				return *NewPartitionKey(PartitionKeyState{}), false, cql.TypeValidation("partition key", "composite component exceeds 65535 bytes")
+				return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "composite component exceeds 65535 bytes")
 			}
 			if e := b.Uint16(uint16(c.Body.Len())); e != nil {
 				return *NewPartitionKey(PartitionKeyState{}), false, e
@@ -126,7 +127,7 @@ func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p Tok
 	if _, builtin := p.(murmur3StreamingPartitioner); builtin {
 		for _, index := range indexes {
 			if index >= 0 && index < len(cells) && cells[index].State != cql.Present && cells[index].State != cql.Null && cells[index].State != cql.Unset {
-				return cql.Option[int64]{}, cql.TypeValidation("partition key", "invalid cell state")
+				return cql.Option[int64]{}, cqltype.TypeValidation("partition key", "invalid cell state")
 			}
 		}
 		token, err := InternalRoutingToken(cells, indexes)
@@ -223,7 +224,7 @@ type InternalRoutingPolicy struct {
 
 func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 	if o.Rack != "" && o.Datacenter == "" {
-		return nil, cql.TypeValidation("routing rack", "requires a datacenter")
+		return nil, cqltype.TypeValidation("routing rack", "requires a datacenter")
 	}
 	if o.Latency.Enabled {
 		if o.Latency.ExclusionThreshold == 0 {
@@ -242,7 +243,7 @@ func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
 			o.Latency.UpdateInterval = time.Second
 		}
 		if o.Latency.ExclusionThreshold < 1 || math.IsNaN(o.Latency.ExclusionThreshold) || math.IsInf(o.Latency.ExclusionThreshold, 0) || o.Latency.MinimumSamples < 1 || o.Latency.Scale <= 0 || o.Latency.RetryPeriod <= 0 || o.Latency.UpdateInterval <= 0 {
-			return nil, cql.TypeValidation("latency routing", "invalid configuration")
+			return nil, cqltype.TypeValidation("latency routing", "invalid configuration")
 		}
 	}
 	p := &InternalRoutingPolicy{InternalOptions: o, seed: rand.Uint64()}
@@ -261,7 +262,7 @@ var validateRackLookup func()
 
 func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 	if m == nil {
-		return cql.TypeValidation("routing", "missing metadata")
+		return cqltype.TypeValidation("routing", "missing metadata")
 	}
 	if p.InternalOptions.Datacenter == "" {
 		return nil
@@ -287,14 +288,14 @@ func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 func (p *InternalRoutingPolicy) validateIndex(idx *InternalRoutingHostIndex) error {
 	o := &p.InternalOptions
 	if idx.enabledDC[o.Datacenter] <= 0 {
-		return cql.TypeValidation("routing datacenter", "%q has no eligible hosts", o.Datacenter)
+		return cqltype.TypeValidation("routing datacenter", "%q has no eligible hosts", o.Datacenter)
 	}
 	if o.Rack != "" {
 		if validateRackLookup != nil {
 			validateRackLookup()
 		}
 		if idx.enabledRack[routingLocality{o.Datacenter, o.Rack}] <= 0 {
-			return cql.TypeValidation("routing rack", "%q has no eligible hosts", o.Rack)
+			return cqltype.TypeValidation("routing rack", "%q has no eligible hosts", o.Rack)
 		}
 	}
 	return nil
@@ -1021,20 +1022,20 @@ func SingleTargetRouting(t Target, strictShard bool) RoutingPolicy {
 }
 func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 	if (p.strict || p.target.StrictShard) && !p.target.ShardID.Set {
-		return cql.TypeValidation("routing shard", "strict target requires a shard ID")
+		return cqltype.TypeValidation("routing shard", "strict target requires a shard ID")
 	}
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
 				if (p.strict || p.target.StrictShard) && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
-					return cql.TypeValidation("routing shard", "unavailable shard")
+					return cqltype.TypeValidation("routing shard", "unavailable shard")
 				}
 				return nil
 			}
 		}
 	}
-	return cql.TypeValidation("routing host", "host is not eligible")
+	return cqltype.TypeValidation("routing host", "host is not eligible")
 }
 
 // Pick returns false: a single target's plan is already its first route.

@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
@@ -75,7 +76,7 @@ func (r InternalV2TopologyRow) InternalHost(defaultPort int) (*implEndpoint.Host
 		implEndpoint.HostInfoData(h).InternalPort = defaultPort
 	}
 	if implEndpoint.HostInfoData(h).InternalPort <= 0 || implEndpoint.HostInfoData(h).InternalPort > 65535 {
-		return nil, cql.TypeValidation("topology port", "invalid port %d", implEndpoint.HostInfoData(h).InternalPort)
+		return nil, cqltype.TypeValidation("topology port", "invalid port %d", implEndpoint.HostInfoData(h).InternalPort)
 	}
 	if err := implEndpoint.HostInfoData(h).InternalVersion.Set(r.release); err != nil {
 		return nil, err

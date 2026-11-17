@@ -36,8 +36,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -240,9 +240,9 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 	var host *implEndpoint.HostInfo
 	if err == nil {
 		if len(hosts) == 0 {
-			err = cql.TypeValidation("control topology", "query returned 0 rows")
+			err = cqltype.TypeValidation("control topology", "query returned 0 rows")
 		} else if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() {
-			err = cql.TypeValidation("control topology", "expected one local identity")
+			err = cqltype.TypeValidation("control topology", "expected one local identity")
 		} else {
 			host = hosts[0]
 		}

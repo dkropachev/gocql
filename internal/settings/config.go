@@ -17,6 +17,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -154,108 +155,108 @@ func (config Config) Validate() error {
 		return err
 	}
 	if len(config.ContactPoints) == 0 {
-		return cql.TypeValidation("contact points", "at least one contact point is required")
+		return cqltype.TypeValidation("contact points", "at least one contact point is required")
 	}
 	if config.Protocol != 4 && config.Protocol != 5 {
-		return cql.TypeValidation("protocol", "supported versions are 4 and 5")
+		return cqltype.TypeValidation("protocol", "supported versions are 4 and 5")
 	}
 	if config.Server == ServerScylla && config.Protocol == 5 {
 		return &UnsupportedSettingError{Setting: "protocol", Reason: "ScyllaDB speaks native protocol 4"}
 	}
 	if config.Port == 0 {
-		return cql.TypeValidation("port", "must not be zero")
+		return cqltype.TypeValidation("port", "must not be zero")
 	}
 	if config.CQLVersion == "" {
-		return cql.TypeValidation("CQL version", "must not be empty")
+		return cqltype.TypeValidation("CQL version", "must not be empty")
 	}
 	if config.ReadTimeout < 0 || config.ConnectTimeout < 0 || config.DNSTimeout < 0 || config.WriteTimeout < 0 || config.KeepaliveInterval < 0 || config.KeepaliveTimeout < 0 || config.SocketKeepalive < 0 || config.CoalesceWait < 0 {
-		return cql.TypeValidation("timeouts", "must not be negative")
+		return cqltype.TypeValidation("timeouts", "must not be negative")
 	}
 	if config.KeepaliveInterval > 0 && config.KeepaliveTimeout == 0 {
-		return cql.TypeValidation("heartbeat", "timeout must be positive when heartbeats are enabled")
+		return cqltype.TypeValidation("heartbeat", "timeout must be positive when heartbeats are enabled")
 	}
 	if config.Protocol == 5 && config.Compression == cql.SnappyCompression {
 		return &UnsupportedSettingError{Setting: "compression", Reason: "native protocol5 supports raw or LZ4 segments"}
 	}
 	if config.Compression > cql.SnappyCompression {
-		return cql.TypeValidation("compression", "unknown algorithm")
+		return cqltype.TypeValidation("compression", "unknown algorithm")
 	}
 	if config.DefaultProfile == nil {
-		return cql.TypeValidation("profile", "default profile is required; use DefaultConfig")
+		return cqltype.TypeValidation("profile", "default profile is required; use DefaultConfig")
 	}
 	if err := (*config.DefaultProfile).ValidateProfile(); err != nil {
 		return err
 	}
 	if config.Limits.MaxFrameBytes <= 0 || config.Limits.MaxDecompressedBytes <= 0 || config.Limits.MaxMetadataDepth <= 0 {
-		return cql.TypeValidation("protocol limits", "must be positive")
+		return cqltype.TypeValidation("protocol limits", "must be positive")
 	}
 	if config.Limits.MaxPagingStates <= 0 || config.Limits.MaxPagingStateBytes <= 0 {
-		return cql.TypeValidation("paging limits", "must be positive")
+		return cqltype.TypeValidation("paging limits", "must be positive")
 	}
 	if config.Limits.MaxMetadataDepth > 128 || config.Limits.MaxFrameBytes > 1<<31-1 || config.Limits.MaxDecompressedBytes > 1<<31-1 {
-		return cql.TypeValidation("protocol limits", "limits exceed supported protocol range")
+		return cqltype.TypeValidation("protocol limits", "limits exceed supported protocol range")
 	}
 	if config.Linger.Set && (config.Linger.Value < 0 || config.Linger.Value%time.Second != 0 || config.Linger.Value/time.Second > math.MaxInt32) {
-		return cql.TypeValidation("linger", "must be nonnegative whole seconds within int32 range")
+		return cqltype.TypeValidation("linger", "must be nonnegative whole seconds within int32 range")
 	}
 	if config.ReceiveBuffer.Set && config.ReceiveBuffer.Value < 0 || config.SendBuffer.Set && config.SendBuffer.Value < 0 {
-		return cql.TypeValidation("socket buffers", "must not be negative")
+		return cqltype.TypeValidation("socket buffers", "must not be negative")
 	}
 	if config.Metadata.AgreementTimeout <= 0 || config.Metadata.AgreementPoll <= 0 {
-		return cql.TypeValidation("schema agreement", "timeout and poll must be positive")
+		return cqltype.TypeValidation("schema agreement", "timeout and poll must be positive")
 	}
 	if config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value > 0 && config.Metadata.ServerTimeout.Value%time.Millisecond != 0 {
-		return cql.TypeValidation("metadata server timeout", "must use whole milliseconds")
+		return cqltype.TypeValidation("metadata server timeout", "must use whole milliseconds")
 	}
 	if config.Metadata.Mode > MetadataSchemaFull {
-		return cql.TypeValidation("metadata mode", "unknown mode")
+		return cqltype.TypeValidation("metadata mode", "unknown mode")
 	}
 	if config.Metadata.PeriodicRefresh < 0 || config.Metadata.RequestTimeout < 0 || config.Metadata.AgreementTimeout < 0 || config.Metadata.AgreementPoll < 0 || config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value < 0 {
-		return cql.TypeValidation("metadata timeouts", "must not be negative")
+		return cqltype.TypeValidation("metadata timeouts", "must not be negative")
 	}
 	if routes := config.ClientRoutes; routes != nil {
 		if len(routes.ConnectionIDs) == 0 {
-			return cql.TypeValidation("client routes", "connection IDs are required")
+			return cqltype.TypeValidation("client routes", "connection IDs are required")
 		}
 		ids := make(map[string]bool, len(routes.ConnectionIDs))
 		for _, id := range routes.ConnectionIDs {
 			if id == "" || ids[id] {
-				return cql.TypeValidation("client routes", "empty or duplicate connection ID")
+				return cqltype.TypeValidation("client routes", "empty or duplicate connection ID")
 			}
 			ids[id] = true
 		}
 		for id, host := range routes.HostnameOverrides {
 			if !ids[id] || host == "" {
-				return cql.TypeValidation("client routes", "override requires configured connection ID and hostname")
+				return cqltype.TypeValidation("client routes", "override requires configured connection ID and hostname")
 			}
 		}
 		if config.AddressTranslator != nil {
-			return cql.TypeValidation("client routes", "user address translator is incompatible")
+			return cqltype.TypeValidation("client routes", "user address translator is incompatible")
 		}
 	}
 	keys := make(map[string]bool, len(config.Metadata.Keyspaces))
 	for _, keyspace := range config.Metadata.Keyspaces {
 		if keyspace == "" || keys[keyspace] {
-			return cql.TypeValidation("metadata keyspaces", "empty or duplicate keyspace")
+			return cqltype.TypeValidation("metadata keyspaces", "empty or duplicate keyspace")
 		}
 		keys[keyspace] = true
 	}
 	for name, partitioner := range config.Partitioners {
 		if name == "" || partitioner == nil {
-			return cql.TypeValidation("partitioners", "empty name or nil partitioner")
+			return cqltype.TypeValidation("partitioners", "empty name or nil partitioner")
 		}
 	}
 	if config.PreparedCacheSize < 0 {
-		return cql.TypeValidation("prepared cache", "must not be negative")
+		return cqltype.TypeValidation("prepared cache", "must not be negative")
 	}
 	if config.Pool.ConnectionsPerHost < 0 || config.Pool.ConnectionsPerShard < 0 || config.Pool.MaxExcessPerShard < 0 || config.Pool.MaxRequestsPerConnection <= 0 || config.Pool.MaxRequestsPerConnection > 32768 || config.Pool.MaxOrphanedStreams < 0 {
-		return cql.TypeValidation("pool", "invalid pool limits")
+		return cqltype.TypeValidation("pool", "invalid pool limits")
 	}
 	if config.Pool.ConnectionsPerHost == 0 && config.Pool.ConnectionsPerShard == 0 {
-		return cql.TypeValidation("pool", "host or shard connection count must be positive")
+		return cqltype.TypeValidation("pool", "host or shard connection count must be positive")
 	}
 	if sa := config.Pool.AdvancedShardAwareness; sa.Enabled && (sa.SourcePortStart < 1024 || sa.SourcePortStart > sa.SourcePortEnd) {
-		return cql.TypeValidation("source ports", "invalid range")
+		return cqltype.TypeValidation("source ports", "invalid range")
 	}
 	return nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -144,16 +145,16 @@ func (b *Batch) requestRouting() model.RoutingInfo {
 // ignored: the options compiled for statements serve batches too.
 func validateBatch(s *implCluster.Core, batch *Batch) error {
 	if batch == nil {
-		return cql.TypeValidation("batch", "nil batch")
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(batch.entries) == 0 {
-		return cql.TypeValidation("batch", "empty")
+		return cqltype.TypeValidation("batch", "empty")
 	}
 	if kind := batch.Kind; kind != cql.LoggedBatch && kind != cql.UnloggedBatch && kind != cql.CounterBatch {
-		return cql.TypeValidation("batch kind", "unknown kind")
+		return cqltype.TypeValidation("batch kind", "unknown kind")
 	}
 	if batch.session != s {
-		return cql.TypeValidation("batch session", "statements belong to another session")
+		return cqltype.TypeValidation("batch session", "statements belong to another session")
 	}
 	return nil
 }
@@ -200,16 +201,16 @@ func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, sta
 // admit checks that a statement of session s with routing r may join b.
 func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 	if b == nil {
-		return cql.TypeValidation("batch", "nil batch")
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	if len(b.entries) == implCluster.MaxBatchStatements {
-		return cql.TypeValidation("batch", "full (%d statements)", implCluster.MaxBatchStatements)
+		return cqltype.TypeValidation("batch", "full (%d statements)", implCluster.MaxBatchStatements)
 	}
 	if b.session != nil && b.session != s {
-		return cql.TypeValidation("batch session", "statements belong to different sessions")
+		return cqltype.TypeValidation("batch session", "statements belong to different sessions")
 	}
 	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
-		return cql.TypeValidation("batch keyspace", "members use different keyspaces")
+		return cqltype.TypeValidation("batch keyspace", "members use different keyspaces")
 	}
 	return nil
 }
@@ -246,11 +247,11 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 // InternalAddBound appends bound's statement and values to batch.
 func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R]) error {
 	if bound == nil || bound.privateStorage.InternalRequest.InternalOwner == nil {
-		return cql.TypeValidation("batch item", "nil binding")
+		return cqltype.TypeValidation("batch item", "nil binding")
 	}
 	request := &bound.privateStorage.InternalRequest
 	if state := request.InternalPrepared(); state != nil && state.InternalSession != s {
-		return cql.TypeValidation("batch session", "prepared statement belongs to another session")
+		return cqltype.TypeValidation("batch session", "prepared statement belongs to another session")
 	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return err

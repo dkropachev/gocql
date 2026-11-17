@@ -7,6 +7,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -33,13 +34,13 @@ func unpreparedStreamQuery[P, R any](session *implCluster.Core, statement Stream
 	}
 	decoder := statement.Rows
 	if decoder == nil {
-		return nil, cql.TypeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
 	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, cql.TypeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
 	q, err := unpreparedQuery(session, base, options.Options)
 	if err != nil {

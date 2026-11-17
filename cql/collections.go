@@ -49,7 +49,7 @@ func (i *ValueIterator[T]) Next() bool {
 		return false
 	}
 	if i.count < 0 || (i.next == nil && i.nextCursor == nil) {
-		i.err = TypeValidation("iterator", "uninitialized iterator")
+		i.err = typeValidation("iterator", "uninitialized iterator")
 		i.done = true
 		return false
 	}
@@ -77,7 +77,7 @@ func (i *ValueIterator[T]) Value() T {
 }
 func (i *ValueIterator[T]) Err() error {
 	if i == nil {
-		return TypeValidation("iterator", "nil iterator")
+		return typeValidation("iterator", "nil iterator")
 	}
 	return i.err
 }
@@ -86,10 +86,10 @@ func (i *ValueIterator[T]) Err() error {
 // no partial slice on failure and recursively detaches every yielded value.
 func (i *ValueIterator[T]) Collect() ([]T, error) {
 	if i == nil {
-		return nil, TypeValidation("iterator", "nil iterator")
+		return nil, typeValidation("iterator", "nil iterator")
 	}
 	if i.clone == nil && i.count > i.index {
-		return nil, TypeValidation("iterator", "missing ownership-detaching clone")
+		return nil, typeValidation("iterator", "missing ownership-detaching clone")
 	}
 	values := make([]T, 0, max(0, i.count-i.index))
 	for i.Next() {
@@ -128,23 +128,23 @@ func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] {
 }
 
 func sequenceElement(typ DataType, kind Type) (DataType, int64, error) {
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		return DataType{}, 0, err
 	}
 	element, ok := typ.Element()
 	if !ok || typ.Kind() != kind {
-		return DataType{}, 0, TypeValidation("type", "expected %s, got %s", kind, typ)
+		return DataType{}, 0, typeValidation("type", "expected %s, got %s", kind, typ)
 	}
 	if kind != TypeCustom {
 		return element, 0, nil
 	}
 	dimension, vector := typ.Dimension()
 	if !vector || dimension == 0 {
-		return DataType{}, 0, TypeValidation("dimension", "vector dimension must be positive")
+		return DataType{}, 0, typeValidation("dimension", "vector dimension must be positive")
 	}
 	width, err := vectorFixedWidth(element)
 	if err == nil && width > math.MaxInt32/int64(dimension) {
-		err = TypeValidation("dimension", "vector body exceeds signed 32-bit length")
+		err = typeValidation("dimension", "vector body exceeds signed 32-bit length")
 	}
 	return element, width, err
 }
@@ -167,7 +167,7 @@ func (c sequenceEncoder[T]) compileValueEncoder(typ DataType) (Encoder[[]T], err
 	return c, nil
 }
 func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		bound, err := c.compileValueEncoder(w.Type())
 		if err != nil {
 			return err
@@ -175,13 +175,13 @@ func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
 		return bound.Encode(w, values)
 	}
 	if !c.typ.Equal(w.Type()) {
-		return TypeValidation("type", "sequence metadata changed after compilation")
+		return typeValidation("type", "sequence metadata changed after compilation")
 	}
 	element, _ := c.typ.Element()
 	if c.kind == TypeCustom {
 		dimension, _ := c.typ.Dimension()
 		if len(values) != int(dimension) {
-			return TypeValidation("dimension", "vector requires %d elements, got %d", dimension, len(values))
+			return typeValidation("dimension", "vector requires %d elements, got %d", dimension, len(values))
 		}
 		for i, value := range values {
 			if err := writeVectorElement(w, element, c.width, c.element, value); err != nil {
@@ -191,7 +191,7 @@ func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
 		return nil
 	}
 	if uint64(len(values)) > math.MaxInt32 {
-		return TypeValidation("count", "collection has too many elements")
+		return typeValidation("count", "collection has too many elements")
 	}
 	if err := w.Uint32(uint32(len(values))); err != nil {
 		return err
@@ -209,7 +209,7 @@ func writeCollectionElement[T any](w *ValueWriter, typ DataType, encoder Encoder
 			return err
 		}
 		if child.state != Present && child.state != EmptyCell {
-			return TypeValidation("element", "collection elements cannot be null or unset")
+			return typeValidation("element", "collection elements cannot be null or unset")
 		}
 		return nil
 	})
@@ -277,7 +277,7 @@ func (c mapEncoder[K, V]) CheckType(typ DataType) error {
 func (c mapEncoder[K, V]) compileValueEncoder(typ DataType) (Encoder[[]Entry[K, V]], error) {
 	kt, vt, ok := typ.KeyValue()
 	if !ok {
-		return nil, TypeValidation("type", "expected map, got %s", typ)
+		return nil, typeValidation("type", "expected map, got %s", typ)
 	}
 	key, err := compileValueEncoder(c.key, kt)
 	if err != nil {
@@ -291,7 +291,7 @@ func (c mapEncoder[K, V]) compileValueEncoder(typ DataType) (Encoder[[]Entry[K, 
 	return c, nil
 }
 func (c mapEncoder[K, V]) Encode(w *ValueWriter, entries []Entry[K, V]) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		bound, err := c.compileValueEncoder(w.Type())
 		if err != nil {
 			return err
@@ -299,10 +299,10 @@ func (c mapEncoder[K, V]) Encode(w *ValueWriter, entries []Entry[K, V]) error {
 		return bound.Encode(w, entries)
 	}
 	if !c.typ.Equal(w.Type()) {
-		return TypeValidation("type", "map metadata changed after compilation")
+		return typeValidation("type", "map metadata changed after compilation")
 	}
 	if uint64(len(entries)) > math.MaxInt32 {
-		return TypeValidation("count", "map has too many entries")
+		return typeValidation("count", "map has too many entries")
 	}
 	if err := w.Uint32(uint32(len(entries))); err != nil {
 		return err
@@ -339,7 +339,7 @@ func (c mapDecoder[K, V]) CheckType(typ DataType) error {
 func (c mapDecoder[K, V]) compileValueDecoder(typ DataType) (Decoder[[]Entry[K, V]], error) {
 	kt, vt, ok := typ.KeyValue()
 	if !ok {
-		return nil, TypeValidation("type", "expected map, got %s", typ)
+		return nil, typeValidation("type", "expected map, got %s", typ)
 	}
 	key, err := compileValueDecoder(c.key, kt)
 	if err != nil {
@@ -360,7 +360,7 @@ func collectionCount(cursor *ValueCursor, minimum int64) (int, error) {
 		return 0, err
 	}
 	if n > math.MaxInt32 || int64(n) > cursor.Remaining()/minimum {
-		return 0, TypeValidation("count", "collection count %d exceeds available framing", n)
+		return 0, typeValidation("count", "collection count %d exceeds available framing", n)
 	}
 	return int(n), nil
 }
@@ -370,7 +370,7 @@ func checkedCollectionChild(cursor *ValueCursor, typ DataType) error {
 		return err
 	}
 	if child.State() != Present {
-		return TypeValidation("element", "collection elements cannot be null or unset")
+		return typeValidation("element", "collection elements cannot be null or unset")
 	}
 	return nil
 }
@@ -391,11 +391,11 @@ func validateSequenceLayout(r ValueReader, kind Type, element DataType, width in
 		count := int(dimension)
 		if width > 0 {
 			if r.body.Len() != int64(count)*width {
-				return Bytes{}, 0, 0, TypeValidation("dimension", "vector requires %d bytes, got %d", int64(count)*width, r.body.Len())
+				return Bytes{}, 0, 0, typeValidation("dimension", "vector requires %d bytes, got %d", int64(count)*width, r.body.Len())
 			}
 		} else {
 			if int64(count) > cursor.Remaining() {
-				return Bytes{}, 0, 0, TypeValidation("dimension", "vector dimension exceeds available lengths")
+				return Bytes{}, 0, 0, typeValidation("dimension", "vector dimension exceeds available lengths")
 			}
 			for i := 0; i < count; i++ {
 				if _, err := readVectorElement(&cursor, element, 0); err != nil {
@@ -432,7 +432,7 @@ func validateMapBody(r ValueReader) (Bytes, int, error) {
 	}
 	key, value, ok := r.Type().KeyValue()
 	if !ok {
-		return Bytes{}, 0, TypeValidation("type", "expected map, got %s", r.Type())
+		return Bytes{}, 0, typeValidation("type", "expected map, got %s", r.Type())
 	}
 	cursor := r.cursorValue()
 	count, err := collectionCount(&cursor, 8)
@@ -460,7 +460,7 @@ func validateMapBody(r ValueReader) (Bytes, int, error) {
 // vectorFixedWidth follows the server's serializer classification. In
 // particular smallint, tinyint, date, time, and counter are variable-width here.
 func vectorFixedWidth(typ DataType) (int64, error) {
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		return 0, err
 	}
 	switch typ.Kind() {
@@ -475,7 +475,7 @@ func vectorFixedWidth(typ DataType) (int64, error) {
 	case TypeCustom:
 		dimension, ok := typ.Dimension()
 		if !ok || dimension == 0 {
-			return 0, TypeValidation("dimension", "vector dimension must be positive")
+			return 0, typeValidation("dimension", "vector dimension must be positive")
 		}
 		element, _ := typ.Element()
 		width, err := vectorFixedWidth(element)
@@ -483,7 +483,7 @@ func vectorFixedWidth(typ DataType) (int64, error) {
 			return 0, err
 		}
 		if width > math.MaxInt32/int64(dimension) {
-			return 0, TypeValidation("dimension", "nested vector width exceeds signed 32-bit length")
+			return 0, typeValidation("dimension", "nested vector width exceeds signed 32-bit length")
 		}
 		return width * int64(dimension), nil
 	default:
@@ -506,10 +506,10 @@ func readVectorElement(cursor *ValueCursor, typ DataType, width int64) (ValueRea
 			length = length<<8 | uint64(b)
 		}
 		if extra > 0 && length < uint64(1)<<uint(extra*7) {
-			return ValueReader{}, cursor.failure(TypeValidation("length", "noncanonical vector length"))
+			return ValueReader{}, cursor.failure(typeValidation("length", "noncanonical vector length"))
 		}
 		if length > math.MaxInt32 {
-			return ValueReader{}, cursor.failure(TypeValidation("length", "vector element length exceeds signed 32-bit range"))
+			return ValueReader{}, cursor.failure(typeValidation("length", "vector element length exceeds signed 32-bit range"))
 		}
 		width = int64(length)
 	}
@@ -517,7 +517,7 @@ func readVectorElement(cursor *ValueCursor, typ DataType, width int64) (ValueRea
 	if err != nil {
 		return ValueReader{}, err
 	}
-	return newValueReader(typ, Present, BytesChain(body), BytesLease(body)), nil
+	return newValueReader(typ, Present, bytesChain(body), bytesLease(body)), nil
 }
 
 // Fixed vector members write directly into the enclosing builder. Variable
@@ -540,13 +540,13 @@ func writeVectorElement[T any](w *ValueWriter, typ DataType, width int64, encode
 		}
 		if child.state != Present || w.builder.Len()-start != width {
 			abortValueWriter(child)
-			return w.fail(TypeValidation("element", "fixed vector element requires %d present bytes", width))
+			return w.fail(typeValidation("element", "fixed vector element requires %d present bytes", width))
 		}
 		child.finished = true
 		return nil
 	}
 	builder := wire.NewBuilder(64)
-	child := NewValueWriter(builder, typ, false)
+	child := newValueWriter(builder, typ, false)
 	child.ownBorrowed = w.ownBorrowed
 	if err := encoder.Encode(child, value); err != nil {
 		abortValueWriter(child)
@@ -554,9 +554,9 @@ func writeVectorElement[T any](w *ValueWriter, typ DataType, width int64, encode
 	}
 	if child.state != Present && child.state != EmptyCell {
 		abortValueWriter(child)
-		return w.fail(TypeValidation("element", "vector elements cannot be null or unset"))
+		return w.fail(typeValidation("element", "vector elements cannot be null or unset"))
 	}
-	if err := FinishValueWriter(child); err != nil {
+	if err := finishValueWriter(child); err != nil {
 		return w.fail(err)
 	}
 	chain, err := builder.Freeze()

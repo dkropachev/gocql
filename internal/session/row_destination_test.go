@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -224,11 +225,11 @@ func clearsStaleRow[R any](t *testing.T, decoder cql.RowDecoder[R], columns cql.
 }
 
 func manages[R any](decoder cql.RowDecoder[R], columns cql.Columns) (bool, error) {
-	plan, err := cql.CompileRowPlan(decoder, columns)
+	plan, err := codec.CompileRowPlan(decoder, columns)
 	if err != nil {
 		return false, err
 	}
-	return cql.ManagesRowDestination(plan), nil
+	return codec.ManagesRowDestination(plan), nil
 }
 
 // TestPageStorageFlagsInPadding checks that the page's cached destination flag

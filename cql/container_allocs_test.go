@@ -32,7 +32,7 @@ func TestContainerAllocs(t *testing.T) {
 		allocated := func(count int) float64 {
 			encoded := CodecTestMust(EncodeValueBorrowed(list, ListEncoder(TupleEncoder(OneParam(Int32Codec))), make([]int32, count)))
 			decoder := CodecTestMust(compileValueDecoder(ListDecoder(TupleDecoder(OneColumn(Int32Codec))), list))
-			reader := NewValueReader(list, Present, BytesChain(encoded.body), nil)
+			reader := valueReaderFromLease(list, Present, bytesChain(encoded.body), nil)
 			return testing.AllocsPerRun(20, func() {
 				values, err := decoder.Decode(reader)
 				if err != nil || len(values) != count {

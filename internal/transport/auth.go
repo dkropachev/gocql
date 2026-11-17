@@ -9,6 +9,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -36,7 +37,7 @@ func (a *v2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
 		a.started = true
 		a.exchange, response, err = a.provider.Start(a.ctx, a.host, string(req))
 		if err == nil && a.exchange == nil {
-			err = cql.TypeValidation("authentication", "provider returned a nil exchange")
+			err = cqltype.TypeValidation("authentication", "provider returned a nil exchange")
 		}
 	} else {
 		response, err = a.exchange.Challenge(a.ctx, nullableAuthBytes(req))
@@ -57,7 +58,7 @@ func (a *v2Authenticator) Success(data []byte) error {
 		return err
 	}
 	if a.exchange == nil {
-		return cql.TypeValidation("authentication", "success before exchange")
+		return cqltype.TypeValidation("authentication", "success before exchange")
 	}
 	return a.exchange.Success(a.ctx, nullableAuthBytes(data))
 }

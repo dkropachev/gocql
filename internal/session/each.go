@@ -9,6 +9,8 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -27,7 +29,7 @@ type eachScratch struct {
 //
 //go:noinline
 func nilEachCallback() (cql.Result, error) {
-	err := cql.TypeValidation("row callback", "nil callback")
+	err := cqltype.TypeValidation("row callback", "nil callback")
 	return InternalExecutionErrorResult(err), err
 }
 
@@ -58,10 +60,10 @@ func isStopIteration(err error) bool {
 // first row when fn is nil.
 func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, cql.Result, error) {
 	if b == nil {
-		return false, cql.Result{}, cql.TypeValidation("binding", "nil binding")
+		return false, cql.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
 	if dst == nil {
-		return false, cql.Result{}, cql.TypeValidation("destination", "nil row destination")
+		return false, cql.Result{}, cqltype.TypeValidation("destination", "nil row destination")
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
@@ -96,13 +98,13 @@ func (rt *InternalSessionRuntime) eachPage[R any](ctx context.Context, b *Bound[
 			if first {
 				return false, InternalExecutionErrorResult(err), err
 			}
-			cql.MergeResult(&result, InternalExecutionErrorResult(err))
+			codec.MergeResult(&result, InternalExecutionErrorResult(err))
 			return false, result, err
 		}
 		if first {
 			result = response.Result
 		} else {
-			cql.MergeResult(&result, response.Result)
+			codec.MergeResult(&result, response.Result)
 		}
 		state = response.State
 		err = rt.decodeEach(ctx, response, b.privateStorage.InternalRows, plans, dst, fn, scratch)
@@ -137,18 +139,18 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 	}
 	// Built-in plans clear the destination themselves; only an application
 	// plan needs it cleared here.
-	manages := cql.ManagesRowDestination(plan)
+	manages := codec.ManagesRowDestination(plan)
 	scratch.cursor = wire.CursorOver(response.Rows)
 	reader := &scratch.reader
 	for i := int32(0); i < response.RowCount; i++ {
-		*reader = cql.RowReaderFromCursor(response.Columns, &scratch.cursor, response.Owner)
+		*reader = codec.RowReaderFromCursor(response.Columns, &scratch.cursor, response.Owner)
 		if !manages {
 			clearDestination(dst)
 		}
 		if err := plan.DecodeInto(reader, dst); err != nil {
 			return err
 		}
-		if err := cql.FinishRowReader(reader); err != nil {
+		if err := codec.FinishRowReader(reader); err != nil {
 			return err
 		}
 		if err := ctx.Err(); err != nil {
@@ -158,7 +160,7 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 			return runtimeerrors.ErrClosed
 		}
 		if fn == nil {
-			cql.DetachRow(plan, dst)
+			codec.DetachRow(plan, dst)
 			return errStopEach
 		}
 		if err := fn(dst); err != nil {

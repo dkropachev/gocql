@@ -10,6 +10,8 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -37,10 +39,10 @@ type Query[P, R any] struct {
 // explicitly detached before each leased response is released.
 func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*model.ResponseData, error), query Query[P, R], columns cql.Columns, value P) ([]R, error) {
 	if ctx == nil || execute == nil {
-		return nil, cql.TypeValidation("system query", "nil context or connection")
+		return nil, cqltype.TypeValidation("system query", "nil context or connection")
 	}
 	if query.Params == nil || query.Rows == nil {
-		return nil, cql.TypeValidation("statement", "parameter and row codecs are required")
+		return nil, cqltype.TypeValidation("statement", "parameter and row codecs are required")
 	}
 	plan, err := query.Params.Compile(columns)
 	if err != nil {
@@ -92,7 +94,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 		if !more {
 			return rows, nil
 		}
-		if err := history.InternalAdd(cql.PageStateOwned(token, 1)); err != nil {
+		if err := history.InternalAdd(cqltype.PageStateOwned(token)); err != nil {
 			return nil, err
 		}
 		if token == nil {
@@ -102,7 +104,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 	}
 }
 func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, decoder cql.RowDecoder[R], rows []R) ([]R, error) {
-	plan, err := cql.CompileRowPlan(decoder, response.Columns)
+	plan, err := codec.CompileRowPlan(decoder, response.Columns)
 	if err != nil {
 		return rows, err
 	}
@@ -114,10 +116,10 @@ func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, 
 		if err := ctx.Err(); err != nil {
 			return rows, err
 		}
-		reader := cql.RowReaderFromCursor(response.Columns, cursor, response.Owner)
+		reader := codec.RowReaderFromCursor(response.Columns, cursor, response.Owner)
 		value, err := plan.Decode(&reader)
 		if err == nil {
-			err = cql.FinishRowReader(&reader)
+			err = codec.FinishRowReader(&reader)
 		}
 		if err == nil {
 			err = ctx.Err()

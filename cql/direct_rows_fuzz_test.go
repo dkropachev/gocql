@@ -74,10 +74,10 @@ func FuzzDirectRowsMatchCodecs(f *testing.F) {
 		}
 		run := func(p RowPlan[directRow]) string {
 			dst := directRow{Owned: make([]byte, 0, 64)}
-			reader := NewRowReader(columns, chain, lease)
+			reader := newRowReader(columns, chain, lease)
 			err := p.DecodeInto(reader, &dst)
 			if err == nil {
-				err = FinishRowReader(reader)
+				err = finishRowReader(reader)
 			}
 			return fmt.Sprintf("%+v|%v|%d|%d", dst, err, reader.index, reader.cursor.Remaining())
 		}

@@ -64,7 +64,7 @@ func dynamicTestRoundTrip(t *testing.T, value Value, golden string) Value {
 func dynamicTestRowBody(t *testing.T, cols Columns, values []Value) wire.Chain {
 	t.Helper()
 	builder := wire.NewBuilder(0)
-	writer := NewParamWriter(builder, cols, false)
+	writer := newParamWriter(builder, cols, false)
 	plan := dynamicTestMust(DynamicParams.Compile(cols))
 	if err := plan.Encode(writer, values); err != nil {
 		t.Fatal(err)
@@ -79,15 +79,15 @@ func TestDynamic(t *testing.T) {
 			cols := NewColumns(ColumnSpec{Name: "a", Type: integer}, ColumnSpec{Name: "b", Type: text}, ColumnSpec{Name: "a", Type: integer})
 			plan := dynamicTestMust(NamedDynamicParams.Compile(cols))
 			builder := wire.NewBuilder(0)
-			writer := NewParamWriter(builder, cols, true)
+			writer := newParamWriter(builder, cols, true)
 			if err := plan.Encode(writer, []ValueField{{Name: "b", Value: CodecTestMust(TextValue("x"))}, {Name: "a", Value: IntValue(9)}}); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishParamWriter(writer); err != nil {
+			if err := finishParamWriter(writer); err != nil {
 				t.Fatal(err)
 			}
 			chain := dynamicTestMust(builder.Freeze())
-			if got := hex.EncodeToString((BytesView(chain, wire.Ref{})).OwnedBytes()); got != "000000040000000900000001780000000400000009" {
+			if got := hex.EncodeToString((bytesView(chain, wire.Ref{})).OwnedBytes()); got != "000000040000000900000001780000000400000009" {
 				t.Fatalf("server marker order: %s", got)
 			}
 			tests := []struct {
@@ -106,7 +106,7 @@ func TestDynamic(t *testing.T) {
 					if err := b.Uint8(0xaa); err != nil {
 						t.Fatal(err)
 					}
-					w := NewParamWriter(b, cols, true)
+					w := newParamWriter(b, cols, true)
 					err := plan.Encode(w, test.fields)
 					if err == nil || !strings.Contains(err.Error(), test.message) {
 						t.Fatalf("unexpected failure: %v", err)
@@ -117,11 +117,11 @@ func TestDynamic(t *testing.T) {
 				})
 			}
 			positional := dynamicTestMust(DynamicParams.Compile(cols))
-			if err := positional.Encode(NewParamWriter(wire.NewBuilder(0), cols, true), []Value{IntValue(1)}); err == nil {
+			if err := positional.Encode(newParamWriter(wire.NewBuilder(0), cols, true), []Value{IntValue(1)}); err == nil {
 				t.Fatal("wrong parameter count accepted")
 			}
 			mismatch := NewColumns(ColumnSpec{Name: "a", Type: text}, ColumnSpec{Name: "b", Type: text}, ColumnSpec{Name: "a", Type: integer})
-			if err := positional.Encode(NewParamWriter(wire.NewBuilder(0), mismatch, true), []Value{IntValue(1), CodecTestMust(TextValue("x")), IntValue(1)}); err == nil {
+			if err := positional.Encode(newParamWriter(wire.NewBuilder(0), mismatch, true), []Value{IntValue(1), CodecTestMust(TextValue("x")), IntValue(1)}); err == nil {
 				t.Fatal("stale parameter metadata accepted")
 			}
 			if _, err := DynamicParams.Compile(NewColumns(ColumnSpec{Name: "x"})); err == nil {
@@ -131,14 +131,14 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("unnamed marker accepted by named binding")
 			}
 			unsetPlan := dynamicTestMust(DynamicParams.Compile(NewColumns(ColumnSpec{Name: "x", Type: integer})))
-			w := NewParamWriter(wire.NewBuilder(0), NewColumns(ColumnSpec{Name: "x", Type: integer}), false)
+			w := newParamWriter(wire.NewBuilder(0), NewColumns(ColumnSpec{Name: "x", Type: integer}), false)
 			if err := unsetPlan.Encode(w, []Value{UnsetDynamic(integer)}); err == nil || w.builder.Len() != 0 {
 				t.Fatal("v3 unset accepted or did not roll back")
 			}
 			// Repeated names still validate each physical marker's actual type.
 			incompatible := NewColumns(ColumnSpec{Name: "x", Type: integer}, ColumnSpec{Name: "x", Type: text})
 			repeated := dynamicTestMust(NamedDynamicParams.Compile(incompatible))
-			w = NewParamWriter(wire.NewBuilder(0), incompatible, true)
+			w = newParamWriter(wire.NewBuilder(0), incompatible, true)
 			if err := repeated.Encode(w, []ValueField{{Name: "x", Value: IntValue(1)}}); err == nil || w.builder.Len() != 0 {
 				t.Fatal("incompatible repeated marker type accepted or leaked bytes")
 			}
@@ -156,8 +156,8 @@ func TestDynamic(t *testing.T) {
 			}
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}))
 			encoded = dynamicTestMust(EncodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: CodecTestMust(TextValue("borrowed"))}, {Name: "n", Value: IntValue(2)}}))
-			lease := wire.NewLease(BytesChain(encoded.Bytes()), nil)
-			encoded.body = BytesView(BytesChain(encoded.body), wire.RefOf(lease))
+			lease := wire.NewLease(bytesChain(encoded.Bytes()), nil)
+			encoded.body = bytesView(bytesChain(encoded.body), wire.RefOf(lease))
 			codec := UDTDecoder(DynamicRows, UDTOptions{Keyspace: "ks", Name: "record"})
 			row := dynamicTestMust(DecodeValue(codec, encoded))
 			clone := codec.Clone(row)
@@ -172,7 +172,7 @@ func TestDynamic(t *testing.T) {
 			cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text})
 			chain := dynamicTestRowBody(t, cols, []Value{IntValue(3), CodecTestMust(TextValue("right"))})
 			paired := dynamicTestMust(PairRows(OneColumn(Int32Codec), DynamicRows).Compile(cols))
-			pair := dynamicTestMust(paired.Decode(NewRowReader(cols, chain, nil)))
+			pair := dynamicTestMust(paired.Decode(newRowReader(cols, chain, nil)))
 			if pair.First != 3 || pair.Second.Columns().Len() != 1 {
 				t.Fatal("paired row did not retain physical subset")
 			}
@@ -190,7 +190,7 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestRowBody(t, cols, []Value{IntValue(42), CodecTestMust(TextValue("shared")), IntValue(42)})
 			lease := wire.NewLease(chain, nil)
 			defer lease.Release()
-			row := dynamicTestMust(rows.Decode(NewRowReader(cols, chain, lease)))
+			row := dynamicTestMust(rows.Decode(newRowReader(cols, chain, lease)))
 			var wg sync.WaitGroup
 			for worker := 0; worker < 8; worker++ {
 				wg.Add(1)
@@ -198,7 +198,7 @@ func TestDynamic(t *testing.T) {
 					defer wg.Done()
 					for n := 0; n < 100; n++ {
 						b := wire.NewBuilder(0)
-						w := NewParamWriter(b, cols, true)
+						w := newParamWriter(b, cols, true)
 						if err := params.Encode(w, input); err != nil {
 							t.Error(err)
 							return
@@ -221,7 +221,7 @@ func TestDynamic(t *testing.T) {
 								return
 							}
 						}
-						independent, err := rows.Decode(NewRowReader(cols, chain, lease))
+						independent, err := rows.Decode(newRowReader(cols, chain, lease))
 						if err != nil {
 							t.Error(err)
 							return
@@ -247,7 +247,7 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestRowBody(t, cols, values)
 			lease := wire.NewLease(chain, nil)
 			plan := CodecTestMust(DynamicRows.Compile(cols))
-			row := CodecTestMust(plan.Decode(NewRowReader(cols, chain, lease)))
+			row := CodecTestMust(plan.Decode(newRowReader(cols, chain, lease)))
 			copyRow := row
 			if row.physical == nil || row.physical != copyRow.physical || row.physical.cells != nil {
 				t.Fatal("eager or unshared physical index")
@@ -304,7 +304,7 @@ func TestDynamic(t *testing.T) {
 			tuple := dynamicTestMust(TupleType(integer, text))
 			cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
 			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), CodecTestMust(TextValue("hello")), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), CodecTestMust(TextValue("nested"))}))})
-			data := (BytesView(source, wire.Ref{})).OwnedBytes()
+			data := (bytesView(source, wire.Ref{})).OwnedBytes()
 			spans := make([]wire.Span, len(data))
 			for i := range data {
 				spans[i] = wire.Borrow(data[i : i+1])
@@ -312,12 +312,12 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestMust(wire.NewChain(spans...))
 			lease := wire.NewLease(chain, nil)
 			plan := dynamicTestMust(DynamicRows.Compile(cols))
-			reader := NewRowReader(cols, chain, lease)
+			reader := newRowReader(cols, chain, lease)
 			row, err := plan.Decode(reader)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishRowReader(reader); err != nil {
+			if err := finishRowReader(reader); err != nil {
 				t.Fatal(err)
 			}
 			if !row.Columns().Equal(cols) || row.Columns().Len() != 3 {
@@ -383,17 +383,17 @@ func TestDynamic(t *testing.T) {
 			boolean := dynamicTestType(TypeBoolean)
 			badCols := NewColumns(ColumnSpec{Name: "b", Type: boolean})
 			badPlan := dynamicTestMust(DynamicRows.Compile(badCols))
-			badRow, err := badPlan.Decode(NewRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
+			badRow, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
 			if err != nil {
 				t.Fatal("valid cell framing rejected before access", err)
 			}
 			if _, err := badRow.At(0); err == nil {
 				t.Fatal("malformed scalar published on access")
 			}
-			if _, err := badPlan.Decode(NewRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
+			if _, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
 				t.Fatal("truncated physical row accepted")
 			}
-			if _, err := plan.Decode(NewRowReader(badCols, chain, nil)); err == nil {
+			if _, err := plan.Decode(newRowReader(badCols, chain, nil)); err == nil {
 				t.Fatal("stale row metadata accepted")
 			}
 		})
@@ -488,7 +488,7 @@ func TestDynamic(t *testing.T) {
 			}
 			chain := dynamicTestMust(wire.NewChain(parts...))
 			lease := wire.NewLease(chain, nil)
-			value, err := DynamicCodec.Decode(NewValueReader(list, Present, chain, lease))
+			value, err := DynamicCodec.Decode(valueReaderFromLease(list, Present, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -507,7 +507,7 @@ func TestDynamic(t *testing.T) {
 			}
 			// The byte view still points directly into the three original fragments.
 			count := 0
-			err = EachBytes(euro.Bytes(), func(span wire.Span) error {
+			err = eachBytes(euro.Bytes(), func(span wire.Span) error {
 				if &span.Bytes()[0] != &body[8+count] {
 					t.Error("cross-segment dynamic text was copied")
 				}
@@ -625,7 +625,7 @@ func TestDynamic(t *testing.T) {
 			if it.Next() || it.Err() == nil || it.Next() {
 				t.Fatal("malformed lazy child did not permanently stop iterator")
 			}
-			if DescriptorOf(it.Value().Type()) != nil {
+			if descriptorOf(it.Value().Type()) != nil {
 				t.Fatal("partial malformed value was published")
 			}
 			if _, err := EncodeValueBorrowed(listBool, DynamicCodec, lazy); err == nil {

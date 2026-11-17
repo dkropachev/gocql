@@ -80,7 +80,7 @@ func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, widt
 	missing := r.allowMissing && r.cursor.Remaining() == 0
 	var length int32 = -1
 	if !missing {
-		if err := ValidateDataType(column.Type); err != nil {
+		if err := validateDataType(column.Type); err != nil {
 			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, err)
 		}
 		if !r.lease.IsZero() && !r.lease.Alive() {

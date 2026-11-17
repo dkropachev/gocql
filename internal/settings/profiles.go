@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
@@ -40,22 +41,22 @@ func InternalDefaultProfile() Profile {
 }
 func (p Profile) ValidateProfile() error {
 	if p.unbuilt {
-		return cql.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
+		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
 	}
 	if !InternalValidConsistency(p.Consistency) {
-		return cql.TypeValidation("consistency", "invalid consistency")
+		return cqltype.TypeValidation("consistency", "invalid consistency")
 	}
 	if p.SerialConsistency.Set && p.SerialConsistency.Value != cql.Serial && p.SerialConsistency.Value != cql.LocalSerial {
-		return cql.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
+		return cqltype.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
 	}
 	if p.Timeout < 0 || p.PageTimeout < 0 {
-		return cql.TypeValidation("timeout", "must not be negative")
+		return cqltype.TypeValidation("timeout", "must not be negative")
 	}
 	if p.PageSize <= 0 {
-		return cql.TypeValidation("page size", "must be positive")
+		return cqltype.TypeValidation("page size", "must be positive")
 	}
 	if p.Prefetch < 0 || p.Prefetch > 1 {
-		return cql.TypeValidation("prefetch", "must be zero or one")
+		return cqltype.TypeValidation("prefetch", "must be zero or one")
 	}
 	return nil
 }

@@ -26,7 +26,7 @@ func BenchmarkScalar(b *testing.B) {
 		b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 			data := bytes.Repeat([]byte{'x'}, 1024)
 			typ := VarcharType
-			r := NewValueReader(typ, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
+			r := valueReaderFromLease(typ, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
 			dst := make([]byte, 1024)
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -75,11 +75,11 @@ func BenchmarkScalar(b *testing.B) {
 		b.ResetTimer()
 		for b.Loop() {
 			builder := wire.NewBuilder(16)
-			w := NewValueWriter(builder, typ, true)
+			w := newValueWriter(builder, typ, true)
 			if err := ByteSliceCodec.Encode(w, data); err != nil {
 				b.Fatal(err)
 			}
-			if err := FinishValueWriter(w); err != nil {
+			if err := finishValueWriter(w); err != nil {
 				b.Fatal(err)
 			}
 			if _, err := builder.Freeze(); err != nil {
@@ -113,7 +113,7 @@ func BenchmarkScalar(b *testing.B) {
 						}
 					})
 					chain := CodecTestMust(wire.NewChain(wire.Borrow(data)))
-					reader := NewValueReader(typ, Present, chain, nil)
+					reader := valueReaderFromLease(typ, Present, chain, nil)
 					b.Run("decode", func(b *testing.B) {
 						b.ReportAllocs()
 						b.SetBytes(int64(size))

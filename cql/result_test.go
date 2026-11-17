@@ -15,10 +15,10 @@ func TestResultDiagnostics(t *testing.T) {
 
 	t.Run("AddWarnings", func(t *testing.T) {
 		a := Result{}
-		a.AddWarnings("w1")
+		a.addWarnings("w1")
 		b := a // copies share nothing that a later append can change
-		a.AddWarnings("w2")
-		b.AddWarnings("other")
+		a.addWarnings("w2")
+		b.addWarnings("other")
 		if got := a.Warnings(); len(got) != 2 || got[1] != "w2" {
 			t.Fatal(got)
 		}
@@ -29,10 +29,10 @@ func TestResultDiagnostics(t *testing.T) {
 
 	t.Run("MergeResult", func(t *testing.T) {
 		var a, b, merged Result
-		a.AddWarnings("w1", "w2")
-		b.AddWarnings("w1", "other")
-		MergeResult(&merged, a)
-		MergeResult(&merged, b)
+		a.addWarnings("w1", "w2")
+		b.addWarnings("w1", "other")
+		mergeResult(&merged, a)
+		mergeResult(&merged, b)
 		if len(merged.Warnings()) != 4 || len(a.Warnings()) != 2 {
 			t.Fatal(merged.Warnings(), a.Warnings())
 		}
@@ -40,8 +40,8 @@ func TestResultDiagnostics(t *testing.T) {
 
 	t.Run("CloneResult", func(t *testing.T) {
 		var r Result
-		r.AddWarnings("w1", "w2")
-		clone := CloneResult(r)
+		r.addWarnings("w1", "w2")
+		clone := cloneResult(r)
 		clone.Warnings()[0] = "changed"
 		if r.Warnings()[0] != "w1" {
 			t.Fatal("clone shares storage")
@@ -50,8 +50,8 @@ func TestResultDiagnostics(t *testing.T) {
 
 	t.Run("SetDiagnostics", func(t *testing.T) {
 		var r Result
-		r.AddWarnings("w1")
-		r.SetDiagnostics(nil, nil, nil)
+		r.addWarnings("w1")
+		r.setDiagnostics(nil, nil, nil)
 		if r.Warnings() != nil {
 			t.Fatal("SetDiagnostics did not clear")
 		}

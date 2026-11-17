@@ -7,6 +7,7 @@ import (
 	. "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -14,7 +15,7 @@ import (
 
 var newInputOwner = session.InternalNewInputOwner
 var conditionalCQL = binding.InternalConditionalCQL
-var newRowReader = cql.NewRowReader
+var newRowReader = codec.NewRowReader
 
 type responsePage = transport.InternalResponsePage
 type responseData = model.ResponseData

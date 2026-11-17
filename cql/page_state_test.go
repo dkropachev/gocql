@@ -9,7 +9,7 @@ func TestPageState(t *testing.T) {
 	t.Run("PageStateFromToken", func(t *testing.T) {
 		start := startPage()
 		empty := PageStateFromToken(nil)
-		complete := CompletePageState()
+		complete := completePageState()
 		if start.More() || start.Complete() || !empty.More() || empty.Complete() || !complete.Complete() {
 			t.Fatal("page state distinctions lost")
 		}

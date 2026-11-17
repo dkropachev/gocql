@@ -46,7 +46,7 @@ func checkRowScalarEquivalent[T any](t *testing.T, kind Type, decoder Decoder[T]
 			} else {
 				defer lease.Release()
 			}
-			direct, generic := NewRowReader(columns, chain, lease), NewRowReader(columns, chain, lease)
+			direct, generic := newRowReader(columns, chain, lease), newRowReader(columns, chain, lease)
 			direct.allowMissing, generic.allowMissing = missing, missing
 			var got, want T
 			directErr := readColumnInto(direct, decoder, &got)

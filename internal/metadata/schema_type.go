@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 var schemaScalarTypes = map[string]cql.Type{
@@ -24,7 +25,7 @@ var schemaScalarTypes = map[string]cql.Type{
 // Custom (quoted class name) types are rejected.
 func InternalSchemaDataType(ks *KeyspaceMetadata, source string) (cql.DataType, error) {
 	if ks == nil {
-		return cql.DataType{}, cql.TypeValidation("schema type", "nil keyspace")
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "nil keyspace")
 	}
 	p := schemaTypeBuilder{v2CQLTypeParser: v2CQLTypeParser{source: source, keyspace: ks.Name, maxDepth: 64}, ks: ks}
 	t, err := p.build(0)
@@ -33,7 +34,7 @@ func InternalSchemaDataType(ks *KeyspaceMetadata, source string) (cql.DataType, 
 	}
 	p.space()
 	if p.offset != len(source) {
-		return cql.DataType{}, cql.TypeValidation("schema type", "trailing syntax in %q", source)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "trailing syntax in %q", source)
 	}
 	return t, nil
 }
@@ -45,11 +46,11 @@ type schemaTypeBuilder struct {
 
 func (p *schemaTypeBuilder) build(depth int) (cql.DataType, error) {
 	if depth >= p.maxDepth {
-		return cql.DataType{}, cql.TypeValidation("schema type", "maximum nesting depth exceeded")
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "maximum nesting depth exceeded")
 	}
 	p.space()
 	if p.offset < len(p.source) && p.source[p.offset] == '\'' {
-		return cql.DataType{}, cql.TypeValidation("schema type", "custom type %q is not supported", p.source)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "custom type %q is not supported", p.source)
 	}
 	name, quoted, err := p.identifier()
 	if err != nil {
@@ -58,7 +59,7 @@ func (p *schemaTypeBuilder) build(depth int) (cql.DataType, error) {
 	p.space()
 	if p.offset < len(p.source) && p.source[p.offset] == '.' {
 		if name != p.keyspace {
-			return cql.DataType{}, cql.TypeValidation("schema type", "foreign keyspace %q", name)
+			return cql.DataType{}, cqltype.TypeValidation("schema type", "foreign keyspace %q", name)
 		}
 		p.offset++
 		if name, _, err = p.identifier(); err != nil {
@@ -69,7 +70,7 @@ func (p *schemaTypeBuilder) build(depth int) (cql.DataType, error) {
 	}
 	if p.offset < len(p.source) && p.source[p.offset] == '<' {
 		if quoted {
-			return cql.DataType{}, cql.TypeValidation("schema type", "UDT cannot have parameters")
+			return cql.DataType{}, cqltype.TypeValidation("schema type", "UDT cannot have parameters")
 		}
 		return p.constructor(name, depth)
 	}
@@ -85,7 +86,7 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 	switch name {
 	case "list", "set", "map", "tuple", "frozen", "vector":
 	default:
-		return cql.DataType{}, cql.TypeValidation("schema type", "unknown constructor %q", name)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "unknown constructor %q", name)
 	}
 	p.offset++ // '<'
 	var params []cql.DataType
@@ -99,7 +100,7 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 			}
 			d, err := strconv.ParseUint(p.source[start:p.offset], 10, 16)
 			if err != nil || d == 0 {
-				return cql.DataType{}, cql.TypeValidation("schema type", "invalid vector dimension")
+				return cql.DataType{}, cqltype.TypeValidation("schema type", "invalid vector dimension")
 			}
 			dimension = d
 		} else {
@@ -111,7 +112,7 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 		}
 		p.space()
 		if p.offset >= len(p.source) {
-			return cql.DataType{}, cql.TypeValidation("schema type", "unterminated parameters")
+			return cql.DataType{}, cqltype.TypeValidation("schema type", "unterminated parameters")
 		}
 		c := p.source[p.offset]
 		p.offset++
@@ -119,7 +120,7 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 			break
 		}
 		if c != ',' {
-			return cql.DataType{}, cql.TypeValidation("schema type", "invalid parameter separator")
+			return cql.DataType{}, cqltype.TypeValidation("schema type", "invalid parameter separator")
 		}
 	}
 	want := 1
@@ -130,7 +131,7 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 		want = 1 // the dimension is not a type parameter
 	}
 	if name != "tuple" && len(params) != want {
-		return cql.DataType{}, cql.TypeValidation("schema type", "wrong arity for %q", name)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "wrong arity for %q", name)
 	}
 	switch name {
 	case "list":
@@ -151,10 +152,10 @@ func (p *schemaTypeBuilder) constructor(name string, depth int) (cql.DataType, e
 func (p *schemaTypeBuilder) userType(name string, depth int) (cql.DataType, error) {
 	udt := p.ks.Types[name]
 	if udt == nil {
-		return cql.DataType{}, cql.TypeValidation("schema type", "unknown UDT %q", name)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "unknown UDT %q", name)
 	}
 	if len(udt.FieldNames) != len(udt.FieldTypes) {
-		return cql.DataType{}, cql.TypeValidation("schema type", "UDT %q has mismatched fields", name)
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "UDT %q has mismatched fields", name)
 	}
 	fields := make([]cql.ColumnSpec, len(udt.FieldNames))
 	for i, fieldType := range udt.FieldTypes {
@@ -165,7 +166,7 @@ func (p *schemaTypeBuilder) userType(name string, depth int) (cql.DataType, erro
 		}
 		field.space()
 		if field.offset != len(fieldType) {
-			return cql.DataType{}, cql.TypeValidation("schema type", "trailing syntax in %q", fieldType)
+			return cql.DataType{}, cqltype.TypeValidation("schema type", "trailing syntax in %q", fieldType)
 		}
 		fields[i] = cql.ColumnSpec{Name: udt.FieldNames[i], Type: t}
 	}

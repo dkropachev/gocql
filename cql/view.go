@@ -42,7 +42,7 @@ func BorrowBytes(b []byte) Bytes {
 // BorrowText borrows a valid UTF-8 string, rejecting malformed input without a panic.
 func BorrowText(s string) (Text, error) {
 	if !utf8.ValidString(s) {
-		return Text{}, TypeValidation("text", "invalid UTF-8")
+		return Text{}, typeValidation("text", "invalid UTF-8")
 	}
 	c, _ := wire.NewChain(wire.BorrowString(s))
 	return Text{bytes: Bytes{chain: c}}, nil
@@ -125,7 +125,7 @@ func (b Bytes) Copy() ([]byte, error) {
 		return nil, err
 	}
 	if b.Len() > int64(int(^uint(0)>>1)) {
-		return nil, TypeValidation("bytes", "value exceeds maximum allocation size")
+		return nil, typeValidation("bytes", "value exceeds maximum allocation size")
 	}
 	dst := make([]byte, int(b.Len()))
 	if _, err := b.chain.CopyTo(dst); err != nil {
@@ -151,7 +151,7 @@ func (t Text) Copy() (string, error) {
 		return "", err
 	}
 	if t.bytes.Len() > int64(int(^uint(0)>>1)) {
-		return "", TypeValidation("text", "value exceeds maximum allocation size")
+		return "", typeValidation("text", "value exceeds maximum allocation size")
 	}
 	var b strings.Builder
 	b.Grow(int(t.bytes.Len()))

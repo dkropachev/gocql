@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -133,9 +134,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			response.Result = aggregate
 			response.Result.Rows = int64(response.RowCount)
 			if response.PagingState != nil {
-				response.State = cql.PageStateOwned(response.PagingState, 1)
+				response.State = cqltype.PageStateOwned(response.PagingState)
 			} else {
-				response.State = cql.CompletePageState()
+				response.State = cqltype.CompletePageState()
 			}
 			return response, nil
 		}
@@ -161,21 +162,21 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
-			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cql.CompletePageState(), Result: aggregate}}, nil
+			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:
 		default:
-			return failure(cql.TypeValidation("retry", "unknown retry action"))
+			return failure(cqltype.TypeValidation("retry", "unknown retry action"))
 		}
 		if decision.Consistency.Set {
 			if !settings.InternalValidConsistency(decision.Consistency.Value) {
-				return failure(cql.TypeValidation("retry consistency", "invalid consistency"))
+				return failure(cqltype.TypeValidation("retry consistency", "invalid consistency"))
 			}
 			consistency = decision.Consistency.Value
 		}
 		if decision.Delay < 0 {
-			return failure(cql.TypeValidation("retry delay", "negative delay"))
+			return failure(cqltype.TypeValidation("retry delay", "negative delay"))
 		}
 		if decision.Delay > 0 {
 			timer := time.NewTimer(decision.Delay)
@@ -221,16 +222,16 @@ func mergeResponseResult(result *cql.Result, response *transport.InternalRespons
 	if response == nil || response.Extras == nil {
 		return
 	}
-	result.AddWarnings(response.Warnings()...)
+	codec.AddWarnings(result, response.Warnings())
 	if id := response.CQLTraceID(); id.Set {
 		attempt.ID = id.Value
-		result.AddCQLTraces(attempt)
+		codec.AddCQLTrace(result, attempt)
 	}
 	for _, entry := range response.Payload() {
 		if entry.Value.Valid {
 			entry.Value.Value = entry.Value.Value.Clone()
 		}
-		result.AddCustomPayload(entry)
+		codec.AddCustomPayload(result, entry)
 	}
 }
 

@@ -237,7 +237,7 @@ func (f inputField[P, V]) directParamOp() (paramOp[P], bool) {
 // invalid column type, goes through WriteParam for its exact errors.
 func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 	column, ok := w.columns.At(w.index)
-	if !ok || w.builder == nil || ValidateDataType(column.Type) != nil || w.capture != nil && w.index >= len(w.capture) {
+	if !ok || w.builder == nil || validateDataType(column.Type) != nil || w.capture != nil && w.index >= len(w.capture) {
 		return op.field.encode(w, value)
 	}
 	get := op.get
@@ -294,7 +294,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		}
 	}
 	if w.capture != nil {
-		w.capture[w.index] = ParamCell{Start: start + 4, End: w.builder.Len(), State: Present}
+		w.capture[w.index] = paramCell{Start: start + 4, End: w.builder.Len(), State: Present}
 	}
 	w.index++
 	return nil
@@ -309,7 +309,7 @@ func (op *paramOp[P]) writeBody(w *ParamWriter, b []byte, s string) error {
 	}
 	if int64(n) > math.MaxInt32 {
 		column, _ := w.columns.At(w.index)
-		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, TypeValidation("value", "cell length %d is outside signed 32-bit range", n))
+		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, typeValidation("value", "cell length %d is outside signed 32-bit range", n))
 	}
 	mark := w.builder.Mark()
 	if err := w.builder.Uint32(uint32(n)); err != nil {

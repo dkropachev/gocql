@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // StreamStatement pairs CQL and its parameters with a streaming result decoder.
@@ -35,7 +36,7 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamS
 
 func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {
 	if statement.Rows == nil {
-		return nil, cql.TypeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
 	base := binding.Statement[P, cql.EmptyRow]{CQL: statement.CQL, Params: statement.Params, Kind: statement.Kind, Rows: execRowsDecoder{}}
 	prepared, err := prepareStatement(ctx, session, &base, options)
@@ -51,7 +52,7 @@ func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, sta
 			return nil, err
 		}
 		if plan == nil {
-			return nil, cql.TypeValidation("stream plan", "decoder returned nil plan")
+			return nil, cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 		}
 	}
 	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.state, kind: prepared.kind, params: prepared.params, rows: execRowsDecoder{}}}
@@ -61,7 +62,7 @@ func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, sta
 // Query creates independent worker-owned execution state with fixed options.
 func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R], error) {
 	if p == nil || p.prepared == nil {
-		return nil, cql.TypeValidation("prepared stream", "nil handle")
+		return nil, cqltype.TypeValidation("prepared stream", "nil handle")
 	}
 	q, err := newStreamQuery(p.prepared, p.decoder, options)
 	if err != nil {

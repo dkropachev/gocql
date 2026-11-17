@@ -116,7 +116,7 @@ func v2SchemaMockResponse(statement string, fixture *nativeResultFixture) (*tran
 		Rows:        chain,
 		RowCount:    int32(fixture.numRows),
 		Owner:       wire.NewLease(chain, release),
-		State:       cql.CompletePageState()},
+		State:       cqltype.CompletePageState()},
 	}, nil
 }
 

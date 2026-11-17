@@ -25,6 +25,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -42,7 +43,7 @@ func testPage(t *testing.T, values ...string) *Page[cql.Bytes] {
 		body = append(body, v...)
 	}
 	chain := typedTestChain(t, body)
-	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: cql.CompletePageState()}}, cql.OneColumn(cql.BlobCodec), nil))
+	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: cqltype.CompletePageState()}}, cql.OneColumn(cql.BlobCodec), nil))
 }
 
 type countingDecoder struct {
@@ -82,7 +83,7 @@ func preparedBody(id []byte, parameters, columns cql.Columns, pk ...int) []byte 
 				b = binary.BigEndian.AppendUint16(b, uint16(i))
 			}
 		}
-		for _, col := range cql.ColumnSlice(c) {
+		for _, col := range cqltype.ColumnSlice(c) {
 			for _, text := range []string{col.Keyspace, col.Table, col.Name} {
 				b = binary.BigEndian.AppendUint16(b, uint16(len(text)))
 				b = append(b, text...)

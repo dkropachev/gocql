@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -263,7 +264,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		return nil, err
 	}
 	if ctx == nil {
-		return nil, cql.TypeValidation("stream context", "nil context")
+		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
 	reader, ok := c.InternalR.(*InternalConnReader)
 	if !ok || reader.InternalConn == nil || reader.InternalR != nil && !reader.transferable {

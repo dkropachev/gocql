@@ -11,6 +11,8 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -39,16 +41,16 @@ func InternalNewPage[R any](response *transport.InternalResponsePage, decoder cq
 }
 func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder cql.RowDecoder[R], plans *InternalResultPlanCache[R], release func()) (*Page[R], error) {
 	if response == nil {
-		return nil, cql.TypeValidation("response", "nil response")
+		return nil, cqltype.TypeValidation("response", "nil response")
 	}
 	if decoder == nil {
 		response.Owner.Release()
-		return nil, cql.TypeValidation("rows", "nil row decoder")
+		return nil, cqltype.TypeValidation("rows", "nil row decoder")
 	}
 	var plan cql.RowPlan[R]
 	var err error
 	if plans == nil {
-		plan, err = cql.CompileRowPlan(decoder, response.Columns)
+		plan, err = codec.CompileRowPlan(decoder, response.Columns)
 	} else {
 		plan, err = plans.InternalSelectPlan(response, decoder)
 	}
@@ -117,7 +119,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		return false
 	}
 	if dst == nil {
-		p.privateStorage.err = cql.TypeValidation("destination", "nil row destination")
+		p.privateStorage.err = cqltype.TypeValidation("destination", "nil row destination")
 		return false
 	}
 	if p.privateStorage.session != nil && p.privateStorage.session.Closed() {
@@ -138,7 +140,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		}
 		return false
 	}
-	p.privateStorage.reader = cql.RowReaderFromCursor(p.privateStorage.response.Columns, &p.privateStorage.InternalCursor, p.privateStorage.response.Owner)
+	p.privateStorage.reader = codec.RowReaderFromCursor(p.privateStorage.response.Columns, &p.privateStorage.InternalCursor, p.privateStorage.response.Owner)
 	// The plan receives the actual application destination, never a row
 	// temporary. A built-in plan clears it itself.
 	if p.privateStorage.rowDest == clearedRowDestination {
@@ -146,7 +148,7 @@ func (p *Page[R]) advance(dst *R) bool {
 	}
 	err := p.privateStorage.plan.DecodeInto(&p.privateStorage.reader, dst)
 	if err == nil {
-		err = cql.FinishRowReader(&p.privateStorage.reader)
+		err = codec.FinishRowReader(&p.privateStorage.reader)
 	}
 	if err == nil && p.privateStorage.ctx != nil {
 		err = p.privateStorage.ctx.Err()
@@ -226,7 +228,7 @@ func (p *Page[R]) Clone() (R, error) {
 }
 func (p *Page[R]) State() cql.PageState {
 	if p == nil {
-		return cql.CompletePageState()
+		return cqltype.CompletePageState()
 	}
 	return p.privateStorage.response.State
 }
@@ -234,7 +236,7 @@ func (p *Page[R]) Info() cql.Result {
 	if p == nil {
 		return cql.Result{}
 	}
-	return cql.CloneResult(p.privateStorage.response.Result)
+	return codec.CloneResult(p.privateStorage.response.Result)
 }
 
 type prefetchJob struct {
@@ -272,13 +274,13 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 	}
 	r.privateStorage.valid = false
 	if dst == nil {
-		r.privateStorage.err = cql.TypeValidation("destination", "nil row destination")
+		r.privateStorage.err = cqltype.TypeValidation("destination", "nil row destination")
 		r.closeLocked()
 		return false
 	}
 	for {
 		if r.privateStorage.rejectColumns && r.privateStorage.page != nil && r.privateStorage.page.Columns().Len() != 0 && r.privateStorage.terminalErr == nil {
-			r.privateStorage.terminalErr = cql.TypeValidation("Exec", "result columns require Run")
+			r.privateStorage.terminalErr = cqltype.TypeValidation("Exec", "result columns require Run")
 		}
 		if r.privateStorage.page.NextInto(dst) {
 			// Session.Close cancels the context of every open Rows, so
@@ -330,12 +332,12 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			response, err = InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.ctx, r.privateStorage.request, state)
 		}
 		if err != nil {
-			cql.MergeResult(&r.privateStorage.info, InternalExecutionErrorResult(err))
+			codec.MergeResult(&r.privateStorage.info, InternalExecutionErrorResult(err))
 			r.privateStorage.err = err
 			r.closeLocked()
 			return false
 		}
-		cql.MergeResult(&r.privateStorage.info, response.Result)
+		codec.MergeResult(&r.privateStorage.info, response.Result)
 		r.privateStorage.page, err = newPageWithPlans(response, r.privateStorage.decoder, r.privateStorage.plans, nil)
 		if err != nil {
 			r.privateStorage.err = err
@@ -439,7 +441,7 @@ func (r *rowsImpl[R]) Info() cql.Result {
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
-	return cql.CloneResult(r.privateStorage.info)
+	return codec.CloneResult(r.privateStorage.info)
 }
 
 type InternalResultPlanCache[R any] struct {
@@ -481,7 +483,7 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 	if previous != nil && columns.Equal(response.Columns) {
 		plan = previous
 	} else {
-		plan, err = cql.CompileRowPlan(decoder, response.Columns)
+		plan, err = codec.CompileRowPlan(decoder, response.Columns)
 	}
 	if err != nil {
 		return nil, err
@@ -514,7 +516,7 @@ func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.Inte
 	c.revision++
 	revision := c.revision
 	c.mu.Unlock()
-	plan, err := cql.CompileRowPlan(decoder, response.Columns)
+	plan, err := codec.CompileRowPlan(decoder, response.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +634,7 @@ func (r *rowsImpl[R]) Columns() cql.Columns {
 
 type execRowsDecoder struct{}
 type execRowsPlan struct {
-	cql.ManagedRowDestination
+	codec.ManagedRowDestination
 	count int
 }
 
@@ -652,7 +654,7 @@ func (execRowsPlan) Clone(value cql.EmptyRow) cql.EmptyRow { return value }
 
 func (p execRowsPlan) DecodeInto(reader *cql.RowReader, dst *cql.EmptyRow) error {
 	if dst == nil {
-		return cql.TypeValidation("destination", "nil row destination")
+		return cqltype.TypeValidation("destination", "nil row destination")
 	}
 	*dst = cql.EmptyRow{}
 	for i := 0; i < p.count; i++ {
@@ -742,9 +744,9 @@ const (
 
 func rowDestinationOf[R any](plan cql.RowPlan[R]) rowDestination {
 	switch {
-	case cql.PreservesRowDestination(plan):
+	case codec.PreservesRowDestination(plan):
 		return preservedRowDestination
-	case cql.ManagesRowDestination(plan):
+	case codec.ManagesRowDestination(plan):
 		return managedRowDestination
 	}
 	return clearedRowDestination

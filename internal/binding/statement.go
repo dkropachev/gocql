@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -15,18 +17,18 @@ import (
 
 func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
-		return model.EncodedValues{}, cql.TypeValidation("parameters", "maximum count is 65535")
+		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
 	// Parameters usually contain a few scalar fields and borrowed payload spans.
 	// Avoid retaining a 4 KiB slab just to frame a small partition key. The builder
 	// allocates larger slabs when an individual encoded scalar needs them.
 	b := wire.NewBuilder(256)
-	writer := cql.NewParamWriter(b, columns, allowUnset)
-	cql.SetParamOwnership(writer, owned)
+	writer := codec.NewParamWriter(b, columns, allowUnset)
+	codec.SetParamOwnership(writer, owned)
 	if err := plan.Encode(writer, value); err != nil {
 		return model.EncodedValues{}, err
 	}
-	if err := cql.FinishParamWriter(writer); err != nil {
+	if err := codec.FinishParamWriter(writer); err != nil {
 		return model.EncodedValues{}, err
 	}
 	framed, err := b.Freeze()
@@ -37,11 +39,11 @@ func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns,
 	cells := make([]model.EncodedCell, columns.Len())
 	for i := range cells {
 		column, _ := columns.At(i)
-		v, err := cql.ReadValue(cursor, column.Type, nil, allowUnset)
+		v, err := codec.ReadValue(cursor, column.Type, nil, allowUnset)
 		if err != nil {
 			return model.EncodedValues{}, err
 		}
-		cells[i] = model.EncodedCell{Typ: column.Type, State: v.State(), Body: cql.BytesChain(v.Bytes())}
+		cells[i] = model.EncodedCell{Typ: column.Type, State: v.State(), Body: cqltype.BytesChain(v.Bytes())}
 	}
 	if err := cursor.RequireEnd(); err != nil {
 		return model.EncodedValues{}, fmt.Errorf("gocql: parameter framing: %w", err)
@@ -85,16 +87,16 @@ func ValidateStatement[P, R any](s *Statement[P, R]) error {
 
 func validateStatement[P, R any](s Statement[P, R]) error {
 	if s.Kind > cql.ConditionalStatement {
-		return cql.TypeValidation("statement kind", "unknown classification")
+		return cqltype.TypeValidation("statement kind", "unknown classification")
 	}
 	if strings.TrimSpace(s.CQL) == "" {
-		return cql.TypeValidation("statement", "empty CQL")
+		return cqltype.TypeValidation("statement", "empty CQL")
 	}
 	if InternalFirstCQLWord(s.CQL) == "USE" {
 		return runtimeerrors.ErrUseStmt
 	}
 	if s.Params == nil || s.Rows == nil {
-		return cql.TypeValidation("statement", "parameter and row codecs are required")
+		return cqltype.TypeValidation("statement", "parameter and row codecs are required")
 	}
 	return nil
 }

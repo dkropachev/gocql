@@ -9,6 +9,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -20,7 +21,7 @@ func readV2Topology(ctx context.Context, conn transport.ConnInterface, stmt stri
 		InternalExecuteTyped(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error)
 	})
 	if !ok {
-		return nil, cql.TypeValidation("topology query", "connection does not support typed requests")
+		return nil, cqltype.TypeValidation("topology query", "connection does not support typed requests")
 	}
 	timeout := timeForTopology(conn)
 	execute := backend.InternalExecuteTyped
@@ -79,7 +80,7 @@ func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*implEndpoint
 			return nil, err
 		}
 		if len(rows) != 1 || implEndpoint.InternalHostInfoHostUUID(rows[0]).IsEmpty() {
-			return nil, cql.TypeValidation("contact identity", "expected one actual local UUID")
+			return nil, cqltype.TypeValidation("contact identity", "expected one actual local UUID")
 		}
 		implEndpoint.InternalHostInfoUpdate(contact, rows[0])
 		if !seen[implEndpoint.InternalHostInfoHostUUID(contact)] {

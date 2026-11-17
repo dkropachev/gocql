@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -18,7 +19,7 @@ import (
 
 func InternalConnectCluster(ctx context.Context, config implSettings.Config, initialize func(*Core, implSettings.Config) *implSettings.Config) (*Core, error) {
 	if ctx == nil {
-		return nil, cql.TypeValidation("context", "nil context")
+		return nil, cqltype.TypeValidation("context", "nil context")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -73,7 +74,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	if config.Reconnect != nil {
 		delay, again := config.Reconnect.Delay(0)
 		if delay < 0 {
-			return nil, cql.TypeValidation("reconnect delay", "must not be negative")
+			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
 		}
 		if again {
 			legacy.ReconnectInterval = max(delay, time.Millisecond)

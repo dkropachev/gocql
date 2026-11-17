@@ -10,7 +10,7 @@ import (
 	"encoding/binary"
 	"os"
 
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // TLSFilesContent is one read of a certificate, key and CA file set.
@@ -27,7 +27,7 @@ func ReadTLSFiles(certFile, keyFile, caFile string) (TLSFilesContent, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return cql.TypeValidation("TLS files", "%w", err)
+			return cqltype.TypeValidation("TLS files", "%w", err)
 		}
 		*into = data
 		return nil
@@ -74,14 +74,14 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 	if content.Cert != nil {
 		pair, err := tls.X509KeyPair(content.Cert, content.Key)
 		if err != nil {
-			return nil, cql.TypeValidation("TLS files", "cert and key: %w", err)
+			return nil, cqltype.TypeValidation("TLS files", "cert and key: %w", err)
 		}
 		config.Certificates = []tls.Certificate{pair}
 	}
 	if content.CA != nil {
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(content.CA) {
-			return nil, cql.TypeValidation("TLS files", "CA file has no PEM certificates")
+			return nil, cqltype.TypeValidation("TLS files", "CA file has no PEM certificates")
 		}
 		config.RootCAs = pool
 	}

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -73,7 +74,7 @@ func FuzzV2PagingHistoryBudgets(f *testing.F) {
 			}
 			token := append([]byte{}, data[:n]...)
 			data = data[n:]
-			state := cql.PageStateOwned(token, 1)
+			state := cqltype.PageStateOwned(token)
 			err := h.InternalAdd(state)
 			if seen[string(token)] {
 				if !errors.Is(err, runtimeerrors.ErrPagingNoProgress) {

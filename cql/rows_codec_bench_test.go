@@ -82,7 +82,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		rows := CodecTestMust(directRows.Compile(columns))
 		row := directRow{I8: 1, I16: 2, I32: 3, I64: 4, Count: 5, View: BorrowBytes([]byte("view")), Owned: []byte("owned"), Text: "text", ASCII: "ascii", Blob: []byte("blob"), Skipped: 6}
 		builder := wire.NewBuilder(256)
-		w := NewParamWriter(builder, columns, true)
+		w := newParamWriter(builder, columns, true)
 		if err := params.Encode(w, row); err != nil {
 			b.Fatal(err)
 		}
@@ -97,7 +97,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
 					builder.BeginOwned(storage)
-					ResetParamWriter(w, builder, columns, true)
+					resetParamWriter(w, builder, columns, true)
 					if err := p.Encode(w, row); err != nil {
 						b.Fatal(err)
 					}
@@ -108,7 +108,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				dst := directRow{Owned: make([]byte, 0, 16)}
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
-					if err := r.DecodeInto(NewRowReader(columns, body, nil), &dst); err != nil {
+					if err := r.DecodeInto(newRowReader(columns, body, nil), &dst); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -135,7 +135,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				var dst textRow
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
-					if err := r.DecodeInto(NewRowReader(columns, body, nil), &dst); err != nil {
+					if err := r.DecodeInto(newRowReader(columns, body, nil), &dst); err != nil {
 						b.Fatal(err)
 					}
 				}
@@ -182,7 +182,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				b.SetBytes(32 * 4096)
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					reader := NewRowReader(columns, chain, lease)
+					reader := newRowReader(columns, chain, lease)
 					for row := 0; row < 32; row++ {
 						reader.index = 0
 						if err := plan.DecodeInto(reader, &dst); err != nil {
@@ -216,7 +216,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				columns := NewColumns(specs...)
 				decoder := Row(fields...)
 				plan := CodecTestMust(decoder.Compile(columns))
-				raw := BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+				raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 				spans := make([]wire.Span, fragments)
 				for i := range spans {
 					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -269,7 +269,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := plan.Decode(NewRowReader(columns, chain, nil))
+			_, err := plan.Decode(newRowReader(columns, chain, nil))
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -42,7 +42,7 @@ func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 }
 func (c streamSequenceCodec[T]) Compile(t DataType) (StreamValuePlan[[]T], error) {
 	if c.element == nil {
-		return nil, TypeValidation("stream codec", "nil sequence child")
+		return nil, typeValidation("stream codec", "nil sequence child")
 	}
 	e, width, err := sequenceElement(t, c.kind)
 	if err != nil {
@@ -65,13 +65,13 @@ func (p streamSequencePlan[T]) Reset(dst *[]T) {
 }
 func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil sequence destination"))
+		return r.fail(typeValidation("destination", "nil sequence destination"))
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled sequence metadata changed"))
+		return r.fail(typeValidation("type", "compiled sequence metadata changed"))
 	}
 	if r.state == Null && p.typ.Kind() != TypeCustom {
 		p.Reset(dst)
@@ -82,12 +82,12 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 	}
 	var count int
 	if p.typ.Kind() == TypeCustom {
-		count = int(DescriptorOf(p.typ).Dimension)
+		count = int(descriptorOf(p.typ).Dimension)
 		if p.width > 0 && r.Remaining() != int64(count)*p.width {
-			return r.fail(TypeValidation("dimension", "incorrect fixed vector body width"))
+			return r.fail(typeValidation("dimension", "incorrect fixed vector body width"))
 		}
 		if p.width == 0 && r.Remaining() < int64(count) {
-			return r.fail(TypeValidation("dimension", "vector dimension exceeds available lengths"))
+			return r.fail(typeValidation("dimension", "vector dimension exceeds available lengths"))
 		}
 	} else {
 		var err error
@@ -140,10 +140,10 @@ func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDec
 func (c streamMapCodec[K, V]) Compile(t DataType) (StreamValuePlan[[]Entry[K, V]], error) {
 	kt, vt, ok := t.KeyValue()
 	if !ok {
-		return nil, TypeValidation("type", "expected map, got %s", t)
+		return nil, typeValidation("type", "expected map, got %s", t)
 	}
 	if c.key == nil || c.value == nil {
-		return nil, TypeValidation("stream codec", "nil map child")
+		return nil, typeValidation("stream codec", "nil map child")
 	}
 	key, e := compileStreamValuePlan(c.key, kt)
 	if e != nil {
@@ -170,13 +170,13 @@ func (p streamMapPlan[K, V]) Reset(dst *[]Entry[K, V]) {
 }
 func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]Entry[K, V]) error {
 	if dst == nil {
-		return r.fail(TypeValidation("destination", "nil map destination"))
+		return r.fail(typeValidation("destination", "nil map destination"))
 	}
 	if err := r.check(); err != nil {
 		return err
 	}
 	if !r.matches(p.typ) {
-		return r.fail(TypeValidation("type", "compiled map metadata changed"))
+		return r.fail(typeValidation("type", "compiled map metadata changed"))
 	}
 	if r.state == Null {
 		p.Reset(dst)

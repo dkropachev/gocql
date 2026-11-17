@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -42,16 +44,16 @@ type StreamQuery[P, R any] struct {
 // row into decoder instead of prepared's buffered row decoder.
 func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if prepared == nil || prepared.privateStorage.InternalState == nil {
-		return nil, cql.TypeValidation("prepared", "nil handle")
+		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
 	if decoder == nil {
-		return nil, cql.TypeValidation("stream decoder", "nil decoder")
+		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
 	}
 	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, cql.TypeValidation("stream prefetch", "must be zero")
+		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
 	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := p.Query(options.Options)
@@ -66,7 +68,7 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 
 func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
 	if q == nil {
-		return nil, cql.TypeValidation("query", "nil query")
+		return nil, cqltype.TypeValidation("query", "nil query")
 	}
 	if err := q.query.capture(ctx, value); err != nil {
 		return nil, err
@@ -88,7 +90,7 @@ func (q *StreamQuery[P, R]) Close() {
 // does.
 func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
 	if q == nil {
-		return cql.TypeValidation("query", "nil query")
+		return cqltype.TypeValidation("query", "nil query")
 	}
 	return q.query.Wait(ctx)
 }
@@ -123,7 +125,7 @@ func (s *RowStream[R]) mergeBufferedFailure(result cql.Result) {
 	r.Attempts += result.Attempts
 	r.Latency += result.Latency
 	if len(refs) > 0 {
-		r.SetDiagnostics(r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
+		codec.SetDiagnostics(r, r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
 	}
 }
 
@@ -153,7 +155,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 	if err != nil {
 		return err
 	}
-	reader, err := cql.NewStreamRowReaderReusingValidation(response.Columns, body, previous)
+	reader, err := codec.NewStreamRowReaderReusingValidation(response.Columns, body, previous)
 	if err != nil {
 		return err
 	}
@@ -174,7 +176,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 			return err
 		}
 		if plan == nil {
-			return cql.TypeValidation("stream plan", "decoder returned nil plan")
+			return cqltype.TypeValidation("stream plan", "decoder returned nil plan")
 		}
 		if cache != nil {
 			cache.columns, cache.plan = response.Columns, plan
@@ -192,7 +194,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 		// CQL trace refs accumulate page after page; the response owns its
 		// own slice, so build a fresh one.
 		r := &p.info.Result
-		r.SetDiagnostics(r.Warnings(), slices.Concat(traces, r.CQLTraces()), r.CustomPayload())
+		codec.SetDiagnostics(r, r.Warnings(), slices.Concat(traces, r.CQLTraces()), r.CustomPayload())
 	}
 	p.info.Pages++
 	p.mu.Unlock()
@@ -206,7 +208,7 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 	for {
 		page := p.bufferedPage
 		if p.bufferedIndex < page.RowCount {
-			cql.BeginStreamRow(p.bufferedReader)
+			codec.BeginStreamRow(p.bufferedReader)
 			p.mu.Lock()
 			p.info.OutputStarted = true
 			p.mu.Unlock()

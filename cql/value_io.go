@@ -23,7 +23,7 @@ type ValueWriter struct {
 	ownBorrowed                 bool
 }
 
-func NewValueWriter(builder *wire.Builder, typ DataType, allowUnset bool) *ValueWriter {
+func newValueWriter(builder *wire.Builder, typ DataType, allowUnset bool) *ValueWriter {
 	w := new(ValueWriter)
 	initValueWriter(w, builder, typ, allowUnset)
 	return w
@@ -32,19 +32,19 @@ func NewValueWriter(builder *wire.Builder, typ DataType, allowUnset bool) *Value
 func initValueWriter(w *ValueWriter, builder *wire.Builder, typ DataType, allowUnset bool) {
 	*w = ValueWriter{builder: builder, typ: typ, allowUnset: allowUnset}
 	if builder == nil {
-		w.err = TypeValidation("writer", "nil builder")
+		w.err = typeValidation("writer", "nil builder")
 		return
 	}
 	w.mark = builder.Mark()
 	w.start = builder.Len()
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		w.err = err
 		return
 	}
 	w.err = builder.Uint32(0)
 }
 func newOwnedValueWriter(builder *wire.Builder, typ DataType, allowUnset bool) *ValueWriter {
-	w := NewValueWriter(builder, typ, allowUnset)
+	w := newValueWriter(builder, typ, allowUnset)
 	w.ownBorrowed = true
 	return w
 }
@@ -60,10 +60,10 @@ func (w *ValueWriter) ready() error {
 		return w.err
 	}
 	if w.finished {
-		return w.fail(TypeValidation("writer", "cell is already finished"))
+		return w.fail(typeValidation("writer", "cell is already finished"))
 	}
 	if w.builder == nil {
-		return w.fail(TypeValidation("writer", "uninitialized writer"))
+		return w.fail(typeValidation("writer", "uninitialized writer"))
 	}
 	return nil
 }
@@ -72,7 +72,7 @@ func (w *ValueWriter) payload() error {
 		return err
 	}
 	if w.state != Present {
-		return w.fail(TypeValidation("value", "payload cannot be combined with null or unset"))
+		return w.fail(typeValidation("value", "payload cannot be combined with null or unset"))
 	}
 	w.wrote = true
 	return nil
@@ -82,10 +82,10 @@ func (w *ValueWriter) setState(state CellState) error {
 		return err
 	}
 	if w.wrote || w.state != Present {
-		return w.fail(TypeValidation("value", "cell state was already written"))
+		return w.fail(typeValidation("value", "cell state was already written"))
 	}
 	if state == Unset && !w.allowUnset {
-		return w.fail(TypeValidation("value", "unset is not permitted in this cell"))
+		return w.fail(typeValidation("value", "unset is not permitted in this cell"))
 	}
 	w.state = state
 	return nil
@@ -95,7 +95,7 @@ func (w *ValueWriter) Null() error  { return w.setState(Null) }
 func (w *ValueWriter) Unset() error { return w.setState(Unset) }
 func (w *ValueWriter) emptyValue() error {
 	if !emptySupported(w.typ) {
-		return w.fail(TypeValidation("type", "%s does not support empty values", w.typ))
+		return w.fail(typeValidation("type", "%s does not support empty values", w.typ))
 	}
 	return w.setState(EmptyCell)
 }
@@ -121,7 +121,7 @@ func (w *ValueWriter) borrowView(b Bytes) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
-	return w.fail(EachBytes(b, func(s wire.Span) error {
+	return w.fail(eachBytes(b, func(s wire.Span) error {
 		if w.ownBorrowed {
 			s = wire.Borrow(append([]byte(nil), s.Bytes()...))
 		}
@@ -167,9 +167,9 @@ func (w *ValueWriter) Child(typ DataType, encode func(*ValueWriter) error) error
 		return err
 	}
 	if encode == nil {
-		return w.fail(TypeValidation("encoder", "nil child encoder"))
+		return w.fail(typeValidation("encoder", "nil child encoder"))
 	}
-	child := NewValueWriter(w.builder, typ, false)
+	child := newValueWriter(w.builder, typ, false)
 	child.ownBorrowed = w.ownBorrowed
 	if child.err != nil {
 		abortValueWriter(child)
@@ -179,7 +179,7 @@ func (w *ValueWriter) Child(typ DataType, encode func(*ValueWriter) error) error
 		abortValueWriter(child)
 		return w.fail(err)
 	}
-	return w.fail(FinishValueWriter(child))
+	return w.fail(finishValueWriter(child))
 }
 func abortValueWriter(w *ValueWriter) {
 	if w == nil || w.finished {
@@ -190,9 +190,9 @@ func abortValueWriter(w *ValueWriter) {
 	}
 	w.finished = true
 }
-func FinishValueWriter(w *ValueWriter) error {
+func finishValueWriter(w *ValueWriter) error {
 	if w == nil {
-		return TypeValidation("writer", "nil writer")
+		return typeValidation("writer", "nil writer")
 	}
 	if err := w.ready(); err != nil {
 		abortValueWriter(w)
@@ -200,7 +200,7 @@ func FinishValueWriter(w *ValueWriter) error {
 	}
 	length := w.builder.Len() - w.start - 4
 	if length < 0 || length > math.MaxInt32 {
-		w.fail(TypeValidation("value", "cell length %d is outside signed 32-bit range", length))
+		w.fail(typeValidation("value", "cell length %d is outside signed 32-bit range", length))
 	}
 	var prefix uint32
 	switch w.state {
@@ -213,10 +213,10 @@ func FinishValueWriter(w *ValueWriter) error {
 	case Unset:
 		prefix = math.MaxUint32 - 1
 	default:
-		w.fail(TypeValidation("value", "invalid cell state %d", w.state))
+		w.fail(typeValidation("value", "invalid cell state %d", w.state))
 	}
 	if w.state != Present && length != 0 {
-		w.fail(TypeValidation("value", "null or unset cell contains a payload"))
+		w.fail(typeValidation("value", "null or unset cell contains a payload"))
 	}
 	if w.err == nil {
 		w.fail(w.builder.PatchUint32(w.mark, prefix))
@@ -240,13 +240,13 @@ type ValueReader struct {
 
 // NewValueReader reads body, borrowed from lease. The caller holds a
 // reference to lease while constructing the reader.
-func NewValueReader(typ DataType, state CellState, body wire.Chain, lease *wire.Lease) ValueReader {
+func valueReaderFromLease(typ DataType, state CellState, body wire.Chain, lease *wire.Lease) ValueReader {
 	return newValueReader(typ, state, body, wire.RefOf(lease))
 }
 
 func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.Ref) ValueReader {
 	r := ValueReader{typ: typ, state: state, body: body, lease: lease}
-	r.err = ValidateDataType(typ)
+	r.err = validateDataType(typ)
 	if state > EmptyCell || (state != Present && body.Len() != 0) {
 		r.err = &ProtocolError{Stage: "cell", Err: fmt.Errorf("invalid state %d for %d bytes", state, body.Len())}
 	}
@@ -258,7 +258,7 @@ func (r ValueReader) Bytes() Bytes {
 	if r.err != nil {
 		panic(r.err)
 	}
-	return BytesView(r.body, r.lease)
+	return bytesView(r.body, r.lease)
 }
 func (r ValueReader) Cursor() *ValueCursor {
 	c := r.cursorValue()
@@ -289,7 +289,7 @@ func (c *ValueCursor) check() error {
 		return c.err
 	}
 	if !c.initialized {
-		c.err = TypeValidation("cursor", "uninitialized cursor")
+		c.err = typeValidation("cursor", "uninitialized cursor")
 	} else if !c.lease.IsZero() && !c.lease.Alive() {
 		c.err = ErrReleased
 	}
@@ -337,7 +337,7 @@ func (c *ValueCursor) Take(n int64) (Bytes, error) {
 	if err != nil {
 		return Bytes{}, c.failure(err)
 	}
-	return BytesView(body, c.lease), nil
+	return bytesView(body, c.lease), nil
 }
 func (c *ValueCursor) Child(typ DataType) (ValueReader, error) {
 	if err := c.check(); err != nil {
@@ -358,18 +358,18 @@ func (c *ValueCursor) RequireEnd() error {
 
 // readValue validates a full framed cell before advancing the caller's cursor.
 // Zero-length cells remain Present; EmptyCodec interprets scalar empty values.
-func ReadValue(cursor *wire.Cursor, typ DataType, lease *wire.Lease, allowUnset bool) (ValueReader, error) {
+func readValue(cursor *wire.Cursor, typ DataType, lease *wire.Lease, allowUnset bool) (ValueReader, error) {
 	return readFramedValue(cursor, typ, wire.RefOf(lease), allowUnset, false)
 }
 func readFramedValue(cursor *wire.Cursor, typ DataType, lease wire.Ref, allowUnset, nested bool) (ValueReader, error) {
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		return ValueReader{}, err
 	}
 	if !lease.IsZero() && !lease.Alive() {
 		return ValueReader{}, ErrReleased
 	}
 	if cursor == nil {
-		return ValueReader{}, TypeValidation("cursor", "nil cursor")
+		return ValueReader{}, typeValidation("cursor", "nil cursor")
 	}
 	checkpoint := *cursor
 	fail := func(err error) (ValueReader, error) {

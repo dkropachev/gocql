@@ -8,13 +8,13 @@ import (
 	"net/netip"
 	"strconv"
 
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 func SnapshotHost(h *HostInfo) (model.HostSnapshot, error) {
 	if h == nil {
-		return model.HostSnapshot{}, cql.TypeValidation("host", "nil host")
+		return model.HostSnapshot{}, cqltype.TypeValidation("host", "nil host")
 	}
 	h.privateStorage.InternalMu.RLock()
 	address, _ := hostInfoConnectAddressLocked(h)

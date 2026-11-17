@@ -45,12 +45,12 @@ func ScalarReader(t testing.TB, kind Type, state CellState, chunks ...[]byte) Va
 	if err != nil {
 		t.Fatal(err)
 	}
-	return NewValueReader(scalarType(t, kind), state, chain, nil)
+	return valueReaderFromLease(scalarType(t, kind), state, chain, nil)
 }
 func scalarEncode[T any](t testing.TB, codec Encoder[T], kind Type, v T) ([]byte, error) {
 	t.Helper()
 	builder := wire.NewBuilder(16)
-	w := NewValueWriter(builder, scalarType(t, kind), true)
+	w := newValueWriter(builder, scalarType(t, kind), true)
 	if err := codec.Encode(w, v); err != nil {
 		abortValueWriter(w)
 		if builder.Len() != 0 {
@@ -58,7 +58,7 @@ func scalarEncode[T any](t testing.TB, codec Encoder[T], kind Type, v T) ([]byte
 		}
 		return nil, err
 	}
-	if err := FinishValueWriter(w); err != nil {
+	if err := finishValueWriter(w); err != nil {
 		return nil, err
 	}
 	chain, err := builder.Freeze()
@@ -161,7 +161,7 @@ func TestScalar(t *testing.T) {
 			t.Fatal("unset marker incorrect")
 		}
 		builder := wire.NewBuilder(16)
-		writer := NewValueWriter(builder, scalarType(t, TypeInt), false)
+		writer := newValueWriter(builder, scalarType(t, TypeInt), false)
 		if err := BindEncoder(Int32Codec).Encode(writer, BindValue[int32]{State: Unset}); err == nil {
 			t.Fatal("nested unset accepted")
 		}
@@ -243,12 +243,12 @@ func TestScalar(t *testing.T) {
 		for split := 0; split <= len(data); split++ {
 			chain := CodecTestMust(wire.NewChain(wire.Borrow(data[:split]), wire.Borrow(data[split:])))
 			lease := wire.NewLease(chain, nil)
-			r := NewValueReader(uuidType, Present, chain, lease)
+			r := valueReaderFromLease(uuidType, Present, chain, lease)
 			got := CodecTestMust(UUIDCodec.Decode(r))
 			if !bytes.Equal(got[:], data) {
 				t.Fatal("UUID result")
 			}
-			if _, e := TimeUUIDCodec.Decode(NewValueReader(timeType, Present, chain, lease)); e != nil {
+			if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, Present, chain, lease)); e != nil {
 				t.Fatal(e)
 			}
 			lease.Release()
@@ -261,34 +261,34 @@ func TestScalar(t *testing.T) {
 				continue
 			}
 			raw := make([]byte, width)
-			if _, e := UUIDCodec.Decode(NewValueReader(uuidType, Present, CodecTestMust(wire.NewChain(wire.Borrow(raw))), nil)); e == nil {
+			if _, e := UUIDCodec.Decode(valueReaderFromLease(uuidType, Present, CodecTestMust(wire.NewChain(wire.Borrow(raw))), nil)); e == nil {
 				t.Fatal("UUID width", width)
 			}
 		}
 		for _, state := range []CellState{Null, Unset, EmptyCell} {
-			if _, e := UUIDCodec.Decode(NewValueReader(uuidType, state, wire.Chain{}, nil)); e == nil {
+			if _, e := UUIDCodec.Decode(valueReaderFromLease(uuidType, state, wire.Chain{}, nil)); e == nil {
 				t.Fatal("UUID state", state)
 			}
 		}
-		if _, e := UUIDCodec.Decode(NewValueReader(textType, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)); e == nil {
+		if _, e := UUIDCodec.Decode(valueReaderFromLease(textType, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)); e == nil {
 			t.Fatal("wrong UUID metadata")
 		}
 		invalidVersion := append([]byte(nil), data...)
 		invalidVersion[6] = 0x40
-		if _, e := TimeUUIDCodec.Decode(NewValueReader(timeType, Present, CodecTestMust(wire.NewChain(wire.Borrow(invalidVersion))), nil)); e == nil {
+		if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, Present, CodecTestMust(wire.NewChain(wire.Borrow(invalidVersion))), nil)); e == nil {
 			t.Fatal("TimeUUID version bypass")
 		}
 		for _, input := range [][]byte{[]byte("valid-🙂"), {0xc0, 0x80}, {0xed, 0xa0, 0x80}, {0xf4, 0x90, 0x80, 0x80}, {0xe2, 0x82}} {
 			for split := 0; split <= len(input); split++ {
 				chain := CodecTestMust(wire.NewChain(wire.Borrow(input[:split]), wire.Borrow(input[split:])))
 				lease := wire.NewLease(chain, nil)
-				r := NewValueReader(textType, Present, chain, lease)
+				r := valueReaderFromLease(textType, Present, chain, lease)
 				v, e := TextCodec.Decode(r)
 				if input[0] == 'v' {
 					if e != nil {
 						t.Fatal(e)
 					}
-					EachBytes(v.Bytes(), func(s wire.Span) error {
+					eachBytes(v.Bytes(), func(s wire.Span) error {
 						p := s.Bytes()
 						match := false
 						chain.Each(func(original wire.Span) error {
@@ -469,7 +469,7 @@ func TestScalar(t *testing.T) {
 		if _, err := VarintCodec.Decode(ScalarReader(t, TypeVarint, Present)); err == nil {
 			t.Fatal("decoded empty varint")
 		}
-		if _, err := BoolCodec.Decode(NewValueReader(scalarType(t, TypeBoolean), Null, BytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
+		if _, err := BoolCodec.Decode(valueReaderFromLease(scalarType(t, TypeBoolean), Null, bytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
 			t.Fatal("accepted null with bytes")
 		}
 	})
@@ -481,7 +481,7 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			lease := wire.NewLease(chain, nil)
-			value, err := TextCodec.Decode(NewValueReader(scalarType(t, TypeText), Present, chain, lease))
+			value, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, TypeText), Present, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -493,16 +493,16 @@ func TestScalar(t *testing.T) {
 			if clone.String() != "borrowed" {
 				t.Fatal("clone did not detach")
 			}
-			if _, err := TextCodec.Decode(NewValueReader(scalarType(t, TypeText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
+			if _, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, TypeText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
 				t.Fatal("decode accepted released lease")
 			}
 			builder := wire.NewBuilder(16)
 			large := []byte(strings.Repeat("a", 1<<20))
-			w := NewValueWriter(builder, scalarType(t, TypeBlob), true)
+			w := newValueWriter(builder, scalarType(t, TypeBlob), true)
 			if err := ByteSliceCodec.Encode(w, large); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishValueWriter(w); err != nil {
+			if err := finishValueWriter(w); err != nil {
 				t.Fatal(err)
 			}
 			out, err := builder.Freeze()

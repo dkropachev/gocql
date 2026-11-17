@@ -3,10 +3,12 @@
 
 package cql
 
+import "unsafe"
+
 // DetachRow makes decoded fields independent of the response before its page
 // is released. Built-in plans preserve owned destination buffers and detach
 // only borrowed fields. Custom plans use their recursive Clone contract.
-func DetachRow[R any](plan RowPlan[R], dst *R) {
+func detachRowFor[R any](plan RowPlan[R], dst *R) {
 	if p, ok := plan.(interface{ detachRow(*R) }); ok {
 		p.detachRow(dst)
 	} else {
@@ -34,8 +36,8 @@ func (f ignoredField[R]) detachField(*R)       {}
 func (p singleColumnPlan[T]) detachRow(dst *T) { detachValue(p.decoder, dst) }
 
 func (p pairedRowPlan[A, B]) detachRow(dst *Pair[A, B]) {
-	DetachRow(p.a, &dst.First)
-	DetachRow(p.b, &dst.Second)
+	detachRowFor(p.a, &dst.First)
+	detachRowFor(p.b, &dst.Second)
 }
 
 func (c scalarCodec[T]) detachValue(dst *T) {
@@ -81,4 +83,9 @@ func (c mapDecoder[K, V]) detachValue(dst *[]Entry[K, V]) {
 	}
 }
 
-func (c recordDecoder[T]) detachValue(dst *T) { DetachRow(c.plan, dst) }
+func (c recordDecoder[T]) detachValue(dst *T) { detachRowFor(c.plan, dst) }
+
+// detachRowAt is detachRow for a destination the engine passes untyped.
+func (p rowPlan[R]) detachRowAt(dst unsafe.Pointer)          { p.detachRow((*R)(dst)) }
+func (p singleColumnPlan[T]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*T)(dst)) }
+func (p pairedRowPlan[A, B]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*Pair[A, B])(dst)) }

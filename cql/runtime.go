@@ -8,8 +8,8 @@ import (
 )
 
 // Runtime constructors reuse the caller's cursor and final row-reader storage.
-func RowReaderFromCursor(columns Columns, cursor *wire.Cursor, lease *wire.Lease) RowReader {
+func rowReaderFromCursor(columns Columns, cursor *wire.Cursor, lease *wire.Lease) RowReader {
 	return RowReader{columns: columns, cursor: cursor, lease: wire.RefOf(lease)}
 }
-func SetParamOwnership(w *ParamWriter, owned bool) { w.ownBorrowed = owned }
-func BeginStreamRow(r *StreamRowReader)            { r.index = 0 }
+func setParamOwnership(w *ParamWriter, owned bool) { w.ownBorrowed = owned }
+func beginStreamRow(r *StreamRowReader)            { r.index = 0 }

@@ -89,20 +89,20 @@ func (c sequenceDecoder[T]) Decode(r ValueReader) ([]T, error) {
 // its elements' storage when the element codec decodes in place.
 func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil slice destination")
+		return typeValidation("destination", "nil slice destination")
 	}
 	dec := c
-	if DescriptorOf(dec.typ) == nil {
+	if descriptorOf(dec.typ) == nil {
 		compiled, err := dec.compileValueDecoder(r.Type())
 		if err != nil {
 			return err
 		}
 		dec = compiled.(sequenceDecoder[T])
 	} else if !dec.typ.Equal(r.Type()) {
-		return TypeValidation("type", "sequence metadata changed after compilation")
+		return typeValidation("type", "sequence metadata changed after compilation")
 	}
 	if dec.kind != TypeCustom && r.err == nil && r.State() == Null {
-		if err := CheckBytesAlive(r.Bytes()); err != nil {
+		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
 		*dst = (*dst)[:0]
@@ -119,7 +119,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	} else {
 		out = out[:count]
 	}
-	cursor := ValueReader{body: BytesChain(body), lease: BytesLease(body)}.cursorValue()
+	cursor := ValueReader{body: bytesChain(body), lease: bytesLease(body)}.cursorValue()
 	for i := range out {
 		var child ValueReader
 		var err error
@@ -211,20 +211,20 @@ func (c mapDecoder[K, V]) Decode(r ValueReader) ([]Entry[K, V], error) {
 
 func (c mapDecoder[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil map destination")
+		return typeValidation("destination", "nil map destination")
 	}
 	dec := c
-	if DescriptorOf(dec.typ) == nil {
+	if descriptorOf(dec.typ) == nil {
 		compiled, err := dec.compileValueDecoder(r.Type())
 		if err != nil {
 			return err
 		}
 		dec = compiled.(mapDecoder[K, V])
 	} else if !dec.typ.Equal(r.Type()) {
-		return TypeValidation("type", "map metadata changed after compilation")
+		return typeValidation("type", "map metadata changed after compilation")
 	}
 	if r.err == nil && r.State() == Null {
-		if err := CheckBytesAlive(r.Bytes()); err != nil {
+		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
 		*dst = (*dst)[:0]
@@ -241,7 +241,7 @@ func (c mapDecoder[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
 	} else {
 		out = out[:count]
 	}
-	cursor := ValueReader{body: BytesChain(body), lease: BytesLease(body)}.cursorValue()
+	cursor := ValueReader{body: bytesChain(body), lease: bytesLease(body)}.cursorValue()
 	for i := range out {
 		kr, err := cursor.Child(kt)
 		if err == nil {

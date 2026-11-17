@@ -7,17 +7,18 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 )
 
 // TestV2SchemaRowsManageDestination checks that the schema row plan clears
 // its own destination, so the session skips its per-row clear.
 func TestV2SchemaRowsManageDestination(t *testing.T) {
 	type row struct{ Name string }
-	plan, err := cql.CompileRowPlan[row](InternalV2SchemaRows[row]{}, cql.NewColumns())
+	plan, err := codec.CompileRowPlan[row](InternalV2SchemaRows[row]{}, cql.NewColumns())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !cql.ManagesRowDestination(plan) {
+	if !codec.ManagesRowDestination(plan) {
 		t.Fatal("schema row plan does not manage its destination")
 	}
 }

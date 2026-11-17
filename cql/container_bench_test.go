@@ -22,7 +22,7 @@ func BenchmarkContainer(b *testing.B) {
 					typ := CodecTestMust(MapType(integer, integer))
 					encoded := CodecTestMust(EncodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), make([]Entry[int32, int32], n)))
 					dec := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
-					reader := NewValueReader(typ, Present, BytesChain(encoded.body), nil)
+					reader := valueReaderFromLease(typ, Present, bytesChain(encoded.body), nil)
 					b.ReportAllocs()
 					b.SetBytes(reader.body.Len())
 					b.ResetTimer()
@@ -58,7 +58,7 @@ func BenchmarkContainer(b *testing.B) {
 				compiled := CodecTestMust(compileValueDecoder(dec, typ))
 				for _, segmented := range []bool{false, true} {
 					b.Run(fmt.Sprintf("segmented=%t", segmented), func(b *testing.B) {
-						chain := BytesChain(encoded.body)
+						chain := bytesChain(encoded.body)
 						if segmented {
 							data := encoded.Bytes().OwnedBytes()
 							spans := make([]wire.Span, len(data))
@@ -67,7 +67,7 @@ func BenchmarkContainer(b *testing.B) {
 							}
 							chain = CodecTestMust(wire.NewChain(spans...))
 						}
-						reader := NewValueReader(typ, Present, chain, nil)
+						reader := valueReaderFromLease(typ, Present, chain, nil)
 						b.ReportAllocs()
 						b.SetBytes(chain.Len())
 						b.ResetTimer()

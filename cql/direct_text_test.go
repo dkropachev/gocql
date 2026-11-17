@@ -108,7 +108,7 @@ func TestDirectTextMatchesCodec(t *testing.T) {
 							defer lease.Release()
 						}
 						var dst textRow
-						reader := NewRowReader(columns, chain, lease)
+						reader := newRowReader(columns, chain, lease)
 						msg := ""
 						if err := p.DecodeInto(reader, &dst); err != nil {
 							msg = err.Error()
@@ -137,7 +137,7 @@ func TestDirectTextForeignColumn(t *testing.T) {
 	body := cell(cell(cell(cell(nil, []byte{0, 0, 0, 1}, false), []byte("a"), false), []byte("b"), false), []byte{0, 0, 0, 2}, false)
 	chain, _ := wire.NewChain(wire.Borrow(body))
 	run := func(p RowPlan[textRow]) (string, int) {
-		reader := NewRowReader(foreign, chain, nil)
+		reader := newRowReader(foreign, chain, nil)
 		var dst textRow
 		err := p.DecodeInto(reader, &dst)
 		return fmt.Sprint(err), reader.index

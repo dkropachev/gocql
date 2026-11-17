@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -19,10 +20,10 @@ func InternalParseTypedTabletHint(value cql.Bytes, keyspace, table string) (tabl
 }
 
 func InternalParseTypedTabletPayload(value cql.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
-	if err := cql.CheckBytesAlive(value); err != nil {
+	if err := cqltype.CheckBytesAlive(value); err != nil {
 		return tablets.TabletInfo{}, err
 	}
-	if raw, ok := cql.BytesChain(value).Contiguous(); ok {
+	if raw, ok := cqltype.BytesChain(value).Contiguous(); ok {
 		if hint, ok, err := parseContiguousTabletPayload(raw, keyspace, table, v2); ok {
 			return hint, err
 		}
@@ -30,7 +31,7 @@ func InternalParseTypedTabletPayload(value cql.Bytes, keyspace, table string, v2
 	}
 	// Cursors are held by value and the first error returns at once, so a
 	// hint allocates only its replicas.
-	p := wire.CursorOver(cql.BytesChain(value))
+	p := wire.CursorOver(cqltype.BytesChain(value))
 	first, err := tabletHintBigint(&p)
 	if err != nil {
 		return tablets.TabletInfo{}, err

@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -206,7 +207,7 @@ func TestTypedFrame(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if &cql.ColumnSlice(first)[0] != &cql.ColumnSlice(second)[0] {
+			if &cqltype.ColumnSlice(first)[0] != &cqltype.ColumnSlice(second)[0] {
 				t.Fatal("matching validated metadata was reallocated")
 			}
 			changed, err := parse(reuseMetadataBody("other", uint16(cql.TypeInt)))

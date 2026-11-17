@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -467,7 +468,7 @@ func TestTypedConn(t *testing.T) {
 			for split := 0; split <= len(body); split++ {
 				chain := typedTestChain(t, body[:split], body[split:])
 				owner := wire.NewLease(chain, nil)
-				_, err := transport.InternalParseTypedTabletHint(cql.BytesView(chain, wire.RefOf(owner)), "ks", "tbl")
+				_, err := transport.InternalParseTypedTabletHint(cqltype.BytesView(chain, wire.RefOf(owner)), "ks", "tbl")
 				owner.Release()
 				if err != nil {
 					t.Fatalf("split %d: %v", split, err)

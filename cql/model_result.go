@@ -84,7 +84,7 @@ func (r *Result) own() *resultDiagnostics {
 }
 
 // AddWarnings appends server warnings.
-func (r *Result) AddWarnings(warnings ...string) {
+func (r *Result) addWarnings(warnings ...string) {
 	if len(warnings) > 0 {
 		d := r.own()
 		d.warnings = append(d.warnings, warnings...)
@@ -92,7 +92,7 @@ func (r *Result) AddWarnings(warnings ...string) {
 }
 
 // AddCQLTraces appends CQL trace session references.
-func (r *Result) AddCQLTraces(traces ...CQLTraceRef) {
+func (r *Result) addCQLTraces(traces ...CQLTraceRef) {
 	if len(traces) > 0 {
 		d := r.own()
 		d.traces = append(d.traces, traces...)
@@ -100,7 +100,7 @@ func (r *Result) AddCQLTraces(traces ...CQLTraceRef) {
 }
 
 // AddCustomPayload appends custom payload entries.
-func (r *Result) AddCustomPayload(entries ...PayloadEntry) {
+func (r *Result) addCustomPayload(entries ...PayloadEntry) {
 	if len(entries) > 0 {
 		d := r.own()
 		d.customPayload = append(d.customPayload, entries...)
@@ -109,7 +109,7 @@ func (r *Result) AddCustomPayload(entries ...PayloadEntry) {
 
 // SetDiagnostics replaces warnings, trace references and custom payload,
 // taking ownership of the slices.
-func (r *Result) SetDiagnostics(warnings []string, traces []CQLTraceRef, customPayload []PayloadEntry) {
+func (r *Result) setDiagnostics(warnings []string, traces []CQLTraceRef, customPayload []PayloadEntry) {
 	if len(warnings) == 0 && len(traces) == 0 && len(customPayload) == 0 {
 		r.diag = nil
 		return
@@ -117,7 +117,7 @@ func (r *Result) SetDiagnostics(warnings []string, traces []CQLTraceRef, customP
 	r.diag = &resultDiagnostics{warnings: warnings, traces: traces, customPayload: customPayload}
 }
 
-func CloneResult(result Result) Result {
+func cloneResult(result Result) Result {
 	if result.diag != nil {
 		result.diag = &resultDiagnostics{
 			warnings:      append([]string(nil), result.diag.warnings...),
@@ -127,14 +127,14 @@ func CloneResult(result Result) Result {
 	}
 	return result
 }
-func MergeResult(dst *Result, src Result) {
+func mergeResult(dst *Result, src Result) {
 	dst.HostID = src.HostID
 	dst.Attempts += src.Attempts
 	dst.Latency += src.Latency
 	dst.Rows += src.Rows
-	dst.AddWarnings(src.Warnings()...)
-	dst.AddCQLTraces(src.CQLTraces()...)
-	dst.AddCustomPayload(src.CustomPayload()...)
+	dst.addWarnings(src.Warnings()...)
+	dst.addCQLTraces(src.CQLTraces()...)
+	dst.addCustomPayload(src.CustomPayload()...)
 	dst.AchievedConsistency = src.AchievedConsistency
 }
 
@@ -169,4 +169,4 @@ func (p PageState) Token() []byte {
 	}
 	return append([]byte{}, p.token...)
 }
-func CompletePageState() PageState { return PageState{kind: 2} }
+func completePageState() PageState { return PageState{kind: 2} }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -26,7 +27,7 @@ func (p passwordAuth) Start(ctx context.Context, _ model.HostSnapshot, _ string)
 		return nil, cql.Nullable[[]byte]{}, err
 	}
 	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
-		return nil, cql.Nullable[[]byte]{}, cql.TypeValidation("password authentication", "credentials contain NUL")
+		return nil, cql.Nullable[[]byte]{}, cqltype.TypeValidation("password authentication", "credentials contain NUL")
 	}
 	response := make([]byte, len(p.username)+len(p.password)+2)
 	copy(response[1:], p.username)

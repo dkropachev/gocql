@@ -24,6 +24,7 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // Prepared epochs are dependency-local clocks. Snapshot publication numbers and
@@ -106,10 +107,10 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 		}
 	}
 	knownTable := false
-	visited := make(map[*cql.DataTypeDescriptor]bool)
+	visited := make(map[*cqltype.DataTypeDescriptor]bool)
 	var typ func(cql.DataType)
 	typ = func(v cql.DataType) {
-		d := cql.DescriptorOf(v)
+		d := cqltype.DescriptorOf(v)
 		if d == nil || visited[d] {
 			return
 		}
@@ -120,12 +121,12 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 		}
 		typ(d.Key)
 		typ(d.Element)
-		for _, f := range cql.ColumnSlice(d.Fields) {
+		for _, f := range cqltype.ColumnSlice(d.Fields) {
 			typ(f.Type)
 		}
 	}
 	for _, set := range []cql.Columns{parameters, columns} {
-		for _, c := range cql.ColumnSlice(set) {
+		for _, c := range cqltype.ColumnSlice(set) {
 			ks := c.Keyspace
 			if ks == "" {
 				ks = keyspace

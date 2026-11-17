@@ -25,6 +25,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
@@ -165,7 +166,7 @@ func TestResultPlanCache(t *testing.T) {
 			if calls.Load() != 1 {
 				t.Fatal("recompiled exact entry", calls.Load())
 			}
-			equivalent := cql.NewColumns(cql.ColumnSlice(cols)...)
+			equivalent := cql.NewColumns(cqltype.ColumnSlice(cols)...)
 			if _, err := cache.InternalSelectPlan(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: equivalent}}, d); err != nil {
 				t.Fatal(err)
 			}

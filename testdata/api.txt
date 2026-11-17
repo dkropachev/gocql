@@ -75,12 +75,8 @@ package gocql
 		field Latency time.Duration
 		field Rows int64
 		field AchievedConsistency cql.Consistency
-		method (*T) AddCQLTraces(traces ...cql.CQLTraceRef)
-		method (*T) AddCustomPayload(entries ...cql.PayloadEntry)
-		method (*T) AddWarnings(warnings ...string)
 		method (T) CQLTraces() []cql.CQLTraceRef
 		method (T) CustomPayload() []cql.PayloadEntry
-		method (*T) SetDiagnostics(warnings []string, traces []cql.CQLTraceRef, customPayload []cql.PayloadEntry)
 		method (T) Warnings() []string
 	type gocql.RowStream[R any] struct
 		method (*T) Close() error
@@ -326,7 +322,6 @@ package cql
 	const cql.All cql.Consistency
 	const cql.Any cql.Consistency
 	type cql.BatchKind byte
-	func cql.BeginStreamRow(r *cql.StreamRowReader)
 	var cql.BigIntType cql.DataType
 	func cql.BigIntValue(n int64) cql.Value
 	func cql.BindEncoder[T any](base cql.Encoder[T]) cql.Encoder[cql.BindValue[T]]
@@ -341,14 +336,6 @@ package cql
 	var cql.BooleanType cql.DataType
 	func cql.BorrowBytes(b []byte) cql.Bytes
 	func cql.BorrowText(s string) (cql.Text, error)
-	type cql.BuiltinFieldType struct
-		field Type reflect.Type
-		field TypeSrc string
-		field EncoderSrc string
-		field DecoderSrc string
-		field Names []string
-		field Default bool
-	func cql.BuiltinFieldTypes() []cql.BuiltinFieldType
 	var cql.ByteSliceCodec cql.Codec[[]byte]
 	type cql.Bytes struct
 		method (T) At(offset int64) (byte, error)
@@ -359,9 +346,6 @@ package cql
 		method (T) OwnedBytes() []byte
 		method (T) Slice(offset int64, length int64) (cql.Bytes, error)
 		method (T) WriteTo(w io.Writer) (int64, error)
-	func cql.BytesChain(b cql.Bytes) internal/wire.Chain
-	func cql.BytesLease(b cql.Bytes) internal/wire.Ref
-	func cql.BytesView(c internal/wire.Chain, l internal/wire.Ref) cql.Bytes
 	type cql.CASResult[R any] struct
 		field Previous cql.Option[R]
 		field Applied bool
@@ -372,11 +356,7 @@ package cql
 		field Attempt int
 		field Failed bool
 		field Speculative bool
-	func cql.CanonicalVarint(b cql.Bytes) (cql.Varint, error)
-	func cql.CaptureParamCells(w *cql.ParamWriter, cells []cql.ParamCell)
 	type cql.CellState uint8
-	func cql.CheckBytesAlive(b cql.Bytes) error
-	func cql.CloneResult(result cql.Result) cql.Result
 	type cql.Codec[T any] interface
 		method CheckType(cql.DataType) error
 		method Clone(T) T
@@ -392,7 +372,6 @@ package cql
 		method (*T) Unwrap() error
 	func cql.Column[R, V any](name string, codec cql.Decoder[V], field func(*R) *V) cql.OutputField[R]
 	func cql.ColumnAt[R, V any](index int, codec cql.Decoder[V], field func(*R) *V) cql.OutputField[R]
-	func cql.ColumnSlice(c cql.Columns) []cql.ColumnSpec
 	type cql.ColumnSpec struct
 		field Type cql.DataType
 		field Keyspace string
@@ -403,11 +382,7 @@ package cql
 		method (T) Equal(other cql.Columns) bool
 		method (T) Len() int
 		method (T) Same(other cql.Columns) bool
-	func cql.ColumnsOwned(c []cql.ColumnSpec) cql.Columns
 	func cql.Command(text string) cql.Statement[cql.EmptyParams, cql.EmptyRow]
-	func cql.CompileParamPlan[P any](encoder cql.ParamEncoder[P], columns cql.Columns) (cql.ParamPlan[P], error)
-	func cql.CompileRowPlan[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.RowPlan[R], error)
-	func cql.CompletePageState() cql.PageState
 	type cql.Compression uint8
 	const cql.ConditionalStatement cql.StatementKind
 	type cql.Consistency uint16
@@ -434,14 +409,6 @@ package cql
 		method (T) String() string
 		method (T) UDTName() (keyspace string, name string, ok bool)
 		method (T) WithFrozen(frozen bool) cql.DataType
-	type cql.DataTypeDescriptor struct
-		field Element cql.DataType
-		field Key cql.DataType
-		field Keyspace string
-		field Name string
-		field Fields cql.Columns
-		field Kind cql.Type
-		field Dimension uint16
 	type cql.Date int32
 		method (T) Time() (time.Time, error)
 	var cql.DateCodec cql.Codec[cql.Date]
@@ -459,8 +426,6 @@ package cql
 		method CheckType(cql.DataType) error
 		method Clone(T) T
 		method Decode(cql.ValueReader) (T, error)
-	func cql.DescriptorOf(t cql.DataType) *cql.DataTypeDescriptor
-	func cql.DetachRow[R any](plan cql.RowPlan[R], dst *R)
 	var cql.DoubleType cql.DataType
 	func cql.DoubleValue(n float64) cql.Value
 	type cql.Duration struct
@@ -478,13 +443,7 @@ package cql
 		method (T) Columns() cql.Columns
 		method (T) Get(name string) (cql.Value, error)
 	var cql.DynamicRows cql.RowDecoder[cql.DynamicRow]
-	func cql.EachBytes(b cql.Bytes, f func(internal/wire.Span) error) error
 	const cql.EachQuorum cql.Consistency
-	const cql.EmbedField cql.Embedding
-	const cql.EmbedFlatten cql.Embedding
-	const cql.EmbedSkip cql.Embedding
-	func cql.EmbeddedField(name string, tag reflect.StructTag, pointer bool, isStruct bool) (cql.Embedding, error)
-	type cql.Embedding int
 	const cql.EmptyCell cql.CellState
 	func cql.EmptyCodec[T any](base cql.Codec[T]) cql.Codec[cql.EmptyValueOf[T]]
 	type cql.EmptyParams = cql.EmptyRow
@@ -510,24 +469,10 @@ package cql
 		field Key K
 		field Value V
 	var cql.ErrReleased error
-	type cql.FieldCandidate struct
-		field Column string
-		field Path string
-		field Depth int
-	type cql.FieldTag struct
-		field Column string
-		field Codec string
-		field Stream string
-	func cql.Fingerprint(t cql.DataType) string
-	func cql.FinishParamWriter(w *cql.ParamWriter) error
-	func cql.FinishRowReader(r *cql.RowReader) error
-	func cql.FinishValueWriter(w *cql.ValueWriter) error
 	var cql.Float32Codec cql.Codec[float32]
 	var cql.Float64Codec cql.Codec[float64]
 	var cql.FloatType cql.DataType
 	func cql.FloatValue(n float32) cql.Value
-	func cql.GeneratedParams[P any](fields cql.structFields[P], opts ...cql.StructOption[P]) (cql.ParamEncoder[P], error)
-	func cql.GeneratedRow[R any](fields cql.structFields[R], opts ...cql.StructOption[R]) (cql.RowDecoder[R], error)
 	func cql.GeneratedStreamRow[R any](columns []cql.StreamOutputField[R], opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
 	func cql.GoMapCodec[K comparable, V any](key cql.Codec[K], value cql.Codec[V]) cql.Codec[map[K]V]
 	func cql.IgnoreColumn[R any](name string) cql.OutputField[R]
@@ -541,7 +486,6 @@ package cql
 	var cql.Int8Codec cql.Codec[int8]
 	var cql.IntType cql.DataType
 	func cql.IntValue(n int32) cql.Value
-	func cql.InternalStreamReaderWorkingStorageBytes(r *cql.StreamRowReader) int64
 	const cql.LZ4Compression cql.Compression
 	func cql.ListCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.ListDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
@@ -552,15 +496,12 @@ package cql
 	const cql.LocalQuorum cql.Consistency
 	const cql.LocalSerial cql.Consistency
 	const cql.LoggedBatch cql.BatchKind
-	type cql.ManagedRowDestination struct
-	func cql.ManagesRowDestination[R any](plan cql.RowPlan[R]) bool
 	func cql.MapCodec[K, V any](key cql.Codec[K], value cql.Codec[V]) cql.Codec[[]cql.Entry[K, V]]
 	func cql.MapDecoder[K, V any](key cql.Decoder[K], value cql.Decoder[V]) cql.Decoder[[]cql.Entry[K, V]]
 	func cql.MapEncoder[K, V any](key cql.Encoder[K], value cql.Encoder[V]) cql.Encoder[[]cql.Entry[K, V]]
 	func cql.MapType(key cql.DataType, value cql.DataType) (cql.DataType, error)
 	func cql.MapValue(t cql.DataType, entries []cql.ValueEntry) (cql.Value, error)
 	func cql.MaxTimeUUID(t time.Time) cql.TimeUUID
-	func cql.MergeResult(dst *cql.Result, src cql.Result)
 	func cql.MinTimeUUID(t time.Time) cql.TimeUUID
 	func cql.MustParamsOf[P any](opts ...cql.StructOption[P]) cql.ParamEncoder[P]
 	func cql.MustParseConsistency(s string) cql.Consistency
@@ -571,14 +512,7 @@ package cql
 	func cql.NamedScalar[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body cql.Bytes) (cql.EncodedValue, error)
-	func cql.NewFrameError(format string, args ...any) *cql.ProtocolError
-	func cql.NewParamWriter(builder *internal/wire.Builder, columns cql.Columns, allowUnset bool) *cql.ParamWriter
-	func cql.NewRowReader(columns cql.Columns, body internal/wire.Chain, lease *internal/wire.Lease) *cql.RowReader
-	func cql.NewStreamRowReader(columns cql.Columns, scope *internal/wire.Stream) (*cql.StreamRowReader, error)
-	func cql.NewStreamRowReaderReusingValidation(columns cql.Columns, scope *internal/wire.Stream, prior *cql.StreamRowReader) (*cql.StreamRowReader, error)
 	func cql.NewTimeUUID() cql.TimeUUID
-	func cql.NewValueReader(typ cql.DataType, state cql.CellState, body internal/wire.Chain, lease *internal/wire.Lease) cql.ValueReader
-	func cql.NewValueWriter(builder *internal/wire.Builder, typ cql.DataType, allowUnset bool) *cql.ValueWriter
 	const cql.NoCompression cql.Compression
 	const cql.Null cql.CellState
 	func cql.NullValue(t cql.DataType) cql.Value
@@ -601,8 +535,6 @@ package cql
 		method (T) More() bool
 		method (T) Token() []byte
 	func cql.PageStateFromToken(token []byte) cql.PageState
-	func cql.PageStateOwned(token []byte, kind uint8) cql.PageState
-	func cql.PageToken(p cql.PageState) []byte
 	type cql.Pair[A any, B any] struct
 		field First A
 		field Second B
@@ -610,10 +542,6 @@ package cql
 	func cql.PairRows[A, B any](a cql.RowDecoder[A], b cql.RowDecoder[B]) cql.RowDecoder[cql.Pair[A, B]]
 	func cql.Param[P, V any](name string, codec cql.Encoder[V], get func(P) V) cql.InputField[P]
 	func cql.ParamAt[P, V any](index int, codec cql.Encoder[V], get func(P) V) cql.InputField[P]
-	type cql.ParamCell struct
-		field Start int64
-		field End int64
-		field State cql.CellState
 	type cql.ParamEncoder[P any] interface
 		method Compile(cql.Columns) (cql.ParamPlan[P], error)
 	type cql.ParamPlan[P any] interface
@@ -623,14 +551,12 @@ package cql
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
 	func cql.ParamsOf[P any](opts ...cql.StructOption[P]) (cql.ParamEncoder[P], error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
-	func cql.ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (cql.FieldTag, bool, error)
 	func cql.ParseTimeUUID(input string) (cql.TimeUUID, error)
 	func cql.ParseUUID(input string) (cql.UUID, error)
 	type cql.PayloadEntry struct
 		field Key string
 		field Value cql.Nullable[cql.Bytes]
 	const cql.Present cql.CellState
-	func cql.PreservesRowDestination[R any](plan cql.RowPlan[R]) bool
 	type cql.ProtocolError struct
 		field Err error
 		field Stage string
@@ -639,24 +565,14 @@ package cql
 		method (*T) Unwrap() error
 	const cql.Quorum cql.Consistency
 	func cql.RandomUUID() cql.UUID
-	func cql.ReadValue(cursor *internal/wire.Cursor, typ cql.DataType, lease *internal/wire.Lease, allowUnset bool) (cql.ValueReader, error)
-	func cql.ReflectParams[P any](opts ...cql.StructOption[P]) (cql.ParamEncoder[P], error)
-	func cql.ReflectRow[R any](opts ...cql.StructOption[R]) (cql.RowDecoder[R], error)
-	func cql.ReflectStreamRow[R any](opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
-	func cql.ResetParamWriter(w *cql.ParamWriter, builder *internal/wire.Builder, columns cql.Columns, allowUnset bool)
-	func cql.ResolveFieldConflicts(candidates []cql.FieldCandidate) ([]int, error)
 	type cql.Result struct
 		field HostID cql.UUID
 		field Attempts int
 		field Latency time.Duration
 		field Rows int64
 		field AchievedConsistency cql.Consistency
-		method (*T) AddCQLTraces(traces ...cql.CQLTraceRef)
-		method (*T) AddCustomPayload(entries ...cql.PayloadEntry)
-		method (*T) AddWarnings(warnings ...string)
 		method (T) CQLTraces() []cql.CQLTraceRef
 		method (T) CustomPayload() []cql.PayloadEntry
-		method (*T) SetDiagnostics(warnings []string, traces []cql.CQLTraceRef, customPayload []cql.PayloadEntry)
 		method (T) Warnings() []string
 	func cql.ReuseBuffers[P any]() cql.StructOption[P]
 	func cql.Row[R any](fields ...cql.OutputField[R]) cql.RowDecoder[R]
@@ -672,14 +588,11 @@ package cql
 	type cql.RowReader struct
 		method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		method (*T) SkipColumn() error
-	func cql.RowReaderFromCursor(columns cql.Columns, cursor *internal/wire.Cursor, lease *internal/wire.Lease) cql.RowReader
 	func cql.ScalarType(kind cql.Type) (cql.DataType, error)
-	func cql.SelectBuiltin(candidates []cql.BuiltinFieldType, codec string) (int, bool)
 	const cql.Serial cql.Consistency
 	func cql.SetCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.SetDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
 	func cql.SetEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
-	func cql.SetParamOwnership(w *cql.ParamWriter, owned bool)
 	func cql.SetType(element cql.DataType) (cql.DataType, error)
 	func cql.SetValue(t cql.DataType, v []cql.Value) (cql.Value, error)
 	var cql.SmallIntType cql.DataType
@@ -697,7 +610,6 @@ package cql
 	var cql.StreamASCII cql.StreamDecoder[[]byte]
 	var cql.StreamBlob cql.StreamDecoder[[]byte]
 	var cql.StreamBool cql.StreamDecoder[bool]
-	func cql.StreamBuiltinFieldTypes() []cql.BuiltinFieldType
 	type cql.StreamCapabilityError struct
 		field Reason string
 		field Protocol int
@@ -785,11 +697,9 @@ package cql
 		method (T) Clone() cql.Text
 		method (T) Copy() (string, error)
 		method (T) String() string
-	func cql.TextBytes(t cql.Text) cql.Bytes
 	var cql.TextCodec cql.Codec[cql.Text]
 	var cql.TextType cql.DataType
 	func cql.TextValue(s string) (cql.Value, error)
-	func cql.TextView(b cql.Bytes) cql.Text
 	const cql.Three cql.Consistency
 	var cql.TimeCodec cql.Codec[cql.TimeOfDay]
 	type cql.TimeOfDay int64
@@ -841,7 +751,6 @@ package cql
 	const cql.TypeDouble cql.Type
 	const cql.TypeDuration cql.Type
 	const cql.TypeFloat cql.Type
-	func cql.TypeFromDescriptor(d *cql.DataTypeDescriptor) cql.DataType
 	const cql.TypeInet cql.Type
 	const cql.TypeInt cql.Type
 	const cql.TypeList cql.Type
@@ -856,7 +765,6 @@ package cql
 	const cql.TypeTuple cql.Type
 	const cql.TypeUDT cql.Type
 	const cql.TypeUUID cql.Type
-	func cql.TypeValidation(field string, format string, args ...any) error
 	const cql.TypeVarchar cql.Type
 	const cql.TypeVarint cql.Type
 	func cql.UDTDecoder[T any](codec cql.RowDecoder[T], options cql.UDTOptions) cql.Decoder[T]
@@ -892,8 +800,6 @@ package cql
 	const cql.Unpaged int32
 	const cql.Unset cql.CellState
 	func cql.UnsetDynamic(t cql.DataType) cql.Value
-	func cql.ValidateDataType(t cql.DataType) error
-	func cql.ValidateScalarKind(kind cql.Type) error
 	type cql.ValidationError struct
 		field Err error
 		field Field string
@@ -960,13 +866,11 @@ package cql
 	const cql.VariantNCSCompat untyped int
 	type cql.Varint struct
 		method (T) BigInt() *math/big.Int
-	func cql.VarintBytes(v cql.Varint) cql.Bytes
 	var cql.VarintCodec cql.Codec[cql.Varint]
 	func cql.VarintFromBigInt(v *math/big.Int) cql.Varint
 	func cql.VarintFromBytes(b []byte) (cql.Varint, error)
 	var cql.VarintType cql.DataType
 	func cql.VarintValue(n cql.Varint) cql.Value
-	func cql.VarintView(b cql.Bytes) cql.Varint
 	func cql.VectorCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.VectorDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
 	func cql.VectorEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]

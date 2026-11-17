@@ -7,6 +7,8 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -15,23 +17,23 @@ import (
 // still using its previous snapshot. No caller-owned input survives Encode.
 type ParameterBuffer struct {
 	storage   []byte
-	positions []cql.ParamCell
+	positions []codec.ParamCell
 	cells     []model.EncodedCell
 	writer    cql.ParamWriter
 	builder   wire.Builder
 }
 
 func (b *ParameterBuffer) RetainedBytes() int {
-	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(cql.ParamCell{}))
+	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
 
 func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
-		return model.EncodedValues{}, cql.TypeValidation("parameters", "maximum count is 65535")
+		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
 	n := columns.Len()
 	if cap(b.positions) < n {
-		b.positions = make([]cql.ParamCell, n)
+		b.positions = make([]codec.ParamCell, n)
 	} else {
 		b.positions = b.positions[:n]
 	}
@@ -42,12 +44,12 @@ func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Colum
 	}
 	b.builder.BeginOwned(b.storage)
 	writer := &b.writer
-	cql.ResetParamWriter(writer, &b.builder, columns, allowUnset)
-	cql.CaptureParamCells(writer, b.positions)
+	codec.ResetParamWriter(writer, &b.builder, columns, allowUnset)
+	codec.CaptureParamCells(writer, b.positions)
 	// The owned builder copies every borrowed span, including custom encoders.
 	err := plan.Encode(writer, value)
 	if err == nil {
-		err = cql.FinishParamWriter(writer)
+		err = codec.FinishParamWriter(writer)
 	}
 	storage := b.builder.OwnedBytes()
 	b.storage = storage
@@ -79,11 +81,11 @@ func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Colum
 // no extra call.
 func (b *ParameterBuffer) EncodeAppend[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
 	if columns.Len() > 65535 {
-		return storage, model.EncodedValues{}, cql.TypeValidation("parameters", "maximum count is 65535")
+		return storage, model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
 	n := columns.Len()
 	if cap(b.positions) < n {
-		b.positions = make([]cql.ParamCell, n)
+		b.positions = make([]codec.ParamCell, n)
 	} else {
 		b.positions = b.positions[:n]
 	}
@@ -95,12 +97,12 @@ func (b *ParameterBuffer) EncodeAppend[P any](plan cql.ParamPlan[P], columns cql
 	tail := storage[len(storage):]
 	b.builder.BeginOwned(tail)
 	writer := &b.writer
-	cql.ResetParamWriter(writer, &b.builder, columns, allowUnset)
-	cql.CaptureParamCells(writer, b.positions)
+	codec.ResetParamWriter(writer, &b.builder, columns, allowUnset)
+	codec.CaptureParamCells(writer, b.positions)
 	// The owned builder copies every borrowed span, including custom encoders.
 	err := plan.Encode(writer, value)
 	if err == nil {
-		err = cql.FinishParamWriter(writer)
+		err = codec.FinishParamWriter(writer)
 	}
 	encoded := b.builder.OwnedBytes()
 	framed, freezeErr := b.builder.Freeze()

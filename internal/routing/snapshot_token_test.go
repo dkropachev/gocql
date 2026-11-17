@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
@@ -45,7 +46,7 @@ func routingCell[T any](t *testing.T, typ cql.DataType, encoder cql.Encoder[T], 
 	if err != nil {
 		t.Fatal(err)
 	}
-	return model.EncodedCell{Typ: typ, Body: cql.BytesChain(encoded.Bytes()), State: encoded.State()}
+	return model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(encoded.Bytes()), State: encoded.State()}
 }
 
 func TestSnapshotToken(t *testing.T) {

@@ -75,7 +75,7 @@ func requirePresent(r ValueReader) error {
 	if r.State() != Present {
 		return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %d", r.Type().Kind(), r.State())
 	}
-	return CheckBytesAlive(r.Bytes())
+	return checkBytesAlive(r.Bytes())
 }
 func fixedCursor(r ValueReader, width int64) (ValueCursor, error) {
 	if r.Bytes().Len() != width {
@@ -135,7 +135,7 @@ func blobColumn(r *RowReader, kind, alternative Type, compiled bool) (Bytes, err
 	if err != nil {
 		return Bytes{}, err
 	}
-	return BytesView(body, r.lease), nil
+	return bytesView(body, r.lease), nil
 }
 
 // textColumn decodes a text or ascii cell like textCodec.Decode, validating
@@ -148,7 +148,7 @@ func textColumn(r *RowReader, kind, alternative Type, compiled bool) (Text, erro
 	if err := validateText(v, kind == TypeAscii); err != nil {
 		return Text{}, err
 	}
-	return TextView(v), nil
+	return textView(v), nil
 }
 
 func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
@@ -425,7 +425,7 @@ func (c textCodec) Decode(r ValueReader) (Text, error) {
 	if e := validateText(r.Bytes(), c.ascii); e != nil {
 		return Text{}, e
 	}
-	return TextView(r.Bytes()), nil
+	return textView(r.Bytes()), nil
 }
 func (textCodec) Clone(v Text) Text { return v.Clone() }
 
@@ -489,10 +489,10 @@ func (v *textValidation) finish() error {
 	return nil
 }
 func validateText(b Bytes, ascii bool) error {
-	if e := CheckBytesAlive(b); e != nil {
+	if e := checkBytesAlive(b); e != nil {
 		return e
 	}
-	if data, ok := BytesChain(b).Contiguous(); ok {
+	if data, ok := bytesChain(b).Contiguous(); ok {
 		if !ascii {
 			if !utf8.Valid(data) {
 				return errors.New("gocql: invalid UTF-8")
@@ -507,7 +507,7 @@ func validateText(b Bytes, ascii bool) error {
 		return nil
 	}
 	v := newTextValidation(ascii)
-	if err := EachBytes(b, func(s wire.Span) error { return v.write(s.Bytes()) }); err != nil {
+	if err := eachBytes(b, func(s wire.Span) error { return v.write(s.Bytes()) }); err != nil {
 		return err
 	}
 	return v.finish()
@@ -530,11 +530,11 @@ type namedScalar[A, B any] struct {
 func (c namedScalar[A, B]) CheckType(t DataType) error {
 	perfCheckType()
 
-	if DescriptorOf(c.typ) != nil {
+	if descriptorOf(c.typ) != nil {
 		if c.typ.Equal(t) {
 			return nil
 		}
-		return TypeValidation("type", "compiled mapped scalar metadata changed")
+		return typeValidation("type", "compiled mapped scalar metadata changed")
 	}
 	if c.base == nil || c.to == nil || c.from == nil {
 		return errors.New("gocql: incomplete named scalar adapter")
@@ -591,11 +591,11 @@ type nullableEncoder[T any] struct {
 func (c nullableEncoder[T]) CheckType(t DataType) error {
 	perfCheckType()
 
-	if DescriptorOf(c.typ) != nil {
+	if descriptorOf(c.typ) != nil {
 		if c.typ.Equal(t) {
 			return nil
 		}
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	if c.base == nil {
 		return errors.New("gocql: nil nullable encoder")
@@ -620,11 +620,11 @@ type nullableDecoder[T any] struct {
 func (c nullableDecoder[T]) CheckType(t DataType) error {
 	perfCheckType()
 
-	if DescriptorOf(c.typ) != nil {
+	if descriptorOf(c.typ) != nil {
 		if c.typ.Equal(t) {
 			return nil
 		}
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	if c.base == nil {
 		return errors.New("gocql: nil nullable decoder")
@@ -639,7 +639,7 @@ func (c nullableDecoder[T]) Decode(r ValueReader) (Nullable[T], error) {
 		return Nullable[T]{}, r.err
 	}
 	if r.State() == Null {
-		if e := CheckBytesAlive(r.Bytes()); e != nil {
+		if e := checkBytesAlive(r.Bytes()); e != nil {
 			return Nullable[T]{}, e
 		}
 		return Nullable[T]{}, nil
@@ -681,11 +681,11 @@ type bindEncoder[T any] struct {
 func (c bindEncoder[T]) CheckType(t DataType) error {
 	perfCheckType()
 
-	if DescriptorOf(c.typ) != nil {
+	if descriptorOf(c.typ) != nil {
 		if c.typ.Equal(t) {
 			return nil
 		}
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	if c.base == nil {
 		return errors.New("gocql: nil bind encoder")
@@ -730,11 +730,11 @@ func emptySupported(t DataType) bool {
 func (c emptyCodec[T]) CheckType(t DataType) error {
 	perfCheckType()
 
-	if DescriptorOf(c.typ) != nil {
+	if descriptorOf(c.typ) != nil {
 		if c.typ.Equal(t) {
 			return nil
 		}
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	if c.base == nil {
 		return errors.New("gocql: nil empty codec")
@@ -767,7 +767,7 @@ func (c emptyCodec[T]) Decode(r ValueReader) (EmptyValueOf[T], error) {
 		return EmptyValueOf[T]{}, r.err
 	}
 	if r.State() == EmptyCell || (r.State() == Present && r.Bytes().Len() == 0) {
-		if e := CheckBytesAlive(r.Bytes()); e != nil {
+		if e := checkBytesAlive(r.Bytes()); e != nil {
 			return EmptyValueOf[T]{}, e
 		}
 		if r.Bytes().Len() != 0 {
@@ -811,7 +811,7 @@ func (c nullableDecoder[T]) compileValueDecoder(t DataType) (Decoder[Nullable[T]
 }
 func (c nullableDecoder[T]) DecodeInto(r ValueReader, dst *Nullable[T]) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil nullable destination")
+		return typeValidation("destination", "nil nullable destination")
 	}
 	*dst = Nullable[T]{}
 	if err := c.typeGuard(r.Type()); err != nil {
@@ -821,7 +821,7 @@ func (c nullableDecoder[T]) DecodeInto(r ValueReader, dst *Nullable[T]) error {
 		return r.err
 	}
 	if r.State() == Null {
-		return CheckBytesAlive(r.Bytes())
+		return checkBytesAlive(r.Bytes())
 	}
 	if err := decodeValueInto(c.base, r, &dst.Value); err != nil {
 		return err
@@ -861,7 +861,7 @@ func (c emptyCodec[T]) compileValueDecoder(t DataType) (Decoder[EmptyValueOf[T]]
 }
 func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *EmptyValueOf[T]) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil empty destination")
+		return typeValidation("destination", "nil empty destination")
 	}
 	*dst = EmptyValueOf[T]{}
 	if err := c.typeGuard(r.Type()); err != nil {
@@ -871,7 +871,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *EmptyValueOf[T]) error {
 		return r.err
 	}
 	if r.State() == EmptyCell || (r.State() == Present && r.Bytes().Len() == 0) {
-		if err := CheckBytesAlive(r.Bytes()); err != nil {
+		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
 		dst.Empty = true
@@ -886,7 +886,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *EmptyValueOf[T]) error {
 
 func (c namedScalar[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
 	if c.to == nil || c.from == nil {
-		return nil, TypeValidation("codec", "nil scalar mapping")
+		return nil, typeValidation("codec", "nil scalar mapping")
 	}
 	base, err := compileValueEncoder(c.base, t)
 	if err != nil {
@@ -897,7 +897,7 @@ func (c namedScalar[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
 }
 func (c namedScalar[A, B]) compileValueDecoder(t DataType) (Decoder[A], error) {
 	if c.to == nil || c.from == nil {
-		return nil, TypeValidation("codec", "nil scalar mapping")
+		return nil, typeValidation("codec", "nil scalar mapping")
 	}
 	base, err := compileValueDecoder(c.base, t)
 	if err != nil {
@@ -965,51 +965,51 @@ func (c stringCodec) compileValueEncoder(t DataType) (Encoder[string], error) {
 }
 
 func (c namedScalar[A, B]) typeGuard(t DataType) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}
 	if !c.typ.Equal(t) {
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	return nil
 }
 
 func (c nullableEncoder[T]) typeGuard(t DataType) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}
 	if !c.typ.Equal(t) {
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	return nil
 }
 
 func (c nullableDecoder[T]) typeGuard(t DataType) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}
 	if !c.typ.Equal(t) {
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	return nil
 }
 
 func (c bindEncoder[T]) typeGuard(t DataType) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}
 	if !c.typ.Equal(t) {
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	return nil
 }
 
 func (c emptyCodec[T]) typeGuard(t DataType) error {
-	if DescriptorOf(c.typ) == nil {
+	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}
 	if !c.typ.Equal(t) {
-		return TypeValidation("type", "compiled wrapper metadata changed")
+		return typeValidation("type", "compiled wrapper metadata changed")
 	}
 	return nil
 }

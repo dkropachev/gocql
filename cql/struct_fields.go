@@ -6,8 +6,9 @@ package cql
 import (
 	"fmt"
 	"reflect"
-	"strings"
 	"unsafe"
+
+	"github.com/scylladb/gocql/v2/internal/structmap"
 )
 
 // Struct mappings build the same Param and Column fields an application writes
@@ -17,76 +18,10 @@ import (
 // built-in direct ops. cmd/cqlgen generates the same fields from source, using
 // the tag grammar and type table below, as a CQLFields method of the struct.
 
-// FieldTag is a struct field's parsed `cql` tag.
-type FieldTag struct {
-	Column string // column name; the lowercased field name when untagged
-	Codec  string // codec override: a built-in codec name, or (cqlgen only) a Go expression
-	Stream string // streaming decoder override, like Codec, for StreamRowOf
-}
-
-// ParseFieldTag returns the column mapping of a struct field. ok is false for
-// a field that maps to no column: an unexported one, or one tagged "-".
-func ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (FieldTag, bool, error) {
-	value, tagged := tag.Lookup("cql")
-	if value == "-" || !exported {
-		return FieldTag{}, false, nil
-	}
-	parts := splitTag(value)
-	result := FieldTag{Column: parts[0]}
-	if !tagged || result.Column == "" {
-		result.Column = strings.ToLower(fieldName)
-	}
-	for _, option := range parts[1:] {
-		key, val, _ := strings.Cut(option, "=")
-		switch {
-		case key == "codec" && val != "":
-			result.Codec = val
-		case key == "stream" && val != "":
-			result.Stream = val
-		default:
-			return FieldTag{}, false, fmt.Errorf("gocql: field %s: unknown cql tag option %q", fieldName, option)
-		}
-	}
-	return result, true, nil
-}
-
-// splitTag splits a tag value at the commas outside brackets, so a codec
-// expression such as MapCodec(StringCodec, Int64) stays one option.
-func splitTag(value string) []string {
-	var parts []string
-	depth, start := 0, 0
-	for i, r := range value {
-		switch r {
-		case '(', '[', '{':
-			depth++
-		case ')', ']', '}':
-			depth--
-		case ',':
-			if depth == 0 {
-				parts = append(parts, value[start:i])
-				start = i + 1
-			}
-		}
-	}
-	return append(parts, value[start:])
-}
-
-// BuiltinFieldType is one Go field type mapped without configuration.
-type BuiltinFieldType struct {
-	Type reflect.Type
-	// TypeSrc, EncoderSrc and DecoderSrc spell the type and codecs in Go
-	// source, qualified with "cql." or "netip.".
-	TypeSrc, EncoderSrc, DecoderSrc string
-	// Names are the codec names a `codec=` tag selects this entry by.
-	Names []string
-	// Default marks the entry used for Type without a `codec=` tag.
-	Default bool
-}
-
 type builtinField[P any] struct {
 	param  func(name string, offset uintptr) InputField[P]
 	column func(name string, offset uintptr) OutputField[P]
-	BuiltinFieldType
+	structmap.BuiltinFieldType
 }
 
 // builtinFields returns the built-in field types, each with its Nullable form.
@@ -128,7 +63,7 @@ func builtinFields[P any]() []builtinField[P] {
 func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinField[P] {
 	names := []string{name}
 	plain := builtinField[P]{
-		BuiltinFieldType: BuiltinFieldType{
+		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[V](), TypeSrc: typeSrc,
 			EncoderSrc: "cql." + name, DecoderSrc: "cql." + name,
 			Names: names, Default: def,
@@ -137,7 +72,7 @@ func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinFiel
 		column: fieldColumn[P](Decoder[V](c)),
 	}
 	nullable := builtinField[P]{
-		BuiltinFieldType: BuiltinFieldType{
+		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[Nullable[V]](), TypeSrc: "cql.Nullable[" + typeSrc + "]",
 			EncoderSrc: "cql.NullableEncoder(cql." + name + ")", DecoderSrc: "cql.NullableDecoder(cql." + name + ")",
 			Names: names, Default: def,
@@ -147,7 +82,7 @@ func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinFiel
 	}
 	collection := func(codec Codec[[]V], src string, names []string, def bool) builtinField[P] {
 		return builtinField[P]{
-			BuiltinFieldType: BuiltinFieldType{
+			BuiltinFieldType: structmap.BuiltinFieldType{
 				Type: reflect.TypeFor[[]V](), TypeSrc: "[]" + typeSrc,
 				EncoderSrc: src, DecoderSrc: src, Names: names, Default: def,
 			},
@@ -165,29 +100,13 @@ func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinFiel
 }
 
 // BuiltinFieldTypes returns the Go field types mapped without configuration.
-func BuiltinFieldTypes() []BuiltinFieldType {
+func builtinFieldTypes() []structmap.BuiltinFieldType {
 	fields := builtinFields[struct{}]()
-	types := make([]BuiltinFieldType, len(fields))
+	types := make([]structmap.BuiltinFieldType, len(fields))
 	for i, f := range fields {
 		types[i] = f.BuiltinFieldType
 	}
 	return types
-}
-
-// SelectBuiltin picks among the built-in entries for one Go type: the one
-// named codec, or the default when codec is empty.
-func SelectBuiltin(candidates []BuiltinFieldType, codec string) (int, bool) {
-	for i, c := range candidates {
-		if codec == "" && c.Default {
-			return i, true
-		}
-		for _, name := range c.Names {
-			if codec != "" && name == codec {
-				return i, true
-			}
-		}
-	}
-	return -1, false
 }
 
 func fieldParam[P, V any](enc Encoder[V]) func(string, uintptr) InputField[P] {
@@ -249,9 +168,9 @@ type structFields[P any] struct {
 
 // GeneratedParams binds parameters from the generated mapping fields, with
 // opts applied to it, or reflects P when fields has no buffered mapping.
-func GeneratedParams[P any](fields structFields[P], opts ...StructOption[P]) (ParamEncoder[P], error) {
+func generatedParams[P any](fields structFields[P], opts ...StructOption[P]) (ParamEncoder[P], error) {
 	if fields.Params == nil {
-		return ReflectParams(opts...)
+		return reflectParams(opts...)
 	}
 	config, err := structOptions(reflect.TypeFor[P](), opts)
 	if err != nil {
@@ -266,9 +185,9 @@ func GeneratedParams[P any](fields structFields[P], opts ...StructOption[P]) (Pa
 
 // GeneratedRow decodes rows with the generated mapping fields, with opts
 // applied to it, or reflects R when fields has no buffered mapping.
-func GeneratedRow[R any](fields structFields[R], opts ...StructOption[R]) (RowDecoder[R], error) {
+func generatedRow[R any](fields structFields[R], opts ...StructOption[R]) (RowDecoder[R], error) {
 	if fields.Columns == nil {
-		return ReflectRow(opts...)
+		return reflectRow(opts...)
 	}
 	config, err := structOptions(reflect.TypeFor[R](), opts)
 	if err != nil {
@@ -320,7 +239,7 @@ func generatedStructOptions[P any](fields structFields[P], config structConfig[P
 	if len(config.streams) != 0 {
 		streamBuiltins = streamBuiltinFields[P]()
 	}
-	err := eachStructField(reflect.TypeFor[P](), func(sf reflect.StructField, tag FieldTag) error {
+	err := eachStructField(reflect.TypeFor[P](), func(sf reflect.StructField, tag structmap.FieldTag) error {
 		if entry, ok := config.codecs[sf.Type]; ok && !tagSelectsBuiltin(builtins, sf.Type, tag.Codec) {
 			if i, ok := params[tag.Column]; ok {
 				fields.Params[i] = entry.param(tag.Column, sf.Offset)
@@ -339,7 +258,9 @@ func generatedStructOptions[P any](fields structFields[P], config structConfig[P
 	return fields, err
 }
 
-func tagSelectsBuiltin[E interface{ meta() BuiltinFieldType }](builtins []E, typ reflect.Type, name string) bool {
+func tagSelectsBuiltin[E interface {
+	meta() structmap.BuiltinFieldType
+}](builtins []E, typ reflect.Type, name string) bool {
 	if name == "" {
 		return false
 	}
@@ -357,7 +278,7 @@ func tagSelectsBuiltin[E interface{ meta() BuiltinFieldType }](builtins []E, typ
 }
 
 // ReflectParams maps the fields of struct P by reflection, once, here.
-func ReflectParams[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
+func reflectParams[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
 	fields, err := reflectFields(opts)
 	if err != nil {
 		return nil, err
@@ -370,7 +291,7 @@ func ReflectParams[P any](opts ...StructOption[P]) (ParamEncoder[P], error) {
 }
 
 // ReflectRow maps the fields of struct R by reflection, once, here.
-func ReflectRow[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
+func reflectRow[R any](opts ...StructOption[R]) (RowDecoder[R], error) {
 	fields, err := reflectFields(opts)
 	if err != nil {
 		return nil, err
@@ -414,7 +335,7 @@ func bufferReset[R any](reuse bool) (func(*R), error) {
 		return nil, nil
 	}
 	var offsets []uintptr
-	err := eachStructField(reflect.TypeFor[R](), func(sf reflect.StructField, _ FieldTag) error {
+	err := eachStructField(reflect.TypeFor[R](), func(sf reflect.StructField, _ structmap.FieldTag) error {
 		if sf.Type.Kind() == reflect.Slice {
 			offsets = append(offsets, sf.Offset)
 		}
@@ -450,7 +371,7 @@ func reflectFields[P any](opts []StructOption[P]) ([]reflectedField[P], error) {
 	}
 	builtins := builtinFields[P]()
 	var fields []reflectedField[P]
-	err = eachStructField(t, func(sf reflect.StructField, tag FieldTag) error {
+	err = eachStructField(t, func(sf reflect.StructField, tag structmap.FieldTag) error {
 		entry, err := resolveField(builtins, config.codecs, sf.Type, tag.Codec, "cql.WithCodec")
 		if err == nil {
 			fields = append(fields, reflectedField[P]{entry: entry, column: tag.Column, offset: sf.Offset})
@@ -477,31 +398,31 @@ func structOptions[P any](t reflect.Type, opts []StructOption[P]) (structConfig[
 // eachStructField calls fn for each mapped field of struct t, in order. The
 // fields of a struct embedded by value are mapped as if declared in t, with
 // their offset from t and a dotted Name; see ResolveFieldConflicts.
-func eachStructField(t reflect.Type, fn func(reflect.StructField, FieldTag) error) error {
+func eachStructField(t reflect.Type, fn func(reflect.StructField, structmap.FieldTag) error) error {
 	var fields []reflect.StructField
-	var candidates []FieldCandidate
-	var tags []FieldTag
+	var candidates []structmap.FieldCandidate
+	var tags []structmap.FieldTag
 	var walk func(t reflect.Type, prefix string, offset uintptr, depth int) error
 	walk = func(t reflect.Type, prefix string, offset uintptr, depth int) error {
 		for i := range t.NumField() {
 			sf := t.Field(i)
 			path := prefix + sf.Name
 			if sf.Anonymous {
-				embed, err := EmbeddedField(sf.Name, sf.Tag, sf.Type.Kind() == reflect.Pointer, sf.Type.Kind() == reflect.Struct)
+				embed, err := structmap.EmbeddedField(sf.Name, sf.Tag, sf.Type.Kind() == reflect.Pointer, sf.Type.Kind() == reflect.Struct)
 				if err != nil {
 					return fmt.Errorf("gocql: struct mapping of %s: %w", t, err)
 				}
-				if embed == EmbedSkip {
+				if embed == structmap.EmbedSkip {
 					continue
 				}
-				if embed == EmbedFlatten {
+				if embed == structmap.EmbedFlatten {
 					if err := walk(sf.Type, path+".", offset+sf.Offset, depth+1); err != nil {
 						return err
 					}
 					continue
 				}
 			}
-			tag, ok, err := ParseFieldTag(sf.Name, sf.IsExported(), sf.Tag)
+			tag, ok, err := structmap.ParseFieldTag(sf.Name, sf.IsExported(), sf.Tag)
 			if err != nil {
 				return fmt.Errorf("gocql: struct mapping of %s: %w", t, err)
 			}
@@ -511,14 +432,14 @@ func eachStructField(t reflect.Type, fn func(reflect.StructField, FieldTag) erro
 			sf.Name, sf.Offset = path, offset+sf.Offset
 			fields = append(fields, sf)
 			tags = append(tags, tag)
-			candidates = append(candidates, FieldCandidate{Column: tag.Column, Path: path, Depth: depth})
+			candidates = append(candidates, structmap.FieldCandidate{Column: tag.Column, Path: path, Depth: depth})
 		}
 		return nil
 	}
 	if err := walk(t, "", 0, 0); err != nil {
 		return err
 	}
-	keep, err := ResolveFieldConflicts(candidates)
+	keep, err := structmap.ResolveFieldConflicts(candidates)
 	if err != nil {
 		return fmt.Errorf("gocql: struct mapping of %s: %w", t, err)
 	}
@@ -530,69 +451,15 @@ func eachStructField(t reflect.Type, fn func(reflect.StructField, FieldTag) erro
 	return nil
 }
 
-// Embedding says how a struct mapping treats an embedded field.
-type Embedding int
-
-const (
-	EmbedField   Embedding = iota // an embedded non-struct: an ordinary field named after its type
-	EmbedFlatten                  // a struct embedded by value: its fields are mapped as the outer struct's
-	EmbedSkip                     // tagged `cql:"-"`
-)
-
-// EmbeddedField decides how to map an embedded field. Pointer embedding is
-// rejected: its fields are not at a fixed offset, and decoding would have to
-// allocate a nil one. A tag other than "-" is rejected too, since there is no
-// column prefix to give.
-func EmbeddedField(name string, tag reflect.StructTag, pointer, isStruct bool) (Embedding, error) {
-	value, tagged := tag.Lookup("cql")
-	switch {
-	case value == "-":
-		return EmbedSkip, nil
-	case pointer:
-		return 0, fmt.Errorf("embedded pointer field %s is not supported; embed it by value or tag it `cql:\"-\"`", name)
-	case !isStruct:
-		return EmbedField, nil
-	case tagged:
-		return 0, fmt.Errorf("embedded field %s: only the tag `cql:\"-\"` is allowed", name)
-	}
-	return EmbedFlatten, nil
-}
-
-// FieldCandidate is a mapped field found while walking a struct and the
-// structs it embeds; Depth counts the embeddings above it.
-type FieldCandidate struct {
-	Column, Path string
-	Depth        int
-}
-
-// ResolveFieldConflicts returns, in order, the candidates that map their
-// column, like Go's field promotion: a shallower field hides deeper ones with
-// the same column, and two at the same depth are an error.
-func ResolveFieldConflicts(candidates []FieldCandidate) ([]int, error) {
-	best := map[string]int{}
-	for i, c := range candidates {
-		j, ok := best[c.Column]
-		switch {
-		case !ok || c.Depth < candidates[j].Depth:
-			best[c.Column] = i
-		case c.Depth == candidates[j].Depth:
-			return nil, fmt.Errorf("fields %s and %s both map column %q", candidates[j].Path, c.Path, c.Column)
-		}
-	}
-	keep := make([]int, 0, len(best))
-	for i, c := range candidates {
-		if best[c.Column] == i {
-			keep = append(keep, i)
-		}
-	}
-	return keep, nil
-}
+const ()
 
 // resolveField picks a field's codec: a built-in named by its tag, then an
 // option for its type, then the built-in default.
-func resolveField[E interface{ meta() BuiltinFieldType }](builtins []E, options map[reflect.Type]E, typ reflect.Type, codec, option string) (E, error) {
+func resolveField[E interface {
+	meta() structmap.BuiltinFieldType
+}](builtins []E, options map[reflect.Type]E, typ reflect.Type, codec, option string) (E, error) {
 	var zero E
-	var candidates []BuiltinFieldType
+	var candidates []structmap.BuiltinFieldType
 	var entries []E
 	for _, b := range builtins {
 		if b.meta().Type == typ {
@@ -601,7 +468,7 @@ func resolveField[E interface{ meta() BuiltinFieldType }](builtins []E, options 
 		}
 	}
 	if codec != "" {
-		if i, ok := SelectBuiltin(candidates, codec); ok {
+		if i, ok := structmap.SelectBuiltin(candidates, codec); ok {
 			return entries[i], nil
 		}
 		if entry, ok := options[typ]; ok {
@@ -612,13 +479,13 @@ func resolveField[E interface{ meta() BuiltinFieldType }](builtins []E, options 
 	if entry, ok := options[typ]; ok {
 		return entry, nil
 	}
-	if i, ok := SelectBuiltin(candidates, ""); ok {
+	if i, ok := structmap.SelectBuiltin(candidates, ""); ok {
 		return entries[i], nil
 	}
 	return zero, fmt.Errorf("no codec for type %s; pass %s or use a supported type", typ, option)
 }
 
-func (f builtinField[P]) meta() BuiltinFieldType { return f.BuiltinFieldType }
+func (f builtinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
 
 // Streaming rows decode with StreamDecoders, which use their own Go types: text
 // and blob columns decode into reusable []byte storage, and there is no string
@@ -627,10 +494,10 @@ func (f builtinField[P]) meta() BuiltinFieldType { return f.BuiltinFieldType }
 
 type streamBuiltinField[P any] struct {
 	column func(name string, offset uintptr) StreamOutputField[P]
-	BuiltinFieldType
+	structmap.BuiltinFieldType
 }
 
-func (f streamBuiltinField[P]) meta() BuiltinFieldType { return f.BuiltinFieldType }
+func (f streamBuiltinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
 
 // streamBuiltinFields returns the built-in streaming field types, each with
 // its Nullable form and, for scalars, its list and set forms.
@@ -664,7 +531,7 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 // (the default), a set (`stream=Set`), or a vector (`stream=Vector`).
 func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool) []streamBuiltinField[P] {
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
-		return streamBuiltinField[P]{column: column, BuiltinFieldType: BuiltinFieldType{
+		return streamBuiltinField[P]{column: column, BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
 		}}
 	}
@@ -685,9 +552,9 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 
 // StreamBuiltinFieldTypes returns the Go field types StreamRowOf maps without
 // configuration. EncoderSrc is empty: streaming only decodes.
-func StreamBuiltinFieldTypes() []BuiltinFieldType {
+func streamBuiltinFieldTypes() []structmap.BuiltinFieldType {
 	fields := streamBuiltinFields[struct{}]()
-	types := make([]BuiltinFieldType, len(fields))
+	types := make([]structmap.BuiltinFieldType, len(fields))
 	for i, f := range fields {
 		types[i] = f.BuiltinFieldType
 	}
@@ -719,7 +586,7 @@ func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 func GeneratedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	fields := structFields[R]{StreamColumns: columns}
 	if fields.StreamColumns == nil {
-		return ReflectStreamRow(opts...)
+		return reflectStreamRow(opts...)
 	}
 	config, err := structOptions(reflect.TypeFor[R](), opts)
 	if err != nil {
@@ -736,7 +603,7 @@ func GeneratedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOpt
 // streaming decoders: every column needs a field, and a field whose column is
 // not selected is reset by its decoder and otherwise left alone. Decoders
 // reuse the storage of []byte and slice fields across rows.
-func ReflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+func reflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	t := reflect.TypeFor[R]()
 	config, err := structOptions(t, opts)
 	if err != nil {
@@ -744,7 +611,7 @@ func ReflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], erro
 	}
 	builtins := streamBuiltinFields[R]()
 	var columns []StreamOutputField[R]
-	err = eachStructField(t, func(sf reflect.StructField, tag FieldTag) error {
+	err = eachStructField(t, func(sf reflect.StructField, tag structmap.FieldTag) error {
 		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "stream.WithCodec")
 		if err == nil {
 			columns = append(columns, entry.column(tag.Column, sf.Offset))

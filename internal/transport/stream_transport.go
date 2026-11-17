@@ -25,6 +25,8 @@ import (
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -41,7 +43,7 @@ type StreamLimits struct {
 
 func InternalCheckedStreamLimits(l StreamLimits) (StreamLimits, error) {
 	if l.MaxMetadataBytes < 0 || l.ReadAheadBytes < 0 || l.DiscardBytes < 0 || l.MaxTransformBytes < 0 {
-		return l, cql.TypeValidation("stream limits", "negative budget")
+		return l, cqltype.TypeValidation("stream limits", "negative budget")
 	}
 	if l.MaxMetadataBytes == 0 {
 		l.MaxMetadataBytes = 1 << 20
@@ -56,7 +58,7 @@ func InternalCheckedStreamLimits(l StreamLimits) (StreamLimits, error) {
 		l.MaxTransformBytes = segment.DefaultUnitStorageBytes
 	}
 	if l.MaxTransformBytes < 16 {
-		return l, cql.TypeValidation("stream limits", "transform budget below framing size")
+		return l, cqltype.TypeValidation("stream limits", "transform budget below framing size")
 	}
 	return l, nil
 }
@@ -144,7 +146,7 @@ func (r *InternalStreamResponse) InternalWorkingStorageBytes() int64 {
 	if r.reservation.InternalMetadataBudget != nil {
 		n += r.reservation.InternalMetadataBudget.Bytes()
 	}
-	n += cql.InternalStreamReaderWorkingStorageBytes(r.InternalReader)
+	n += codec.StreamReaderWorkingStorageBytes(r.InternalReader)
 	if r.reservation.InternalUnits != nil {
 		n += r.reservation.InternalUnits.InternalUnits.StorageBytes()
 	}
@@ -206,7 +208,7 @@ func (r *InternalExclusiveConn) InternalFinishResponse() error {
 }
 func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() error) error {
 	if ctx == nil {
-		return cql.TypeValidation("stream context", "nil context")
+		return cqltype.TypeValidation("stream context", "nil context")
 	}
 	if r.InternalClosing.Load() {
 		if cause := r.cancellationCause(); cause != nil {
@@ -253,7 +255,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *m
 			}
 		}()
 		if request == nil {
-			return cql.TypeValidation("stream request", "nil attempt")
+			return cqltype.TypeValidation("stream request", "nil attempt")
 		}
 		if !r.InternalComplete {
 			return &cql.ProtocolError{Stage: "stream exchange", Err: errors.New("prior response incomplete")}
@@ -276,7 +278,7 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *m
 			}
 		}()
 		for _, e := range request.Payload {
-			if owner := cql.BytesLease(e.Value.Value); e.Value.Valid && !owner.IsZero() {
+			if owner := cqltype.BytesLease(e.Value.Value); e.Value.Valid && !owner.IsZero() {
 				if !owner.Retain() {
 					return cql.ErrReleased
 				}
@@ -398,9 +400,9 @@ func (r *InternalExclusiveConn) InternalExchange(ctx context.Context, request *m
 // a row reader. Full response metadata is never replaced by a newer cache view.
 func (r *InternalStreamResponse) InternalInstallColumns(columns cql.Columns) error {
 	if columns.Len() != r.InternalColumnCount {
-		return cql.TypeValidation("stream columns", "metadata count differs")
+		return cqltype.TypeValidation("stream columns", "metadata count differs")
 	}
-	reader, err := cql.NewStreamRowReader(columns, r.InternalBody)
+	reader, err := codec.NewStreamRowReader(columns, r.InternalBody)
 	if err != nil {
 		return err
 	}
@@ -413,13 +415,13 @@ func (r *InternalStreamResponse) InternalInstallColumns(columns cql.Columns) err
 // requires exact metadata ownership identity and allocates fresh page state.
 func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns cql.Columns, prior *InternalStreamResponse) error {
 	if columns.Len() != r.InternalColumnCount {
-		return cql.TypeValidation("stream columns", "metadata count differs")
+		return cqltype.TypeValidation("stream columns", "metadata count differs")
 	}
 	var previous *cql.StreamRowReader
 	if prior != nil {
 		previous = prior.InternalReader
 	}
-	reader, err := cql.NewStreamRowReaderReusingValidation(columns, r.InternalBody, previous)
+	reader, err := codec.NewStreamRowReaderReusingValidation(columns, r.InternalBody, previous)
 	if err != nil {
 		return err
 	}
@@ -429,11 +431,11 @@ func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns cql.Colum
 }
 func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan cql.StreamRowPlan[R], dst *R) (ok bool, err error) {
 	if response == nil {
-		return false, cql.TypeValidation("stream response", "nil response")
+		return false, cqltype.TypeValidation("stream response", "nil response")
 	}
 	pageCtx := response.InternalCtx
 	if pageCtx == nil {
-		return false, cql.TypeValidation("stream context", "response has no page context")
+		return false, cqltype.TypeValidation("stream context", "response has no page context")
 	}
 	err = response.reservation.InternalWithIO(pageCtx, func() error {
 		if response.InternalTerminal {
@@ -444,10 +446,10 @@ func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan cql.S
 			return nil
 		}
 		if dst == nil {
-			return cql.TypeValidation("destination", "nil stream destination")
+			return cqltype.TypeValidation("destination", "nil stream destination")
 		}
 		if response.InternalReader == nil || plan == nil {
-			return cql.TypeValidation("stream plan", "metadata/plan not installed")
+			return cqltype.TypeValidation("stream plan", "metadata/plan not installed")
 		}
 		if response.InternalIndex == response.InternalRowCount {
 			if err := response.InternalBody.RequireEnd(); err != nil {
@@ -459,7 +461,7 @@ func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan cql.S
 			response.InternalTerminal = true
 			return nil
 		}
-		cql.BeginStreamRow(response.InternalReader)
+		codec.BeginStreamRow(response.InternalReader)
 		plan.Reset(dst)
 		if err := plan.DecodeInto(response.InternalReader, dst); err != nil {
 			return err

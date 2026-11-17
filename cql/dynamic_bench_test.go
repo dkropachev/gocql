@@ -31,14 +31,14 @@ func BenchmarkDynamic(b *testing.B) {
 						values[i] = BlobValue(make([]byte, (1<<20)/n))
 					}
 					columns := NewColumns(cols...)
-					raw := BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 					parts := make([]wire.Span, fragments)
 					for i := range parts {
 						parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
 					}
 					chain := CodecTestMust(wire.NewChain(parts...))
 					plan := CodecTestMust(DynamicRows.Compile(columns))
-					row := CodecTestMust(plan.Decode(NewRowReader(columns, chain, nil)))
+					row := CodecTestMust(plan.Decode(newRowReader(columns, chain, nil)))
 					CodecTestMust(row.At(n - 1))
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -65,7 +65,7 @@ func BenchmarkDynamic(b *testing.B) {
 						values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
 					}
 					columns := NewColumns(cols...)
-					raw := BytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
 					spans := make([]wire.Span, fragments)
 					for i := range spans {
 						spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -77,7 +77,7 @@ func BenchmarkDynamic(b *testing.B) {
 					b.SetBytes(int64(len(raw)))
 					b.ResetTimer()
 					for b.Loop() {
-						reader := NewRowReader(columns, chain, nil)
+						reader := newRowReader(columns, chain, nil)
 						if e := plan.DecodeInto(reader, &dst); e != nil {
 							b.Fatal(e)
 						}
@@ -105,13 +105,13 @@ func BenchmarkDynamic(b *testing.B) {
 				values := []Value{CodecTestMust(TextValue(payload)), CodecTestMust(ASCIIValue(payload))}
 				plan := CodecTestMust(DynamicParams.Compile(columns))
 				builder := wire.NewBuilder(256)
-				w := NewParamWriter(builder, columns, true)
+				w := newParamWriter(builder, columns, true)
 				var storage []byte
 				b.ReportAllocs()
 				b.SetBytes(int64(2 * size))
 				for b.Loop() {
 					builder.BeginOwned(storage)
-					ResetParamWriter(w, builder, columns, true)
+					resetParamWriter(w, builder, columns, true)
 					if err := plan.Encode(w, values); err != nil {
 						b.Fatal(err)
 					}

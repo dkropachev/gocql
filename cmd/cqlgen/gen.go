@@ -23,7 +23,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/scylladb/gocql/v2/cql"
+	// Package cql registers the built-in field types read through link.
+	_ "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/link"
+	"github.com/scylladb/gocql/v2/internal/structmap"
 )
 
 const (
@@ -60,7 +63,7 @@ type genField struct {
 // builtinType is a table entry with its type resolved by go/types.
 type builtinType struct {
 	typ types.Type
-	cql.BuiltinFieldType
+	structmap.BuiltinFieldType
 }
 
 // generator type-checks one package and maps its structs with the table
@@ -280,7 +283,7 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 		scratch.Scope().Insert(types.NewPkgName(token.NoPos, scratch, name, pkg))
 	}
 	g := &generator{fset: fset, info: info, pkg: pkg, files: files, names: map[string]bool{}, imports: map[string]importRef{}}
-	resolve := func(table []cql.BuiltinFieldType) ([]builtinType, error) {
+	resolve := func(table []structmap.BuiltinFieldType) ([]builtinType, error) {
 		out := make([]builtinType, len(table))
 		for i, b := range table {
 			tv, err := types.Eval(token.NewFileSet(), scratch, token.NoPos, b.TypeSrc)
@@ -294,10 +297,10 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 		}
 		return out, nil
 	}
-	if g.builtins, err = resolve(cql.BuiltinFieldTypes()); err != nil {
+	if g.builtins, err = resolve(builtinFieldTypes(false)); err != nil {
 		return nil, err
 	}
-	if g.streams, err = resolve(cql.StreamBuiltinFieldTypes()); err != nil {
+	if g.streams, err = resolve(builtinFieldTypes(true)); err != nil {
 		return nil, err
 	}
 	g.cqlName, g.streamName = "cql", "stream"
@@ -351,11 +354,11 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 	st := g.pkg.Scope().Lookup(s.name).Type().Underlying().(*types.Struct)
 	type found struct {
 		v    *types.Var
-		tag  cql.FieldTag
+		tag  structmap.FieldTag
 		path string
 	}
 	var fields []found
-	var candidates []cql.FieldCandidate
+	var candidates []structmap.FieldCandidate
 	var walk func(st *types.Struct, prefix string, depth int) error
 	walk = func(st *types.Struct, prefix string, depth int) error {
 		for i := range st.NumFields() {
@@ -365,27 +368,27 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 				t := types.Unalias(v.Type())
 				_, pointer := t.(*types.Pointer)
 				inner, isStruct := t.Underlying().(*types.Struct)
-				embed, err := cql.EmbeddedField(v.Name(), tag, pointer, isStruct)
+				embed, err := structmap.EmbeddedField(v.Name(), tag, pointer, isStruct)
 				if err != nil {
 					return fmt.Errorf("%s: %w", s.name, err)
 				}
-				if embed == cql.EmbedSkip {
+				if embed == structmap.EmbedSkip {
 					continue
 				}
-				if embed == cql.EmbedFlatten {
+				if embed == structmap.EmbedFlatten {
 					if err := walk(inner, path+".", depth+1); err != nil {
 						return err
 					}
 					continue
 				}
 			}
-			ft, ok, err := cql.ParseFieldTag(v.Name(), v.Exported(), tag)
+			ft, ok, err := structmap.ParseFieldTag(v.Name(), v.Exported(), tag)
 			if err != nil {
 				return fmt.Errorf("%s: %w", s.name, err)
 			}
 			if ok {
 				fields = append(fields, found{v: v, tag: ft, path: path})
-				candidates = append(candidates, cql.FieldCandidate{Column: ft.Column, Path: path, Depth: depth})
+				candidates = append(candidates, structmap.FieldCandidate{Column: ft.Column, Path: path, Depth: depth})
 			}
 		}
 		return nil
@@ -393,7 +396,7 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 	if err := walk(st, "", 0); err != nil {
 		return nil, false, false, err
 	}
-	keep, err := cql.ResolveFieldConflicts(candidates)
+	keep, err := structmap.ResolveFieldConflicts(candidates)
 	if err != nil {
 		return nil, false, false, fmt.Errorf("%s: %w", s.name, err)
 	}
@@ -516,13 +519,13 @@ func (g *generator) fileOf(pos token.Pos) *ast.File {
 // codec picks a field's codec source from table: a built-in named by the tag,
 // else the tag's own Go expression, else the type's built-in default.
 func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, tag, key string) (enc, dec string, found bool, err error) {
-	var candidates []cql.BuiltinFieldType
+	var candidates []structmap.BuiltinFieldType
 	for _, b := range table {
 		if types.Identical(types.Unalias(typ), b.typ) {
 			candidates = append(candidates, b.BuiltinFieldType)
 		}
 	}
-	if i, ok := cql.SelectBuiltin(candidates, tag); ok {
+	if i, ok := structmap.SelectBuiltin(candidates, tag); ok {
 		return g.qualify(candidates[i].EncoderSrc), g.qualify(candidates[i].DecoderSrc), true, nil
 	}
 	if tag == "" {
@@ -626,4 +629,10 @@ func writeFieldsMethods(b *bytes.Buffer, typeName, cql, stream string, fields []
 		}
 		b.WriteString("\t}\n}\n")
 	}
+}
+
+// builtinFieldTypes returns the field types package cql maps without
+// configuration, for RowOf or, with stream, for stream.RowOf.
+func builtinFieldTypes(stream bool) []structmap.BuiltinFieldType {
+	return link.Get[func(bool) []structmap.BuiltinFieldType](link.BuiltinFieldTypes)(stream)
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -861,7 +862,7 @@ func TestQuery(t *testing.T) {
 		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
 		prepared := preparedBody([]byte("loopback"), key, value, 0)
 		if workload == "pwrite" {
-			prepared = preparedBody([]byte("loopback"), cql.NewColumns(append(cql.ColumnSlice(key), cql.ColumnSlice(value)...)...), cql.NewColumns(), 0)
+			prepared = preparedBody([]byte("loopback"), cql.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), cql.NewColumns(), 0)
 		}
 		listener, err := net.Listen("tcp", "127.0.0.1:0")
 		if err != nil {

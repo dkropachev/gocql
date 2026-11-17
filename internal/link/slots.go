@@ -13,3 +13,67 @@ var (
 	// ProfileFromEngine holds func(settings.Profile) config.Profile.
 	ProfileFromEngine = NewSlot("config.Profile.fromEngine")
 )
+
+// Package cql's codec runtime, which the engine drives. Each comment names the
+// function type, with cql's types.
+var (
+	// NewParamWriter holds func(*wire.Builder, cql.Columns, bool) *cql.ParamWriter.
+	NewParamWriter = NewSlot("cql.newParamWriter")
+	// ResetParamWriter holds func(*cql.ParamWriter, *wire.Builder, cql.Columns, bool).
+	ResetParamWriter = NewSlot("cql.resetParamWriter")
+	// FinishParamWriter holds func(*cql.ParamWriter) error.
+	FinishParamWriter = NewSlot("cql.finishParamWriter")
+	// CaptureParamCells holds func(*cql.ParamWriter, unsafe.Pointer, int): the
+	// pointer is the first element of n cells laid out as ParamCellType.
+	CaptureParamCells = NewSlot("cql.captureParamCells")
+	// ParamCellType holds func() reflect.Type, the type CaptureParamCells writes.
+	ParamCellType = NewSlot("cql.paramCellType")
+	// SetParamOwnership holds func(*cql.ParamWriter, bool).
+	SetParamOwnership = NewSlot("cql.setParamOwnership")
+	// ReadValue holds func(*wire.Cursor, cql.DataType, *wire.Lease, bool) (cql.ValueReader, error).
+	ReadValue = NewSlot("cql.readValue")
+	// NewValueReader holds func(cql.DataType, cql.CellState, wire.Chain, *wire.Lease) cql.ValueReader.
+	NewValueReader = NewSlot("cql.newValueReader")
+	// RowReaderFromCursor holds func(cql.Columns, *wire.Cursor, *wire.Lease) cql.RowReader.
+	RowReaderFromCursor = NewSlot("cql.rowReaderFromCursor")
+	// NewRowReader holds func(cql.Columns, wire.Chain, *wire.Lease) *cql.RowReader.
+	NewRowReader = NewSlot("cql.newRowReader")
+	// FinishRowReader holds func(*cql.RowReader) error.
+	FinishRowReader = NewSlot("cql.finishRowReader")
+	// BeginStreamRow holds func(*cql.StreamRowReader).
+	BeginStreamRow = NewSlot("cql.beginStreamRow")
+	// NewStreamRowReader holds func(cql.Columns, *wire.Stream, *cql.StreamRowReader) (*cql.StreamRowReader, error);
+	// a nil prior validates the columns afresh.
+	NewStreamRowReader = NewSlot("cql.newStreamRowReader")
+	// StreamReaderStorageBytes holds func(*cql.StreamRowReader) int64.
+	StreamReaderStorageBytes = NewSlot("cql.streamReaderStorageBytes")
+	// DetachRow holds func(plan any, dst unsafe.Pointer) bool: it detaches the
+	// row at dst when plan is a built-in plan, and reports whether it did.
+	DetachRow = NewSlot("cql.detachRow")
+	// ManagesRowDestination holds func(plan any) bool.
+	ManagesRowDestination = NewSlot("cql.managesRowDestination")
+	// PreservesRowDestination holds func(plan any) bool.
+	PreservesRowDestination = NewSlot("cql.preservesRowDestination")
+)
+
+// Package cql's Result, which the engine fills in. The functions take and
+// return Results by value, so no Result escapes through the indirect call.
+var (
+	// CloneResult holds func(cql.Result) cql.Result.
+	CloneResult = NewSlot("cql.cloneResult")
+	// MergeResult holds func(dst, src cql.Result) cql.Result.
+	MergeResult = NewSlot("cql.mergeResult")
+	// ResultAddWarnings holds func(cql.Result, []string) cql.Result.
+	ResultAddWarnings = NewSlot("cql.Result.addWarnings")
+	// ResultAddCQLTrace holds func(cql.Result, cql.CQLTraceRef) cql.Result.
+	ResultAddCQLTrace = NewSlot("cql.Result.addCQLTrace")
+	// ResultAddCustomPayload holds func(cql.Result, cql.PayloadEntry) cql.Result.
+	ResultAddCustomPayload = NewSlot("cql.Result.addCustomPayload")
+	// ResultSetDiagnostics holds func(cql.Result, []string, []cql.CQLTraceRef, []cql.PayloadEntry) cql.Result.
+	ResultSetDiagnostics = NewSlot("cql.Result.setDiagnostics")
+)
+
+// BuiltinFieldTypes holds func(stream bool) []structmap.BuiltinFieldType: the
+// Go field types package cql maps without configuration, for RowOf and
+// ParamsOf, or for stream.RowOf. cmd/cqlgen reads it.
+var BuiltinFieldTypes = NewSlot("cql.builtinFieldTypes")

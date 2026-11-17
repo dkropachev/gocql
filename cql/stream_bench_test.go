@@ -36,7 +36,7 @@ func BenchmarkStream(b *testing.B) {
 				source := &streamRepeatSource{cell: data}
 				const batch = 32
 				first := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))
-				reader := CodecTestMust(NewStreamRowReader(cols, first))
+				reader := CodecTestMust(newStreamRowReader(cols, first))
 				dst := make([]byte, 0, size)
 				// Warm all reusable scopes before measuring per-page/per-row work.
 				for i := 0; i < batch; i++ {
@@ -80,7 +80,7 @@ func BenchmarkStream(b *testing.B) {
 				const batch = 32
 				dst := make([]int32, 0, count)
 				first := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))
-				reader := CodecTestMust(NewStreamRowReader(cols, first))
+				reader := CodecTestMust(newStreamRowReader(cols, first))
 				for i := 0; i < batch; i++ {
 					reader.index = 0
 					plan.Reset(&dst)

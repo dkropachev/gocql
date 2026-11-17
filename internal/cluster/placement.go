@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -160,7 +161,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)
 		}
-		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cql.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
+		routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, cqltype.TypeValidation("tablet placement", "feedback queue saturated; mappings invalidated"))
 		for _, k := range known {
 			if _, _, err := routing.InternalMetadataSnapshotLookupRanges(old, k.InternalKeyspace, k.InternalTable); err == nil && routing.SnapshotData(next).InternalPlacements.Get(k) == nil {
 				routing.SnapshotData(next).InternalPlacements = routing.SnapshotData(next).InternalPlacements.Put(k, routing.InternalTabletPlacement{InternalIdentity: routing.InternalMetadataSnapshotTableIdentity(old, k)})

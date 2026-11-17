@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implPaging "github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -46,8 +47,8 @@ func TestPaging(t *testing.T) {
 			entry := h.InternalEntries
 			found := false
 			for _, v := range entry {
-				if bytes.Equal(cql.PageToken(v.InternalState), cql.PageToken(a)) {
-					found = &cql.PageToken(v.InternalState)[0] == &cql.PageToken(a)[0]
+				if bytes.Equal(cqltype.PageToken(v.InternalState), cqltype.PageToken(a)) {
+					found = &cqltype.PageToken(v.InternalState)[0] == &cqltype.PageToken(a)[0]
 				}
 			}
 			if !found {
@@ -70,7 +71,7 @@ func TestPaging(t *testing.T) {
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 8}
 			_ = h.InternalAdd(b)
 			h.InternalSpill()
-			hash := maphash.Bytes(h.InternalSeed, cql.PageToken(b))
+			hash := maphash.Bytes(h.InternalSeed, cqltype.PageToken(b))
 			h.InternalEntries[hash] = implPaging.InternalPagingHistoryEntry{InternalState: a}
 			h.InternalCount = 1
 			h.InternalBytes = 1
@@ -108,7 +109,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal(h.InternalCount, h.InternalBytes)
 			}
 			for _, held := range inline {
-				if cql.PageToken(held) != nil {
+				if cqltype.PageToken(held) != nil {
 					t.Fatal("spilled history kept an inline token")
 				}
 			}
@@ -135,7 +136,7 @@ func TestPaging(t *testing.T) {
 			h = implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000, InternalInline: inline}
 			_ = h.InternalAdd(token(0))
 			h.InternalClear()
-			if h.InternalCount != 0 || h.InternalEntries != nil || cql.PageToken(inline[0]) != nil || h.InternalAdd(token(0)) != nil {
+			if h.InternalCount != 0 || h.InternalEntries != nil || cqltype.PageToken(inline[0]) != nil || h.InternalAdd(token(0)) != nil {
 				t.Fatal("clear")
 			}
 			// Without inline storage every token goes to the map.
@@ -158,7 +159,7 @@ func TestPaging(t *testing.T) {
 			if c.Validate() == nil {
 				t.Fatal("negative byte budget")
 			}
-			if _, err := RunPage[cql.EmptyRow](nil, nil, nil, cql.CompletePageState(), 0, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
+			if _, err := RunPage[cql.EmptyRow](nil, nil, nil, cqltype.CompletePageState(), 0, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrPagingComplete) {
 				t.Fatal("complete admitted", err)
 			}
 		})

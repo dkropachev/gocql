@@ -118,7 +118,7 @@ func classifiedLeaves() []error {
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
 		&cql.CodecError{Stage: "decode", Err: errors.New("bad")},
 		&cql.ProtocolError{Stage: "rows", Err: errors.New("bad")},
-		cql.NewFrameError("unknown opcode"),
+		cqltype.NewFrameError("unknown opcode"),
 		&SchemaChangedError{Statement: "s"},
 		&UnsupportedSettingError{Setting: "s", Reason: "r"},
 		&ServerMismatchError{Want: "ScyllaDB", Got: "Cassandra"},

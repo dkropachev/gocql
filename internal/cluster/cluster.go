@@ -37,6 +37,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -488,47 +489,47 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Authenticator != nil && cfg.AuthProvider != nil {
-		return cql.TypeValidation("Authenticator", "cannot be combined with AuthProvider")
+		return cqltype.TypeValidation("Authenticator", "cannot be combined with AuthProvider")
 	}
 
 	if cfg.InitialReconnectionPolicy == nil {
-		return cql.TypeValidation("InitialReconnectionPolicy", "is nil")
+		return cqltype.TypeValidation("InitialReconnectionPolicy", "is nil")
 	}
 
 	if cfg.InitialReconnectionPolicy.GetMaxRetries() <= 0 {
-		return cql.TypeValidation("InitialReconnectionPolicy", "GetMaxRetries must return a positive number")
+		return cqltype.TypeValidation("InitialReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.ReconnectionPolicy == nil {
-		return cql.TypeValidation("ReconnectionPolicy", "is nil")
+		return cqltype.TypeValidation("ReconnectionPolicy", "is nil")
 	}
 
 	if cfg.ReconnectionPolicy.GetMaxRetries() <= 0 {
-		return cql.TypeValidation("ReconnectionPolicy", "GetMaxRetries must return a positive number")
+		return cqltype.TypeValidation("ReconnectionPolicy", "GetMaxRetries must return a positive number")
 	}
 
 	if cfg.PageSize < 0 {
-		return cql.TypeValidation("PageSize", "must not be negative")
+		return cqltype.TypeValidation("PageSize", "must not be negative")
 	}
 
 	if cfg.MaxRoutingKeyInfo < 0 {
-		return cql.TypeValidation("MaxRoutingKeyInfo", "must not be negative")
+		return cqltype.TypeValidation("MaxRoutingKeyInfo", "must not be negative")
 	}
 
 	if cfg.MaxPreparedStmts < 0 {
-		return cql.TypeValidation("MaxPreparedStmts", "must not be negative")
+		return cqltype.TypeValidation("MaxPreparedStmts", "must not be negative")
 	}
 
 	if cfg.SocketKeepalive < 0 {
-		return cql.TypeValidation("SocketKeepalive", "must not be negative")
+		return cqltype.TypeValidation("SocketKeepalive", "must not be negative")
 	}
 
 	if cfg.MaxRequestsPerConn < 0 || cfg.MaxRequestsPerConn > 32768 {
-		return cql.TypeValidation("MaxRequestsPerConn", "must be between 0 and 32768")
+		return cqltype.TypeValidation("MaxRequestsPerConn", "must be between 0 and 32768")
 	}
 
 	if cfg.NumConns < 0 {
-		return cql.TypeValidation("NumConns", "must not be negative")
+		return cqltype.TypeValidation("NumConns", "must not be negative")
 	}
 
 	// Resolve cfg.Port: when the user has not set it explicitly (Port == 0),
@@ -556,43 +557,43 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.Port <= 0 || cfg.Port > 65535 {
-		return cql.TypeValidation("Port", "must be between 1 and 65535")
+		return cqltype.TypeValidation("Port", "must be between 1 and 65535")
 	}
 
 	if cfg.WriteTimeout < 0 {
-		return cql.TypeValidation("WriteTimeout", "must not be negative")
+		return cqltype.TypeValidation("WriteTimeout", "must not be negative")
 	}
 
 	if cfg.Timeout < 0 {
-		return cql.TypeValidation("Timeout", "must not be negative")
+		return cqltype.TypeValidation("Timeout", "must not be negative")
 	}
 
 	if cfg.ConnectTimeout < 0 {
-		return cql.TypeValidation("ConnectTimeout", "must not be negative")
+		return cqltype.TypeValidation("ConnectTimeout", "must not be negative")
 	}
 
 	if cfg.ReadTimeout < 0 {
-		return cql.TypeValidation("ReadTimeout", "must not be negative")
+		return cqltype.TypeValidation("ReadTimeout", "must not be negative")
 	}
 
 	if cfg.MetadataSchemaRequestTimeout < 0 {
-		return cql.TypeValidation("MetadataSchemaRequestTimeout", "must not be negative")
+		return cqltype.TypeValidation("MetadataSchemaRequestTimeout", "must not be negative")
 	}
 
 	if cfg.WriteCoalesceWaitTime < 0 {
-		return cql.TypeValidation("WriteCoalesceWaitTime", "must not be negative")
+		return cqltype.TypeValidation("WriteCoalesceWaitTime", "must not be negative")
 	}
 
 	if cfg.ReconnectInterval < 0 {
-		return cql.TypeValidation("ReconnectInterval", "must not be negative")
+		return cqltype.TypeValidation("ReconnectInterval", "must not be negative")
 	}
 
 	if cfg.MaxWaitSchemaAgreement < 0 {
-		return cql.TypeValidation("MaxWaitSchemaAgreement", "must not be negative")
+		return cqltype.TypeValidation("MaxWaitSchemaAgreement", "must not be negative")
 	}
 
 	if cfg.ProtoVersion != protocol.ProtoVersion4 && cfg.ProtoVersion != protocol.ProtoVersion5 {
-		return cql.TypeValidation("ProtoVersion", "supported versions are 4 and 5")
+		return cqltype.TypeValidation("ProtoVersion", "supported versions are 4 and 5")
 	}
 
 	if cfg.ProtoVersion >= protocol.ProtoVersion5 && cfg.Compressor != nil {
@@ -608,7 +609,7 @@ func (cfg *InternalClusterSettings) Validate() error {
 		// The built-in SnappyCompressor deliberately does not; LZ4Compressor does.
 		// A nil compressor (no compression) is always allowed on v5.
 		if _, ok := cfg.Compressor.(protocol.SegmentCompressor); !ok {
-			return cql.TypeValidation("Compressor", "%q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
+			return cqltype.TypeValidation("Compressor", "%q does not support protocol v5 segment framing; use LZ4Compressor or no compression with ProtoVersion >= 5", cfg.Compressor.Name())
 		}
 	}
 
@@ -624,20 +625,20 @@ func (cfg *InternalClusterSettings) Validate() error {
 	}
 
 	if cfg.SerialConsistency > 0 && !cfg.SerialConsistency.IsSerial() {
-		return cql.TypeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", cfg.SerialConsistency)
+		return cqltype.TypeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", cfg.SerialConsistency)
 	}
 
 	if cfg.DNSResolver == nil {
-		return cql.TypeValidation("DNSResolver", "is nil")
+		return cqltype.TypeValidation("DNSResolver", "is nil")
 	}
 
 	if cfg.MaxExcessShardConnectionsRate < 0 {
-		return cql.TypeValidation("MaxExcessShardConnectionsRate", "must not be negative")
+		return cqltype.TypeValidation("MaxExcessShardConnectionsRate", "must not be negative")
 	}
 
 	if cfg.ClientRoutesConfig != nil {
 		if cfg.AddressTranslator != nil {
-			return cql.TypeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
+			return cqltype.TypeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
 		}
 		if err := cfg.ClientRoutesConfig.Validate(); err != nil {
 			return &cql.ValidationError{Field: "ClientRoutesConfig", Err: err}

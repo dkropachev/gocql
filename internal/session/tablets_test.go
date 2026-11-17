@@ -28,6 +28,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -142,7 +143,7 @@ func TestTablets(t *testing.T) {
 				raw := testPayload(h)
 				for split := 0; split <= len(raw); split++ {
 					chain := typedTestChain(t, raw[:split], raw[split:])
-					parsed, err := transport.InternalParseTypedTabletPayload(cql.BytesView(chain, wire.Ref{}), "ks", "table", v2)
+					parsed, err := transport.InternalParseTypedTabletPayload(cqltype.BytesView(chain, wire.Ref{}), "ks", "table", v2)
 					if err != nil || !(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}).SameTabletObservation(parsed) {
 						t.Fatalf("v2=%t split=%d: %v", v2, split, err)
 					}
@@ -166,7 +167,7 @@ func TestTablets(t *testing.T) {
 						bad := append([]byte(nil), raw...)
 						bad[offset] = v
 						got, gotErr := transport.InternalParseTypedTabletPayload(cql.BorrowBytes(bad), "ks", "table", v2)
-						want, wantErr := transport.InternalParseTypedTabletPayload(cql.BytesView(typedTestChain(t, bad[:1], bad[1:]), wire.Ref{}), "ks", "table", v2)
+						want, wantErr := transport.InternalParseTypedTabletPayload(cqltype.BytesView(typedTestChain(t, bad[:1], bad[1:]), wire.Ref{}), "ks", "table", v2)
 						if fmt.Sprint(gotErr) != fmt.Sprint(wantErr) || !reflect.DeepEqual(got, want) {
 							t.Fatalf("v2=%t offset=%d value=%#x: contiguous %v %v, split %v %v", v2, offset, v, got, gotErr, want, wantErr)
 						}

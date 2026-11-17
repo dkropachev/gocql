@@ -50,7 +50,7 @@ func (c byteSliceCodec) Decode(r ValueReader) ([]byte, error) {
 }
 func (c byteSliceCodec) DecodeInto(r ValueReader, dst *[]byte) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil blob destination")
+		return typeValidation("destination", "nil blob destination")
 	}
 	if err := checkScalarType(r.Type(), TypeBlob, 0); err != nil {
 		return err

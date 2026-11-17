@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // casTally is what a CASBatchRows has learned from the rows read so far. A
@@ -76,7 +77,7 @@ func (r CASBatchRows[X]) NextInto(dst *cql.CASResult[X]) bool {
 // handle is stale, and for the zero CASBatchRows.
 func (r CASBatchRows[X]) Applied() (bool, error) {
 	if r.tally == nil {
-		return false, cql.TypeValidation("CASBatchRows", "zero rows handle")
+		return false, cqltype.TypeValidation("CASBatchRows", "zero rows handle")
 	}
 	if !r.rows.stale() && !r.tally.done && !r.tally.closed {
 		for r.NextInto(&r.tally.scratch) {
@@ -89,10 +90,10 @@ func (r CASBatchRows[X]) Applied() (bool, error) {
 		return false, err
 	}
 	if !r.tally.done {
-		return false, cql.TypeValidation("CASBatchRows", "rows closed before Applied read them")
+		return false, cqltype.TypeValidation("CASBatchRows", "rows closed before Applied read them")
 	}
 	if !r.tally.rows {
-		return false, cql.TypeValidation("CASBatchRows", "conditional batch returned no rows")
+		return false, cqltype.TypeValidation("CASBatchRows", "conditional batch returned no rows")
 	}
 	return !r.tally.notApplied, nil
 }
@@ -129,10 +130,10 @@ func (r CASBatchRows[X]) Info() cql.Result { return r.rows.Info() }
 // has no [applied] column.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options CompiledOptions) (CASBatchRows[X], error) {
 	if s == nil {
-		return CASBatchRows[X]{}, cql.TypeValidation("session", "nil session")
+		return CASBatchRows[X]{}, cqltype.TypeValidation("session", "nil session")
 	}
 	if decoder == nil {
-		return CASBatchRows[X]{}, cql.TypeValidation("batch rows", "nil decoder")
+		return CASBatchRows[X]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	core := s.Core()
 	if err := validateBatch(core, batch); err != nil {
@@ -142,7 +143,7 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 	// [applied] to report: reject it before sending, as ExecBatch rejects a
 	// conditional one.
 	if batch.routing.Kind == cql.OrdinaryStatement {
-		return CASBatchRows[X]{}, cql.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch")
+		return CASBatchRows[X]{}, cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch")
 	}
 	r, rows, err := sendBatchRows(ctx, core, batch, decoder, options)
 	if err != nil {

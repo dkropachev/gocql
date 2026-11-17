@@ -13,17 +13,16 @@ import (
 // IntType returns the same descriptor for a kind, so writing through
 // DescriptorOf changes that type process-wide. Build a private descriptor with
 // TypeFromDescriptor instead.
-func DescriptorOf(t DataType) *DataTypeDescriptor { return t.descriptor }
-func TypeFromDescriptor(d *DataTypeDescriptor) DataType {
+func descriptorOf(t DataType) *dataTypeDescriptor { return t.descriptor }
+func typeFromDescriptor(d *dataTypeDescriptor) DataType {
 	return DataType{descriptor: d}
 }
-func ColumnSlice(c Columns) []ColumnSpec               { return c.columns }
-func ColumnsOwned(c []ColumnSpec) Columns              { return Columns{columns: c} }
-func BytesChain(b Bytes) wire.Chain                    { return b.chain }
-func BytesLease(b Bytes) wire.Ref                      { return b.lease }
-func BytesView(c wire.Chain, l wire.Ref) Bytes         { return Bytes{chain: c, lease: l} }
-func TextView(b Bytes) Text                            { return Text{bytes: b} }
-func TextBytes(t Text) Bytes                           { return t.bytes }
-func CheckBytesAlive(b Bytes) error                    { return b.checkAlive() }
-func EachBytes(b Bytes, f func(wire.Span) error) error { return b.each(f) }
-func Fingerprint(t DataType) string                    { return t.fingerprint() }
+func columnSlice(c Columns) []ColumnSpec               { return c.columns }
+func bytesChain(b Bytes) wire.Chain                    { return b.chain }
+func bytesLease(b Bytes) wire.Ref                      { return b.lease }
+func bytesView(c wire.Chain, l wire.Ref) Bytes         { return Bytes{chain: c, lease: l} }
+func textView(b Bytes) Text                            { return Text{bytes: b} }
+func textBytes(t Text) Bytes                           { return t.bytes }
+func checkBytesAlive(b Bytes) error                    { return b.checkAlive() }
+func eachBytes(b Bytes, f func(wire.Span) error) error { return b.each(f) }
+func typeFingerprint(t DataType) string                { return t.fingerprint() }

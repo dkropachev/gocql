@@ -18,7 +18,7 @@ func leasedView(t *testing.T, data string) (Bytes, *wire.Lease) {
 		t.Fatal(err)
 	}
 	l := wire.NewLease(c, nil)
-	return BytesView(c, wire.RefOf(l)), l
+	return bytesView(c, wire.RefOf(l)), l
 }
 
 func TestViewCopyLive(t *testing.T) {
@@ -28,11 +28,11 @@ func TestViewCopyLive(t *testing.T) {
 	if err != nil || string(got) != "hello" {
 		t.Fatalf("Bytes.Copy = %q, %v", got, err)
 	}
-	s, err := TextView(b).Copy()
+	s, err := textView(b).Copy()
 	if err != nil || s != "hello" {
 		t.Fatalf("Text.Copy = %q, %v", s, err)
 	}
-	if s := TextView(b).String(); s != "hello" {
+	if s := textView(b).String(); s != "hello" {
 		t.Fatalf("Text.String = %q", s)
 	}
 }
@@ -50,11 +50,11 @@ func TestViewCopyExpired(t *testing.T) {
 	if got, err := b.Copy(); !errors.Is(err, ErrReleased) || got != nil {
 		t.Fatalf("Bytes.Copy = %q, %v; want ErrReleased", got, err)
 	}
-	if s, err := TextView(b).Copy(); !errors.Is(err, ErrReleased) || s != "" {
+	if s, err := textView(b).Copy(); !errors.Is(err, ErrReleased) || s != "" {
 		t.Fatalf("Text.Copy = %q, %v; want ErrReleased", s, err)
 	}
 	for name, f := range map[string]func(){
-		"Text.String":      func() { _ = TextView(b).String() },
+		"Text.String":      func() { _ = textView(b).String() },
 		"Bytes.OwnedBytes": func() { _ = b.OwnedBytes() },
 		"Bytes.Clone":      func() { _ = b.Clone() },
 	} {

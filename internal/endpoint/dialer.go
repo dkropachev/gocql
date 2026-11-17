@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -61,7 +62,7 @@ func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.
 	n := net.Dialer{Timeout: d.ConnectTimeout, KeepAlive: keepalive}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
-			return nil, cql.TypeValidation("local address", "source selection requires TCP")
+			return nil, cqltype.TypeValidation("local address", "source selection requires TCP")
 		}
 		n.LocalAddr = net.TCPAddrFromAddrPort(target.LocalAddress)
 	}

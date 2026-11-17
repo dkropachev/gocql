@@ -26,7 +26,7 @@ func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
 	first, ok := columns.At(0)
 	if !ok || first.Name != "[applied]" {
-		return nil, TypeValidation("CAS result", "first column must be [applied]")
+		return nil, typeValidation("CAS result", "first column must be [applied]")
 	}
 	if err := BoolCodec.CheckType(first.Type); err != nil {
 		return nil, err
@@ -38,14 +38,14 @@ func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
 	p := casRowPlan[R]{columns: previous}
 	if previous.Len() > 0 {
 		if c.decoder == nil {
-			return nil, TypeValidation("CAS result", "nil previous-value decoder")
+			return nil, typeValidation("CAS result", "nil previous-value decoder")
 		}
 		// The previous row's columns differ between Cassandra and ScyllaDB
 		// and between outcomes, so a field-mapped decoder compiles leniently.
 		if lenient, ok := c.decoder.(lenientRowDecoder[R]); ok {
 			p.previous, err = lenient.compileLenient(previous)
 		} else {
-			p.previous, err = CompileRowPlan(c.decoder, previous)
+			p.previous, err = compileRowPlan(c.decoder, previous)
 		}
 		if err != nil {
 			return nil, err
@@ -63,7 +63,7 @@ func (p casRowPlan[R]) Decode(reader *RowReader) (CASResult[R], error) {
 }
 func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	if dst == nil {
-		return TypeValidation("destination", "nil CAS destination")
+		return typeValidation("destination", "nil CAS destination")
 	}
 	*dst = CASResult[R]{}
 	if err := readColumnInto(reader, BoolCodec, &dst.Applied); err != nil {
@@ -79,7 +79,7 @@ func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	reader.columns, reader.index = p.columns, 0
 	err := p.previous.DecodeInto(reader, &dst.Previous.Value)
 	if err == nil {
-		err = FinishRowReader(reader)
+		err = finishRowReader(reader)
 	}
 	reader.columns, reader.index = columns, index
 	if err != nil {

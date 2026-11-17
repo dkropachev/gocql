@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -113,9 +114,9 @@ type capturedPartitioner struct {
 func (p *capturedPartitioner) Token(key implRouting.PartitionKey) (int64, error) {
 	p.calls++
 	err := key.ForEach(func(b cql.Bytes) error {
-		return cql.EachBytes(b, func(s wire.Span) error {
+		return cqltype.EachBytes(b, func(s wire.Span) error {
 			if len(s.Bytes()) != len(p.expected) || len(p.expected) > 0 && &s.Bytes()[0] != &p.expected[0] {
-				return cql.TypeValidation("partitioner", "payload was reencoded or copied")
+				return cqltype.TypeValidation("partitioner", "payload was reencoded or copied")
 			}
 			return nil
 		})

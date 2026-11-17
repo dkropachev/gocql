@@ -143,7 +143,7 @@ func (o *inputOwner) InternalClose() {
 func (o *inputOwner) InternalWait(ctx context.Context) error {
 	done := o.done
 	if !o.closed() {
-		return cql.TypeValidation("binding", "Wait requires Close first")
+		return cqltype.TypeValidation("binding", "Wait requires Close first")
 	}
 	select {
 	case <-done:

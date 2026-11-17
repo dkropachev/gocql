@@ -40,11 +40,11 @@ func TestDetachRow(t *testing.T) {
 		).Compile(columns))
 		dst := row{Owned: make([]byte, 0, 64), Nested: make([]Text, 1)}
 		ownedBacking, nestedBacking := &dst.Owned[:cap(dst.Owned)][0], &dst.Nested[0]
-		if err := plan.DecodeInto(NewRowReader(columns, body, lease), &dst); err != nil {
+		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
 		borrowed := dst.View
-		DetachRow(plan, &dst)
+		detachRowFor(plan, &dst)
 		lease.Release()
 		if string(dst.View.OwnedBytes()) != "view" || string(dst.Owned) != "owned" || dst.Nested[0].String() != "nested" {
 			t.Fatalf("detached row: %+v", dst)
@@ -65,10 +65,10 @@ func TestDetachRow(t *testing.T) {
 		calls := 0
 		plan := cloneCountingPlan{RowPlan: base, calls: &calls}
 		var dst Bytes
-		if err := plan.DecodeInto(NewRowReader(columns, body, lease), &dst); err != nil {
+		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		DetachRow[Bytes](plan, &dst)
+		detachRowFor[Bytes](plan, &dst)
 		lease.Release()
 		if calls != 1 || string(dst.OwnedBytes()) != "custom" {
 			t.Fatalf("clone calls %d, value %q", calls, dst.OwnedBytes())
@@ -82,10 +82,10 @@ func TestDetachRow(t *testing.T) {
 		defer lease.Release()
 		plan := CodecTestMust(OneColumn(VarintCodec).Compile(columns))
 		var dst Varint
-		if err := plan.DecodeInto(NewRowReader(columns, body, lease), &dst); err != nil {
+		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		DetachRow(plan, &dst)
+		detachRowFor(plan, &dst)
 		lease.Release()
 		if dst.BigInt().Int64() != 42 {
 			t.Fatal("varint expired")
@@ -99,10 +99,10 @@ func TestDetachRow(t *testing.T) {
 		defer lease.Release()
 		plan := CodecTestMust(DynamicRows.Compile(columns))
 		var dst DynamicRow
-		if err := plan.DecodeInto(NewRowReader(columns, body, lease), &dst); err != nil {
+		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		DetachRow(plan, &dst)
+		detachRowFor(plan, &dst)
 		lease.Release()
 		value, err := dst.Get("v")
 		if err != nil {
@@ -152,10 +152,10 @@ func TestDetachNestedValues(t *testing.T) {
 	defer lease.Release()
 	plan := CodecTestMust(decoder.Compile(columns))
 	var dst row
-	if err := plan.DecodeInto(NewRowReader(columns, body, lease), &dst); err != nil {
+	if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 		t.Fatal(err)
 	}
-	DetachRow(plan, &dst)
+	detachRowFor(plan, &dst)
 	lease.Release()
 	if !dst.Name.Valid || dst.Name.Value.String() != "name" || dst.Amount.Unscaled.BigInt().Int64() != 42 || dst.Amount.Scale != 2 ||
 		dst.Mapping[0].Key.String() != "name" || string(dst.Mapping[0].Value.OwnedBytes()) != "payload" ||

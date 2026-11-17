@@ -55,8 +55,8 @@ func TestCodecPerf(t *testing.T) {
 								t.Fatal(err)
 							}
 						}
-						EachBytes(view, func(s wire.Span) error {
-							body := BytesChain(encoded.body)
+						eachBytes(view, func(s wire.Span) error {
+							body := bytesChain(encoded.body)
 							same := false
 							body.Each(func(p wire.Span) error {
 								if len(s.Bytes()) > 0 && len(p.Bytes()) > 0 && &s.Bytes()[0] == &p.Bytes()[0] {
@@ -70,7 +70,7 @@ func TestCodecPerf(t *testing.T) {
 							return nil
 						})
 						if !text && size > 0 {
-							EachBytes(view, func(s wire.Span) error {
+							eachBytes(view, func(s wire.Span) error {
 								if &s.Bytes()[0] != &data[0] {
 									t.Fatal("bind payload copied")
 								}
@@ -121,7 +121,7 @@ func TestCodecPerf(t *testing.T) {
 		var dst result
 		ResetPerfCounters()
 		for page := 0; page < 10000; page++ {
-			if e := plan.DecodeInto(NewRowReader(cols, body, lease), &dst); e != nil {
+			if e := plan.DecodeInto(newRowReader(cols, body, lease), &dst); e != nil {
 				t.Fatal(e)
 			}
 			if len(dst.List) != 1 || dst.List[0] != 7 {
@@ -136,11 +136,11 @@ func TestCodecPerf(t *testing.T) {
 		t.Log("10000 compiled scalar/text/blob/container/nullable/empty/dynamic rows Compile=0 CheckType=0 name_maps=0")
 		changed := NewColumns(ColumnSpec{Name: "n", Type: text})
 		direct := CodecTestMust(OneColumn(Int32Codec).Compile(NewColumns(ColumnSpec{Name: "n", Type: integer})))
-		if _, e := direct.Decode(NewRowReader(changed, CodecTestMust(wire.NewChain(wire.Borrow([]byte{0, 0, 0, 4, 0, 0, 0, 3}))), nil)); e == nil {
+		if _, e := direct.Decode(newRowReader(changed, CodecTestMust(wire.NewChain(wire.Borrow([]byte{0, 0, 0, 4, 0, 0, 0, 3}))), nil)); e == nil {
 			t.Fatal("mismatched reader accepted")
 		}
 		lease.Release()
-		if e := plan.DecodeInto(NewRowReader(cols, body, lease), &dst); !errors.Is(e, ErrReleased) {
+		if e := plan.DecodeInto(newRowReader(cols, body, lease), &dst); !errors.Is(e, ErrReleased) {
 			t.Fatal("expired compiled reader", e)
 		}
 	})
@@ -157,14 +157,14 @@ func TestCodecPerf(t *testing.T) {
 							values[i] = BlobValue(make([]byte, (1<<20)/n))
 						}
 						cols := NewColumns(specs...)
-						raw := BytesView(dynamicTestRowBody(t, cols, values), wire.Ref{}).OwnedBytes()
+						raw := bytesView(dynamicTestRowBody(t, cols, values), wire.Ref{}).OwnedBytes()
 						spans := make([]wire.Span, fragments)
 						for i := range spans {
 							spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
 						}
 						chain := CodecTestMust(wire.NewChain(spans...))
 						plan := CodecTestMust(DynamicRows.Compile(cols))
-						row := CodecTestMust(plan.Decode(NewRowReader(cols, chain, nil)))
+						row := CodecTestMust(plan.Decode(newRowReader(cols, chain, nil)))
 						ResetPerfCounters()
 						wire.ResetPerfCounters()
 						CodecTestMust(row.At(n - 1))
@@ -199,7 +199,7 @@ func TestCodecPerf(t *testing.T) {
 			ResetPerfCounters()
 			wire.ResetPerfCounters()
 			for page := 0; page < 4; page++ {
-				reader := NewRowReader(cols, source, nil)
+				reader := newRowReader(cols, source, nil)
 				row := CodecTestMust(plan.Decode(reader))
 				v := CodecTestMust(row.Get("list"))
 				it := CodecTestMust(v.Elements())
@@ -254,7 +254,7 @@ func TestCodecPerf(t *testing.T) {
 				compiled := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
 				ResetPerfCounters()
 				wire.ResetPerfCounters()
-				v := CodecTestMust(compiled.Decode(NewValueReader(typ, Present, BytesChain(encoded.body), nil)))
+				v := CodecTestMust(compiled.Decode(valueReaderFromLease(typ, Present, bytesChain(encoded.body), nil)))
 				if len(v) != n {
 					t.Fatal(len(v))
 				}
@@ -287,7 +287,7 @@ func TestCodecPerf(t *testing.T) {
 					plan := CodecTestMust(compileValueDecoder(DynamicCodec, typ))
 					wire.ResetPerfCounters()
 					ResetPerfCounters()
-					value := CodecTestMust(plan.Decode(NewValueReader(typ, Present, chain, nil)))
+					value := CodecTestMust(plan.Decode(valueReaderFromLease(typ, Present, chain, nil)))
 					for i := 0; i < depth; i++ {
 						it := CodecTestMust(value.Elements())
 						if !it.Next() {

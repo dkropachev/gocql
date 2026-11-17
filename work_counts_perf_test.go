@@ -21,6 +21,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
@@ -88,7 +89,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				h := pagingHistory{InternalMaxCount: count + 4, InternalMaxBytes: 1 << 20}
 				tokens := make([]cql.PageState, count)
 				for i := range tokens {
-					tokens[i] = cql.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)), 1)
+					tokens[i] = cqltype.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)))
 					if e := h.InternalAdd(tokens[i]); e != nil {
 						t.Fatal(e)
 					}
@@ -104,16 +105,16 @@ func TestWorkCountsPerf(t *testing.T) {
 					}
 					t.Logf("history=%d token=%d counts=%+v", count, index, c)
 				}
-				empty := cql.PageStateOwned([]byte{}, 1)
+				empty := cqltype.PageStateOwned([]byte{})
 				if e := h.InternalAdd(empty); e != nil {
 					t.Fatal(e)
 				}
 				if h.InternalAdd(empty) != cqlerr.ErrPagingNoProgress {
 					t.Fatal("empty")
 				}
-				collision := cql.PageStateOwned([]byte("collision"), 1)
+				collision := cqltype.PageStateOwned([]byte("collision"))
 				h.InternalSpill()
-				hash := maphash.Bytes(h.InternalSeed, cql.PageToken(collision))
+				hash := maphash.Bytes(h.InternalSeed, cqltype.PageToken(collision))
 				h.InternalEntries[hash] = pagingHistoryEntry{InternalState: tokens[0]}
 				paging.ResetPerfCounters()
 				if e := h.InternalAdd(collision); e != nil {
@@ -127,7 +128,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(c)
 				}
 				entry := h.InternalEntries[hash]
-				if &cql.PageToken(entry.InternalState)[0] != &cql.PageToken(collision)[0] {
+				if &cqltype.PageToken(entry.InternalState)[0] != &cqltype.PageToken(collision)[0] {
 					t.Fatal("copied history token")
 				}
 				t.Logf("collision=%+v token_payload_bytes=%d", c, h.InternalBytes)

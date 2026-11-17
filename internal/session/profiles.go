@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
@@ -85,7 +86,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	case SerialOmit:
 		p.SerialConsistency = cql.Option[cql.Consistency]{}
 	default:
-		return InternalResolvedOptions{}, cql.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
+		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
 	if options.Timeout.Set {
 		p.Timeout = options.Timeout.Value
@@ -103,13 +104,13 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p.Retry = options.Retry
 	}
 	if options.Consistency.Set && !settings.InternalValidConsistency(p.Consistency) {
-		return InternalResolvedOptions{}, cql.TypeValidation("consistency", "invalid consistency")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("consistency", "invalid consistency")
 	}
 	if options.Timeout.Set && p.Timeout < 0 || options.PageTimeout.Set && p.PageTimeout < 0 {
-		return InternalResolvedOptions{}, cql.TypeValidation("timeout", "must not be negative")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")
 	}
 	if options.PageSize.Set && p.PageSize <= 0 {
-		return InternalResolvedOptions{}, cql.TypeValidation("page size", "must be positive")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive")
 	}
 	if p.PageSize == cql.Unpaged {
 		if options.Prefetch.Set && options.Prefetch.Value != 0 {
@@ -119,22 +120,22 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p.PageSize = 0
 	}
 	if options.Prefetch.Set && (p.Prefetch < 0 || p.Prefetch > 1) {
-		return InternalResolvedOptions{}, cql.TypeValidation("prefetch", "must be zero or one")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("prefetch", "must be zero or one")
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
-		return InternalResolvedOptions{}, cql.TypeValidation("host ID", "empty UUID")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("host ID", "empty UUID")
 	}
 	if options.ShardID.Set && !options.HostID.Set {
-		return InternalResolvedOptions{}, cql.TypeValidation("shard", "requires a host ID")
+		return InternalResolvedOptions{}, cqltype.TypeValidation("shard", "requires a host ID")
 	}
 	keys := make(map[string]bool, len(options.CustomPayload))
 	for _, entry := range options.CustomPayload {
 		if len(entry.Key) > 65535 || keys[entry.Key] {
-			return InternalResolvedOptions{}, cql.TypeValidation("custom payload", "invalid or duplicate key")
+			return InternalResolvedOptions{}, cqltype.TypeValidation("custom payload", "invalid or duplicate key")
 		}
 		keys[entry.Key] = true
 		if entry.Value.Valid {
-			if err := cql.CheckBytesAlive(entry.Value.Value); err != nil {
+			if err := cqltype.CheckBytesAlive(entry.Value.Value); err != nil {
 				return InternalResolvedOptions{}, err
 			}
 		}

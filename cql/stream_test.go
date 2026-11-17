@@ -261,11 +261,11 @@ func TestStream(t *testing.T) {
 			} {
 				t.Run(candidate.name, func(t *testing.T) {
 					scope := CodecTestMust(wire.NewStream(context.Background(), bytes.NewReader(nil), 0, wire.StreamLimits{}))
-					next := CodecTestMust(NewStreamRowReaderReusingValidation(candidate.columns, scope, prior))
+					next := CodecTestMust(newStreamRowReaderReusingValidation(candidate.columns, scope, prior))
 					if next.validations[0] == prior.validations[0] {
 						t.Fatal("replacement metadata kept old validation descriptors")
 					}
-					if DescriptorOf(next.validations[0].typ) != DescriptorOf(ColumnSlice(candidate.columns)[0].Type) {
+					if descriptorOf(next.validations[0].typ) != descriptorOf(columnSlice(candidate.columns)[0].Type) {
 						t.Fatal("validation did not use exact new metadata")
 					}
 				})
@@ -291,7 +291,7 @@ func TestStream(t *testing.T) {
 							t.Error(err)
 							return
 						}
-						next, err := NewStreamRowReaderReusingValidation(columns, scope, prior)
+						next, err := newStreamRowReaderReusingValidation(columns, scope, prior)
 						if err != nil {
 							t.Error(err)
 							return
@@ -332,7 +332,7 @@ func TestStream(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			scope := CodecTestMust(wire.NewStream(ctx, bytes.NewReader(data), int64(len(data)), wire.StreamLimits{DiscardBytes: 17}))
-			next := CodecTestMust(NewStreamRowReaderReusingValidation(columns, scope, prior))
+			next := CodecTestMust(newStreamRowReaderReusingValidation(columns, scope, prior))
 			if next == prior || next.shared == prior.shared || next.scope != scope || next.Context() != ctx {
 				t.Fatal("new page inherited mutable reader state")
 			}
@@ -354,11 +354,11 @@ func TestStream(t *testing.T) {
 			// Cancellation is enforced where a page reads its source.
 			cancel()
 			scope = CodecTestMust(wire.NewStream(ctx, bytes.NewReader(data), int64(len(data)), wire.StreamLimits{}))
-			again := CodecTestMust(NewStreamRowReaderReusingValidation(columns, scope, next))
+			again := CodecTestMust(newStreamRowReaderReusingValidation(columns, scope, next))
 			if err := plan.DecodeInto(again, &value); !errors.Is(err, context.Canceled) {
 				t.Fatal("new page context not enforced", err)
 			}
-			if _, err := NewStreamRowReaderReusingValidation(columns, nil, next); err == nil {
+			if _, err := newStreamRowReaderReusingValidation(columns, nil, next); err == nil {
 				t.Fatal("nil page scope accepted")
 			}
 		})
@@ -376,7 +376,7 @@ func TestStream(t *testing.T) {
 				{MaxCount: 1},
 			} {
 				scope := CodecTestMust(wire.NewStream(context.Background(), bytes.NewReader(data), int64(len(data)), limits))
-				next := CodecTestMust(NewStreamRowReaderReusingValidation(columns, scope, prior))
+				next := CodecTestMust(newStreamRowReaderReusingValidation(columns, scope, prior))
 				if err := next.SkipColumn(); !errors.Is(err, wire.ErrLimit) {
 					t.Fatal("shared validation bypassed stricter envelope limit", limits, err)
 				}
@@ -734,11 +734,11 @@ func TestStream(t *testing.T) {
 		t.Run("RejectsUnsupportedScalarKinds", func(t *testing.T) {
 			for _, kind := range []Type{-1, TypeDuration + 1, 65535} {
 				// Corrupt a private copy: ScalarType descriptors are shared.
-				typ := TypeFromDescriptor(&DataTypeDescriptor{Kind: kind})
+				typ := typeFromDescriptor(&dataTypeDescriptor{Kind: kind})
 				checks := []func() error{
 					func() error { _, err := compileStreamValidation(typ, 0); return err },
 					func() error {
-						_, err := checkedTypeHeight(typ, 0, make(map[*DataTypeDescriptor]int), make(map[*DataTypeDescriptor]bool))
+						_, err := checkedTypeHeight(typ, 0, make(map[*dataTypeDescriptor]int), make(map[*dataTypeDescriptor]bool))
 						return err
 					},
 				}

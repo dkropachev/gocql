@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -87,7 +88,7 @@ func streamReaderFixture(t testing.TB, columns cql.Columns, source io.Reader, si
 	if err != nil {
 		t.Fatal(err)
 	}
-	r, err := cql.NewStreamRowReader(columns, scope)
+	r, err := codec.NewStreamRowReader(columns, scope)
 	if err != nil {
 		t.Fatal(err)
 	}

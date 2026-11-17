@@ -30,6 +30,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
@@ -43,7 +44,7 @@ func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.Ho
 	c := d.InternalConfig.TLS
 	if source := d.InternalConfig.TLSSource; source != nil {
 		if c = source.TLSConfig(); c == nil {
-			return nil, cql.TypeValidation("TLS source", "returned no config")
+			return nil, cqltype.TypeValidation("TLS source", "returned no config")
 		}
 	}
 	if c != nil {
@@ -71,11 +72,11 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.D
 		return nil, err
 	}
 	if c == nil {
-		return nil, cql.TypeValidation("dial", "hook returned nil connection")
+		return nil, cqltype.TypeValidation("dial", "hook returned nil connection")
 	}
 	if _, ok := c.(*tls.Conn); ok {
 		c.Close()
-		return nil, cql.TypeValidation("dial", "hook must return a raw connection")
+		return nil, cqltype.TypeValidation("dial", "hook must return a raw connection")
 	}
 	if target.LocalAddress.IsValid() {
 		a, ok := c.LocalAddr().(*net.TCPAddr)
@@ -212,7 +213,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	var selectedShard cql.Option[uint32]
 	if shards > 0 && d.InternalConfig.Pool.AdvancedShardAwareness.Enabled && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
 		if shard < 0 || shard >= shards {
-			return nil, cql.TypeValidation("shard", "target out of range")
+			return nil, cqltype.TypeValidation("shard", "target out of range")
 		}
 		endpoint := ""
 		if translated != nil {
@@ -261,7 +262,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	}
 	if tlsConfig != nil && tlsConfig.ServerName == "" && !snapshot.Address.IsValid() {
 		c.Close()
-		return nil, cql.TypeValidation("TLS identity", "missing logical host name")
+		return nil, cqltype.TypeValidation("TLS identity", "missing logical host name")
 	}
 	result, err := WrapTLS(ctx, c, logicalAddress, tlsConfig)
 	if err != nil {
@@ -276,7 +277,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 			return err
 		}
 		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || logicalV2TLSAddress(host) != logicalAddress {
-			return cql.TypeValidation("dial target generation", "host identity/endpoint changed during opening")
+			return cqltype.TypeValidation("dial target generation", "host identity/endpoint changed during opening")
 		}
 		return nil
 	}

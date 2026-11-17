@@ -28,6 +28,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -41,5 +42,5 @@ func scalarReader(t testing.TB, kind cql.Type, state cql.CellState, chunks ...[]
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cql.NewValueReader(foundationScalar(t, kind), state, chain, nil)
+	return codec.NewValueReader(foundationScalar(t, kind), state, chain, nil)
 }

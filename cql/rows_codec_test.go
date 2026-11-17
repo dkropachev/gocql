@@ -45,11 +45,11 @@ func encodeTestParams[P any](t testing.TB, columns Columns, codec ParamEncoder[P
 		t.Fatal(err)
 	}
 	builder := wire.NewBuilder(8)
-	w := NewParamWriter(builder, columns, true)
+	w := newParamWriter(builder, columns, true)
 	if err := plan.Encode(w, value); err != nil {
 		t.Fatal(err)
 	}
-	if err := FinishParamWriter(w); err != nil {
+	if err := finishParamWriter(w); err != nil {
 		t.Fatal(err)
 	}
 	chain, err := builder.Freeze()
@@ -89,7 +89,7 @@ func TestRowsCodec(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for j := 0; j < 100; j++ {
-						value, err := plan.Decode(NewRowReader(columns, chain, nil))
+						value, err := plan.Decode(newRowReader(columns, chain, nil))
 						if err != nil || value != 123 {
 							t.Errorf("value=%d err=%v", value, err)
 							return
@@ -109,7 +109,7 @@ func TestRowsCodec(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := plan.Decode(NewRowReader(columns, chain, nil))
+			result, err := plan.Decode(newRowReader(columns, chain, nil))
 			if err != nil || result.First != 9 || result.Second != 9 {
 				t.Fatalf("result=%+v err=%v", result, err)
 			}
@@ -142,7 +142,7 @@ func TestRowsCodec(t *testing.T) {
 					body := encodeTestParams(t, columns, PairParams(Params(paramAt(0), paramAt(1)), PairParams(OneParam(Int32Codec), OneParam(Int32Codec))),
 						Pair[[2]int32, Pair[int32, int32]]{[2]int32{1, 2}, Pair[int32, int32]{3, 4}})
 					plan := CodecTestMust(rows.Compile(columns))
-					got, err := plan.Decode(NewRowReader(columns, body, nil))
+					got, err := plan.Decode(newRowReader(columns, body, nil))
 					if err != nil || got.First != [2]int32{1, 2} || got.Second.First != 3 || got.Second.Second != 4 {
 						t.Fatalf("got %+v, %v", got, err)
 					}
@@ -176,7 +176,7 @@ func TestRowsCodec(t *testing.T) {
 			// a custom decoder here.
 			right := directTestRowDecoder{&dst.Second, &decodes, &into}
 			plan := CodecTestMust(PairRows(OneColumn(Int32Codec), right).Compile(cols))
-			if err := plan.DecodeInto(NewRowReader(cols, body, nil), &dst); err != nil || dst.First != 1 || dst.Second != 2 || decodes != 0 || into != 1 {
+			if err := plan.DecodeInto(newRowReader(cols, body, nil), &dst); err != nil || dst.First != 1 || dst.Second != 2 || decodes != 0 || into != 1 {
 				t.Fatal("pair destination", dst, decodes, into, err)
 			}
 			applied := FoundationScalar(t, TypeBoolean)
@@ -185,7 +185,7 @@ func TestRowsCodec(t *testing.T) {
 			var cas CASResult[int32]
 			custom := directTestRowDecoder{&cas.Previous.Value, &decodes, &into}
 			casPlan := CodecTestMust(CASRows(custom).Compile(casCols))
-			if err := casPlan.DecodeInto(NewRowReader(casCols, casBody, nil), &cas); err != nil || !cas.Previous.Set || cas.Previous.Value != 7 || decodes != 0 {
+			if err := casPlan.DecodeInto(newRowReader(casCols, casBody, nil), &cas); err != nil || !cas.Previous.Set || cas.Previous.Value != 7 || decodes != 0 {
 				t.Fatal("CAS destination", cas, err)
 			}
 		})
@@ -222,11 +222,11 @@ func TestRowsCodec(t *testing.T) {
 			plan := CodecTestMust(decoder.Compile(columns))
 			dst.Unused = 5
 			dst.Padding[100] = 9
-			reader := NewRowReader(columns, body, lease)
+			reader := newRowReader(columns, body, lease)
 			if err := plan.DecodeInto(reader, &dst); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishRowReader(reader); err != nil {
+			if err := finishRowReader(reader); err != nil {
 				t.Fatal(err)
 			}
 			if dst.Inner.Number != 7 || dst.Inner.Text.String() != "borrowed" || dst.Unused != 0 || dst.Padding[100] != 0 {
@@ -238,7 +238,7 @@ func TestRowsCodec(t *testing.T) {
 			if cloned.Inner.Text.String() != "borrowed" {
 				t.Fatal("schema independent record Clone")
 			}
-			err := plan.DecodeInto(NewRowReader(columns, body, nil), nil)
+			err := plan.DecodeInto(newRowReader(columns, body, nil), nil)
 			if _, ok := errors.AsType[*ValidationError](err); !ok {
 				t.Fatal("nil destination", err)
 			}
@@ -253,8 +253,8 @@ func TestRowsCodec(t *testing.T) {
 			for _, p := range []ParamPlan[directRow]{plan, interfaceOnlyParams(plan)} {
 				row := directRow{View: BorrowBytes([]byte("view")), Owned: []byte("owned"), Blob: []byte("blob")}
 				builder := wire.NewBuilder(16)
-				w := NewParamWriter(builder, columns, true)
-				SetParamOwnership(w, true)
+				w := newParamWriter(builder, columns, true)
+				setParamOwnership(w, true)
 				if err := p.Encode(w, row); err != nil {
 					t.Fatal(err)
 				}
@@ -345,7 +345,7 @@ func TestRowsCodec(t *testing.T) {
 				chain, _ := wire.NewChain(wire.Borrow(body))
 				run := func(p RowPlan[directRow]) (directRow, string, int) {
 					dst := directRow{Owned: make([]byte, 0, 64)}
-					reader := NewRowReader(columns, chain, nil)
+					reader := newRowReader(columns, chain, nil)
 					err := p.DecodeInto(reader, &dst)
 					msg := ""
 					if err != nil {
@@ -386,7 +386,7 @@ func TestRowsCodec(t *testing.T) {
 			if !lease.Retain() {
 				t.Fatal("retain failed")
 			}
-			reader := NewRowReader(columns, chain, lease)
+			reader := newRowReader(columns, chain, lease)
 			var value Bytes
 			if err := readColumnInto(reader, BlobCodec, &value); err != nil {
 				t.Fatal(err)
@@ -410,10 +410,10 @@ func TestRowsCodec(t *testing.T) {
 				checkRowScalarEquivalent(t, TypeBlob, decoder, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
 				chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte{1, 2, 3})))
 				value := int32(99)
-				if err := readColumnInto(NewRowReader(columns, chain, nil), decoder, &value); err == nil || value != 99 {
+				if err := readColumnInto(newRowReader(columns, chain, nil), decoder, &value); err == nil || value != 99 {
 					t.Fatalf("destination overwritten: value=%d err=%v", value, err)
 				}
-				check := NewRowReader(columns, chain, nil)
+				check := newRowReader(columns, chain, nil)
 				if err := readColumnInto(check, decoder, nil); err == nil || check.index != 1 {
 					t.Fatalf("nil dst err=%v index=%d", err, check.index)
 				}
@@ -428,7 +428,7 @@ func TestRowsCodec(t *testing.T) {
 			chain, _ := wire.NewChain(wire.Borrow(data))
 			lease := wire.NewLease(chain, nil)
 			defer lease.Release()
-			reader := NewRowReader(columns, chain, lease)
+			reader := newRowReader(columns, chain, lease)
 			var snapshot ValueReader
 			var calls int
 			custom := capturedRowInt{Decoder: Int32Codec, seen: &snapshot, calls: &calls}
@@ -482,7 +482,7 @@ func TestRowsCodec(t *testing.T) {
 			if err := builder.Uint8(0xff); err != nil {
 				t.Fatal(err)
 			}
-			w := NewParamWriter(builder, columns, true)
+			w := newParamWriter(builder, columns, true)
 			if err := plan.Encode(w, Pair[int32, int32]{First: 3, Second: 4}); err == nil {
 				t.Fatal("expected encoder failure")
 			}
@@ -498,7 +498,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 			payload := []byte("original")
 			builder := wire.NewBuilder(8)
-			w := NewParamWriter(builder, columns, true)
+			w := newParamWriter(builder, columns, true)
 			w.ownBorrowed = true
 			if err := plan.Encode(w, payload); err != nil {
 				t.Fatal(err)
@@ -508,7 +508,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			value, err := NewRowReader(columns, chain, nil).ReadColumn(BlobCodec)
+			value, err := newRowReader(columns, chain, nil).ReadColumn(BlobCodec)
 			if err != nil || string(value.OwnedBytes()) != "original" {
 				t.Fatalf("value=%q err=%v", value.OwnedBytes(), err)
 			}
@@ -523,7 +523,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 			for _, malformed := range [][]byte{{0, 0, 0}, {0, 0, 0, 8, 1}, {255, 255, 255, 254}} {
 				chain, _ := wire.NewChain(wire.Borrow(malformed))
-				if _, err := plan.Decode(NewRowReader(columns, chain, nil)); err == nil {
+				if _, err := plan.Decode(newRowReader(columns, chain, nil)); err == nil {
 					t.Fatalf("accepted malformed ignored cell: %x", malformed)
 				}
 			}
@@ -556,12 +556,12 @@ func TestRowsCodec(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			reader := NewRowReader(columns, chain, lease)
+			reader := newRowReader(columns, chain, lease)
 			row, err := plan.Decode(reader)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishRowReader(reader); err != nil {
+			if err := finishRowReader(reader); err != nil {
 				t.Fatal(err)
 			}
 			if err := reader.cursor.RequireEnd(); err != nil {

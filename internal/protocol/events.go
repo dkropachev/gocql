@@ -31,6 +31,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -110,6 +111,6 @@ func (p *TypedParser) StreamExtensions(h frm.FrameHeader) cql.Result {
 			}
 		}
 	}
-	info.SetDiagnostics(warnings, traces, payload)
+	codec.SetDiagnostics(&info, warnings, traces, payload)
 	return info
 }

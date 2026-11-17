@@ -6,7 +6,7 @@ package cluster
 import (
 	"context"
 
-	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -50,7 +50,7 @@ func (source schemaSource) InternalQuerySystem(ctx context.Context, request *mod
 		}
 		c, ok := h.InternalConn.(*transport.Conn)
 		if !ok {
-			return nil, cql.TypeValidation("schema query", "control connection does not support typed requests")
+			return nil, cqltype.TypeValidation("schema query", "control connection does not support typed requests")
 		}
 		response, err = c.InternalExecuteV2System(ctx, request)
 	}

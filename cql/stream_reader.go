@@ -135,13 +135,13 @@ func (r *StreamValueReader) Remaining() int64 {
 }
 func (r *StreamValueReader) check() error {
 	if r == nil || r.scope == nil || r.shared == nil {
-		return TypeValidation("stream reader", "uninitialized value reader")
+		return typeValidation("stream reader", "uninitialized value reader")
 	}
 	if r.shared.err != nil {
 		return r.shared.err
 	}
 	if !r.active {
-		return r.shared.fail(TypeValidation("stream reader", "reader escaped its callback"))
+		return r.shared.fail(typeValidation("stream reader", "reader escaped its callback"))
 	}
 	return nil
 }
@@ -230,7 +230,7 @@ func (r *StreamValueReader) present() error {
 		return err
 	}
 	if r.state != Present {
-		return r.fail(TypeValidation("stream value", "nonnullable %s has state %d", r.typ, r.state))
+		return r.fail(typeValidation("stream value", "nonnullable %s has state %d", r.typ, r.state))
 	}
 	return nil
 }
@@ -245,7 +245,7 @@ func (r *StreamValueReader) childBody(typ DataType, state CellState, size int64,
 		return err
 	}
 	if fn == nil {
-		return r.fail(TypeValidation("stream child", "nil callback"))
+		return r.fail(typeValidation("stream child", "nil callback"))
 	}
 	err := r.scope.Child(size, func(scope *wire.Stream) error {
 		child := r.shared.value(r.depth + 1)
@@ -271,14 +271,14 @@ func (r *StreamValueReader) child(typ DataType, validation *streamValidationPlan
 	if n == -1 && allowNull {
 		state, n = Null, 0
 	} else if n < 0 {
-		return r.fail(TypeValidation("stream length", "invalid nested cell length %d", n))
+		return r.fail(typeValidation("stream length", "invalid nested cell length %d", n))
 	}
 	return r.childBody(typ, state, n, validation, fn)
 }
 
 // Child reads one signed-length framed member. Result unset is always invalid.
 func (r *StreamValueReader) Child(typ DataType, fn func(*StreamValueReader) error) error {
-	if err := ValidateDataType(typ); err != nil {
+	if err := validateDataType(typ); err != nil {
 		return r.fail(err)
 	}
 	validation, err := r.childValidation(typ)
@@ -372,7 +372,7 @@ func (r *StreamValueReader) vectorLength() (int64, error) {
 		n = n<<8 | uint64(b)
 	}
 	if (extra > 0 && n < uint64(1)<<uint(extra*7)) || n > math.MaxInt32 {
-		return 0, r.fail(TypeValidation("stream vector length", "invalid or noncanonical element length"))
+		return 0, r.fail(typeValidation("stream vector length", "invalid or noncanonical element length"))
 	}
 	return int64(n), nil
 }
@@ -394,21 +394,21 @@ type StreamRowReader struct {
 // scratch plus conservative scope descriptor capacities. Validation plans/maps
 // depend on schema and are accounted separately from payload working storage.
 // Captures alias final application storage and must not be counted again.
-func InternalStreamReaderWorkingStorageBytes(r *StreamRowReader) int64 {
+func streamReaderWorkingStorageBytes(r *StreamRowReader) int64 {
 	if r == nil || r.shared == nil {
 		return 0
 	}
 	return int64(cap(r.shared.discard)) + 32 + int64(cap(r.shared.values))*192 + int64(cap(r.shared.rows))*128
 }
 
-func NewStreamRowReader(columns Columns, scope *wire.Stream) (*StreamRowReader, error) {
+func newStreamRowReader(columns Columns, scope *wire.Stream) (*StreamRowReader, error) {
 	if scope == nil {
-		return nil, TypeValidation("stream reader", "nil envelope")
+		return nil, typeValidation("stream reader", "nil envelope")
 	}
 	state := &streamDecodeState{discardBytes: scope.Limits().DiscardBytes}
 	r := &StreamRowReader{columns: columns, scope: scope, shared: state, active: true}
 	r.validations = make([]*streamValidationPlan, columns.Len())
-	for i, c := range ColumnSlice(columns) {
+	for i, c := range columnSlice(columns) {
 		p, err := compileStreamValidation(c.Type, 0)
 		if err != nil {
 			return nil, err
@@ -424,18 +424,18 @@ func NewStreamRowReader(columns Columns, scope *wire.Stream) (*StreamRowReader, 
 // alive after its owner releases its budget. All mutable decode state is fresh.
 // Compilation always uses depth zero and the fixed descriptor nesting bound;
 // per-envelope byte, depth and count limits remain enforced by the new scope.
-func NewStreamRowReaderReusingValidation(columns Columns, scope *wire.Stream, prior *StreamRowReader) (*StreamRowReader, error) {
+func newStreamRowReaderReusingValidation(columns Columns, scope *wire.Stream, prior *StreamRowReader) (*StreamRowReader, error) {
 	if prior != nil && len(prior.validations) == columns.Len() && prior.columns.Len() == columns.Len() {
-		current, previous := ColumnSlice(columns), ColumnSlice(prior.columns)
+		current, previous := columnSlice(columns), columnSlice(prior.columns)
 		if len(current) == 0 || &current[0] == &previous[0] {
 			if scope == nil {
-				return nil, TypeValidation("stream reader", "nil envelope")
+				return nil, typeValidation("stream reader", "nil envelope")
 			}
 			state := &streamDecodeState{discardBytes: scope.Limits().DiscardBytes}
 			return &StreamRowReader{columns: columns, scope: scope, shared: state, validations: prior.validations, active: true}, nil
 		}
 	}
-	return NewStreamRowReader(columns, scope)
+	return newStreamRowReader(columns, scope)
 }
 func (r *StreamRowReader) Context() context.Context {
 	if r == nil || r.scope == nil {
@@ -445,13 +445,13 @@ func (r *StreamRowReader) Context() context.Context {
 }
 func (r *StreamRowReader) check() error {
 	if r == nil || r.scope == nil || r.shared == nil {
-		return TypeValidation("stream row", "uninitialized reader")
+		return typeValidation("stream row", "uninitialized reader")
 	}
 	if r.shared.err != nil {
 		return r.shared.err
 	}
 	if !r.active {
-		return r.shared.fail(TypeValidation("stream row", "inactive reader"))
+		return r.shared.fail(typeValidation("stream row", "inactive reader"))
 	}
 	return nil
 }
@@ -461,7 +461,7 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 	}
 	column, ok := r.columns.At(r.index)
 	if !ok {
-		return r.shared.fail(TypeValidation("stream column", "too many columns"))
+		return r.shared.fail(typeValidation("stream column", "too many columns"))
 	}
 	i := r.index
 	r.index++
@@ -478,7 +478,7 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 		if size == -1 {
 			state, size = Null, 0
 		} else if size < 0 {
-			return r.shared.fail(TypeValidation("stream length", "invalid result length %d", size))
+			return r.shared.fail(typeValidation("stream length", "invalid result length %d", size))
 		}
 	}
 	err := r.scope.Child(size, func(scope *wire.Stream) error {
@@ -499,7 +499,7 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 // ReadColumn decodes the next column into dst with plan.
 func (r *StreamRowReader) ReadColumn[T any](plan StreamValuePlan[T], dst *T) error {
 	if plan == nil || dst == nil {
-		return TypeValidation("stream column", "nil plan or destination")
+		return typeValidation("stream column", "nil plan or destination")
 	}
 	return r.column(func(value *StreamValueReader) error { return plan.DecodeInto(value, dst) })
 }
@@ -511,7 +511,7 @@ func (r *StreamRowReader) RequireEnd() error {
 		return err
 	}
 	if r.index != r.columns.Len() {
-		return r.shared.fail(TypeValidation("stream row", "decoded %d of %d columns", r.index, r.columns.Len()))
+		return r.shared.fail(typeValidation("stream row", "decoded %d of %d columns", r.index, r.columns.Len()))
 	}
 	return nil
 }
@@ -532,21 +532,21 @@ func (r *StreamRowReader) framingUint32() (uint32, error) {
 }
 
 type streamTypePair struct {
-	expected, actual *DataTypeDescriptor
+	expected, actual *dataTypeDescriptor
 }
 type streamColumnsPair struct {
 	expected, actual       *ColumnSpec
 	expectedLen, actualLen int
 }
 type streamChildPair struct {
-	parent, requested *DataTypeDescriptor
+	parent, requested *dataTypeDescriptor
 }
 
 func (r *StreamValueReader) matches(t DataType) bool {
-	if DescriptorOf(t) == DescriptorOf(r.typ) {
+	if descriptorOf(t) == descriptorOf(r.typ) {
 		return true
 	}
-	key := streamTypePair{DescriptorOf(t), DescriptorOf(r.typ)}
+	key := streamTypePair{descriptorOf(t), descriptorOf(r.typ)}
 	if known, ok := r.shared.typeMatches[key]; ok {
 		return known
 	}
@@ -561,7 +561,7 @@ func (r *StreamRowReader) matches(columns Columns) bool {
 	if columns.Len() == 0 || r.columns.Len() == 0 {
 		return columns.Len() == r.columns.Len()
 	}
-	key := streamColumnsPair{&ColumnSlice(columns)[0], &ColumnSlice(r.columns)[0], columns.Len(), r.columns.Len()}
+	key := streamColumnsPair{&columnSlice(columns)[0], &columnSlice(r.columns)[0], columns.Len(), r.columns.Len()}
 	if key.expected == key.actual && key.expectedLen == key.actualLen {
 		return true
 	}
@@ -577,12 +577,12 @@ func (r *StreamRowReader) matches(columns Columns) bool {
 }
 func (r *StreamValueReader) childValidation(t DataType) (*streamValidationPlan, error) {
 	if r.validation == nil {
-		return nil, TypeValidation("stream child", "missing compiled parent validation")
+		return nil, typeValidation("stream child", "missing compiled parent validation")
 	}
-	if child := r.validation.children[DescriptorOf(t)]; child != nil {
+	if child := r.validation.children[descriptorOf(t)]; child != nil {
 		return child, nil
 	}
-	key := streamChildPair{DescriptorOf(r.typ), DescriptorOf(t)}
+	key := streamChildPair{descriptorOf(r.typ), descriptorOf(t)}
 	if child := r.shared.childMatches[key]; child != nil {
 		return child, nil
 	}
@@ -599,26 +599,26 @@ func (r *StreamValueReader) childValidation(t DataType) (*streamValidationPlan, 
 			return child, nil
 		}
 	}
-	return nil, TypeValidation("stream child", "requested type is absent from actual parent metadata")
+	return nil, typeValidation("stream child", "requested type is absent from actual parent metadata")
 }
 
 func compileStreamValuePlan[T any](decoder StreamDecoder[T], typ DataType) (StreamValuePlan[T], error) {
 	if decoder == nil {
-		return nil, TypeValidation("stream codec", "nil value decoder")
+		return nil, typeValidation("stream codec", "nil value decoder")
 	}
 	plan, err := decoder.Compile(typ)
 	if err == nil && plan == nil {
-		err = TypeValidation("stream codec", "Compile returned a nil value plan")
+		err = typeValidation("stream codec", "Compile returned a nil value plan")
 	}
 	return plan, err
 }
 func compileStreamRowPlan[R any](decoder StreamRowDecoder[R], columns Columns) (StreamRowPlan[R], error) {
 	if decoder == nil {
-		return nil, TypeValidation("stream codec", "nil row decoder")
+		return nil, typeValidation("stream codec", "nil row decoder")
 	}
 	plan, err := decoder.Compile(columns)
 	if err == nil && plan == nil {
-		err = TypeValidation("stream codec", "Compile returned a nil row plan")
+		err = typeValidation("stream codec", "Compile returned a nil row plan")
 	}
 	return plan, err
 }

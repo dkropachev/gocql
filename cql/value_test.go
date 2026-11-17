@@ -21,7 +21,7 @@ func TestValue(t *testing.T) {
 			chain := FoundationChain(t, first, second)
 			released := 0
 			lease := wire.NewLease(chain, func() { released++ })
-			view := BytesView(chain, wire.RefOf(lease))
+			view := bytesView(chain, wire.RefOf(lease))
 			slice, err := view.Slice(1, 4)
 			if err != nil {
 				t.Fatal(err)
@@ -30,7 +30,7 @@ func TestValue(t *testing.T) {
 				t.Fatal("wrong view length")
 			}
 			var spans [][]byte
-			if err := EachBytes(slice, func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil }); err != nil {
+			if err := eachBytes(slice, func(s wire.Span) error { spans = append(spans, s.Bytes()); return nil }); err != nil {
 				t.Fatal(err)
 			}
 			if len(spans) != 2 || &spans[0][0] != &first[1] || &spans[1][0] != &second[0] {
@@ -81,7 +81,7 @@ func TestValue(t *testing.T) {
 			data := []byte("immutable retained page")
 			chain := FoundationChain(t, data)
 			lease := wire.NewLease(chain, nil)
-			view := BytesView(chain, wire.RefOf(lease))
+			view := bytesView(chain, wire.RefOf(lease))
 			var wg sync.WaitGroup
 			for i := 0; i < 12; i++ {
 				if !lease.Retain() {
@@ -136,7 +136,7 @@ func TestValue(t *testing.T) {
 			codec.reject = false
 			codec.errorAfterWrite = true
 			failed, err := EncodeValueBorrowed(typ, codec, []byte("partial"))
-			if err == nil || DescriptorOf(failed.Type()) != nil {
+			if err == nil || descriptorOf(failed.Type()) != nil {
 				t.Fatal("failed encoder published a value")
 			}
 			var nilEncoder Encoder[[]byte]
@@ -157,7 +157,7 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := EachBytes(borrowed.Bytes(), func(s wire.Span) error {
+			if err := eachBytes(borrowed.Bytes(), func(s wire.Span) error {
 				if &s.Bytes()[0] != &source[0] {
 					t.Error("borrowed encode copied payload")
 				}
@@ -184,12 +184,12 @@ func TestValue(t *testing.T) {
 			if err := w.Child(typ, func(child *ValueWriter) error { return child.BorrowBytes(source) }); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishValueWriter(w); err != nil {
+			if err := finishValueWriter(w); err != nil {
 				t.Fatal(err)
 			}
 			chain, _ := builder.Freeze()
 			source[0] = 'X'
-			parent, err := ReadValue(wire.NewCursor(chain), typ, nil, false)
+			parent, err := readValue(wire.NewCursor(chain), typ, nil, false)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -213,15 +213,15 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := NewEncodedValue(typ, Present, BytesView(chain, wire.Ref{})); err == nil {
+			if _, err := NewEncodedValue(typ, Present, bytesView(chain, wire.Ref{})); err == nil {
 				t.Fatal("oversized standalone cell accepted")
 			}
 			builder := wire.NewBuilder(0)
-			w := NewValueWriter(builder, typ, false)
-			if err := w.borrowView(BytesView(chain, wire.Ref{})); err != nil {
+			w := newValueWriter(builder, typ, false)
+			if err := w.borrowView(bytesView(chain, wire.Ref{})); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishValueWriter(w); err == nil {
+			if err := finishValueWriter(w); err == nil {
 				t.Fatal("oversized framed cell accepted")
 			}
 			if builder.Len() != 0 {
@@ -262,7 +262,7 @@ func TestValue(t *testing.T) {
 			}
 			chain := FoundationChain(t, []byte("leased"))
 			lease := wire.NewLease(chain, nil)
-			leased, err := NewEncodedValue(blob, Present, BytesView(chain, wire.RefOf(lease)))
+			leased, err := NewEncodedValue(blob, Present, bytesView(chain, wire.RefOf(lease)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,7 +294,7 @@ func TestValue(t *testing.T) {
 			data := []byte("a€界z")
 			chain := FoundationChain(t, data[:2], data[2:4], data[4:6], data[6:])
 			lease := wire.NewLease(chain, nil)
-			text := TextView(BytesView(chain, wire.RefOf(lease)))
+			text := textView(bytesView(chain, wire.RefOf(lease)))
 			if got := text.String(); got != string(data) {
 				t.Fatalf("String: %q", got)
 			}
@@ -320,7 +320,7 @@ func TestValue(t *testing.T) {
 			for _, data := range [][]byte{{}, {0}, {0, 0, 0}, {0, 0, 0, 2, 1}, {0x7f, 0xff, 0xff, 0xff}, {0xff, 0xff, 0xff, 0xfe}, {0xff, 0xff, 0xff, 0xfd}, {0x80, 0, 0, 0}} {
 				c := wire.NewCursor(foundationChain(t, data))
 				before := c.Remaining()
-				_, err := ReadValue(c, typ, nil, false)
+				_, err := readValue(c, typ, nil, false)
 				if _, ok := errors.AsType[*ProtocolError](err); !ok {
 					t.Fatalf("%x: expected protocol error, got %v", data, err)
 				}
@@ -328,7 +328,7 @@ func TestValue(t *testing.T) {
 					t.Fatalf("%x: failed framing advanced cursor", data)
 				}
 			}
-			reader := NewValueReader(typ, Present, foundationChain(t, []byte{1, 2, 3}), nil)
+			reader := valueReaderFromLease(typ, Present, foundationChain(t, []byte{1, 2, 3}), nil)
 			c := reader.Cursor()
 			if _, err := c.Uint32(); err == nil {
 				t.Fatal("truncated scalar accepted")
@@ -355,18 +355,18 @@ func TestValue(t *testing.T) {
 			builder := wire.NewBuilder(4)
 			encoders := []func(*ValueWriter) error{func(w *ValueWriter) error { return w.BorrowBytes(nil) }, func(w *ValueWriter) error { return w.BorrowBytes([]byte{}) }, func(w *ValueWriter) error { return w.Null() }, func(w *ValueWriter) error { return w.Unset() }}
 			for _, encode := range encoders {
-				w := NewValueWriter(builder, typ, true)
+				w := newValueWriter(builder, typ, true)
 				if err := encode(w); err != nil {
 					t.Fatal(err)
 				}
-				if err := FinishValueWriter(w); err != nil {
+				if err := finishValueWriter(w); err != nil {
 					t.Fatal(err)
 				}
 			}
 			chain, _ := builder.Freeze()
 			c := wire.NewCursor(chain)
 			for i, want := range []CellState{Present, Present, Null, Unset} {
-				reader, err := ReadValue(c, typ, nil, true)
+				reader, err := readValue(c, typ, nil, true)
 				if err != nil || reader.State() != want || reader.Bytes().Len() != 0 {
 					t.Fatalf("cell %d state=%d err=%v", i, reader.State(), err)
 				}
@@ -379,11 +379,11 @@ func TestValue(t *testing.T) {
 			typ := foundationScalar(t, TypeBlob)
 			builder := wire.NewBuilder(3)
 			payload := []byte("payload")
-			writer := NewValueWriter(builder, typ, true)
+			writer := newValueWriter(builder, typ, true)
 			if err := writer.BorrowBytes(payload); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishValueWriter(writer); err != nil {
+			if err := finishValueWriter(writer); err != nil {
 				t.Fatal(err)
 			}
 			for _, test := range []struct {
@@ -400,11 +400,11 @@ func TestValue(t *testing.T) {
 			} {
 				t.Run(test.name, func(t *testing.T) {
 					before := builder.Len()
-					w := NewValueWriter(builder, typ, true)
+					w := newValueWriter(builder, typ, true)
 					if err := test.encode(w); err == nil {
 						t.Fatal("malformed cell accepted")
 					}
-					if err := FinishValueWriter(w); err == nil {
+					if err := finishValueWriter(w); err == nil {
 						t.Fatal("failed writer committed")
 					}
 					if builder.Len() != before {
@@ -435,7 +435,7 @@ func TestValue(t *testing.T) {
 		t.Run("SegmentedCursor", func(t *testing.T) {
 			typ := foundationScalar(t, TypeBlob)
 			builder := wire.NewBuilder(1)
-			w := NewValueWriter(builder, typ, false)
+			w := newValueWriter(builder, typ, false)
 			if err := w.Uint16(0x1234); err != nil {
 				t.Fatal(err)
 			}
@@ -445,7 +445,7 @@ func TestValue(t *testing.T) {
 			if err := w.Uint64(0x123456789abcdef0); err != nil {
 				t.Fatal(err)
 			}
-			if err := FinishValueWriter(w); err != nil {
+			if err := finishValueWriter(w); err != nil {
 				t.Fatal(err)
 			}
 			wireBytes := make([]byte, builder.Len())
@@ -457,7 +457,7 @@ func TestValue(t *testing.T) {
 			}
 			chain = foundationChain(t, parts...)
 			lease := wire.NewLease(chain, nil)
-			reader, err := ReadValue(wire.NewCursor(chain), typ, lease, false)
+			reader, err := readValue(wire.NewCursor(chain), typ, lease, false)
 			if err != nil {
 				t.Fatal(err)
 			}

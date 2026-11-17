@@ -39,7 +39,7 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			alias := false
-			EachBytes(encoded.Bytes(), func(s wire.Span) error {
+			eachBytes(encoded.Bytes(), func(s wire.Span) error {
 				if len(s.Bytes()) == len(payload) && &s.Bytes()[0] == &payload[0] {
 					alias = true
 				}
@@ -55,14 +55,14 @@ func TestContainer(t *testing.T) {
 			}
 			chain, _ := wire.NewChain(spans...)
 			lease := wire.NewLease(chain, nil)
-			leased, _ := NewEncodedValue(list, Present, BytesView(chain, wire.RefOf(lease)))
+			leased, _ := NewEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
 			sequence, err := DecodeValue(ListDecoder(BlobCodec), leased)
 			if err != nil {
 				t.Fatal(err)
 			}
 			clone := ListDecoder(BlobCodec).Clone(sequence)
 			fragments := 0
-			EachBytes(sequence[0], func(s wire.Span) error {
+			eachBytes(sequence[0], func(s wire.Span) error {
 				if &s.Bytes()[0] != &body[8+fragments] {
 					t.Error("fragment payload was copied")
 				}
@@ -73,7 +73,7 @@ func TestContainer(t *testing.T) {
 				t.Fatalf("got %d fragments, want %d", fragments, len(payload))
 			}
 			lease.Release()
-			if err := CheckBytesAlive(sequence[0]); !errors.Is(err, ErrReleased) {
+			if err := checkBytesAlive(sequence[0]); !errors.Is(err, ErrReleased) {
 				t.Fatalf("released element: %v", err)
 			}
 			if string(clone[0].OwnedBytes()) != "fragmented" {
@@ -95,12 +95,12 @@ func TestContainer(t *testing.T) {
 		list := CodecTestMust(ListType(tuple))
 		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
 		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
-		lease := wire.NewLease(BytesChain(encoded.body), nil)
-		borrowed := EncodedValue{typ: list, state: Present, body: BytesView(BytesChain(encoded.body), wire.RefOf(lease))}
+		lease := wire.NewLease(bytesChain(encoded.body), nil)
+		borrowed := EncodedValue{typ: list, state: Present, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
 		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
-		dynamic := CodecTestMust(DynamicCodec.Decode(NewValueReader(list, Present, BytesChain(encoded.body), lease)))
+		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
 		dynamicValues := CodecTestMust(CodecTestMust(dynamic.Elements()).Collect())
 		lease.Release()
 		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.OwnedBytes(), []byte("more")) {
@@ -138,7 +138,7 @@ func TestContainer(t *testing.T) {
 				go func() {
 					defer group.Done()
 					for range 30 {
-						sequence, err := plan.Decode(NewRowReader(columns, chain, nil))
+						sequence, err := plan.Decode(newRowReader(columns, chain, nil))
 						if err != nil {
 							t.Error(err)
 							return
@@ -319,7 +319,7 @@ func TestContainer(t *testing.T) {
 				t.Fatalf("unsigned vint body = %x", data)
 			}
 			alias := false
-			EachBytes(borrowed.Bytes(), func(span wire.Span) error {
+			eachBytes(borrowed.Bytes(), func(span wire.Span) error {
 				if span.Len() == len(payload) && &span.Bytes()[0] == &payload[0] {
 					alias = true
 				}
@@ -342,7 +342,7 @@ func TestContainer(t *testing.T) {
 				spans[index] = wire.Borrow(data[index : index+1])
 			}
 			chain, _ := wire.NewChain(spans...)
-			sequence, err := VectorDecoder(BlobCodec).Decode(NewValueReader(vector, Present, chain, nil))
+			sequence, err := VectorDecoder(BlobCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
 			if err != nil {
 				t.Fatal(err)
 			}

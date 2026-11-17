@@ -30,6 +30,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -1039,7 +1040,7 @@ func TestPrepared(t *testing.T) {
 			oldColumns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 			state, old := preparedState(t, s, oldColumns)
 			state.partitioner = "known-before-schema-invalidation"
-			newColumns := implCql.NewColumns(implCql.ColumnSlice(oldColumns)[0], implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: typ})
+			newColumns := implCql.NewColumns(cqltype.ColumnSlice(oldColumns)[0], implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: typ})
 			done := make(chan error, 1)
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
@@ -1068,7 +1069,7 @@ func TestPrepared(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
 					typ := codecTestMust(implCql.ScalarType(implCql.TypeBlob))
 					parameters := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "a", Type: typ}, implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "b", Type: typ})
-					columns := implCql.NewColumns(implCql.ColumnSlice(parameters)[0])
+					columns := implCql.NewColumns(cqltype.ColumnSlice(parameters)[0])
 					state, old := preparedState(t, s, columns)
 					state.InternalParameters = parameters
 					state.InternalInfo.PartitionKeyIndexes = []int{0, 1}
@@ -1077,11 +1078,11 @@ func TestPrepared(t *testing.T) {
 					case "partition-key-order":
 						pk = []int{1, 0}
 					case "table":
-						changed := append([]implCql.ColumnSpec(nil), implCql.ColumnSlice(parameters)...)
+						changed := append([]implCql.ColumnSpec(nil), cqltype.ColumnSlice(parameters)...)
 						changed[0].Table = "other"
 						current = implCql.NewColumns(changed...)
 					case "type":
-						changed := append([]implCql.ColumnSpec(nil), implCql.ColumnSlice(parameters)...)
+						changed := append([]implCql.ColumnSpec(nil), cqltype.ColumnSlice(parameters)...)
 						changed[1].Type = codecTestMust(implCql.ScalarType(implCql.TypeInt))
 						current = implCql.NewColumns(changed...)
 					case "partitioner":

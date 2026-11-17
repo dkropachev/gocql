@@ -27,41 +27,42 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func InternalCheckedV2PoolBudget(options connectivity.PoolOptions, shards int) (int, error) {
 	if shards < 1 || shards > math.MaxUint16 {
-		return 0, cql.TypeValidation("shard count", "must be 1..65535")
+		return 0, cqltype.TypeValidation("shard count", "must be 1..65535")
 	}
 	if options.ConnectionsPerHost < 0 || options.ConnectionsPerShard < 0 || options.MaxExcessPerShard < 0 {
-		return 0, cql.TypeValidation("pool counts", "must not be negative")
+		return 0, cqltype.TypeValidation("pool counts", "must not be negative")
 	}
 	if options.ConnectionsPerHost > 0 {
 		return options.ConnectionsPerHost, nil
 	}
 	if options.ConnectionsPerShard == 0 {
-		return 0, cql.TypeValidation("pool target", "per-host or per-shard count required")
+		return 0, cqltype.TypeValidation("pool target", "per-host or per-shard count required")
 	}
 	if options.ConnectionsPerShard > math.MaxInt/shards || options.MaxExcessPerShard > math.MaxInt/shards {
-		return 0, cql.TypeValidation("pool target", "connection/excess count arithmetic overflow")
+		return 0, cqltype.TypeValidation("pool target", "connection/excess count arithmetic overflow")
 	}
 	target := options.ConnectionsPerShard * shards
 	excess := options.MaxExcessPerShard * shards
 	if excess > math.MaxInt-target {
-		return 0, cql.TypeValidation("pool target", "combined target/excess count arithmetic overflow")
+		return 0, cqltype.TypeValidation("pool target", "combined target/excess count arithmetic overflow")
 	}
 	return target, nil
 }
 func InternalValidateV2ConnectionSharding(info implEndpoint.ScyllaConnectionFeatures) error {
 	if implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards == 0 {
 		if implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard != 0 || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalMsbIgnore != 0 {
-			return cql.TypeValidation("sharding", "unsharded connection has shard-specific parameters")
+			return cqltype.TypeValidation("sharding", "unsharded connection has shard-specific parameters")
 		}
 		return nil
 	}
 	if implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards < 1 || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards > math.MaxUint16 || implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard < 0 || implEndpoint.ScyllaConnectionFeaturesData(&info).InternalShard >= implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalNrShards || implEndpoint.ScyllaHostFeaturesData(&info.ScyllaHostFeatures).InternalMsbIgnore > 63 {
-		return cql.TypeValidation("sharding", "invalid count, shard ID or ignored MSB count")
+		return cqltype.TypeValidation("sharding", "invalid count, shard ID or ignored MSB count")
 	}
 	return nil
 }

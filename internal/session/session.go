@@ -9,6 +9,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
@@ -55,7 +57,7 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement binding.State
 // again for it on each execution.
 func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 	if s == nil {
-		return CompiledOptions{}, cql.TypeValidation("session", "nil session")
+		return CompiledOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
 	return InternalCompileOptions(s.Core(), options)
 }
@@ -67,7 +69,7 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 // a Batch must not be changed while it is sent.
 func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (cql.Result, error) {
 	if s == nil {
-		err := cql.TypeValidation("session", "nil session")
+		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
 	}
 	core := s.Core()
@@ -91,10 +93,10 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledO
 // same.
 func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options CompiledOptions) (Rows[R], error) {
 	if s == nil {
-		return Rows[R]{}, cql.TypeValidation("session", "nil session")
+		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
 	}
 	if decoder == nil {
-		return Rows[R]{}, cql.TypeValidation("batch rows", "nil decoder")
+		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
 	}
 	_, rows, err := sendBatchRows(ctx, s.Core(), batch, decoder, options)
 	return rows, err
@@ -107,10 +109,10 @@ func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql
 // added this way carries no routing token.
 func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding.Statement[P, R], value P) error {
 	if s == nil {
-		return cql.TypeValidation("session", "nil session")
+		return cqltype.TypeValidation("session", "nil session")
 	}
 	if batch == nil {
-		return cql.TypeValidation("batch", "nil batch")
+		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	core := s.Core()
 	if core.Closed() {
@@ -119,7 +121,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return err
 	}
-	plan, err := cql.CompileParamPlan(statement.Params, statement.BindMarkers)
+	plan, err := codec.CompileParamPlan(statement.Params, statement.BindMarkers)
 	if err != nil {
 		return err
 	}

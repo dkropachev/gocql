@@ -8,6 +8,7 @@ import (
 	"hash/maphash"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
@@ -40,13 +41,13 @@ func (h *InternalPagingHistory) InternalAdd(state cql.PageState) error {
 	if !state.More() {
 		return nil
 	}
-	token := cql.PageToken(state)
+	token := cqltype.PageToken(state)
 	perfAdd(0, len(token))
 	if h.InternalEntries == nil && h.InternalInline != nil {
 		// Without a map, InternalCount is the number of inline tokens.
 		for _, held := range h.InternalInline[:h.InternalCount] {
 			perfAdd(1, 1)
-			if bytes.Equal(cql.PageToken(held), token) {
+			if bytes.Equal(cqltype.PageToken(held), token) {
 				return runtimeerrors.ErrPagingNoProgress
 			}
 		}
@@ -67,12 +68,12 @@ func (h *InternalPagingHistory) InternalAdd(state cql.PageState) error {
 	hash := maphash.Bytes(h.InternalSeed, token)
 	if entry, exists := h.InternalEntries[hash]; exists {
 		perfAdd(1, 1)
-		if bytes.Equal(cql.PageToken(entry.InternalState), token) {
+		if bytes.Equal(cqltype.PageToken(entry.InternalState), token) {
 			return runtimeerrors.ErrPagingNoProgress
 		}
 		for p := entry.InternalNext; p != nil; p = p.InternalNext {
 			perfAdd(1, 1)
-			if bytes.Equal(cql.PageToken(p.InternalState), token) {
+			if bytes.Equal(cqltype.PageToken(p.InternalState), token) {
 				return runtimeerrors.ErrPagingNoProgress
 			}
 		}
@@ -97,7 +98,7 @@ func (h *InternalPagingHistory) InternalSpill() {
 		return
 	}
 	for i, held := range h.InternalInline[:h.InternalCount] {
-		h.insert(maphash.Bytes(h.InternalSeed, cql.PageToken(held)), held)
+		h.insert(maphash.Bytes(h.InternalSeed, cqltype.PageToken(held)), held)
 		h.InternalInline[i] = cql.PageState{}
 	}
 }

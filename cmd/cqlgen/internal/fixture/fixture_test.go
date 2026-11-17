@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cql/stream"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -84,11 +86,11 @@ func encode(t *testing.T, cols cql.Columns, params cql.ParamEncoder[Fixture], v 
 		t.Fatal(err)
 	}
 	builder := wire.NewBuilder(8)
-	w := cql.NewParamWriter(builder, cols, true)
+	w := codec.NewParamWriter(builder, cols, true)
 	if err := plan.Encode(w, v); err != nil {
 		t.Fatal(err)
 	}
-	if err := cql.FinishParamWriter(w); err != nil {
+	if err := codec.FinishParamWriter(w); err != nil {
 		t.Fatal(err)
 	}
 	chain, err := builder.Freeze()
@@ -108,12 +110,12 @@ func decode(t *testing.T, cols cql.Columns, rows cql.RowDecoder[Fixture], chain 
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := cql.NewRowReader(cols, chain, wire.NewLease(chain, nil))
+	reader := codec.NewRowReader(cols, chain, wire.NewLease(chain, nil))
 	row, err := plan.Decode(reader)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cql.FinishRowReader(reader); err != nil {
+	if err := codec.FinishRowReader(reader); err != nil {
 		t.Fatal(err)
 	}
 	return rows.Clone(row)
@@ -149,7 +151,59 @@ func streamColumns(t *testing.T) cql.Columns {
 	)
 }
 
+// reflectedFixture and reflectedStreamFixture have the fields of Fixture and
+// StreamFixture but not their generated mapping methods, so cql.ParamsOf,
+// cql.RowOf and stream.RowOf map them by reflection.
+type (
+	reflectedFixture       Fixture
+	reflectedStreamFixture StreamFixture
+)
+
+// reflectParams is Fixture's parameter mapping built by reflection.
+func reflectParams(t *testing.T, opts ...cql.StructOption[reflectedFixture]) cql.ParamEncoder[Fixture] {
+	t.Helper()
+	params, err := cql.ParamsOf(opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cql.ConvertParams(params, func(v Fixture) reflectedFixture { return reflectedFixture(v) })
+}
+
+// reflectRows is Fixture's row mapping built by reflection.
+func reflectRows(t *testing.T, opts ...cql.StructOption[reflectedFixture]) cql.RowDecoder[Fixture] {
+	t.Helper()
+	rows, err := cql.RowOf(opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return cql.ConvertRows(rows, func(v reflectedFixture) Fixture { return Fixture(v) },
+		func(v Fixture) Fixture { return Fixture(rows.Clone(reflectedFixture(v))) })
+}
+
 func streamDecode(t *testing.T, cols cql.Columns, rows cql.StreamRowDecoder[StreamFixture], data []byte) StreamFixture {
+	t.Helper()
+	// Streaming decoders write into the destination's storage.
+	dst := StreamFixture{Payload: make([]byte, 0, 16), Name: make([]byte, 0, 16),
+		Pieces: [][]byte{make([]byte, 0, 8), make([]byte, 0, 8)}[:0], Tags: make([]int32, 0, 4)}
+	streamDecodeInto(t, cols, rows, data, &dst)
+	return dst
+}
+
+// reflectStreamDecode decodes data with StreamFixture's stream mapping built
+// by reflection.
+func reflectStreamDecode(t *testing.T, cols cql.Columns, data []byte) StreamFixture {
+	t.Helper()
+	rows, err := stream.RowOf[reflectedStreamFixture]()
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := reflectedStreamFixture{Payload: make([]byte, 0, 16), Name: make([]byte, 0, 16),
+		Pieces: [][]byte{make([]byte, 0, 8), make([]byte, 0, 8)}[:0], Tags: make([]int32, 0, 4)}
+	streamDecodeInto(t, cols, rows, data, &dst)
+	return StreamFixture(dst)
+}
+
+func streamDecodeInto[R any](t *testing.T, cols cql.Columns, rows cql.StreamRowDecoder[R], data []byte, dst *R) {
 	t.Helper()
 	plan, err := rows.Compile(cols)
 	if err != nil {
@@ -159,19 +213,15 @@ func streamDecode(t *testing.T, cols cql.Columns, rows cql.StreamRowDecoder[Stre
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader, err := cql.NewStreamRowReader(cols, scope)
+	reader, err := codec.NewStreamRowReader(cols, scope)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Streaming decoders write into the destination's storage.
-	dst := StreamFixture{Payload: make([]byte, 0, 16), Name: make([]byte, 0, 16),
-		Pieces: [][]byte{make([]byte, 0, 8), make([]byte, 0, 8)}[:0], Tags: make([]int32, 0, 4)}
-	plan.Reset(&dst)
-	if err := plan.DecodeInto(reader, &dst); err != nil {
+	plan.Reset(dst)
+	if err := plan.DecodeInto(reader, dst); err != nil {
 		t.Fatal(err)
 	}
 	if err := scope.RequireEnd(); err != nil {
 		t.Fatal(err)
 	}
-	return dst
 }

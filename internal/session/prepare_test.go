@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
@@ -24,7 +25,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
 	columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
 	state, _ := preparedState(t, s, columns)
-	changed := cql.NewColumns(cql.ColumnSlice(columns)[0], cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
+	changed := cql.NewColumns(cqltype.ColumnSlice(columns)[0], cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
 	bound := func() *Bound[cql.Bytes] {
 		opaqueStorageValue := new(Bound[cql.Bytes])
 		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cql.OrdinaryStatement}}
