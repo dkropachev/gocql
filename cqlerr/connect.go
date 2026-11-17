@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"fmt"
@@ -15,9 +15,8 @@ type HostError struct {
 	Address string
 }
 
-// ConnectError reports that no host could be reached while a session was
-// connecting. errors.Is matches ErrNoConnectionsStarted, and errors.As finds
-// each host's cause, such as a *net.OpError.
+// ConnectError reports that no host was reachable while a session was
+// connecting; it matches ErrNoConnectionsStarted.
 type ConnectError struct {
 	// Stage names the step that failed, such as "protocol discovery".
 	Stage string

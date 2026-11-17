@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"errors"
@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 type benchTimeoutError struct{}
@@ -23,13 +22,13 @@ var benchKindSink Kind
 
 // BenchmarkKindOf measures classifying the errors a failed attempt carries.
 func BenchmarkKindOf(b *testing.B) {
-	unavailable := &protocol.UnavailableError{}
+	unavailable := &UnavailableError{}
 	for _, bench := range []struct {
 		name string
 		err  error
 	}{
 		{"server", fmt.Errorf("attempt: %w", unavailable)},
-		{"execution", NewExecutionError(unavailable, cql.Result{}, 0, nil)},
+		{"execution", newExecutionError(unavailable, cql.Result{}, 0, nil)},
 		{"net_timeout", &net.OpError{Op: "read", Err: benchTimeoutError{}}},
 		{"unknown", fmt.Errorf("wrap: %w", errors.New("x"))},
 	} {

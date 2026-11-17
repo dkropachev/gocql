@@ -25,7 +25,7 @@
 package metadata
 
 import (
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
-var InternalErrNoControl = runtimeerrors.ErrNoControl
+var InternalErrNoControl = cqlerr.ErrNoControl

@@ -14,7 +14,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
 )
@@ -627,7 +626,7 @@ func TestStructMapping(t *testing.T) {
 			}
 			stream, err := q.Run(ctx, 9)
 			if incremental && frameCompressed {
-				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
+				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 					t.Fatal("frame-compressed incremental stream not rejected:", err)
 				}
 				q.Close()

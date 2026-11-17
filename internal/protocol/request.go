@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -65,7 +66,7 @@ func (e *TypedEnvelope) Bytes(p []byte, short bool) {
 		e.U16(uint16(len(p)))
 	} else {
 		if int64(len(p)) > math.MaxInt32 {
-			e.check(ErrFrameTooBig)
+			e.check(cqlerr.ErrFrameTooBig)
 			return
 		}
 		e.U32(uint32(len(p)))
@@ -174,7 +175,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 				return wire.Chain{}, false, err
 			}
 			if value.Len() > math.MaxInt32 {
-				return wire.Chain{}, false, ErrFrameTooBig
+				return wire.Chain{}, false, cqlerr.ErrFrameTooBig
 			}
 			e.U32(uint32(value.Len()))
 			e.Chain(cqltype.BytesChain(value))
@@ -234,7 +235,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 		}
 		size := e.b.Len() - HeadSize
 		if size > c.MaxFrameBytes {
-			return wire.Chain{}, false, ErrFrameTooBig
+			return wire.Chain{}, false, cqlerr.ErrFrameTooBig
 		}
 		e.check(e.b.PatchUint32(bodyLength, uint32(size)))
 		frame, err = e.Freeze()
@@ -244,7 +245,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 			return wire.Chain{}, false, freezeErr
 		}
 		if body.Len() > c.MaxFrameBytes {
-			return wire.Chain{}, false, ErrFrameTooBig
+			return wire.Chain{}, false, cqlerr.ErrFrameTooBig
 		}
 		var out []byte
 		switch c.Compression {
@@ -263,7 +264,7 @@ func (c *Settings) BuildTypedRequestInto(req *model.AttemptRequest, stream int, 
 		body, _ = wire.NewChain(wire.Borrow(out))
 		Flags |= frm.FlagCompress
 		if body.Len() > c.MaxFrameBytes {
-			return wire.Chain{}, false, ErrFrameTooBig
+			return wire.Chain{}, false, cqlerr.ErrFrameTooBig
 		}
 		header := NewTypedEnvelope()
 		header.U8(proto)
@@ -377,7 +378,7 @@ func (c *Settings) WriteTypedParams(e *TypedEnvelope, r *model.AttemptRequest, b
 	}
 	if paging {
 		if int64(len(r.PagingState)) > math.MaxInt32 {
-			e.check(ErrFrameTooBig)
+			e.check(cqlerr.ErrFrameTooBig)
 			return
 		}
 		before += 4

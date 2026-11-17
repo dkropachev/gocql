@@ -15,14 +15,13 @@ import (
 	"weak"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -279,7 +278,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 		return nil, err
 	}
 	if s.Core.Closed() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	if err := state.reconcilePendingConflict(); err != nil {
 		return nil, err
@@ -305,7 +304,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 		rt := s
 		if !rt.beginPreparedWorker(s.Core) {
 			state.InternalMu.Unlock()
-			return nil, runtimeerrors.ErrClosed
+			return nil, cqlerr.ErrClosed
 		}
 		state.preparing[id] = flight
 		parameters := values.Columns
@@ -358,14 +357,14 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 		return nil, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
 	}
 	if !state.InternalParameters.Equal(page.BindColumns()) || !parameters.Equal(page.BindColumns()) {
-		return nil, &runtimeerrors.SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns()}
+		return nil, &cqlerr.SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns()}
 	}
 	info, err := s.hostPreparedInfo(conn, page, state)
 	if err != nil {
 		return nil, err
 	}
 	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && s.Core.PreparedPartitionerName(info.Keyspace, info.Table) != state.partitioner {
-		return nil, &runtimeerrors.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
+		return nil, &cqlerr.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
 	if flight.previous != nil {
@@ -617,7 +616,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	}
 	s := rt.Core
 	if s.Closed() {
-		return nil, nil, nil, runtimeerrors.ErrClosed
+		return nil, nil, nil, cqlerr.ErrClosed
 	}
 	var request *InternalExecutionRequest
 	query := b.privateStorage.InternalRequest.query
@@ -821,7 +820,7 @@ func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state
 
 func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
-		return nil, runtimeerrors.ErrPagingComplete
+		return nil, cqlerr.ErrPagingComplete
 	}
 	if pageSize < 0 {
 		return nil, cqltype.TypeValidation("page size", "must not be negative")
@@ -876,7 +875,7 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 		request.InternalLogical.releaseInput()
 	}
 	request.InternalLogical.installStop(stopFunc(func() {
-		request.InternalLogical.InternalFinish(response.Result, runtimeerrors.ErrClosed)
+		request.InternalLogical.InternalFinish(response.Result, cqlerr.ErrClosed)
 		request.InternalLogical.releaseInput()
 	}))
 	return page, nil
@@ -937,7 +936,7 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 //
 //go:noinline
 func conditionalExec() (cql.Result, error) {
-	return cql.Result{}, runtimeerrors.ErrConditionalExec
+	return cql.Result{}, cqlerr.ErrConditionalExec
 }
 
 type typedAttemptOutcome struct {
@@ -1190,12 +1189,12 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		consistency := request.options.InternalProfile.Consistency
 		conn, err := s.Core.SelectTypedConn(ctx, request.routing, plan)
 		if err != nil {
-			return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+			return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 		}
 		if conn.InternalStreamObserver != nil {
 			// A stream-observed connection keeps its attempt on a goroutine.
 			if err := launch(conn, consistency, false); err != nil {
-				return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+				return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 			}
 		} else {
 			startedCount, active = 1, 1
@@ -1263,7 +1262,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 		}
 	} else if err := launch(nil, request.options.InternalProfile.Consistency, false); err != nil {
-		return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+		return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 	}
 	var timer *time.Timer
 	var speculate <-chan time.Time
@@ -1309,13 +1308,13 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				failure := ctx.Err()
 				if active > 0 {
 					// An abandoned in-flight attempt may have been applied.
-					log.raise(cqltype.MaybeExecuted)
+					log.raise(cqlerr.MaybeExecuted)
 				}
 				if request.InternalLogical != nil {
 					if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
 						aggregate.HostID = *coordinator
 						failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
-						log.raise(cqltype.PartiallyExecuted)
+						log.raise(cqlerr.PartiallyExecuted)
 					}
 				}
 				return nil, log.error(failure, aggregate)
@@ -1324,7 +1323,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				// launching them.
 				delayed = delayed[:0]
 				armDelay()
-				lastErr = runtimeerrors.ErrClosed
+				lastErr = cqlerr.ErrClosed
 				if active == 0 {
 					return nil, log.error(lastErr, aggregate)
 				}
@@ -1393,7 +1392,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
 				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
-				log.raise(cqltype.PartiallyExecuted)
+				log.raise(cqlerr.PartiallyExecuted)
 				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
@@ -1403,7 +1402,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
@@ -1526,7 +1525,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
-		if unprepared, ok := errors.AsType[*protocol.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
+		if unprepared, ok := errors.AsType[*cqlerr.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
 			repaired = unprepared.StatementID
 			if response != nil {
 				response.Owner.Release()
@@ -1582,7 +1581,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 				} else {
 					refreshErr = s.Core.RefreshMetadata(ctx)
 				}
-				if refreshErr != nil && !errors.Is(refreshErr, runtimeerrors.ErrKeyspaceDoesNotExist) {
+				if refreshErr != nil && !errors.Is(refreshErr, cqlerr.ErrKeyspaceDoesNotExist) {
 					return response, refreshErr
 				}
 			}
@@ -1614,7 +1613,7 @@ func InternalExecutionErrorResult(err error) cql.Result {
 	return cql.Result{}
 }
 func attemptBytesWritten(err error) bool {
-	return runtimeerrors.ExecutionStatusOf(err) != cqltype.NotExecuted
+	return cqlerr.ExecutionStatusOf(err) != cqlerr.NotExecuted
 }
 
 // hasCounterColumn reports whether columns, a statement's parameters, include

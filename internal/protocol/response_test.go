@@ -36,9 +36,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestResponse(t *testing.T) {
@@ -610,7 +612,7 @@ func TestResponse(t *testing.T) {
 		t.Run("NegativeCountIsEmpty", func(t *testing.T) {
 			t.Parallel()
 
-			body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
+			body := errBody(ProtoVersion5, cqlerr.CodeReadFailure, "rf", func(f *Framer) {
 				f.WriteConsistency(cql.One)
 				f.WriteInt(0)
 				f.WriteInt(1)
@@ -621,7 +623,7 @@ func TestResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rf := got.(*ErrorResponseFrame).Err.(*ReadFailureError)
+			rf := got.(*ErrorResponseFrame).Err.(*cqlerr.ReadFailureError)
 			if len(rf.ErrorMap) != 0 || rf.NumFailures != 0 {
 				t.Fatalf("ErrorMap = %v, NumFailures = %d; want empty", rf.ErrorMap, rf.NumFailures)
 			}
@@ -661,7 +663,7 @@ func TestResponse(t *testing.T) {
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
-					body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
+					body := errBody(ProtoVersion5, cqlerr.CodeReadFailure, "rf", func(f *Framer) {
 						f.WriteConsistency(cql.One)
 						f.WriteInt(0)
 						f.WriteInt(1)
@@ -739,16 +741,16 @@ func TestResponse(t *testing.T) {
 	})
 	t.Run("ServerErrorCode", func(t *testing.T) {
 		for _, err := range []error{
-			NewOtherServerError(CodeSyntax, "syntax"),
-			&UnavailableError{serverError: serverError{message: "unavailable"}},
-			&WriteTimeoutError{serverError: serverError{message: "write timeout"}},
-			&UnpreparedError{serverError: serverError{message: "unprepared"}},
+			cqlerr.NewOtherServerError(cqlerr.CodeSyntax, "syntax"),
+			runtimeerrors.WithMessage(&cqlerr.UnavailableError{}, "unavailable"),
+			runtimeerrors.WithMessage(&cqlerr.WriteTimeoutError{}, "write timeout"),
+			runtimeerrors.WithMessage(&cqlerr.UnpreparedError{}, "unprepared"),
 		} {
-			direct, ok := errors.AsType[ServerError](err)
+			direct, ok := errors.AsType[cqlerr.ServerError](err)
 			if !ok {
 				t.Fatalf("%T does not satisfy server error contract", err)
 			}
-			if wrapped, ok := errors.AsType[ServerError](fmt.Errorf("outer: %w", err)); !ok || wrapped.Code() != direct.Code() || wrapped.Message() != direct.Message() {
+			if wrapped, ok := errors.AsType[cqlerr.ServerError](fmt.Errorf("outer: %w", err)); !ok || wrapped.Code() != direct.Code() || wrapped.Message() != direct.Message() {
 				t.Fatalf("wrapped %T lost server details", err)
 			}
 		}

@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"context"
@@ -10,27 +10,9 @@ import (
 	"net"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-// Kind groups errors by what a caller can do about them.
-type Kind = cqltype.Kind
-
-const (
-	KindUnknown      = cqltype.KindUnknown
-	KindTimeout      = cqltype.KindTimeout
-	KindUnavailable  = cqltype.KindUnavailable
-	KindOverloaded   = cqltype.KindOverloaded
-	KindRateLimited  = cqltype.KindRateLimited
-	KindInvalid      = cqltype.KindInvalid
-	KindUnauthorized = cqltype.KindUnauthorized
-	KindConnection   = cqltype.KindConnection
-	KindCanceled     = cqltype.KindCanceled
-	KindClosed       = cqltype.KindClosed
-	KindProtocol     = cqltype.KindProtocol
-	KindServer       = cqltype.KindServer
-)
+const ()
 
 // kinded is an error that knows its Kind: every server error and every
 // error type the driver defines.
@@ -76,11 +58,11 @@ func rankOf(k Kind) rank {
 
 // serverKind classifies a server error. The driver's own have a Kind method;
 // another implementation is classified by its code.
-func serverKind(err protocol.ServerError) Kind {
+func serverKind(err ServerError) Kind {
 	if k, ok := err.(kinded); ok {
 		return k.Kind()
 	}
-	return protocol.CodeKind(err.Code())
+	return codeKind(err.Code())
 }
 
 // sentinelKind classifies an error by identity: the driver's sentinels and
@@ -92,9 +74,9 @@ func sentinelKind(err error) Kind {
 		return KindClosed
 	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete:
 		return KindInvalid
-	case protocol.ErrFrameTooBig:
+	case ErrFrameTooBig:
 		return KindProtocol
-	case ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout:
+	case ErrTimeoutNoResponse, ErrReadHeaderTimeout:
 		return KindTimeout
 	case ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed:
@@ -128,7 +110,7 @@ func (w *kindWalk) visit(err error) bool {
 	if w.rank <= rankServer {
 		return true
 	}
-	if server, ok := err.(protocol.ServerError); ok { //nolint:errorlint // one node of a tree walkErrors walks
+	if server, ok := err.(ServerError); ok { //nolint:errorlint // one node of a tree walkErrors walks
 		// The first server error of the tree decides, as errors.As finds it.
 		w.kind, w.rank = serverKind(server), rankServer
 		return true
@@ -155,14 +137,13 @@ func (w *kindWalk) visit(err error) bool {
 }
 
 // KindOf classifies err. For a request that failed after several attempts it
-// classifies the reason the request stopped.
+// classifies the reason the request stopped. Kind.Transient reports whether
+// trying again can help; ExecutionStatusOf reports whether it is safe.
 //
-// It walks err's tree once, as errors.Is and errors.As do. When the tree
-// holds several classified errors, a cancellation wins over a deadline, a
+// When err wraps several errors, a cancellation wins over a deadline, a
 // deadline over a server error, and a server error over the driver's own
-// errors, which rank closed, invalid, protocol, timeout, then connection. A
-// net.Error that is no driver error classifies as a timeout when the first
-// one of the tree times out, and as a connection failure otherwise.
+// errors, so a ConnectError whose host rejected the credentials reports
+// KindUnauthorized.
 func KindOf(err error) Kind {
 	if err == nil {
 		return KindUnknown

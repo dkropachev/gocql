@@ -22,20 +22,18 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package protocol
+package cqlerr
 
 import (
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/cql"
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 // ErrorCode is the code of a server error. As an error it is the code's
 // name, and every ServerError matches its own code through errors.Is:
 //
-//	errors.Is(err, CodeOverloaded)
+//	if errors.Is(err, cqlerr.CodeOverloaded) { ... }
 type ErrorCode uint16
 
 // Server error codes, with their native protocol values. See CQL Binary
@@ -83,9 +81,8 @@ const (
 	CodeAlreadyExists ErrorCode = 0x2400
 	// CodeUnprepared: the server does not know the prepared statement ID.
 	CodeUnprepared ErrorCode = 0x2500
-	// CodeRateLimitReached is ScyllaDB's per-partition rate limit error. Its
-	// wire value is negotiated through the SCYLLA_RATE_LIMIT_ERROR extension;
-	// whatever the value, the driver reports the error with this code.
+	// CodeRateLimitReached is ScyllaDB's rate limit error. Its wire value is
+	// negotiated per connection; the driver reports it with this code.
 	CodeRateLimitReached ErrorCode = 0xF000
 )
 
@@ -145,7 +142,11 @@ func (c ErrorCode) name() string {
 	return ""
 }
 
-// ServerError is implemented by every error a server returns.
+// ServerError is implemented by every error a server returns. Find one with
+// errors.As, or a specific kind with its concrete type:
+//
+//	var timeout *cqlerr.WriteTimeoutError
+//	if errors.As(err, &timeout) { ... }
 type ServerError interface {
 	error
 	// Code is the error's code.
@@ -373,11 +374,11 @@ func NewOtherServerError(code ErrorCode, message string) *OtherServerError {
 func (e *OtherServerError) Code() ErrorCode      { return e.code }
 func (e *OtherServerError) Error() string        { return e.text(e.code) }
 func (e *OtherServerError) Is(target error) bool { return target == e.code }
-func (e *OtherServerError) Kind() Kind           { return CodeKind(e.code) }
+func (e *OtherServerError) Kind() Kind           { return codeKind(e.code) }
 
 // CodeKind classifies a code the way KindOf classifies the server errors that
 // carry it.
-func CodeKind(c ErrorCode) Kind {
+func codeKind(c ErrorCode) Kind {
 	switch c {
 	case CodeReadTimeout, CodeWriteTimeout:
 		return KindTimeout
@@ -399,7 +400,7 @@ func CodeKind(c ErrorCode) Kind {
 // ServerErrorExecutionStatus reports what a request that failed with err may have
 // done on the cluster. It is the single classification of server error codes
 // by execution outcome.
-func ServerErrorExecutionStatus(err ServerError) ExecutionStatus {
+func serverErrorExecutionStatus(err ServerError) ExecutionStatus {
 	switch e := err.(type) {
 	case *WriteTimeoutError:
 		return writeExecution(e.Received, e.WriteType)
@@ -435,17 +436,6 @@ func writeExecution(received int, writeType string) ExecutionStatus {
 	}
 }
 
-// ErrorResponseFrame is a parsed ERROR response: the frame that carries a
-// server error. The header stays here, off the error a caller sees; Err is
-// what the driver returns.
-type ErrorResponseFrame struct {
-	Err ServerError
-	frm.FrameHeader
-}
-
-func (f *ErrorResponseFrame) Error() string { return f.Err.Error() }
-func (f *ErrorResponseFrame) Unwrap() error { return f.Err }
-
 // errorBody reads the fields of an ERROR response body.
 type errorBody interface {
 	I32() int
@@ -453,13 +443,13 @@ type errorBody interface {
 	U8() byte
 	Str() string
 	Strings() []string
-	shortBytes() []byte
-	errorMap() ErrorMap
+	ShortBytes() []byte
+	ReadErrorMap() ErrorMap
 }
 
 // decodeServerError decodes an ERROR response body into its typed error.
 // It is the only decoder of server errors.
-func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode int) ServerError {
+func decodeServerError(r errorBody, warnings []string, failureReasonMap bool, rateLimitCode int) ServerError {
 	wire, msg := r.I32(), r.Str()
 	base := serverError{message: msg, warnings: warnings}
 	// Every code with fields of its own fits in 16 bits. A wider code is
@@ -476,11 +466,11 @@ func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode
 		case CodeAlreadyExists:
 			return &AlreadyExistsError{serverError: base, Keyspace: r.Str(), Table: r.Str()}
 		case CodeUnprepared:
-			return &UnpreparedError{serverError: base, StatementID: r.shortBytes()}
+			return &UnpreparedError{serverError: base, StatementID: r.ShortBytes()}
 		case CodeReadFailure:
 			e := &ReadFailureError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
-			if VersionFor(proto).FailureReasonMap {
-				e.ErrorMap = r.errorMap()
+			if failureReasonMap {
+				e.ErrorMap = r.ReadErrorMap()
 				e.NumFailures = len(e.ErrorMap)
 			} else {
 				e.NumFailures = r.I32()
@@ -489,8 +479,8 @@ func decodeServerError(r errorBody, warnings []string, proto byte, rateLimitCode
 			return e
 		case CodeWriteFailure:
 			e := &WriteFailureError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
-			if VersionFor(proto).FailureReasonMap {
-				e.ErrorMap = r.errorMap()
+			if failureReasonMap {
+				e.ErrorMap = r.ReadErrorMap()
 				e.NumFailures = len(e.ErrorMap)
 			} else {
 				e.NumFailures = r.I32()

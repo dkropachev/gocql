@@ -9,10 +9,10 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -157,7 +157,7 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 			return err
 		}
 		if rt.Closed() {
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		if fn == nil {
 			codec.DetachRow(plan, dst)

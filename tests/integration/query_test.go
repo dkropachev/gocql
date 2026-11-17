@@ -34,9 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/logging"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -45,6 +42,8 @@ import (
 	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -512,7 +511,7 @@ func TestQuery(t *testing.T) {
 			_, err := cql.ParseUUID("[invalid]")
 			require.Error(t, err, "invalid host IDs are rejected while constructing typed UUIDs")
 			_, err = session.CompileOptions(exec.Options{HostID: cql.Option[cql.UUID]{Value: cql.UUID{}, Set: true}})
-			var invalidHost *cqlerr.ValidationError
+			var invalidHost *cql.ValidationError
 			require.ErrorAs(t, err, &invalidHost, "an empty host ID is rejected when options are built")
 			err = runOn(exec.Options{HostID: cql.Option[cql.UUID]{Value: cql.RandomUUID(), Set: true}})
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
@@ -799,7 +798,7 @@ func TestQuery(t *testing.T) {
 			streamQuery := codecTestMust(readStream.Query(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
-				if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
+				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 					t.Fatal(err)
 				}
 				streamQuery.Close()

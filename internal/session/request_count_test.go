@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -52,7 +52,7 @@ func TestRequestCount(t *testing.T) {
 		go func() { _ = s.Close(); close(closed) }()
 		spinUntil(t, "Close marked the session", s.Closed)
 		release()
-		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
 		receiveWithin(t, "Close", closed)
@@ -88,7 +88,7 @@ func TestRequestCount(t *testing.T) {
 			// A registration that checked the mark before waiting for the
 			// lock would be registered after Close marked, and is listed only
 			// if Close reaches its shard after it: that is the miss.
-			if err := receiveWithin(t, "Exec", result); !errors.Is(err, runtimeerrors.ErrClosed) {
+			if err := receiveWithin(t, "Exec", result); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("Exec on a session Close was stopping: %v", err)
 			}
 			if refused := rt.refusedRegistrations.Load(); refused != 1 {

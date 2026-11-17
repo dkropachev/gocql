@@ -26,9 +26,9 @@ import (
 	"slices"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -41,7 +41,7 @@ func (s *Core) ScheduleV2PreparedRefresh(keyspace string) error {
 	p.InternalMu.Lock()
 	if p.closed || s.Closed() {
 		p.InternalMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if _, exists := p.InternalPreparedRefreshScopes[keyspace]; !exists && len(p.InternalPreparedRefreshScopes) >= InternalMaxPreparedRefreshScopes {
 		p.InternalMu.Unlock()
@@ -84,7 +84,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
 	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), keyspace)
-	absent := errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist)
+	absent := errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist)
 	if err != nil && !absent {
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	p.InternalMu.Lock()
 	if p.schemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
-		return &metadata.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
+		return &cqlerr.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
 	}
 	if publish && s.privateStorage.InternalMetadataDescriber != nil {
 		p.schemaRevision[keyspace]++

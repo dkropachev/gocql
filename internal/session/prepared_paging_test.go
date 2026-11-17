@@ -24,10 +24,10 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/retry"
@@ -102,11 +102,11 @@ func readRequest(server net.Conn) (byte, int, []byte, error) {
 	_, e := io.ReadFull(server, b)
 	return h[4], int(binary.BigEndian.Uint16(h[2:4])), b, e
 }
-func errorResponse(t *testing.T, stream int, code protocol.ErrorCode, id []byte) []byte {
+func errorResponse(t *testing.T, stream int, code cqlerr.ErrorCode, id []byte) []byte {
 	body := binary.BigEndian.AppendUint32(nil, uint32(code))
 	body = binary.BigEndian.AppendUint16(body, 4)
 	body = append(body, "test"...)
-	if code == protocol.CodeUnprepared {
+	if code == cqlerr.CodeUnprepared {
 		body = binary.BigEndian.AppendUint16(body, uint16(len(id)))
 		body = append(body, id...)
 	}

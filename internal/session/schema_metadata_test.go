@@ -11,12 +11,12 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
@@ -126,7 +126,7 @@ func TestSchemaMetadata(t *testing.T) {
 			mock.queryError = errors.New("base schema denied temporarily")
 			mock.mu.Unlock()
 			err := s.RefreshV2Keyspace(context.Background(), "ks1")
-			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
+			if _, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok {
 				t.Fatal("retained stale base schema lacks partial error", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks == nil || ks.Tables["t1"] == nil {
@@ -156,7 +156,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
 			close(release)
 			err := <-done
-			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
+			if _, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok {
 				t.Fatal("stale table refresh accepted", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks.Tables["t1"] != nil {

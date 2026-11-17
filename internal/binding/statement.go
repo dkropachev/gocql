@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -93,7 +93,7 @@ func validateStatement[P, R any](s Statement[P, R]) error {
 		return cqltype.TypeValidation("statement", "empty CQL")
 	}
 	if InternalFirstCQLWord(s.CQL) == "USE" {
-		return runtimeerrors.ErrUseStmt
+		return cqlerr.ErrUseStmt
 	}
 	if s.Params == nil || s.Rows == nil {
 		return cqltype.TypeValidation("statement", "parameter and row codecs are required")

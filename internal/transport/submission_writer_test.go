@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -79,7 +79,7 @@ func TestSubmissionWriter(t *testing.T) {
 			t.Fatal("accepted ticket storage drained before writer completion")
 		default:
 		}
-		ticket.finish(InternalWriteResult{InternalErr: runtimeerrors.ErrConnectionClosed})
+		ticket.finish(InternalWriteResult{InternalErr: cqlerr.ErrConnectionClosed})
 		<-drained
 	})
 
@@ -172,7 +172,7 @@ func TestSubmissionWriter(t *testing.T) {
 		live := &Conn{InternalCtx: context.Background(), typedWriter: w}
 		live.typedWriterOnce.Do(func() {})
 		chain, _ := wire.NewChain(wire.Borrow([]byte("late")))
-		if _, err := live.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+		if _, err := live.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, cqlerr.ErrConnectionClosed) {
 			t.Fatal("submit after shutdown accepted", err)
 		}
 	})
@@ -233,7 +233,7 @@ func TestSubmissionWriter(t *testing.T) {
 			}
 			time.Sleep(time.Millisecond)
 		}
-		if _, err := conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+		if _, err := conn.submitTyped(context.Background(), chain, wire.NewLease(chain, nil)); !errors.Is(err, cqlerr.ErrConnectionClosed) {
 			t.Fatal("submit after a failed write accepted", err)
 		}
 		first.release()

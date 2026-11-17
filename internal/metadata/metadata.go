@@ -9,18 +9,16 @@ import (
 	"errors"
 	"fmt"
 	"maps"
-	"sort"
 	"strconv"
 	"strings"
 
 	"golang.org/x/sync/errgroup"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func cloneV2Any(v any) any {
@@ -192,60 +190,6 @@ func InternalCloneV2Keyspace(k *KeyspaceMetadata) *KeyspaceMetadata {
 	return &r
 }
 
-// PartialRefreshError reports keyspaces whose previous valid schema was kept.
-type PartialRefreshError struct {
-	Topology     error
-	ClientRoutes error
-	Keyspaces    map[string]error
-	Generation   uint64
-}
-
-func (e *PartialRefreshError) Error() string {
-	names := make([]string, 0, len(e.Keyspaces))
-	for name := range e.Keyspaces {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	var details []string
-	for _, name := range names {
-		details = append(details, fmt.Sprintf("%s: %v", name, e.Keyspaces[name]))
-	}
-	if e.Topology != nil {
-		details = append(details, "topology: "+e.Topology.Error())
-	}
-	if e.ClientRoutes != nil {
-		details = append(details, "client routes: "+e.ClientRoutes.Error())
-	}
-	return fmt.Sprintf("gocql: metadata generation %d retained stale data (%s)", e.Generation, strings.Join(details, "; "))
-}
-func (e *PartialRefreshError) Unwrap() []error {
-	names := make([]string, 0, len(e.Keyspaces))
-	for name := range e.Keyspaces {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	out := make([]error, 0, len(names))
-	for _, name := range names {
-		out = append(out, e.Keyspaces[name])
-	}
-	if e.Topology != nil {
-		out = append(out, e.Topology)
-	}
-	if e.ClientRoutes != nil {
-		out = append(out, e.ClientRoutes)
-	}
-	return out
-}
-
-// NoHostsError distinguishes an empty eligible peer scope from agreement.
-type NoHostsError struct {
-	Operation string
-	Causes    []error
-}
-
-func (e *NoHostsError) Error() string   { return "gocql: no eligible hosts for " + e.Operation }
-func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes...) }
-
 // Schema rows intentionally materialize small metadata values on the cold path.
 // Fields are explicitly registered; no reflection or destination inference runs.
 type InternalV2SchemaField[R any] struct {
@@ -398,7 +342,7 @@ func (p v2SchemaParams) Encode(w *cql.ParamWriter, values []string) error {
 func InternalQueryV2SchemaRows[R any](ctx context.Context, s Source, stmt string, args []string, decoder cql.RowDecoder[R]) ([]R, error) {
 	settings := s.InternalSchemaSettings()
 	if !settings.SystemSchema {
-		return nil, &runtimeerrors.UnsupportedSettingError{Setting: "schema metadata", Reason: "server does not provide system_schema tables"}
+		return nil, &cqlerr.UnsupportedSettingError{Setting: "schema metadata", Reason: "server does not provide system_schema tables"}
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -560,7 +504,7 @@ func InternalGetV2KeyspaceMetadata(ctx context.Context, s Source, name string) (
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, runtimeerrors.ErrKeyspaceDoesNotExist
+		return nil, cqlerr.ErrKeyspaceDoesNotExist
 	}
 	if len(rows) != 1 {
 		return nil, cqltype.TypeValidation("keyspace schema", "duplicate identity %q", name)
@@ -638,7 +582,7 @@ func InternalGetV2CreateStatements(ctx context.Context, s Source, keyspace strin
 	stmt := `DESCRIBE KEYSPACE "` + strings.ReplaceAll(keyspace, `"`, `""`) + `" WITH INTERNALS`
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, nil, decoder)
 	if err != nil {
-		if server, ok := errors.AsType[protocol.ServerError](err); ok && server.Code() == protocol.CodeSyntax {
+		if server, ok := errors.AsType[cqlerr.ServerError](err); ok && server.Code() == cqlerr.CodeSyntax {
 			return nil, nil
 		}
 		return nil, err

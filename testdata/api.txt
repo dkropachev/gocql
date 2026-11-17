@@ -886,76 +886,68 @@ package cql
 	func cql.WithStreamCodec[P, V any](decoder cql.StreamDecoder[V]) cql.StructOption[P]
 
 package cqlerr
-	type cqlerr.AlreadyExistsError = internal/protocol.AlreadyExistsError
+	type cqlerr.AlreadyExistsError struct
 		field Keyspace string
 		field Table string
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.AttemptFailure = internal/runtimeerrors.AttemptFailure
+	type cqlerr.AttemptFailure struct
 		field Err error
 		field Address string
 		field HostID cql.UUID
 		field Number int
 		field Shard cql.Option[uint32]
 		field Consistency cql.Consistency
-		field Status internal/cqltype.ExecutionStatus
+		field Status cqlerr.ExecutionStatus
 		field CQLTraceID cql.Option[cql.UUID]
 		method (T) String() string
-	type cqlerr.CASWriteUnknownError = internal/protocol.CASWriteUnknownError
+	type cqlerr.CASWriteUnknownError struct
 		field Consistency cql.Consistency
 		field Received int
 		field BlockFor int
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.CDCWriteFailureError = internal/protocol.CDCWriteFailureError
-		method (*T) Code() internal/protocol.ErrorCode
+	type cqlerr.CDCWriteFailureError struct
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	const cqlerr.CodeAlreadyExists internal/protocol.ErrorCode
-	const cqlerr.CodeBadCredentials internal/protocol.ErrorCode
-	const cqlerr.CodeBootstrapping internal/protocol.ErrorCode
-	const cqlerr.CodeCASWriteUnknown internal/protocol.ErrorCode
-	const cqlerr.CodeCDCWriteFailure internal/protocol.ErrorCode
-	const cqlerr.CodeConfig internal/protocol.ErrorCode
-	const cqlerr.CodeFunctionFailure internal/protocol.ErrorCode
-	const cqlerr.CodeInvalid internal/protocol.ErrorCode
-	const cqlerr.CodeOverloaded internal/protocol.ErrorCode
-	const cqlerr.CodeProtocol internal/protocol.ErrorCode
-	const cqlerr.CodeRateLimitReached internal/protocol.ErrorCode
-	const cqlerr.CodeReadFailure internal/protocol.ErrorCode
-	const cqlerr.CodeReadTimeout internal/protocol.ErrorCode
-	const cqlerr.CodeServer internal/protocol.ErrorCode
-	const cqlerr.CodeSyntax internal/protocol.ErrorCode
-	const cqlerr.CodeTruncate internal/protocol.ErrorCode
-	const cqlerr.CodeUnauthorized internal/protocol.ErrorCode
-	const cqlerr.CodeUnavailable internal/protocol.ErrorCode
-	const cqlerr.CodeUnprepared internal/protocol.ErrorCode
-	const cqlerr.CodeWriteFailure internal/protocol.ErrorCode
-	const cqlerr.CodeWriteTimeout internal/protocol.ErrorCode
-	type cqlerr.CodecError = cql.CodecError
-		field Err error
-		field Column string
-		field Path string
+	const cqlerr.CodeAlreadyExists cqlerr.ErrorCode
+	const cqlerr.CodeBadCredentials cqlerr.ErrorCode
+	const cqlerr.CodeBootstrapping cqlerr.ErrorCode
+	const cqlerr.CodeCASWriteUnknown cqlerr.ErrorCode
+	const cqlerr.CodeCDCWriteFailure cqlerr.ErrorCode
+	const cqlerr.CodeConfig cqlerr.ErrorCode
+	const cqlerr.CodeFunctionFailure cqlerr.ErrorCode
+	const cqlerr.CodeInvalid cqlerr.ErrorCode
+	const cqlerr.CodeOverloaded cqlerr.ErrorCode
+	const cqlerr.CodeProtocol cqlerr.ErrorCode
+	const cqlerr.CodeRateLimitReached cqlerr.ErrorCode
+	const cqlerr.CodeReadFailure cqlerr.ErrorCode
+	const cqlerr.CodeReadTimeout cqlerr.ErrorCode
+	const cqlerr.CodeServer cqlerr.ErrorCode
+	const cqlerr.CodeSyntax cqlerr.ErrorCode
+	const cqlerr.CodeTruncate cqlerr.ErrorCode
+	const cqlerr.CodeUnauthorized cqlerr.ErrorCode
+	const cqlerr.CodeUnavailable cqlerr.ErrorCode
+	const cqlerr.CodeUnprepared cqlerr.ErrorCode
+	const cqlerr.CodeWriteFailure cqlerr.ErrorCode
+	const cqlerr.CodeWriteTimeout cqlerr.ErrorCode
+	type cqlerr.ConnectError struct
 		field Stage string
-		field Index int
+		field Hosts []cqlerr.HostError
 		method (*T) Error() string
-		method (*T) Unwrap() error
-	type cqlerr.ConnectError = internal/runtimeerrors.ConnectError
-		field Stage string
-		field Hosts []internal/runtimeerrors.HostError
-		method (*T) Error() string
-		method (*T) Kind() internal/runtimeerrors.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Unwrap() []error
 	var cqlerr.ErrBusy error
 	var cqlerr.ErrClosed error
@@ -965,6 +957,7 @@ package cqlerr
 	var cqlerr.ErrKeyspaceDoesNotExist error
 	var cqlerr.ErrNoConnections error
 	var cqlerr.ErrNoConnectionsStarted error
+	var cqlerr.ErrNoControl error
 	var cqlerr.ErrNoHosts error
 	var cqlerr.ErrNoKeyspace error
 	var cqlerr.ErrNoRows error
@@ -975,7 +968,6 @@ package cqlerr
 	var cqlerr.ErrPagingNoProgress error
 	var cqlerr.ErrPagingStateLimit error
 	var cqlerr.ErrReadHeaderTimeout error
-	var cqlerr.ErrReleased error
 	var cqlerr.ErrScyllaSourcePortAlreadyInUse error
 	var cqlerr.ErrSessionClosed error
 	var cqlerr.ErrSessionNotReady error
@@ -983,195 +975,174 @@ package cqlerr
 	var cqlerr.ErrTabletsNotUsed error
 	var cqlerr.ErrTimeoutNoResponse error
 	var cqlerr.ErrUseStmt error
-	type cqlerr.ErrorCode = internal/protocol.ErrorCode
+	type cqlerr.ErrorCode uint16
 		method (T) Error() string
-	type cqlerr.ErrorMap = internal/protocol.ErrorMap
-	type cqlerr.ExecutionError = internal/runtimeerrors.ExecutionError
+	type cqlerr.ErrorMap map[string]uint16
+	type cqlerr.ExecutionError struct
 		field Err error
-		field Attempts []internal/runtimeerrors.AttemptFailure
+		field Attempts []cqlerr.AttemptFailure
 		field Result cql.Result
 		method (*T) Error() string
-		method (*T) ExecutionStatus() internal/cqltype.ExecutionStatus
+		method (*T) ExecutionStatus() cqlerr.ExecutionStatus
 		method (*T) Unwrap() []error
-	type cqlerr.ExecutionStatus = internal/cqltype.ExecutionStatus
+	type cqlerr.ExecutionStatus uint8
 		method (T) String() string
-		method (T) Worse(o internal/cqltype.ExecutionStatus) internal/cqltype.ExecutionStatus
+		method (T) Worse(o cqlerr.ExecutionStatus) cqlerr.ExecutionStatus
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
-	type cqlerr.FunctionFailureError = internal/protocol.FunctionFailureError
+	type cqlerr.FunctionFailureError struct
 		field Keyspace string
 		field Function string
 		field ArgTypes []string
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.HostError = internal/runtimeerrors.HostError
+	type cqlerr.HostError struct
 		field Err error
 		field Address string
 	func cqlerr.IsCASWriteUnknown(err error) bool
-	type cqlerr.Kind = internal/cqltype.Kind
+	type cqlerr.Kind uint8
 		method (T) String() string
 		method (T) Transient() bool
-	const cqlerr.KindCanceled internal/cqltype.Kind
-	const cqlerr.KindClosed internal/cqltype.Kind
-	const cqlerr.KindConnection internal/cqltype.Kind
-	const cqlerr.KindInvalid internal/cqltype.Kind
+	const cqlerr.KindCanceled cqlerr.Kind
+	const cqlerr.KindClosed cqlerr.Kind
+	const cqlerr.KindConnection cqlerr.Kind
+	const cqlerr.KindInvalid cqlerr.Kind
 	func cqlerr.KindOf(err error) cqlerr.Kind
-	const cqlerr.KindOverloaded internal/cqltype.Kind
-	const cqlerr.KindProtocol internal/cqltype.Kind
-	const cqlerr.KindRateLimited internal/cqltype.Kind
-	const cqlerr.KindServer internal/cqltype.Kind
-	const cqlerr.KindTimeout internal/cqltype.Kind
-	const cqlerr.KindUnauthorized internal/cqltype.Kind
-	const cqlerr.KindUnavailable internal/cqltype.Kind
-	const cqlerr.KindUnknown internal/cqltype.Kind
-	const cqlerr.MaybeExecuted internal/cqltype.ExecutionStatus
-	type cqlerr.NoHostsError = internal/metadata.NoHostsError
+	const cqlerr.KindOverloaded cqlerr.Kind
+	const cqlerr.KindProtocol cqlerr.Kind
+	const cqlerr.KindRateLimited cqlerr.Kind
+	const cqlerr.KindServer cqlerr.Kind
+	const cqlerr.KindTimeout cqlerr.Kind
+	const cqlerr.KindUnauthorized cqlerr.Kind
+	const cqlerr.KindUnavailable cqlerr.Kind
+	const cqlerr.KindUnknown cqlerr.Kind
+	const cqlerr.MaybeExecuted cqlerr.ExecutionStatus
+	func cqlerr.NewOtherServerError(code cqlerr.ErrorCode, message string) *cqlerr.OtherServerError
+	type cqlerr.NoHostsError struct
 		field Operation string
 		field Causes []error
 		method (*T) Error() string
 		method (*T) Unwrap() []error
-	const cqlerr.NotExecuted internal/cqltype.ExecutionStatus
-	type cqlerr.OpType = internal/protocol.OpType
-	const cqlerr.OpTypeRead internal/protocol.OpType
-	const cqlerr.OpTypeWrite internal/protocol.OpType
-	type cqlerr.OtherServerError = internal/protocol.OtherServerError
-		method (*T) Code() internal/protocol.ErrorCode
+	const cqlerr.NotExecuted cqlerr.ExecutionStatus
+	type cqlerr.OpType uint8
+	const cqlerr.OpTypeRead cqlerr.OpType
+	const cqlerr.OpTypeWrite cqlerr.OpType
+	type cqlerr.OtherServerError struct
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.PartialRefreshError = internal/metadata.PartialRefreshError
+	type cqlerr.PartialRefreshError struct
 		field Topology error
 		field ClientRoutes error
 		field Keyspaces map[string]error
 		field Generation uint64
 		method (*T) Error() string
 		method (*T) Unwrap() []error
-	const cqlerr.PartiallyExecuted internal/cqltype.ExecutionStatus
-	type cqlerr.ProtocolError = cql.ProtocolError
-		field Err error
-		field Stage string
-		field Offset int64
+	const cqlerr.PartiallyExecuted cqlerr.ExecutionStatus
+	type cqlerr.QueryError struct
 		method (*T) Error() string
+		method (*T) ExecutionStatus() cqlerr.ExecutionStatus
 		method (*T) Unwrap() error
-	type cqlerr.QueryError = internal/runtimeerrors.QueryError
-		method (*T) Error() string
-		method (*T) ExecutionStatus() internal/cqltype.ExecutionStatus
-		method (*T) IsIdempotent() bool
-		method (*T) Unwrap() error
-	type cqlerr.RateLimitReachedError = internal/protocol.RateLimitReachedError
-		field OpType internal/protocol.OpType
+	type cqlerr.RateLimitReachedError struct
+		field OpType cqlerr.OpType
 		field RejectedByCoordinator bool
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.ReadFailureError = internal/protocol.ReadFailureError
-		field ErrorMap internal/protocol.ErrorMap
+	type cqlerr.ReadFailureError struct
+		field ErrorMap cqlerr.ErrorMap
 		field Received int
 		field BlockFor int
 		field NumFailures int
 		field Consistency cql.Consistency
 		field DataPresent bool
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.ReadTimeoutError = internal/protocol.ReadTimeoutError
+	type cqlerr.ReadTimeoutError struct
 		field Received int
 		field BlockFor int
 		field Consistency cql.Consistency
 		field DataPresent bool
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.SchemaChangedError = internal/runtimeerrors.SchemaChangedError
+	type cqlerr.SchemaChangedError struct
 		field Statement string
 		field Previous cql.Columns
 		field Current cql.Columns
 		method (*T) Error() string
-		method (*T) Kind() internal/runtimeerrors.Kind
-	type cqlerr.ServerError = internal/protocol.ServerError
-		method Code() internal/protocol.ErrorCode
+		method (*T) Kind() cqlerr.Kind
+	type cqlerr.ServerError interface
+		method Code() cqlerr.ErrorCode
 		method Error() string
 		method Message() string
 		method Warnings() []string
-	type cqlerr.ServerMismatchError = internal/runtimeerrors.ServerMismatchError
+	type cqlerr.ServerMismatchError struct
 		field Want string
 		field Got string
 		method (*T) Error() string
-		method (*T) Kind() internal/runtimeerrors.Kind
-	type cqlerr.StreamCapabilityError = cql.StreamCapabilityError
-		field Reason string
-		field Protocol int
-		field Compression cql.Compression
-		method (*T) Error() string
-	type cqlerr.StreamCapacityError = cql.StreamCapacityError
-		field Path string
-		field Required int64
-		field Available int64
-		method (*T) Error() string
-	type cqlerr.UnavailableError = internal/protocol.UnavailableError
+		method (*T) Kind() cqlerr.Kind
+	type cqlerr.UnavailableError struct
 		field Consistency cql.Consistency
 		field Required int
 		field Alive int
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.UnpreparedError = internal/protocol.UnpreparedError
+	type cqlerr.UnpreparedError struct
 		field StatementID []byte
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.UnsupportedSettingError = internal/runtimeerrors.UnsupportedSettingError
+	type cqlerr.UnsupportedSettingError struct
 		field Setting string
 		field Reason string
 		method (*T) Error() string
-		method (*T) Kind() internal/runtimeerrors.Kind
-	type cqlerr.ValidationError = cql.ValidationError
-		field Err error
-		field Field string
-		method (*T) Error() string
-		method (*T) Unwrap() error
-	type cqlerr.WriteFailureError = internal/protocol.WriteFailureError
-		field ErrorMap internal/protocol.ErrorMap
+		method (*T) Kind() cqlerr.Kind
+	type cqlerr.WriteFailureError struct
+		field ErrorMap cqlerr.ErrorMap
 		field WriteType string
 		field Received int
 		field BlockFor int
 		field NumFailures int
 		field Consistency cql.Consistency
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
-	type cqlerr.WriteTimeoutError = internal/protocol.WriteTimeoutError
+	type cqlerr.WriteTimeoutError struct
 		field WriteType string
 		field Received int
 		field BlockFor int
 		field Consistency cql.Consistency
-		method (*T) Code() internal/protocol.ErrorCode
+		method (*T) Code() cqlerr.ErrorCode
 		method (*T) Error() string
 		method (*T) Is(target error) bool
-		method (*T) Kind() internal/cqltype.Kind
+		method (*T) Kind() cqlerr.Kind
 		method (*T) Message() string
 		method (*T) Warnings() []string
 

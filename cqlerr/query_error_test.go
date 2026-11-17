@@ -1,4 +1,4 @@
-package runtimeerrors
+package cqlerr
 
 import (
 	"errors"
@@ -51,7 +51,7 @@ func TestQueryError(t *testing.T) {
 
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
-				qErr := NewQueryError(QueryErrorState{
+				qErr := newQueryError(queryErrorState{
 					InternalErr:                 tt.err,
 					InternalPotentiallyExecuted: tt.potentiallyExecuted,
 					InternalTimeout:             tt.timeout,
@@ -61,41 +61,6 @@ func TestQueryError(t *testing.T) {
 				got := qErr.Error()
 				if got != tt.expected {
 					t.Errorf("QueryError.Error() = %v, expected %v", got, tt.expected)
-				}
-			})
-		}
-	})
-
-	t.Run("IsIdempotent", func(t *testing.T) {
-		t.Parallel()
-
-		tests := []struct {
-			name         string
-			isIdempotent bool
-			expected     bool
-		}{
-			{
-				name:         "idempotent true",
-				isIdempotent: true,
-				expected:     true,
-			},
-			{
-				name:         "idempotent false",
-				isIdempotent: false,
-				expected:     false,
-			},
-		}
-
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				qErr := NewQueryError(QueryErrorState{
-					InternalErr:  errors.New("test error"),
-					isIdempotent: tt.isIdempotent,
-				})
-
-				got := qErr.IsIdempotent()
-				if got != tt.expected {
-					t.Errorf("QueryError.IsIdempotent() = %v, expected %v", got, tt.expected)
 				}
 			})
 		}

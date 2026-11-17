@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -214,7 +215,7 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 		if cause := r.cancellationCause(); cause != nil {
 			return cause
 		}
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	r.active.Lock()
 	defer r.active.Unlock()
@@ -222,7 +223,7 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 		if cause := r.cancellationCause(); cause != nil {
 			return cause
 		}
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if err := ctx.Err(); err != nil {
 		return err
@@ -513,7 +514,7 @@ func (c *Conn) InternalDispatchEventOwned(event protocol.Frame, release func()) 
 		return reject(nil)
 	}
 	if c.eventsClosed || c.InternalCtx.Err() != nil {
-		return reject(runtimeerrors.ErrClosed)
+		return reject(cqlerr.ErrClosed)
 	}
 	c.eventOnce.Do(func() {
 		c.eventQueue = make(chan connEvent, 32)
@@ -558,7 +559,7 @@ func (c *Conn) InternalDispatchEventOwned(event protocol.Frame, release func()) 
 		}
 	})
 	if c.eventsClosed {
-		return reject(runtimeerrors.ErrClosed)
+		return reject(cqlerr.ErrClosed)
 	}
 	select {
 	case c.eventQueue <- connEvent{event, release}:

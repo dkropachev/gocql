@@ -43,6 +43,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
@@ -735,7 +736,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			}
 		default:
 			respFrame.WriteHeader(0, frm.OpError, head.Stream)
-			respFrame.WriteInt(int32(implProtocol.CodeUnprepared))
+			respFrame.WriteInt(int32(cqlerr.CodeUnprepared))
 			respFrame.WriteString("unprepared")
 			respFrame.WriteShortBytes(binary.BigEndian.AppendUint64(nil, id))
 		}

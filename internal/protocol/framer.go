@@ -36,6 +36,7 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -60,10 +61,6 @@ const (
 	// CASSGO-88 (https://issues.apache.org/jira/browse/CASSGO-88). Supporting a
 	// beta dialect would need an explicit opt-in bound to that specific dialect.
 	ProtoVersion5 = 0x05
-)
-
-var (
-	ErrReadHeaderTimeout = errors.New("unable to read frame header")
 )
 
 func ReadInt(p []byte) int32 {
@@ -191,7 +188,7 @@ func ReadHeader(r io.Reader, p []byte) (head frm.FrameHeader, err error) {
 		// Conn.readFirstSegmentHeader: the two timeout checks must stay in
 		// agreement even if a caller in between starts wrapping the error.
 		if netErr, ok := errors.AsType[net.Error](err); n == 0 && ok && netErr.Timeout() {
-			return frm.FrameHeader{}, fmt.Errorf("%w: %w", ErrReadHeaderTimeout, err)
+			return frm.FrameHeader{}, fmt.Errorf("%w: %w", cqlerr.ErrReadHeaderTimeout, err)
 		}
 		return frm.FrameHeader{}, err
 	}
@@ -227,7 +224,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 			// than read the leftover bytes as the next frame header.
 			return fmt.Errorf("error whilst trying to discard frame with invalid length: %w", err)
 		}
-		return ErrFrameTooBig
+		return cqlerr.ErrFrameTooBig
 	}
 
 	if cap(f.ReadBuffer) >= head.Length {
@@ -264,7 +261,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 		}
 	}
 	if int64(len(f.Buf)) > f.decompressedLimit() {
-		return ErrFrameTooBig
+		return cqlerr.ErrFrameTooBig
 	}
 
 	f.Header = head
@@ -284,7 +281,7 @@ func (f *Framer) ReadFrame(r io.Reader, head *frm.FrameHeader) error {
 // below v5).
 func (f *Framer) AdoptFrameBody(body []byte, head *frm.FrameHeader) error {
 	if int64(len(body)) > min(f.frameLimit(), f.decompressedLimit()) {
-		return ErrFrameTooBig
+		return cqlerr.ErrFrameTooBig
 	}
 	if head.Length != len(body) {
 		return fmt.Errorf("gocql: frame body length %d does not match the %d bytes reassembled", head.Length, len(body))
@@ -379,16 +376,16 @@ func (f *Framer) parseErrorFrame() Frame {
 // input like every other Framer read.
 type framerErrorBody struct{ f *Framer }
 
-func (r framerErrorBody) I32() int           { return r.f.ReadInt() }
-func (r framerErrorBody) U16() uint16        { return r.f.ReadShort() }
-func (r framerErrorBody) U8() byte           { return r.f.ReadByteValue() }
-func (r framerErrorBody) Str() string        { return r.f.ReadString() }
-func (r framerErrorBody) Strings() []string  { return r.f.ReadStringList() }
-func (r framerErrorBody) shortBytes() []byte { return r.f.ReadShortBytesCopy() }
-func (r framerErrorBody) errorMap() ErrorMap { return r.f.readErrorMap() }
+func (r framerErrorBody) I32() int                      { return r.f.ReadInt() }
+func (r framerErrorBody) U16() uint16                   { return r.f.ReadShort() }
+func (r framerErrorBody) U8() byte                      { return r.f.ReadByteValue() }
+func (r framerErrorBody) Str() string                   { return r.f.ReadString() }
+func (r framerErrorBody) Strings() []string             { return r.f.ReadStringList() }
+func (r framerErrorBody) ShortBytes() []byte            { return r.f.ReadShortBytesCopy() }
+func (r framerErrorBody) ReadErrorMap() cqlerr.ErrorMap { return r.f.readErrorMap() }
 
-func (f *Framer) readErrorMap() (errMap ErrorMap) {
-	errMap = make(ErrorMap)
+func (f *Framer) readErrorMap() (errMap cqlerr.ErrorMap) {
+	errMap = make(cqlerr.ErrorMap)
 	numErrs := f.ReadInt()
 	for i := 0; i < numErrs; i++ {
 		ip := f.readInetAdressOnly().String()
@@ -424,7 +421,7 @@ func (f *Framer) Finish() error {
 		// nothing can reach. Two arrays where the pool intends one.
 		f.Buf = make([]byte, DefaultBufSize)
 		f.ReadBuffer = f.Buf
-		return ErrFrameTooBig
+		return cqlerr.ErrFrameTooBig
 	}
 
 	if !VersionFor(f.Proto).Segments && f.Buf[1]&frm.FlagCompress == frm.FlagCompress {
@@ -453,7 +450,7 @@ func (f *Framer) Finish() error {
 		if int64(len(compressed)) > f.frameLimit() {
 			f.Buf = make([]byte, DefaultBufSize)
 			f.ReadBuffer = f.Buf
-			return ErrFrameTooBig
+			return cqlerr.ErrFrameTooBig
 		}
 
 		f.Buf = append(f.Buf[:HeadSize], compressed...)

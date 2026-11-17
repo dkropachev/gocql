@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -80,7 +81,7 @@ func (o *inputOwner) InternalAdmit() error {
 	for {
 		v := o.state.Load()
 		if v&ownerClosed != 0 {
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		if o.state.CompareAndSwap(v, v+1) {
 			return nil
@@ -238,8 +239,8 @@ func (r *InternalExecutionRequest) optionsScratch() *InternalResolvedOptions {
 	return q.optionsScratch
 }
 
-type ExecutionError = runtimeerrors.ExecutionError
+type ExecutionError = cqlerr.ExecutionError
 
-func newExecutionError(err error, result cql.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func newExecutionError(err error, result cql.Result, status cqlerr.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return runtimeerrors.NewExecutionError(err, result, status, attempts)
 }

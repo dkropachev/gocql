@@ -7,20 +7,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
 	"sync"
-
 	"time"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type ClientRoutesEndpoint struct {
@@ -333,7 +331,7 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
 		p.privateStorage.queueMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	default:
 	}
 	p.privateStorage.InternalSession = s
@@ -382,7 +380,7 @@ func (p *ClientRoutesHandler) UpdateHostPortMappingAsync(task InternalUpdateTask
 func clientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task InternalUpdateTask) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	default:
 	}
 	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource()), task)
@@ -463,7 +461,7 @@ func (p *ClientRoutesHandler) StartUpdateWorker() {
 						task.InternalRelease()
 					}
 					if task.result != nil {
-						task.result <- runtimeerrors.ErrClosed
+						task.result <- cqlerr.ErrClosed
 					}
 				default:
 					return

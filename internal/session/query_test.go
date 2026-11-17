@@ -22,6 +22,7 @@ import (
 	"weak"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -32,9 +33,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
@@ -340,7 +339,7 @@ func TestQuery(t *testing.T) {
 			if err := q.Wait(context.Background()); err != nil {
 				t.Fatal(err)
 			}
-			if err := q.capture(context.Background(), input); !errors.Is(err, runtimeerrors.ErrClosed) {
+			if err := q.capture(context.Background(), input); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatal(err)
 			}
 		})
@@ -568,7 +567,7 @@ func TestQuery(t *testing.T) {
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
 				if err == nil {
-					_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeServer, nil))
+					_, err = peers[0].Write(errorResponse(t, stream, cqlerr.CodeServer, nil))
 				}
 				if err != nil {
 					t.Error(err)
@@ -658,7 +657,7 @@ func TestQuery(t *testing.T) {
 				return nil
 			})
 			<-served
-			if !errors.Is(err, runtimeerrors.ErrPagingNoProgress) || strings.Join(got, ",") != "a,b,c" {
+			if !errors.Is(err, cqlerr.ErrPagingNoProgress) || strings.Join(got, ",") != "a,b,c" {
 				t.Fatal(got, err)
 			}
 			served = serve(runtimeRowsBody(nil, "next"))
@@ -702,7 +701,7 @@ func TestQuery(t *testing.T) {
 					case step == 0:
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one", "uno")))
 					case step == 1:
-						_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeUnprepared, old.InternalId))
+						_, err = peers[0].Write(errorResponse(t, stream, cqlerr.CodeUnprepared, old.InternalId))
 					default:
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "two")))
 					}
@@ -982,7 +981,7 @@ func TestQuery(t *testing.T) {
 				}
 				mu.Unlock()
 				if fail {
-					return errorResponse(t, stream, protocol.CodeServer, nil)
+					return errorResponse(t, stream, cqlerr.CodeServer, nil)
 				}
 				return pinPages(t, stream, token)
 			})
@@ -1056,10 +1055,10 @@ func TestQuery(t *testing.T) {
 			if !errors.Is(first.Err(), ErrStaleRows) {
 				t.Fatal("stale handle error", first.Err())
 			}
-			if _, err := first.Clone(); !errors.Is(err, runtimeerrors.ErrNoRows) {
+			if _, err := first.Clone(); !errors.Is(err, cqlerr.ErrNoRows) {
 				t.Fatal("stale handle cloned a row", err)
 			}
-			if _, err := first.Retain(); !errors.Is(err, runtimeerrors.ErrNoRows) {
+			if _, err := first.Retain(); !errors.Is(err, cqlerr.ErrNoRows) {
 				t.Fatal("stale handle retained a page", err)
 			}
 			if first.Columns().Len() != 0 || first.Info().Attempts != 0 {

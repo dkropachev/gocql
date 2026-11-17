@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -334,10 +335,10 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 			state.InternalMu.Unlock()
 			p.privateStorage.InternalSession.PublishV2Metadata()
 		}
-		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: err}
+		return &cqlerr.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: err}
 	}
 	if !p.ApplyRouteRead(task, epochs, rows) {
-		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: fmt.Errorf("routes changed during refresh")}
+		return &cqlerr.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: fmt.Errorf("routes changed during refresh")}
 	}
 	if p.privateStorage.InternalSession != nil {
 		state := p.privateStorage.InternalSession.Peripheral()

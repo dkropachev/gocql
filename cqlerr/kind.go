@@ -1,9 +1,11 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package cqltype
+package cqlerr
 
-// Kind groups errors by what a caller can do about them.
+// Kind groups errors by what a caller can do about them. Server errors and
+// the driver's error types report theirs with a Kind method; KindOf
+// classifies any error.
 type Kind uint8
 
 const (

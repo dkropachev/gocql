@@ -30,12 +30,12 @@ import (
 	"time"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
@@ -409,7 +409,7 @@ func TestConfig(t *testing.T) {
 					}
 					var response []byte
 					if step == 0 {
-						response = errorResponse(t, stream, protocol.CodeServer, nil)
+						response = errorResponse(t, stream, cqlerr.CodeServer, nil)
 					} else if step == 1 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("page"), "a"))
 					} else {

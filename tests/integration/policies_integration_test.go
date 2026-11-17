@@ -3,20 +3,18 @@
 package integration
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
-	"github.com/scylladb/gocql/v2/metadata"
-	routing "github.com/scylladb/gocql/v2/routing"
-
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing "github.com/scylladb/gocql/v2/routing"
 )
 
 func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
@@ -30,7 +28,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	if err == nil {
 		t.Fatal("Connect was expected to fail with an unknown datacenter")
 	}
-	if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+	if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
 	}
 }

@@ -5,9 +5,9 @@ package routing
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 
 	"context"
 	"errors"
@@ -21,7 +21,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	// PartitionKey is the canonical encoded component stream. It never owns a
@@ -1068,16 +1067,16 @@ func InternalRoutingLatencySample(err error) bool {
 	if err == nil {
 		return true
 	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
+	if server, ok := errors.AsType[cqlerr.ServerError](err); ok {
 		// Fast rejections say nothing about how long the replica takes.
-		switch runtimeerrors.KindOf(server) {
-		case runtimeerrors.KindUnavailable, runtimeerrors.KindOverloaded, runtimeerrors.KindRateLimited:
+		switch cqlerr.KindOf(server) {
+		case cqlerr.KindUnavailable, cqlerr.KindOverloaded, cqlerr.KindRateLimited:
 			return false
 		}
-		return server.Code() != protocol.CodeUnprepared
+		return server.Code() != cqlerr.CodeUnprepared
 	}
 	// Local validation/serialization and broken transport are not response latency.
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, runtimeerrors.ErrNoConnections) || errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, cqlerr.ErrNoConnections) || errors.Is(err, cqlerr.ErrConnectionClosed) {
 		return false
 	}
 	if _, ok := errors.AsType[*cql.ValidationError](err); ok {

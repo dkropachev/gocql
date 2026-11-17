@@ -22,15 +22,12 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"errors"
 	"fmt"
 	"time"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 var (
@@ -39,51 +36,49 @@ var (
 	ErrNoStreams         = errors.New("gocql: no streams available on connection")
 )
 
+// QueryError is the failure of a single attempt on one connection.
 type QueryError struct {
-	state QueryErrorState
-}
-
-func (e *QueryError) IsIdempotent() bool {
-	return QueryErrorData(e).isIdempotent
+	state queryErrorState
 }
 
 // ExecutionStatus reports what this attempt may have done on the cluster.
-func (e *QueryError) ExecutionStatus() cqltype.ExecutionStatus {
-	d := QueryErrorData(e)
+func (e *QueryError) ExecutionStatus() ExecutionStatus {
+	d := &e.state
 	if !d.InternalPotentiallyExecuted {
-		return cqltype.NotExecuted
+		return NotExecuted
 	}
-	if server, ok := errors.AsType[protocol.ServerError](d.InternalErr); ok {
-		return protocol.ServerErrorExecutionStatus(server)
+	if server, ok := errors.AsType[ServerError](d.InternalErr); ok {
+		return serverErrorExecutionStatus(server)
 	}
-	return cqltype.MaybeExecuted
+	return MaybeExecuted
 }
 
 func (e *QueryError) Error() string {
-	d := QueryErrorData(e)
+	d := &e.state
 	msg := d.InternalErr.Error()
 	if d.InternalTimeout > 0 {
 		msg = fmt.Sprintf("%s (timeout: %v, in-flight: %d)", msg, d.InternalTimeout, d.InternalInFlight)
 	}
-	return msg + ExecutionSuffix(e.ExecutionStatus())
+	return msg + executionSuffix(e.ExecutionStatus())
 }
 
-// ExecutionSuffix renders a non-default execution state for error messages.
-func ExecutionSuffix(x cqltype.ExecutionStatus) string {
-	if x == cqltype.NotExecuted {
+// executionSuffix renders a non-default execution state for error messages.
+func executionSuffix(x ExecutionStatus) string {
+	if x == NotExecuted {
 		return ""
 	}
 	return " (" + x.String() + ")"
 }
 
 func (e *QueryError) Unwrap() error {
-	return QueryErrorData(e).InternalErr
+	return e.state.InternalErr
 }
 
-type QueryErrorState struct {
+// queryErrorState is what the engine records about a failed attempt. The
+// engine builds it through the mirror in internal/runtimeerrors.
+type queryErrorState struct {
 	InternalErr                 error
 	InternalTimeout             time.Duration
 	InternalInFlight            int
 	InternalPotentiallyExecuted bool
-	isIdempotent                bool
 }

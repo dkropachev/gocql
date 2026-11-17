@@ -12,8 +12,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // answerOneShot answers the next EXECUTE with rows, reporting its page size.
@@ -178,7 +178,7 @@ func TestPreparedHandles(t *testing.T) {
 		var dst []byte
 		for rows.NextInto(&dst) {
 		}
-		if err := rows.Err(); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if err := rows.Err(); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("rows after Session.Close: %v", err)
 		}
 		_ = rows.Close()
@@ -254,7 +254,7 @@ func TestCloseStopsRowsOfBusyPooledQuery(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("NextInto after Session.Close blocked")
 	}
-	if err := rows.Err(); !errors.Is(err, runtimeerrors.ErrClosed) {
+	if err := rows.Err(); !errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatalf("rows after Session.Close: %v", err)
 	}
 }
@@ -285,7 +285,7 @@ func TestCancelStopsRowsMidPage(t *testing.T) {
 	if rows.NextInto(&dst) {
 		t.Fatalf("NextInto after cancel decoded %q", dst)
 	}
-	if err := rows.Err(); !errors.Is(err, context.Canceled) || errors.Is(err, runtimeerrors.ErrClosed) {
+	if err := rows.Err(); !errors.Is(err, context.Canceled) || errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatalf("rows after cancel: %v", err)
 	}
 	if s.Closed() {

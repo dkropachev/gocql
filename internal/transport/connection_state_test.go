@@ -15,8 +15,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -595,7 +595,7 @@ func TestCallTableCloseRace(t *testing.T) {
 					call := getCallReq(0)
 					call.typed = true
 					if err := c.allocCall(call); err != nil {
-						if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+						if !errors.Is(err, cqlerr.ErrConnectionClosed) {
 							t.Errorf("round %d: allocCall: %v", round, err)
 						}
 						call.finishExec()

@@ -23,9 +23,3 @@
  */
 
 package protocol
-
-import (
-	"errors"
-)
-
-var ErrFrameTooBig = errors.New("frame length is bigger than the maximum allowed")

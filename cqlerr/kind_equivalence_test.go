@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 // referenceKindOf is KindOf as a sequence of errors.Is and errors.As checks,
@@ -40,11 +39,11 @@ func referenceKindOf(err error) Kind {
 	case has(context.DeadlineExceeded):
 		return KindTimeout
 	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
-		if _, ok := server.(*protocol.RateLimitReachedError); ok {
+	if server, ok := errors.AsType[ServerError](err); ok {
+		if _, ok := server.(*RateLimitReachedError); ok {
 			return KindRateLimited
 		}
-		return protocol.CodeKind(server.Code())
+		return codeKind(server.Code())
 	}
 	switch {
 	case has(ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased):
@@ -53,9 +52,9 @@ func referenceKindOf(err error) Kind {
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete):
 		return KindInvalid
-	case hasType[*cql.ProtocolError](err), has(protocol.ErrFrameTooBig):
+	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig):
 		return KindProtocol
-	case has(ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout):
+	case has(ErrTimeoutNoResponse, ErrReadHeaderTimeout):
 		return KindTimeout
 	}
 	if network, ok := errors.AsType[net.Error](err); ok && network.Timeout() {
@@ -72,25 +71,25 @@ func referenceKindOf(err error) Kind {
 
 // referenceExecutionStatusOf is ExecutionStatusOf as separate errors.Is and
 // errors.As checks.
-func referenceExecutionStatusOf(err error) cqltype.ExecutionStatus {
+func referenceExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
-		return cqltype.NotExecuted
+		return NotExecuted
 	}
 	if reporter, ok := errors.AsType[executionStatusReporter](err); ok {
 		return reporter.ExecutionStatus()
 	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
-		return protocol.ServerErrorExecutionStatus(server)
+	if server, ok := errors.AsType[ServerError](err); ok {
+		return serverErrorExecutionStatus(server)
 	}
 	if hasType[*SchemaChangedError](err) {
-		return cqltype.NotExecuted
+		return NotExecuted
 	}
 	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, target) {
-			return cqltype.NotExecuted
+			return NotExecuted
 		}
 	}
-	return cqltype.MaybeExecuted
+	return MaybeExecuted
 }
 
 func hasType[E error](err error) bool {
@@ -112,7 +111,7 @@ func classifiedLeaves() []error {
 		context.Canceled, context.DeadlineExceeded,
 		ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased,
 		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
-		protocol.ErrFrameTooBig, ErrTimeoutNoResponse, protocol.ErrReadHeaderTimeout,
+		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,
 		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNotFound, ErrNoRows, ErrPagingStateLimit,
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
@@ -126,26 +125,26 @@ func classifiedLeaves() []error {
 		&net.OpError{Op: "dial", Err: errors.New("refused")},
 		&net.OpError{Op: "read", Err: netTimeout{timeout: true}},
 		netTimeout{timeout: true}, netTimeout{},
-		&protocol.UnavailableError{},
-		&protocol.WriteTimeoutError{WriteType: "SIMPLE"},
-		&protocol.WriteTimeoutError{WriteType: "SIMPLE", Received: 1},
-		&protocol.WriteTimeoutError{WriteType: "CAS", Received: 1},
-		&protocol.WriteFailureError{WriteType: "BATCH", Received: 1},
-		&protocol.ReadTimeoutError{}, &protocol.ReadFailureError{},
-		&protocol.CDCWriteFailureError{}, &protocol.CASWriteUnknownError{},
-		&protocol.AlreadyExistsError{}, &protocol.UnpreparedError{}, &protocol.FunctionFailureError{},
-		&protocol.RateLimitReachedError{}, &protocol.RateLimitReachedError{RejectedByCoordinator: true},
-		protocol.NewOtherServerError(0x7777, ""),
-		protocol.NewOtherServerError(protocol.CodeRateLimitReached, ""),
+		&UnavailableError{},
+		&WriteTimeoutError{WriteType: "SIMPLE"},
+		&WriteTimeoutError{WriteType: "SIMPLE", Received: 1},
+		&WriteTimeoutError{WriteType: "CAS", Received: 1},
+		&WriteFailureError{WriteType: "BATCH", Received: 1},
+		&ReadTimeoutError{}, &ReadFailureError{},
+		&CDCWriteFailureError{}, &CASWriteUnknownError{},
+		&AlreadyExistsError{}, &UnpreparedError{}, &FunctionFailureError{},
+		&RateLimitReachedError{}, &RateLimitReachedError{RejectedByCoordinator: true},
+		NewOtherServerError(0x7777, ""),
+		NewOtherServerError(CodeRateLimitReached, ""),
 	}
-	for _, code := range []protocol.ErrorCode{
-		protocol.CodeServer, protocol.CodeProtocol, protocol.CodeBadCredentials, protocol.CodeUnavailable,
-		protocol.CodeOverloaded, protocol.CodeBootstrapping, protocol.CodeTruncate, protocol.CodeWriteTimeout,
-		protocol.CodeReadTimeout, protocol.CodeReadFailure, protocol.CodeFunctionFailure, protocol.CodeWriteFailure,
-		protocol.CodeCDCWriteFailure, protocol.CodeCASWriteUnknown, protocol.CodeSyntax, protocol.CodeUnauthorized,
-		protocol.CodeInvalid, protocol.CodeConfig, protocol.CodeAlreadyExists, protocol.CodeUnprepared,
+	for _, code := range []ErrorCode{
+		CodeServer, CodeProtocol, CodeBadCredentials, CodeUnavailable,
+		CodeOverloaded, CodeBootstrapping, CodeTruncate, CodeWriteTimeout,
+		CodeReadTimeout, CodeReadFailure, CodeFunctionFailure, CodeWriteFailure,
+		CodeCDCWriteFailure, CodeCASWriteUnknown, CodeSyntax, CodeUnauthorized,
+		CodeInvalid, CodeConfig, CodeAlreadyExists, CodeUnprepared,
 	} {
-		leaves = append(leaves, protocol.NewOtherServerError(code, ""))
+		leaves = append(leaves, NewOtherServerError(code, ""))
 	}
 	return leaves
 }
@@ -160,9 +159,9 @@ func TestKindOfMatchesReference(t *testing.T) {
 	for _, a := range leaves {
 		trees = append(trees, a,
 			fmt.Errorf("wrapped: %w", a),
-			NewQueryError(QueryErrorState{InternalErr: a}),
-			NewQueryError(QueryErrorState{InternalErr: a, InternalPotentiallyExecuted: true}),
-			NewExecutionError(a, cql.Result{}, cqltype.PartiallyExecuted, nil),
+			newQueryError(queryErrorState{InternalErr: a}),
+			newQueryError(queryErrorState{InternalErr: a, InternalPotentiallyExecuted: true}),
+			newExecutionError(a, cql.Result{}, PartiallyExecuted, nil),
 			&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h", Err: a}}},
 		)
 		for _, b := range leaves {
@@ -170,7 +169,7 @@ func TestKindOfMatchesReference(t *testing.T) {
 				errors.Join(a, b),
 				fmt.Errorf("%w: %w", a, fmt.Errorf("inner: %w", b)),
 				&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h1", Err: a}, {Address: "h2", Err: b}}},
-				NewExecutionError(a, cql.Result{}, cqltype.MaybeExecuted, []AttemptFailure{{Err: b}}),
+				newExecutionError(a, cql.Result{}, MaybeExecuted, []AttemptFailure{{Err: b}}),
 			)
 		}
 	}
@@ -186,16 +185,16 @@ func TestKindOfMatchesReference(t *testing.T) {
 
 // A user's own ServerError implementation, without the driver's Kind
 // method, is classified by its code.
-type customServerError struct{ code protocol.ErrorCode }
+type customServerError struct{ code ErrorCode }
 
-func (e customServerError) Error() string            { return "custom" }
-func (e customServerError) Code() protocol.ErrorCode { return e.code }
-func (e customServerError) Message() string          { return "" }
-func (e customServerError) Warnings() []string       { return nil }
+func (e customServerError) Error() string      { return "custom" }
+func (e customServerError) Code() ErrorCode    { return e.code }
+func (e customServerError) Message() string    { return "" }
+func (e customServerError) Warnings() []string { return nil }
 
 func TestKindOfCustomServerError(t *testing.T) {
 	t.Parallel()
-	if got := KindOf(fmt.Errorf("x: %w", customServerError{code: protocol.CodeOverloaded})); got != KindOverloaded {
+	if got := KindOf(fmt.Errorf("x: %w", customServerError{code: CodeOverloaded})); got != KindOverloaded {
 		t.Fatalf("KindOf = %v, want overloaded", got)
 	}
 }
@@ -203,7 +202,7 @@ func TestKindOfCustomServerError(t *testing.T) {
 // KindOf and ExecutionStatusOf run on every failed attempt, so they must not
 // allocate.
 func TestKindOfAllocs(t *testing.T) {
-	err := fmt.Errorf("attempt: %w", NewQueryError(QueryErrorState{InternalErr: errors.Join(&net.OpError{Op: "read", Err: netTimeout{timeout: true}}, ErrConnectionClosed), InternalPotentiallyExecuted: true}))
+	err := fmt.Errorf("attempt: %w", newQueryError(queryErrorState{InternalErr: errors.Join(&net.OpError{Op: "read", Err: netTimeout{timeout: true}}, ErrConnectionClosed), InternalPotentiallyExecuted: true}))
 	if allocs := testing.AllocsPerRun(100, func() {
 		_ = KindOf(err)
 		_ = ExecutionStatusOf(err)

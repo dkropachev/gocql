@@ -8,10 +8,10 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type TokenRange struct {
@@ -72,12 +72,12 @@ func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Targ
 // component, is a validation error.
 func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
 	if m == nil {
-		return 0, runtimeerrors.ErrNoKeyspace
+		return 0, cqlerr.ErrNoKeyspace
 	}
 	data := SnapshotData(m)
 	ks := data.InternalKeyspaces[keyspace]
 	if ks == nil {
-		return 0, fmt.Errorf("%s: %w", keyspace, runtimeerrors.ErrNoKeyspace)
+		return 0, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
 	}
 	var columns []*implMetadata.ColumnMetadata
 	partitioner := data.InternalPartitioner
@@ -92,7 +92,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 			partitioner = v.Options.Partitioner
 		}
 	} else {
-		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
+		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
 	}
 	if len(columns) == 0 {
 		return 0, cqltype.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
@@ -155,16 +155,16 @@ func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, er
 }
 func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]TokenRange, bool, error) {
 	if m == nil {
-		return nil, false, runtimeerrors.ErrNoKeyspace
+		return nil, false, cqlerr.ErrNoKeyspace
 	}
 	ks, ok := SnapshotData(m).InternalKeyspaces[keyspace]
 	if !ok {
-		return nil, false, fmt.Errorf("%s: %w", keyspace, runtimeerrors.ErrNoKeyspace)
+		return nil, false, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
 	}
 	if table != "" {
 		if _, ok := ks.Tables[table]; !ok {
 			if _, ok := ks.Views[table]; !ok {
-				return nil, false, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
+				return nil, false, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
 			}
 		}
 		if r, ok := SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}]; ok {

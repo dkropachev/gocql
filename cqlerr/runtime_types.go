@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"errors"
@@ -17,7 +17,8 @@ var (
 	ErrNoRows           = errors.New("gocql: no rows")
 )
 
-// SchemaChangedError requires preparing and binding again after incompatible metadata.
+// SchemaChangedError reports that a prepared statement's bound parameters
+// changed between executions.
 type SchemaChangedError struct {
 	Statement         string
 	Previous, Current cql.Columns

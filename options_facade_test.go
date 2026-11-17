@@ -13,7 +13,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
@@ -71,7 +70,7 @@ func roundTripOptions(t *testing.T, o exec.Options) exec.Options {
 func TestOptionsProfileMustBeBuilt(t *testing.T) {
 	literal := config.Profile{PageSize: 1000}
 	_, err := implSession.NewCompiledOptions(nil, internalOptions(exec.Options{Profile: &literal}))
-	if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 	}
 	built := codecTestMust(config.NewProfile().Build())
@@ -127,7 +126,7 @@ func TestTooManyOptions(t *testing.T) {
 	two := []exec.CompiledOptions{{}, {}}
 	check := func(name string, err error) {
 		t.Helper()
-		if ve, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one CompiledOptions" {
+		if ve, ok := errors.AsType[*cql.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one CompiledOptions" {
 			t.Errorf("%s: error %v", name, err)
 		}
 	}
@@ -158,7 +157,7 @@ func TestTooManyOptions(t *testing.T) {
 	check("RunBatch", err)
 	checkPrepare := func(name string, err error) {
 		t.Helper()
-		if ve, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one PrepareOptions" {
+		if ve, ok := errors.AsType[*cql.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one PrepareOptions" {
 			t.Errorf("%s: error %v", name, err)
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -242,7 +243,7 @@ func (p *TypedParser) Str() string {
 	_ = c.Each(func(s wire.Span) error { _, err := b.Write(s.Bytes()); return err })
 	return b.String()
 }
-func (p *TypedParser) shortBytes() []byte { return p.Copy(int(p.U16())) }
+func (p *TypedParser) ShortBytes() []byte { return p.Copy(int(p.U16())) }
 func (p *TypedParser) Bytes() []byte {
 	n := p.I32()
 	if n == -1 {
@@ -448,7 +449,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		}
 	}
 	if !prepared && p.MetadataID && flags&uint32(frm.FlagMetaDataChanged) != 0 {
-		page.MetadataID = p.shortBytes()
+		page.MetadataID = p.ShortBytes()
 	}
 	if flags&uint32(frm.FlagNoMetaData) != 0 {
 		if !prepared && flags&uint32(frm.FlagMetaDataChanged) != 0 {
@@ -502,7 +503,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, owner *wire.Lease, page *model.ResponseData) (*model.ResponseData, error) {
 
 	if body.Len() > c.MaxDecompressedBytes {
-		return nil, ErrFrameTooBig
+		return nil, cqlerr.ErrFrameTooBig
 	}
 	// A caller's page arrives with the result columns it expects.
 	expect := page.Columns
@@ -565,9 +566,9 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 			}
 			page.Rows = p.Take(p.Cursor.Remaining())
 		case frm.ResultKindPrepared:
-			page.Extra().PreparedID = p.shortBytes()
+			page.Extra().PreparedID = p.ShortBytes()
 			if p.MetadataID {
-				page.MetadataID = p.shortBytes()
+				page.MetadataID = p.ShortBytes()
 			}
 			page.Extra().BindColumns, _ = p.metadata(page, true, c.FlagLWT)
 			page.Columns, page.ColumnCount = p.metadata(page, false, 0)
@@ -603,13 +604,13 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 	return page, nil
 }
 
-func (p *TypedParser) errorMap() ErrorMap {
+func (p *TypedParser) ReadErrorMap() cqlerr.ErrorMap {
 	n := p.Count(4)
 	p.ReserveAllocation(int64(n) * 64)
 	if p.Err != nil {
 		return nil
 	}
-	out := make(ErrorMap, n)
+	out := make(cqlerr.ErrorMap, n)
 	for i := 0; i < n; i++ {
 		length := int(p.U8())
 		if length != 4 && length != 16 {

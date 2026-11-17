@@ -7,13 +7,13 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/metrics"
 )
 
@@ -116,7 +116,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	}
 	core := s.Core()
 	if core.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return err

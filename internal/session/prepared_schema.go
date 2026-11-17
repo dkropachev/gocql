@@ -22,8 +22,8 @@ package session
 import (
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 )
 
@@ -58,7 +58,7 @@ func (s *InternalPreparedState) noteMetadataConflict() error {
 		return nil
 	}
 	if s.InternalSession.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	s.conflictMu.Lock()
 	defer s.conflictMu.Unlock()

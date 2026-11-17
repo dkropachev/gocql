@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -37,7 +37,7 @@ func TestInputOwner(t *testing.T) {
 				close(start)
 				err := <-admitted
 				if err != nil {
-					if !errors.Is(err, runtimeerrors.ErrClosed) {
+					if !errors.Is(err, cqlerr.ErrClosed) {
 						t.Fatal(err)
 					}
 					parent.InternalRelease()

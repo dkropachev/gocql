@@ -10,12 +10,12 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
@@ -148,7 +148,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 					log = new(attemptLog)
 				}
 				log.fail(err, conn, attempt, consistency, trace)
-				log.raise(cqltype.PartiallyExecuted)
+				log.raise(cqlerr.PartiallyExecuted)
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
 		}
@@ -158,7 +158,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		attemptStatus := log.fail(err, conn, attempt, consistency, trace)
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
@@ -188,7 +188,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				// No attempt is in flight during the delay, so a closing
 				// session ends the execution here.
 				timer.Stop()
-				return failure(runtimeerrors.ErrClosed)
+				return failure(cqlerr.ErrClosed)
 			case <-timer.C:
 			}
 		}

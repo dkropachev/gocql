@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -296,19 +297,19 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 				x.releaseStream = true
 				x.recycleCall = true
 			}
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
 		}
 		if c.markOrphan(call) {
 			x.closeErr = errOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
 		return abandon()
 	case <-parentDone:
 		return abandon()
 	case <-connDone:
 		x.stopWaiting = true
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
 }
 

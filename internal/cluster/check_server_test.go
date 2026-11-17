@@ -7,8 +7,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -32,12 +32,12 @@ func TestCheckServer(t *testing.T) {
 		{implSettings.ServerCassandra, scylla, true},
 	} {
 		err := checkServer(tc.want, tc.conn)
-		_, mismatch := errors.AsType[*runtimeerrors.ServerMismatchError](err)
+		_, mismatch := errors.AsType[*cqlerr.ServerMismatchError](err)
 		if mismatch != tc.mismatch || !tc.mismatch && err != nil {
 			t.Errorf("want %v, scylla %t: %v", tc.want, tc.conn.InternalIsScyllaConn(), err)
 		}
-		if mismatch && runtimeerrors.KindOf(err) != runtimeerrors.KindInvalid {
-			t.Errorf("mismatch kind %v", runtimeerrors.KindOf(err))
+		if mismatch && cqlerr.KindOf(err) != cqlerr.KindInvalid {
+			t.Errorf("mismatch kind %v", cqlerr.KindOf(err))
 		}
 	}
 }

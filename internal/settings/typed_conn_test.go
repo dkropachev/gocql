@@ -15,11 +15,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -393,7 +393,7 @@ func TestTypedConn(t *testing.T) {
 				body = append(body, "key"...)
 				body = binary.BigEndian.AppendUint32(body, 3)
 				body = append(body, "val"...)
-				body = binary.BigEndian.AppendUint32(body, uint32(protocol.CodeUnprepared))
+				body = binary.BigEndian.AppendUint32(body, uint32(cqlerr.CodeUnprepared))
 				body = binary.BigEndian.AppendUint16(body, 7)
 				body = append(body, "missing"...)
 				body = binary.BigEndian.AppendUint16(body, 2)
@@ -406,7 +406,7 @@ func TestTypedConn(t *testing.T) {
 				}
 			}()
 			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT value FROM ks.tbl", Consistency: cql.One, Timeout: time.Second})
-			if unprepared, ok := errors.AsType[*protocol.UnpreparedError](err); !ok || !bytes.Equal(unprepared.StatementID, []byte{1, 2}) {
+			if unprepared, ok := errors.AsType[*cqlerr.UnpreparedError](err); !ok || !bytes.Equal(unprepared.StatementID, []byte{1, 2}) {
 				t.Fatalf("wrong error %v", err)
 			}
 			if page == nil || len(page.Warnings()) != 1 || !page.CQLTraceID().Set || len(page.Payload()) != 1 {
@@ -436,7 +436,7 @@ func TestTypedConn(t *testing.T) {
 			c.InternalCancel()
 			select {
 			case err := <-out:
-				if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
+				if !errors.Is(err, cqlerr.ErrConnectionClosed) {
 					t.Fatalf("got %v", err)
 				}
 			case <-time.After(5 * time.Second):
@@ -484,7 +484,7 @@ func TestTypedConn(t *testing.T) {
 	t.Run("ProtocolLimits", func(t *testing.T) {
 		t.Run("request", func(t *testing.T) {
 			c := &transport.Conn{InternalVersion: 4, InternalCfg: &transport.ConnConfig{TypedLimits: ProtocolLimits{MaxFrameBytes: 8}}}
-			if _, err := c.InternalBuildTypedRequest(&model.AttemptRequest{Statement: "SELECT value FROM table", Consistency: cql.One}, 1); !errors.Is(err, protocol.ErrFrameTooBig) {
+			if _, err := c.InternalBuildTypedRequest(&model.AttemptRequest{Statement: "SELECT value FROM table", Consistency: cql.One}, 1); !errors.Is(err, cqlerr.ErrFrameTooBig) {
 				t.Fatalf("got %v", err)
 			}
 		})
@@ -526,13 +526,13 @@ func TestTypedConn(t *testing.T) {
 			if page != nil {
 				page.Owner.Release()
 			}
-			if !errors.Is(err, protocol.ErrFrameTooBig) {
+			if !errors.Is(err, cqlerr.ErrFrameTooBig) {
 				t.Fatalf("got %v", err)
 			}
 		})
 		t.Run("v5 expansion before payload read", func(t *testing.T) {
 			c := &transport.Conn{InternalCfg: &transport.ConnConfig{TypedLimits: ProtocolLimits{MaxDecompressedBytes: 64}}}
-			if _, err := c.InternalReadTypedSegmentPayload(segment.Header{PayloadLen: 1, UncompressedLen: 65}); !errors.Is(err, protocol.ErrFrameTooBig) {
+			if _, err := c.InternalReadTypedSegmentPayload(segment.Header{PayloadLen: 1, UncompressedLen: 65}); !errors.Is(err, cqlerr.ErrFrameTooBig) {
 				t.Fatalf("got %v", err)
 			}
 		})

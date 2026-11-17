@@ -13,9 +13,9 @@ import (
 	"weak"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // queryPoolBase is what the session runtime sees of a query pool: its idle
@@ -51,7 +51,7 @@ func (rt *InternalSessionRuntime) registerPool(s *implCluster.Core, base *queryP
 	data.InternalSessionStateMu.RLock()
 	defer data.InternalSessionStateMu.RUnlock()
 	if data.InternalIsClosing || data.InternalIsClosed {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	entry := &queryPoolEntry{ref: weak.Make(base)}
 	rt.InternalMu.Lock()
@@ -119,7 +119,7 @@ func newQueryPool[P, R any](s *implCluster.Core, newQuery func(*queryPoolBase) (
 
 func (p *queryPool[P, R]) get() (*Query[P, R], error) {
 	if p.base.closed.Load() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	n := len(p.slots)
 	for i, start := 0, int(rand.Uint32N(uint32(n))); i < n; i++ {
@@ -318,7 +318,7 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	state := p.privateStorage.InternalState
 	s := state.InternalSession
 	if s.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	routing := preparedRouting(state, p.privateStorage.kind)
 	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, true)

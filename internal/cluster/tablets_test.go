@@ -29,10 +29,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
@@ -163,7 +163,7 @@ func TestTablets(t *testing.T) {
 				t.Fatal("callback should not be called on closed session")
 				return true
 			})
-			if !errors.Is(err, runtimeerrors.ErrSessionClosed) {
+			if !errors.Is(err, cqlerr.ErrSessionClosed) {
 				t.Fatalf("expected ErrSessionClosed, got %v", err)
 			}
 		})
@@ -180,7 +180,7 @@ func TestTablets(t *testing.T) {
 				t.Fatal("callback should not be called when tablets not enabled")
 				return true
 			})
-			if !errors.Is(err, runtimeerrors.ErrTabletsNotUsed) {
+			if !errors.Is(err, cqlerr.ErrTabletsNotUsed) {
 				t.Fatalf("expected ErrTabletsNotUsed, got %v", err)
 			}
 		})
@@ -237,7 +237,7 @@ func TestTablets(t *testing.T) {
 			sessionMarkClosed(s)
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrSessionClosed) {
+			if !errors.Is(err, cqlerr.ErrSessionClosed) {
 				t.Fatalf("expected ErrSessionClosed, got %v", err)
 			}
 		})
@@ -251,7 +251,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrSessionNotReady) {
+			if !errors.Is(err, cqlerr.ErrSessionNotReady) {
 				t.Fatalf("expected ErrSessionNotReady, got %v", err)
 			}
 		})
@@ -265,7 +265,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).isInitialized = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrTabletsNotUsed) {
+			if !errors.Is(err, cqlerr.ErrTabletsNotUsed) {
 				t.Fatalf("expected ErrTabletsNotUsed, got %v", err)
 			}
 		})
@@ -280,7 +280,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "", "tb")
-			if !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
+			if !errors.Is(err, cqlerr.ErrNoKeyspace) {
 				t.Fatalf("expected ErrNoKeyspace, got %v", err)
 			}
 		})
@@ -295,7 +295,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "")
-			if !errors.Is(err, runtimeerrors.ErrNoTable) {
+			if !errors.Is(err, cqlerr.ErrNoTable) {
 				t.Fatalf("expected ErrNoTable, got %v", err)
 			}
 		})

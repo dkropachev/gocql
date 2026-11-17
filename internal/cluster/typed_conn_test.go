@@ -31,13 +31,13 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -870,7 +870,7 @@ func TestTypedConn(t *testing.T) {
 				owner.Release()
 				err := <-result
 				if partial {
-					if query, ok := errors.AsType[*implRuntimeerrors.QueryError](err); err == nil || !ok || !runtimeerrors.QueryErrorData(query).InternalPotentiallyExecuted || !c.Closed() {
+					if query, ok := errors.AsType[*cqlerr.QueryError](err); err == nil || !ok || !runtimeerrors.QueryErrorData(query).InternalPotentiallyExecuted || !c.Closed() {
 						t.Fatal("partial TLS write not poisoned", err)
 					}
 				} else if err != nil || recorder.borrowed != len(payload) {

@@ -10,12 +10,12 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -123,7 +123,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		return false
 	}
 	if p.privateStorage.session != nil && p.privateStorage.session.Closed() {
-		p.privateStorage.err = runtimeerrors.ErrClosed
+		p.privateStorage.err = cqlerr.ErrClosed
 		p.closeLocked()
 		return false
 	}
@@ -154,7 +154,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		err = p.privateStorage.ctx.Err()
 	}
 	if err == nil && p.privateStorage.session != nil && p.privateStorage.session.Closed() {
-		err = runtimeerrors.ErrClosed
+		err = cqlerr.ErrClosed
 	}
 	if err != nil {
 		p.privateStorage.err = err
@@ -201,10 +201,10 @@ func (p *Page[R]) closeLocked() {
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
 	if p == nil {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.response.Owner.Retain() {
 		return nil, cql.ErrReleased
@@ -218,11 +218,11 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 func (p *Page[R]) Clone() (R, error) {
 	if p == nil {
 		var zero R
-		return zero, runtimeerrors.ErrNoRows
+		return zero, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		var zero R
-		return zero, runtimeerrors.ErrNoRows
+		return zero, cqlerr.ErrNoRows
 	}
 	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
 }
@@ -355,7 +355,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 //go:noinline
 func (r *rowsImpl[R]) stop(err error) {
 	if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
-		err = runtimeerrors.ErrClosed
+		err = cqlerr.ErrClosed
 	}
 	r.privateStorage.err = err
 	r.closeLocked()
@@ -413,25 +413,25 @@ func (r *rowsImpl[R]) closeLocked() {
 }
 func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if r == nil {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	return r.privateStorage.page.Retain()
 }
 func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
 		var z R
-		return z, runtimeerrors.ErrNoRows
+		return z, cqlerr.ErrNoRows
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
 		var z R
-		return z, runtimeerrors.ErrNoRows
+		return z, cqlerr.ErrNoRows
 	}
 	return r.privateStorage.page.Clone()
 }
@@ -698,7 +698,7 @@ func (r *rowsImpl[R]) stopExecution(l *logicalExecution) {
 		r.privateStorage.future = nil
 	}
 	r.privateStorage.mu.Unlock()
-	l.InternalFinish(r.Info(), runtimeerrors.ErrClosed)
+	l.InternalFinish(r.Info(), cqlerr.ErrClosed)
 	l.releaseInput()
 }
 

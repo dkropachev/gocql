@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"context"
@@ -10,19 +10,17 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 type executionStatusReporter interface {
 	error
-	ExecutionStatus() cqltype.ExecutionStatus
+	ExecutionStatus() ExecutionStatus
 }
 
 // statusWalk is the state of one ExecutionStatusOf walk over an error tree.
 type statusWalk struct {
 	reporter    executionStatusReporter
-	server      protocol.ServerError
+	server      ServerError
 	notExecuted bool
 }
 
@@ -34,7 +32,7 @@ func (w *statusWalk) visit(err error) bool {
 		return false
 	}
 	if w.server == nil {
-		w.server, _ = err.(protocol.ServerError) //nolint:errorlint // one node of a tree walkErrors walks
+		w.server, _ = err.(ServerError) //nolint:errorlint // one node of a tree walkErrors walks
 	}
 	if !w.notExecuted {
 		w.notExecuted = unsent(err)
@@ -59,16 +57,11 @@ func unsent(err error) bool {
 }
 
 // ExecutionStatusOf reports what the request that failed with err may have
-// done on the cluster. The driver wraps every failure that follows a sent
-// attempt in a QueryError or ExecutionError carrying that verdict, so a bare
-// cancellation means the request was never sent. Any other error the driver
-// cannot attribute reports MaybeExecuted.
-//
-// It walks err's tree once: the first QueryError or ExecutionError decides,
-// then the first server error, then any error proving the request unsent.
-func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
+// done on the cluster, across all of its attempts. It returns NotExecuted for
+// a nil error and MaybeExecuted for an error the driver cannot attribute.
+func ExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
-		return cqltype.NotExecuted
+		return NotExecuted
 	}
 	var w statusWalk
 	walkErrors(err, nil, &w)
@@ -76,15 +69,16 @@ func ExecutionStatusOf(err error) cqltype.ExecutionStatus {
 	case w.reporter != nil:
 		return w.reporter.ExecutionStatus()
 	case w.server != nil:
-		return protocol.ServerErrorExecutionStatus(w.server)
+		return serverErrorExecutionStatus(w.server)
 	case w.notExecuted:
-		return cqltype.NotExecuted
+		return NotExecuted
 	default:
-		return cqltype.MaybeExecuted
+		return MaybeExecuted
 	}
 }
 
-// AttemptFailure records one failed attempt of a request.
+// AttemptFailure records one failed attempt of a request; see
+// ExecutionError.Attempts.
 type AttemptFailure struct {
 	Err error
 	// Address is the host:port the attempt was sent to.
@@ -95,7 +89,7 @@ type AttemptFailure struct {
 	// Shard is the shard of the connection, when the host is shard-aware.
 	Shard       cql.Option[uint32]
 	Consistency cql.Consistency
-	Status      cqltype.ExecutionStatus
+	Status      ExecutionStatus
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
 	// error. Read it with package cqltrace.
@@ -116,9 +110,7 @@ func (a AttemptFailure) String() string {
 // maxRenderedAttempts bounds how many attempts an error message lists.
 const maxRenderedAttempts = 3
 
-// ExecutionError is returned when a request fails. ExecutionStatus reports
-// what the request may have done on the cluster across all of its attempts.
-// errors.Is and errors.As search Err and the error of every attempt.
+// ExecutionError is returned when a request fails after all its attempts.
 type ExecutionError struct {
 	// Err is the reason the request stopped: the last attempt's error, the
 	// caller's cancellation, or a failure before any attempt.
@@ -126,12 +118,12 @@ type ExecutionError struct {
 	// Attempts lists the failed attempts in the order they finished.
 	Attempts []AttemptFailure
 	Result   cql.Result
-	status   cqltype.ExecutionStatus
+	status   ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request whose attempts reached
 // status.
-func NewExecutionError(err error, result cql.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func newExecutionError(err error, result cql.Result, status ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return &ExecutionError{Err: err, Result: result, status: status, Attempts: attempts}
 }
 
@@ -141,7 +133,7 @@ func (e *ExecutionError) Error() string {
 	b.WriteString(e.Err.Error())
 	// A single attempt's error already names its own status.
 	if ExecutionStatusOf(e.Err) != e.status {
-		b.WriteString(ExecutionSuffix(e.status))
+		b.WriteString(executionSuffix(e.status))
 	}
 	attempts := e.Attempts
 	if n := len(attempts); n > 0 && errors.Is(e.Err, attempts[n-1].Err) {
@@ -176,16 +168,18 @@ func (e *ExecutionError) Unwrap() []error {
 }
 
 // ExecutionStatus reports the most severe status among all attempts.
-func (e *ExecutionError) ExecutionStatus() cqltype.ExecutionStatus { return e.status }
+func (e *ExecutionError) ExecutionStatus() ExecutionStatus { return e.status }
 
-// IsCASWriteUnknown reports whether err says that a conditional write timed
-// out with an unknown outcome: CAS_WRITE_UNKNOWN on Cassandra over protocol
-// 5, or a write timeout of write type CAS on ScyllaDB and on Cassandra over
-// protocol 4. The write may or may not have applied.
+// IsCASWriteUnknown reports whether err says that a conditional (LWT) write
+// timed out without knowing whether it applied. Cassandra reports this as
+// CAS_WRITE_UNKNOWN on protocol 5 and as a write timeout of write type CAS on
+// protocol 4; ScyllaDB reports the write timeout. ExecutionStatusOf reports
+// MaybeExecuted for all of them. Read the row back before retrying a write
+// that is not idempotent.
 func IsCASWriteUnknown(err error) bool {
-	if _, ok := errors.AsType[*protocol.CASWriteUnknownError](err); ok {
+	if _, ok := errors.AsType[*CASWriteUnknownError](err); ok {
 		return true
 	}
-	timeout, ok := errors.AsType[*protocol.WriteTimeoutError](err)
+	timeout, ok := errors.AsType[*WriteTimeoutError](err)
 	return ok && timeout.WriteType == "CAS"
 }

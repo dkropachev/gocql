@@ -14,9 +14,8 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -289,7 +288,7 @@ func TestPreparedOneShot(t *testing.T) {
 			t.Fatal("close did not stop the unanswered call")
 		}
 		<-closed
-		if _, err := p.Exec(context.Background(), 2, CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if _, err := p.Exec(context.Background(), 2, CompiledOptions{}); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("call after close: %v", err)
 		}
 	})
@@ -319,7 +318,7 @@ func TestPreparedOneShot(t *testing.T) {
 					call <- err
 				}()
 				r := <-requests
-				if _, err := peers[0].Write(serverError(t, r.stream, protocol.CodeUnavailable, unavailableBody())); err != nil {
+				if _, err := peers[0].Write(serverError(t, r.stream, cqlerr.CodeUnavailable, unavailableBody())); err != nil {
 					t.Fatal(err)
 				}
 				<-decided
@@ -333,7 +332,7 @@ func TestPreparedOneShot(t *testing.T) {
 				if n := pooledBusy(s); n != 0 {
 					t.Fatalf("%d busy pooled queries after close", n)
 				}
-				if err := <-call; !errors.Is(err, runtimeerrors.ErrClosed) {
+				if err := <-call; !errors.Is(err, cqlerr.ErrClosed) {
 					t.Fatalf("call in backoff ended with %v, want ErrClosed", err)
 				}
 			})

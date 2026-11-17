@@ -7,13 +7,13 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 const testAuthClass = "org.apache.cassandra.auth.PasswordAuthenticator"
@@ -22,7 +22,7 @@ const testAuthClass = "org.apache.cassandra.auth.PasswordAuthenticator"
 type authReply struct {
 	op      frm.Op // OpAuthChallenge, OpAuthSuccess, OpError or anything else
 	data    []byte
-	errCode protocol.ErrorCode
+	errCode cqlerr.ErrorCode
 	errMsg  string
 }
 
@@ -155,5 +155,5 @@ func multiStepReply(token []byte) authReply {
 	case "r1":
 		return authReply{op: frm.OpAuthSuccess, data: []byte("done")}
 	}
-	return authReply{op: frm.OpError, errCode: protocol.CodeBadCredentials, errMsg: "unexpected token " + string(token)}
+	return authReply{op: frm.OpError, errCode: cqlerr.CodeBadCredentials, errMsg: "unexpected token " + string(token)}
 }

@@ -13,6 +13,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -85,7 +86,7 @@ func TestTypedFrame(t *testing.T) {
 						t.Fatalf("native header = %+v, bytes=%d, error=%v", header, len(native), err)
 					}
 					settings.MaxFrameBytes--
-					if _, err := settings.BuildTypedRequest(request, 23); !errors.Is(err, ErrFrameTooBig) {
+					if _, err := settings.BuildTypedRequest(request, 23); !errors.Is(err, cqlerr.ErrFrameTooBig) {
 						t.Fatalf("body above limit: %v", err)
 					}
 					// An earlier encoding error takes precedence over the later size

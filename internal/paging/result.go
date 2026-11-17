@@ -8,8 +8,8 @@ import (
 	"hash/maphash"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // pagingHistory owns references to the same immutable tokens sent on the wire.
@@ -48,7 +48,7 @@ func (h *InternalPagingHistory) InternalAdd(state cql.PageState) error {
 		for _, held := range h.InternalInline[:h.InternalCount] {
 			perfAdd(1, 1)
 			if bytes.Equal(cqltype.PageToken(held), token) {
-				return runtimeerrors.ErrPagingNoProgress
+				return cqlerr.ErrPagingNoProgress
 			}
 		}
 		if err := h.checkLimits(token); err != nil {
@@ -69,12 +69,12 @@ func (h *InternalPagingHistory) InternalAdd(state cql.PageState) error {
 	if entry, exists := h.InternalEntries[hash]; exists {
 		perfAdd(1, 1)
 		if bytes.Equal(cqltype.PageToken(entry.InternalState), token) {
-			return runtimeerrors.ErrPagingNoProgress
+			return cqlerr.ErrPagingNoProgress
 		}
 		for p := entry.InternalNext; p != nil; p = p.InternalNext {
 			perfAdd(1, 1)
 			if bytes.Equal(cqltype.PageToken(p.InternalState), token) {
-				return runtimeerrors.ErrPagingNoProgress
+				return cqlerr.ErrPagingNoProgress
 			}
 		}
 	}
@@ -112,7 +112,7 @@ func (h *InternalPagingHistory) checkLimits(token []byte) error {
 		maxBytes = 16 << 20
 	}
 	if h.InternalCount >= maxCount || int64(len(token)) > maxBytes-h.InternalBytes {
-		return runtimeerrors.ErrPagingStateLimit
+		return cqlerr.ErrPagingStateLimit
 	}
 	return nil
 }

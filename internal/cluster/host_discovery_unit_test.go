@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -59,7 +60,7 @@ func newRingTestServer(t *testing.T, peers ...testPeer) *ringTestServer {
 			peersErr := rs.peersErr
 			rs.mu.Unlock()
 			if peersErr != "" {
-				writeErrorResult(resp, stream, protocol.CodeServer, peersErr)
+				writeErrorResult(resp, stream, cqlerr.CodeServer, peersErr)
 				return true
 			}
 			var rows [][][]byte

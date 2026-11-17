@@ -31,10 +31,10 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 var errOrphanBudget = errors.New("gocql: abandoned stream budget exceeded")
@@ -127,7 +127,7 @@ func (c *Conn) beginSharedSlow(ctx context.Context) error {
 		w := c.admission.Load()
 		if w&admissionClosed != 0 {
 			c.InternalMu.Unlock()
-			return runtimeerrors.ErrConnectionClosed
+			return cqlerr.ErrConnectionClosed
 		}
 		if w&admissionExclusive == 0 {
 			// The flags cannot change while we hold InternalMu, only the count.
@@ -279,7 +279,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	c.InternalMu.Lock()
 	if c.InternalClosed {
 		c.InternalMu.Unlock()
-		return nil, runtimeerrors.ErrConnectionClosed
+		return nil, cqlerr.ErrConnectionClosed
 	}
 	if c.InternalCfg != nil && c.InternalCfg.InternalIsControlConn {
 		c.InternalMu.Unlock()
@@ -287,7 +287,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	}
 	if c.admission.Load()&admissionExclusive != 0 {
 		c.InternalMu.Unlock()
-		return nil, runtimeerrors.ErrNoStreams
+		return nil, cqlerr.ErrNoStreams
 	}
 	// From here on beginShared fails its CAS and waits under InternalMu.
 	c.admission.Or(admissionExclusive)
@@ -303,7 +303,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		c.InternalMu.Lock()
 		if c.InternalClosed {
 			c.InternalMu.Unlock()
-			return nil, runtimeerrors.ErrConnectionClosed
+			return nil, cqlerr.ErrConnectionClosed
 		}
 		// Every registered call, orphans included, holds a stream until it
 		// leaves the table, so no stream in use means no call either. The
@@ -324,7 +324,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 			case <-ctx.Done():
 				return nil, ctx.Err()
 			case <-c.InternalCtx.Done():
-				return nil, runtimeerrors.ErrConnectionClosed
+				return nil, cqlerr.ErrConnectionClosed
 			}
 			break
 		}
@@ -335,7 +335,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-c.InternalCtx.Done():
-			return nil, runtimeerrors.ErrConnectionClosed
+			return nil, cqlerr.ErrConnectionClosed
 		}
 	}
 	if err = ctx.Err(); err != nil {
@@ -343,7 +343,7 @@ func (c *Conn) InternalReserveExclusiveWithLimits(ctx context.Context, limits St
 	}
 	stream, ok := c.InternalStreams.GetStream()
 	if !ok {
-		return nil, runtimeerrors.ErrNoStreams
+		return nil, cqlerr.ErrNoStreams
 	}
 	r := &InternalExclusiveConn{InternalConn: c, InternalCtx: ctx, InternalStream: stream, InternalDone: make(chan struct{}), InternalComplete: true}
 	// The shared reader acknowledged a native-frame/v5-unit boundary. Move its
@@ -416,7 +416,7 @@ func (r *InternalExclusiveConn) closeOwned(reusable bool) error {
 	}
 
 	if !reusable {
-		r.InternalConn.InternalCloseWithError(runtimeerrors.ErrConnectionClosed)
+		r.InternalConn.InternalCloseWithError(cqlerr.ErrConnectionClosed)
 	}
 	r.active.Lock()
 	defer r.active.Unlock()
@@ -624,7 +624,7 @@ func (r *InternalExclusiveConn) watchIOContext(ctx context.Context) error {
 	}
 	r.cancelMu.Unlock()
 	if r.InternalClosing.Load() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	return ctx.Err()
 }

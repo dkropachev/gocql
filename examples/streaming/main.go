@@ -244,7 +244,7 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
 	if incremental && !segments && frameCompression != config.NoCompression {
-		if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
+		if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)
 		}
 		fmt.Println("frame compression explicitly rejected before streaming submission")

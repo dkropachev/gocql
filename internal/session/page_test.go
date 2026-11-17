@@ -26,10 +26,9 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -213,7 +212,7 @@ func TestPage(t *testing.T) {
 						if string(before.OwnedBytes()) != "delivered" {
 							t.Fatal("shutdown recycled delivered page")
 						}
-						if p.NextInto(&dst) || dst.Len() != 0 || !errors.Is(p.Err(), runtimeerrors.ErrClosed) {
+						if p.NextInto(&dst) || dst.Len() != 0 || !errors.Is(p.Err(), cqlerr.ErrClosed) {
 							t.Fatal("closed page advance", p.Err())
 						}
 					} else {
@@ -227,7 +226,7 @@ func TestPage(t *testing.T) {
 						if string(before.OwnedBytes()) != "delivered" {
 							t.Fatal("shutdown recycled delivered rows")
 						}
-						if r.NextInto(&dst) || dst.Len() != 0 || !errors.Is(r.Err(), runtimeerrors.ErrClosed) {
+						if r.NextInto(&dst) || dst.Len() != 0 || !errors.Is(r.Err(), cqlerr.ErrClosed) {
 							t.Fatal("closed rows advance", r.Err())
 						}
 					}
@@ -300,7 +299,7 @@ func TestPage(t *testing.T) {
 					if string(view.OwnedBytes()) != "retained" {
 						t.Fatal("retained lease lost")
 					}
-					if _, err := Run(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+					if _, err := Run(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, cqlerr.ErrClosed) {
 						t.Fatal(err)
 					}
 				})

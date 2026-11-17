@@ -24,6 +24,7 @@ import (
 	"net/netip"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -130,7 +131,7 @@ func hostInfoFromFixture(f *nativeResultFixture, port int) (*endpoint.HostInfo, 
 	return rows[0].InternalHost(port)
 }
 
-func writeErrorResult(resp *protocol.Framer, stream int, code protocol.ErrorCode, msg string) {
+func writeErrorResult(resp *protocol.Framer, stream int, code cqlerr.ErrorCode, msg string) {
 	resp.WriteHeader(0, frm.OpError, stream)
 	resp.WriteInt(int32(code))
 	resp.WriteString(msg)

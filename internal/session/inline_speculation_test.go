@@ -12,9 +12,9 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -196,7 +196,7 @@ func TestInlineSpeculation(t *testing.T) {
 			if first.peer < 0 {
 				return
 			}
-			_, _ = peers[first.peer].Write(errorResponse(t, first.stream, protocol.CodeServer, nil))
+			_, _ = peers[first.peer].Write(errorResponse(t, first.stream, cqlerr.CodeServer, nil))
 			second := next()
 			if second.peer < 0 {
 				return

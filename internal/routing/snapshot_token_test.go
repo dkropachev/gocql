@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func tokenTestSnapshot() *MetadataSnapshot {
@@ -116,10 +116,10 @@ func TestSnapshotToken(t *testing.T) {
 				t.Errorf("%s: no error", name)
 			}
 		}
-		if _, err := m.Token("ks", "missing", cql.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoTable) {
+		if _, err := m.Token("ks", "missing", cql.IntValue(1)); !errors.Is(err, cqlerr.ErrNoTable) {
 			t.Errorf("missing table: %v", err)
 		}
-		if _, err := m.Token("nope", "single", cql.IntValue(1)); !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
+		if _, err := m.Token("nope", "single", cql.IntValue(1)); !errors.Is(err, cqlerr.ErrNoKeyspace) {
 			t.Errorf("missing keyspace: %v", err)
 		}
 	})

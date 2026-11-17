@@ -28,12 +28,12 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -135,7 +135,7 @@ func TestEvents(t *testing.T) {
 				t.Fatal("close did not release queued charges", budget.Bytes())
 			}
 			var released atomic.Int32
-			if err := c.InternalDispatchEventOwned(&frm.ClientRoutesChanged{}, func() { released.Add(1) }); !errors.Is(err, runtimeerrors.ErrClosed) || released.Load() != 1 {
+			if err := c.InternalDispatchEventOwned(&frm.ClientRoutesChanged{}, func() { released.Add(1) }); !errors.Is(err, cqlerr.ErrClosed) || released.Load() != 1 {
 				t.Fatal("terminal enqueue retained ownership", err, released.Load())
 			}
 			// Event semantic consumption rejects bytes after a fully parsed event.

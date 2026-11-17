@@ -26,11 +26,11 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
-type UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
+type UnsupportedSettingError = cqlerr.UnsupportedSettingError
 
 func typeValidation(field, message string, args ...any) error {
 	return cqltype.TypeValidation(field, message, args...)

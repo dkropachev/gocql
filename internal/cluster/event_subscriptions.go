@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -123,7 +123,7 @@ func InternalSubscriptionPublish(s *Subscription, e Event) {
 }
 func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	if s == nil || s.Closed() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	if filter.Capacity < 0 {
 		return nil, cqltype.TypeValidation("subscription capacity", "must not be negative")
@@ -141,7 +141,7 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	if p.closed {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	sub := func() *Subscription {
 		opaqueStorageValue := new(Subscription)

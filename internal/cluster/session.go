@@ -36,6 +36,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -44,7 +45,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -581,7 +581,7 @@ func (s *Core) initialized() bool {
 
 func sessionReady(s *Core) error {
 	s.privateStorage.InternalSessionStateMu.RLock()
-	err := runtimeerrors.ErrSessionNotReady
+	err := cqlerr.ErrSessionNotReady
 	if s.privateStorage.isInitialized || s.privateStorage.initErr != nil {
 		err = s.privateStorage.initErr
 	}
@@ -598,13 +598,13 @@ func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
 func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetadata, error) {
 	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
+		return nil, cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if keyspace == "" {
-		return nil, runtimeerrors.ErrNoKeyspace
+		return nil, cqlerr.ErrNoKeyspace
 	} else if table == "" {
-		return nil, runtimeerrors.ErrNoTable
+		return nil, cqlerr.ErrNoTable
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.GetTable(keyspace, table)
@@ -615,15 +615,15 @@ func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetad
 func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.TabletEntryList, error) {
 	// fail fast
 	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
+		return nil, cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if !s.privateStorage.tabletsRoutingV1 {
-		return nil, runtimeerrors.ErrTabletsNotUsed
+		return nil, cqlerr.ErrTabletsNotUsed
 	} else if keyspace == "" {
-		return nil, runtimeerrors.ErrNoKeyspace
+		return nil, cqlerr.ErrNoKeyspace
 	} else if table == "" {
-		return nil, runtimeerrors.ErrNoTable
+		return nil, cqlerr.ErrNoTable
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.getTableTablets(keyspace, table), nil
@@ -635,11 +635,11 @@ func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.Table
 func sessionForEachTablet(s *Core, fn func(keyspace, table string, entries tablets.TabletEntryList) bool) error {
 	// fail fast
 	if s.Closed() {
-		return runtimeerrors.ErrSessionClosed
+		return cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return err
 	} else if !s.privateStorage.tabletsRoutingV1 {
-		return runtimeerrors.ErrTabletsNotUsed
+		return cqlerr.ErrTabletsNotUsed
 	}
 	if fn == nil {
 		return nil
@@ -730,7 +730,7 @@ func checkServer(want implSettings.Server, conn *transport.Conn) error {
 		got = implSettings.ServerScylla
 	}
 	if got != want {
-		return &runtimeerrors.ServerMismatchError{Want: want.String(), Got: got.String()}
+		return &cqlerr.ServerMismatchError{Want: want.String(), Got: got.String()}
 	}
 	return nil
 }

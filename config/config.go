@@ -14,7 +14,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -73,12 +72,12 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		}
 	}
 	if settings.Identity.ApplicationVersion != "" && settings.Identity.ApplicationName == "" {
-		return Config{}, &cqlerr.ValidationError{Field: "application", Err: errors.New("version requires a name")}
+		return Config{}, &cql.ValidationError{Field: "application", Err: errors.New("version requires a name")}
 	}
 	if settings.TLSSource != nil {
 		settings.TLS = settings.TLSSource.TLSConfig()
 		if settings.TLS == nil {
-			return Config{}, &cqlerr.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
+			return Config{}, &cql.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
 		}
 	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
@@ -86,17 +85,17 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if b.perHost {
 		if b.shardAwarenessChosen && settings.Pool.AdvancedShardAwareness.Enabled {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
 		}
 		if b.maxExcessChosen {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
 		}
 		settings.Pool.AdvancedShardAwareness.Enabled = false
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
 		if id.IsEmpty() {
-			return Config{}, &cqlerr.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
+			return Config{}, &cql.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter
 		settings.HostFilter = func(host routing.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
@@ -112,7 +111,7 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		case implCluster.ClientRouteEvent:
 			settings.Metadata.ClientRouteEvents = false
 		default:
-			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
+			return Config{}, &cql.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
 		}
 	}
 	if err := settings.Validate(); err != nil {
@@ -621,7 +620,7 @@ func (c Config) String() string {
 // Config.
 func (c Config) resolved() (implSettings.Config, error) {
 	if c.settings == nil {
-		return implSettings.Config{}, &cqlerr.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with config.New")}
+		return implSettings.Config{}, &cql.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with config.New")}
 	}
 	return *c.settings, nil
 }

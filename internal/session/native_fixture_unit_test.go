@@ -24,6 +24,7 @@ import (
 	"time"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -128,7 +129,7 @@ func execTestStatement(ctx context.Context, s *cluster.Core, cql string, opts Co
 	return err
 }
 
-func writeErrorResult(resp *protocol.Framer, stream int, code protocol.ErrorCode, msg string) {
+func writeErrorResult(resp *protocol.Framer, stream int, code cqlerr.ErrorCode, msg string) {
 	resp.WriteHeader(0, frm.OpError, stream)
 	resp.WriteInt(int32(code))
 	resp.WriteString(msg)

@@ -330,7 +330,7 @@ func TestSession(t *testing.T) {
 			if owner.Alive() {
 				t.Fatal("owner final release did not finish")
 			}
-			if _, e = old.At(0); !errors.Is(e, cqlerr.ErrReleased) {
+			if _, e = old.At(0); !errors.Is(e, cql.ErrReleased) {
 				t.Fatal("old backing remained accessible", e)
 			}
 			if n, c := cache.Storage(); n != 0 || c != 0 {

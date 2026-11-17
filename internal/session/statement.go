@@ -9,13 +9,13 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -100,7 +100,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 		return empty, err
 	}
 	if s.Closed() {
-		return empty, runtimeerrors.ErrClosed
+		return empty, cqlerr.ErrClosed
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
 		return empty, cqltype.TypeValidation("prepare host", "empty UUID")

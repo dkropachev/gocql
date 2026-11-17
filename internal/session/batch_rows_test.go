@@ -8,9 +8,9 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type batchRow struct{ A, B []byte }
@@ -94,7 +94,7 @@ func TestRunBatch(t *testing.T) {
 		}
 		runBatchRows(t, session, batch, decoder)
 		var row batchRow
-		if old.NextInto(&row) || old.Err() != runtimeerrors.ErrStaleRows {
+		if old.NextInto(&row) || old.Err() != cqlerr.ErrStaleRows {
 			t.Fatalf("stale handle read rows: err %v", old.Err())
 		}
 	})

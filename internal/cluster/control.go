@@ -36,6 +36,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -44,7 +45,6 @@ import (
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -194,14 +194,14 @@ func (c *InternalControlConn) InternalConnect(hosts []*implEndpoint.HostInfo) er
 	cfg := sessionControlConnConfig(c.InternalSession)
 
 	var conn *transport.Conn
-	failure := &runtimeerrors.ConnectError{Stage: "control connection"}
+	failure := &cqlerr.ConnectError{Stage: "control connection"}
 	for _, host := range hosts {
 		var err error
 		conn, err = sessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, cfg, c)
 		// conn.finalizeConnection() to be called outside of this function, since initialization process is not completed yet
 		if err != nil {
 			c.InternalSession.logger().Warn("control connection: dial failed", logging.KeyHost, hostAddress(host), logging.Err(err))
-			failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
+			failure.Hosts = append(failure.Hosts, cqlerr.HostError{Address: hostAddress(host), Err: err})
 			continue
 		}
 		err = c.setupConn(conn)
@@ -209,7 +209,7 @@ func (c *InternalControlConn) InternalConnect(hosts []*implEndpoint.HostInfo) er
 			break
 		}
 		c.InternalSession.logger().Warn("control connection: setup failed", logging.KeyHost, hostAddress(host), logging.Err(err))
-		failure.Hosts = append(failure.Hosts, runtimeerrors.HostError{Address: hostAddress(host), Err: err})
+		failure.Hosts = append(failure.Hosts, cqlerr.HostError{Address: hostAddress(host), Err: err})
 		conn.Close()
 		conn = nil
 	}
@@ -272,7 +272,7 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 	c.workerMu.Lock()
 	if atomic.LoadInt32(&c.state) == controlConnClosing {
 		c.workerMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if c.connections == nil {
 		c.connections = make(map[*transport.Conn]struct{})

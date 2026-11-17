@@ -92,7 +92,7 @@ database type. Custom streaming declarations mapping such absent fields must
 provide it. Use `cql.StreamRowReader.ReadColumn` with a checked child plan. Do not adapt a
 buffered decoder by accumulating an entire streamed cell.
 
-Streaming decoders must report `cqlerr.StreamCapacityError` when caller
+Streaming decoders must report `cql.StreamCapacityError` when caller
 capacity is insufficient rather than growing payload buffers. Only a true
 `NextInto` publishes a complete row; a failure can leave earlier destination
 fields changed. See [streaming](statements/streaming.md) for cursor ownership,

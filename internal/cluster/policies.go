@@ -31,11 +31,11 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 const hostInfoListMapThreshold = 20
@@ -410,7 +410,7 @@ func (t *tokenAwareHostPolicy) Init(s *Core) {
 	}
 	t.privateStorage.getKeyspaceMetadata = func(keyspace string) (*metadata.KeyspaceMetadata, error) {
 		if keyspace == "" {
-			return nil, runtimeerrors.ErrNoKeyspace
+			return nil, cqlerr.ErrNoKeyspace
 		}
 		return s.privateStorage.InternalMetadataDescriber.GetKeyspace(keyspace)
 	}

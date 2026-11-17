@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -17,11 +18,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-var ErrBusy = runtimeerrors.ErrBusy
+var ErrBusy = cqlerr.ErrBusy
 
 type queryState struct {
 	owner        *inputOwner
@@ -115,7 +115,7 @@ func newQueryState(s *implCluster.Core, state *queryState, retire func(), pool *
 	data.InternalSessionStateMu.RLock()
 	defer data.InternalSessionStateMu.RUnlock()
 	if data.InternalIsClosing || data.InternalIsClosed {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	state.runtime = InternalRuntimeFor(s)
 	state.owner = InternalNewInputOwner()
@@ -273,7 +273,7 @@ func (s *queryState) begin(ctx context.Context) error {
 	}
 	if s.closed {
 		s.mu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	s.busy = true
 	s.generation.Add(1)
@@ -284,7 +284,7 @@ func (s *queryState) begin(ctx context.Context) error {
 		s.runtime.pooledBusy.Add(1)
 		if s.runtime.Core.Closed() {
 			s.idle()
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 	}
 	// Never acquire owner.mu while holding state.mu: the final release calls idle.
@@ -377,7 +377,7 @@ func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
 	closed := q.state.closed
 	q.state.mu.Unlock()
 	if closed {
-		return model.RoutingInfo{}, runtimeerrors.ErrClosed
+		return model.RoutingInfo{}, cqlerr.ErrClosed
 	}
 	scratch := routingScratch.Get().(*binding.ParameterBuffer)
 	values, err := scratch.Encode(q.params, q.columns, value, q.allowUnset)
@@ -410,11 +410,11 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	closed := q.state.closed
 	q.state.mu.Unlock()
 	if closed {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	s := q.state.runtime.Core
 	if s.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	request := &q.bound.privateStorage.InternalRequest
 	return batch.addValue(s, request.InternalSource, request.statement, &request.routing, q.params, q.columns, value, q.allowUnset)

@@ -5,16 +5,15 @@
 package cluster
 
 import (
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
 	"fmt"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 )
 
@@ -63,7 +62,7 @@ func (s *InternalMetadataDescriber) getKeyspaceInternal(keyspaceName string) (me
 
 		metadata, found = s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName)
 		if !found {
-			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, runtimeerrors.ErrNotFound)
+			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, cqlerr.ErrNotFound)
 		}
 	}
 
@@ -76,7 +75,7 @@ func (s *InternalMetadataDescriber) GetKeyspace(keyspaceName string) (*implMetad
 }
 
 func tableNotFoundError(keyspaceName, tableName string) error {
-	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, runtimeerrors.ErrNotFound)
+	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, cqlerr.ErrNotFound)
 }
 
 // getTableFromSnapshot resolves a table lookup against a keyspace snapshot.
@@ -286,7 +285,7 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 	if p.schemaEpoch[keyspaceName] != epoch || p.schemaRevision[keyspaceName] != revision || p.tableRevision[tableKey] != tableRevision || p.schemaDropped[keyspaceName] {
 		p.InternalMu.Unlock()
 		s.InternalSession.scheduleV2SchemaRetry()
-		return &implMetadata.PartialRefreshError{Generation: s.InternalSession.Metadata().Generation(), Keyspaces: map[string]error{keyspaceName: fmt.Errorf("schema changed during table refresh")}}
+		return &cqlerr.PartialRefreshError{Generation: s.InternalSession.Metadata().Generation(), Keyspaces: map[string]error{keyspaceName: fmt.Errorf("schema changed during table refresh")}}
 	}
 	applied := s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(keyspaceName, func(ks *implMetadata.KeyspaceMetadata) {
 		if len(tables) == 0 {

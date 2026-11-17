@@ -14,13 +14,12 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
 // serverError is a server ERROR response with a code-specific body.
-func serverError(t *testing.T, stream int, code protocol.ErrorCode, body []byte) []byte {
+func serverError(t *testing.T, stream int, code cqlerr.ErrorCode, body []byte) []byte {
 	t.Helper()
 	b := binary.BigEndian.AppendUint32(nil, uint32(code))
 	b = binary.BigEndian.AppendUint16(b, 4)
@@ -31,7 +30,7 @@ func serverError(t *testing.T, stream int, code protocol.ErrorCode, body []byte)
 }
 
 // tracedServerError is serverError carrying the CQL trace session id.
-func tracedServerError(t *testing.T, stream int, code protocol.ErrorCode, body []byte, id cql.UUID) []byte {
+func tracedServerError(t *testing.T, stream int, code cqlerr.ErrorCode, body []byte, id cql.UUID) []byte {
 	t.Helper()
 	b := append([]byte{}, id[:]...)
 	b = binary.BigEndian.AppendUint32(b, uint32(code))
@@ -135,7 +134,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := run(t, ctx, policy, func(_, stream int) []byte {
-			return serverError(t, stream, protocol.CodeUnavailable, unavailableBody())
+			return serverError(t, stream, cqlerr.CodeUnavailable, unavailableBody())
 		}, 3)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.NotExecuted {
 			t.Fatalf("status %v: %v", got, err)
@@ -152,9 +151,9 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		defer cancel()
 		err := run(t, ctx, &recordingRetry{limit: 2}, func(attempt, stream int) []byte {
 			if attempt == 0 {
-				return serverError(t, stream, protocol.CodeWriteTimeout, writeTimeoutBody(0, "SIMPLE"))
+				return serverError(t, stream, cqlerr.CodeWriteTimeout, writeTimeoutBody(0, "SIMPLE"))
 			}
-			return serverError(t, stream, protocol.CodeUnavailable, unavailableBody())
+			return serverError(t, stream, cqlerr.CodeUnavailable, unavailableBody())
 		}, 2)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.MaybeExecuted {
 			t.Fatalf("status %v: %v", got, err)
@@ -173,7 +172,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		defer cancel()
 		ids := []cql.UUID{{15: 1}, {15: 2}}
 		err := run(t, ctx, &recordingRetry{limit: 2}, func(attempt, stream int) []byte {
-			return tracedServerError(t, stream, protocol.CodeUnavailable, unavailableBody(), ids[attempt])
+			return tracedServerError(t, stream, cqlerr.CodeUnavailable, unavailableBody(), ids[attempt])
 		}, 2)
 		failure := requestError(t, err)
 		if len(failure.Attempts) != 2 {
@@ -199,7 +198,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		err := run(t, ctx, &recordingRetry{limit: 1}, func(_, stream int) []byte {
-			return serverError(t, stream, protocol.CodeWriteTimeout, writeTimeoutBody(1, "SIMPLE"))
+			return serverError(t, stream, cqlerr.CodeWriteTimeout, writeTimeoutBody(1, "SIMPLE"))
 		}, 1)
 		if got := requestError(t, err).ExecutionStatus(); got != cqlerr.PartiallyExecuted {
 			t.Fatalf("status %v: %v", got, err)
@@ -212,7 +211,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		sent := make(chan struct{})
 		err := run(t, ctx, &recordingRetry{limit: 3}, func(attempt, stream int) []byte {
 			if attempt == 0 {
-				return serverError(t, stream, protocol.CodeOverloaded, nil)
+				return serverError(t, stream, cqlerr.CodeOverloaded, nil)
 			}
 			close(sent)
 			go cancel()

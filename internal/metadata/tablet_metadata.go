@@ -8,8 +8,8 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 type v2ScyllaKeyspaceRow struct {
@@ -37,7 +37,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, args, decoder)
 	if err != nil {
-		if invalid, ok := errors.AsType[protocol.ServerError](err); ok && invalid.Code() == protocol.CodeInvalid {
+		if invalid, ok := errors.AsType[cqlerr.ServerError](err); ok && invalid.Code() == cqlerr.CodeInvalid {
 			return nil
 		}
 		return err

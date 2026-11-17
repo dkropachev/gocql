@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -69,7 +68,7 @@ func TestPageAPI(t *testing.T) {
 			if !released {
 				t.Fatal("page not released")
 			}
-			if _, err = view.At(0); !errors.Is(err, cqlerr.ErrReleased) {
+			if _, err = view.At(0); !errors.Is(err, cql.ErrReleased) {
 				t.Fatal(err)
 			}
 			if string(clone.OwnedBytes()) != "value" {

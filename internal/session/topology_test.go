@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -82,7 +83,7 @@ func TestTopology(t *testing.T) {
 			incomplete.rack = ""
 			srv.setPeers(incomplete)
 			err := s.RefreshRingNow()
-			if partial, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok || partial.Topology == nil {
+			if partial, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok || partial.Topology == nil {
 				t.Fatal("incomplete read was not a visible partial failure", err)
 			}
 			if got := ringHosts(s); !reflect.DeepEqual(got, before) {

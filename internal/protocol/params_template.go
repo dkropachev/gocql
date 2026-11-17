@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -118,7 +119,7 @@ func (c *Settings) writeTemplatedParams(e *TypedEnvelope, r *model.AttemptReques
 	if r.PagingState != nil {
 		// The page size and the paging state's length go in one run.
 		if int64(len(r.PagingState)) > math.MaxInt32 {
-			e.check(ErrFrameTooBig)
+			e.check(cqlerr.ErrFrameTooBig)
 			return
 		}
 		if p, err = e.b.ScalarBytes(t.PagingAt + 4); err != nil {

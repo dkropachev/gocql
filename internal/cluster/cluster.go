@@ -37,12 +37,12 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -651,8 +651,8 @@ func (cfg *InternalClusterSettings) Validate() error {
 const defaultCQLPort = 9042
 
 var (
-	ErrNoHosts              = runtimeerrors.ErrNoHosts
-	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
+	ErrNoHosts              = cqlerr.ErrNoHosts
+	ErrNoConnectionsStarted = cqlerr.ErrNoConnectionsStarted
 )
 
 // learnPortFromHosts inspects the host entries for embedded ports.

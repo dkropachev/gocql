@@ -13,7 +13,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/routing"
@@ -51,7 +50,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ZeroConfigRejected", func(t *testing.T) {
 		_, err := implSettings.InternalResolvePublic(Config{})
-		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || !strings.Contains(err.Error(), "config.New") {
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok || !strings.Contains(err.Error(), "config.New") {
 			t.Fatalf("resolving Config{} = %v, want a validation error naming config.New", err)
 		}
 	})
@@ -60,7 +59,7 @@ func TestConfigBuilder(t *testing.T) {
 		b := New("h").WithPort(0).WithConnectionsPerShard(-1)
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an invalid port")
-		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "port" {
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "port" {
 			t.Fatalf("Build = %v, want a port ValidationError", err)
 		}
 		b.WithPort(9042)
@@ -75,7 +74,7 @@ func TestConfigBuilder(t *testing.T) {
 		b := New("h").WithApplication("", "1.0.0")
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an application version without a name")
-		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "application" {
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "application" {
 			t.Fatalf("Build = %v, want an application ValidationError", err)
 		}
 		mustBuildConfig(t, b.WithApplication("app", "1.0.0"))
@@ -245,7 +244,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
 					t.Fatal("Build accepted the routes")
-				} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "client routes" {
+				} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "client routes" {
 					t.Fatalf("Build = %v, want a client routes ValidationError", err)
 				}
 			})
@@ -294,7 +293,7 @@ func TestConfigBuilder(t *testing.T) {
 		}
 		if _, err := New("h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
 			t.Fatal("Build accepted an empty host ID")
-		} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+		} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 			t.Fatalf("Build = %v, want a ValidationError", err)
 		}
 	})
@@ -321,7 +320,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
 					t.Fatal("Build accepted the pool size")
-				} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+				} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 					t.Fatalf("Build = %v, want a ValidationError", err)
 				}
 			})
@@ -343,7 +342,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DefaultProfileMustBeBuilt", func(t *testing.T) {
 		_, err := New("h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
-		if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 		}
 		_, err = New("h").WithDefaultProfile(Profile{PageSize: 1000}).

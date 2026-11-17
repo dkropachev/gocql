@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -41,7 +40,7 @@ func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
 //
 //go:noinline
 func tooManyPrepareOptions() error {
-	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
 // internalOptionList converts the optional exec.Options of a throwaway call; the
@@ -63,7 +62,7 @@ func internalOptionList(options []exec.Options) []implSession.Options {
 //
 //go:noinline
 func tooManyOptions() error {
-	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
 }
 
 // tooManyOptionsResult returns tooManyOptions with its execution result.

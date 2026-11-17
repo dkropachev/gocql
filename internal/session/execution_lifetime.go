@@ -25,8 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // Each logical operation has a closed input owner of its own. Its final drain
@@ -97,7 +97,7 @@ func (s *InternalSessionRuntime) registerExecution(l *logicalExecution, parent *
 		query.mu.Lock()
 		if query.closed || s.Core.Closed() {
 			query.mu.Unlock()
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		query.logical = l
 		query.mu.Unlock()
@@ -121,7 +121,7 @@ func (s *InternalSessionRuntime) registerExecution(l *logicalExecution, parent *
 	shard.mu.Lock()
 	if s.Core.Closed() {
 		shard.mu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	// Close may stop the execution as soon as the lock is released, and the
 	// stop releases this owner.

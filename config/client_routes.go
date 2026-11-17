@@ -7,7 +7,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/cql"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -75,7 +75,7 @@ func (b *ClientRoutesBuilder) WithRoute(connectionID, hostname string) *ClientRo
 // ID. Later calls on the builder do not affect the returned ClientRoutes.
 func (b *ClientRoutesBuilder) Build() (ClientRoutes, error) {
 	invalid := func(reason string) error {
-		return &cqlerr.ValidationError{Field: "client routes", Err: errors.New(reason)}
+		return &cql.ValidationError{Field: "client routes", Err: errors.New(reason)}
 	}
 	if len(b.routes) == 0 {
 		return ClientRoutes{}, invalid("no routes; add one with WithRoute")

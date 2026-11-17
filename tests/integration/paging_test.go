@@ -37,16 +37,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/config"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 func TestPaging(t *testing.T) {
@@ -344,7 +342,7 @@ func TestPaging(t *testing.T) {
 		}
 		if *flagProto < 5 && fixtureCompressed() {
 			_, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
-			if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
+			if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 				t.Fatal("frame compression pre-submit capability", err)
 			}
 			t.Log("frame-compressed streaming explicitly rejected before query")

@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type casBatchRow struct {
@@ -155,7 +155,7 @@ func TestRunConditionalBatch(t *testing.T) {
 		if old.NextInto(&row) {
 			t.Fatal("stale handle read a row")
 		}
-		if _, err := old.Applied(); err != runtimeerrors.ErrStaleRows {
+		if _, err := old.Applied(); err != cqlerr.ErrStaleRows {
 			t.Fatalf("stale Applied: %v", err)
 		}
 		if err := old.Close(); err != nil {

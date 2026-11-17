@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import "errors"
 
@@ -14,9 +14,8 @@ var (
 // write, or callback. Wait joins that execution before the query is reused.
 var ErrBusy = errors.New("gocql: query is busy")
 
-// ServerMismatchError reports that a session opened for one database reached
-// another: Connect[gocql.ScyllaV4] reaching Cassandra, or a Cassandra
-// dialect reaching ScyllaDB.
+// ServerMismatchError reports that Connect reached a database other than
+// the one its dialect names.
 type ServerMismatchError struct {
 	Want, Got string
 }
@@ -28,9 +27,8 @@ func (e *ServerMismatchError) Error() string {
 // Kind returns KindInvalid.
 func (e *ServerMismatchError) Kind() Kind { return KindInvalid }
 
-// ErrConditionalExec is returned, before anything is sent, by an Exec call
-// or ExecBatch for a statement or batch the driver knows to be conditional: its
-// result is a row reporting whether it applied, which Exec cannot return.
+// ErrConditionalExec reports an Exec or ExecBatch call for a statement or
+// batch known to be conditional. Nothing was sent.
 var ErrConditionalExec = errors.New("gocql: conditional statements return rows: use One, Each, All or Run, or RunBatch for a batch")
 
 // ErrStaleRows is reported by a Rows handle whose query has started a later

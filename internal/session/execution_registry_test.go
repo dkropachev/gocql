@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // TestCloseStopsBoundExecutions checks that Session.Close stops every
@@ -58,7 +58,7 @@ func TestCloseStopsBoundExecutions(t *testing.T) {
 				}
 				// Close cancels the executions it finds in flight; those
 				// report the cancellation. Later admissions report ErrClosed.
-				if !errors.Is(err, runtimeerrors.ErrClosed) && !errors.Is(err, context.Canceled) {
+				if !errors.Is(err, cqlerr.ErrClosed) && !errors.Is(err, context.Canceled) {
 					failures <- err
 				}
 				return
@@ -88,7 +88,7 @@ func TestCloseStopsBoundExecutions(t *testing.T) {
 	if n := InternalRuntimeFor(db).activeExecutions(); n != 0 {
 		t.Fatal("registry retained", n, "executions")
 	}
-	if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); !errors.Is(err, runtimeerrors.ErrClosed) {
+	if err := execTestStatement(context.Background(), db, "void", CompiledOptions{}); !errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatal("registration after Close", err)
 	}
 }

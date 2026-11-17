@@ -35,11 +35,11 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -327,7 +327,7 @@ func TestStream(t *testing.T) {
 			if err := b.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if cursor.NextInto(nil) || !errors.Is(cursor.Err(), runtimeerrors.ErrClosed) {
+			if cursor.NextInto(nil) || !errors.Is(cursor.Err(), cqlerr.ErrClosed) {
 				t.Fatal(cursor.Err())
 			}
 			if InternalRuntimeFor(s).activeExecutions() != 0 {
@@ -825,9 +825,9 @@ func TestStream(t *testing.T) {
 					if cursor.NextInto(&dst) {
 						t.Fatal("invented row")
 					}
-					want := runtimeerrors.ErrPagingNoProgress
+					want := cqlerr.ErrPagingNoProgress
 					if limit {
-						want = runtimeerrors.ErrPagingStateLimit
+						want = cqlerr.ErrPagingStateLimit
 					}
 					if !errors.Is(cursor.Err(), want) || string(dst) != "untouched" || cursor.Info().OutputStarted {
 						t.Fatal(cursor.Err(), cursor.Info())
@@ -971,7 +971,7 @@ func TestStream(t *testing.T) {
 					return frame
 				}, nilPreparedStreamPlan{}},
 				{"CQLTraceOfServerErrorIsFailed", func(stream int, id cql.UUID) []byte {
-					return tracedServerError(t, stream, implProtocol.CodeInvalid, nil, id)
+					return tracedServerError(t, stream, cqlerr.CodeInvalid, nil, id)
 				}, cql.StreamOneColumn(cql.StreamBlob)},
 			} {
 				t.Run(tc.name+"/"+mode, func(t *testing.T) {
@@ -1162,11 +1162,11 @@ func TestStream(t *testing.T) {
 						}
 						switch step {
 						case 0:
-							_, err = peer.Write(errorResponse(t, id, implProtocol.CodeUnprepared, old.InternalId))
+							_, err = peer.Write(errorResponse(t, id, cqlerr.CodeUnprepared, old.InternalId))
 						case 2:
 							_, err = peer.Write(typedTestResponse(t, 4, id, runtimeRowsBody([]byte("next"), "first")))
 						case 3:
-							_, err = peer.Write(errorExtensions(errorResponse(t, id, implProtocol.CodeUnprepared, []byte("new"))))
+							_, err = peer.Write(errorExtensions(errorResponse(t, id, cqlerr.CodeUnprepared, []byte("new"))))
 						}
 					}
 					if err != nil {
@@ -1189,7 +1189,7 @@ func TestStream(t *testing.T) {
 			if cursor.NextInto(&dst) {
 				t.Fatal("unprepared replay after output")
 			}
-			if _, ok := errors.AsType[*implProtocol.UnpreparedError](cursor.Err()); !ok {
+			if _, ok := errors.AsType[*cqlerr.UnpreparedError](cursor.Err()); !ok {
 				t.Fatal(cursor.Err())
 			}
 			if count != 1 || cursor.Info().DeliveredRows != 1 || cursor.Info().Result.Attempts != 3 {
@@ -1373,7 +1373,7 @@ func TestStream(t *testing.T) {
 					return
 				}
 				id = typedTestReadRequest(t, c, peer)
-				if _, err := peer.Write(withPayload(errorResponse(t, id, implProtocol.CodeServer, nil))); err != nil {
+				if _, err := peer.Write(withPayload(errorResponse(t, id, cqlerr.CodeServer, nil))); err != nil {
 					return
 				}
 				id = typedTestReadRequest(t, c, peer)

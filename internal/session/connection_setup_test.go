@@ -30,13 +30,13 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -54,7 +54,7 @@ func TestConnectionSetup(t *testing.T) {
 		})
 
 		t.Run("PreservesCause", func(t *testing.T) {
-			for _, cause := range []error{errors.New("fixture dial rejected"), protocol.NewOtherServerError(protocol.CodeBadCredentials, "rejected")} {
+			for _, cause := range []error{errors.New("fixture dial rejected"), cqlerr.NewOtherServerError(cqlerr.CodeBadCredentials, "rejected")} {
 				config := settings.DefaultConfig("127.0.20.1")
 				config.Protocol = 4
 				config.Logger = logging.Nop()
@@ -66,8 +66,8 @@ func TestConnectionSetup(t *testing.T) {
 				if !errors.Is(err, cause) {
 					t.Fatalf("bootstrap discarded dial cause: %v", err)
 				}
-				if request, ok := cause.(protocol.ServerError); ok {
-					if got, ok := errors.AsType[protocol.ServerError](err); !ok || got.Code() != request.Code() {
+				if request, ok := cause.(cqlerr.ServerError); ok {
+					if got, ok := errors.AsType[cqlerr.ServerError](err); !ok || got.Code() != request.Code() {
 						t.Fatal("bootstrap discarded server error", err)
 					}
 				}
@@ -256,7 +256,7 @@ func TestConnectionSetup(t *testing.T) {
 			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 				if target.ShardID.Set {
 					targeted++
-					return nil, transport.ErrScyllaSourcePortAlreadyInUse
+					return nil, cqlerr.ErrScyllaSourcePortAlreadyInUse
 				}
 				ordinary++
 				a, b := net.Pipe()

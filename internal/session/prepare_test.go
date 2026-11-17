@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 )
 
@@ -64,7 +64,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 						return
 					}
 					if failContinuation {
-						_, err = peer.Write(errorResponse(t, id, protocol.CodeServer, nil))
+						_, err = peer.Write(errorResponse(t, id, cqlerr.CodeServer, nil))
 						done <- err
 						return
 					}
@@ -119,7 +119,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		if cursor.NextInto(&dst) {
 			t.Fatal("failed continuation delivered output")
 		}
-		if server, ok := errors.AsType[protocol.ServerError](cursor.Err()); !ok || server.Code() != protocol.CodeServer {
+		if server, ok := errors.AsType[cqlerr.ServerError](cursor.Err()); !ok || server.Code() != cqlerr.CodeServer {
 			t.Fatal(cursor.Err())
 		}
 		info := cursor.Info()

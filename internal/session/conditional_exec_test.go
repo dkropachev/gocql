@@ -11,10 +11,9 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // An Exec of a statement or batch known to be conditional is rejected before
@@ -23,13 +22,13 @@ import (
 func TestConditionalExecRejected(t *testing.T) {
 	check := func(t *testing.T, err error) {
 		t.Helper()
-		if !errors.Is(err, runtimeerrors.ErrConditionalExec) {
+		if !errors.Is(err, cqlerr.ErrConditionalExec) {
 			t.Fatalf("err = %v, want ErrConditionalExec", err)
 		}
-		if status := runtimeerrors.ExecutionStatusOf(err); status != cqltype.NotExecuted {
+		if status := cqlerr.ExecutionStatusOf(err); status != cqlerr.NotExecuted {
 			t.Fatalf("status = %v, want NotExecuted", status)
 		}
-		if kind := runtimeerrors.KindOf(err); kind != runtimeerrors.KindInvalid {
+		if kind := cqlerr.KindOf(err); kind != cqlerr.KindInvalid {
 			t.Fatalf("kind = %v, want invalid", kind)
 		}
 	}
@@ -87,7 +86,7 @@ func TestExecSerialConsistencyReadIsNotRejectedUpFront(t *testing.T) {
 	if err == nil {
 		t.Fatal("Exec of a row-returning statement succeeded")
 	}
-	if errors.Is(err, runtimeerrors.ErrConditionalExec) {
+	if errors.Is(err, cqlerr.ErrConditionalExec) {
 		t.Fatalf("err = %v, rejected up front as conditional", err)
 	}
 	if !strings.Contains(err.Error(), "result columns require Run") {

@@ -49,12 +49,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -997,7 +997,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			}
 		default:
 			respFrame.WriteHeader(0, frm.OpError, head.Stream)
-			respFrame.WriteInt(int32(implProtocol.CodeUnprepared))
+			respFrame.WriteInt(int32(cqlerr.CodeUnprepared))
 			respFrame.WriteString("unprepared")
 			respFrame.WriteShortBytes(binary.BigEndian.AppendUint64(nil, id))
 		}
@@ -1735,8 +1735,8 @@ func TestConn(t *testing.T) {
 
 				select {
 				case err := <-errCh:
-					if !errors.Is(err, runtimeerrors.ErrTimeoutNoResponse) {
-						t.Fatalf("expected timeout error %v, got %v", runtimeerrors.ErrTimeoutNoResponse, err)
+					if !errors.Is(err, cqlerr.ErrTimeoutNoResponse) {
+						t.Fatalf("expected timeout error %v, got %v", cqlerr.ErrTimeoutNoResponse, err)
 					}
 				case <-time.After(execCloseTestTimeout):
 					t.Fatal("exec deadlocked waiting for timeout")
@@ -1845,8 +1845,8 @@ func TestConn(t *testing.T) {
 
 				select {
 				case err := <-errCh:
-					if !errors.Is(err, runtimeerrors.ErrConnectionClosed) {
-						t.Fatalf("expected close error %v, got %v", runtimeerrors.ErrConnectionClosed, err)
+					if !errors.Is(err, cqlerr.ErrConnectionClosed) {
+						t.Fatalf("expected close error %v, got %v", cqlerr.ErrConnectionClosed, err)
 					}
 				case <-time.After(execCloseTestTimeout):
 					t.Fatal("exec deadlocked after Close")
@@ -2145,7 +2145,7 @@ func TestConn(t *testing.T) {
 					// Not normalised: a timeout that already consumed part of a header leaves
 					// the stream at an unknown offset, so serve() must close the connection
 					// rather than resume and mis-frame everything after it.
-					require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+					require.False(t, errors.Is(err, cqlerr.ErrReadHeaderTimeout),
 						"a timeout partway through a header must stay fatal, got %q", err)
 
 					require.GreaterOrEqual(t, len(r.readLens), 2,
@@ -2229,7 +2229,7 @@ func TestConn(t *testing.T) {
 					_, err := c.InternalReadFrameHeader(c.InternalR)
 
 					require.Error(t, err)
-					require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+					require.Equal(t, tc.wantIsErr, errors.Is(err, cqlerr.ErrReadHeaderTimeout),
 						"errors.Is(ErrReadHeaderTimeout) on %q", err)
 				})
 
@@ -2239,7 +2239,7 @@ func TestConn(t *testing.T) {
 					_, err := c.InternalReadFirstSegmentHeader()
 
 					require.Error(t, err)
-					require.Equal(t, tc.wantIsErr, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+					require.Equal(t, tc.wantIsErr, errors.Is(err, cqlerr.ErrReadHeaderTimeout),
 						"errors.Is(ErrReadHeaderTimeout) on %q", err)
 				})
 			}
@@ -2829,7 +2829,7 @@ func TestConn(t *testing.T) {
 				// io.EOF is a clean close, not a timeout, so serve() must treat it as fatal.
 				require.ErrorIs(t, err, io.EOF,
 					"recvSegment should propagate io.EOF from a closed read, not misclassify it")
-				require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+				require.False(t, errors.Is(err, cqlerr.ErrReadHeaderTimeout),
 					"io.EOF must not be wrapped as ErrReadHeaderTimeout")
 			case <-ctx.Done():
 				t.Fatal("timed out waiting for recvSegment to return after Read was unblocked")
@@ -2892,7 +2892,7 @@ func TestConn(t *testing.T) {
 			select {
 			case err := <-errCh:
 				require.Error(t, err, "recvSegment should fail when the advertised payload never arrives")
-				require.False(t, errors.Is(err, implProtocol.ErrReadHeaderTimeout),
+				require.False(t, errors.Is(err, cqlerr.ErrReadHeaderTimeout),
 					"a mid-transfer payload stall must not be normalised to the benign idle header timeout")
 			case <-time.After(5 * time.Second):
 				t.Fatal("recvSegment hung on the payload read; the read deadline was not re-armed after the segment header")

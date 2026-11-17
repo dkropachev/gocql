@@ -11,7 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/cql"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -69,7 +69,7 @@ type TLSFileSource struct {
 // cannot be loaded.
 func NewTLSFiles(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
 	invalid := func(reason string) error {
-		return &cqlerr.ValidationError{Field: "NewTLSFiles", Err: errors.New(reason)}
+		return &cql.ValidationError{Field: "NewTLSFiles", Err: errors.New(reason)}
 	}
 	switch {
 	case (files.CertFile == "") != (files.KeyFile == ""):

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -16,7 +17,6 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -53,7 +53,7 @@ func uuidRows(id, version cql.UUID) []byte {
 	}
 	return body
 }
-func agreementConn(t *testing.T, s *cluster.Core, id, version cql.UUID, code protocol.ErrorCode) (*transport.Conn, *atomic.Int32) {
+func agreementConn(t *testing.T, s *cluster.Core, id, version cql.UUID, code cqlerr.ErrorCode) (*transport.Conn, *atomic.Int32) {
 	t.Helper()
 	c, server := typedTestConn(t, 4, nil)
 	c.InternalHost = func() *endpoint.HostInfo {

@@ -1,14 +1,11 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package runtimeerrors
+package cqlerr
 
 import (
 	"fmt"
 	"testing"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 // Cassandra over protocol 5 reports an LWT with an unknown outcome as
@@ -19,17 +16,17 @@ func TestIsCASWriteUnknown(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{&protocol.CASWriteUnknownError{}, true},
-		{fmt.Errorf("wrapped: %w", &protocol.CASWriteUnknownError{}), true},
-		{&protocol.WriteTimeoutError{WriteType: "CAS"}, true},
-		{&protocol.WriteTimeoutError{WriteType: "SIMPLE"}, false},
-		{&protocol.ReadTimeoutError{}, false},
+		{&CASWriteUnknownError{}, true},
+		{fmt.Errorf("wrapped: %w", &CASWriteUnknownError{}), true},
+		{&WriteTimeoutError{WriteType: "CAS"}, true},
+		{&WriteTimeoutError{WriteType: "SIMPLE"}, false},
+		{&ReadTimeoutError{}, false},
 		{nil, false},
 	} {
 		if got := IsCASWriteUnknown(tc.err); got != tc.want {
 			t.Errorf("%v: %t, want %t", tc.err, got, tc.want)
 		}
-		if tc.want && ExecutionStatusOf(tc.err) != cqltype.MaybeExecuted {
+		if tc.want && ExecutionStatusOf(tc.err) != MaybeExecuted {
 			t.Errorf("%v: status %v, want MaybeExecuted", tc.err, ExecutionStatusOf(tc.err))
 		}
 	}

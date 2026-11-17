@@ -32,13 +32,13 @@ import (
 	"unsafe"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -297,7 +297,7 @@ func TestExecution(t *testing.T) {
 					}
 					select {
 					case err := <-done:
-						if !errors.Is(err, context.Canceled) && !errors.Is(err, runtimeerrors.ErrClosed) {
+						if !errors.Is(err, context.Canceled) && !errors.Is(err, cqlerr.ErrClosed) {
 							t.Fatal(err)
 						}
 					case <-time.After(time.Second):
@@ -369,7 +369,7 @@ func TestExecution(t *testing.T) {
 					}
 					select {
 					case err := <-done:
-						if !errors.Is(err, context.Canceled) && !errors.Is(err, runtimeerrors.ErrClosed) {
+						if !errors.Is(err, context.Canceled) && !errors.Is(err, cqlerr.ErrClosed) {
 							t.Fatal(err)
 						}
 					case <-time.After(time.Second):
@@ -631,7 +631,7 @@ func TestExecution(t *testing.T) {
 				defer close(done)
 				for attempt := 0; attempt < 3; attempt++ {
 					stream := typedTestReadRequest(t, conns[0], peers[0])
-					response := errorResponse(t, stream, protocol.CodeOverloaded, nil)
+					response := errorResponse(t, stream, cqlerr.CodeOverloaded, nil)
 					if attempt == 2 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "retried"))
 					}
@@ -671,7 +671,7 @@ func TestExecution(t *testing.T) {
 			handle := new(profile)
 			go func() {
 				stream := typedTestReadRequest(t, conns[0], peers[0])
-				_, _ = peers[0].Write(errorResponse(t, stream, protocol.CodeOverloaded, nil))
+				_, _ = peers[0].Write(errorResponse(t, stream, cqlerr.CodeOverloaded, nil))
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -712,7 +712,7 @@ func TestExecution(t *testing.T) {
 		t.Run("SafeBytesWritten", func(t *testing.T) {
 			for _, written := range []bool{false, true} {
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
-				status := runtimeerrors.ExecutionStatusOf(err)
+				status := cqlerr.ExecutionStatusOf(err)
 				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: attemptBytesWritten(err), ExecutionStatus: status})
 				if (decision.Action == retry.Next) == written {
 					t.Fatal(written, decision)

@@ -77,3 +77,15 @@ var (
 // Go field types package cql maps without configuration, for RowOf and
 // ParamsOf, or for cql.StreamRowOf. cmd/cqlgen reads it.
 var BuiltinFieldTypes = NewSlot("cql.builtinFieldTypes")
+
+// Package cqlerr's server errors, which the engine decodes and builds.
+var (
+	// DecodeServerError holds func(body any, warnings []string,
+	// failureReasonMap bool, rateLimitCode int) cqlerr.ServerError. body has
+	// the methods I32, U16, U8, Str, Strings, ShortBytes and ReadErrorMap of a
+	// response body positioned at an ERROR's code.
+	DecodeServerError = NewSlot("cqlerr.decodeServerError")
+	// ServerErrorMessage holds func(cqlerr.ServerError, string, []string): it
+	// sets a server error's message and warnings, for engine tests.
+	ServerErrorMessage = NewSlot("cqlerr.serverErrorMessage")
+)

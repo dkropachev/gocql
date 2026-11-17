@@ -30,6 +30,7 @@ import (
 	"time"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -40,7 +41,6 @@ import (
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -311,7 +311,7 @@ func TestHostConnPool(t *testing.T) {
 			pinned := implEndpoint.InternalHostInfoHostUUID(cs[0].InternalHost)
 			other := implEndpoint.InternalHostInfoHostUUID(cs[1].InternalHost)
 			plan := &routing.InternalTargetPlan{InternalTargets: []model.Target{{HostID: other}}}
-			if conn, err := s.SelectTypedConn(context.Background(), model.RoutingInfo{HostID: implCql.Option[implCql.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, implRuntimeerrors.ErrNoConnections) {
+			if conn, err := s.SelectTypedConn(context.Background(), model.RoutingInfo{HostID: implCql.Option[implCql.UUID]{Set: true, Value: pinned}}, plan); conn != nil || !errors.Is(err, cqlerr.ErrNoConnections) {
 				t.Fatal("host pin escaped", conn, err)
 			}
 		})

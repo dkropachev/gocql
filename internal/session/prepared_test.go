@@ -27,6 +27,7 @@ import (
 	"time"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -36,9 +37,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -301,7 +300,7 @@ func TestPrepared(t *testing.T) {
 					}
 					var response []byte
 					if i == 0 {
-						response = errorResponse(t, stream, protocol.CodeServer, nil)
+						response = errorResponse(t, stream, cqlerr.CodeServer, nil)
 					} else {
 						response = typedTestResponse(t, 4, stream, preparedBody([]byte{byte(i)}, implCql.NewColumns(), cols))
 					}
@@ -438,7 +437,7 @@ func TestPrepared(t *testing.T) {
 					close(release)
 					err := <-second
 					if incompatible {
-						if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
+						if _, ok := errors.AsType[*cqlerr.SchemaChangedError](err); !ok {
 							t.Fatal(err)
 						}
 					} else if err != nil {
@@ -982,9 +981,9 @@ func TestPrepared(t *testing.T) {
 						}
 						switch step {
 						case 0:
-							_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeServer, nil))
+							_, err = peers[0].Write(errorResponse(t, stream, cqlerr.CodeServer, nil))
 						case 1:
-							_, err = peers[0].Write(errorResponse(t, stream, protocol.CodeUnprepared, old.InternalId))
+							_, err = peers[0].Write(errorResponse(t, stream, cqlerr.CodeUnprepared, old.InternalId))
 						case 3:
 							_, err = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("a"), "one")))
 						case 4:
@@ -1101,7 +1100,7 @@ func TestPrepared(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
 					_, err := InternalRuntimeFor(s).prepareOnConnExpected(ctx, conns[0], state, implModel.EncodedValues{Columns: parameters}, true, old)
-					if _, ok := errors.AsType[*runtimeerrors.SchemaChangedError](err); !ok {
+					if _, ok := errors.AsType[*cqlerr.SchemaChangedError](err); !ok {
 						t.Fatal(mode, err)
 					}
 					if state.host(implCql.UUID{15: 1}) != old {

@@ -1,22 +1,20 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package cqltype
+package cqlerr
 
 // ExecutionStatus reports what a failed request may have done on the
-// cluster. The zero value is MaybeExecuted, the conservative answer.
+// cluster. States are ordered by severity.
 type ExecutionStatus uint8
 
 const (
-	// MaybeExecuted means the outcome is unknown: the request reached a
-	// server and may or may not have been applied.
+	// MaybeExecuted means the request reached a server and may or may not
+	// have been applied.
 	MaybeExecuted ExecutionStatus = iota
 	// NotExecuted guarantees the request had no effect: it never reached a
 	// server, or the server rejected it before applying anything.
 	NotExecuted
-	// PartiallyExecuted means the request was applied at least in part: a
-	// write reached some replicas without the requested consistency, or a
-	// schema change succeeded but its follow-up work failed.
+	// PartiallyExecuted means the request was applied at least in part.
 	PartiallyExecuted
 )
 

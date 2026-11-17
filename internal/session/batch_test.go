@@ -27,12 +27,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, cql.EmptyRow] {
@@ -106,7 +105,7 @@ func TestBatch(t *testing.T) {
 			b := runtimeQuery(t)
 			b.Close()
 			var batch Batch
-			if err := InternalAddBound(&batch, s, b); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+			if err := InternalAddBound(&batch, s, b); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatal(err)
 			}
 			if batch.Len() != 0 {
@@ -321,11 +320,11 @@ func TestBatch(t *testing.T) {
 			go func() {
 				// BATCH -> UNPREPARED id1, PREPARE, BATCH -> UNPREPARED id2, PREPARE, BATCH -> void.
 				responses := []func(stream int) []byte{
-					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id1")) },
+					func(stream int) []byte { return errorResponse(t, stream, cqlerr.CodeUnprepared, []byte("id1")) },
 					func(stream int) []byte {
 						return typedTestResponse(t, 4, stream, preparedBody([]byte("id1"), columns, cql.NewColumns(), 0))
 					},
-					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id2")) },
+					func(stream int) []byte { return errorResponse(t, stream, cqlerr.CodeUnprepared, []byte("id2")) },
 					func(stream int) []byte {
 						return typedTestResponse(t, 4, stream, preparedBody([]byte("id2"), columns, cql.NewColumns(), 0))
 					},
@@ -532,7 +531,7 @@ func TestBatch(t *testing.T) {
 		if err := q.Wait(closeCtx); err != nil {
 			t.Fatal(err)
 		}
-		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}
 		if batch.Len() != 2 {

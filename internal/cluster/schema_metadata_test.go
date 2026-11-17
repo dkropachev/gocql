@@ -28,13 +28,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestSchemaMetadata(t *testing.T) {
@@ -1293,7 +1293,7 @@ func TestSchemaMetadata(t *testing.T) {
 		ctrl.setQueryError(errors.New("schema unavailable"))
 
 		_, err := getKeyspaceMetadata(s, "ks1")
-		if err == nil || errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) || !strings.Contains(err.Error(), "schema unavailable") {
+		if err == nil || errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) || !strings.Contains(err.Error(), "schema unavailable") {
 			t.Fatalf("getKeyspaceMetadata error = %v, want the query error", err)
 		}
 	})
@@ -1412,7 +1412,7 @@ func TestSchemaMetadata(t *testing.T) {
 			// must never be restored from the older enumerated rows.
 			err := s.RefreshV2AllSchema(context.Background())
 			if err != nil {
-				partial, ok := errors.AsType[*metadata.PartialRefreshError](err)
+				partial, ok := errors.AsType[*cqlerr.PartialRefreshError](err)
 				if !ok {
 					t.Fatal(err)
 				}
@@ -1437,7 +1437,7 @@ func TestSchemaMetadata(t *testing.T) {
 				return nil
 			}
 			err := s.RefreshV2AllSchema(context.Background())
-			if _, ok := errors.AsType[*metadata.PartialRefreshError](err); !ok || !errors.Is(err, cause) {
+			if _, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok || !errors.Is(err, cause) {
 				t.Fatal("partial error lost cause", err)
 			}
 			for _, snapshot := range []*routing.MetadataSnapshot{before, s.Metadata()} {
@@ -1650,7 +1650,7 @@ func TestSchemaMetadata(t *testing.T) {
 				SessionData(s).isInitialized = true
 
 				_, err := sessionTableMetadata(s, "ks", "")
-				if !errors.Is(err, runtimeerrors.ErrNoTable) {
+				if !errors.Is(err, cqlerr.ErrNoTable) {
 					t.Fatalf("TableMetadata: expected ErrNoTable, got %v", err)
 				}
 			})

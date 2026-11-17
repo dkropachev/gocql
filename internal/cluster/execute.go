@@ -7,12 +7,12 @@ import (
 	"context"
 	"math"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -29,16 +29,16 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, p
 		return nil, err
 	}
 	if s.Closed() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	if s.privateStorage.InternalPool == nil || s.privateStorage.InternalHostSource == nil {
-		return nil, runtimeerrors.ErrNoConnections
+		return nil, cqlerr.ErrNoConnections
 	}
 	if plan != nil {
 		for {
 			r, ok := plan.Next()
 			if !ok {
-				return nil, runtimeerrors.ErrNoConnections
+				return nil, cqlerr.ErrNoConnections
 			}
 			if conn := sessionPickRoute(s, r, routing); conn != nil {
 				return conn, nil
@@ -53,11 +53,11 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, p
 		if conn := sessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
 			return conn, nil
 		}
-		return nil, runtimeerrors.ErrNoConnections
+		return nil, cqlerr.ErrNoConnections
 	}
 	hosts := s.privateStorage.InternalHostSource.InternalHostsView()
 	if len(hosts) == 0 {
-		return nil, runtimeerrors.ErrNoConnections
+		return nil, cqlerr.ErrNoConnections
 	}
 	start := int(s.privateStorage.nextTypedHost.Add(1) % uint64(len(hosts)))
 	for i := 0; i < len(hosts); i++ {
@@ -66,7 +66,7 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing model.RoutingInfo, p
 			return conn, nil
 		}
 	}
-	return nil, runtimeerrors.ErrNoConnections
+	return nil, cqlerr.ErrNoConnections
 }
 
 // sessionPickRoute returns a connection of r's host for r's shard,

@@ -22,9 +22,9 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -86,7 +86,7 @@ func BenchmarkPaging(b *testing.B) {
 				b.ReportAllocs()
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
-					if h.InternalAdd(state) != runtimeerrors.ErrPagingNoProgress {
+					if h.InternalAdd(state) != cqlerr.ErrPagingNoProgress {
 						b.Fatal("history lost state")
 					}
 				}
