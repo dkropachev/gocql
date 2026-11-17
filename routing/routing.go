@@ -7,7 +7,10 @@
 // NewPolicy builds the default token- and tablet-aware policy and
 // SingleTarget one that always routes to a single host; both are implemented
 // by the session. An application can implement Policy itself, often by
-// wrapping a built-in one.
+// wrapping a built-in one. In a program that links no session, such as the
+// tests of a policy library, the built-in policies find no route and
+// Validate fails, and NewPlan, HostRoutes and ReplicaRoutes return no
+// routes.
 package routing
 
 import (

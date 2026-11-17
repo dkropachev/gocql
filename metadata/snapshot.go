@@ -12,7 +12,9 @@ import (
 
 // Snapshot is an immutable view of cluster topology and schema. A session
 // publishes a new one when either changes; Session.Metadata returns the
-// current one. A Snapshot is safe for concurrent use.
+// current one. A Snapshot is safe for concurrent use. A nil or zero
+// Snapshot knows no cluster: it reports no hosts or schema, and its lookups
+// fail with a validation error.
 type Snapshot struct{ src snapshotSource }
 
 // snapshotSource is the session's snapshot behind a Snapshot.
