@@ -18,7 +18,7 @@ func TestMirrorLayouts(t *testing.T) {
 	if err := link.CheckLayout[routing.PartitionKey, partitionKeyRep](); err != nil {
 		t.Error(err)
 	}
-	if routing.AnyShard != AnyShard || metadata.AnyShard != AnyShard {
-		t.Errorf("AnyShard differs: routing %d, metadata %d, engine %d", routing.AnyShard, metadata.AnyShard, AnyShard)
+	if metadata.AnyShard != AnyShard {
+		t.Errorf("AnyShard differs: metadata %d, engine %d", metadata.AnyShard, AnyShard)
 	}
 }

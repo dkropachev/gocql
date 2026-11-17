@@ -17,7 +17,8 @@
 // NewProfile starts a ProfileBuilder for execution defaults: the session's
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one
 // (exec.Options.Profile). WithTLS encrypts connections with a fixed
-// tls.Config; WithTLSSource takes a TLSSource such as NewTLSFiles, which
-// reloads certificates while the session runs. Observer and LifecycleObserver
-// receive requests and session events.
+// tls.Config; WithTLSSource takes an endpoint.TLSSource such as NewTLSFiles,
+// which reloads certificates while the session runs. WithObserver and
+// WithLifecycleObserver install an observe.Observer and an
+// observe.LifecycleObserver.
 package config

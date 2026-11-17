@@ -23,7 +23,7 @@ the standalone streaming command has an explicit `-tls-uri` example.
 
 ## Changing TLS while sessions run
 
-`WithTLSSource` takes a `endpoint.TLSSource` instead. The driver calls its
+`WithTLSSource` takes an `endpoint.TLSSource` instead. The driver calls its
 `TLSConfig` method on every dial and uses the result for
 that connection: reconnects, pool refills, new shards and the control
 connection all pick up the current config. Connections that are already open

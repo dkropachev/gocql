@@ -3,7 +3,7 @@
 
 // Package cqltrace reads CQL trace sessions: the server-side query traces a
 // cluster records in system_traces for executions run with
-// exec.Options.CQLTrace. Result.CQLTraces names the sessions to read, with the
+// exec.Options.CQLTrace. cql.Result.CQLTraces names the sessions to read, with the
 // attempt each one records; a failed execution's Result lists its failed
 // attempts' sessions too.
 //

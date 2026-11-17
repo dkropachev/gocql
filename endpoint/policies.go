@@ -22,9 +22,9 @@ type ReconnectPolicy interface {
 // configuration can change while sessions run. The driver calls TLSConfig on
 // every dial, from many goroutines, and copies the result; it must be fast and
 // must not return nil. Connections already open keep the configuration they
-// were dialed with. Pass a source to ConfigBuilder.WithTLSSource;
-// TLSFileSource is a ready-made one. Use ConfigBuilder.WithTLS for a fixed
-// configuration.
+// were dialed with. Pass a source to config.ConfigBuilder.WithTLSSource;
+// config.TLSFileSource is a ready-made one. Use config.ConfigBuilder.WithTLS
+// for a fixed configuration.
 type TLSSource interface {
 	// TLSConfig returns the configuration for the next connection. It is
 	// called on every dial, from many goroutines; the result is copied and

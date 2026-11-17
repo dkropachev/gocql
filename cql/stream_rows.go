@@ -20,11 +20,9 @@ import (
 	"fmt"
 )
 
-// StreamOutputField is an immutable typed field declaration. It never boxes a
-// field value and never retains the application destination supplied later.
-
-// StreamOutputField is one column of a streamed row mapping, built with Column or
-// ColumnAt.
+// StreamOutputField is one column of a streamed row mapping, built with
+// StreamColumn or StreamColumnAt. It is immutable, never boxes a field value
+// and never retains the application destination supplied later.
 type StreamOutputField[R any] struct {
 	compile         func(DataType) (streamFieldPlan[R], error)
 	resetMissing    func(*R)

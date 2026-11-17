@@ -59,7 +59,7 @@ type StreamDecoder[T any] interface {
 
 // StreamValuePlan decodes one value of a compiled column type into caller storage.
 // Reset clears the logical value while keeping buffer capacity, and
-// DecodeInto reads the value from a ValueReader into the destination.
+// DecodeInto reads the value from a StreamValueReader into the destination.
 type StreamValuePlan[T any] interface {
 	Reset(*T)
 	DecodeInto(*StreamValueReader, *T) error
@@ -71,7 +71,7 @@ type StreamRowDecoder[R any] interface {
 }
 
 // StreamRowPlan decodes rows of compiled metadata into caller storage through a
-// RowReader.
+// StreamRowReader.
 type StreamRowPlan[R any] interface {
 	Reset(*R)
 	DecodeInto(*StreamRowReader, *R) error
@@ -398,7 +398,7 @@ type StreamRowReader struct {
 	active       bool
 }
 
-// InternalStreamReaderWorkingStorageBytes reports the actual retained byte
+// streamReaderWorkingStorageBytes reports the actual retained byte
 // scratch plus conservative scope descriptor capacities. Validation plans/maps
 // depend on schema and are accounted separately from payload working storage.
 // Captures alias final application storage and must not be counted again.

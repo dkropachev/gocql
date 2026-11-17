@@ -24,7 +24,7 @@ import (
 //
 // StartAttempt is called as each attempt, retry or speculative attempt is
 // sent. The function it returns, if not nil, is called once with the
-// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
+// completed attempt; routing.AttemptEvent.CQLTraceID links it to the server-side CQL
 // trace session when the request runs with exec.Options.CQLTrace.
 //
 // A speculative attempt that loses can start or end after its request has

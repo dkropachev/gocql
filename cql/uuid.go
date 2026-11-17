@@ -329,12 +329,12 @@ func (u UUID) Time() time.Time {
 	return time.Unix(sec+timeBase, nsec).UTC()
 }
 
-// Marshaling for JSON
+// MarshalJSON encodes u as its string form, quoted.
 func (u UUID) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + u.String() + `"`), nil
 }
 
-// Unmarshaling for JSON
+// UnmarshalJSON decodes the quoted string form of a UUID.
 func (u *UUID) UnmarshalJSON(data []byte) error {
 	str := strings.Trim(string(data), `"`)
 	if len(str) > 36 {

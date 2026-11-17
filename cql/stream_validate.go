@@ -233,7 +233,7 @@ type streamEncodedCodec struct{}
 type streamEncodedPlan struct{ validation *streamValidationPlan }
 
 // StreamEncoded decodes a cell of any type, validated against its metadata,
-// into an EncodedValue.
+// into a StreamEncodedValue.
 var StreamEncoded StreamDecoder[StreamEncodedValue] = streamEncodedCodec{}
 
 func (streamEncodedCodec) Compile(t DataType) (StreamValuePlan[StreamEncodedValue], error) {

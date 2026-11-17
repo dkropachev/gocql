@@ -38,7 +38,7 @@ func ExampleNewTLSFiles() {
 	// files.Err reports a change that could not be loaded.
 }
 
-// rotatingTLS is a TLSSource the application updates, for example from a
+// rotatingTLS is an endpoint.TLSSource the application updates, for example from a
 // secrets manager.
 type rotatingTLS struct{ current atomic.Pointer[tls.Config] }
 

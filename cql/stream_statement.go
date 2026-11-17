@@ -25,8 +25,8 @@ type StreamStatement[P, R any] struct {
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
 // mapping is used; otherwise R is reflected once, here. Of the
-// cql.StructOption values, RowOf applies WithCodec from this package and
-// ignores cql.WithCodec and cql.ReuseBuffers.
+// StructOption values, StreamRowOf applies WithStreamCodec and ignores
+// WithCodec and ReuseBuffers.
 func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]
 	if g, ok := any(new(R)).(interface{ CQLStreamColumns() []StreamOutputField[R] }); ok {
@@ -35,7 +35,7 @@ func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 	return generatedStreamRow(columns, opts...)
 }
 
-// MustStreamRowOf is RowOf that panics on error, for package-level variables.
+// MustStreamRowOf is StreamRowOf that panics on error, for package-level variables.
 func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
 	r, err := StreamRowOf(opts...)
 	if err != nil {

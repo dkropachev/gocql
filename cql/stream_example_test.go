@@ -16,7 +16,7 @@ type download struct {
 	ID      int32
 }
 
-// RowInto maps columns into caller storage; Compile checks the mapping
+// StreamRowInto maps columns into caller storage; Compile checks the mapping
 // against the result metadata, as Session.PrepareStream does.
 func ExampleStreamRowInto() {
 	decoder := cql.StreamRowInto(func(*download) {},

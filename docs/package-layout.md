@@ -158,7 +158,7 @@ documented methods.
 ### `config` (layer 3)
 
 - **Contains:** `ConfigBuilder`, `Config`, `ProfileBuilder`, `Profile`,
-  `ClientRoutes`, `TLSFileSource`, and compression constants. It is layer 3
+  `ClientRoutes` and `TLSFileSource`. It is layer 3
   because the engine never imports it: `Connect` turns a `Config` into engine
   settings.
 - **Must not contain:** policy or observer interfaces, event payloads, or

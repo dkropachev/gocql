@@ -19,9 +19,6 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-// AnyShard is a Route's shard when any connection of its host will do.
-const AnyShard = metadata.AnyShard
-
 // Plan returns the routes a request tries, in order, until one of them has a
 // connection.
 type Plan interface{ Next() (metadata.Route, bool) }

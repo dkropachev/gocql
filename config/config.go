@@ -162,7 +162,7 @@ func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
 
 // WithTLSSource encrypts every connection with the configuration source
 // returns when the connection is dialed, for one that changes while the
-// session runs: NewTLSFiles or your own TLSSource. Build validates the
+// session runs: NewTLSFiles or your own endpoint.TLSSource. Build validates the
 // configuration source returns at that time. Verification is as for WithTLS.
 // A nil source selects plaintext. It replaces WithTLS.
 func (b *ConfigBuilder) WithTLSSource(source endpoint.TLSSource) *ConfigBuilder {

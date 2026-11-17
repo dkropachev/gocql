@@ -8,14 +8,14 @@ go get github.com/scylladb/gocql/v2@v2.0.0
 ```
 
 The root package `github.com/scylladb/gocql/v2` (`gocql`) connects and runs
-statements. The data vocabulary (statements, types, codecs, values,
-consistency levels and server errors) lives in `github.com/scylladb/gocql/v2/cql`,
+statements. The data vocabulary (statements, types, codecs, values and
+consistency levels) lives in `github.com/scylladb/gocql/v2/cql`,
 including the streaming decoders that write into caller storage (`cql.Stream*`)
 and the values typed by metadata at run time (`cql.Value`, `cql.DynamicRows`).
 Session configuration and execution profiles are in `config`.
 Cluster metadata (topology and schema) is in `metadata`, host selection in `routing`, authentication
-in `auth`, addressing and dialing in `endpoint`, and API only ScyllaDB supports in
-`scylla`. The repository has one Go
+in `auth`, addressing and dialing in `endpoint`, observation in `observe`, and
+errors in `cqlerr`. The repository has one Go
 module; compression and benchmarks are included in it.
 
 ## Typed execution

@@ -12,10 +12,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// Value is an explicitly typed CQL value. Variable-length payloads and aggregate
-// input descriptors are borrowed; Clone detaches them. The type and state select
-// the active payload; no payload is stored in an interface.
-
 // Value is an explicitly typed CQL value: a type, a cell state (present,
 // NULL, UNSET or empty) and the payload that type selects. Type and State
 // report the first two. The accessors Bool, Signed, Float, Text, Bytes, UUID,
@@ -42,7 +38,7 @@ type Value struct {
 }
 
 // ValueField is one named field of a UDT Value, or one named parameter of
-// NamedParams.
+// NamedDynamicParams.
 type ValueField struct {
 	Name  string
 	Value Value
@@ -1136,7 +1132,7 @@ type dynamicRowsPlan struct {
 
 // DynamicRow holds columns and metadata-driven values. Columns returns the result
 // metadata, At and Get return a column's Value by position and name, and
-// Clone detaches the row. Cursor and Each values may borrow the response;
+// Clone detaches the row. Rows, Page and Each values may borrow the response;
 // One detaches the row before returning.
 type DynamicRow struct {
 	physical     *dynamicRowIndex

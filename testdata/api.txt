@@ -1460,7 +1460,6 @@ package retry
 	const retry.Stop retry.Action
 
 package routing
-	const routing.AnyShard int32
 	type routing.AttemptEvent struct
 		field Started time.Time
 		field Err error

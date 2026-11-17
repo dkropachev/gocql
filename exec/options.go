@@ -49,7 +49,7 @@ type Options struct {
 	IncludeMetadata   bool
 	Idempotent        bool
 	// CQLTrace asks the cluster to record a CQL trace session of every
-	// attempt in system_traces. Result.CQLTraces names the sessions, failed
+	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
 	// instrumentation such as OpenTelemetry, which hooks observe.Observer.
 	CQLTrace bool

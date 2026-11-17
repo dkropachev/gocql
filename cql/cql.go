@@ -2,7 +2,8 @@
 // Use of this source code is governed by a BSD-style license.
 
 // Package cql holds the CQL data vocabulary: statements, types, values,
-// codecs, consistency levels and server errors. It does no I/O.
+// codecs and consistency levels, and the errors of its own values and codecs.
+// It does no I/O.
 //
 // A Statement pairs CQL text with a ParamEncoder and a RowDecoder. Params,
 // Param and ParamAt map parameters; Row, RowInto, Column, ColumnAt and
@@ -39,7 +40,7 @@
 // []Value and []ValueField, DynamicRows decodes a DynamicRow, and DynamicCodec
 // encodes and decodes a single Value, as in Statement[[]Value, DynamicRow].
 //
-// Values decoded from a response may borrow its page: Cursor and Each values
+// Values decoded from a response may borrow its page: Rows, Page and Each values
 // expire with their page, while One and Clone detach them. Constructors that
 // take slices or bytes borrow them until the parameters are captured; keep
 // them unchanged until then.

@@ -30,7 +30,7 @@ func sortedByName[T any](m map[string]T) []T {
 	return out
 }
 
-// ToCQL returns a CQL query that ca be used to recreate keyspace with all
+// ToCQL returns a CQL query that can be used to recreate keyspace with all
 // user defined types, tables, indexes, functions, aggregates and views associated
 // with this keyspace.
 func (ks *Keyspace) ToCQL() (string, error) {

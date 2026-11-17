@@ -365,7 +365,9 @@ type OtherServerError struct {
 	code ErrorCode
 }
 
-// NewOtherServerError returns the server error with code and message.
+// NewOtherServerError returns the server error with code and message, for
+// codes without an error type of their own. Tests of a retry.Policy can use
+// it to build the server errors the policy sees.
 func NewOtherServerError(code ErrorCode, message string) *OtherServerError {
 	return &OtherServerError{serverError: serverError{message: message}, code: code}
 }

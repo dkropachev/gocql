@@ -59,7 +59,7 @@ type Policy interface {
 	Decide(Attempt) Decision
 }
 
-// Never stops after the first failed attempt. Set Options.Retry to Never{}
+// Never stops after the first failed attempt. Set exec.Options.Retry to Never{}
 // to disable retries for an execution while nil inherits the profile's policy.
 type Never struct{}
 

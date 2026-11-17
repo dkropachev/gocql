@@ -22,7 +22,6 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-// Package cql holds CQL vocabulary shared by the driver's public packages.
 package cql
 
 import (

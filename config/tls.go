@@ -32,7 +32,7 @@ type TLSFiles struct {
 	Interval time.Duration
 }
 
-// TLSFileSource is a TLSSource that loads the client certificate and key, and
+// TLSFileSource is an endpoint.TLSSource that loads the client certificate and key, and
 // the CA certificates that replace RootCAs, from files over a base
 // configuration, and reloads them when their content changes. It runs no
 // goroutine: a dial checks the files when Interval has passed since the last
