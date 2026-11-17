@@ -44,6 +44,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -57,10 +58,10 @@ func (p *countSpeculation) Delay(int) (time.Duration, bool) {
 
 type panicObserver struct{}
 
-func (panicObserver) ObserveRequest(settings.RequestEvent) { panic("request") }
+func (panicObserver) ObserveRequest(observe.RequestEvent)  { panic("request") }
 func (panicObserver) ObserveAttempt(routing2.AttemptEvent) { panic("attempt") }
 
-func (o panicObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o panicObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o panicObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
@@ -70,7 +71,7 @@ func (o panicObserver) StartAttempt(context.Context, routing2.AttemptStart) func
 // panicStartObserver panics when a request or attempt starts.
 type panicStartObserver struct{}
 
-func (panicStartObserver) StartRequest(context.Context, settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (panicStartObserver) StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	panic("request start")
 }
 func (panicStartObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
@@ -84,8 +85,8 @@ type observerKey struct{}
 type pairingObserver struct {
 	mu     sync.Mutex
 	calls  []string
-	starts []settings.RequestStart
-	ends   []settings.RequestEvent
+	starts []observe.RequestStart
+	ends   []observe.RequestEvent
 	ctxErr bool
 }
 
@@ -95,12 +96,12 @@ func (o *pairingObserver) record(call string) {
 	o.mu.Unlock()
 }
 
-func (o *pairingObserver) StartRequest(ctx context.Context, start settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o *pairingObserver) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	o.mu.Lock()
 	o.starts = append(o.starts, start)
 	o.mu.Unlock()
 	o.record("request start")
-	return context.WithValue(ctx, observerKey{}, "span"), func(e settings.RequestEvent) {
+	return context.WithValue(ctx, observerKey{}, "span"), func(e observe.RequestEvent) {
 		o.mu.Lock()
 		o.ends = append(o.ends, e)
 		o.mu.Unlock()

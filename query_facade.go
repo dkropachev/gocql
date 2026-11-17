@@ -23,14 +23,14 @@ func (q *Query[P, R]) internal() *implSession.Query[P, R] { return (*implSession
 
 // Exec executes a statement with no result columns, capturing value once for
 // routing, retries and paging. Overlapping calls return cqlerr.ErrBusy.
-func (q *Query[P, R]) Exec(ctx context.Context, value P) (Result, error) {
+func (q *Query[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
 	return q.internal().Exec(ctx, value)
 }
 
 // One decodes the first row into dst, ignoring further rows. It reports whether
 // a row exists and clears dst when none exists. Borrowed fields are detached
 // before return; built-in owning fields keep their destination buffers.
-func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, error) {
+func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error) {
 	return q.internal().One(ctx, value, dst)
 }
 
@@ -40,7 +40,7 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, Result, e
 // dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
-func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (Result, error) {
+func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error) {
 	return q.internal().Each(ctx, value, dst, fn)
 }
 

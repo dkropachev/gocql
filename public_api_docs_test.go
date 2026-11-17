@@ -40,7 +40,7 @@ func TestPublicMethodDocumentation(t *testing.T) {
 		{"github.com/scylladb/gocql/v2/config.Profile.Consistency", "Consistency"},
 		{"github.com/scylladb/gocql/v2/exec.PrepareOptions.HostID", "HostID"},
 		{"github.com/scylladb/gocql/v2/exec.StreamOptions.Incremental", "Incremental"},
-		{"github.com/scylladb/gocql/v2/config.Observer", "StartRequest"},
+		{"github.com/scylladb/gocql/v2/observe.Observer", "StartRequest"},
 		{"github.com/scylladb/gocql/v2/cqltrace.Fetcher", "Settle"},
 		{"github.com/scylladb/gocql/v2/exec.Options.CQLTrace", "server-side"},
 		{"github.com/scylladb/gocql/v2/metrics.Snapshot", "Requests"},

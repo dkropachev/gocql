@@ -31,6 +31,7 @@ import (
 
 	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -43,6 +44,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -75,7 +77,7 @@ func TestHostConnPool(t *testing.T) {
 			implCluster.SessionData(f.session).InternalPool.InternalMu.Unlock()
 			entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 			p := f.session.Peripheral()
-			p.InternalConfig.LifecycleObserver = lifecycleFunc(func(e settings.LifecycleEvent) {
+			p.InternalConfig.LifecycleObserver = lifecycleFunc(func(e observe.LifecycleEvent) {
 				if e.Stage == "connected" {
 					close(entered)
 					<-release
@@ -104,7 +106,7 @@ func TestHostConnPool(t *testing.T) {
 					config := settings.DefaultConfig("localhost")
 					config.Pool.ConnectionsPerHost = 1
 					config.KeepaliveInterval = 0
-					config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+					config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 						close(selected)
 						select {
 						case <-release:

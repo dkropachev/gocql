@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package settings
+package auth
 
 import (
 	"context"
@@ -9,25 +9,22 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
-	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-// AuthProvider creates independent exchanges and must be concurrency safe.
-type AuthProvider = connectivity.AuthProvider
-type AuthExchange = connectivity.AuthExchange
 type passwordAuth struct{ username, password string }
 
-func PasswordAuth(username, password string) AuthProvider {
+// Password authenticates with PasswordAuthenticator credentials.
+func Password(username, password string) Provider {
 	return passwordAuth{username: username, password: password}
 }
-func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, _ string) (AuthExchange, cql.Nullable[[]byte], error) {
+
+func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, _ string) (Exchange, cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cql.Nullable[[]byte]{}, err
 	}
 	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
-		return nil, cql.Nullable[[]byte]{}, cqltype.TypeValidation("password authentication", "credentials contain NUL")
+		return nil, cql.Nullable[[]byte]{}, &cql.ValidationError{Field: "password authentication", Err: errors.New("credentials contain NUL")}
 	}
 	response := make([]byte, len(p.username)+len(p.password)+2)
 	copy(response[1:], p.username)
@@ -43,7 +40,9 @@ func (*passwordExchange) Challenge(ctx context.Context, _ cql.Nullable[cql.Bytes
 	}
 	return cql.Nullable[[]byte]{}, errors.New("gocql: password authenticator received an unexpected challenge")
 }
+
 func (*passwordExchange) Success(ctx context.Context, _ cql.Nullable[cql.Bytes]) error {
 	return ctx.Err()
 }
+
 func (*passwordExchange) Close() {}

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
@@ -31,12 +32,12 @@ func TestHostConnPool(t *testing.T) {
 					cause := errors.New("actual pool failure completion")
 					calls, downs := 0, 0
 					p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{}, InternalLogger: logging.Nop()}
-					policy := &convictionRecorder{callback: func(e connectivity.ConvictionEvent) bool {
+					policy := &convictionRecorder{callback: func(e endpoint2.ConvictionEvent) bool {
 						err, snapshot := e.Err, e.Host
 						if !p.InternalFilling {
 							t.Fatal("fill ended before the policy saw its failure")
 						}
-						if e.Shard.Set || e.Source != connectivity.ConvictionPool {
+						if e.Shard.Set || e.Source != endpoint2.ConvictionPool {
 							t.Fatalf("whole-host pool failure reported as %+v", e)
 						}
 						if !p.InternalMu.TryLock() {
@@ -71,8 +72,8 @@ func TestHostConnPool(t *testing.T) {
 					if err != nil || fresh.Tokens[0] != -12 {
 						t.Fatal("callback mutated host storage", fresh, err)
 					}
-					var hook connectivity.ConvictionPolicy = policy
-					hook.Reset(connectivity.ConvictionEvent{Host: fresh})
+					var hook endpoint2.ConvictionPolicy = policy
+					hook.Reset(endpoint2.ConvictionEvent{Host: fresh})
 					if len(policy.resets) != 1 || policy.resets[0].Host.ID != id {
 						t.Fatal("reset lost host context")
 					}
@@ -90,21 +91,21 @@ func TestHostConnPool(t *testing.T) {
 			id := cql.MustParseUUID("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
 			host := (endpoint.HostInfoBuilder{HostId: id.String(), ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042}).Build()
 			cause := errors.New("shard dial failure")
-			newPool := func(policy connectivity.ConvictionPolicy, downs *int) *InternalHostConnPool {
+			newPool := func(policy endpoint2.ConvictionPolicy, downs *int) *InternalHostConnPool {
 				p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{count: 1}, InternalLogger: logging.Nop(), InternalRepairCtx: context.Background()}
 				p.InternalServices = InternalPoolServices{Config: &connectivity.Config{}, Conviction: policy, Down: func(net.IP, int) { *downs++ }, Connected: func(*InternalHostConnPool) {}}
 				return p
 			}
 			t.Run("ConvictMarksDown", func(t *testing.T) {
-				var events []connectivity.ConvictionEvent
-				policy := &convictionRecorder{callback: func(e connectivity.ConvictionEvent) bool {
+				var events []endpoint2.ConvictionEvent
+				policy := &convictionRecorder{callback: func(e endpoint2.ConvictionEvent) bool {
 					events = append(events, e)
 					return e.Shard.Set
 				}}
 				downs := 0
 				p := newPool(policy, &downs)
 				p.shardFailed(cause, 3, 8)
-				if len(events) != 1 || !events[0].Shard.Set || events[0].Shard.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.ID != id || events[0].Source != connectivity.ConvictionPool {
+				if len(events) != 1 || !events[0].Shard.Set || events[0].Shard.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.ID != id || events[0].Source != endpoint2.ConvictionPool {
 					t.Fatalf("shard failure reported as %+v", events)
 				}
 				if downs != 0 {
@@ -121,7 +122,7 @@ func TestHostConnPool(t *testing.T) {
 				}
 			})
 			t.Run("ClosedPoolKeepsHost", func(t *testing.T) {
-				policy := &convictionRecorder{callback: func(connectivity.ConvictionEvent) bool { return true }}
+				policy := &convictionRecorder{callback: func(endpoint2.ConvictionEvent) bool { return true }}
 				downs := 0
 				p := newPool(policy, &downs)
 				p.shardFailed(cause, 3, 8)
@@ -139,8 +140,8 @@ func TestHostConnPool(t *testing.T) {
 					want          bool
 				}{{"ChosenShard", 5, 8, true}, {"UnchosenShard", 0, 0, false}} {
 					t.Run(tc.name, func(t *testing.T) {
-						var events []connectivity.ConvictionEvent
-						policy := &convictionRecorder{callback: func(e connectivity.ConvictionEvent) bool {
+						var events []endpoint2.ConvictionEvent
+						policy := &convictionRecorder{callback: func(e endpoint2.ConvictionEvent) bool {
 							events = append(events, e)
 							return false
 						}}
@@ -172,7 +173,7 @@ func TestHostConnPool(t *testing.T) {
 				}
 			})
 			t.Run("UnknownShard", func(t *testing.T) {
-				policy := &convictionRecorder{callback: func(connectivity.ConvictionEvent) bool {
+				policy := &convictionRecorder{callback: func(endpoint2.ConvictionEvent) bool {
 					t.Fatal("failure without a chosen shard reported as a shard failure")
 					return false
 				}}
@@ -180,7 +181,7 @@ func TestHostConnPool(t *testing.T) {
 				newPool(policy, &downs).shardFailed(cause, 0, 0)
 			})
 			t.Run("Reset", func(t *testing.T) {
-				policy := &convictionRecorder{callback: func(connectivity.ConvictionEvent) bool { return false }}
+				policy := &convictionRecorder{callback: func(endpoint2.ConvictionEvent) bool { return false }}
 				downs := 0
 				p := newPool(policy, &downs)
 				p.shardConnected(2, 8)
@@ -208,14 +209,14 @@ func TestHostConnPool(t *testing.T) {
 }
 
 type convictionRecorder struct {
-	callback func(connectivity.ConvictionEvent) bool
-	resets   []connectivity.ConvictionEvent
+	callback func(endpoint2.ConvictionEvent) bool
+	resets   []endpoint2.ConvictionEvent
 }
 
-func (r *convictionRecorder) AddFailure(e connectivity.ConvictionEvent) bool {
+func (r *convictionRecorder) AddFailure(e endpoint2.ConvictionEvent) bool {
 	return r.callback(e)
 }
-func (r *convictionRecorder) Reset(e connectivity.ConvictionEvent) { r.resets = append(r.resets, e) }
+func (r *convictionRecorder) Reset(e endpoint2.ConvictionEvent) { r.resets = append(r.resets, e) }
 
 type convictionPicker struct {
 	InternalNopConnPicker

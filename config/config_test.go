@@ -13,7 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
@@ -147,7 +147,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
 		b := New().WithContactPoints("h").
 			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
-			WithIgnoreEvents(implCluster.OverflowEvent).WithIgnoreEvents(implCluster.StatusEvent).
+			WithIgnoreEvents(event.Overflow).WithIgnoreEvents(event.Status).
 			WithTLSSource(staticTLS{}).WithTLS(nil).
 			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a"))).WithClientRoutes(ClientRoutes{}).
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
@@ -411,11 +411,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("IgnoreEvents", func(t *testing.T) {
-		m := mustBuildConfig(t, New("h").WithIgnoreEvents(implCluster.SchemaEvent, implCluster.StatusEvent)).settings.Metadata
+		m := mustBuildConfig(t, New("h").WithIgnoreEvents(event.Schema, event.Status)).settings.Metadata
 		if m.SchemaEvents || m.StatusEvents || !m.TopologyEvents || !m.ClientRouteEvents {
 			t.Fatalf("events = %+v", m)
 		}
-		if _, err := New("h").WithIgnoreEvents(implCluster.OverflowEvent).Build(); err == nil {
+		if _, err := New("h").WithIgnoreEvents(event.Overflow).Build(); err == nil {
 			t.Fatal("IgnoreEvents accepted a client-side event")
 		}
 	})

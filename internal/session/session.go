@@ -8,6 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
@@ -167,6 +168,6 @@ func (s *Session) RefreshMetadata(ctx context.Context) error { return s.core.Ref
 
 // Subscribe returns a subscription to the session's events that match
 // filter.
-func (s *Session) Subscribe(filter implCluster.EventFilter) (*implCluster.Subscription, error) {
+func (s *Session) Subscribe(filter event.Filter) (*implCluster.Subscription, error) {
 	return s.core.Subscribe(filter)
 }

@@ -12,8 +12,6 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-const ()
-
 // kinded is an error that knows its Kind: every server error and every
 // error type the driver defines.
 type kinded interface {

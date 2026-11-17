@@ -14,12 +14,11 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/exec"
-
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -70,11 +69,11 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.Co
 	if skip&fixtureCompression == 0 {
 		switch *flagCompressTest {
 		case "snappy":
-			b.WithCompression(config.SnappyCompression)
+			b.WithCompression(cql.SnappyCompression)
 		case "lz4":
-			b.WithCompression(config.LZ4Compression)
+			b.WithCompression(cql.LZ4Compression)
 		case "no-compression", "":
-			b.WithCompression(config.NoCompression)
+			b.WithCompression(cql.NoCompression)
 		default:
 			panic("invalid compressor: " + *flagCompressTest)
 		}
@@ -290,14 +289,14 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 // v2Exec, v2Query and v2ReadOne accept only explicitly typed dynamic values.
 // Statements with values are prepared; v2Exec and v2ReadOne run statements
 // without values unprepared.
-func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Result, error) {
+func v2Exec(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.Result, error) {
 	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	if len(values) == 0 {
 		return session.UnpreparedExec(ctx, statement, values)
 	}
 	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {
-		return gocql.Result{}, err
+		return cql.Result{}, err
 	}
 	return prepared.Exec(ctx, values)
 }

@@ -5,35 +5,35 @@
 // gocql.Session.Subscribe.
 package event
 
-import implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-
-// Event is one cluster change delivered to a Subscription.
-type Event = implCluster.Event
-
-// Filter selects the kinds of events a Subscription receives and its queue
-// capacity.
-type Filter = implCluster.EventFilter
-
-// Kind classifies an Event.
-type Kind = implCluster.EventKind
+import "github.com/scylladb/gocql/v2/internal/link"
 
 // Subscription owns a bounded queue of events. Overflow discards queued
 // deltas and emits Overflow, then closes. Subscribe again before reading
-// gocql.Session.Metadata.
-type Subscription = implCluster.Subscription
+// Session.Metadata.
+type Subscription struct {
+	events <-chan Event
+	close  func()
+}
 
-const (
-	// Topology reports a node joining or leaving the cluster.
-	Topology = implCluster.TopologyEvent
-	// Status reports a node going up or down.
-	Status = implCluster.StatusEvent
-	// Schema reports a keyspace, table, type, function or aggregate change.
-	Schema = implCluster.SchemaEvent
-	// Control reports that the control connection reconnected to another host.
-	Control = implCluster.ControlEvent
-	// ClientRoute reports a change of the cluster's client routes.
-	ClientRoute = implCluster.ClientRouteEvent
-	// Overflow is the last event of a Subscription, sent when its queue
-	// overflows or when the session fails to publish a metadata change.
-	Overflow = implCluster.OverflowEvent
-)
+// The session creates subscriptions through internal/link.
+func init() {
+	link.Set(link.NewSubscription, func(events <-chan Event, close func()) *Subscription {
+		return &Subscription{events: events, close: close}
+	})
+}
+
+// Events returns the subscription's queue. It is closed when the
+// subscription closes.
+func (s *Subscription) Events() <-chan Event {
+	if s == nil {
+		return nil
+	}
+	return s.events
+}
+
+// Close stops the subscription and closes its queue. It is idempotent.
+func (s *Subscription) Close() {
+	if s != nil && s.close != nil {
+		s.close()
+	}
+}

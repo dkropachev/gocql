@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
@@ -18,7 +19,7 @@ import (
 // Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
-	Observer             settings.Observer
+	Observer             observe.Observer
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
 	Keyspace             string

@@ -29,6 +29,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -198,21 +199,21 @@ func TestEvents(t *testing.T) {
 			}()
 
 			defer s.Close()
-			slow, _ := s.Subscribe(cluster.EventFilter{Capacity: 2})
-			fast, _ := s.Subscribe(cluster.EventFilter{Capacity: 8})
+			slow, _ := s.Subscribe(event.Filter{Capacity: 2})
+			fast, _ := s.Subscribe(event.Filter{Capacity: 8})
 			defer fast.Close()
 			for _, generation := range []uint64{40, 99, 41} {
-				s.PublishV2LocalEvent(cluster.Event{Kind: cluster.StatusEvent, Generation: generation})
+				s.PublishV2LocalEvent(event.Event{Kind: event.Status, Generation: generation})
 			}
 			marker, ok := <-slow.Events()
-			if !ok || marker.Kind != cluster.OverflowEvent || marker.Generation != 99 {
+			if !ok || marker.Kind != event.Overflow || marker.Generation != 99 {
 				t.Fatal(marker, ok)
 			}
 			if _, ok := <-slow.Events(); ok {
 				t.Fatal("overflow marker was not terminal")
 			}
 			for _, generation := range []uint64{40, 99, 41} {
-				if e := <-fast.Events(); e.Kind != cluster.StatusEvent || e.Generation != generation {
+				if e := <-fast.Events(); e.Kind != event.Status || e.Generation != generation {
 					t.Fatal("one slow subscriber affected another", e)
 				}
 			}

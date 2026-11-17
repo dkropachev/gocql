@@ -16,9 +16,9 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -30,6 +30,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -202,7 +203,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			hp := testHostPrepared(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				(*implSession.Session)(s).Core().InvalidatePreparedSchema(implCluster.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				(*implSession.Session)(s).Core().InvalidatePreparedSchema(event.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")
@@ -254,7 +255,7 @@ func TestWorkCountsPerf(t *testing.T) {
 				for _, kind := range []string{"ordinary", "pinned", "conditional", "leader", "latency", "fallback"} {
 					t.Run(fmt.Sprintf("hosts%d/%s", hosts, kind), func(t *testing.T) {
 						m := v2TestMetadata()
-						storage := implRouting.SnapshotData(m)
+						storage := implRouting.SnapshotData(implRouting.SnapshotOf(m))
 						storage.InternalHosts = make([]metadata.HostSnapshot, hosts)
 						for i := range storage.InternalHosts {
 							h := v2TestHost(0, "a", "r1")
@@ -286,7 +287,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						}
 						policy := codecTestMust(routing.NewPolicy(opts))
 						if kind == "latency" {
-							policy.(*routingPolicy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 						}
 						implRouting.ResetPerfCounters()
 						plan := routing.NewPlan(policy, info, m)
@@ -412,10 +413,10 @@ func TestWorkCountsPerf(t *testing.T) {
 
 type testObserver struct{ requests, attempts atomic.Int64 }
 
-func (o *testObserver) ObserveRequest(config.RequestEvent)  { o.requests.Add(1) }
+func (o *testObserver) ObserveRequest(observe.RequestEvent) { o.requests.Add(1) }
 func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) }
 
-func (o *testObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *testObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {

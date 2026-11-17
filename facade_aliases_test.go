@@ -22,6 +22,7 @@ import (
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type hostPrepared = implSession.InternalHostPrepared
@@ -117,3 +118,12 @@ func updateTabletRange(a0 *tabletRangeTree, a1 tablets.TabletInfo) (*tabletRange
 }
 
 type routingHostIndex = implRouting.InternalRoutingHostIndex
+
+// builtinPolicy returns the session's default policy behind p.
+func builtinPolicy(p routing.Policy) *routingPolicy {
+	b, ok := implRouting.InternalBuiltin(p)
+	if !ok {
+		panic("not a built-in routing policy")
+	}
+	return b
+}

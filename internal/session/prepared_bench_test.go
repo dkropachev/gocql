@@ -32,6 +32,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -80,7 +81,7 @@ func BenchmarkPrepared(b *testing.B) {
 									return
 								default:
 								}
-								s.InvalidatePreparedSchema(cluster.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
+								s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
 								p := s.Peripheral()
 								current := s.Metadata()
 								info := routing.Info{Keyspace: "ks", Table: "table"}

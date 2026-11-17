@@ -37,6 +37,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -143,7 +144,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	resync := func() {
 		s.debounceRingRefresh()
 		s.scheduleV2SchemaRetry()
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
 	}
 	s.privateStorage.InternalSchemaEvents.InternalResync = resync
 	s.privateStorage.InternalNodeEvents.InternalResync = resync

@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -67,7 +68,7 @@ func TestHostConnPool(t *testing.T) {
 			opaqueStorageValuex := new(Core)
 			SessionData(opaqueStorageValuex).InternalCfg = InternalClusterSettings{
 				NumConns:         2,
-				ConvictionPolicy: &settings.SimpleConvictionPolicy{},
+				ConvictionPolicy: &endpoint2.SimpleConvictionPolicy{},
 			}
 			SessionData(opaqueStorageValuex).InternalLogger = logging.Nop()
 			return opaqueStorageValuex
@@ -131,7 +132,7 @@ func TestHostConnPool(t *testing.T) {
 				opaqueStorageValuexxx := new(Core)
 				SessionData(opaqueStorageValuexxx).InternalCfg = InternalClusterSettings{
 					NumConns:         1,
-					ConvictionPolicy: &settings.SimpleConvictionPolicy{},
+					ConvictionPolicy: &endpoint2.SimpleConvictionPolicy{},
 				}
 				SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxx

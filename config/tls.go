@@ -15,15 +15,6 @@ import (
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
-// TLSSource supplies the TLS configuration of each new connection, so the
-// configuration can change while sessions run. The driver calls TLSConfig on
-// every dial, from many goroutines, and copies the result; it must be fast and
-// must not return nil. Connections already open keep the configuration they
-// were dialed with. Pass a source to ConfigBuilder.WithTLSSource;
-// TLSFileSource is a ready-made one. Use ConfigBuilder.WithTLS for a fixed
-// configuration.
-type TLSSource = implSettings.TLSSource
-
 // staticTLS is the source ConfigBuilder.WithTLS makes.
 type staticTLS struct{ config *tls.Config }
 

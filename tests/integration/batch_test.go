@@ -33,15 +33,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/config"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -123,8 +122,8 @@ func TestBatch(t *testing.T) {
 			require.True(t, resolved.InternalOptions.CQLTrace)
 			// Native batch kind remains explicit on Batch.Kind.
 			// Per-request Result/Observer replace attempts/latency on a mutable batch.
-			require.Zero(t, (gocql.Result{}).Attempts)
-			require.Zero(t, (gocql.Result{}).Latency)
+			require.Zero(t, (cql.Result{}).Attempts)
+			require.Zero(t, (cql.Result{}).Latency)
 			for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
 				batch := &gocql.Batch{Kind: kind}
 				cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1)})

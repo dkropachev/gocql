@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -72,7 +73,7 @@ func TestResultPlanCache(t *testing.T) {
 			_, hp := preparedState(t, s, columns)
 			var calls atomic.Int32
 			decoder := countingDecoder{calls: &calls, hook: func() {
-				s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 			}}
 			cache := &InternalResultPlanCache[cql.Bytes]{}
 			response := &transport.InternalResponsePage{InternalMetadata: hp.InternalResult, ResponseData: implModel.ResponseData{Columns: columns}}

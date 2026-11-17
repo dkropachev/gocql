@@ -64,6 +64,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	"github.com/scylladb/gocql/v2/internal/testkit/ccm"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
@@ -223,11 +224,11 @@ func init() {
 
 type cassandraObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
+	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
 }
 
-func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
+func (o *cassandraObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
@@ -238,7 +239,7 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
@@ -250,10 +251,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}
@@ -412,11 +413,11 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.Co
 	if skip&fixtureCompression == 0 {
 		switch *flagCompressTest {
 		case "snappy":
-			b.WithCompression(config.SnappyCompression)
+			b.WithCompression(cql.SnappyCompression)
 		case "lz4":
-			b.WithCompression(config.LZ4Compression)
+			b.WithCompression(cql.LZ4Compression)
 		case "no-compression", "":
-			b.WithCompression(config.NoCompression)
+			b.WithCompression(cql.NoCompression)
 		default:
 			panic("invalid compressor: " + *flagCompressTest)
 		}
@@ -1068,11 +1069,11 @@ type testConviction struct {
 	resets  int
 }
 
-func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
+func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	host := e.Host
-	if e.Shard.Set || e.Source != config.ConvictionPool {
+	if e.Shard.Set || e.Source != endpoint.ConvictionPool {
 		panic("conviction event is not a whole-host pool failure")
 	}
 	if !errors.Is(e.Err, p.cause) {
@@ -1082,7 +1083,7 @@ func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(e config.ConvictionEvent) {
+func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
@@ -1360,11 +1361,11 @@ func (c *OneConnTestServer) lockedClose() {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
+	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
 }
 
-func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
+func (o *sessionTestObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
@@ -1375,16 +1376,16 @@ func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -1495,7 +1496,7 @@ type v2TabletAttemptObserver struct {
 	targets []metadata.Target
 }
 
-func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
+func (*v2TabletAttemptObserver) ObserveRequest(observe.RequestEvent) {}
 func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -1504,7 +1505,7 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 	}
 }
 
-func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {

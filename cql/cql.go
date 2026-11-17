@@ -68,5 +68,3 @@
 // decoders accept NULL as an empty collection, matching buffered decoding,
 // and vectors reject it.
 package cql
-
-const ()

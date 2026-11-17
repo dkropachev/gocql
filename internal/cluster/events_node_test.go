@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -30,7 +31,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 // Session.handleNodeEvent and Session.handleNodeUp had no unit coverage at all
@@ -144,7 +144,7 @@ func newNodeEventFixture(t *testing.T, opts ...func(*InternalClusterSettings)) *
 		SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
-	SessionData(s).InternalCfg.ConvictionPolicy = &settings.SimpleConvictionPolicy{}
+	SessionData(s).InternalCfg.ConvictionPolicy = &endpoint2.SimpleConvictionPolicy{}
 	for _, opt := range opts {
 		opt(&SessionData(s).InternalCfg)
 	}

@@ -64,9 +64,6 @@ type RowDecoder[R any] interface {
 // Predeclared scalar types. Each equals ScalarType of the matching Type
 // constant. Treat them as constants: reassigning one changes only code that
 // reads the variable, not ScalarType or decoded metadata.
-var ()
-
-const ()
 
 // EmptyParams is the input type of a statement without bind markers.
 type EmptyParams = EmptyRow

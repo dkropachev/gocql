@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 )
@@ -84,7 +85,7 @@ func (s *InternalPreparedState) queueMetadataConflict() error {
 	if s.InternalInfo.Table == "" {
 		target = "KEYSPACE"
 	}
-	s.InternalSession.InvalidatePreparedSchema(implCluster.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, Target: target})
+	s.InternalSession.InvalidatePreparedSchema(event.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, Target: target})
 	s.InternalSession.MarkV2SchemaStale(s.InternalInfo.Keyspace, false)
 	return nil
 }

@@ -27,6 +27,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	metadata2 "github.com/scylladb/gocql/v2/metadata"
@@ -117,7 +118,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	delete(p.schemaStale, keyspace)
 	p.InternalMu.Unlock()
 	if absent {
-		s.InvalidatePreparedSchema(Event{Keyspace: keyspace, Target: "KEYSPACE"})
+		s.InvalidatePreparedSchema(event.Event{Keyspace: keyspace, Target: "KEYSPACE"})
 	}
 	if publish {
 		s.PublishV2Metadata()

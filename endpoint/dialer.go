@@ -1,32 +1,16 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-/*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements. See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership. The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- * http://www.apache.org/licenses/LICENSE-2.0
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package endpoint
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/netip"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -39,6 +23,7 @@ type DialTarget struct {
 	ShardID          cql.Option[uint32]
 }
 
+// Dialer opens the raw connections of a session; TLS is applied afterward.
 type Dialer interface {
 	DialContext(context.Context, DialTarget) (net.Conn, error)
 }
@@ -62,7 +47,7 @@ func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.
 	n := net.Dialer{Timeout: d.ConnectTimeout, KeepAlive: keepalive}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
-			return nil, cqltype.TypeValidation("local address", "source selection requires TCP")
+			return nil, &cql.ValidationError{Field: "local address", Err: errors.New("source selection requires TCP")}
 		}
 		n.LocalAddr = net.TCPAddrFromAddrPort(target.LocalAddress)
 	}

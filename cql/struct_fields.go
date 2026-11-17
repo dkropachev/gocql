@@ -451,8 +451,6 @@ func eachStructField(t reflect.Type, fn func(reflect.StructField, structmap.Fiel
 	return nil
 }
 
-const ()
-
 // resolveField picks a field's codec: a built-in named by its tag, then an
 // option for its type, then the built-in default.
 func resolveField[E interface {

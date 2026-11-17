@@ -28,17 +28,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
 // InternalTranslateAddressPort applies addressTranslator to addr of peer. A nil
 // translator or an unusable addr returns addr unchanged.
-func InternalTranslateAddressPort(ctx context.Context, addressTranslator AddressTranslator, peer Peer, addr netip.AddrPort, logger *slog.Logger) (netip.AddrPort, error) {
+func InternalTranslateAddressPort(ctx context.Context, addressTranslator endpoint.Translator, peer endpoint.Peer, addr netip.AddrPort, logger *slog.Logger) (netip.AddrPort, error) {
 	logger = logging.Or(logger)
 	if addressTranslator == nil || !InternalUsableAddrPort(addr) {
 		return addr, nil
@@ -59,7 +59,7 @@ func InternalTranslateAddressPort(ctx context.Context, addressTranslator Address
 	return newAddr, nil
 }
 
-func InternalResolveInitialEndpoints(resolver Resolver, addrs []string, defaultPort int, logger *slog.Logger) ([]*HostInfo, error) {
+func InternalResolveInitialEndpoints(resolver endpoint.Resolver, addrs []string, defaultPort int, logger *slog.Logger) ([]*HostInfo, error) {
 	logger = logging.Or(logger)
 	var hosts []*HostInfo
 	var errs []error

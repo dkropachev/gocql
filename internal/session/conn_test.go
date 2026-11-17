@@ -50,6 +50,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
@@ -125,7 +126,7 @@ func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.C
 	return testCluster(proto, addresses...).Open()
 }
 
-var _ endpoint.Resolver = brokenDNSResolver{}
+var _ endpoint2.Resolver = brokenDNSResolver{}
 
 type testRetryPolicy struct {
 	NumRetries int

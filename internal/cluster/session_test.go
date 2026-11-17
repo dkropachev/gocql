@@ -47,6 +47,7 @@ import (
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 func TestSession(t *testing.T) {
@@ -457,7 +458,7 @@ func TestSession(t *testing.T) {
 
 		p := s.Peripheral()
 		p.InternalConfig.LifecycleObserver = panicLifecycle{}
-		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
+		sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "test", At: time.Now()})
 		s.CloseV2Peripheral()
 	})
 

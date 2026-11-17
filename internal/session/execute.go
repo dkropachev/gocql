@@ -27,6 +27,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -509,10 +510,10 @@ func selectPreparedMetadata(state *InternalPreparedState, host cql.UUID, prepare
 
 type logicalExecution struct {
 	started  time.Time
-	observer settings.Observer
+	observer observe.Observer
 	// observerCtx and requestEnd are what observer.StartRequest returned.
 	observerCtx    context.Context
-	requestEnd     func(settings.RequestEvent)
+	requestEnd     func(observe.RequestEvent)
 	ddlCoordinator atomic.Pointer[cql.UUID]
 	rt             *InternalSessionRuntime
 	request        *InternalExecutionRequest
@@ -547,7 +548,7 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	}
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
-		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
+		event := observe.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
 		rt.ObserveSafely(func() { end(event) })
 	}
 }
@@ -555,7 +556,7 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 // startRequest calls the observer's StartRequest with the caller's context.
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
-	start := settings.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
+	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
 	l.rt.ObserveSafely(func() {
 		observerCtx, end := l.observer.StartRequest(ctx, start)
 		if observerCtx != nil {

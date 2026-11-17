@@ -37,7 +37,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
@@ -414,7 +414,7 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint
 		conn, err := sessionDial(c.InternalSession, c.InternalSession.privateStorage.InternalCtx, host, cfg, c)
 		if err != nil {
 			snapshot, _ := snapshotV2Host(c.InternalSession, host)
-			if c.InternalSession.privateStorage.InternalCfg.ConvictionPolicy.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Source: connectivity.ConvictionControl}) {
+			if c.InternalSession.privateStorage.InternalCfg.ConvictionPolicy.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, Source: endpoint.ConvictionControl}) {
 				c.InternalSession.HandleNodeDown(host.ConnectAddress(), host.Port())
 			}
 			c.InternalSession.logger().Warn("control connection: dial failed", logging.KeyHost, hostAddress(host), logging.Err(err))

@@ -19,6 +19,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -124,11 +125,11 @@ type testConviction struct {
 	resets  int
 }
 
-func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
+func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	host := e.Host
-	if e.Shard.Set || e.Source != config.ConvictionPool {
+	if e.Shard.Set || e.Source != endpoint.ConvictionPool {
 		panic("conviction event is not a whole-host pool failure")
 	}
 	if !errors.Is(e.Err, p.cause) {
@@ -138,7 +139,7 @@ func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(e config.ConvictionEvent) {
+func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {

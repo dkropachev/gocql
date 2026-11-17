@@ -107,7 +107,7 @@ func TestPool(t *testing.T) {
 				if resets != 0 {
 					t.Fatal("reset reported although no pool connection opened")
 				}
-				policy.Reset(config.ConvictionEvent{Host: hosts[0]})
+				policy.Reset(endpoint.ConvictionEvent{Host: hosts[0]})
 				policy.mu.Lock()
 				resets = policy.resets
 				policy.mu.Unlock()
@@ -131,7 +131,7 @@ func TestPool(t *testing.T) {
 		cfg := createV2ClusterWithout(skip)
 		cfg.WithConnectionsPerHost(1).WithHeartbeat(0, 0)
 		if *flagProto < 5 {
-			cfg.WithCompression(config.NoCompression)
+			cfg.WithCompression(cql.NoCompression)
 		}
 		s := createV2SessionFromConfig(cfg, t, false)
 		defer s.Close()

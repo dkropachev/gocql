@@ -4,21 +4,19 @@
 package cluster
 
 import (
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/events"
-
-	"github.com/scylladb/gocql/v2/internal/endpoint"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
+	"github.com/scylladb/gocql/v2/internal/events"
 )
 
 type ClientRoutesHandlerStorage struct {
 	log                 *slog.Logger
 	c                   InternalControlConnection
-	resolver            endpoint.Resolver
+	resolver            endpoint2.Resolver
 	InternalSession     *Core
 	connectionEpoch     map[string]uint64
 	pairEpoch           map[InternalPair]uint64

@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
@@ -48,7 +49,7 @@ func TestTablets(t *testing.T) {
 		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata2.Keyspace{Name: "ks", Tables: map[string]*metadata2.Table{"t": {Name: "t"}}})
 		p := s.Peripheral()
 		p.InternalFeedbackOnce.Do(func() {}) // Hold the consumer while filling the bounded queue.
-		sub, err := s.Subscribe(EventFilter{Kinds: []EventKind{OverflowEvent}, Capacity: 1})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Overflow}, Capacity: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,9 +72,9 @@ func TestTablets(t *testing.T) {
 		p.InternalMu.Unlock()
 		go sessionRunV2TabletFeedback(s, p)
 		select {
-		case event := <-sub.Events():
-			if event.Kind != OverflowEvent || event.Change != "TABLET_RESYNC" {
-				t.Fatal(event)
+		case ev := <-sub.Events():
+			if ev.Kind != event.Overflow || ev.Change != "TABLET_RESYNC" {
+				t.Fatal(ev)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("feedback resync was not published")

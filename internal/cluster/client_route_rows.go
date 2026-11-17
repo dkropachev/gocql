@@ -15,6 +15,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -348,7 +349,7 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 		if !p.privateStorage.InternalSession.PublishV2Metadata() {
 			return p.privateStorage.InternalSession.v2MetadataPublicationError()
 		}
-		p.privateStorage.InternalSession.PublishV2LocalEvent(Event{Kind: ClientRouteEvent, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
+		p.privateStorage.InternalSession.PublishV2LocalEvent(event.Event{Kind: event.ClientRoute, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
 	}
 	return nil
 }

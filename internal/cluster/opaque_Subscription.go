@@ -5,12 +5,14 @@ package cluster
 
 import (
 	"sync"
+
+	"github.com/scylladb/gocql/v2/event"
 )
 
 type SubscriptionStorage struct {
-	events chan Event
+	events chan event.Event
 	parent *InternalV2PeripheralState
-	filter EventFilter
+	filter event.Filter
 	mu     sync.Mutex
 	closed bool
 }

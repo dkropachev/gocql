@@ -4,20 +4,18 @@
 package settings
 
 import (
-	"context"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
-	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type Profile struct {
 	Retry                retry.Policy
 	Routing              routing.RoutingPolicy
-	Speculation          SpeculationPolicy
+	Speculation          retry.SpeculationPolicy
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
 	PageSize             int32
@@ -64,34 +62,25 @@ func InternalValidConsistency(c cql.Consistency) bool {
 	return c >= cql.Any && c <= cql.LocalOne
 }
 
-type SpeculationPolicy interface {
-	Delay(attempt int) (time.Duration, bool)
-}
+// SpeculationPolicy schedules additional attempts of eligible executions.
+// Delay receives the number of attempts started so far and returns how long
+// to wait before starting another, and whether to start one at all.
 
-type Observer interface {
-	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
-	StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent)
-}
-
-// RequestStart describes a request as it is admitted, before its first
-// attempt.
-type RequestStart struct {
-	Started         time.Time
-	Statement       string
-	BatchStatements []string
-	Parameters      cql.Columns
-	Routing         routing2.Info
-	ID              uint64
-	// CQLTrace reports that the request's attempts ask the cluster to record
-	// CQL trace sessions.
-	CQLTrace bool
-}
-type RequestEvent struct {
-	Err             error
-	Statement       string
-	BatchStatements []string
-	Parameters      cql.Columns
-	Result          cql.Result
-	Routing         routing2.Info
-	ID              uint64
-}
+// Observer instruments requests and their attempts from the client side; it
+// is the hook for client-side tracing such as OpenTelemetry. Implementations
+// are shared between executions and must be safe for concurrent use.
+//
+// StartRequest is called once per request as it is admitted, with the
+// caller's context. The context it returns is passed to StartAttempt for
+// each of the request's attempts, so a span started for the request can
+// parent the attempts' spans; the driver uses it for nothing else and never
+// derives cancellation from it. The function it returns, if not nil, is
+// called once with the completed request.
+//
+// StartAttempt is called as each attempt, retry or speculative attempt is
+// sent. The function it returns, if not nil, is called once with the
+// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
+// trace session when the request runs with exec.Options.CQLTrace.
+//
+// A speculative attempt that loses can start or end after its request has
+// ended. A panic in any of these calls is logged and otherwise ignored.

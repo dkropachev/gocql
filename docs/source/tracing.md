@@ -8,13 +8,13 @@ OpenTelemetry, records what the driver did, in your own tracing system.
 
 Set `exec.Options.CQLTrace` and the cluster records a trace session of every
 attempt in `system_traces`. `Result.CQLTraces` lists them in the order the
-attempts finished, page after page. Each `gocql.CQLTraceRef` carries the
+attempts finished, page after page. Each `cql.CQLTraceRef` carries the
 session ID and the attempt it records: its coordinator `HostID`, its
 `Attempt` number within the page, and whether it `Failed` or was
 `Speculative`. The `Result` of a failed request lists its failed attempts'
 sessions too, so tracing a timeout needs no error unwrapping. The IDs also
 come back on each `cqlerr.AttemptFailure.CQLTraceID` and each
-`config.AttemptEvent.CQLTraceID`. Package `cqltrace` reads a session:
+`routing.AttemptEvent.CQLTraceID`. Package `cqltrace` reads a session:
 
 ```go
 insert := cql.Statement[int32, cql.EmptyRow]{
@@ -49,7 +49,7 @@ does not report that session's ID, so find it in `system_traces.sessions`.
 
 ## Client-side tracing
 
-`config.Observer` is the hook for client-side tracing. `StartRequest`
+`observe.Observer` is the hook for client-side tracing. `StartRequest`
 receives the caller's context as a request is admitted and returns the
 context for its attempts, so a span started for the request can parent one
 span per attempt, retry or speculative attempt from `StartAttempt`. Each start

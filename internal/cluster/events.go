@@ -27,22 +27,21 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"sync"
 	"time"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/event"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/settings"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 type InternalEventDebouncer struct {
@@ -275,7 +274,7 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 		}
 	}
 	if !s.PublishV2Metadata() {
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 		return
 	}
 	for _, f := range frames {
@@ -359,7 +358,7 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 		}
 	}
 	if !s.PublishV2Metadata() {
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 		return
 	}
 	for _, f := range frames {
@@ -423,7 +422,7 @@ func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	p.InternalMu.Unlock()
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
-	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
 	s.synchronizeV2HostPolicy(pool.InternalHost)
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
@@ -436,7 +435,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	defer s.PublishV2Metadata()
 	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
-	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 
 	if !s.privateStorage.InternalCfg.FilterHost(host) {
 		s.privateStorage.InternalPolicy.HostUp(host)
@@ -460,7 +459,7 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 			s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(host))
 		}
 		p.hostMu.Unlock()
-		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "host", Stage: "down", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+		sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "down", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 		if filtered {
 			return
 		}

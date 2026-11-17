@@ -12,13 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/config"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // TestRunStreamCoordinatorStop stops the coordinator of an incremental
@@ -33,7 +32,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 			// Streaming rejects frame compression before protocol v5, and the
 			// suite's default compressor would skip this test on every v4 lane.
 			// Compression is not what it tests.
-			WithCompression(config.NoCompression)
+			WithCompression(cql.NoCompression)
 	})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()

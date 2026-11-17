@@ -102,9 +102,9 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session[test
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
-func recreateExec(t testing.TB, s *gocql.Session[testDialect], stmt string) (gocql.Result, error) {
+func recreateExec(t testing.TB, s *gocql.Session[testDialect], stmt string) (cql.Result, error) {
 	t.Helper()
-	var result gocql.Result
+	var result cql.Result
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)

@@ -1,9 +1,9 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 type panicLifecycle struct{}
 
-func (panicLifecycle) ObserveLifecycle(settings.LifecycleEvent) { panic("observer failure") }
+func (panicLifecycle) ObserveLifecycle(observe.LifecycleEvent) { panic("observer failure") }

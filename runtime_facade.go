@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
@@ -61,7 +62,29 @@ func Connect[D Dialect](ctx context.Context, cfg config.Config) (*Session[D], er
 	return (*Session[D])(session), err
 }
 
-type PreparedInfo = implSession.PreparedInfo
+// PreparedInfo describes a prepared statement.
+type PreparedInfo struct {
+	// Keyspace and Table name the statement's table, when the server
+	// reported it.
+	Keyspace, Table string
+	// PartitionKeyIndexes are the positions of the bind markers that hold the
+	// partition key, in key order; the session routes with them.
+	PartitionKeyIndexes []int
+	// Kind and Conditional classify the statement.
+	Kind        cql.StatementKind
+	Conditional bool
+	// Generation counts the statement's re-preparations after schema changes.
+	Generation uint64
+}
 
 // StreamInfo reports delivered rows, pages and execution progress.
-type StreamInfo = implSession.StreamInfo
+type StreamInfo struct {
+	// Result describes the execution so far.
+	Result cql.Result
+	// DeliveredRows and Pages count the rows NextInto delivered and the pages
+	// they came from.
+	DeliveredRows, Pages int64
+	// OutputStarted reports that a row has been written to the caller's
+	// storage.
+	OutputStarted bool
+}

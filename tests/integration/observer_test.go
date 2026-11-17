@@ -164,7 +164,7 @@ func TestObserver(t *testing.T) {
 			result, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, result.CQLTraces())
-			checkTrace := func(refs []gocql.CQLTraceRef) {
+			checkTrace := func(refs []cql.CQLTraceRef) {
 				t.Helper()
 				require.NotEmpty(t, refs)
 				for _, ref := range refs {

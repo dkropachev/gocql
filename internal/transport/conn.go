@@ -41,8 +41,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -142,7 +144,7 @@ type SslOptions struct {
 }
 
 type ConnConfig struct {
-	TypedAuth            connectivity.AuthProvider
+	TypedAuth            auth.Provider
 	Dialer               implEndpoint.InternalLegacyDialer
 	Logger               *slog.Logger
 	Authenticator        Authenticator
@@ -393,7 +395,7 @@ func (c *Conn) InternalGetScyllaSupported() implEndpoint.ScyllaConnectionFeature
 	return c.InternalScyllaSupported
 }
 
-func InternalTranslateHostAddresses(ctx context.Context, addressTranslator implEndpoint.AddressTranslator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
+func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
 	logger = logging.Or(logger)
 	port := host.Port()
 	if port < 1 || port > 65535 {

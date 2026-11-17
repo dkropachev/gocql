@@ -271,7 +271,7 @@ func TestMetadata(t *testing.T) {
 			fixture := &incompletePeerDialer{}
 			// TLS is never set here: the test skips under -runssl above.
 			cfg := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *config.ConfigBuilder) {
-				c.WithCompression(config.NoCompression).WithDialer(fixture)
+				c.WithCompression(cql.NoCompression).WithDialer(fixture)
 			})
 			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
 			require.NoError(t, err)
@@ -930,10 +930,10 @@ func TestMetadata(t *testing.T) {
 // metadataExecOnConn prepares stmt and runs it with options. Statements are
 // prepared because only prepared execution accepts the fixture's internal
 // connection seam.
-func metadataExecOnConn(ctx context.Context, s *gocql.Session[testDialect], stmt string, options implSession.Options) (gocql.Result, error) {
+func metadataExecOnConn(ctx context.Context, s *gocql.Session[testDialect], stmt string, options implSession.Options) (cql.Result, error) {
 	prepared, err := s.Prepare(ctx, cql.Command(stmt), exec.PrepareOptions{})
 	if err != nil {
-		return gocql.Result{}, err
+		return cql.Result{}, err
 	}
 	return prepared.Exec(ctx, cql.EmptyParams{}, bindOptions(s, options))
 }

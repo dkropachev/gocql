@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -22,7 +22,7 @@ import (
 // deadlines for request time limits without rebuilding options.
 type Options struct {
 	Retry    retry.Policy
-	Observer config.Observer
+	Observer observe.Observer
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal
 	// is rejected.
@@ -51,7 +51,7 @@ type Options struct {
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
-	// instrumentation such as OpenTelemetry, which hooks config.Observer.
+	// instrumentation such as OpenTelemetry, which hooks observe.Observer.
 	CQLTrace bool
 }
 
@@ -108,7 +108,17 @@ type StreamOptions struct {
 }
 
 // StreamLimits bounds the receive scratch of an incremental stream.
-type StreamLimits = implTransport.StreamLimits
+type StreamLimits struct {
+	// MaxMetadataBytes caps a page's result metadata. Default 1 MiB.
+	MaxMetadataBytes int64
+	// ReadAheadBytes is how much the stream reads ahead of the decoder.
+	// Default 32 KiB.
+	ReadAheadBytes int
+	// DiscardBytes is the scratch used to skip unread data.
+	DiscardBytes int
+	// MaxTransformBytes caps the scratch a decompressing stream holds.
+	MaxTransformBytes int64
+}
 
 func publicOptions(o implSession.Options) Options {
 	v := Options{

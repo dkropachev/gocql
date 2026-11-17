@@ -22,13 +22,14 @@ package cluster
 import (
 	"slices"
 
+	"github.com/scylladb/gocql/v2/event"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-func (s *Core) InvalidatePreparedSchema(e Event) {
+func (s *Core) InvalidatePreparedSchema(e event.Event) {
 	t := s.SchemaTracker()
 	keys := []schemafence.InternalPreparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
 	switch e.Target {
@@ -65,7 +66,7 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 		}
 		if a == nil || b == nil {
 			if a != b {
-				s.InvalidatePreparedSchema(Event{Keyspace: n, Target: "KEYSPACE"})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Target: "KEYSPACE"})
 			}
 			continue
 		}
@@ -78,7 +79,7 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 		}
 		for name := range tables {
 			if !a.Tables[name].Equals(b.Tables[name]) {
-				s.InvalidatePreparedSchema(Event{Keyspace: n, Object: name, Target: "TABLE"})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, Target: "TABLE"})
 			}
 		}
 		types := make(map[string]bool, len(a.Types)+len(b.Types))
@@ -92,13 +93,13 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 			x, y := a.Types[name], b.Types[name]
 			same := x == y || x != nil && y != nil && x.Keyspace == y.Keyspace && x.Name == y.Name && slices.Equal(x.FieldNames, y.FieldNames) && slices.Equal(x.FieldTypes, y.FieldTypes)
 			if !same {
-				s.InvalidatePreparedSchema(Event{Keyspace: n, Object: name, Target: "TYPE"})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, Target: "TYPE"})
 			}
 		}
 		// Function dependencies are not exposed by PREPARED, so use their keyspace
 		// scope conservatively; unrelated table/type publications stay isolated.
 		if !equalPreparedFunctions(a.Functions, b.Functions) || !equalPreparedAggregates(a.Aggregates, b.Aggregates) {
-			s.InvalidatePreparedSchema(Event{Keyspace: n, Target: "FUNCTION"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: n, Target: "FUNCTION"})
 		}
 	}
 }

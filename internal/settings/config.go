@@ -15,28 +15,30 @@ import (
 
 	"log/slog"
 
+	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 	// DialHost opens a raw socket using immutable host metadata; TLS is applied afterward.
 )
 
 type Config struct {
 	LocalAddress      netip.Addr
-	Dialer            implEndpoint.Dialer
-	DNSResolver       implEndpoint.Resolver
-	Auth              AuthProvider
+	Dialer            endpoint.Dialer
+	DNSResolver       endpoint.Resolver
+	Auth              auth.Provider
 	Reconnect         ReconnectPolicy
-	Conviction        ConvictionPolicy
-	AddressTranslator implEndpoint.AddressTranslator
-	Observer          Observer
-	LifecycleObserver LifecycleObserver
+	Conviction        endpoint.ConvictionPolicy
+	AddressTranslator endpoint.Translator
+	Observer          observe.Observer
+	LifecycleObserver observe.LifecycleObserver
 	Logger            *slog.Logger
-	DialHost          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
+	DialHost          func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
 	// TLSSource, when set, supplies TLS for every dial; TLS then holds its
 	// config at Build, for validation.
@@ -74,7 +76,7 @@ type Config struct {
 
 type PoolOptions = connectivity.PoolOptions
 type AdvancedShardAwarenessOptions = connectivity.AdvancedShardAwarenessOptions
-type ReconnectPolicy = connectivity.ReconnectPolicy
+type ReconnectPolicy = endpoint.ReconnectPolicy
 type ProtocolLimits = connectivity.ProtocolLimits
 type MetadataOptions struct {
 	Keyspaces                                                     []string
@@ -88,11 +90,9 @@ type MetadataOptions struct {
 	TopologyEvents, StatusEvents, SchemaEvents, ClientRouteEvents bool
 }
 
-const ()
-
 type IdentityOptions struct{ DriverName, DriverVersion, ApplicationName, ApplicationVersion, ClientID string }
 type ClientRoutesOptions = connectivity.ClientRoutesOptions
-type TLSSource = connectivity.TLSSource
+type TLSSource = endpoint.TLSSource
 
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()

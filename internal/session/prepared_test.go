@@ -28,6 +28,7 @@ import (
 
 	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -290,7 +291,7 @@ func TestPrepared(t *testing.T) {
 			key := prepareCacheKey{InternalCql: "A", InternalKeyspace: "ks"}
 			rt.InternalPrepared[key] = state
 			rt.InternalPrepareOrder = []prepareCacheKey{key}
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 			done := make(chan error, 1)
 			go func() {
 				for i := 0; i < 3; i++ {
@@ -692,11 +693,11 @@ func TestPrepared(t *testing.T) {
 			udt := codecTestMust(implCql.UDTType("ks", "wanted", implCql.ColumnSpec{Name: "n", Type: integer}))
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: udt})
 			_, hp := preparedState(t, s, columns)
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "unrelated", Target: "TYPE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Object: "unrelated", Target: "TYPE"})
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated UDT invalidated")
 			}
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "wanted", Target: "TYPE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Object: "wanted", Target: "TYPE"})
 			if hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("UDT dependency ignored")
 			}
@@ -739,7 +740,7 @@ func TestPrepared(t *testing.T) {
 			if current == old || !current.InternalEpoch.InternalCurrent() {
 				t.Fatal("changed result not installed")
 			}
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
 			if current.InternalEpoch.InternalCurrent() || state.cacheCurrent() {
 				t.Fatal("new UDT dependency was not registered")
 			}
@@ -753,15 +754,15 @@ func TestPrepared(t *testing.T) {
 			}()
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
 			state, hp := preparedState(t, s, columns)
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "other", Object: "other", Target: "TABLE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "other", Target: "TABLE"})
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated keyspace invalidated")
 			}
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "other", Target: "TABLE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Object: "other", Target: "TABLE"})
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated table invalidated")
 			}
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
 			if hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("related table not invalidated")
 			}
@@ -807,7 +808,7 @@ func TestPrepared(t *testing.T) {
 				t.Fatal("opaque IDs treated as ordered")
 			}
 			current := state.host(id)
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Object: "tbl", Target: "TABLE"})
 			response = &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: columns, MetadataID: []byte("later")}}
 			_ = selectPreparedResponse(state, id, current, current.InternalMetadataID, true, response)
 			if state.host(id) != current {
@@ -823,7 +824,7 @@ func TestPrepared(t *testing.T) {
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
 				if err == nil {
-					s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
+					s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 					_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("old"), implCql.NewColumns(), columns)))
 				}
 				serverDone <- err
@@ -862,7 +863,7 @@ func TestPrepared(t *testing.T) {
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
 			state, old := preparedState(t, s, columns)
 			started := state.InternalDependencies.InternalTracker.InternalStart()
-			s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TYPE", Object: "introduced"})
 			udt := codecTestMust(implCql.UDTType("ks", "introduced", implCql.ColumnSpec{Name: "n", Type: codecTestMust(implCql.ScalarType(implCql.TypeInt))}))
 			changed := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("stale")}}
@@ -911,7 +912,7 @@ func TestPrepared(t *testing.T) {
 						state.publishHost(implCql.UUID{15: 1}, expected, false, nil)
 						state.InternalMu.Unlock()
 					} else {
-						s.InvalidatePreparedSchema(cluster.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
+						s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", Target: "TABLE", Object: "tbl"})
 					}
 					close(release)
 					entry := <-result

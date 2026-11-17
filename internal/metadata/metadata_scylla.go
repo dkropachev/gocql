@@ -100,12 +100,6 @@ func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName str
 	return true
 }
 
-const ()
-
-const ()
-
-const ()
-
 func columnKindFromSchema(kind string) (metadata2.ColumnKind, error) {
 	switch kind {
 	case "partition_key":

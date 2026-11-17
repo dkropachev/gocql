@@ -416,7 +416,7 @@ func TestQuery(t *testing.T) {
 
 			// Query setters become per-admission Options. Trace IDs and timing belong
 			// to each execution result; a statement never accumulates mutable metrics.
-			zero := gocql.Result{}
+			zero := cql.Result{}
 			require.Zero(t, zero.Attempts)
 			require.Zero(t, zero.Latency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}

@@ -61,6 +61,7 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	clustertestkit "github.com/scylladb/gocql/v2/internal/testkit/cluster"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -80,11 +81,11 @@ func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
+	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
 }
 
-func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
+func (o *sessionTestObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
@@ -95,16 +96,16 @@ func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -564,7 +565,7 @@ func TestSession(t *testing.T) {
 		// The dialect fixes the protocol version; nothing is negotiated.
 		t.Run("DialectProtocol", func(t *testing.T) {
 			t.Parallel()
-			cfg := createV2ClusterWithout(fixtureCompression).WithCompression(config.NoCompression)
+			cfg := createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression)
 			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
 			require.NoError(t, err)
 			defer session.Close()
@@ -573,7 +574,7 @@ func TestSession(t *testing.T) {
 		// A dialect naming the other database fails to connect.
 		t.Run("DialectMismatch", func(t *testing.T) {
 			t.Parallel()
-			cfg := mustBuild(t, createV2ClusterWithout(fixtureCompression).WithCompression(config.NoCompression))
+			cfg := mustBuild(t, createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression))
 			var err error
 			if testDialectDistribution == "scylla" {
 				var s *gocql.Session[gocql.CassandraV4]
@@ -969,9 +970,9 @@ func TestSession(t *testing.T) {
 			})
 		switch v2SmokeOption("compressor", "no-compression") {
 		case "lz4":
-			cfg.WithCompression(config.LZ4Compression)
+			cfg.WithCompression(cql.LZ4Compression)
 		case "snappy":
-			cfg.WithCompression(config.SnappyCompression)
+			cfg.WithCompression(cql.SnappyCompression)
 		}
 		if v2SmokeOption("runauth", "false") == "true" {
 			cfg.WithAuth(auth.Password("cassandra", "cassandra"))

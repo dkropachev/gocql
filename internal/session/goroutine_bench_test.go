@@ -14,14 +14,15 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type nopObserver struct{}
 
-func (nopObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
-	return ctx, func(settings.RequestEvent) {}
+func (nopObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	return ctx, func(observe.RequestEvent) {}
 }
 
 func (nopObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {

@@ -9,16 +9,16 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type countingObserver struct{ requests atomic.Uint64 }
 
-func (o *countingObserver) ObserveRequest(settings.RequestEvent) { o.requests.Add(1) }
+func (o *countingObserver) ObserveRequest(observe.RequestEvent)  { o.requests.Add(1) }
 func (o *countingObserver) ObserveAttempt(routing2.AttemptEvent) {}
 
-func (o *countingObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o *countingObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *countingObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {

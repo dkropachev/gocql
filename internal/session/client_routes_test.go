@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -43,7 +44,7 @@ func TestClientRoutes(t *testing.T) {
 			if snapshot.ClientRoutes.ConnectionIDs[0] != "one" || snapshot.ClientRoutes.HostnameOverrides["one"] != "proxy.example" {
 				t.Fatal("route config aliases input")
 			}
-			edits := []func(*settings.Config){func(c *settings.Config) { c.AddressTranslator = implEndpoint.AddressTranslatorFunc(nil) }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }}
+			edits := []func(*settings.Config){func(c *settings.Config) { c.AddressTranslator = endpoint2.TranslatorFunc(nil) }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }}
 			for _, edit := range edits {
 				c := snapshot.Snapshot()
 				edit(&c)
@@ -101,7 +102,7 @@ func TestClientRoutes(t *testing.T) {
 			var mu sync.Mutex
 			var deadlines []time.Time
 			var targets []string
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				if !target.Host.ID.IsEmpty() {
 					deadline, _ := ctx.Deadline()
 					mu.Lock()
@@ -109,7 +110,7 @@ func TestClientRoutes(t *testing.T) {
 					targets = append(targets, target.Address)
 					mu.Unlock()
 				}
-				return (endpoint.DefaultDialer{}).DialContext(ctx, target)
+				return (endpoint2.DefaultDialer{}).DialContext(ctx, target)
 			}
 			s, err := Connect(context.Background(), config)
 			if err != nil {

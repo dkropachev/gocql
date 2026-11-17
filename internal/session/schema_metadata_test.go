@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
@@ -66,11 +67,11 @@ func TestSchemaMetadata(t *testing.T) {
 			profile.Routing = unstablePolicy{RoutingPolicy: profile.Routing, session: s}
 			config.DefaultProfile = &profile
 			s.ConfigureV2Peripheral(config)
-			sub, _ := s.Subscribe(cluster.EventFilter{Capacity: 4})
+			sub, _ := s.Subscribe(event.Filter{Capacity: 4})
 			s.HandleNodeEvent([]protocol.Frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})
-			event := <-sub.Events()
-			if event.Kind != cluster.OverflowEvent || event.Change != "PUBLICATION_RESYNC" {
-				t.Fatal("unpublished delta escaped", event)
+			ev := <-sub.Events()
+			if ev.Kind != event.Overflow || ev.Change != "PUBLICATION_RESYNC" {
+				t.Fatal("unpublished delta escaped", ev)
 			}
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("resync marker was not terminal")

@@ -38,6 +38,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -76,7 +77,7 @@ type InternalClusterSettings struct {
 	// ApplicationInfo reports application information to the server by inserting it into options of the STARTUP frame
 	ApplicationInfo endpoint.ApplicationInfo
 	// DNSResolver Resolves DNS names to IP addresses
-	DNSResolver endpoint.Resolver
+	DNSResolver endpoint2.Resolver
 	// Logger for this clusterSettings.
 	// If not specified, defaults to the gocql.defaultLogger.
 	Logger *slog.Logger
@@ -98,7 +99,7 @@ type InternalClusterSettings struct {
 	// Use it to collect metrics / stats from queries by providing an implementation of QueryObserver.
 	// AddressTranslator will translate addresses found on peer discovery and/or
 	// node change events.
-	AddressTranslator endpoint.AddressTranslator
+	AddressTranslator endpoint2.Translator
 	// HostFilter will filter all incoming events for host, any which don't pass
 	// the filter will be ignored. If set will take precedence over any options set
 	// via Discovery
@@ -115,7 +116,7 @@ type InternalClusterSettings struct {
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.
 	// Default: SimpleConvictionPolicy
-	ConvictionPolicy settings.ConvictionPolicy
+	ConvictionPolicy endpoint2.ConvictionPolicy
 	// Default reconnection policy to use for reconnecting before trying to mark host as down.
 	ReconnectionPolicy pool.ReconnectionPolicy
 	// A reconnection policy to use for reconnecting when connecting to the cluster first time.
@@ -381,7 +382,7 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		DriverVersion:                 settings.InternalDefaultDriverVersion,
 		MaxWaitSchemaAgreement:        60 * time.Second,
 		ReconnectInterval:             60 * time.Second,
-		ConvictionPolicy:              &settings.SimpleConvictionPolicy{},
+		ConvictionPolicy:              &endpoint2.SimpleConvictionPolicy{},
 		ReconnectionPolicy:            &pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second},
 		InitialReconnectionPolicy:     &pool.NoReconnectionPolicy{},
 		SocketKeepalive:               15 * time.Second,

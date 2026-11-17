@@ -164,5 +164,3 @@ func (t UDTTypeInfo) String() string {
 
 	return buf.String()
 }
-
-const ()

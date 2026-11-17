@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -17,11 +18,11 @@ func BenchmarkMetadata(b *testing.B) {
 			return opaqueStorageValuexxxxx
 		}()
 
-		sub, _ := s.Subscribe(cluster.EventFilter{Capacity: 1})
+		sub, _ := s.Subscribe(event.Filter{Capacity: 1})
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			implCluster.InternalSubscriptionPublish(sub, cluster.Event{Kind: cluster.StatusEvent})
+			implCluster.InternalSubscriptionPublish(sub, event.Event{Kind: event.Status})
 			<-sub.Events()
 		}
 	})

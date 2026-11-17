@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -52,7 +53,7 @@ func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host metadata
 	}
 	return c, nil
 }
-func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.DialTarget) (net.Conn, error) {
+func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -63,7 +64,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.D
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
-		c, err = (implEndpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {
@@ -183,7 +184,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
 			}
 		}
-		c, e := d.raw(ctx, implEndpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})
+		c, e := d.raw(ctx, endpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})
 		if e != nil {
 			return nil, e
 		}
@@ -205,7 +206,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
 		address = translated.CQL.String()
 	}
-	target := implEndpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
+	target := endpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)
 	}
@@ -288,7 +289,7 @@ func cloneV2HostSnapshot(v metadata.HostSnapshot) metadata.HostSnapshot {
 	v.Tokens = slices.Clone(v.Tokens)
 	return v
 }
-func cloneV2DialTarget(v implEndpoint.DialTarget) implEndpoint.DialTarget {
+func cloneV2DialTarget(v endpoint.DialTarget) endpoint.DialTarget {
 	v.Host = cloneV2HostSnapshot(v.Host)
 	return v
 }

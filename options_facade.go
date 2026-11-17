@@ -11,6 +11,7 @@ import (
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func internalOptions(o exec.Options) implSession.Options {
@@ -32,7 +33,7 @@ func internalOptions(o exec.Options) implSession.Options {
 }
 
 func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
-	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: o.Limits, Incremental: o.Incremental}
+	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: implTransport.StreamLimits(o.Limits), Incremental: o.Incremental}
 }
 
 // tooManyPrepareOptions is the error of a call given more than one
@@ -68,7 +69,7 @@ func tooManyOptions() error {
 // tooManyOptionsResult returns tooManyOptions with its execution result.
 //
 //go:noinline
-func tooManyOptionsResult() (Result, error) {
+func tooManyOptionsResult() (cql.Result, error) {
 	err := tooManyOptions()
 	return implSession.InternalExecutionErrorResult(err), err
 }
@@ -77,7 +78,7 @@ func tooManyOptionsResult() (Result, error) {
 // whether a row was found.
 //
 //go:noinline
-func tooManyOptionsFound() (bool, Result, error) {
+func tooManyOptionsFound() (bool, cql.Result, error) {
 	r, err := tooManyOptionsResult()
 	return false, r, err
 }

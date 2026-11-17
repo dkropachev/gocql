@@ -61,9 +61,6 @@ var primitivePackages = map[string]bool{
 // test fails on any violation missing here and on any entry that is no longer
 // a violation.
 var layerViolations = map[string]bool{
-	"auth -> internal/settings":          true,
-	"endpoint -> internal/endpoint":      true,
-	"event -> internal/cluster":          true,
 	"internal/tablets -> internal/tests": true,
 }
 

@@ -7,8 +7,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/metadata"
 )
@@ -17,14 +17,14 @@ import (
 // involved. One bridge is created for each connection and closed on every exit.
 type v2Authenticator struct {
 	ctx      context.Context
-	provider connectivity.AuthProvider
-	exchange connectivity.AuthExchange
+	provider auth.Provider
+	exchange auth.Exchange
 	host     metadata.HostSnapshot
 	once     sync.Once
 	started  bool
 }
 
-func InternalNewV2Authenticator(ctx context.Context, host metadata.HostSnapshot, provider connectivity.AuthProvider) *v2Authenticator {
+func InternalNewV2Authenticator(ctx context.Context, host metadata.HostSnapshot, provider auth.Provider) *v2Authenticator {
 	return &v2Authenticator{ctx: ctx, host: host, provider: provider}
 }
 func (a *v2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {

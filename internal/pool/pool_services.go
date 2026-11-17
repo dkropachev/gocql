@@ -5,10 +5,10 @@ package pool
 
 import (
 	"context"
+	"log/slog"
 	"net"
 
-	"log/slog"
-
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -18,7 +18,7 @@ type InternalPoolServices struct {
 	Context      context.Context
 	Logger       *slog.Logger
 	Config       *connectivity.Config
-	Conviction   connectivity.ConvictionPolicy
+	Conviction   endpoint2.ConvictionPolicy
 	Reconnection ReconnectionPolicy
 	Worker       func(func()) bool
 	Dial         func(context.Context, *endpoint.HostInfo, transport.ConnErrorHandler, int, int) (*transport.Conn, error)

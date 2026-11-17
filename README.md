@@ -163,7 +163,7 @@ per object and 64 objects per session.
 
 Normal buffered execution supports negotiated LZ4 and Snappy subject to native
 protocol rules; protocol 5 compression uses LZ4. Configure
-`config.New(hosts...).WithCompression(config.LZ4Compression)` without a
+`config.New(hosts...).WithCompression(cql.LZ4Compression)` without a
 compressor import.
 
 ## Configuration and extensions

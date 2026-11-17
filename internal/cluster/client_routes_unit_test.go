@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
@@ -91,11 +92,11 @@ const (
 )
 
 // routePeer returns a peer with hostID, or with no host ID when it is empty.
-func routePeer(hostID string) endpoint.Peer {
+func routePeer(hostID string) endpoint2.Peer {
 	if hostID == "" {
-		return endpoint.Peer{}
+		return endpoint2.Peer{}
 	}
-	return endpoint.Peer{HostID: cql.MustParseUUID(hostID)}
+	return endpoint2.Peer{HostID: cql.MustParseUUID(hostID)}
 }
 
 // sameIP reports whether addr carries ip.

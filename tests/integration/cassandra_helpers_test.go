@@ -12,11 +12,11 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -69,7 +69,7 @@ func cassandraRead(t testing.TB, s *gocql.Session[testDialect], stmt string, val
 	}
 	return row
 }
-func cassandraWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) gocql.Result {
+func cassandraWrite(t testing.TB, s *gocql.Session[testDialect], stmt string, values ...cql.Value) cql.Result {
 	t.Helper()
 	result, err := v2Exec(context.Background(), s, stmt, values...)
 	if err != nil {
@@ -180,7 +180,7 @@ func cassandraRows[P any, O fixtureOptions](t testing.TB, s *gocql.Session[testD
 	}
 	return result
 }
-func cassandraBatch[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], batch *gocql.Batch, options O) gocql.Result {
+func cassandraBatch[O fixtureOptions](t testing.TB, s *gocql.Session[testDialect], batch *gocql.Batch, options O) cql.Result {
 	t.Helper()
 	r, e := s.ExecBatch(context.Background(), batch, bindOptions(s, options))
 	if e != nil {
@@ -239,11 +239,11 @@ func cassandraOtherSession(t testing.TB, s *gocql.Session[testDialect], keyspace
 
 type cassandraObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
+	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
 }
 
-func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
+func (o *cassandraObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
@@ -254,7 +254,7 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
 func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
@@ -266,10 +266,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}

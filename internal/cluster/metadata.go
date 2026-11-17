@@ -31,6 +31,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
+	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -133,7 +134,7 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		}
 	}
-	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
@@ -431,7 +432,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, e
 	}
 	return out, tokenErr
 }
-func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
+func sessionObserveV2Lifecycle(s *Core, event observe.LifecycleEvent) {
 	p := s.Peripheral()
 	if p == nil {
 		return

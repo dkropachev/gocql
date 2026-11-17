@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
@@ -42,7 +43,7 @@ func TestDialect(t *testing.T) {
 	// Snappy compresses frames, which protocol 5 does not have: only the
 	// dialect reveals the conflict, so Connect reports it.
 	t.Run("CompressionConflict", func(t *testing.T) {
-		snappy := mustBuildConfig(t, config.New("127.0.0.1").WithCompression(config.SnappyCompression))
+		snappy := mustBuildConfig(t, config.New("127.0.0.1").WithCompression(cql.SnappyCompression))
 		s, err := dialectSettings[CassandraV5](snappy)
 		if err != nil {
 			t.Fatal(err)

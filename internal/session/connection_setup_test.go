@@ -31,6 +31,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -58,7 +59,7 @@ func TestConnectionSetup(t *testing.T) {
 				config := settings.DefaultConfig("127.0.20.1")
 				config.Protocol = 4
 				config.Logger = logging.Nop()
-				config.Dialer = endpoint.DialerFunc(func(context.Context, endpoint.DialTarget) (net.Conn, error) { return nil, cause })
+				config.Dialer = endpoint2.DialerFunc(func(context.Context, endpoint2.DialTarget) (net.Conn, error) { return nil, cause })
 				session, err := Connect(context.Background(), config)
 				if session != nil {
 					session.Close()
@@ -88,7 +89,7 @@ func TestConnectionSetup(t *testing.T) {
 			var calls atomic.Int32
 			client, server := net.Pipe()
 			defer server.Close()
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				host := target.Host
 				calls.Add(1)
 				if host.Datacenter != "dc" || host.Address != netip.MustParseAddrPort("127.0.0.1:9042") {
@@ -130,7 +131,7 @@ func TestConnectionSetup(t *testing.T) {
 			expected := implEndpoint.HostInfoData(host).InternalInitialSetupDeadline
 			var observed time.Time
 			entered := make(chan struct{})
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				observed, _ = ctx.Deadline()
 				close(entered)
 				<-ctx.Done()
@@ -139,7 +140,7 @@ func TestConnectionSetup(t *testing.T) {
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint.AddressTranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
 					time.Sleep(20 * time.Millisecond)
 					return addr, nil
 				})
@@ -253,7 +254,7 @@ func TestConnectionSetup(t *testing.T) {
 			config.Pool.AdvancedShardAwareness.SourcePortStart = 49152
 			config.Pool.AdvancedShardAwareness.SourcePortEnd = 49155
 			var targeted, ordinary int
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				if target.ShardID.Set {
 					targeted++
 					return nil, cqlerr.ErrScyllaSourcePortAlreadyInUse
@@ -451,10 +452,10 @@ func TestConnectionSetup(t *testing.T) {
 			}()
 			config := settings.DefaultConfig("localhost")
 			config.TLS = tlsConfig
-			var selected endpoint.DialTarget
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			var selected endpoint2.DialTarget
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				selected = target
-				return (endpoint.DefaultDialer{}).DialContext(ctx, target)
+				return (endpoint2.DefaultDialer{}).DialContext(ctx, target)
 			}
 			d := transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -479,7 +480,7 @@ func TestConnectionSetup(t *testing.T) {
 			config.Protocol = 4
 			config.Metadata.InitialDiscovery = false
 			targetSeen := false
-			config.Dialer = endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.Dialer = endpoint2.DialerFunc(func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				targetSeen = true
 				if target.Network != "unix" || target.Address != config.ContactPoints[0][5:] || target.Host.Address.IsValid() || target.LocalAddress.IsValid() || target.ShardID.Set {
 					t.Fatal("Unix target leaked TCP placeholder", target)

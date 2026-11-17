@@ -18,13 +18,14 @@ path, where the first route serves the request:
 - `Observe` receives every attempt's outcome.
 
 `routing.NewPlan(policy, info, snapshot)` combines Pick and Fallback into the plan
-a request follows. `Plan.Next` lazily returns `routing.Route` values; Pick and Next
+a request follows. `Plan.Next` lazily returns `metadata.Route` values; Pick and Next
 must not perform I/O or mutate inputs. A Route is a host and a shard,
 or `AnyShard`, resolved by the plan: a request takes a connection for exactly
 that shard of that host and does not move to another shard or host on its own;
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
-`HostRoutes` (every host, in the order of `Hosts`) and `ReplicaRoutes` (the
-replicas of a request's token), and narrows them with `WithShard` and `ShardOf`.
+`routing.HostRoutes` (every host, in the order of `Hosts`) and
+`routing.ReplicaRoutes` (the replicas of a request's token), and narrows them
+with `WithShard` and `ShardOf`.
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
 and leaders. Its Pick routes to one random replica when that replica is up and in the
@@ -61,7 +62,7 @@ Each stage of a request has its own answer:
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
   including speculative and cancelled ones, implement
-  `config.Observer.StartAttempt` (see [Tracing](tracing.md)).
+  `observe.Observer.StartAttempt` (see [Tracing](tracing.md)).
 
 ## Writing your own policy
 
@@ -77,15 +78,15 @@ type skipFailed struct {
 	failed         sync.Map // host ID -> struct{}
 }
 
-func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (routing.Route, bool) {
+func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool) {
 	r, ok := p.Policy.Pick(info, m)
 	if _, bad := p.failed.Load(r.HostID()); ok && bad {
-		return routing.Route{}, false // the driver asks Fallback instead
+		return metadata.Route{}, false // the driver asks Fallback instead
 	}
 	return r, ok
 }
 
-func (p *skipFailed) Observe(e config.AttemptEvent) {
+func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	switch {
 	case e.Cancelled:
 	case e.Err != nil:

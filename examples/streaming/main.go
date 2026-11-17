@@ -65,13 +65,13 @@ func run() (resultErr error) {
 		}
 		builder.WithPort(uint16(n))
 	}
-	frameCompression := config.NoCompression
+	frameCompression := cql.NoCompression
 	switch *compression {
 	case "none":
 	case "lz4":
-		frameCompression = config.LZ4Compression
+		frameCompression = cql.LZ4Compression
 	case "snappy":
-		frameCompression = config.SnappyCompression
+		frameCompression = cql.SnappyCompression
 	default:
 		return fmt.Errorf("unknown compression %q", *compression)
 	}
@@ -145,7 +145,7 @@ func run() (resultErr error) {
 // streamTable connects with dialect D and streams the example table. segments
 // reports that the dialect's protocol compresses transport segments rather
 // than frames.
-func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, incremental, segments bool, frameCompression config.Compression) (resultErr error) {
+func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, incremental, segments bool, frameCompression cql.Compression) (resultErr error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	s, err := gocql.Connect[D](ctx, cfg)
@@ -243,7 +243,7 @@ func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, increm
 	}
 	defer query.Close()
 	stream, err := query.Run(ctx, cql.EmptyParams{})
-	if incremental && !segments && frameCompression != config.NoCompression {
+	if incremental && !segments && frameCompression != cql.NoCompression {
 		if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)
 		}

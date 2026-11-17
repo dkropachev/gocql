@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -212,7 +213,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 	p.InternalMu.Unlock()
 	p.publishMu.Unlock()
 	if resync {
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
 	}
 }
 func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
