@@ -6,11 +6,11 @@ package cluster
 import (
 	"encoding/binary"
 
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
-var benchmarkTarget model.Target
+var benchmarkTarget metadata.Target
 
 func testPayload(h tablets.TabletInfo) []byte {
 	field := func(dst, b []byte) []byte { return append(binary.BigEndian.AppendUint32(dst, uint32(len(b))), b...) }

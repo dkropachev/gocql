@@ -16,6 +16,7 @@ import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type EventKind uint8
@@ -264,7 +265,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 			if e.Target == "KEYSPACE" {
 				md.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(e.Keyspace)
 			} else {
-				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *implMetadata.KeyspaceMetadata) {
+				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *metadata.Keyspace) {
 					switch e.Target {
 					case "TABLE":
 						implMetadata.InternalKeyspaceMetadataRemoveTable(ks, e.Object)

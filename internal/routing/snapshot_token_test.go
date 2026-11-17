@@ -12,29 +12,30 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func tokenTestSnapshot() *MetadataSnapshot {
-	column := func(name, typ string) *implMetadata.ColumnMetadata {
-		return &implMetadata.ColumnMetadata{Keyspace: "ks", Name: name, Type: typ, Kind: implMetadata.ColumnPartitionKey}
+	column := func(name, typ string) *metadata.Column {
+		return &metadata.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnPartitionKey}
 	}
-	ks := &implMetadata.KeyspaceMetadata{
+	ks := &metadata.Keyspace{
 		Name: "ks",
-		Tables: map[string]*implMetadata.TableMetadata{
-			"single":    {Keyspace: "ks", Name: "single", PartitionKey: []*implMetadata.ColumnMetadata{column("id", "int")}},
-			"composite": {Keyspace: "ks", Name: "composite", PartitionKey: []*implMetadata.ColumnMetadata{column("a", "int"), column("b", "text")}},
-			"tupled":    {Keyspace: "ks", Name: "tupled", PartitionKey: []*implMetadata.ColumnMetadata{column("t", "frozen<tuple<int, text>>")}},
-			"custom":    {Keyspace: "ks", Name: "custom", PartitionKey: []*implMetadata.ColumnMetadata{column("id", "int")}, Options: implMetadata.TableMetadataOptions{Partitioner: "unknown"}},
+		Tables: map[string]*metadata.Table{
+			"single":    {Keyspace: "ks", Name: "single", PartitionKey: []*metadata.Column{column("id", "int")}},
+			"composite": {Keyspace: "ks", Name: "composite", PartitionKey: []*metadata.Column{column("a", "int"), column("b", "text")}},
+			"tupled":    {Keyspace: "ks", Name: "tupled", PartitionKey: []*metadata.Column{column("t", "frozen<tuple<int, text>>")}},
+			"custom":    {Keyspace: "ks", Name: "custom", PartitionKey: []*metadata.Column{column("id", "int")}, Options: metadata.TableOptions{Partitioner: "unknown"}},
 			"nokey":     {Keyspace: "ks", Name: "nokey"},
 		},
 	}
 	return NewMetadataSnapshot(SnapshotState{
-		InternalKeyspaces:    map[string]*implMetadata.KeyspaceMetadata{"ks": ks},
+		InternalKeyspaces:    map[string]*metadata.Keyspace{"ks": ks},
 		InternalPartitioner:  "org.apache.cassandra.dht.Murmur3Partitioner",
-		InternalPartitioners: map[string]TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": Murmur3TokenPartitioner},
+		InternalPartitioners: map[string]routing.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing.Murmur3TokenPartitioner},
 	})
 }
 
@@ -81,7 +82,7 @@ func TestSnapshotToken(t *testing.T) {
 			t.Fatal(err)
 		}
 		cells := []model.EncodedCell{routingCell(t, intType, cql.Int32Codec, int32(7)), routingCell(t, textType, cql.StringCodec, "key")}
-		want, err := InternalComputeRoutingToken(cells, []int{0, 1}, Murmur3TokenPartitioner)
+		want, err := InternalComputeRoutingToken(cells, []int{0, 1}, routing.Murmur3TokenPartitioner)
 		if err != nil || !want.Set {
 			t.Fatal(want, err)
 		}

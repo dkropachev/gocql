@@ -11,9 +11,10 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func BenchmarkRouting(b *testing.B) {
@@ -25,7 +26,7 @@ func BenchmarkRouting(b *testing.B) {
 				for _, shuffle := range []bool{true, false} {
 					b.Run(fmt.Sprintf("hosts%d/rack=%q/shuffle=%v", count, rack, shuffle), func(b *testing.B) {
 						m := v2TestMetadata()
-						routing.SnapshotData(m).InternalHosts = make([]model.HostSnapshot, count)
+						routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 						for i := range routing.SnapshotData(m).InternalHosts {
 							h := v2TestHost(0, "a", fmt.Sprintf("r%d", i%3+1))
 							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
@@ -35,8 +36,8 @@ func BenchmarkRouting(b *testing.B) {
 						h := testHint(b, 0, 100, cql.Option[uint64]{}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 						root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
-						p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
+						info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
+						p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
 						var storage routing.InternalLazyRoutingPlan
 						b.ReportAllocs()
 						b.ResetTimer()
@@ -58,7 +59,7 @@ func BenchmarkRouting(b *testing.B) {
 			for _, kind := range []string{"ordinary", "lwt", "leader", "latency", "pinned"} {
 				b.Run(fmt.Sprintf("hosts%d/%s", count, kind), func(b *testing.B) {
 					m := v2TestMetadata()
-					routing.SnapshotData(m).InternalHosts = make([]model.HostSnapshot, count)
+					routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 					for i := range routing.SnapshotData(m).InternalHosts {
 						h := v2TestHost(0, "a", "r1")
 						binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
@@ -68,8 +69,8 @@ func BenchmarkRouting(b *testing.B) {
 					h := testHint(b, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, hTarget(1, 0), hTarget(2, 0), hTarget(3, 0))
 					root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 					routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
-					info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
-					options := implRouting.RoutingOptions{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
+					info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
+					options := routing2.Options{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
 					if kind == "lwt" {
 						info.Conditional = true
 					}
@@ -116,7 +117,7 @@ func BenchmarkRouting(b *testing.B) {
 				}
 				b.Run(name, func(b *testing.B) {
 					s := hostRoutingSession(b, placement == "tablets")
-					p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: dc})).(*routing.InternalRoutingPolicy)
+					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Datacenter: dc})).(*routing.InternalRoutingPolicy)
 					tokens := make([]int64, 4096)
 					for i := range tokens {
 						tokens[i] = int64(uint64(i) * 0x9e3779b97f4a7c15)
@@ -130,7 +131,7 @@ func BenchmarkRouting(b *testing.B) {
 						i := 0
 						for pb.Next() {
 							m := s.Metadata()
-							info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
+							info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 							i++
 							tablet := routing.InternalLookupTabletCached(m, info, &cache)
 							conn, err := s.SelectTypedConn(ctx, info, p.InternalPlanWith(info, m, &plan, &tablet))

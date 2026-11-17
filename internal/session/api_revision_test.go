@@ -14,7 +14,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/routing"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestQueryDrainAdmission(t *testing.T) {
@@ -26,7 +26,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		entered, release := make(chan struct{}), make(chan struct{})
 		var block atomic.Bool
 		block.Store(true)
-		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) {
+		observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) {
 			if block.CompareAndSwap(true, false) {
 				close(entered)
 				<-release
@@ -87,7 +87,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 	t.Run("CloseWaitsForDrain", func(t *testing.T) {
 		s, conns, peers := runtimeTestSession(t, 1)
 		entered, release := make(chan struct{}), make(chan struct{})
-		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
+		observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) { close(entered); <-release }}
 		query := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 		go func() {
 			stream := typedTestReadRequest(t, conns[0], peers[0])

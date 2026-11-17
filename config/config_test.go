@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -282,13 +283,13 @@ func TestConfigBuilder(t *testing.T) {
 		id := cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")
 		other := cql.MustParseUUID("10112233-4455-4677-8899-aabbccddeeff")
 		keep := mustBuildConfig(t, New("h").WithOnlyHost(id)).settings.HostFilter
-		if keep == nil || !keep(routing.HostSnapshot{ID: id}) || keep(routing.HostSnapshot{ID: other}) {
+		if keep == nil || !keep(metadata.HostSnapshot{ID: id}) || keep(metadata.HostSnapshot{ID: other}) {
 			t.Fatal("WithOnlyHost did not keep exactly its host")
 		}
 		keep = mustBuildConfig(t, New("h").WithOnlyHost(id).
-			WithHostFilter(func(h routing.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
-		if !keep(routing.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(routing.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
-			keep(routing.HostSnapshot{ID: other, Datacenter: "dc1"}) {
+			WithHostFilter(func(h metadata.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
+		if !keep(metadata.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(metadata.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
+			keep(metadata.HostSnapshot{ID: other, Datacenter: "dc1"}) {
 			t.Fatal("WithOnlyHost and WithHostFilter must both pass")
 		}
 		if _, err := New("h").WithOnlyHost(cql.UUID{}).Build(); err == nil {

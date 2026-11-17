@@ -13,9 +13,9 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type nopObserver struct{}
@@ -24,8 +24,8 @@ func (nopObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (c
 	return ctx, func(settings.RequestEvent) {}
 }
 
-func (nopObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
-	return func(routing.AttemptEvent) {}
+func (nopObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+	return func(routing2.AttemptEvent) {}
 }
 
 // constantSpeculation starts each speculative attempt delay after the last.

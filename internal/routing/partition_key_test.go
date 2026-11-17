@@ -12,6 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/murmur"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func TestPartitionKey(t *testing.T) {
@@ -31,7 +32,7 @@ func TestPartitionKey(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					got, err := Murmur3TokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
+					got, err := routing.Murmur3TokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
 					if err != nil || got != expected {
 						t.Fatalf("length=%d split=%d: got %d,%v want %d", length, split, got, err, expected)
 					}
@@ -46,7 +47,7 @@ func TestPartitionKey(t *testing.T) {
 					spans = append(spans, wire.Borrow(test.input[i:i+1]))
 				}
 				chain, _ := wire.NewChain(spans...)
-				got, err := CDCTokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
+				got, err := routing.CDCTokenPartitioner.Token(*NewPartitionKey(PartitionKeyState{chain: chain}))
 				if err != nil || got != test.expected {
 					t.Fatalf("CDC=%d,%v want %d", got, err, test.expected)
 				}

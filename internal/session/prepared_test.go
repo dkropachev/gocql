@@ -40,6 +40,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestPrepared(t *testing.T) {
@@ -114,7 +115,7 @@ func TestPrepared(t *testing.T) {
 			p := s.Peripheral()
 			p.InternalMu.Lock()
 			p.InternalConfig = settings.DefaultConfig("localhost")
-			p.InternalConfig.Metadata.Mode = settings.MetadataSchemaNone
+			p.InternalConfig.Metadata.Mode = metadata2.SchemaNone
 			p.InternalMu.Unlock()
 			state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks1", Table: "t1"}}
 			if err := state.noteMetadataConflict(); err != nil {
@@ -167,11 +168,11 @@ func TestPrepared(t *testing.T) {
 					p.InternalMu.Lock()
 					p.InternalConfig = settings.DefaultConfig("localhost")
 					if mode == "disabled" {
-						p.InternalConfig.Metadata.Mode = settings.MetadataSchemaNone
+						p.InternalConfig.Metadata.Mode = metadata2.SchemaNone
 					} else if mode == "excluded" {
 						p.InternalConfig.Metadata.Keyspaces = []string{"ks2"}
 					} else {
-						p.InternalConfig.Metadata.Mode = settings.MetadataSchemaKeyspaces
+						p.InternalConfig.Metadata.Mode = metadata2.SchemaKeyspaces
 					}
 					p.InternalMu.Unlock()
 					before := s.Metadata()
@@ -702,13 +703,13 @@ func TestPrepared(t *testing.T) {
 			tracker := InternalRuntimeFor(s).InternalSchemaTracker()
 			d := tracker.InternalDependencies("ks", implCql.NewColumns(), columns)
 			stamp := d.InternalSnapshot()
-			old := routing.NewMetadataSnapshot(routing.SnapshotState{InternalPartitioner: "p", InternalKeyspaces: map[string]*metadata.KeyspaceMetadata{"ks": {Name: "ks", Tables: map[string]*metadata.TableMetadata{"tbl": {Name: "tbl", Keyspace: "ks"}}}}})
-			next := routing.NewMetadataSnapshot(routing.SnapshotState{InternalPartitioner: "p", InternalKeyspaces: map[string]*metadata.KeyspaceMetadata{"ks": metadata.InternalCloneV2Keyspace(routing.SnapshotData(old).InternalKeyspaces["ks"])}})
+			old := routing.NewMetadataSnapshot(routing.SnapshotState{InternalPartitioner: "p", InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata2.Table{"tbl": {Name: "tbl", Keyspace: "ks"}}}}})
+			next := routing.NewMetadataSnapshot(routing.SnapshotState{InternalPartitioner: "p", InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": metadata.InternalCloneV2Keyspace(routing.SnapshotData(old).InternalKeyspaces["ks"])}})
 			s.UpdatePreparedSchemaSnapshot(old, next)
 			if !stamp.InternalCurrent() {
 				t.Fatal("unchanged refresh invalidated")
 			}
-			routing.SnapshotData(next).InternalKeyspaces["ks"].Tables["other"] = &metadata.TableMetadata{Keyspace: "ks", Name: "other"}
+			routing.SnapshotData(next).InternalKeyspaces["ks"].Tables["other"] = &metadata2.Table{Keyspace: "ks", Name: "other"}
 			s.UpdatePreparedSchemaSnapshot(old, next)
 			if !stamp.InternalCurrent() {
 				t.Fatal("unrelated refresh invalidated")

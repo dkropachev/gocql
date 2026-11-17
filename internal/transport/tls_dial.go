@@ -32,7 +32,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type InternalV2TLSHostDialer struct {
@@ -40,7 +40,7 @@ type InternalV2TLSHostDialer struct {
 	InternalConfig     connectivity.Config
 }
 
-func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
+func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host metadata.HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
 	if source := d.InternalConfig.TLSSource; source != nil {
 		if c = source.TLSConfig(); c == nil {
@@ -284,7 +284,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	return result, nil
 }
 
-func cloneV2HostSnapshot(v model.HostSnapshot) model.HostSnapshot {
+func cloneV2HostSnapshot(v metadata.HostSnapshot) metadata.HostSnapshot {
 	v.Tokens = slices.Clone(v.Tokens)
 	return v
 }

@@ -9,9 +9,9 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type Profile struct {
@@ -70,7 +70,7 @@ type SpeculationPolicy interface {
 
 type Observer interface {
 	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
-	StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
+	StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent)
 }
 
 // RequestStart describes a request as it is admitted, before its first
@@ -80,7 +80,7 @@ type RequestStart struct {
 	Statement       string
 	BatchStatements []string
 	Parameters      cql.Columns
-	Routing         model.RoutingInfo
+	Routing         routing2.Info
 	ID              uint64
 	// CQLTrace reports that the request's attempts ask the cluster to record
 	// CQL trace sessions.
@@ -92,6 +92,6 @@ type RequestEvent struct {
 	BatchStatements []string
 	Parameters      cql.Columns
 	Result          cql.Result
-	Routing         model.RoutingInfo
+	Routing         routing2.Info
 	ID              uint64
 }

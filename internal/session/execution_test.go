@@ -39,12 +39,13 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type countSpeculation struct{ calls atomic.Int32 }
@@ -57,12 +58,12 @@ func (p *countSpeculation) Delay(int) (time.Duration, bool) {
 type panicObserver struct{}
 
 func (panicObserver) ObserveRequest(settings.RequestEvent) { panic("request") }
-func (panicObserver) ObserveAttempt(routing.AttemptEvent)  { panic("attempt") }
+func (panicObserver) ObserveAttempt(routing2.AttemptEvent) { panic("attempt") }
 
 func (o panicObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o panicObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o panicObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 
@@ -72,7 +73,7 @@ type panicStartObserver struct{}
 func (panicStartObserver) StartRequest(context.Context, settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
 	panic("request start")
 }
-func (panicStartObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (panicStartObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	panic("attempt start")
 }
 
@@ -107,14 +108,14 @@ func (o *pairingObserver) StartRequest(ctx context.Context, start settings.Reque
 	}
 }
 
-func (o *pairingObserver) StartAttempt(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *pairingObserver) StartAttempt(ctx context.Context, start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if ctx.Value(observerKey{}) != "span" {
 		o.mu.Lock()
 		o.ctxErr = true
 		o.mu.Unlock()
 	}
 	o.record(fmt.Sprintf("attempt %d start", start.Attempt))
-	return func(e routing.AttemptEvent) { o.record(fmt.Sprintf("attempt %d end", e.Attempt)) }
+	return func(e routing2.AttemptEvent) { o.record(fmt.Sprintf("attempt %d end", e.Attempt)) }
 }
 
 type panicHandler struct{}
@@ -264,7 +265,7 @@ func TestExecution(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
 					acknowledged := make(chan struct{})
 					continueAttempt := make(chan struct{})
-					observer := &execVoidObserver{onAttempt: func(event routing.AttemptEvent) {
+					observer := &execVoidObserver{onAttempt: func(event routing2.AttemptEvent) {
 						if event.Err == nil {
 							// The native VOID reply has been parsed, but execution has not
 							// accepted the successful attempt's outcome yet.
@@ -736,7 +737,7 @@ func TestExecution(t *testing.T) {
 		t.Run("SpeculativeTraceRef", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 2)
 			second := implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)
-			policy := &runtimePolicy{targets: []model.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: second}}}
+			policy := &runtimePolicy{targets: []metadata.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: second}}}
 			profile := settings.InternalDefaultProfile()
 			profile.Routing = policy
 			profile.Speculation = runtimeSpeculation{}

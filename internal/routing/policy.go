@@ -8,6 +8,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 
 	"context"
 	"errors"
@@ -19,36 +20,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/murmur"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	// PartitionKey is the canonical encoded component stream. It never owns a
 	// second serialization of the bound parameters.
 )
-
-type PartitionKey struct{ state PartitionKeyState }
-
-func (k PartitionKey) Len() int64 { return PartitionKeyData(&k).chain.Len() }
-func (k PartitionKey) ForEach(fn func(cql.Bytes) error) error {
-	if fn == nil {
-		return cqltype.TypeValidation("partition key", "nil visitor")
-	}
-	return PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
-		c, e := wire.NewChain(s)
-		if e != nil {
-			return e
-		}
-		return fn(cqltype.BytesView(c, wire.Ref{}))
-	})
-}
-
-type TokenPartitioner interface {
-	Token(PartitionKey) (int64, error)
-}
-
-var Murmur3TokenPartitioner TokenPartitioner = murmur3StreamingPartitioner{}
-var CDCTokenPartitioner TokenPartitioner = cdcStreamingPartitioner{}
 
 // validatePartitionKey applies InternalNewPartitionKey's checks
 // without building the key.
@@ -68,7 +45,7 @@ func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 	return nil
 }
 
-func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (PartitionKey, bool, error) {
+func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (routing2.PartitionKey, bool, error) {
 	if len(indexes) == 0 {
 		return *NewPartitionKey(PartitionKeyState{}), false, nil
 	}
@@ -122,8 +99,8 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (Partitio
 	c, e := b.Freeze()
 	return *NewPartitionKey(PartitionKeyState{chain: c}), e == nil, e
 }
-func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p TokenPartitioner) (cql.Option[int64], error) {
-	if _, builtin := p.(murmur3StreamingPartitioner); builtin {
+func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p routing2.TokenPartitioner) (cql.Option[int64], error) {
+	if p == routing2.Murmur3TokenPartitioner {
 		for _, index := range indexes {
 			if index >= 0 && index < len(cells) && cells[index].State != cql.Present && cells[index].State != cql.Null && cells[index].State != cql.Unset {
 				return cql.Option[int64]{}, cqltype.TypeValidation("partition key", "invalid cell state")
@@ -147,55 +124,6 @@ func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p Tok
 	return cql.Option[int64]{Value: v, Set: e == nil}, e
 }
 
-type cdcStreamingPartitioner struct{}
-
-func (cdcStreamingPartitioner) Token(k PartitionKey) (int64, error) {
-	if k.Len() < 8 {
-		return math.MinInt64, nil
-	}
-	var n uint64
-	remaining := 8
-	e := PartitionKeyData(&k).chain.Each(func(s wire.Span) error {
-		for _, b := range s.Bytes() {
-			if remaining == 0 {
-				break
-			}
-			n = n<<8 | uint64(b)
-			remaining--
-		}
-		return nil
-	})
-	v := int64(n)
-	if v == math.MinInt64 {
-		v = math.MaxInt64
-	}
-	return v, e
-}
-
-type murmur3StreamingPartitioner struct{}
-
-func (murmur3StreamingPartitioner) Token(k PartitionKey) (int64, error) {
-	var hash murmur.Stream
-	err := PartitionKeyData(&k).chain.Each(func(s wire.Span) error { _, err := hash.Write(s.Bytes()); return err })
-	token := hash.Sum64()
-	if token == math.MinInt64 {
-		token = math.MaxInt64
-	}
-	return token, err
-}
-
-type RoutingOptions struct {
-	Datacenter, Rack                          string
-	Latency                                   LatencyOptions
-	TokenAware                                bool
-	AllowRemote, ShuffleReplicas, LeaderAware bool
-}
-type LatencyOptions struct {
-	Enabled                            bool
-	ExclusionThreshold                 float64
-	MinimumSamples                     int
-	Scale, RetryPeriod, UpdateInterval time.Duration
-}
 type InternalRoutingLatency struct {
 	nextProbe       time.Time // protected by mu, including selection reservations
 	InternalUpdated time.Time
@@ -215,13 +143,13 @@ type InternalRoutingPolicy struct {
 	// depends only on seed and the count.
 	fixed             *[17][16]uint8
 	InternalLatencies syncx.Map[cql.UUID, *InternalRoutingLatency]
-	InternalOptions   RoutingOptions
+	InternalOptions   routing2.Options
 	seed              uint64
 	round             atomic.Uint64
 	minimumBits       atomic.Uint64
 }
 
-func NewRoutingPolicy(o RoutingOptions) (RoutingPolicy, error) {
+func NewRoutingPolicy(o routing2.Options) (RoutingPolicy, error) {
 	if o.Rack != "" && o.Datacenter == "" {
 		return nil, cqltype.TypeValidation("routing rack", "requires a datacenter")
 	}
@@ -443,7 +371,7 @@ type InternalLazyRoutingPlan struct {
 // the preferred tier: the local rack when the policy has one, else the
 // local datacenter. Plans that need a leader, avoid a slow
 // host, keep replica order or do not shuffle replicas are not picked.
-func (p *InternalRoutingPolicy) Pick(info model.RoutingInfo, m *MetadataSnapshot) (Route, bool) {
+func (p *InternalRoutingPolicy) Pick(info routing2.Info, m *MetadataSnapshot) (Route, bool) {
 	o := &p.InternalOptions
 	if m == nil || info.HostID.Set || !o.ShuffleReplicas || !o.TokenAware || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return Route{}, false
@@ -473,7 +401,7 @@ const smallReplicas = 16
 
 // leader is the replica that leads info's token range when leader-aware
 // routing applies to info.
-func (p *InternalRoutingPolicy) leader(info model.RoutingInfo, m *MetadataSnapshot, lookup *InternalTabletLookup) cql.Option[Target] {
+func (p *InternalRoutingPolicy) leader(info routing2.Info, m *MetadataSnapshot, lookup *InternalTabletLookup) cql.Option[Target] {
 	o := &p.InternalOptions
 	if !o.LeaderAware || !o.TokenAware || !info.Token.Set || info.Consistency == cql.One || info.Consistency == cql.LocalOne {
 		return cql.Option[Target]{}
@@ -486,13 +414,6 @@ func (p *InternalRoutingPolicy) leader(info model.RoutingInfo, m *MetadataSnapsh
 		return cql.Option[Target]{Value: r.InternalSpan.Replicas[0], Set: true}
 	}
 	return cql.Option[Target]{}
-}
-
-// preferred reports whether a pick may route to replica host h: h is
-// routable and in the preferred tier, the local rack when the options have
-// one, else the local datacenter.
-func (o *RoutingOptions) preferred(h *HostSnapshot) bool {
-	return h.Enabled && h.Connected && h.Up && (o.Datacenter == "" || h.Datacenter == o.Datacenter) && (o.Rack == "" || h.Rack == o.Rack)
 }
 
 // replicaRoute is the route to replica t of host h: to the request's shard
@@ -513,13 +434,13 @@ func replicaRoute(host *pool.HostRoute, t Target, h *HostSnapshot, shard cql.Opt
 
 // Fallback returns the full plan: the leader, the replicas by tier in
 // shuffled or fixed order, then the other hosts by tier.
-func (p *InternalRoutingPolicy) Fallback(info model.RoutingInfo, m *MetadataSnapshot) QueryPlan {
+func (p *InternalRoutingPolicy) Fallback(info routing2.Info, m *MetadataSnapshot) QueryPlan {
 	return p.planWith(info, m, new(InternalLazyRoutingPlan), nil, false)
 }
 
 // InternalPlanInto initializes a worker-owned cursor over immutable placement
 // data. The preceding traversal must be finished before its storage is reused.
-func (p *InternalRoutingPolicy) InternalPlanInto(info model.RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan) QueryPlan {
+func (p *InternalRoutingPolicy) InternalPlanInto(info routing2.Info, m *MetadataSnapshot, plan *InternalLazyRoutingPlan) QueryPlan {
 	return p.InternalPlanWith(info, m, plan, nil)
 }
 
@@ -527,12 +448,12 @@ func (p *InternalRoutingPolicy) InternalPlanInto(info model.RoutingInfo, m *Meta
 // up in m, or that looks it up itself when tablet is nil or did not run.
 // The plan is Pick's route, then Fallback's routes except that one, in one
 // cursor that builds the fallback only when the pick does not route.
-func (p *InternalRoutingPolicy) InternalPlanWith(info model.RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup) QueryPlan {
+func (p *InternalRoutingPolicy) InternalPlanWith(info routing2.Info, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup) QueryPlan {
 	return p.planWith(info, m, plan, tablet, true)
 }
 
 // planWith initializes plan; a plan that may pick tries Pick's route first.
-func (p *InternalRoutingPolicy) planWith(info model.RoutingInfo, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup, mayPick bool) QueryPlan {
+func (p *InternalRoutingPolicy) planWith(info routing2.Info, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup, mayPick bool) QueryPlan {
 	info.Conditional = info.Conditional || info.Kind != cql.OrdinaryStatement
 	if m == nil {
 		return &InternalTargetPlan{}
@@ -639,11 +560,11 @@ func (plan *InternalLazyRoutingPlan) prepare() {
 // is routable and in the preferred tier, and returns its position, its
 // host's position and its host. The replica is uniform over that tier, so
 // the full plan, which a miss falls back to, keeps the same odds.
-func pickReplica(o *RoutingOptions, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8) (k, i int, h *HostSnapshot) {
+func pickReplica(o *routing2.Options, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8) (k, i int, h *HostSnapshot) {
 	k = rand.IntN(len(replicas))
 	perfAdd(0, 1)
 	if i, ok := x.host(replicas[k].HostID); ok {
-		if h = &SnapshotData(m).InternalHosts[i]; o.preferred(h) {
+		if h = &SnapshotData(m).InternalHosts[i]; preferred(o, h) {
 			return k, i, h
 		}
 	}
@@ -657,7 +578,7 @@ func (p *InternalLazyRoutingPlan) pick() (Route, bool) {
 	o := &p.policy.InternalOptions
 	k := rand.IntN(len(p.replicas))
 	t := p.replicas[k]
-	if i, h := p.host(t); h != nil && o.preferred(h) {
+	if i, h := p.host(t); h != nil && preferred(o, h) {
 		return p.accept(t, i, h, true)
 	}
 	k, i, h := redrawReplica(o, p.metadata, p.index, p.replicas, &p.smallPermutation, k)
@@ -669,7 +590,7 @@ func (p *InternalLazyRoutingPlan) pick() (Route, bool) {
 
 // redrawReplica is pickReplica after its first draw, replica first, missed:
 // it shuffles perm forward one position per draw over the other replicas.
-func redrawReplica(o *RoutingOptions, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8, first int) (k, i int, h *HostSnapshot) {
+func redrawReplica(o *routing2.Options, m *MetadataSnapshot, x *InternalRoutingHostIndex, replicas []Target, perm *[16]uint8, first int) (k, i int, h *HostSnapshot) {
 	n := len(replicas)
 	for j := range n {
 		perm[j] = uint8(j)
@@ -681,7 +602,7 @@ func redrawReplica(o *RoutingOptions, m *MetadataSnapshot, x *InternalRoutingHos
 		k = int(perm[c])
 		perfAdd(0, 1)
 		if i, ok := x.host(replicas[k].HostID); ok {
-			if h = &SnapshotData(m).InternalHosts[i]; o.preferred(h) {
+			if h = &SnapshotData(m).InternalHosts[i]; preferred(o, h) {
 				return k, i, h
 			}
 		}
@@ -940,7 +861,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 		return Route{}, false
 	}
 }
-func (p *InternalRoutingPolicy) Observe(e AttemptEvent) {
+func (p *InternalRoutingPolicy) Observe(e routing2.AttemptEvent) {
 	if !p.InternalOptions.Latency.Enabled || e.Cancelled || !InternalRoutingLatencySample(e.Err) || e.Latency <= 0 {
 		return
 	}
@@ -1038,11 +959,11 @@ func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
 }
 
 // Pick returns false: a single target's plan is already its first route.
-func (*singleTargetRouting) Pick(model.RoutingInfo, *MetadataSnapshot) (Route, bool) {
+func (*singleTargetRouting) Pick(routing2.Info, *MetadataSnapshot) (Route, bool) {
 	return Route{}, false
 }
 
-func (p *singleTargetRouting) Fallback(_ model.RoutingInfo, m *MetadataSnapshot) QueryPlan {
+func (p *singleTargetRouting) Fallback(_ routing2.Info, m *MetadataSnapshot) QueryPlan {
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
@@ -1061,7 +982,7 @@ func (p *singleTargetRouting) Fallback(_ model.RoutingInfo, m *MetadataSnapshot)
 	}
 	return &InternalTargetPlan{}
 }
-func (*singleTargetRouting) Observe(AttemptEvent) {}
+func (*singleTargetRouting) Observe(routing2.AttemptEvent) {}
 
 func InternalRoutingLatencySample(err error) bool {
 	if err == nil {
@@ -1088,6 +1009,9 @@ func InternalRoutingLatencySample(err error) bool {
 	return true
 }
 
-type PartitionKeyState struct {
-	chain wire.Chain
+// preferred reports whether a pick may route to replica host h: h is
+// routable and in the preferred tier, the local rack when the options have
+// one, else the local datacenter.
+func preferred(o *routing2.Options, h *HostSnapshot) bool {
+	return h.Enabled && h.Connected && h.Up && (o.Datacenter == "" || h.Datacenter == o.Datacenter) && (o.Rack == "" || h.Rack == o.Rack)
 }

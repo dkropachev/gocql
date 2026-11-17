@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 var ErrBusy = cqlerr.ErrBusy
@@ -162,9 +163,9 @@ func queryOptions(s *implCluster.Core, values Options) (CompiledOptions, error) 
 
 // preparedRouting returns the routing template of a prepared statement of
 // kind, as newPreparedQuery builds it; executions add the token.
-func preparedRouting(state *InternalPreparedState, kind cql.StatementKind) model.RoutingInfo {
+func preparedRouting(state *InternalPreparedState, kind cql.StatementKind) routing2.Info {
 	info := &state.InternalInfo
-	return model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}
+	return routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}
 }
 
 func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool *queryPoolBase) (*Query[P, R], error) {
@@ -180,7 +181,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}, hasCounter: state.hasCounter}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}, hasCounter: state.hasCounter}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -202,7 +203,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
@@ -369,15 +370,15 @@ func (q *Query[P, R]) RunPage(ctx context.Context, value P, state cql.PageState,
 // request. It encodes into scratch of its own, not the execution's storage, so
 // it works while the query runs, drains or has an open handle; only a closed
 // query rejects it.
-func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
+func (q *Query[P, R]) Routing(value P) (routing2.Info, error) {
 	if q == nil || q.state.owner == nil || q.state.runtime == nil {
-		return model.RoutingInfo{}, cqltype.TypeValidation("query", "uninitialized query")
+		return routing2.Info{}, cqltype.TypeValidation("query", "uninitialized query")
 	}
 	q.state.mu.Lock()
 	closed := q.state.closed
 	q.state.mu.Unlock()
 	if closed {
-		return model.RoutingInfo{}, cqlerr.ErrClosed
+		return routing2.Info{}, cqlerr.ErrClosed
 	}
 	scratch := routingScratch.Get().(*binding.ParameterBuffer)
 	values, err := scratch.Encode(q.params, q.columns, value, q.allowUnset)
@@ -389,7 +390,7 @@ func (q *Query[P, R]) Routing(value P) (model.RoutingInfo, error) {
 	scratch.Retire()
 	routingScratch.Put(scratch)
 	if err != nil {
-		return model.RoutingInfo{}, err
+		return routing2.Info{}, err
 	}
 	return routing, nil
 }

@@ -33,7 +33,7 @@ func sortedByName[T any](m map[string]T) []T {
 // ToCQL returns a CQL query that ca be used to recreate keyspace with all
 // user defined types, tables, indexes, functions, aggregates and views associated
 // with this keyspace.
-func (ks *KeyspaceMetadata) ToCQL() (string, error) {
+func (ks *Keyspace) ToCQL() (string, error) {
 	// Be aware that `CreateStmts` is not only a cache for ToCQL,
 	// but it also can be populated from response to `DESCRIBE KEYSPACE %s WITH INTERNALS`
 	if len(ks.CreateStmts) != 0 {
@@ -279,8 +279,8 @@ func (ref cqlTypeRef) namesUserType() bool {
 // a -> var edge, which closes a cycle with the real var -> a edge if a type
 // "var" embeds "a", and the cycle guard then resolves it the wrong way round --
 // emitting var before the a it embeds.
-func keyspaceMetadataTypesSortedTopologically(ks *KeyspaceMetadata) []*TypeMetadata {
-	sorted := make([]*TypeMetadata, 0, len(ks.Types))
+func keyspaceMetadataTypesSortedTopologically(ks *Keyspace) []*Type {
+	sorted := make([]*Type, 0, len(ks.Types))
 	visited := make(map[string]bool, len(ks.Types))
 
 	var visit func(name string)
@@ -327,7 +327,7 @@ CREATE TABLE {{ ident .KeyspaceName }}.{{ ident .Tm.Name }} (
 ) WITH {{ tablePropertiesToCQL .Tm.ClusteringColumns .Tm.Options .Tm.Extensions }};
 `))
 
-func (ks *KeyspaceMetadata) tableToCQL(w io.Writer, kn string, tm *TableMetadata) error {
+func (ks *Keyspace) tableToCQL(w io.Writer, kn string, tm *Table) error {
 	if err := tableCQLTemplate.Execute(w, map[string]any{
 		"Tm":           tm,
 		"KeyspaceName": kn,
@@ -357,7 +357,7 @@ CREATE FUNCTION {{ ident .keyspaceName }}.{{ ident .fm.Name }} (
     AS {{ bodyLiteral .fm.Body }};
 `))
 
-func keyspaceMetadataFunctionToCQL(ks *KeyspaceMetadata, w io.Writer, keyspaceName string, fm *FunctionMetadata) error {
+func keyspaceMetadataFunctionToCQL(ks *Keyspace, w io.Writer, keyspaceName string, fm *Function) error {
 	if err := functionTemplate.Execute(w, map[string]any{
 		"fm":           fm,
 		"keyspaceName": keyspaceName,
@@ -388,7 +388,7 @@ CREATE MATERIALIZED VIEW {{ ident .vm.KeyspaceName }}.{{ ident .vm.ViewName }} A
     WITH {{ tablePropertiesToCQL .vm.ClusteringColumns .vm.Options .vm.Extensions }};
 `))
 
-func keyspaceMetadataViewToCQL(ks *KeyspaceMetadata, w io.Writer, vm *ViewMetadata) error {
+func keyspaceMetadataViewToCQL(ks *Keyspace, w io.Writer, vm *View) error {
 	if err := viewTemplate.Execute(w, map[string]any{
 		"vm": vm,
 	}); err != nil {
@@ -419,7 +419,7 @@ CREATE AGGREGATE {{ ident .Keyspace }}.{{ ident .Name }}(
 ;
 `))
 
-func keyspaceMetadataAggregateToCQL(ks *KeyspaceMetadata, w io.Writer, am *AggregateMetadata) error {
+func keyspaceMetadataAggregateToCQL(ks *Keyspace, w io.Writer, am *Aggregate) error {
 	if err := aggregatesTemplate.Execute(w, am); err != nil {
 		return err
 	}
@@ -439,14 +439,14 @@ CREATE TYPE {{ ident .Keyspace }}.{{ ident .Name }} (
 );
 `))
 
-func (ks *KeyspaceMetadata) userTypeToCQL(w io.Writer, tm *TypeMetadata) error {
+func (ks *Keyspace) userTypeToCQL(w io.Writer, tm *Type) error {
 	if err := typeCQLTemplate.Execute(w, tm); err != nil {
 		return err
 	}
 	return nil
 }
 
-func keyspaceMetadataIndexToCQL(ks *KeyspaceMetadata, w io.Writer, im *IndexMetadata) error {
+func keyspaceMetadataIndexToCQL(ks *Keyspace, w io.Writer, im *Index) error {
 	// Scylla doesn't support any custom indexes
 	if im.Kind == IndexKindCustom {
 		return nil
@@ -502,7 +502,7 @@ var keyspaceCQLTemplate = template.Must(template.New("keyspace").
 	Parse(`CREATE KEYSPACE {{ ident .Name }} WITH replication = {'class': {{ escape ( fixStrategy .StrategyClass) }}{{ range $key, $value := .StrategyOptions }}, {{ escape $key }}: {{ escape $value }}{{ end }}} AND durable_writes = {{ .DurableWrites }};
 `))
 
-func keyspaceMetadataKeyspaceToCQL(ks *KeyspaceMetadata, w io.Writer) error {
+func keyspaceMetadataKeyspaceToCQL(ks *Keyspace, w io.Writer) error {
 	if err := keyspaceCQLTemplate.Execute(w, ks); err != nil {
 		return err
 	}
@@ -716,7 +716,7 @@ func (h toCQLHelpers) encryptionOptionsToCQL(e *scyllaEncryptionOptions) string 
 // it. Rewriting every double quote to a single one, which is what this used to
 // do to re-quote JSON, let a comment of `x" AND gc_grace_seconds = 0 AND
 // comment = "y` leave here as three properties instead of one.
-func (h toCQLHelpers) tableOptionsToCQL(ops TableMetadataOptions) []string {
+func (h toCQLHelpers) tableOptionsToCQL(ops TableOptions) []string {
 	opts := map[string]string{
 		"bloom_filter_fp_chance":      fmt.Sprint(ops.BloomFilterFpChance),
 		"comment":                     h.escapeString(ops.Comment),
@@ -772,7 +772,7 @@ func (h toCQLHelpers) tableExtensionsToCQL(extensions map[string][]byte) ([]stri
 	return out, nil
 }
 
-func (h toCQLHelpers) tablePropertiesToCQL(cks []*ColumnMetadata, opts TableMetadataOptions,
+func (h toCQLHelpers) tablePropertiesToCQL(cks []*Column, opts TableOptions,
 	extensions map[string][]byte) (string, error) {
 	var sb strings.Builder
 
@@ -798,7 +798,7 @@ func (h toCQLHelpers) tablePropertiesToCQL(cks []*ColumnMetadata, opts TableMeta
 	return sb.String(), nil
 }
 
-func (h toCQLHelpers) tableColumnToCQL(tm *TableMetadata) string {
+func (h toCQLHelpers) tableColumnToCQL(tm *Table) string {
 	var sb strings.Builder
 
 	var columns []string
@@ -825,7 +825,7 @@ func (h toCQLHelpers) tableColumnToCQL(tm *TableMetadata) string {
 	return sb.String()
 }
 
-func (h toCQLHelpers) partitionKeyString(pks, cks []*ColumnMetadata) string {
+func (h toCQLHelpers) partitionKeyString(pks, cks []*Column) string {
 	var sb strings.Builder
 
 	if len(pks) > 1 {

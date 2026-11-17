@@ -10,15 +10,15 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestAuthAPI(t *testing.T) {
 	t.Run("Authenticator", func(t *testing.T) {
 		t.Run("ExchangeIsolationAndNull", func(t *testing.T) {
 			p := &v2TestAuthProvider{}
-			a := newV2Authenticator(context.Background(), routing.HostSnapshot{}, p)
-			b := newV2Authenticator(context.Background(), routing.HostSnapshot{}, p)
+			a := newV2Authenticator(context.Background(), metadata.HostSnapshot{}, p)
+			b := newV2Authenticator(context.Background(), metadata.HostSnapshot{}, p)
 			response, next, err := a.Challenge([]byte("test"))
 			if err != nil || response == nil || next != a {
 				t.Fatal("present empty response lost", response, next, err)
@@ -43,7 +43,7 @@ func TestAuthAPI(t *testing.T) {
 	t.Run("Password", func(t *testing.T) {
 		t.Run("StartAndCancellation", func(t *testing.T) {
 			provider := auth.Password("alice", "secret")
-			exchange, token, err := provider.Start(context.Background(), routing.HostSnapshot{}, "org.apache.cassandra.auth.PasswordAuthenticator")
+			exchange, token, err := provider.Start(context.Background(), metadata.HostSnapshot{}, "org.apache.cassandra.auth.PasswordAuthenticator")
 			if err != nil || !token.Valid || !bytes.Equal(token.Value, []byte("\x00alice\x00secret")) {
 				t.Fatal(token, err)
 			}
@@ -53,7 +53,7 @@ func TestAuthAPI(t *testing.T) {
 			exchange.Close()
 			ctx, cancel := context.WithCancel(context.Background())
 			cancel()
-			if _, _, err := provider.Start(ctx, routing.HostSnapshot{}, ""); err != context.Canceled {
+			if _, _, err := provider.Start(ctx, metadata.HostSnapshot{}, ""); err != context.Canceled {
 				t.Fatal(err)
 			}
 		})
@@ -66,7 +66,7 @@ type v2TestAuthExchange struct {
 	closed                 int
 }
 
-func (p *v2TestAuthProvider) Start(context.Context, routing.HostSnapshot, string) (auth.Exchange, cql.Nullable[[]byte], error) {
+func (p *v2TestAuthProvider) Start(context.Context, metadata.HostSnapshot, string) (auth.Exchange, cql.Nullable[[]byte], error) {
 	e := &v2TestAuthExchange{}
 	p.exchanges = append(p.exchanges, e)
 	return e, cql.Nullable[[]byte]{Valid: true}, nil

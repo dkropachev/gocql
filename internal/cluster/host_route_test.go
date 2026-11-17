@@ -12,13 +12,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func hostRouteConn(host *endpoint.HostInfo, shard int) *transport.Conn {
@@ -101,14 +101,14 @@ func TestHostRoute(t *testing.T) {
 			pools := SessionData(s).InternalPool
 			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].ID
 			route := routing.InternalNewRoute(pools.InternalRoute(id), 2)
-			conn := sessionPickRoute(s, route, model.RoutingInfo{})
+			conn := sessionPickRoute(s, route, routing2.Info{})
 			if conn == nil || implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard != 2 {
 				t.Fatal("picked another shard", conn)
 			}
-			if sessionPickRoute(s, route.WithShard(hostRoutingShards), model.RoutingInfo{}) != nil {
+			if sessionPickRoute(s, route.WithShard(hostRoutingShards), routing2.Info{}) != nil {
 				t.Fatal("picked a shard the host lacks")
 			}
-			if sessionPickRoute(s, route.WithShard(implRouting.AnyShard), model.RoutingInfo{}) == nil {
+			if sessionPickRoute(s, route.WithShard(implRouting.AnyShard), routing2.Info{}) == nil {
 				t.Fatal("no connection for any shard")
 			}
 			old := route.InternalHost().Pool()
@@ -117,7 +117,7 @@ func TestHostRoute(t *testing.T) {
 			pools.InternalHostConnPools[id] = &implPool.InternalHostConnPool{InternalHost: old.InternalHost, InternalConnPicker: implPool.InternalNopConnPicker{}}
 			pools.InternalMu.Unlock()
 			pools.InternalRemoveHost(id)
-			if route.InternalHost().Pool() != nil || sessionPickRoute(s, route, model.RoutingInfo{}) != nil {
+			if route.InternalHost().Pool() != nil || sessionPickRoute(s, route, routing2.Info{}) != nil {
 				t.Fatal("route kept a removed pool")
 			}
 			pools.InternalMu.Lock()
@@ -152,7 +152,7 @@ func TestHostRoute(t *testing.T) {
 				if r.Shard%2 == 0 {
 					r = r.WithShard(implRouting.AnyShard)
 				}
-				_ = sessionPickRoute(s, r, model.RoutingInfo{})
+				_ = sessionPickRoute(s, r, routing2.Info{})
 			}
 			cancel()
 			wg.Wait()
@@ -164,8 +164,8 @@ func TestHostRoute(t *testing.T) {
 	t.Run("Plan", func(t *testing.T) {
 		s := hostRoutingSession(t, false)
 		m := s.Metadata()
-		p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
-		info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 42, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
+		p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})).(*routing.InternalRoutingPolicy)
+		info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 42, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 		var storage routing.InternalLazyRoutingPlan
 		plan := p.InternalPlanWith(info, m, &storage, nil)
 		first, ok := plan.Next()

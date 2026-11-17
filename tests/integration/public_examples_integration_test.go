@@ -19,7 +19,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresent bool) {
@@ -118,8 +118,8 @@ func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg 
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []routing.HostSnapshot
-	targets []routing.HostSnapshot
+	hosts   []metadata.HostSnapshot
+	targets []metadata.HostSnapshot
 	verdict bool
 	resets  int
 }

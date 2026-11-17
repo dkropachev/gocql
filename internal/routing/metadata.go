@@ -12,14 +12,14 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-type TokenRange struct {
-	Replicas   []Target
-	Start, End int64
-}
 type MetadataSnapshot struct {
-	state SnapshotState
+	// public is the handle package metadata exposes for the snapshot.
+	public *metadata.Snapshot
+	state  SnapshotState
 	// id is unique among the snapshots of the process, so a cache can key
 	// what it found in a snapshot by id without keeping the snapshot alive.
 	id uint64
@@ -46,7 +46,7 @@ func (m *MetadataSnapshot) Hosts() []HostSnapshot {
 	}
 	return out
 }
-func (m *MetadataSnapshot) Keyspace(name string) (*implMetadata.KeyspaceMetadata, bool) {
+func (m *MetadataSnapshot) Keyspace(name string) (*metadata.Keyspace, bool) {
 	if m == nil {
 		return nil, false
 	}
@@ -79,7 +79,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 	if ks == nil {
 		return 0, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
 	}
-	var columns []*implMetadata.ColumnMetadata
+	var columns []*metadata.Column
 	partitioner := data.InternalPartitioner
 	if t := ks.Tables[table]; t != nil {
 		columns = t.PartitionKey
@@ -130,12 +130,12 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 	}
 	return token.Value, nil
 }
-func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, error) {
+func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]metadata.TokenRange, error) {
 	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
 		if _, _, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err != nil {
 			return nil, err
 		}
-		var out []TokenRange
+		var out []metadata.TokenRange
 		for _, r := range root.All() {
 			v := r.InternalSpan
 			v.Replicas = append([]Target(nil), v.Replicas...)
@@ -147,13 +147,13 @@ func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, er
 	if e != nil {
 		return nil, e
 	}
-	out := append([]TokenRange(nil), r...)
+	out := append([]metadata.TokenRange(nil), r...)
 	for i := range out {
 		out[i].Replicas = append([]Target(nil), out[i].Replicas...)
 	}
 	return out, nil
 }
-func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]TokenRange, bool, error) {
+func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
 	if m == nil {
 		return nil, false, cqlerr.ErrNoKeyspace
 	}
@@ -186,13 +186,13 @@ type SnapshotState struct {
 	InternalHostIndex       *InternalRoutingHostIndex
 	InternalPlacements      *tabletPlacementTree
 	InternalPlacementSignal *atomic.Uint64
-	InternalKeyspaces       map[string]*implMetadata.KeyspaceMetadata
-	InternalSchemaSources   map[string]*implMetadata.KeyspaceMetadata
-	InternalRanges          map[string][]TokenRange
-	InternalTablets         map[InternalMetadataTable][]TokenRange
+	InternalKeyspaces       map[string]*metadata.Keyspace
+	InternalSchemaSources   map[string]*metadata.Keyspace
+	InternalRanges          map[string][]metadata.TokenRange
+	InternalTablets         map[InternalMetadataTable][]metadata.TokenRange
 	// InternalPartitioners is the session's partitioner registry, by name,
 	// for Token. It is shared and never mutated.
-	InternalPartitioners   map[string]TokenPartitioner
+	InternalPartitioners   map[string]routing.TokenPartitioner
 	InternalPartitioner    string
 	InternalHosts          []HostSnapshot
 	InternalDiagnostics    []error
@@ -200,4 +200,4 @@ type SnapshotState struct {
 	InternalGeneration     uint64
 }
 
-type HostSnapshot = model.HostSnapshot
+type HostSnapshot = metadata.HostSnapshot

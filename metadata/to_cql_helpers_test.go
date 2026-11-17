@@ -244,45 +244,45 @@ func TestToCQLHelpers(t *testing.T) {
 
 		for _, tc := range []struct {
 			name string
-			tm   *TableMetadata
+			tm   *Table
 			want string
 		}{
 			{
 				name: "single partition key is declared inline",
-				tm: &TableMetadata{
+				tm: &Table{
 					OrderedColumns: []string{"id", "v"},
-					Columns: map[string]*ColumnMetadata{
+					Columns: map[string]*Column{
 						"id": col("id", "int", ColumnPartitionKey),
 						"v":  col("v", "text", ColumnRegular),
 					},
-					PartitionKey: []*ColumnMetadata{col("id", "int", ColumnPartitionKey)},
+					PartitionKey: []*Column{col("id", "int", ColumnPartitionKey)},
 				},
 				want: "id int PRIMARY KEY,\n    v text",
 			},
 			{
 				name: "static column carries the static keyword",
-				tm: &TableMetadata{
+				tm: &Table{
 					OrderedColumns: []string{"id", "c", "s"},
-					Columns: map[string]*ColumnMetadata{
+					Columns: map[string]*Column{
 						"id": col("id", "int", ColumnPartitionKey),
 						"c":  col("c", "int", ColumnClusteringKey),
 						"s":  col("s", "text", ColumnStatic),
 					},
-					PartitionKey:      []*ColumnMetadata{col("id", "int", ColumnPartitionKey)},
-					ClusteringColumns: []*ColumnMetadata{col("c", "int", ColumnClusteringKey)},
+					PartitionKey:      []*Column{col("id", "int", ColumnPartitionKey)},
+					ClusteringColumns: []*Column{col("c", "int", ColumnClusteringKey)},
 				},
 				want: "s text static",
 			},
 			{
 				name: "composite partition key moves to a PRIMARY KEY clause",
-				tm: &TableMetadata{
+				tm: &Table{
 					OrderedColumns: []string{"a", "b", "v"},
-					Columns: map[string]*ColumnMetadata{
+					Columns: map[string]*Column{
 						"a": col("a", "int", ColumnPartitionKey),
 						"b": col("b", "int", ColumnPartitionKey),
 						"v": col("v", "text", ColumnRegular),
 					},
-					PartitionKey: []*ColumnMetadata{
+					PartitionKey: []*Column{
 						col("a", "int", ColumnPartitionKey),
 						col("b", "int", ColumnPartitionKey),
 					},
@@ -291,18 +291,18 @@ func TestToCQLHelpers(t *testing.T) {
 			},
 			{
 				name: "clustering columns follow the partition key",
-				tm: &TableMetadata{
+				tm: &Table{
 					OrderedColumns: []string{"a", "c", "d", "v"},
-					Columns: map[string]*ColumnMetadata{
+					Columns: map[string]*Column{
 						"a": col("a", "int", ColumnPartitionKey),
 						"c": col("c", "int", ColumnClusteringKey),
 						"d": col("d", "int", ColumnClusteringKey),
 						"v": col("v", "text", ColumnRegular),
 					},
-					PartitionKey: []*ColumnMetadata{col("a", "int", ColumnPartitionKey)},
+					PartitionKey: []*Column{col("a", "int", ColumnPartitionKey)},
 					// Two clustering columns, so the separator arm of
 					// partitionKeyString runs as well as the first-column arm.
-					ClusteringColumns: []*ColumnMetadata{
+					ClusteringColumns: []*Column{
 						col("c", "int", ColumnClusteringKey),
 						col("d", "int", ColumnClusteringKey),
 					},
@@ -431,7 +431,7 @@ func TestToCQLHelpers(t *testing.T) {
 
 			for _, tc := range []struct {
 				name string
-				ops  TableMetadataOptions
+				ops  TableOptions
 				want string
 			}{
 				{
@@ -439,32 +439,32 @@ func TestToCQLHelpers(t *testing.T) {
 					// emit comment = 'x' AND gc_grace_seconds = 0 AND comment = 'y',
 					// which replays as three properties, two of them forged.
 					name: "a double quote in a comment stays data",
-					ops:  TableMetadataOptions{Comment: `x" AND gc_grace_seconds = 0 AND comment = "y`},
+					ops:  TableOptions{Comment: `x" AND gc_grace_seconds = 0 AND comment = "y`},
 					want: `comment = 'x" AND gc_grace_seconds = 0 AND comment = "y'`,
 				},
 				{
 					name: "a single quote in a comment doubles",
-					ops:  TableMetadataOptions{Comment: "it's"},
+					ops:  TableOptions{Comment: "it's"},
 					want: `comment = 'it''s'`,
 				},
 				{
 					name: "a map value is a CQL string, not JSON",
-					ops:  TableMetadataOptions{Caching: map[string]string{"keys": "ALL"}},
+					ops:  TableOptions{Caching: map[string]string{"keys": "ALL"}},
 					want: `caching = {'keys': 'ALL'}`,
 				},
 				{
 					name: "a quote inside a map value doubles",
-					ops:  TableMetadataOptions{Compaction: map[string]string{"class": "it's"}},
+					ops:  TableOptions{Compaction: map[string]string{"class": "it's"}},
 					want: `compaction = {'class': 'it''s'}`,
 				},
 				{
 					name: "a quote inside a map key doubles",
-					ops:  TableMetadataOptions{Compression: map[string]string{"it's": "x"}},
+					ops:  TableOptions{Compression: map[string]string{"it's": "x"}},
 					want: `compression = {'it''s': 'x'}`,
 				},
 				{
 					name: "map entries are ordered by key",
-					ops:  TableMetadataOptions{Caching: map[string]string{"rows_per_partition": "NONE", "keys": "ALL"}},
+					ops:  TableOptions{Caching: map[string]string{"rows_per_partition": "NONE", "keys": "ALL"}},
 					want: `caching = {'keys': 'ALL', 'rows_per_partition': 'NONE'}`,
 				},
 			} {
@@ -494,7 +494,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("cdc is emitted when set", func(t *testing.T) {
 				t.Parallel()
 
-				got := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{CDC: map[string]string{"enabled": "true"}})
+				got := cqlHelpers.tableOptionsToCQL(TableOptions{CDC: map[string]string{"enabled": "true"}})
 				if !hasOption(got, "cdc = ") {
 					t.Errorf("cdc missing from %q", got)
 				}
@@ -503,7 +503,7 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("cdc is omitted when unset", func(t *testing.T) {
 				t.Parallel()
 
-				got := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{})
+				got := cqlHelpers.tableOptionsToCQL(TableOptions{})
 				if hasOption(got, "cdc = ") {
 					t.Errorf("cdc emitted for a table that has none: %q", got)
 				}
@@ -512,12 +512,12 @@ func TestToCQLHelpers(t *testing.T) {
 			t.Run("in_memory is emitted only when true", func(t *testing.T) {
 				t.Parallel()
 
-				on := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{InMemory: true})
+				on := cqlHelpers.tableOptionsToCQL(TableOptions{InMemory: true})
 				if !hasOption(on, "in_memory = ") {
 					t.Errorf("in_memory missing from %q", on)
 				}
 
-				off := cqlHelpers.tableOptionsToCQL(TableMetadataOptions{})
+				off := cqlHelpers.tableOptionsToCQL(TableOptions{})
 				if hasOption(off, "in_memory = ") {
 					t.Errorf("in_memory emitted for a non in-memory table: %q", off)
 				}
@@ -527,7 +527,7 @@ func TestToCQLHelpers(t *testing.T) {
 	t.Run("TablePropertiesToCQL", func(t *testing.T) {
 		t.Parallel()
 
-		opts := TableMetadataOptions{
+		opts := TableOptions{
 			Comment:        "hi",
 			GcGraceSeconds: 864000,
 			Caching:        map[string]string{"keys": "ALL"},
@@ -538,7 +538,7 @@ func TestToCQLHelpers(t *testing.T) {
 		t.Run("clustering order leads the property list", func(t *testing.T) {
 			t.Parallel()
 
-			cks := []*ColumnMetadata{{Name: "c", ClusteringOrder: "DESC"}}
+			cks := []*Column{{Name: "c", ClusteringOrder: "DESC"}}
 			got, err := cqlHelpers.tablePropertiesToCQL(cks, opts, nil)
 			if err != nil {
 				t.Fatalf("tablePropertiesToCQL: %v", err)

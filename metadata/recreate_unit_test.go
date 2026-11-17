@@ -16,6 +16,6 @@
 
 package metadata
 
-func col(name, typ string, kind ColumnKind) *ColumnMetadata {
-	return &ColumnMetadata{Name: name, Type: typ, Kind: kind}
+func col(name, typ string, kind ColumnKind) *Column {
+	return &Column{Name: name, Type: typ, Kind: kind}
 }

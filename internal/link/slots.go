@@ -89,3 +89,39 @@ var (
 	// sets a server error's message and warnings, for engine tests.
 	ServerErrorMessage = NewSlot("cqlerr.serverErrorMessage")
 )
+
+// Package metadata's Snapshot, a handle on the engine's snapshot.
+var (
+	// NewSnapshot holds func(src any) *metadata.Snapshot: it wraps the
+	// engine's snapshot src.
+	NewSnapshot = NewSlot("metadata.newSnapshot")
+	// SnapshotSource holds func(*metadata.Snapshot) any: it returns the
+	// engine's snapshot a Snapshot wraps.
+	SnapshotSource = NewSlot("metadata.snapshotSource")
+)
+
+// Package routing's policies and package metadata's routes, which the engine
+// implements. The engine fills these slots; the public packages call them
+// once a session exists.
+var (
+	// BuildPolicy holds func(single bool, options routing.Options, target
+	// metadata.Target, strict bool) routing.Policy: the session's
+	// implementation of a policy NewPolicy (or, with single, SingleTarget)
+	// describes.
+	BuildPolicy = NewSlot("routing.buildPolicy")
+	// BuiltinPolicy holds func(routing.Policy) (routing.Policy, bool): the
+	// session's implementation behind a policy NewPolicy or SingleTarget
+	// returned. Package routing fills it.
+	BuiltinPolicy = NewSlot("routing.builtinPolicy")
+	// NewPlan holds func(routing.Policy, routing.Info, *metadata.Snapshot) routing.Plan.
+	NewPlan = NewSlot("routing.newPlan")
+	// HostRoutes holds func(*metadata.Snapshot) []metadata.Route.
+	HostRoutes = NewSlot("routing.hostRoutes")
+	// ReplicaRoutes holds func(*metadata.Snapshot, routing.Info) []metadata.Route.
+	ReplicaRoutes = NewSlot("routing.replicaRoutes")
+	// RouteHost holds func(host unsafe.Pointer) (id cql.UUID, usable bool):
+	// what a metadata.Route's host reports.
+	RouteHost = NewSlot("metadata.routeHost")
+	// RouteShardOf holds func(host unsafe.Pointer, token int64) int32.
+	RouteShardOf = NewSlot("metadata.routeShardOf")
+)

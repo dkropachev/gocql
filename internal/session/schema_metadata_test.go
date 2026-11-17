@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestSchemaMetadata(t *testing.T) {
@@ -89,7 +90,7 @@ func TestSchemaMetadata(t *testing.T) {
 				}
 			}
 			implCluster.SessionData(s).InternalUseSystemSchema = true
-			for _, mode := range []settings.MetadataMode{settings.MetadataSchemaNone, settings.MetadataSchemaKeyspaces, settings.MetadataSchemaFull} {
+			for _, mode := range []metadata.Mode{metadata.SchemaNone, metadata.SchemaKeyspaces, metadata.SchemaFull} {
 				config := settings.DefaultConfig("localhost")
 				config.Metadata.Mode = mode
 				config.Metadata.Keyspaces = []string{"ks1"}
@@ -103,7 +104,7 @@ func TestSchemaMetadata(t *testing.T) {
 				mock.mu.Lock()
 				queries := append([]queryRecord(nil), mock.queries...)
 				mock.mu.Unlock()
-				if mode == settings.MetadataSchemaNone && len(queries) != 0 {
+				if mode == metadata.SchemaNone && len(queries) != 0 {
 					t.Fatal("disabled schema issued optional queries", queries)
 				}
 				for _, q := range queries {
@@ -111,7 +112,7 @@ func TestSchemaMetadata(t *testing.T) {
 						t.Fatal("filtered keyspace queried", q)
 					}
 				}
-				if mode == settings.MetadataSchemaKeyspaces {
+				if mode == metadata.SchemaKeyspaces {
 					ks, _ := s.Metadata().Keyspace("ks1")
 					if ks == nil || len(ks.Tables) != 0 {
 						t.Fatal("minimal metadata expanded schema")

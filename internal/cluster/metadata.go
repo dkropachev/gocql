@@ -29,7 +29,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type v2LatencySummary struct{ p50, p95, p99 time.Duration }
@@ -38,7 +40,7 @@ type InternalV2PeripheralState struct {
 	routeDiagnostic     error
 	InternalSnapshot    atomic.Pointer[routing.MetadataSnapshot]
 	InternalSubscribers map[*Subscription]struct{}
-	partitioners        atomic.Pointer[map[string]routing.TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
+	partitioners        atomic.Pointer[map[string]routing2.TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
 	schemaEpoch         map[string]uint64
 	schemaRevision      map[string]uint64
 	tableRevision       map[routing.InternalMetadataTable]uint64
@@ -214,7 +216,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		diagnostics = append(diagnostics, p.routeDiagnostic)
 	}
 	p.InternalMu.Unlock()
-	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*implMetadata.KeyspaceMetadata), InternalRanges: make(map[string][]routing.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]routing.TokenRange)})
+	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*metadata.Keyspace), InternalRanges: make(map[string][]metadata.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]metadata.TokenRange)})
 	routing.SnapshotData(m).InternalDiagnostics = diagnostics
 	routing.SnapshotData(m).InternalPartitioners = config.Partitioners
 	if old != nil {
@@ -231,7 +233,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		s.privateStorage.InternalHostSource.mu.RUnlock()
 	}
-	var schemaSource *map[string]*implMetadata.KeyspaceMetadata
+	var schemaSource *map[string]*metadata.Keyspace
 	if s.privateStorage.InternalMetadataDescriber != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata != nil {
 		schemaSource = s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalKeyspaceMap.Load()
 	}
@@ -279,11 +281,11 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		if md.privateStorage.InternalTabletsMetadata != nil && (old == nil || routing.SnapshotData(old).InternalPlacements == nil) {
 			md.privateStorage.InternalTabletsMetadata.ForEach(func(ks, table string, entries tablets.TabletEntryList) bool {
-				r := make([]routing.TokenRange, len(entries))
+				r := make([]metadata.TokenRange, len(entries))
 				for i, e := range entries {
-					r[i] = routing.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
+					r[i] = metadata.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
 					for _, replica := range e.ReplicasUnsafe() {
-						r[i].Replicas = append(r[i].Replicas, model.Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
+						r[i].Replicas = append(r[i].Replicas, metadata.Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
 					}
 				}
 				routing.SnapshotData(m).InternalTablets[routing.InternalMetadataTable{InternalKeyspace: ks, InternalTable: table}] = r
@@ -367,7 +369,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
-	if config.Metadata.Mode != settings.MetadataSchemaFull {
+	if config.Metadata.Mode != metadata.SchemaFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
 	for keyspace, ks := range routing.SnapshotData(m).InternalKeyspaces {
@@ -408,7 +410,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	p.InternalSnapshot.Store(m)
 	return true
 }
-func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, error) {
+func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, error) {
 	out, tokenErr := implEndpoint.SnapshotHost(h)
 	if h == nil {
 		return out, tokenErr
@@ -741,7 +743,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	epochs := maps.Clone(p.schemaEpoch)
 	revisions := maps.Clone(p.schemaRevision)
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaNone {
+	if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaNone {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
@@ -751,7 +753,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	keyspaces := make(map[string]*implMetadata.KeyspaceMetadata, len(rows))
+	keyspaces := make(map[string]*metadata.Keyspace, len(rows))
 	allowed := make(map[string]bool, len(config.Metadata.Keyspaces))
 	for _, name := range config.Metadata.Keyspaces {
 		allowed[name] = true
@@ -798,10 +800,10 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 					break
 				}
 			}
-			var ks *implMetadata.KeyspaceMetadata
-			if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+			var ks *metadata.Keyspace
+			if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaKeyspaces {
 				ks = base
-				ks.Tables = make(map[string]*implMetadata.TableMetadata)
+				ks.Tables = make(map[string]*metadata.Table)
 			} else {
 				ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 			}
@@ -922,7 +924,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	tables := p.captureTableRevisionsLocked(name)
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && (config.Metadata.Mode == settings.MetadataSchemaNone || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
+	if config.DefaultProfile != nil && (config.Metadata.Mode == metadata.SchemaNone || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
@@ -946,10 +948,10 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	if err != nil {
 		return s.v2SchemaRefreshFailure(name, err)
 	}
-	var ks *implMetadata.KeyspaceMetadata
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+	var ks *metadata.Keyspace
+	if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaKeyspaces {
 		ks = base
-		ks.Tables = make(map[string]*implMetadata.TableMetadata)
+		ks.Tables = make(map[string]*metadata.Table)
 	} else {
 		ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 	}
@@ -1143,7 +1145,7 @@ func (s *Core) MarkV2SchemaStale(keyspace string, dropped bool) {
 	}
 	p.InternalMu.Unlock()
 }
-func (s *Core) invalidateV2ChangedTablets(keyspace string, current *implMetadata.KeyspaceMetadata) {
+func (s *Core) invalidateV2ChangedTablets(keyspace string, current *metadata.Keyspace) {
 	if s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -1303,7 +1305,7 @@ func (s *Core) v2MetadataPublicationError() error {
 
 // sessionRoutingHostIndex indexes hosts with the session's routes to
 // them, so that plans route to their pools without looking them up.
-func sessionRoutingHostIndex(s *Core, hosts []model.HostSnapshot) *routing.InternalRoutingHostIndex {
+func sessionRoutingHostIndex(s *Core, hosts []metadata.HostSnapshot) *routing.InternalRoutingHostIndex {
 	if s.privateStorage.InternalPool == nil {
 		return routing.InternalBuildRoutingHostIndex(hosts)
 	}

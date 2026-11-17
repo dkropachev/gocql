@@ -8,10 +8,10 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/tablets"
-	"github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
-func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...routing.Target) tablets.TabletInfo {
+func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...metadata.Target) tablets.TabletInfo {
 	t.Helper()
 	rs := make([]tablets.ReplicaInfo, len(replicas))
 	for i, r := range replicas {
@@ -27,6 +27,6 @@ func testHint(t testing.TB, first, last int64, version cql.Option[uint64], repli
 	return h
 }
 
-func hTarget(id byte, shard uint32) routing.Target {
-	return routing.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
+func hTarget(id byte, shard uint32) metadata.Target {
+	return metadata.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 }

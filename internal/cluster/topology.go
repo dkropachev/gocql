@@ -26,15 +26,14 @@ package cluster
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"strconv"
 	"strings"
 
-	"log/slog"
-
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/metadata"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 type hostTokens struct {
@@ -113,7 +112,7 @@ func getReplicationFactorFromOpts(val string) (int, error) {
 	return n, nil
 }
 
-func getStrategy(ks *metadata.KeyspaceMetadata, logger *slog.Logger) placementStrategy {
+func getStrategy(ks *metadata2.Keyspace, logger *slog.Logger) placementStrategy {
 	logger = logging.Or(logger)
 	switch {
 	case strings.Contains(ks.StrategyClass, "SimpleStrategy"):

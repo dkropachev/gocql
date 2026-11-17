@@ -18,6 +18,7 @@ import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestTopology(t *testing.T) {
@@ -38,7 +39,7 @@ func TestTopology(t *testing.T) {
 			}
 			config := settings.DefaultConfig(contacts...)
 			config.Protocol = 4
-			config.Metadata.Mode = settings.MetadataSchemaNone
+			config.Metadata.Mode = metadata.SchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.AdvancedShardAwareness.Enabled = false

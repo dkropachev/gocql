@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func streamReconcile(t *testing.T, failContinuation bool) {
@@ -28,7 +29,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	changed := cql.NewColumns(cqltype.ColumnSlice(columns)[0], cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
 	bound := func() *Bound[cql.Bytes] {
 		opaqueStorageValue := new(Bound[cql.Bytes])
-		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cql.OrdinaryStatement}}
+		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
 		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BlobCodec)
 		return opaqueStorageValue
 	}()

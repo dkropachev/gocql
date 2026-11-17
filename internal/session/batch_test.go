@@ -32,6 +32,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, cql.EmptyRow] {
@@ -479,7 +480,7 @@ func TestBatch(t *testing.T) {
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &model.RoutingInfo{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}

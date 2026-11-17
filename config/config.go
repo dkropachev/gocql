@@ -17,6 +17,7 @@ import (
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
@@ -98,7 +99,7 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cql.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter
-		settings.HostFilter = func(host routing.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
+		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
@@ -389,7 +390,7 @@ func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 }
 
 // WithHostFilter skips nodes for which keep returns false. Default all nodes.
-func (b *ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder {
+func (b *ConfigBuilder) WithHostFilter(keep func(metadata.HostSnapshot) bool) *ConfigBuilder {
 	b.settings.HostFilter = keep
 	return b
 }
@@ -716,7 +717,7 @@ func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
 // selection without a request-specific routing plan. Default token-aware with
 // shuffled replicas.
 func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
-	p.profile.Routing = policy
+	p.profile.Routing = implRouting.EngineOf(policy)
 	return p
 }
 

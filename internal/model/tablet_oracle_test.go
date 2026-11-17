@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
-func sameReplicaSet(a, b []Target) bool {
+func sameReplicaSet(a, b []metadata.Target) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -31,23 +32,23 @@ func sameReplicaSet(a, b []Target) bool {
 
 func TestTabletOracle(t *testing.T) {
 	t.Run("SameReplicaSet", func(t *testing.T) {
-		a := Target{HostID: cql.UUID{15: 1}, ShardID: cql.Option[uint32]{Set: true}}
-		b := Target{HostID: cql.UUID{15: 2}, ShardID: cql.Option[uint32]{Set: true, Value: 1}}
+		a := metadata.Target{HostID: cql.UUID{15: 1}, ShardID: cql.Option[uint32]{Set: true}}
+		b := metadata.Target{HostID: cql.UUID{15: 2}, ShardID: cql.Option[uint32]{Set: true, Value: 1}}
 		otherShard := a
 		otherShard.ShardID.Value = 1
 		for _, test := range []struct {
 			name        string
-			left, right []Target
+			left, right []metadata.Target
 			want        bool
 		}{
 			{"empty", nil, nil, true},
-			{"same", []Target{a, b}, []Target{a, b}, true},
-			{"reordered", []Target{a, b}, []Target{b, a}, true},
-			{"driver-duplicate", []Target{a, a}, []Target{a, b}, false},
-			{"authority-duplicate", []Target{a, b}, []Target{a, a}, false},
-			{"both-duplicate", []Target{a, a}, []Target{a, a}, false},
-			{"different-length", []Target{a}, []Target{a, b}, false},
-			{"different-shard", []Target{a, b}, []Target{otherShard, b}, false},
+			{"same", []metadata.Target{a, b}, []metadata.Target{a, b}, true},
+			{"reordered", []metadata.Target{a, b}, []metadata.Target{b, a}, true},
+			{"driver-duplicate", []metadata.Target{a, a}, []metadata.Target{a, b}, false},
+			{"authority-duplicate", []metadata.Target{a, b}, []metadata.Target{a, a}, false},
+			{"both-duplicate", []metadata.Target{a, a}, []metadata.Target{a, a}, false},
+			{"different-length", []metadata.Target{a}, []metadata.Target{a, b}, false},
+			{"different-shard", []metadata.Target{a, b}, []metadata.Target{otherShard, b}, false},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				if got := sameReplicaSet(test.left, test.right); got != test.want {

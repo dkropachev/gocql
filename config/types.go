@@ -53,16 +53,11 @@ type LifecycleObserver = implSettings.LifecycleObserver
 // ended. A panic in any of these calls is logged and otherwise ignored.
 type Observer interface {
 	StartRequest(ctx context.Context, start RequestStart) (context.Context, func(RequestEvent))
-	StartAttempt(ctx context.Context, start AttemptStart) func(AttemptEvent)
+	StartAttempt(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent)
 }
 
 // RequestStart describes a request as it is admitted, before its first attempt.
 type RequestStart = implSettings.RequestStart
-
-// AttemptStart describes an attempt as it is sent to its target.
-type AttemptStart = implRouting.AttemptStart
-
-type AttemptEvent = implRouting.AttemptEvent
 
 // Profile supplies reusable execution defaults. Build one with NewProfile and
 // ProfileBuilder.Build. A Profile written as a literal, such as
@@ -99,7 +94,7 @@ type SpeculationPolicy interface {
 }
 
 func internalProfile(p Profile) implSettings.Profile {
-	v := implSettings.Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
+	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
 	if !p.built {
@@ -109,7 +104,7 @@ func internalProfile(p Profile) implSettings.Profile {
 }
 
 func publicProfile(p implSettings.Profile) Profile {
-	return Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
+	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
 		built: p.InternalBuilt()}

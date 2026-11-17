@@ -224,7 +224,7 @@ func init() {
 type cassandraObserver struct {
 	mu       sync.Mutex
 	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	attempts []routing.AttemptEvent
 }
 
 func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
@@ -232,7 +232,7 @@ func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
@@ -241,7 +241,7 @@ func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
 func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {
@@ -250,10 +250,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}
@@ -824,7 +824,7 @@ type v2UnavailableHostsRouting struct {
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (metadata.Route, bool) {
 	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
@@ -833,18 +833,18 @@ func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadat
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
-	snapshot := *metadata
-	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
-	implRouting. // rebuild indices after test-only membership changes
-			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
-		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
+func (p v2UnavailableHostsRouting) unavailable(snapshot *metadata.Snapshot) *metadata.Snapshot {
+	state := *implRouting.SnapshotData(implRouting.SnapshotOf(snapshot))
+	// The routing host index is rebuilt for the changed membership.
+	state.InternalHostIndex = nil
+	state.InternalHosts = snapshot.Hosts()
+	for i := range state.InternalHosts {
+		state.InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
-		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(state.InternalHosts) > 1 {
+		state.InternalHosts = state.InternalHosts[:1]
 	}
-	return &snapshot
+	return implRouting.NewMetadataSnapshot(state).Public()
 }
 
 type liveDestination struct {
@@ -1062,8 +1062,8 @@ func fixtureWriteExecute(f *framer, streamID int, preparedID, resultMetadataID [
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []routing.HostSnapshot
-	targets []routing.HostSnapshot
+	hosts   []metadata.HostSnapshot
+	targets []metadata.HostSnapshot
 	verdict bool
 	resets  int
 }
@@ -1361,7 +1361,7 @@ func (c *OneConnTestServer) lockedClose() {
 type sessionTestObserver struct {
 	mu       sync.Mutex
 	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	attempts []routing.AttemptEvent
 }
 
 func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
@@ -1369,7 +1369,7 @@ func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
@@ -1378,13 +1378,13 @@ func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
 func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -1492,11 +1492,11 @@ func (s *testIO) snapshot() (reads, writes, readBytes, writeBytes int64) {
 
 type v2TabletAttemptObserver struct {
 	mu      sync.Mutex
-	targets []routing.Target
+	targets []metadata.Target
 }
 
 func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
-func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
+func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if event.Err == nil {
@@ -1507,13 +1507,13 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
+func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]routing.Target(nil), o.targets...)
+	return append([]metadata.Target(nil), o.targets...)
 }
 
 type position struct {

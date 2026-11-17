@@ -7,16 +7,17 @@ import (
 	"sync"
 
 	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
 type v2TabletAttemptObserver struct {
 	mu      sync.Mutex
-	targets []routing.Target
+	targets []metadata.Target
 }
 
 func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
-func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
+func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if event.Err == nil {
@@ -27,11 +28,11 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
+func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]routing.Target(nil), o.targets...)
+	return append([]metadata.Target(nil), o.targets...)
 }

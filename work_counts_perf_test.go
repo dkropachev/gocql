@@ -29,6 +29,7 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
+	"github.com/scylladb/gocql/v2/metadata"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -254,7 +255,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Run(fmt.Sprintf("hosts%d/%s", hosts, kind), func(t *testing.T) {
 						m := v2TestMetadata()
 						storage := implRouting.SnapshotData(m)
-						storage.InternalHosts = make([]routing.HostSnapshot, hosts)
+						storage.InternalHosts = make([]metadata.HostSnapshot, hosts)
 						for i := range storage.InternalHosts {
 							h := v2TestHost(0, "a", "r1")
 							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
@@ -411,13 +412,13 @@ func TestWorkCountsPerf(t *testing.T) {
 
 type testObserver struct{ requests, attempts atomic.Int64 }
 
-func (o *testObserver) ObserveRequest(config.RequestEvent) { o.requests.Add(1) }
-func (o *testObserver) ObserveAttempt(config.AttemptEvent) { o.attempts.Add(1) }
+func (o *testObserver) ObserveRequest(config.RequestEvent)  { o.requests.Add(1) }
+func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) }
 
 func (o *testObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *testObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

@@ -6,22 +6,22 @@
 package integration
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
-	routing "github.com/scylladb/gocql/v2/routing"
-
 	"context"
 	"math"
 	"slices"
 	"testing"
+
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // tabletAuthority brackets routed queries with independent server reads.
 // During a transition or disagreement it supplies no correctness credit.
 type tabletObservation struct {
 	last      int64
-	replicas  []routing.Target
+	replicas  []metadata.Target
 	readNodes []cql.UUID
 	stable    bool
 }
@@ -59,7 +59,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		row := rows[0]
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
-		var replicas []routing.Target
+		var replicas []metadata.Target
 		for iterator.Next() {
 			tuple := codecTestMust(iterator.Value().Elements())
 			if !tuple.Next() {
@@ -76,7 +76,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 			if tuple.Next() || tuple.Err() != nil {
 				t.Fatal("authoritative replica extra member", tuple.Err())
 			}
-			replicas = append(replicas, routing.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
+			replicas = append(replicas, metadata.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
 		}
 		if iterator.Err() != nil {
 			t.Fatal(iterator.Err())
@@ -101,7 +101,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
-func sameReplicaSet(a, b []routing.Target) bool {
+func sameReplicaSet(a, b []metadata.Target) bool {
 	if len(a) != len(b) {
 		return false
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // TestTabletIdentityLazy checks that a request reads its table's schema
@@ -20,7 +21,7 @@ func TestTabletIdentityLazy(t *testing.T) {
 	testHookSchemaIdentity = func() { lookups.Add(1) }
 	t.Cleanup(func() { testHookSchemaIdentity = nil })
 	s := testSession(t)
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}}
+	info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}}
 	features := transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true}
 
 	stamp := s.CaptureTabletFeedback(info, s.Metadata())
@@ -49,7 +50,7 @@ func TestTabletIdentityLazy(t *testing.T) {
 // and recreated meanwhile has a new identity, and its hint is dropped.
 func TestTabletIdentityCapturedSource(t *testing.T) {
 	s := testSession(t)
-	info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}}
+	info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}}
 	features := transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true}
 	md := MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata)
 	ks, _ := md.InternalKeyspaceMetadata.InternalGetKeyspace("ks")

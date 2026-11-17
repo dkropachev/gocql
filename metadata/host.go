@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package model
+package metadata
 
 import (
 	"net/netip"
@@ -9,6 +9,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
+// HostSnapshot is what a session knows about a host: its address, place in
+// the cluster, tokens, sharding and state.
 type HostSnapshot struct {
 	Address          netip.AddrPort
 	Datacenter, Rack string

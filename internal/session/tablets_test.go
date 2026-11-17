@@ -38,14 +38,16 @@ import (
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestTablets(t *testing.T) {
 	t.Run("Feedback", func(t *testing.T) {
 		t.Run("ConcurrentPlans", func(t *testing.T) {
 			s := testSession(t)
-			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Conditional: true}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, ShuffleReplicas: true}))
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Conditional: true}
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, ShuffleReplicas: true}))
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
@@ -69,7 +71,7 @@ func TestTablets(t *testing.T) {
 		t.Run("EnqueueDoesNotWaitForPublication", func(t *testing.T) {
 			s := testSession(t)
 			p := s.Peripheral()
-			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
+			info := routing2.Info{Keyspace: "ks", Table: "table"}
 			stamp := s.CaptureTabletFeedback(info, s.Metadata())
 			h := testHint(t, 0, 100, cql.Option[uint64]{}, hTarget(1, 0))
 			p.InternalMu.Lock()
@@ -104,7 +106,7 @@ func TestTablets(t *testing.T) {
 				}
 			}
 			s := testSession(t)
-			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}}
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}}
 			h := testHint(t, 0, 100, cql.Option[uint64]{Set: true, Value: 0xfedcba9876543210}, hTarget(1, 1))
 			stamp := s.CaptureTabletFeedback(info, s.Metadata())
 			// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
@@ -120,7 +122,7 @@ func TestTablets(t *testing.T) {
 					t.Fatal("wrong nibble direction", b)
 				}
 			}
-			if b := routing.InternalMetadataSnapshotTabletVersionBlock(m, implModel.RoutingInfo{}); b != 0 {
+			if b := routing.InternalMetadataSnapshotTabletVersionBlock(m, routing2.Info{}); b != 0 {
 				t.Fatal("absent identity/token hint is not zero")
 			}
 			// A malformed V2 body never falls back to the simultaneously supplied V1.
@@ -137,14 +139,14 @@ func TestTablets(t *testing.T) {
 	t.Run("Payload", func(t *testing.T) {
 
 		t.Run("Wire", func(t *testing.T) {
-			target := implModel.Target{HostID: cql.UUID{15: 7}, ShardID: cql.Option[uint32]{Value: math.MaxInt32, Set: true}}
+			target := metadata.Target{HostID: cql.UUID{15: 7}, ShardID: cql.Option[uint32]{Value: math.MaxInt32, Set: true}}
 			for _, v2 := range []bool{false, true} {
 				h := testHint(t, math.MinInt64, math.MaxInt64, cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}, target)
 				raw := testPayload(h)
 				for split := 0; split <= len(raw); split++ {
 					chain := typedTestChain(t, raw[:split], raw[split:])
 					parsed, err := transport.InternalParseTypedTabletPayload(cqltype.BytesView(chain, wire.Ref{}), "ks", "table", v2)
-					if err != nil || !(&implRouting.InternalTabletRange{InternalSpan: implRouting.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []implModel.Target{target}}, InternalVersion: cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}).SameTabletObservation(parsed) {
+					if err != nil || !(&implRouting.InternalTabletRange{InternalSpan: metadata.TokenRange{Start: h.FirstToken(), End: h.LastToken(), Replicas: []metadata.Target{target}}, InternalVersion: cql.Option[uint64]{Value: 0xfedcba9876543210, Set: v2}}).SameTabletObservation(parsed) {
 						t.Fatalf("v2=%t split=%d: %v", v2, split, err)
 					}
 				}
@@ -238,10 +240,10 @@ func TestTablets(t *testing.T) {
 		t.Run("FencesSharingAndOverflow", func(t *testing.T) {
 			s := testSession(t)
 			p := s.Peripheral()
-			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table"}
+			info := routing2.Info{Keyspace: "ks", Table: "table"}
 			first := s.Metadata()
 			stamp := s.CaptureTabletFeedback(info, first)
-			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Set: true}})
+			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Set: true}})
 			s.QueueTabletFeedback(h, stamp)
 			testDrain(s)
 			a := s.Metadata()
@@ -258,7 +260,7 @@ func TestTablets(t *testing.T) {
 			}
 			// A numerically smaller opaque version is a valid update. The stale request
 			// captured before the first update cannot overwrite its overlapping range.
-			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, implModel.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
+			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
 			s.QueueTabletFeedback(moved, stamp)
 			testDrain(s)
 			if s.Metadata() != a {
@@ -290,7 +292,7 @@ func TestTablets(t *testing.T) {
 			}
 			beforeEpoch := s.Metadata()
 			oldStamp := s.CaptureTabletFeedback(info, beforeEpoch)
-			lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})), implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
+			lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})), routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 			p.InternalMu.Lock()
 			p.InternalBumpTableRevisionLocked(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
@@ -360,14 +362,14 @@ func TestTablets(t *testing.T) {
 			m := v2TestMetadata()
 			routing.SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
 			k := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}
-			set := func(targets ...implModel.Target) {
+			set := func(targets ...metadata.Target) {
 				h := testHint(t, 0, 100, cql.Option[uint64]{Value: 9, Set: true}, targets...)
 				r, _ := implRouting.InternalUpdateTabletRange(nil, h)
 				routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, implRouting.InternalTabletPlacement{InternalRanges: r})
 			}
 			set(hTarget(3, 1), hTarget(2, 2), hTarget(1, 3))
-			info := implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Conditional: true}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Conditional: true}
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)
 				first, ok := implRouting.InternalNextTarget(plan)
@@ -400,7 +402,7 @@ func TestTablets(t *testing.T) {
 					}
 				})
 			}
-			local := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1"}))
+			local := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1"}))
 			if ids := v2PlanIDs(implRouting.NewPlan(local, info, m)); bytes.Contains(ids, []byte{3}) {
 				t.Fatal("excluded remote leader admitted", ids)
 			}

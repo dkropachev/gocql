@@ -12,9 +12,9 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/metrics"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -125,7 +125,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err != nil {
 		return err
 	}
-	routing := model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}
+	routing := routing2.Info{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}
 	return batch.addValue(core, cqlText{}, statement.CQL, &routing, plan, statement.BindMarkers, value, true)
 }
 

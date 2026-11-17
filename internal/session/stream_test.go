@@ -47,6 +47,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func TestStream(t *testing.T) {
@@ -1026,7 +1027,7 @@ func TestStream(t *testing.T) {
 					state, _ := preparedState(t, s, columns)
 					bound := func() *Bound[cql.Bytes] {
 						opaqueStorageValuex := new(Bound[cql.Bytes])
-						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cql.OrdinaryStatement}}
+						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
 						BoundData(opaqueStorageValuex).InternalRows = cql.OneColumn(cql.BlobCodec)
 						return opaqueStorageValuex
 					}()
@@ -1081,7 +1082,7 @@ func TestStream(t *testing.T) {
 			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cql.Bytes])
-			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cql.OrdinaryStatement}}
+			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
 			BoundData(bound).InternalRows = cql.OneColumn(cql.BlobCodec)
 			id := cql.UUID{15: 11}
 			done := make(chan struct{})
@@ -1538,7 +1539,7 @@ func TestStream(t *testing.T) {
 			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cql.Bytes])
-			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: cql.OrdinaryStatement}}
+			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
 			BoundData(bound).InternalRows = cql.OneColumn(cql.BlobCodec)
 			defer bound.Close()
 			// The first page is empty. The next omits metadata, then an equal full

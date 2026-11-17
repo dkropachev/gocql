@@ -30,10 +30,10 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/internal/metadata"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestTablets(t *testing.T) {
@@ -45,7 +45,7 @@ func TestTablets(t *testing.T) {
 		SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 		defer MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Close()
 		defer s.CloseV2Peripheral()
-		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata.KeyspaceMetadata{Name: "ks", Tables: map[string]*metadata.TableMetadata{"t": {Name: "t"}}})
+		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata2.Keyspace{Name: "ks", Tables: map[string]*metadata2.Table{"t": {Name: "t"}}})
 		p := s.Peripheral()
 		p.InternalFeedbackOnce.Do(func() {}) // Hold the consumer while filling the bounded queue.
 		sub, err := s.Subscribe(EventFilter{Kinds: []EventKind{OverflowEvent}, Capacity: 1})

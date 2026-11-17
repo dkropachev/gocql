@@ -34,8 +34,8 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 const hostInfoListMapThreshold = 20
@@ -408,7 +408,7 @@ func (t *tokenAwareHostPolicy) Init(s *Core) {
 		// See https://github.com/scylladb/gocql/issues/94.
 		panic("sharing token aware host selection policy between sessions is not supported")
 	}
-	t.privateStorage.getKeyspaceMetadata = func(keyspace string) (*metadata.KeyspaceMetadata, error) {
+	t.privateStorage.getKeyspaceMetadata = func(keyspace string) (*metadata2.Keyspace, error) {
 		if keyspace == "" {
 			return nil, cqlerr.ErrNoKeyspace
 		}

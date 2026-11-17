@@ -35,6 +35,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 var (
@@ -440,17 +441,17 @@ func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *Core {
 }
 
 func populateKeyspace(s *Core, ksName string, tableNames ...string) {
-	ks := &metadata.KeyspaceMetadata{
+	ks := &metadata2.Keyspace{
 		Name:          ksName,
 		DurableWrites: true,
-		Tables:        make(map[string]*metadata.TableMetadata),
+		Tables:        make(map[string]*metadata2.Table),
 	}
 	for _, tbl := range tableNames {
-		ks.Tables[tbl] = &metadata.TableMetadata{
+		ks.Tables[tbl] = &metadata2.Table{
 			Keyspace: ksName,
 			Name:     tbl,
-			Columns: map[string]*metadata.ColumnMetadata{
-				"id": {Keyspace: ksName, Table: tbl, Name: "id", Kind: metadata.ColumnPartitionKey},
+			Columns: map[string]*metadata2.Column{
+				"id": {Keyspace: ksName, Table: tbl, Name: "id", Kind: metadata2.ColumnPartitionKey},
 			},
 		}
 	}

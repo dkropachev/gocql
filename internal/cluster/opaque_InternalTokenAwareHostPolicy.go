@@ -25,12 +25,11 @@
 package cluster
 
 import (
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/metadata"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 type tokenAwareHostPolicyStorage struct {
@@ -38,7 +37,7 @@ type tokenAwareHostPolicyStorage struct {
 	// atomic store for *clusterMeta
 	metadata            atomic.Pointer[clusterMeta]
 	logger              *slog.Logger
-	getKeyspaceMetadata func(keyspace string) (*metadata.KeyspaceMetadata, error)
+	getKeyspaceMetadata func(keyspace string) (*metadata2.Keyspace, error)
 	getKeyspaceName     func() string
 	hosts               cowHostList
 	partitioner         string

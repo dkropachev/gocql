@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func BenchmarkTablets(b *testing.B) {
@@ -22,7 +22,7 @@ func BenchmarkTablets(b *testing.B) {
 	b.Run("FeedbackCaptureParallel", func(b *testing.B) {
 		s := testSession(b)
 		m := s.Metadata()
-		info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
+		info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
 		b.ReportAllocs()
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
@@ -38,7 +38,7 @@ func BenchmarkTablets(b *testing.B) {
 		for _, ranges := range []int{1, 1024} {
 			b.Run(fmt.Sprintf("hints%d", ranges), func(b *testing.B) {
 				s := testSession(b)
-				info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
+				info := routing2.Info{Keyspace: "ks", Table: "table"}
 				stamp := s.CaptureTabletFeedback(info, s.Metadata())
 				hints := make([]InternalV2PendingTabletFeedback, ranges)
 				for i := range hints {
@@ -90,7 +90,7 @@ func BenchmarkTablets(b *testing.B) {
 						other := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalRanges: root}))
 					}
-					p := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true})).(*routing.InternalRoutingPolicy)
+					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})).(*routing.InternalRoutingPolicy)
 					var plan routing.InternalLazyRoutingPlan
 					// The request is a prepared statement's, whose placement cache
 					// finds its table.
@@ -102,7 +102,7 @@ func BenchmarkTablets(b *testing.B) {
 					b.ReportAllocs()
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum}
+						info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: tokens[i&4095], Set: true}, Consistency: cql.Quorum}
 						stamp := s.CaptureTabletFeedback(info, m)
 						tablet := routing.InternalLookupTabletCached(m, info, &cache)
 						block := tablet.VersionBlock(info)
@@ -135,7 +135,7 @@ func BenchmarkTablets(b *testing.B) {
 							other := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
 							routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, implRouting.InternalTabletPlacement{InternalRanges: root})
 						}
-						info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
+						info := routing2.Info{Keyspace: "ks", Table: "table"}
 						h := testHint(b, 0, 1, cql.Option[uint64]{Value: 0, Set: true}, hTarget(1, 0))
 						updates := make(map[InternalV2TabletFeedbackKey]InternalV2PendingTabletFeedback, 1)
 						b.ReportAllocs()

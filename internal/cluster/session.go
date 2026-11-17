@@ -49,6 +49,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 // Core owns cluster metadata, pooled connections and typed executions. It
@@ -596,7 +597,7 @@ func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 }
 
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
-func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetadata, error) {
+func sessionTableMetadata(s *Core, keyspace, table string) (*metadata2.Table, error) {
 	if s.Closed() {
 		return nil, cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {

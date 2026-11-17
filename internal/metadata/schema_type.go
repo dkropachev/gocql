@@ -8,6 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 var schemaScalarTypes = map[string]cql.Type{
@@ -23,7 +24,7 @@ var schemaScalarTypes = map[string]cql.Type{
 // InternalSchemaDataType builds the DataType of a schema type string, such as
 // the type of a system_schema.columns row, resolving user types from ks.
 // Custom (quoted class name) types are rejected.
-func InternalSchemaDataType(ks *KeyspaceMetadata, source string) (cql.DataType, error) {
+func InternalSchemaDataType(ks *metadata.Keyspace, source string) (cql.DataType, error) {
 	if ks == nil {
 		return cql.DataType{}, cqltype.TypeValidation("schema type", "nil keyspace")
 	}
@@ -40,7 +41,7 @@ func InternalSchemaDataType(ks *KeyspaceMetadata, source string) (cql.DataType, 
 }
 
 type schemaTypeBuilder struct {
-	ks *KeyspaceMetadata
+	ks *metadata.Keyspace
 	v2CQLTypeParser
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // An Exec of a statement or batch known to be conditional is rejected before
@@ -55,7 +56,7 @@ func TestConditionalExecRejected(t *testing.T) {
 		} {
 			var batch Batch
 			for _, kind := range kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &model.RoutingInfo{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}

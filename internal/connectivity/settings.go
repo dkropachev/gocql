@@ -14,13 +14,13 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type Option[T any] = cql.Option[T]
 type Nullable[T any] = cql.Nullable[T]
 type Bytes = cql.Bytes
-type HostSnapshot = model.HostSnapshot
+type HostSnapshot = metadata.HostSnapshot
 type PoolOptions struct {
 	ConnectionsPerHost, ConnectionsPerShard int
 	MaxExcessPerShard                       int

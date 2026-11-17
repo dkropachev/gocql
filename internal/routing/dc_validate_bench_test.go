@@ -3,12 +3,16 @@
 
 package routing
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/scylladb/gocql/v2/routing"
+)
 
 func BenchmarkDCAwareValidate(b *testing.B) {
 	for _, rack := range []string{"", "r1"} {
 		b.Run("rack="+rack, func(b *testing.B) {
-			p := codecTestMust(NewRoutingPolicy(RoutingOptions{Datacenter: "a", Rack: rack}))
+			p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: rack}))
 			m := v2TestMetadata()
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {

@@ -31,7 +31,6 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -39,6 +38,8 @@ import (
 	transporttestkit "github.com/scylladb/gocql/v2/internal/testkit/transport"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func testOwnedQuery(t testing.TB) *Query[[]byte, cql.EmptyRow] {
@@ -53,7 +54,7 @@ func testOwnedQuery(t testing.TB) *Query[[]byte, cql.EmptyRow] {
 	return q
 }
 
-type slicePlan []model.Target
+type slicePlan []metadata.Target
 
 func (p *slicePlan) Next() (routing.Route, bool) {
 	if len(*p) == 0 {
@@ -733,7 +734,7 @@ func TestQuery(t *testing.T) {
 		t.Run("BlockedObserverKeepsBusy", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			entered, release := make(chan struct{}), make(chan struct{})
-			observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
+			observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) { close(entered); <-release }}
 			query := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k)VALUES(1)", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, Options{Observer: observer, Profile: generalPathProfile()}))
 			defer query.Close()
 			served := make(chan struct{})

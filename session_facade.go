@@ -199,7 +199,7 @@ func (s *Session[D]) Close() error { return s.internal().Close() }
 func (s *Session[D]) Closed() bool { return s.internal().Closed() }
 
 // Metadata returns the current immutable cluster metadata snapshot.
-func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata() }
+func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata().Public() }
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session[D]) Metrics() metrics.Snapshot { return s.internal().Metrics() }

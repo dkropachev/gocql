@@ -11,7 +11,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // AuthProvider creates independent exchanges and must be concurrency safe.
@@ -22,7 +22,7 @@ type passwordAuth struct{ username, password string }
 func PasswordAuth(username, password string) AuthProvider {
 	return passwordAuth{username: username, password: password}
 }
-func (p passwordAuth) Start(ctx context.Context, _ model.HostSnapshot, _ string) (AuthExchange, cql.Nullable[[]byte], error) {
+func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, _ string) (AuthExchange, cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cql.Nullable[[]byte]{}, err
 	}

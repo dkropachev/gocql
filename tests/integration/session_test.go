@@ -62,6 +62,7 @@ import (
 	clustertestkit "github.com/scylladb/gocql/v2/internal/testkit/cluster"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
@@ -80,7 +81,7 @@ func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 type sessionTestObserver struct {
 	mu       sync.Mutex
 	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	attempts []routing.AttemptEvent
 }
 
 func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
@@ -88,7 +89,7 @@ func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
@@ -97,13 +98,13 @@ func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
 func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {

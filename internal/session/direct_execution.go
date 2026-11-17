@@ -18,7 +18,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // canExecuteDirect reports whether request's pages run on the calling
@@ -110,7 +112,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		} else {
 			started = time.Now()
 		}
-		var end func(routing.AttemptEvent)
+		var end func(routing2.AttemptEvent)
 		var observed time.Time
 		if observe {
 			end, observed = startDirectAttempt(request, conn, attempt)
@@ -242,8 +244,8 @@ func routingObservesLatency(policy routing.RoutingPolicy) bool {
 }
 
 // attemptTarget is the host and shard an attempt on conn goes to.
-func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) model.Target {
-	target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
+func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) metadata.Target {
+	target := metadata.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
 		target.ShardID = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 	}
@@ -256,18 +258,18 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) mode
 // although the execution's own latency may include it.
 //
 //go:noinline
-func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing.AttemptEvent), time.Time) {
+func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(routing.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
+	return l.startAttempt(routing2.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end
 // callback and to a latency-aware routing policy, on the calling goroutine.
 //
 //go:noinline
-func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing.AttemptEvent)) {
-	event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
+	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

@@ -65,11 +65,6 @@ var layerViolations = map[string]bool{
 	"endpoint -> internal/endpoint":      true,
 	"event -> internal/cluster":          true,
 	"internal/tablets -> internal/tests": true,
-	"metadata -> internal/metadata":      true,
-	"metadata -> internal/routing":       true,
-	"metadata -> internal/settings":      true,
-	"routing -> internal/model":          true,
-	"routing -> internal/routing":        true,
 }
 
 func layerOf(rel string) (int, bool) {

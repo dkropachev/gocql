@@ -13,6 +13,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type casBatchRow struct {
@@ -59,7 +60,7 @@ var casBatchDecoder = cql.CASRows(batchRowA)
 func newCASBatch(t testing.TB, body []byte) (*Session, *Batch) {
 	t.Helper()
 	return newServedBatchOf(t, body, func(s *implCluster.Core, batch *Batch) error {
-		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &model.RoutingInfo{Kind: cql.ConditionalStatement}, model.EncodedValues{})
+		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &routing.Info{Kind: cql.ConditionalStatement}, model.EncodedValues{})
 	})
 }
 

@@ -20,12 +20,12 @@
 package cluster
 
 import (
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/schemafence"
-
 	"slices"
 
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func (s *Core) InvalidatePreparedSchema(e Event) {
@@ -102,10 +102,10 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 		}
 	}
 }
-func equalPreparedFunction(a, b implMetadata.FunctionMetadata) bool {
+func equalPreparedFunction(a, b metadata.Function) bool {
 	return a.Keyspace == b.Keyspace && a.Name == b.Name && a.Body == b.Body && a.Language == b.Language && a.ReturnType == b.ReturnType && a.CalledOnNullInput == b.CalledOnNullInput && slices.Equal(a.ArgumentTypes, b.ArgumentTypes) && slices.Equal(a.ArgumentNames, b.ArgumentNames)
 }
-func equalPreparedFunctions(a, b map[string]*implMetadata.FunctionMetadata) bool {
+func equalPreparedFunctions(a, b map[string]*metadata.Function) bool {
 	if len(a) != len(b) {
 		return false
 	}
@@ -123,7 +123,7 @@ func equalPreparedFunctions(a, b map[string]*implMetadata.FunctionMetadata) bool
 	}
 	return true
 }
-func equalPreparedAggregates(a, b map[string]*implMetadata.AggregateMetadata) bool {
+func equalPreparedAggregates(a, b map[string]*metadata.Aggregate) bool {
 	if len(a) != len(b) {
 		return false
 	}

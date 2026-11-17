@@ -134,22 +134,6 @@ package auth
 		method Start(context.Context, internal/connectivity.HostSnapshot, string) (internal/connectivity.AuthExchange, internal/connectivity.Nullable[[]byte], error)
 
 package config
-	type config.AttemptEvent = internal/routing.AttemptEvent
-		field Started time.Time
-		field Err error
-		field RequestID uint64
-		field Attempt int
-		field Latency time.Duration
-		field Target internal/routing.Target
-		field CQLTraceID cql.Option[cql.UUID]
-		field Cancelled bool
-		field Speculative bool
-	type config.AttemptStart = internal/routing.AttemptStart
-		field Started time.Time
-		field RequestID uint64
-		field Attempt int
-		field Target internal/routing.Target
-		field Speculative bool
 	type config.ClientRoute struct
 		field ConnectionID string
 		field Hostname string
@@ -187,7 +171,7 @@ package config
 		method (*T) WithDialer(dialer endpoint.Dialer) *config.ConfigBuilder
 		method (*T) WithDiscovery(on bool) *config.ConfigBuilder
 		method (*T) WithHeartbeat(interval time.Duration, timeout time.Duration) *config.ConfigBuilder
-		method (*T) WithHostFilter(keep func(routing.HostSnapshot) bool) *config.ConfigBuilder
+		method (*T) WithHostFilter(keep func(metadata.HostSnapshot) bool) *config.ConfigBuilder
 		method (*T) WithIgnoreEvents(kinds ...event.Kind) *config.ConfigBuilder
 		method (*T) WithKeyspace(name string) *config.ConfigBuilder
 		method (*T) WithLifecycleObserver(observer config.LifecycleObserver) *config.ConfigBuilder
@@ -252,7 +236,7 @@ package config
 	func config.NewTLSFiles(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
 	const config.NoCompression cql.Compression
 	type config.Observer interface
-		method StartAttempt(ctx context.Context, start config.AttemptStart) func(config.AttemptEvent)
+		method StartAttempt(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent)
 		method StartRequest(ctx context.Context, start config.RequestStart) (context.Context, func(config.RequestEvent))
 	type config.Profile struct
 		field Retry retry.Policy
@@ -286,14 +270,14 @@ package config
 		field BatchStatements []string
 		field Parameters cql.Columns
 		field Result cql.Result
-		field Routing internal/model.RoutingInfo
+		field Routing routing.Info
 		field ID uint64
 	type config.RequestStart = internal/settings.RequestStart
 		field Started time.Time
 		field Statement string
 		field BatchStatements []string
 		field Parameters cql.Columns
-		field Routing internal/model.RoutingInfo
+		field Routing routing.Info
 		field ID uint64
 		field CQLTrace bool
 	type config.SimpleConvictionPolicy = internal/settings.SimpleConvictionPolicy
@@ -1185,7 +1169,7 @@ package endpoint
 		field LocalAddress net/netip.AddrPort
 		field Network string
 		field Address string
-		field Host internal/model.HostSnapshot
+		field Host metadata.HostSnapshot
 		field ShardID cql.Option[uint32]
 	type endpoint.Dialer = internal/endpoint.Dialer
 		method DialContext(context.Context, internal/endpoint.DialTarget) (net.Conn, error)
@@ -1278,43 +1262,44 @@ package exec
 		field Incremental bool
 
 package metadata
-	const metadata.ASC internal/metadata.ColumnOrder
-	type metadata.Aggregate = internal/metadata.AggregateMetadata
+	const metadata.ASC metadata.ColumnOrder
+	type metadata.Aggregate struct
 		field Keyspace string
 		field Name string
 		field InitCond string
 		field ReturnType string
 		field StateType string
 		field ArgumentTypes []string
-		field FinalFunc internal/metadata.FunctionMetadata
-		field StateFunc internal/metadata.FunctionMetadata
-	type metadata.Column = internal/metadata.ColumnMetadata
-		field Index internal/metadata.ColumnIndexMetadata
+		field FinalFunc metadata.Function
+		field StateFunc metadata.Function
+	const metadata.AnyShard int32
+	type metadata.Column struct
+		field Index metadata.ColumnIndex
 		field Keyspace string
 		field Table string
 		field Name string
 		field Type string
 		field ClusteringOrder string
 		field ComponentIndex int
-		field Kind internal/metadata.ColumnKind
-		field Order internal/metadata.ColumnOrder
-		method (*T) Equals(other *internal/metadata.ColumnMetadata) bool
-	const metadata.ColumnClusteringKey internal/metadata.ColumnKind
-	const metadata.ColumnCompact internal/metadata.ColumnKind
-	type metadata.ColumnIndex = internal/metadata.ColumnIndexMetadata
+		field Kind metadata.ColumnKind
+		field Order metadata.ColumnOrder
+		method (*T) Equals(other *metadata.Column) bool
+	const metadata.ColumnClusteringKey metadata.ColumnKind
+	const metadata.ColumnCompact metadata.ColumnKind
+	type metadata.ColumnIndex struct
 		field Options map[string]any
 		field Name string
 		field Type string
-		method (*T) Equals(other *internal/metadata.ColumnIndexMetadata) bool
-	type metadata.ColumnKind = internal/metadata.ColumnKind
+		method (*T) Equals(other *metadata.ColumnIndex) bool
+	type metadata.ColumnKind int
 		method (T) String() string
-	const metadata.ColumnKindUnknown internal/metadata.ColumnKind
-	type metadata.ColumnOrder = internal/metadata.ColumnOrder
-	const metadata.ColumnPartitionKey internal/metadata.ColumnKind
-	const metadata.ColumnRegular internal/metadata.ColumnKind
-	const metadata.ColumnStatic internal/metadata.ColumnKind
-	const metadata.DESC internal/metadata.ColumnOrder
-	type metadata.Function = internal/metadata.FunctionMetadata
+	const metadata.ColumnKindUnknown metadata.ColumnKind
+	type metadata.ColumnOrder bool
+	const metadata.ColumnPartitionKey metadata.ColumnKind
+	const metadata.ColumnRegular metadata.ColumnKind
+	const metadata.ColumnStatic metadata.ColumnKind
+	const metadata.DESC metadata.ColumnOrder
+	type metadata.Function struct
 		field Keyspace string
 		field Name string
 		field Body string
@@ -1323,63 +1308,79 @@ package metadata
 		field ArgumentTypes []string
 		field ArgumentNames []string
 		field CalledOnNullInput bool
-	type metadata.Index = internal/metadata.IndexMetadata
+	type metadata.HostSnapshot struct
+		field Address net/netip.AddrPort
+		field Datacenter string
+		field Rack string
+		field Tokens []int64
+		field Shards uint32
+		field ShardingIgnoreMSB uint8
+		field ID cql.UUID
+		field Enabled bool
+		field Connected bool
+		field Up bool
+	type metadata.Index struct
 		field Name string
 		field KeyspaceName string
 		field TableName string
-		field Kind internal/metadata.IndexKind
+		field Kind metadata.IndexKind
 		field Options map[string]string
-		field Columns map[string]*internal/metadata.ColumnMetadata
+		field Columns map[string]*metadata.Column
 		field OrderedColumns []string
-		field PartitionKey []*internal/metadata.ColumnMetadata
-		field ClusteringColumns []*internal/metadata.ColumnMetadata
-	type metadata.IndexKind = internal/metadata.IndexKind
-	const metadata.IndexKindComposites internal/metadata.IndexKind
-	const metadata.IndexKindCustom internal/metadata.IndexKind
-	const metadata.IndexKindKeys internal/metadata.IndexKind
-	type metadata.Keyspace = internal/metadata.KeyspaceMetadata
+		field PartitionKey []*metadata.Column
+		field ClusteringColumns []*metadata.Column
+	type metadata.IndexKind string
+	const metadata.IndexKindComposites metadata.IndexKind
+	const metadata.IndexKindCustom metadata.IndexKind
+	const metadata.IndexKindKeys metadata.IndexKind
+	type metadata.Keyspace struct
 		field StrategyOptions map[string]string
-		field Tables map[string]*internal/metadata.TableMetadata
-		field Functions map[string]*internal/metadata.FunctionMetadata
-		field Aggregates map[string]*internal/metadata.AggregateMetadata
-		field Types map[string]*internal/metadata.TypeMetadata
-		field Indexes map[string]*internal/metadata.IndexMetadata
-		field Views map[string]*internal/metadata.ViewMetadata
+		field Tables map[string]*metadata.Table
+		field Functions map[string]*metadata.Function
+		field Aggregates map[string]*metadata.Aggregate
+		field Types map[string]*metadata.Type
+		field Indexes map[string]*metadata.Index
+		field Views map[string]*metadata.View
 		field ConsistencyMode string
 		field Name string
 		field StrategyClass string
 		field CreateStmts string
 		field TabletBased bool
 		field DurableWrites bool
-		method (*T) Clone() *internal/metadata.KeyspaceMetadata
+		method (*T) Clone() *metadata.Keyspace
 		method (*T) ToCQL() (string, error)
-	type metadata.Mode = internal/settings.MetadataMode
-	const metadata.SchemaFull internal/settings.MetadataMode
-	const metadata.SchemaKeyspaces internal/settings.MetadataMode
-	const metadata.SchemaNone internal/settings.MetadataMode
-	type metadata.Snapshot = internal/routing.MetadataSnapshot
+	type metadata.Mode uint8
+	type metadata.Route struct
+		field Shard int32
+		method (T) HostID() cql.UUID
+		method (T) ShardOf(token int64) int32
+		method (T) Target() metadata.Target
+		method (T) Usable() bool
+		method (T) WithShard(shard int32) metadata.Route
+	const metadata.SchemaFull metadata.Mode
+	const metadata.SchemaKeyspaces metadata.Mode
+	const metadata.SchemaNone metadata.Mode
+	type metadata.Snapshot struct
 		method (*T) Diagnostics() []error
 		method (*T) Generation() uint64
-		method (*T) HostRoutes() []internal/routing.Route
-		method (*T) Hosts() []internal/routing.HostSnapshot
-		method (*T) Keyspace(name string) (*internal/metadata.KeyspaceMetadata, bool)
-		method (*T) ReplicaRoutes(info internal/model.RoutingInfo) []internal/routing.Route
-		method (*T) Replicas(keyspace string, table string, token int64) ([]internal/routing.Target, error)
+		method (*T) Hosts() []metadata.HostSnapshot
+		method (*T) Keyspace(name string) (*metadata.Keyspace, bool)
+		method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Target, error)
 		method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
-		method (*T) TokenRanges(keyspace string, table string) ([]internal/routing.TokenRange, error)
-	type metadata.Table = internal/metadata.TableMetadata
+		method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
+	type metadata.Table struct
 		field ID string
-		field Columns map[string]*internal/metadata.ColumnMetadata
+		field Columns map[string]*metadata.Column
 		field Extensions map[string][]byte
 		field Keyspace string
 		field Name string
-		field PartitionKey []*internal/metadata.ColumnMetadata
-		field ClusteringColumns []*internal/metadata.ColumnMetadata
+		field PartitionKey []*metadata.Column
+		field ClusteringColumns []*metadata.Column
 		field OrderedColumns []string
 		field Flags []string
-		field Options internal/metadata.TableMetadataOptions
-		method (*T) Equals(other *internal/metadata.TableMetadata) bool
-	type metadata.TableOptions = internal/metadata.TableMetadataOptions
+		field Options metadata.TableOptions
+		method (*T) Equals(other *metadata.Table) bool
+	type metadata.TableOptions struct
 		field Caching map[string]string
 		field Compaction map[string]string
 		field Compression map[string]string
@@ -1398,14 +1399,22 @@ package metadata
 		field DcLocalReadRepairChance float64
 		field CrcCheckChance float64
 		field InMemory bool
-		method (*T) Equals(other *internal/metadata.TableMetadataOptions) bool
-	type metadata.Type = internal/metadata.TypeMetadata
+		method (*T) Equals(other *metadata.TableOptions) bool
+	type metadata.Target struct
+		field StrictShard bool
+		field HostID cql.UUID
+		field ShardID cql.Option[uint32]
+	type metadata.TokenRange struct
+		field Replicas []metadata.Target
+		field Start int64
+		field End int64
+	type metadata.Type struct
 		field Keyspace string
 		field Name string
 		field FieldNames []string
 		field FieldTypes []string
-	type metadata.View = internal/metadata.ViewMetadata
-		field Columns map[string]*internal/metadata.ColumnMetadata
+	type metadata.View struct
+		field Columns map[string]*metadata.Column
 		field Extensions map[string][]byte
 		field WhereClause string
 		field BaseTableName string
@@ -1414,9 +1423,9 @@ package metadata
 		field BaseTableID string
 		field ViewName string
 		field OrderedColumns []string
-		field PartitionKey []*internal/metadata.ColumnMetadata
-		field ClusteringColumns []*internal/metadata.ColumnMetadata
-		field Options internal/metadata.TableMetadataOptions
+		field PartitionKey []*metadata.Column
+		field ClusteringColumns []*metadata.Column
+		field Options metadata.TableOptions
 		field DcLocalReadRepairChance float64
 		field ReadRepairChance float64
 		field IncludeAllColumns bool
@@ -1469,19 +1478,25 @@ package retry
 
 package routing
 	const routing.AnyShard int32
-	var routing.CDCTokenPartitioner internal/routing.TokenPartitioner
-	type routing.HostSnapshot = internal/model.HostSnapshot
-		field Address net/netip.AddrPort
-		field Datacenter string
-		field Rack string
-		field Tokens []int64
-		field Shards uint32
-		field ShardingIgnoreMSB uint8
-		field ID cql.UUID
-		field Enabled bool
-		field Connected bool
-		field Up bool
-	type routing.Info = internal/model.RoutingInfo
+	type routing.AttemptEvent struct
+		field Started time.Time
+		field Err error
+		field RequestID uint64
+		field Attempt int
+		field Latency time.Duration
+		field Target metadata.Target
+		field CQLTraceID cql.Option[cql.UUID]
+		field Cancelled bool
+		field Speculative bool
+	type routing.AttemptStart struct
+		field Started time.Time
+		field RequestID uint64
+		field Attempt int
+		field Target metadata.Target
+		field Speculative bool
+	var routing.CDCTokenPartitioner routing.TokenPartitioner
+	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
+	type routing.Info struct
 		field Keyspace string
 		field Table string
 		field Token cql.Option[int64]
@@ -1490,51 +1505,36 @@ package routing
 		field Consistency cql.Consistency
 		field HostID cql.Option[cql.UUID]
 		field ShardID cql.Option[uint32]
-	type routing.LatencyOptions = internal/routing.LatencyOptions
+	type routing.LatencyOptions struct
 		field Enabled bool
 		field ExclusionThreshold float64
 		field MinimumSamples int
 		field Scale time.Duration
 		field RetryPeriod time.Duration
 		field UpdateInterval time.Duration
-	var routing.Murmur3TokenPartitioner internal/routing.TokenPartitioner
-	func routing.NewPlan(policy routing.Policy, info routing.Info, m *metadata.Snapshot) routing.Plan
+	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
+	func routing.NewPlan(policy routing.Policy, info routing.Info, snapshot *metadata.Snapshot) routing.Plan
 	func routing.NewPolicy(options routing.Options) (routing.Policy, error)
-	type routing.Options = internal/routing.RoutingOptions
+	type routing.Options struct
 		field Datacenter string
 		field Rack string
-		field Latency internal/routing.LatencyOptions
+		field Latency routing.LatencyOptions
 		field TokenAware bool
 		field AllowRemote bool
 		field ShuffleReplicas bool
 		field LeaderAware bool
-	type routing.PartitionKey = internal/routing.PartitionKey
+	type routing.PartitionKey struct
 		method (T) ForEach(fn func(cql.Bytes) error) error
 		method (T) Len() int64
-	type routing.Plan = internal/routing.QueryPlan
-		method Next() (internal/routing.Route, bool)
-	type routing.Policy = internal/routing.RoutingPolicy
-		method Fallback(internal/model.RoutingInfo, *internal/routing.MetadataSnapshot) internal/routing.QueryPlan
-		method Observe(internal/routing.AttemptEvent)
-		method Pick(internal/model.RoutingInfo, *internal/routing.MetadataSnapshot) (internal/routing.Route, bool)
-		method Validate(*internal/routing.MetadataSnapshot) error
-	type routing.Route = internal/routing.Route
-		field Shard int32
-		method (T) HostID() cql.UUID
-		method (T) InternalHost() *internal/pool.HostRoute
-		method (T) ShardOf(token int64) int32
-		method (T) Target() internal/routing.Target
-		method (T) Usable() bool
-		method (T) WithShard(shard int32) internal/routing.Route
-	func routing.SingleTarget(target routing.Target, strictShard bool) routing.Policy
-	type routing.Target = internal/model.Target
-		field StrictShard bool
-		field HostID cql.UUID
-		field ShardID cql.Option[uint32]
-	type routing.TokenPartitioner = internal/routing.TokenPartitioner
-		method Token(internal/routing.PartitionKey) (int64, error)
-	type routing.TokenRange = internal/routing.TokenRange
-		field Replicas []internal/routing.Target
-		field Start int64
-		field End int64
+	type routing.Plan interface
+		method Next() (metadata.Route, bool)
+	type routing.Policy interface
+		method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
+		method Observe(routing.AttemptEvent)
+		method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
+		method Validate(*metadata.Snapshot) error
+	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
+	func routing.SingleTarget(target metadata.Target, strictShard bool) routing.Policy
+	type routing.TokenPartitioner interface
+		method Token(routing.PartitionKey) (int64, error)
 

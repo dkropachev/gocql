@@ -168,7 +168,7 @@ type v2UnavailableHostsRouting struct {
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (metadata.Route, bool) {
 	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
@@ -177,16 +177,16 @@ func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadat
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
-	snapshot := *metadata
-	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
-	implRouting. // rebuild indices after test-only membership changes
-			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
-		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
+func (p v2UnavailableHostsRouting) unavailable(snapshot *metadata.Snapshot) *metadata.Snapshot {
+	state := *implRouting.SnapshotData(implRouting.SnapshotOf(snapshot))
+	// The routing host index is rebuilt for the changed membership.
+	state.InternalHostIndex = nil
+	state.InternalHosts = snapshot.Hosts()
+	for i := range state.InternalHosts {
+		state.InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
-		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(state.InternalHosts) > 1 {
+		state.InternalHosts = state.InternalHosts[:1]
 	}
-	return &snapshot
+	return implRouting.NewMetadataSnapshot(state).Public()
 }

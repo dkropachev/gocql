@@ -25,8 +25,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type prepareCacheKey struct {
@@ -212,7 +214,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	}()
 	conn := options.privateStorage.InternalConnection
 	if conn == nil {
-		conn, err = s.Core.SelectTypedConn(ctx, model.RoutingInfo{HostID: options.HostID}, nil)
+		conn, err = s.Core.SelectTypedConn(ctx, routing2.Info{HostID: options.HostID}, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -565,11 +567,11 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
-func (l *logicalExecution) startAttempt(start routing.AttemptStart) func(routing.AttemptEvent) {
+func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if l == nil || l.observer == nil {
 		return nil
 	}
-	var end func(routing.AttemptEvent)
+	var end func(routing2.AttemptEvent)
 	l.rt.ObserveSafely(func() { end = l.observer.StartAttempt(l.observerCtx, start) })
 	return end
 }
@@ -943,31 +945,31 @@ type typedAttemptOutcome struct {
 	response    *transport.InternalResponsePage
 	err         error
 	conn        *transport.Conn
-	event       routing.AttemptEvent
+	event       routing2.AttemptEvent
 	consistency cql.Consistency
 }
 
 // beginAttempt tells the request's observer that an attempt on conn starts
 // and returns its target, start time and the observer's end callback.
-func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (model.Target, time.Time, func(routing.AttemptEvent)) {
+func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
 	target := attemptTarget(request, conn)
 	var requestID uint64
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
 	started := time.Now()
-	end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
 // attemptOutcome reports one finished attempt to the observer's end callback
 // and the routing policy and returns it for the execution loop.
-func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionRequest, conn *transport.Conn, target model.Target, index int, started time.Time, response *transport.InternalResponsePage, err error, consistency cql.Consistency, speculative bool, end func(routing.AttemptEvent)) typedAttemptOutcome {
+func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionRequest, conn *transport.Conn, target metadata.Target, index int, started time.Time, response *transport.InternalResponsePage, err error, consistency cql.Consistency, speculative bool, end func(routing2.AttemptEvent)) typedAttemptOutcome {
 	var requestID uint64
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

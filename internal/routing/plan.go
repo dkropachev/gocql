@@ -3,13 +3,15 @@
 
 package routing
 
-import "github.com/scylladb/gocql/v2/internal/model"
+import (
+	"github.com/scylladb/gocql/v2/routing"
+)
 
 // NewPlan returns the plan a request follows under policy: the route
 // policy.Pick gives, then the routes of policy.Fallback except that one.
 // Fallback is called only when the plan needs a second route, or a first
 // one when Pick returns false.
-func NewPlan(policy RoutingPolicy, info model.RoutingInfo, m *MetadataSnapshot) QueryPlan {
+func NewPlan(policy RoutingPolicy, info routing.Info, m *MetadataSnapshot) QueryPlan {
 	switch p := policy.(type) {
 	case *InternalRoutingPolicy:
 		// Built-in routing picks and falls back within one cursor.
@@ -27,7 +29,7 @@ type pickPlan struct {
 	fallback QueryPlan
 	metadata *MetadataSnapshot
 	picked   Route
-	info     model.RoutingInfo
+	info     routing.Info
 	started  bool
 	hasPick  bool
 }

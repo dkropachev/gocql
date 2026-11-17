@@ -45,6 +45,7 @@ import (
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -88,8 +89,8 @@ func TestPool(t *testing.T) {
 					t.Fatal("failed data connection unexpectedly connected")
 				}
 				policy.mu.Lock()
-				hosts := append([]routing.HostSnapshot(nil), policy.hosts...)
-				targets := append([]routing.HostSnapshot(nil), policy.targets...)
+				hosts := append([]metadata.HostSnapshot(nil), policy.hosts...)
+				targets := append([]metadata.HostSnapshot(nil), policy.targets...)
 				resets := policy.resets
 				policy.mu.Unlock()
 				if len(hosts) == 0 || len(targets) == 0 {
@@ -173,7 +174,7 @@ func TestPool(t *testing.T) {
 		if !ok {
 			t.Fatal("pool missing")
 		}
-		r, err := pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
+		r, err := pool.InternalReserveStream(ctx, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -227,7 +228,7 @@ func TestPool(t *testing.T) {
 		}
 		// Early abandonment discards the reserved slot, and ordinary bounded pool
 		// repair restores healthy shared execution without growing its target.
-		r, err = pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
+		r, err = pool.InternalReserveStream(ctx, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 		if err != nil {
 			t.Fatal(err)
 		}

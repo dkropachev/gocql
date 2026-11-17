@@ -27,7 +27,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // DialTarget is a resolved raw connection target. Hooks must honor the selected
@@ -35,7 +35,7 @@ import (
 type DialTarget struct {
 	LocalAddress     netip.AddrPort
 	Network, Address string
-	Host             model.HostSnapshot
+	Host             metadata.HostSnapshot
 	ShardID          cql.Option[uint32]
 }
 

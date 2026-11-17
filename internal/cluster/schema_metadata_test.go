@@ -32,9 +32,9 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestSchemaMetadata(t *testing.T) {
@@ -67,7 +67,7 @@ func TestSchemaMetadata(t *testing.T) {
 				defer s.Close()
 
 				var wg sync.WaitGroup
-				results := make([]*metadata.KeyspaceMetadata, concurrency)
+				results := make([]*metadata2.Keyspace, concurrency)
 				errs := make([]error, concurrency)
 				for i := range concurrency {
 					wg.Add(1)
@@ -195,7 +195,7 @@ func TestSchemaMetadata(t *testing.T) {
 				SessionData(s).InternalMetadataDescriber.invalidateTableSchema("test_ks", "tbl_a")
 
 				var wg sync.WaitGroup
-				results := make([]*metadata.TableMetadata, concurrency)
+				results := make([]*metadata2.Table, concurrency)
 				errs := make([]error, concurrency)
 				for i := range concurrency {
 					wg.Add(1)
@@ -1539,9 +1539,9 @@ func TestSchemaMetadata(t *testing.T) {
 	})
 
 	t.Run("Snapshot", func(t *testing.T) {
-		column := &metadata.ColumnMetadata{Name: "id", Type: "int", Index: metadata.ColumnIndexMetadata{Options: map[string]any{"nested": map[string]any{"bytes": []byte{1}}}}}
-		ks := &metadata.KeyspaceMetadata{Name: "ks", StrategyOptions: map[string]string{"replication_factor": "1"}, Tables: map[string]*metadata.TableMetadata{"t": {Columns: map[string]*metadata.ColumnMetadata{"id": column}, PartitionKey: []*metadata.ColumnMetadata{column}, Extensions: map[string][]byte{"bytes": {2}}, Options: metadata.TableMetadataOptions{CDC: map[string]string{"enabled": "true"}}}}, Types: map[string]*metadata.TypeMetadata{"u": {FieldNames: []string{"a"}, FieldTypes: []string{"int"}}}, Functions: map[string]*metadata.FunctionMetadata{"f": {ArgumentNames: []string{"a"}, ArgumentTypes: []string{"int"}}}}
-		m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 8, InternalKeyspaces: map[string]*metadata.KeyspaceMetadata{"ks": metadata.InternalCloneV2Keyspace(ks)}, InternalHosts: []model.HostSnapshot{{Tokens: []int64{1}}}})
+		column := &metadata2.Column{Name: "id", Type: "int", Index: metadata2.ColumnIndex{Options: map[string]any{"nested": map[string]any{"bytes": []byte{1}}}}}
+		ks := &metadata2.Keyspace{Name: "ks", StrategyOptions: map[string]string{"replication_factor": "1"}, Tables: map[string]*metadata2.Table{"t": {Columns: map[string]*metadata2.Column{"id": column}, PartitionKey: []*metadata2.Column{column}, Extensions: map[string][]byte{"bytes": {2}}, Options: metadata2.TableOptions{CDC: map[string]string{"enabled": "true"}}}}, Types: map[string]*metadata2.Type{"u": {FieldNames: []string{"a"}, FieldTypes: []string{"int"}}}, Functions: map[string]*metadata2.Function{"f": {ArgumentNames: []string{"a"}, ArgumentTypes: []string{"int"}}}}
+		m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 8, InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": metadata.InternalCloneV2Keyspace(ks)}, InternalHosts: []metadata2.HostSnapshot{{Tokens: []int64{1}}}})
 		ks.Tables["t"].Columns["id"].Name = "mutated"
 		ks.Tables["t"].Extensions["bytes"][0] = 9
 		first, _ := m.Keyspace("ks")
@@ -1671,16 +1671,16 @@ func TestSchemaMetadata(t *testing.T) {
 	})
 
 	t.Run("ValidateSchemaParts", func(t *testing.T) {
-		ks := &metadata.KeyspaceMetadata{Name: "ks"}
-		tables := []metadata.TableMetadata{{Name: "t"}}
-		columns := []metadata.ColumnMetadata{{Table: "t", Name: "p", Type: "int", Kind: metadata.ColumnPartitionKey, ComponentIndex: 0}}
-		check := func(cols []metadata.ColumnMetadata, types []metadata.TypeMetadata) error {
+		ks := &metadata2.Keyspace{Name: "ks"}
+		tables := []metadata2.Table{{Name: "t"}}
+		columns := []metadata2.Column{{Table: "t", Name: "p", Type: "int", Kind: metadata2.ColumnPartitionKey, ComponentIndex: 0}}
+		check := func(cols []metadata2.Column, types []metadata2.Type) error {
 			return metadata.InternalValidateV2SchemaParts(ks, tables, cols, types, nil, nil, nil, nil)
 		}
 		if err := check(columns, nil); err != nil {
 			t.Fatal(err)
 		}
-		malformed := append([]metadata.ColumnMetadata(nil), columns...)
+		malformed := append([]metadata2.Column(nil), columns...)
 		malformed[0].ComponentIndex = 2
 		if err := check(malformed, nil); err == nil {
 			t.Fatal("key gap accepted")
@@ -1689,11 +1689,11 @@ func TestSchemaMetadata(t *testing.T) {
 		if err := check(malformed, nil); err == nil {
 			t.Fatal("duplicate identity accepted")
 		}
-		types := []metadata.TypeMetadata{{Name: "a", FieldNames: []string{"b"}, FieldTypes: []string{"frozen<b>"}}, {Name: "b", FieldNames: []string{"a"}, FieldTypes: []string{"frozen<a>"}}}
+		types := []metadata2.Type{{Name: "a", FieldNames: []string{"b"}, FieldTypes: []string{"frozen<b>"}}, {Name: "b", FieldNames: []string{"a"}, FieldTypes: []string{"frozen<a>"}}}
 		if err := check(columns, types); err == nil {
 			t.Fatal("UDT cycle accepted")
 		}
-		types = []metadata.TypeMetadata{{Name: "a", FieldNames: []string{"x", "x"}, FieldTypes: []string{"int", "int"}}}
+		types = []metadata2.Type{{Name: "a", FieldNames: []string{"x", "x"}, FieldTypes: []string{"int", "int"}}}
 		if err := check(columns, types); err == nil {
 			t.Fatal("duplicate UDT field accepted")
 		}

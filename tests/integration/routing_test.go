@@ -49,6 +49,7 @@ import (
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -275,7 +276,7 @@ func TestRouting(t *testing.T) {
 			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
+			cluster.WithHostFilter(func(host metadata.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -311,7 +312,7 @@ func TestRouting(t *testing.T) {
 			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
-			cluster.WithHostFilter(func(host routing.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
+			cluster.WithHostFilter(func(host metadata.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
@@ -567,7 +568,7 @@ func TestRouting(t *testing.T) {
 			}
 			for _, tokenRange := range ranges {
 				for _, token := range []int64{tokenRange.End, tokenRange.Start, math.MinInt64, math.MaxInt64} {
-					var expected []routing.Target
+					var expected []metadata.Target
 					for _, candidate := range ranges {
 						if token > candidate.Start && token <= candidate.End || candidate.Start >= candidate.End && (token > candidate.Start || token <= candidate.End) {
 							expected = candidate.Replicas
@@ -581,7 +582,7 @@ func TestRouting(t *testing.T) {
 				}
 			}
 			firstRange := ranges[0]
-			expectedReplicas := append([]routing.Target(nil), firstRange.Replicas...)
+			expectedReplicas := append([]metadata.Target(nil), firstRange.Replicas...)
 			ranges[0].Replicas[0].ShardID.Value++
 			actual, err := snapshot.Replicas(prepared.Info().Keyspace, table, firstRange.End)
 			if err != nil || !slices.Equal(actual, expectedReplicas) {
@@ -739,12 +740,12 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var authoritative []routing.TokenRange
+			var authoritative []metadata.TokenRange
 			var row cql.DynamicRow
 			for serverRows.NextInto(&row) {
 				last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 				list := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
-				r := routing.TokenRange{End: last}
+				r := metadata.TokenRange{End: last}
 				for list.Next() {
 					tuple := codecTestMust(list.Value().Elements())
 					if !tuple.Next() {
@@ -755,7 +756,7 @@ func TestRouting(t *testing.T) {
 						t.Fatal("missing shard")
 					}
 					shard := codecTestMust(tuple.Value().Signed())
-					r.Replicas = append(r.Replicas, routing.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
+					r.Replicas = append(r.Replicas, metadata.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
 				}
 				if err := list.Err(); err != nil {
 					t.Fatal(err)
@@ -770,7 +771,7 @@ func TestRouting(t *testing.T) {
 			if len(authoritative) == 0 {
 				t.Fatal("no authoritative tablet records")
 			}
-			slices.SortFunc(authoritative, func(a, b routing.TokenRange) int { return stdcmp.Compare(a.End, b.End) })
+			slices.SortFunc(authoritative, func(a, b metadata.TokenRange) int { return stdcmp.Compare(a.End, b.End) })
 			for i := range authoritative {
 				authoritative[i].Start = math.MinInt64
 				if i > 0 {
@@ -784,7 +785,7 @@ func TestRouting(t *testing.T) {
 				if !token.Set {
 					t.Fatal("prepared partition key did not produce token")
 				}
-				var expected []routing.Target
+				var expected []metadata.Target
 				for _, r := range authoritative {
 					if token.Value > r.Start && token.Value <= r.End {
 						expected = r.Replicas
@@ -803,7 +804,7 @@ func TestRouting(t *testing.T) {
 					before := tabletAuthority(t, ctx, s, id, token.Value)
 					opts := exec.Options{}
 					if attempt < 3 {
-						opts = exec.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(s.Metadata()).InternalHosts[attempt%len(implRouting.SnapshotData(s.Metadata()).InternalHosts)].ID, Set: true}}
+						opts = exec.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts[attempt%len(implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts)].ID, Set: true}}
 					}
 					rows, err := read.Run(ctx, key, bindOptions(s, opts))
 					if err != nil {

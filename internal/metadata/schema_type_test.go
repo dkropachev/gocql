@@ -7,10 +7,11 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestSchemaDataType(t *testing.T) {
-	ks := &KeyspaceMetadata{Name: "ks", Types: map[string]*TypeMetadata{
+	ks := &metadata.Keyspace{Name: "ks", Types: map[string]*metadata.Type{
 		"addr":   {Keyspace: "ks", Name: "addr", FieldNames: []string{"street", "zip"}, FieldTypes: []string{"text", "int"}},
 		"Quoted": {Keyspace: "ks", Name: "Quoted", FieldNames: []string{"v"}, FieldTypes: []string{"frozen<addr>"}},
 	}}

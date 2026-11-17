@@ -32,8 +32,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type poolState uint8
@@ -283,12 +284,12 @@ func (p *InternalTypedConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 	if raw, ok := t.(implEndpoint.InternalInt64Token); ok {
 		return p.PickInt64(int64(raw))
 	}
-	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{})
 }
 func (p *InternalTypedConnPicker) PickInt64(t int64) *transport.Conn {
-	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{Token: cql.Option[int64]{Value: t, Set: true}})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{Token: cql.Option[int64]{Value: t, Set: true}})
 }
-func (p *InternalTypedConnPicker) InternalPickTarget(target model.Target, routing model.RoutingInfo) *transport.Conn {
+func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, routing routing.Info) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 	if p.closed {
@@ -355,10 +356,10 @@ func (pool *InternalHostConnPool) signalReservation() {
 	pool.signalReservationLocked()
 	pool.InternalMu.Unlock()
 }
-func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target model.Target, routing model.RoutingInfo) (*transport.InternalExclusiveConn, error) {
+func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target metadata.Target, routing routing.Info) (*transport.InternalExclusiveConn, error) {
 	return pool.InternalReserveStreamWithLimits(ctx, target, routing, transport.StreamLimits{})
 }
-func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target model.Target, routing model.RoutingInfo, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
+func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target metadata.Target, routing routing.Info, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
 	if ctx == nil {
 		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}

@@ -25,12 +25,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func TestTypedConnPicker(t *testing.T) {
@@ -41,7 +42,7 @@ func TestTypedConnPicker(t *testing.T) {
 		p := codecTestMust(implPool.InternalNewTypedConnPicker(c, options))
 		p.InternalConns[0] = []*transport.Conn{{InternalStreams: streams.New()}, {InternalStreams: streams.New()}, {InternalStreams: streams.New()}}
 		p.InternalPos.Store(math.MaxInt64)
-		if p.InternalPickTarget(model.Target{}, model.RoutingInfo{}) == nil {
+		if p.InternalPickTarget(metadata.Target{}, routing.Info{}) == nil {
 			t.Fatal("wrapped position lost eligible connection")
 		}
 	})

@@ -7,8 +7,8 @@ import (
 	"math"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/model"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // AnyShard is a Route's shard when any connection of its host will do.
@@ -96,7 +96,7 @@ func (m *MetadataSnapshot) HostRoutes() []Route {
 
 // ReplicaRoutes returns a route to each replica of info's token, to its
 // shard when placement names one and to any shard otherwise.
-func (m *MetadataSnapshot) ReplicaRoutes(info model.RoutingInfo) []Route {
+func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 	if m == nil || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return nil
 	}

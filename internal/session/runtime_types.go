@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // inputOwner serializes close against admission. Each admitted operation and
@@ -197,7 +198,7 @@ type InternalExecutionRequest struct {
 	keyspace       string
 	InternalValues model.EncodedValues
 	tabletFeedback routing.InternalTabletFeedbackStamp
-	routing        model.RoutingInfo
+	routing        routing2.Info
 	// timestamp is the client timestamp the request sends when
 	// hasTimestamp: its options' own or one admission generated.
 	timestamp          int64

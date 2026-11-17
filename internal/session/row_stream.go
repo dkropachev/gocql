@@ -39,7 +39,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // StreamOptions configures a stream query; streaming is pull-driven. The
@@ -425,13 +427,13 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 
 func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 	request := s.privateStorage.request
-	var target model.Target
+	var target metadata.Target
 	var routed *implPool.InternalHostConnPool // the pool of the plan's route
 	if s.privateStorage.retryTarget != nil {
 		target = *s.privateStorage.retryTarget
 		s.privateStorage.retryTarget = nil
 	} else if request.connection != nil {
-		target = model.Target{HostID: implEndpoint.InternalHostInfoHostUUID(request.connection.InternalHost)}
+		target = metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(request.connection.InternalHost)}
 	} else if plan != nil {
 		r, ok := plan.Next()
 		if !ok {
@@ -440,7 +442,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 		target = r.Target()
 		routed = r.InternalHost().Pool()
 	} else if request.routing.HostID.Set {
-		target = model.Target{HostID: request.routing.HostID.Value, ShardID: request.routing.ShardID, StrictShard: request.routing.ShardID.Set}
+		target = metadata.Target{HostID: request.routing.HostID.Value, ShardID: request.routing.ShardID, StrictShard: request.routing.ShardID.Set}
 	} else {
 		hosts := implCluster.SessionData(s.privateStorage.session).InternalHostSource.InternalGetHostsList()
 		for _, host := range hosts {
@@ -542,19 +544,19 @@ func (s *RowStream[R]) loadPage() error {
 // rowStreamLoadPage loads the next page, recording its failed attempts in log.
 func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request := s.privateStorage.request
-	metadata := s.privateStorage.session.Metadata()
-	request.tabletFeedback = s.privateStorage.session.CaptureTabletFeedback(request.routing, metadata)
-	tablet := lookupRequestTablet(metadata, request)
+	snapshot := s.privateStorage.session.Metadata()
+	request.tabletFeedback = s.privateStorage.session.CaptureTabletFeedback(request.routing, snapshot)
+	tablet := lookupRequestTablet(snapshot, request)
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		if err := policy.Validate(metadata); err != nil {
+		if err := policy.Validate(snapshot); err != nil {
 			return err
 		}
 		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
-			plan = builtin.InternalPlanWith(request.routing, metadata, new(implRouting.InternalLazyRoutingPlan), &tablet)
+			plan = builtin.InternalPlanWith(request.routing, snapshot, new(implRouting.InternalLazyRoutingPlan), &tablet)
 		} else {
-			plan = implRouting.NewPlan(policy, request.routing, metadata)
+			plan = implRouting.NewPlan(policy, request.routing, snapshot)
 		}
 	}
 	pagectx := s.privateStorage.ctx
@@ -588,7 +590,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				return err
 			}
 			s.privateStorage.prepared = prepared
-			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 			if err := s.acquire(plan); err != nil {
 				return err
 			}
@@ -600,19 +602,19 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		wireRequest.Lease = request.InternalOwner.InternalWriterLease(request.InternalValues.Framed)
 		observed := request.source().observe()
 		conn := s.privateStorage.reservation.InternalConn
-		target := model.Target{HostID: conn.InternalHostID()}
+		target := metadata.Target{HostID: conn.InternalHostID()}
 		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
 			target.ShardID = cql.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
 		}
 		started := time.Now()
-		end := request.InternalLogical.startAttempt(implRouting.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+		end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
 		var traces []cql.CQLTraceRef
 		if response != nil {
 			traces = response.InternalInfo.CQLTraces()
 		}
-		event := implRouting.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 		if len(traces) > 0 {
 			event.CQLTraceID = cql.Option[cql.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}
@@ -712,7 +714,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				return closeErr
 			}
 			s.privateStorage.reservation = nil
-			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.session), conn, request.InternalValues, true, s.privateStorage.prepared)
 			if err != nil {
 				return err
@@ -740,7 +742,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			consistency = decision.Consistency.Value
 		}
 		if decision.Action == retry.Same && s.privateStorage.reservation.InternalClosing.Load() {
-			s.privateStorage.retryTarget = &model.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
 		}
 		if decision.Action == retry.Next || s.privateStorage.reservation.InternalClosing.Load() {
 			s.privateStorage.reservation.InternalClose(false)
@@ -771,7 +773,7 @@ type rowStreamStorage[R any] struct {
 	bufferedPlans   *streamPlanCache[R]
 	attemptMetadata *transport.InternalStreamResponse
 	closeDone       chan struct{}
-	retryTarget     *model.Target
+	retryTarget     *metadata.Target
 	cancel          context.CancelFunc
 	stop            func() bool
 	session         *implCluster.Core

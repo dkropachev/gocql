@@ -12,13 +12,13 @@ import (
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/exec"
-
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // These helpers accept typed descriptors and explicit values. Retained results
@@ -240,7 +240,7 @@ func cassandraOtherSession(t testing.TB, s *gocql.Session[testDialect], keyspace
 type cassandraObserver struct {
 	mu       sync.Mutex
 	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	attempts []routing.AttemptEvent
 }
 
 func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
@@ -248,7 +248,7 @@ func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
@@ -257,7 +257,7 @@ func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
 func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {
@@ -266,10 +266,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]config.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}

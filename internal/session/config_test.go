@@ -40,6 +40,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type runtimeBlockingDNS struct{ done chan struct{} }
@@ -232,7 +233,7 @@ func TestConfig(t *testing.T) {
 		t.Run("CurrentTypedProfile", func(t *testing.T) {
 			config := settings.DefaultConfig("127.0.0.1")
 			profile := *config.DefaultProfile
-			routing, err := implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: implRouting.LatencyOptions{Enabled: true}})
+			routing, err := implRouting.NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}})
 			if err != nil {
 				t.Fatal(err)
 			}

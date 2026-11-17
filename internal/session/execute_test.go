@@ -16,12 +16,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func runtimeTestSession(t testing.TB, n int) (*cluster.Core, []*transport.Conn, []net.Conn) {
@@ -90,18 +91,18 @@ func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
 }
 
 type runtimePolicy struct {
-	targets []model.Target
+	targets []metadata.Target
 	events  atomic.Int32
 }
 
 func (p *runtimePolicy) Validate(*routing.MetadataSnapshot) error { return nil }
-func (p *runtimePolicy) Pick(model.RoutingInfo, *routing.MetadataSnapshot) (routing.Route, bool) {
+func (p *runtimePolicy) Pick(routing2.Info, *routing.MetadataSnapshot) (routing.Route, bool) {
 	return routing.Route{}, false
 }
-func (p *runtimePolicy) Fallback(model.RoutingInfo, *routing.MetadataSnapshot) routing.QueryPlan {
-	return &routing.InternalTargetPlan{InternalTargets: append([]model.Target(nil), p.targets...)}
+func (p *runtimePolicy) Fallback(routing2.Info, *routing.MetadataSnapshot) routing.QueryPlan {
+	return &routing.InternalTargetPlan{InternalTargets: append([]metadata.Target(nil), p.targets...)}
 }
-func (p *runtimePolicy) Observe(routing.AttemptEvent) { p.events.Add(1) }
+func (p *runtimePolicy) Observe(routing2.AttemptEvent) { p.events.Add(1) }
 
 type runtimeSpeculation struct{}
 
@@ -110,7 +111,7 @@ func (runtimeSpeculation) Delay(attempt int) (time.Duration, bool) {
 }
 func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Duration) {
 	s, conns, peers := runtimeTestSession(t, 2)
-	policy := &runtimePolicy{targets: []model.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)}}}
+	policy := &runtimePolicy{targets: []metadata.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)}}}
 	profile := settings.InternalDefaultProfile()
 	profile.Routing = policy
 	profile.Speculation = runtimeSpeculation{}

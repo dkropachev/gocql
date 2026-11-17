@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/routing"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func unpreparedQueries(s *Session) int {
@@ -62,7 +62,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		s := InternalWrapSession(core)
 		entered, release := make(chan struct{}), make(chan struct{})
 		defer close(release)
-		observer := &execVoidObserver{onAttempt: func(routing.AttemptEvent) { close(entered); <-release }}
+		observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) { close(entered); <-release }}
 		options := Options{Observer: observer, Profile: generalPathProfile()}
 		served := make(chan struct{})
 		go func() {

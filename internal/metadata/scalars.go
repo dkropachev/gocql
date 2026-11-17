@@ -8,6 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
@@ -53,14 +54,14 @@ func (InternalV2MetadataInt) Clone(v int) int { return v }
 func (v2MetadataKind) CheckType(t cql.DataType) error {
 	return (InternalV2MetadataText{}).CheckType(t)
 }
-func (v2MetadataKind) Decode(r cql.ValueReader) (ColumnKind, error) {
+func (v2MetadataKind) Decode(r cql.ValueReader) (metadata.ColumnKind, error) {
 	v, e := (InternalV2MetadataText{}).Decode(r)
 	if e != nil {
 		return 0, e
 	}
 	return columnKindFromSchema(v)
 }
-func (v2MetadataKind) Clone(v ColumnKind) ColumnKind { return v }
+func (v2MetadataKind) Clone(v metadata.ColumnKind) metadata.ColumnKind { return v }
 
 func (v2MetadataStrings) CheckType(t cql.DataType) error {
 	if t.Kind() == cql.TypeSet {

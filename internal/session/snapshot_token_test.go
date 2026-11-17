@@ -9,6 +9,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type snapshotTokenKey struct {
@@ -25,19 +27,19 @@ func TestSnapshotTokenMatchesPreparedRouting(t *testing.T) {
 	p.InternalMu.Lock()
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	config.Partitioners = map[string]routing.TokenPartitioner{partitioner: routing.Murmur3TokenPartitioner}
+	config.Partitioners = map[string]routing2.TokenPartitioner{partitioner: routing2.Murmur3TokenPartitioner}
 	s.ConfigureV2Peripheral(config)
 
 	intType := codecTestMust(cql.ScalarType(cql.TypeInt))
 	textType := codecTestMust(cql.ScalarType(cql.TypeText))
 	next := routing.InternalClonePlacementSnapshot(s.Metadata())
 	ks := metadata.InternalCloneV2Keyspace(routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"])
-	column := func(name, typ string) *metadata.ColumnMetadata {
-		return &metadata.ColumnMetadata{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnPartitionKey}
+	column := func(name, typ string) *metadata2.Column {
+		return &metadata2.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata2.ColumnPartitionKey}
 	}
-	ks.Tables["single"] = &metadata.TableMetadata{Keyspace: "ks", Name: "single", PartitionKey: []*metadata.ColumnMetadata{column("a", "int")}}
-	ks.Tables["composite"] = &metadata.TableMetadata{Keyspace: "ks", Name: "composite", PartitionKey: []*metadata.ColumnMetadata{column("a", "int"), column("b", "text")}}
-	routing.SnapshotData(next).InternalKeyspaces = map[string]*metadata.KeyspaceMetadata{"ks": ks}
+	ks.Tables["single"] = &metadata2.Table{Keyspace: "ks", Name: "single", PartitionKey: []*metadata2.Column{column("a", "int")}}
+	ks.Tables["composite"] = &metadata2.Table{Keyspace: "ks", Name: "composite", PartitionKey: []*metadata2.Column{column("a", "int"), column("b", "text")}}
+	routing.SnapshotData(next).InternalKeyspaces = map[string]*metadata2.Keyspace{"ks": ks}
 	routing.SnapshotData(next).InternalPartitioner = partitioner
 	routing.SnapshotData(next).InternalPartitioners = config.Partitioners
 	p.InternalSnapshot.Store(next)

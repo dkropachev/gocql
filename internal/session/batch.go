@@ -17,6 +17,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // Batch collects statements, each with its values, to send as one CQL
@@ -49,7 +50,7 @@ type Batch struct {
 	// state is the execution state lent to an execution while no earlier
 	// one may still read it.
 	state   batchState
-	routing model.RoutingInfo
+	routing routing.Info
 	// params encodes AddToBatch values straight into values.
 	params  binding.ParameterBuffer
 	lastGen uint64
@@ -104,7 +105,7 @@ func (b *Batch) Reset() {
 		clear(b.entries)
 		b.entries, b.values = b.entries[:0], b.values[:0]
 	}
-	b.session, b.routing, b.shared = nil, model.RoutingInfo{}, false
+	b.session, b.routing, b.shared = nil, routing.Info{}, false
 }
 
 // drained reports whether the latest execution of the batch, if any, has
@@ -134,7 +135,7 @@ func (b *Batch) begin() *batchState {
 }
 
 // request returns the batch's request routing.
-func (b *Batch) requestRouting() model.RoutingInfo {
+func (b *Batch) requestRouting() routing.Info {
 	routing := b.routing
 	routing.Conditional = routing.Kind != cql.OrdinaryStatement
 	return routing
@@ -161,7 +162,7 @@ func validateBatch(s *implCluster.Core, batch *Batch) error {
 
 // add appends one statement whose encoded values are values, copying them
 // into the batch. r is the statement's routing.
-func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *model.RoutingInfo, values model.EncodedValues) error {
+func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *routing.Info, values model.EncodedValues) error {
 	if err := b.admit(s, r); err != nil {
 		return err
 	}
@@ -180,7 +181,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 // appends the statement. template is the statement's routing; the token is
 // computed from the encoded values. b.params keeps viewing the entry's bytes
 // until the next add; nothing reads them through it.
-func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *model.RoutingInfo, plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) error {
+func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *routing.Info, plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) error {
 	if err := b.admit(s, template); err != nil {
 		return err
 	}
@@ -199,7 +200,7 @@ func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, sta
 }
 
 // admit checks that a statement of session s with routing r may join b.
-func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
+func (b *Batch) admit(s *implCluster.Core, r *routing.Info) error {
 	if b == nil {
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
@@ -216,7 +217,7 @@ func (b *Batch) admit(s *implCluster.Core, r *model.RoutingInfo) error {
 }
 
 // appendEntry records a statement whose values are b.values[start:].
-func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *model.RoutingInfo, values model.EncodedValues, start int) {
+func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *routing.Info, values model.EncodedValues, start int) {
 	b.entries = append(b.entries, batchEntry{
 		source:    source,
 		statement: statement,

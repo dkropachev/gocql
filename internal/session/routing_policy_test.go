@@ -17,10 +17,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/model"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestRoutingPolicy(t *testing.T) {
@@ -34,7 +34,7 @@ func TestRoutingPolicy(t *testing.T) {
 			peripheral.InternalMu.Lock()
 			config := peripheral.InternalConfig
 			peripheral.InternalMu.Unlock()
-			config.Partitioners = map[string]implRouting.TokenPartitioner{"old": old, "new": newer}
+			config.Partitioners = map[string]routing2.TokenPartitioner{"old": old, "new": newer}
 			s.ConfigureV2Peripheral(config)
 			typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
@@ -56,7 +56,7 @@ func TestRoutingPolicy(t *testing.T) {
 			}()
 
 			next := implRouting.InternalClonePlacementSnapshot(s.Metadata())
-			routing.SnapshotData(next).InternalKeyspaces = map[string]*metadata.KeyspaceMetadata{"ks": metadata.InternalCloneV2Keyspace(routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"])}
+			routing.SnapshotData(next).InternalKeyspaces = map[string]*metadata2.Keyspace{"ks": metadata.InternalCloneV2Keyspace(routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"])}
 			routing.SnapshotData(next).InternalKeyspaces["ks"].Tables["table"].Options.Partitioner = "new"
 			peripheral.InternalSnapshot.Store(next)
 			b := codecTestMust(BindBorrowed(prepared, cql.BorrowBytes(payload)))
@@ -69,12 +69,12 @@ func TestRoutingPolicy(t *testing.T) {
 
 	t.Run("Latency", func(t *testing.T) {
 		t.Run("ExplicitThresholdChangesDecision", func(t *testing.T) {
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{Latency: implRouting.LatencyOptions{Enabled: true, ExclusionThreshold: 3, MinimumSamples: 1}})).(*implRouting.InternalRoutingPolicy)
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Latency: routing2.LatencyOptions{Enabled: true, ExclusionThreshold: 3, MinimumSamples: 1}})).(*implRouting.InternalRoutingPolicy)
 			now := time.Now()
 			for id, value := range map[byte]float64{1: float64(time.Millisecond), 2: float64(2500 * time.Microsecond), 3: float64(3500 * time.Microsecond)} {
 				policy.InternalLatencies.Store(cql.UUID{15: id}, &implRouting.InternalRoutingLatency{InternalValue: value, InternalSamples: 1, InternalUpdated: now})
 			}
-			policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: cql.UUID{15: 4}}, Started: now, Latency: time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 4}}, Started: now, Latency: time.Millisecond})
 			decisions := policy.InternalDecisions.Load()
 			if decisions == nil {
 				t.Fatal("no latency decision")
@@ -88,11 +88,11 @@ func TestRoutingPolicy(t *testing.T) {
 		})
 
 		t.Run("LargePublicationInterval", func(t *testing.T) {
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{Latency: implRouting.LatencyOptions{Enabled: true, MinimumSamples: 1, UpdateInterval: time.Duration(1<<63 - 1)}})).(*implRouting.InternalRoutingPolicy)
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Latency: routing2.LatencyOptions{Enabled: true, MinimumSamples: 1, UpdateInterval: time.Duration(1<<63 - 1)}})).(*implRouting.InternalRoutingPolicy)
 			now := time.Now()
-			policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: cql.UUID{15: 1}}, Started: now, Latency: time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 1}}, Started: now, Latency: time.Millisecond})
 			first := policy.InternalDecisions.Load()
-			policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: cql.UUID{15: 2}}, Started: now, Latency: 3 * time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 2}}, Started: now, Latency: 3 * time.Millisecond})
 			if policy.InternalDecisions.Load() != first {
 				t.Fatal("valid MaxDuration UpdateInterval republished before deadline without a new minimum")
 			}
@@ -100,17 +100,17 @@ func TestRoutingPolicy(t *testing.T) {
 
 		t.Run("LargeRetryWholePlan", func(t *testing.T) {
 			period := time.Duration(1<<63 - 1)
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Latency: implRouting.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: period, UpdateInterval: time.Hour}})).(*implRouting.InternalRoutingPolicy)
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Latency: routing2.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: period, UpdateInterval: time.Hour}})).(*implRouting.InternalRoutingPolicy)
 			metadata := v2TestMetadata()
 			slow := cql.UUID{15: 1}
 			healthy := cql.UUID{15: 2}
-			routing.SnapshotData(metadata).InternalRanges["ks"][0].Replicas = []model.Target{{HostID: slow}}
+			routing.SnapshotData(metadata).InternalRanges["ks"][0].Replicas = []metadata2.Target{{HostID: slow}}
 			now := time.Now()
 			old := now.Add(-period).Add(-time.Minute)
-			policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: healthy}, Started: old, Latency: time.Millisecond})
-			policy.Observe(implRouting.AttemptEvent{Target: model.Target{HostID: slow}, Started: old, Latency: 10 * time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: healthy}, Started: old, Latency: time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: slow}, Started: old, Latency: 10 * time.Millisecond})
 			policy.InternalDecisions.Store(&routing.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{slow: now.Add(-time.Minute)}})
-			info := model.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cql.OrdinaryStatement}
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cql.OrdinaryStatement}
 			start := make(chan struct{})
 			var wg sync.WaitGroup
 			var probes atomic.Int32
@@ -136,7 +136,7 @@ func TestRoutingPolicy(t *testing.T) {
 		})
 
 		t.Run("ThresholdExpiryAndSamples", func(t *testing.T) {
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{Latency: implRouting.LatencyOptions{Enabled: true, MinimumSamples: 2, RetryPeriod: time.Minute}})).(*implRouting.InternalRoutingPolicy)
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Latency: routing2.LatencyOptions{Enabled: true, MinimumSamples: 2, RetryPeriod: time.Minute}})).(*implRouting.InternalRoutingPolicy)
 			now := time.Now()
 			for id, value := range map[byte]float64{1: float64(time.Millisecond), 2: float64(2 * time.Millisecond), 3: float64(3 * time.Millisecond), 4: float64(9 * time.Millisecond)} {
 				samples := 2
@@ -145,7 +145,7 @@ func TestRoutingPolicy(t *testing.T) {
 				}
 				policy.InternalLatencies.Store(cql.UUID{15: id}, &implRouting.InternalRoutingLatency{InternalValue: value, InternalSamples: samples, InternalUpdated: now})
 			}
-			policy.Observe(implRouting.AttemptEvent{Target: implModel.Target{HostID: cql.UUID{15: 5}}, Started: now, Latency: time.Millisecond})
+			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 5}}, Started: now, Latency: time.Millisecond})
 			decisions := policy.InternalDecisions.Load()
 			if decisions == nil {
 				t.Fatal("no decisions")
@@ -160,7 +160,7 @@ func TestRoutingPolicy(t *testing.T) {
 				t.Fatal("insufficient samples excluded")
 			}
 			plan := &implRouting.InternalLazyRoutingPlan{InternalSlow: decisions, InternalNow: now.Add(2 * time.Minute)}
-			if plan.InternalPenalty(implModel.Target{HostID: cql.UUID{15: 3}}) {
+			if plan.InternalPenalty(metadata2.Target{HostID: cql.UUID{15: 3}}) {
 				t.Fatal("penalty did not expire")
 			}
 			if !implRouting.InternalRoutingLatencySample(cqltype.NewFrameError("bad response")) || implRouting.InternalRoutingLatencySample(context.Canceled) {
@@ -175,8 +175,8 @@ func TestRoutingPolicy(t *testing.T) {
 			for i := range routing.SnapshotData(m).InternalHosts {
 				routing.SnapshotData(m).InternalHosts[i].Connected = false
 			}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "a"}))
-			if ids := v2PlanIDs(implRouting.NewPlan(policy, implModel.RoutingInfo{Kind: cql.OrdinaryStatement}, m)); !bytes.Equal(ids, []byte{2, 4, 1}) {
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Datacenter: "a"}))
+			if ids := v2PlanIDs(implRouting.NewPlan(policy, routing2.Info{Kind: cql.OrdinaryStatement}, m)); !bytes.Equal(ids, []byte{2, 4, 1}) {
 				t.Fatal("enabled disconnected fallback", ids)
 			}
 			m = v2TestMetadata()
@@ -184,8 +184,8 @@ func TestRoutingPolicy(t *testing.T) {
 			h := testHint(t, 0, 100, cql.Option[uint64]{Set: true}, hTarget(2, 1), hTarget(99, 2), hTarget(1, 1))
 			r, _ := implRouting.InternalUpdateTabletRange(nil, h)
 			routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: r})
-			leader := codecTestMust(implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, LeaderAware: true}))
-			first, _ := implRouting.InternalNextTarget(implRouting.NewPlan(leader, implModel.RoutingInfo{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum}, m))
+			leader := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true}))
+			first, _ := implRouting.InternalNextTarget(implRouting.NewPlan(leader, routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum}, m))
 			if first.HostID[15] != 2 {
 				t.Fatal("missing follower hid resolved leader")
 			}
@@ -241,7 +241,7 @@ func TestRoutingPolicy(t *testing.T) {
 				{"SimpleStrategy", map[string]string{"replication_factor": "0"}, nil},
 				{"UnknownStrategy", nil, []byte{1}},
 			} {
-				ranges, err := cluster.InternalBuildV2VnodeRanges(ring, &metadata.KeyspaceMetadata{StrategyClass: test.strategy, StrategyOptions: test.options})
+				ranges, err := cluster.InternalBuildV2VnodeRanges(ring, &metadata2.Keyspace{StrategyClass: test.strategy, StrategyOptions: test.options})
 				if err != nil {
 					t.Fatal(err)
 				}

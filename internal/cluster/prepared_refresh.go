@@ -29,7 +29,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/settings"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 const InternalMaxPreparedRefreshScopes = 64
@@ -88,7 +88,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	if err != nil && !absent {
 		return err
 	}
-	var schema, minimal *metadata.KeyspaceMetadata
+	var schema, minimal *metadata2.Keyspace
 	if !absent {
 		copyBase := *base
 		minimal = &copyBase
@@ -97,7 +97,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 			return err
 		}
 	}
-	publish := config.Metadata.Mode != settings.MetadataSchemaNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
+	publish := config.Metadata.Mode != metadata2.SchemaNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
 	p.InternalMu.Lock()
 	if p.schemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
@@ -108,7 +108,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 		if absent {
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(keyspace)
 		} else {
-			if config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+			if config.Metadata.Mode == metadata2.SchemaKeyspaces {
 				schema = minimal
 			}
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalSet(keyspace, schema)

@@ -39,6 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func BenchmarkPrepared(b *testing.B) {
@@ -82,7 +83,7 @@ func BenchmarkPrepared(b *testing.B) {
 								s.InvalidatePreparedSchema(cluster.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
 								p := s.Peripheral()
 								current := s.Metadata()
-								info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
+								info := routing.Info{Keyspace: "ks", Table: "table"}
 								stamp := s.CaptureTabletFeedback(info, current)
 								hint := testHint(b, 0, 1, cql.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
 								s.PublishTabletFeedback(p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)

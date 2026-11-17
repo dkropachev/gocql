@@ -11,15 +11,16 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
-func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...implModel.Target) tablets.TabletInfo {
+func testHint(t testing.TB, first, last int64, version cql.Option[uint64], replicas ...metadata.Target) tablets.TabletInfo {
 	t.Helper()
 	rs := make([]tablets.ReplicaInfo, len(replicas))
 	for i, r := range replicas {
@@ -84,8 +85,8 @@ func testDrain(s *cluster.Core) {
 	p.InternalFeedbackMu.Unlock()
 	s.PublishTabletFeedback(p, updates, resync)
 }
-func hTarget(id byte, shard uint32) implModel.Target {
-	return implModel.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
+func hTarget(id byte, shard uint32) metadata.Target {
+	return metadata.Target{HostID: cql.UUID{15: id}, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 }
 
 func FuzzTabletPayload(f *testing.F) {
@@ -111,7 +112,7 @@ type capturedPartitioner struct {
 	expected []byte
 }
 
-func (p *capturedPartitioner) Token(key implRouting.PartitionKey) (int64, error) {
+func (p *capturedPartitioner) Token(key routing2.PartitionKey) (int64, error) {
 	p.calls++
 	err := key.ForEach(func(b cql.Bytes) error {
 		return cqltype.EachBytes(b, func(s wire.Span) error {

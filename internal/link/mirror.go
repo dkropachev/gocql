@@ -35,6 +35,11 @@ func sameLayout(pub, rep reflect.Type, path string, depth int) error {
 		return fmt.Errorf("%s: size/align %d/%d, mirror %v has %d/%d",
 			pathOr(path, pub), pub.Size(), pub.Align(), rep, rep.Size(), rep.Align())
 	}
+	// An unsafe.Pointer may mirror a typed pointer: the public side holds an
+	// engine object it cannot name.
+	if isPointer(pub) && isPointer(rep) && (pub.Kind() == reflect.UnsafePointer || rep.Kind() == reflect.UnsafePointer) {
+		return nil
+	}
 	if pub.Kind() != rep.Kind() {
 		return fmt.Errorf("%s: kind %v, mirror %v has %v", pathOr(path, pub), pub.Kind(), rep, rep.Kind())
 	}
@@ -73,4 +78,8 @@ func pathOr(path string, t reflect.Type) string {
 		return t.String()
 	}
 	return t.String() + " at " + path
+}
+
+func isPointer(t reflect.Type) bool {
+	return t.Kind() == reflect.Pointer || t.Kind() == reflect.UnsafePointer
 }
