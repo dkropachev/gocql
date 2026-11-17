@@ -49,7 +49,6 @@ Rules that follow from the table:
    method is a decision, with its doc comment in the public package.
 5. **No internal type appears in a public signature.** This covers parameters,
    results, fields, method receivers and the methods of aliased types.
-   `routing.Route.InternalHost() *pool.HostRoute` breaks this rule.
 6. **No type aliases from a public package to an internal one.** Aliases
    between public packages are allowed only for a deliberate rename with a
    deprecation path. That does not happen before v2.0.0.
@@ -86,8 +85,8 @@ documented methods.
   files only when the caller calls it, never in the background.
 - **No driver-only members.** No exported setter, field or method that exists
   because an engine package needs it. The engine builds values through
-  exported fields or public constructors. `Result.AddWarnings` and
-  `Result.SetDiagnostics` break this rule.
+  exported fields, public constructors, or the mechanisms of "Engine access
+  to public types".
 - **Results are plain data.** Values the driver returns (`Result`, errors,
   events, metadata structs, host snapshots) are structs with exported fields
   or getters. Users cannot change the driver's state through them.
@@ -134,12 +133,10 @@ documented methods.
   `internal/routing` needs something from `internal/pool`, `internal/routing`
   declares the interface it needs.
 - **`internal/model` shrinks.** It holds shared engine vocabulary that is not
-  public. Each type in it that users see (`Result`, `HostSnapshot`,
-  `RoutingInfo`, `Target`, `PageState`, `PayloadEntry`) moves to its public
-  package.
-- **Delete unused packages.** `internal/lru` has no importers.
-  `internal/cqlproto` is used only by `internal/tablets` and duplicates
-  readers in `internal/wire` and `internal/protocol`.
+  public. A type in it that users see belongs in its public package, as
+  `Result`, `HostSnapshot`, `RoutingInfo`, `Target`, `PageState` and
+  `PayloadEntry` did.
+- **Delete unused packages** rather than keep them for later.
 - **Test helpers** live in `internal/testkit/...` and `internal/tests/...`
   and are never imported by production code.
 
@@ -226,8 +223,10 @@ documented methods.
 - **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces,
   `Options`, `LatencyOptions`, `Info`, `PartitionKey`, `AttemptStart` and
   `AttemptEvent` (which `Policy.Observe` consumes), the built-in policy
-  constructors, and functions over a snapshot that need `Info`
-  (`ReplicaRoutes`).
+  constructors (`NewPolicy`, `SingleTarget`), and the functions a custom
+  policy picks with (`NewPlan`, `HostRoutes`, `ReplicaRoutes`). The built-in
+  policies are the session's: `NewPolicy` validates its options and returns
+  a handle that builds the session's policy on first use.
 - **Must not contain:** pool handles or connection state.
 - **Future:** leader-aware routing for strongly consistent tables (#1175) as
   an `Options` field, and vector-search or other workload-specific
@@ -235,8 +234,8 @@ documented methods.
 
 ### `retry` (layer 1)
 
-- **Contains:** the retry `Policy` and its built-ins, and the speculative
-  execution policy (moved from `config`). Both decide whether another
+- **Contains:** the retry `Policy` and its built-ins, and
+  `SpeculationPolicy`. Both decide whether another
   attempt is made.
 - **Must not contain:** timers or attempt execution.
 
@@ -245,16 +244,16 @@ documented methods.
 - **Contains:** how nodes are addressed, dialed and kept connected:
   `Dialer`, `Resolver`, `Translator` and their adapters, `DefaultDialer`,
   `DialTarget`, `Peer`, `TLSSource`, and the reconnect and conviction
-  policies (moved from `config`).
+  policies.
 - **Must not contain:** pool management or shard selection logic.
 - **Future:** proxy and private-link dialers, shard-aware port fallback
   policy (#123).
 
-### `observe` (new, layer 1)
+### `observe` (layer 1)
 
 - **Contains:** the observer interfaces (`Observer`, `LifecycleObserver`) and
-  their event payloads (`RequestStart`, `RequestEvent`, `LifecycleEvent`),
-  all moved from `config`. `Observer.StartAttempt` uses
+  their event payloads (`RequestStart`, `RequestEvent`, `LifecycleEvent`).
+  `Observer.StartAttempt` uses
   `routing.AttemptStart` and `routing.AttemptEvent`, and
   `endpoint.ConvictionEvent` stays with the conviction policy.
 - **Must not contain:** exporters. OpenTelemetry and Prometheus integrations
@@ -333,15 +332,14 @@ own module and does not reuse `internal/testkit`.
 
 ## Where the code stands today
 
-These parts of the current code break the rules above. Each is a
-release-review item:
+Every public package follows the rules above: no public name aliases an
+internal type, no public package imports an engine package, and
+`TestPackageLayers` allows no exception. Two parts of the internals still
+need work, tracked in the release review:
 
-- 144 public names are aliases of internal types
-  (`testdata/internal_aliases.txt`).
-- Driver-only members on public types: `Result.AddWarnings`,
-  `AddCQLTraces`, `AddCustomPayload` and `SetDiagnostics`, and
-  `routing.Route.InternalHost`.
-- `config` defines observer and policy interfaces and aliases engine
-  types.
-- Duplicated v1 file splits across `internal/cluster`, `internal/pool` and
-  `internal/endpoint`, and the unused `internal/lru`.
+- The v1 package split left files with the same names (`connectionpool.go`,
+  `policies.go`, `host_source.go`, `pool_services.go`) in
+  `internal/cluster`, `internal/pool` and `internal/endpoint`. Merge each
+  responsibility into one owner.
+- Several public types still lack doc comments of their own; the API
+  golden file lists every exported name to review.

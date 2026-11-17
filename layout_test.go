@@ -46,7 +46,6 @@ var primitivePackages = map[string]bool{
 	"internal/frame":        true,
 	"internal/link":         true,
 	"internal/logging":      true,
-	"internal/lru":          true,
 	"internal/murmur":       true,
 	"internal/segment":      true,
 	"internal/streams":      true,
@@ -60,9 +59,7 @@ var primitivePackages = map[string]bool{
 // entry is "importer -> imported". Remove entries as the code is fixed; the
 // test fails on any violation missing here and on any entry that is no longer
 // a violation.
-var layerViolations = map[string]bool{
-	"internal/tablets -> internal/tests": true,
-}
+var layerViolations = map[string]bool{}
 
 func layerOf(rel string) (int, bool) {
 	switch {
