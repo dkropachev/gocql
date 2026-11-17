@@ -9,11 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -57,7 +55,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		}
 		page.Close()
 	}
-	exec := func(t *testing.T, exec func() (model.Result, error)) {
+	exec := func(t *testing.T, exec func() (cql.Result, error)) {
 		t.Helper()
 		got := serve(void)
 		if _, err := exec(); err != nil {
@@ -69,9 +67,9 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 	}
 
 	t.Run("Pooled", func(t *testing.T) {
-		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, model.StartPage(), 7, CompiledOptions{}) })
+		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage, 7, CompiledOptions{}) })
 		waitIdle(t, p, 1)
-		exec(t, func() (model.Result, error) { return p.Exec(ctx, 1, CompiledOptions{}) })
+		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, CompiledOptions{}) })
 	})
 	t.Run("Query", func(t *testing.T) {
 		q, err := p.Query(Options{})
@@ -79,8 +77,8 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer q.Close()
-		runPage(t, func() (*Page[[]byte], error) { return q.RunPage(ctx, 1, model.StartPage(), 7) })
-		exec(t, func() (model.Result, error) { return q.Exec(ctx, 1) })
+		runPage(t, func() (*Page[[]byte], error) { return q.RunPage(ctx, 1, cql.StartPage, 7) })
+		exec(t, func() (cql.Result, error) { return q.Exec(ctx, 1) })
 	})
 	t.Run("CompiledOptions", func(t *testing.T) {
 		profile := settings.InternalDefaultProfile()
@@ -88,9 +86,9 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, model.StartPage(), 7, options) })
+		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage, 7, options) })
 		waitIdle(t, p, 1)
-		exec(t, func() (model.Result, error) { return p.Exec(ctx, 1, options) })
+		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, options) })
 		if size := options.p.resolved.InternalProfile.PageSize; size != want {
 			t.Fatalf("compiled options' page size changed to %d", size)
 		}
@@ -118,11 +116,11 @@ func TestStreamOptionsOverrideIsolated(t *testing.T) {
 		}
 	}
 	// There are no hosts, so each stream fails after its overrides applied.
-	stream := func(t *testing.T, bound *Bound[cqltype.Bytes], options CompiledOptions) {
+	stream := func(t *testing.T, bound *Bound[cql.Bytes], options CompiledOptions) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
-		if cursor, err := rt.runStream(ctx, bound, codec.StreamOneColumn(codec.StreamBlob), options, StreamOptions{}.Limits, false, nil); err == nil {
+		if cursor, err := rt.runStream(ctx, bound, cql.StreamOneColumn(cql.StreamBlob), options, StreamOptions{}.Limits, false, nil); err == nil {
 			cursor.Close()
 			t.Fatal("stream without hosts succeeded")
 		}
@@ -146,12 +144,12 @@ func TestStreamOptionsOverrideIsolated(t *testing.T) {
 		isolated(t, "compiled", &options.p.resolved)
 	})
 	t.Run("Query", func(t *testing.T) {
-		q, err := unpreparedQuery(s, binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, Options{CQLTrace: true})
+		q, err := unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, Options{CQLTrace: true})
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer q.Close()
-		if err := q.capture(context.Background(), codec.EmptyRecord{}); err != nil {
+		if err := q.capture(context.Background(), cql.EmptyRow{}); err != nil {
 			t.Fatal(err)
 		}
 		stream(t, &q.bound, q.options)

@@ -27,15 +27,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestEvents(t *testing.T) {
@@ -135,7 +137,7 @@ func TestEvents(t *testing.T) {
 				t.Fatal("close did not release queued charges", budget.Bytes())
 			}
 			var released atomic.Int32
-			if err := c.InternalDispatchEventOwned(&frm.ClientRoutesChanged{}, func() { released.Add(1) }); !errors.Is(err, runtimeerrors.ErrClosed) || released.Load() != 1 {
+			if err := c.InternalDispatchEventOwned(&frm.ClientRoutesChanged{}, func() { released.Add(1) }); !errors.Is(err, cqlerr.ErrClosed) || released.Load() != 1 {
 				t.Fatal("terminal enqueue retained ownership", err, released.Load())
 			}
 			// Event semantic consumption rejects bytes after a fully parsed event.
@@ -197,21 +199,21 @@ func TestEvents(t *testing.T) {
 			}()
 
 			defer s.Close()
-			slow, _ := s.Subscribe(cluster.EventFilter{Capacity: 2})
-			fast, _ := s.Subscribe(cluster.EventFilter{Capacity: 8})
+			slow, _ := s.Subscribe(event.Filter{Capacity: 2})
+			fast, _ := s.Subscribe(event.Filter{Capacity: 8})
 			defer fast.Close()
 			for _, generation := range []uint64{40, 99, 41} {
-				s.PublishV2LocalEvent(cluster.Event{Kind: cluster.StatusEvent, Generation: generation})
+				s.PublishV2LocalEvent(event.Event{Kind: event.Status, Generation: generation})
 			}
 			marker, ok := <-slow.Events()
-			if !ok || marker.Kind != cluster.OverflowEvent || marker.Generation != 99 {
+			if !ok || marker.Kind != event.Overflow || marker.Generation != 99 {
 				t.Fatal(marker, ok)
 			}
 			if _, ok := <-slow.Events(); ok {
 				t.Fatal("overflow marker was not terminal")
 			}
 			for _, generation := range []uint64{40, 99, 41} {
-				if e := <-fast.Events(); e.Kind != cluster.StatusEvent || e.Generation != generation {
+				if e := <-fast.Events(); e.Kind != event.Status || e.Generation != generation {
 					t.Fatal("one slow subscriber affected another", e)
 				}
 			}
@@ -250,7 +252,7 @@ func TestEvents(t *testing.T) {
 							if !strings.Contains(query, "system.client_routes") {
 								return false
 							}
-							columns := []rowsCol{{"connection_id", optNative(cqltype.TypeVarchar)}, {"host_id", optNative(cqltype.TypeUUID)}, {"address", optNative(cqltype.TypeVarchar)}, {"port", optNative(cqltype.TypeInt)}, {"tls_port", optNative(cqltype.TypeInt)}}
+							columns := []rowsCol{{"connection_id", optNative(cql.TypeVarchar)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeVarchar)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
 							writeRows(response, stream, columns, [][][]byte{{[]byte("route"), testLocalHostID[:], []byte("127.0.0.1"), binary.BigEndian.AppendUint32(nil, uint32(srv.port())), nil}})
 							return true
 						}
@@ -270,7 +272,7 @@ func TestEvents(t *testing.T) {
 					config.Protocol = 4
 					config.KeepaliveInterval = 0
 					config.Metadata.InitialDiscovery = false
-					config.Metadata.Mode = settings.MetadataSchemaNone
+					config.Metadata.Mode = metadata.SchemaNone
 					config.Metadata.PeriodicRefresh = 0
 					config.ReportConfiguration = false
 					config.Pool.ConnectionsPerHost = 1

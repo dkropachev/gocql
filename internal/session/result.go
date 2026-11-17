@@ -6,18 +6,17 @@ package session
 import (
 	"context"
 	"fmt"
+	"sync"
+	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
-
-	"sync"
-	"sync/atomic"
-
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -37,10 +36,10 @@ type Page[R any] struct {
 	privateStorage pageStorage[R]
 }
 
-func InternalNewPage[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], release func()) (*Page[R], error) {
+func InternalNewPage[R any](response *transport.InternalResponsePage, decoder cql.RowDecoder[R], release func()) (*Page[R], error) {
 	return newPageWithPlans(response, decoder, nil, release)
 }
-func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R], release func()) (*Page[R], error) {
+func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder cql.RowDecoder[R], plans *InternalResultPlanCache[R], release func()) (*Page[R], error) {
 	if response == nil {
 		return nil, cqltype.TypeValidation("response", "nil response")
 	}
@@ -48,7 +47,7 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 		response.Owner.Release()
 		return nil, cqltype.TypeValidation("rows", "nil row decoder")
 	}
-	var plan codec.RowPlan[R]
+	var plan cql.RowPlan[R]
 	var err error
 	if plans == nil {
 		plan, err = codec.CompileRowPlan(decoder, response.Columns)
@@ -61,7 +60,7 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 	}
 	if response.RowCount < 0 {
 		response.Owner.Release()
-		return nil, &cqltype.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
+		return nil, &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
 	page := new(Page[R])
 	page.initResponse(response, plan, release)
@@ -69,7 +68,7 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 }
 
 // newPageInto is InternalNewPageWithPlans building into caller-owned storage.
-func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage, decoder codec.RowDecoder[R], plans *InternalResultPlanCache[R]) error {
+func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage, decoder cql.RowDecoder[R], plans *InternalResultPlanCache[R]) error {
 	plan, err := plans.InternalSelectPlan(response, decoder)
 	if err != nil {
 		response.Owner.Release()
@@ -77,13 +76,13 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 	}
 	if response.RowCount < 0 {
 		response.Owner.Release()
-		return &cqltype.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
+		return &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
 	page.initResponse(response, plan, nil)
 	return nil
 }
 
-func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan codec.RowPlan[R], release func()) {
+func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cql.RowPlan[R], release func()) {
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
 	p.privateStorage.rowDest = rowDestinationOf(plan)
@@ -124,7 +123,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		return false
 	}
 	if p.privateStorage.session != nil && p.privateStorage.session.Closed() {
-		p.privateStorage.err = runtimeerrors.ErrClosed
+		p.privateStorage.err = cqlerr.ErrClosed
 		p.closeLocked()
 		return false
 	}
@@ -135,9 +134,9 @@ func (p *Page[R]) advance(dst *R) bool {
 	}
 	if p.privateStorage.index >= p.privateStorage.response.RowCount {
 		p.privateStorage.exhausted = true
-		p.privateStorage.reader = codec.RowReader{}
+		p.privateStorage.reader = cql.RowReader{}
 		if err := p.privateStorage.InternalCursor.RequireEnd(); err != nil {
-			p.privateStorage.err = &cqltype.ProtocolError{Stage: "rows", Err: err}
+			p.privateStorage.err = &cql.ProtocolError{Stage: "rows", Err: err}
 		}
 		return false
 	}
@@ -155,7 +154,7 @@ func (p *Page[R]) advance(dst *R) bool {
 		err = p.privateStorage.ctx.Err()
 	}
 	if err == nil && p.privateStorage.session != nil && p.privateStorage.session.Closed() {
-		err = runtimeerrors.ErrClosed
+		err = cqlerr.ErrClosed
 	}
 	if err != nil {
 		p.privateStorage.err = err
@@ -193,7 +192,7 @@ func (p *Page[R]) closeLocked() {
 	p.privateStorage.closed = true
 	p.privateStorage.valid = false
 	p.privateStorage.destination = nil
-	p.privateStorage.reader = codec.RowReader{}
+	p.privateStorage.reader = cql.RowReader{}
 	p.privateStorage.response.Owner.Release()
 	if p.privateStorage.release != nil {
 		p.privateStorage.pendingRelease = p.privateStorage.release
@@ -202,13 +201,13 @@ func (p *Page[R]) closeLocked() {
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
 	if p == nil {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.response.Owner.Retain() {
-		return nil, cqltype.ErrReleased
+		return nil, cql.ErrReleased
 	}
 	return func() *PageLease {
 		opaqueStorageValuex := new(PageLease)
@@ -219,30 +218,30 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 func (p *Page[R]) Clone() (R, error) {
 	if p == nil {
 		var zero R
-		return zero, runtimeerrors.ErrNoRows
+		return zero, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		var zero R
-		return zero, runtimeerrors.ErrNoRows
+		return zero, cqlerr.ErrNoRows
 	}
 	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
 }
-func (p *Page[R]) State() model.PageState {
+func (p *Page[R]) State() cql.PageState {
 	if p == nil {
-		return model.CompletePageState()
+		return cqltype.CompletePageState()
 	}
 	return p.privateStorage.response.State
 }
-func (p *Page[R]) Info() model.Result {
+func (p *Page[R]) Info() cql.Result {
 	if p == nil {
-		return model.Result{}
+		return cql.Result{}
 	}
-	return model.CloneResult(p.privateStorage.response.Result)
+	return codec.CloneResult(p.privateStorage.response.Result)
 }
 
 type prefetchJob struct {
 	future *InternalPageFuture
-	state  model.PageState
+	state  cql.PageState
 }
 
 // rowsImpl is the storage and logic behind a Rows handle. A reusable query
@@ -333,12 +332,12 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			response, err = InternalRuntimeFor(r.privateStorage.session).executePage(r.privateStorage.ctx, r.privateStorage.request, state)
 		}
 		if err != nil {
-			model.MergeResult(&r.privateStorage.info, InternalExecutionErrorResult(err))
+			codec.MergeResult(&r.privateStorage.info, InternalExecutionErrorResult(err))
 			r.privateStorage.err = err
 			r.closeLocked()
 			return false
 		}
-		model.MergeResult(&r.privateStorage.info, response.Result)
+		codec.MergeResult(&r.privateStorage.info, response.Result)
 		r.privateStorage.page, err = newPageWithPlans(response, r.privateStorage.decoder, r.privateStorage.plans, nil)
 		if err != nil {
 			r.privateStorage.err = err
@@ -356,7 +355,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 //go:noinline
 func (r *rowsImpl[R]) stop(err error) {
 	if r.privateStorage.session != nil && r.privateStorage.session.Closed() {
-		err = runtimeerrors.ErrClosed
+		err = cqlerr.ErrClosed
 	}
 	r.privateStorage.err = err
 	r.closeLocked()
@@ -414,54 +413,54 @@ func (r *rowsImpl[R]) closeLocked() {
 }
 func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if r == nil {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
-		return nil, runtimeerrors.ErrNoRows
+		return nil, cqlerr.ErrNoRows
 	}
 	return r.privateStorage.page.Retain()
 }
 func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
 		var z R
-		return z, runtimeerrors.ErrNoRows
+		return z, cqlerr.ErrNoRows
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
 		var z R
-		return z, runtimeerrors.ErrNoRows
+		return z, cqlerr.ErrNoRows
 	}
 	return r.privateStorage.page.Clone()
 }
-func (r *rowsImpl[R]) Info() model.Result {
+func (r *rowsImpl[R]) Info() cql.Result {
 	if r == nil {
-		return model.Result{}
+		return cql.Result{}
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
-	return model.CloneResult(r.privateStorage.info)
+	return codec.CloneResult(r.privateStorage.info)
 }
 
 type InternalResultPlanCache[R any] struct {
-	plan  codec.RowPlan[R]
+	plan  cql.RowPlan[R]
 	entry *model.ResultSchemaIdentity
 	// current mirrors entry and plan for lock-free hits on identified
 	// responses. It is replaced under InternalMu whenever entry changes.
 	current  atomic.Pointer[resultPlanSnapshot[R]]
-	columns  cqltype.Columns
+	columns  cql.Columns
 	revision uint64
 	mu       sync.Mutex
 }
 
 type resultPlanSnapshot[R any] struct {
 	entry *model.ResultSchemaIdentity
-	plan  codec.RowPlan[R]
+	plan  cql.RowPlan[R]
 }
 
-func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.InternalResponsePage, decoder codec.RowDecoder[R]) (codec.RowPlan[R], error) {
+func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.RowPlan[R], error) {
 	entry := response.InternalMetadata
 	if entry == nil {
 		return c.selectUnidentified(response, decoder)
@@ -479,7 +478,7 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 	c.revision++
 	revision := c.revision
 	c.mu.Unlock()
-	var plan codec.RowPlan[R]
+	var plan cql.RowPlan[R]
 	var err error
 	if previous != nil && columns.Equal(response.Columns) {
 		plan = previous
@@ -507,7 +506,7 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 // selectUnidentified serves responses without a schema identity, such as
 // unprepared queries. Their columns are compared directly instead of minting
 // a throwaway identity for every response.
-func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.InternalResponsePage, decoder codec.RowDecoder[R]) (codec.RowPlan[R], error) {
+func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.RowPlan[R], error) {
 	c.mu.Lock()
 	if c.plan != nil && c.columns.Equal(response.Columns) {
 		plan := c.plan
@@ -613,22 +612,22 @@ func (r *rowsImpl[R]) startPrefetch() {
 }
 
 // Columns returns the actual physical result metadata, including for empty pages.
-func (p *Page[R]) Columns() cqltype.Columns {
+func (p *Page[R]) Columns() cql.Columns {
 	if p == nil || p.privateStorage.response == nil {
-		return cqltype.Columns{}
+		return cql.Columns{}
 	}
 	return p.privateStorage.response.Columns
 }
 
 // Columns returns the current page's actual physical result metadata.
-func (r *rowsImpl[R]) Columns() cqltype.Columns {
+func (r *rowsImpl[R]) Columns() cql.Columns {
 	if r == nil {
-		return cqltype.Columns{}
+		return cql.Columns{}
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if r.privateStorage.page == nil {
-		return cqltype.Columns{}
+		return cql.Columns{}
 	}
 	return r.privateStorage.page.Columns()
 }
@@ -639,25 +638,25 @@ type execRowsPlan struct {
 	count int
 }
 
-func (execRowsDecoder) Compile(columns cqltype.Columns) (codec.RowPlan[codec.EmptyRecord], error) {
+func (execRowsDecoder) Compile(columns cql.Columns) (cql.RowPlan[cql.EmptyRow], error) {
 	return execRowsPlan{count: columns.Len()}, nil
 }
-func (execRowsDecoder) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
-func (p execRowsPlan) Decode(reader *codec.RowReader) (codec.EmptyRecord, error) {
+func (execRowsDecoder) Clone(value cql.EmptyRow) cql.EmptyRow { return value }
+func (p execRowsPlan) Decode(reader *cql.RowReader) (cql.EmptyRow, error) {
 	for i := 0; i < p.count; i++ {
 		if err := reader.SkipColumn(); err != nil {
-			return codec.EmptyRecord{}, err
+			return cql.EmptyRow{}, err
 		}
 	}
-	return codec.EmptyRecord{}, nil
+	return cql.EmptyRow{}, nil
 }
-func (execRowsPlan) Clone(value codec.EmptyRecord) codec.EmptyRecord { return value }
+func (execRowsPlan) Clone(value cql.EmptyRow) cql.EmptyRow { return value }
 
-func (p execRowsPlan) DecodeInto(reader *codec.RowReader, dst *codec.EmptyRecord) error {
+func (p execRowsPlan) DecodeInto(reader *cql.RowReader, dst *cql.EmptyRow) error {
 	if dst == nil {
 		return cqltype.TypeValidation("destination", "nil row destination")
 	}
-	*dst = codec.EmptyRecord{}
+	*dst = cql.EmptyRow{}
 	for i := 0; i < p.count; i++ {
 		if err := reader.SkipColumn(); err != nil {
 			return err
@@ -699,7 +698,7 @@ func (r *rowsImpl[R]) stopExecution(l *logicalExecution) {
 		r.privateStorage.future = nil
 	}
 	r.privateStorage.mu.Unlock()
-	l.InternalFinish(r.Info(), runtimeerrors.ErrClosed)
+	l.InternalFinish(r.Info(), cqlerr.ErrClosed)
 	l.releaseInput()
 }
 
@@ -710,7 +709,7 @@ type pageLeaseStorage struct {
 
 type pageStorage[R any] struct {
 	ctx            context.Context
-	plan           codec.RowPlan[R]
+	plan           cql.RowPlan[R]
 	err            error
 	pendingRelease func()
 	destination    *R
@@ -719,7 +718,7 @@ type pageStorage[R any] struct {
 	response       *transport.InternalResponsePage
 	release        func()
 	cursor         queryCursor
-	reader         codec.RowReader
+	reader         cql.RowReader
 	InternalCursor wire.Cursor
 	index          int32
 	valid          bool
@@ -743,7 +742,7 @@ const (
 	preservedRowDestination
 )
 
-func rowDestinationOf[R any](plan codec.RowPlan[R]) rowDestination {
+func rowDestinationOf[R any](plan cql.RowPlan[R]) rowDestination {
 	switch {
 	case codec.PreservesRowDestination(plan):
 		return preservedRowDestination
@@ -757,7 +756,7 @@ type rowsStorage[R any] struct {
 	nextErr        error
 	terminalErr    error
 	ctx            context.Context
-	decoder        codec.RowDecoder[R]
+	decoder        cql.RowDecoder[R]
 	err            error
 	prefetchJobs   chan prefetchJob
 	pendingRelease func()
@@ -773,7 +772,7 @@ type rowsStorage[R any] struct {
 	execution, pendingExecution *logicalExecution
 	cursor                      queryCursor
 	history                     paging.InternalPagingHistory
-	info                        model.Result
+	info                        cql.Result
 	mu                          sync.Mutex
 	rejectColumns               bool
 	closed                      bool

@@ -23,7 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -306,7 +306,7 @@ func TestScyllaSupported(t *testing.T) {
 			values := validSupported()
 			change(values)
 			err := transport.InternalValidateV2Supported(values, options)
-			if _, ok := errors.AsType[*cqltype.ProtocolError](err); !ok {
+			if _, ok := errors.AsType[*cql.ProtocolError](err); !ok {
 				t.Fatal("malformed SUPPORTED not rejected before parse", values, err)
 			}
 			// Legacy callers are also panic-free, even if they do not request typed setup.

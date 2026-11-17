@@ -6,6 +6,7 @@ package binding
 import (
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -18,7 +19,7 @@ type ParameterBuffer struct {
 	storage   []byte
 	positions []codec.ParamCell
 	cells     []model.EncodedCell
-	writer    codec.ParamWriter
+	writer    cql.ParamWriter
 	builder   wire.Builder
 }
 
@@ -26,7 +27,7 @@ func (b *ParameterBuffer) RetainedBytes() int {
 	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
 
-func (b *ParameterBuffer) Encode[P any](plan codec.ParamPlan[P], columns cqltype.Columns, value P, allowUnset bool) (model.EncodedValues, error) {
+func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
 		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
@@ -78,7 +79,7 @@ func (b *ParameterBuffer) Encode[P any](plan codec.ParamPlan[P], columns cqltype
 // the next call; b keeps its cell scratch but not storage. On error the caller
 // keeps its own storage. Encode keeps its own body so the execution path takes
 // no extra call.
-func (b *ParameterBuffer) EncodeAppend[P any](plan codec.ParamPlan[P], columns cqltype.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
+func (b *ParameterBuffer) EncodeAppend[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
 	if columns.Len() > 65535 {
 		return storage, model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
@@ -129,7 +130,7 @@ func (b *ParameterBuffer) EncodeAppend[P any](plan codec.ParamPlan[P], columns c
 // Retire drops large buffers and all views only after transport and callbacks
 // have drained. Idle queries retain at most 64 KiB of request backing.
 func (b *ParameterBuffer) Retire() {
-	b.writer = codec.ParamWriter{}
+	b.writer = cql.ParamWriter{}
 	clear(b.cells)
 	clear(b.positions)
 	if cap(b.storage) > 64<<10 {

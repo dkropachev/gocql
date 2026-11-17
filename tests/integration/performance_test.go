@@ -26,7 +26,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
 )
@@ -86,8 +85,8 @@ func TestPerformance(t *testing.T) {
 		}()
 		decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, exec.PrepareOptions{}))
-		streamDecoder := stream.RowInto(func(*testOutput) {}, stream.Column("id", stream.Int32, func(v *testOutput) *int32 { return &v.ID }), stream.Column("payload", stream.Blob, func(v *testOutput) *[]byte { return &v.Payload }), stream.Column("pieces", stream.List(stream.Blob), func(v *testOutput) *[][]byte { return &v.Pieces }))
-		streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[cql.EmptyParams, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: streamDecoder}))
+		streamDecoder := cql.StreamRowInto(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
+		streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: streamDecoder}))
 		runtime.GC()
 		fixed := mem().HeapAlloc
 		records := []concurrentMemory{}
@@ -383,8 +382,8 @@ func TestPerformance(t *testing.T) {
 		}
 		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, exec.PrepareOptions{}))
-		streamDecoder := stream.RowInto(func(*testOutput) {}, stream.Column("id", stream.Int32, func(v *testOutput) *int32 { return &v.ID }), stream.Column("payload", stream.Blob, func(v *testOutput) *[]byte { return &v.Payload }), stream.Column("pieces", stream.List(stream.Blob), func(v *testOutput) *[][]byte { return &v.Pieces }))
-		streamPrepared := codecTestMust(s.PrepareStream(ctx, stream.Statement[testQuery, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: streamDecoder}))
+		streamDecoder := cql.StreamRowInto(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
+		streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[testQuery, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: streamDecoder}))
 		shapes := []testShape{{"small", 1, 32, 1, 1, false}, {"page1", 128, 4096, 1, 1, false}, {"page32", 128, 4096, 32, 1, false}, {"rows1", 1, 4096, 128, 1, false}, {"rows128", 128, 4096, 128, 1, false}, {"cell256K", 1, 256 << 10, 1, 1, false}, {"cell8M", 1, 8 << 20, 1, 1, false}, {"concurrent", 128, 4096, 32, 4, false}, {"slow", 128, 4096, 32, 1, true}}
 		runtime.GC()
 		setupHeap := mem().HeapAlloc

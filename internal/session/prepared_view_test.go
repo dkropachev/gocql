@@ -5,16 +5,16 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 // TestPreparedViewConcurrentUpdate publishes a new host with new result metadata
 // while 32 readers load the view; every load must be a consistent triple.
 func TestPreparedViewConcurrentUpdate(t *testing.T) {
-	first := cqltype.UUID{13: 1}
+	first := cql.UUID{13: 1}
 	r0 := &model.ResultSchemaIdentity{}
-	state := newTestPreparedState(&InternalPreparedState{}, map[cqltype.UUID]*InternalHostPrepared{first: {InternalResult: r0}}, r0, first)
+	state := newTestPreparedState(&InternalPreparedState{}, map[cql.UUID]*InternalHostPrepared{first: {InternalResult: r0}}, r0, first)
 	var stop atomic.Bool
 	var bad atomic.Int64
 	var wg sync.WaitGroup
@@ -32,7 +32,7 @@ func TestPreparedViewConcurrentUpdate(t *testing.T) {
 		}()
 	}
 	for i := 1; i <= 2000; i++ {
-		id := cqltype.UUID{15: byte(i), 14: byte(i >> 8)}
+		id := cql.UUID{15: byte(i), 14: byte(i >> 8)}
 		result := &model.ResultSchemaIdentity{}
 		state.InternalMu.Lock()
 		state.publishHost(id, &InternalHostPrepared{InternalResult: result}, true, result)
@@ -50,13 +50,13 @@ func TestPreparedViewConcurrentUpdate(t *testing.T) {
 
 func TestPreparedViewEmpty(t *testing.T) {
 	var state InternalPreparedState
-	if state.host(cqltype.UUID{1: 1}) != nil || state.loadView().result != nil {
+	if state.host(cql.UUID{1: 1}) != nil || state.loadView().result != nil {
 		t.Fatal("zero state must expose an empty view")
 	}
 }
 
 // newTestPreparedState seeds a view for tests.
-func newTestPreparedState(state *InternalPreparedState, hosts map[cqltype.UUID]*InternalHostPrepared, result *model.ResultSchemaIdentity, resultHost cqltype.UUID) *InternalPreparedState {
+func newTestPreparedState(state *InternalPreparedState, hosts map[cql.UUID]*InternalHostPrepared, result *model.ResultSchemaIdentity, resultHost cql.UUID) *InternalPreparedState {
 	state.view.Store(&preparedView{hosts: hosts, result: result, resultHost: resultHost})
 	return state
 }

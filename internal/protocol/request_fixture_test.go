@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -40,8 +40,8 @@ type fixtureQueryParams struct {
 	pagingState           []byte
 	pageSize              int
 	defaultTimestampValue int64
-	consistency           Consistency
-	serialConsistency     Consistency
+	consistency           cql.Consistency
+	serialConsistency     cql.Consistency
 	skipMeta              bool
 	defaultTimestamp      bool
 }
@@ -256,9 +256,9 @@ type fixtureBatchFrame struct {
 	keyspace              string
 	statements            []fixtureBatchStatement
 	defaultTimestampValue int64
-	consistency           Consistency
-	serialConsistency     Consistency
-	typ                   BatchKind
+	consistency           cql.Consistency
+	serialConsistency     cql.Consistency
+	typ                   cql.BatchKind
 	defaultTimestamp      bool
 }
 

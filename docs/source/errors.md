@@ -84,4 +84,4 @@ in `Result.HostID`; an `Observer` sees the shard of every attempt in
 When no host can be reached, `Connect` returns an error matching
 `cqlerr.ErrNoConnectionsStarted`. `errors.As` into `*cqlerr.ConnectError` lists
 each host tried and its cause, such as a `*net.OpError`. An invalid cluster
-config returns a `*cqlerr.ValidationError` naming the field.
+config returns a `*cql.ValidationError` naming the field.

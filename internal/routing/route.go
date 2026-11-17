@@ -6,9 +6,9 @@ package routing
 import (
 	"math"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // AnyShard is a Route's shard when any connection of its host will do.
@@ -42,9 +42,9 @@ func InternalRouteOf(t Target) Route {
 func (r Route) InternalHost() *pool.HostRoute { return r.host }
 
 // HostID returns the ID of the route's host.
-func (r Route) HostID() cqltype.UUID {
+func (r Route) HostID() cql.UUID {
 	if r.host == nil {
-		return cqltype.UUID{}
+		return cql.UUID{}
 	}
 	return r.host.ID()
 }
@@ -53,7 +53,7 @@ func (r Route) HostID() cqltype.UUID {
 func (r Route) Target() Target {
 	t := Target{HostID: r.HostID()}
 	if r.Shard >= 0 {
-		t.ShardID = cqltype.Option[uint32]{Value: uint32(r.Shard), Set: true}
+		t.ShardID = cql.Option[uint32]{Value: uint32(r.Shard), Set: true}
 	}
 	return t
 }
@@ -96,7 +96,7 @@ func (m *MetadataSnapshot) HostRoutes() []Route {
 
 // ReplicaRoutes returns a route to each replica of info's token, to its
 // shard when placement names one and to any shard otherwise.
-func (m *MetadataSnapshot) ReplicaRoutes(info model.RoutingInfo) []Route {
+func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 	if m == nil || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return nil
 	}

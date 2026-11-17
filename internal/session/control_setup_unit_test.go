@@ -3,15 +3,13 @@ package session
 import (
 	"context"
 	"encoding/binary"
-
 	"net"
 	"strings"
 	"sync"
-
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -53,17 +51,17 @@ func encodeTextSet(items ...string) []byte {
 }
 
 var systemLocalCols = []rowsCol{
-	{"host_id", optNative(cqltype.TypeUUID)},
-	{"data_center", optNative(cqltype.TypeVarchar)},
-	{"rack", optNative(cqltype.TypeVarchar)},
-	{"rpc_address", optNative(cqltype.TypeInet)},
-	{"release_version", optNative(cqltype.TypeVarchar)},
-	{"partitioner", optNative(cqltype.TypeVarchar)},
-	{"tokens", optCollection(cqltype.TypeSet, optNative(cqltype.TypeVarchar))},
+	{"host_id", optNative(cql.TypeUUID)},
+	{"data_center", optNative(cql.TypeVarchar)},
+	{"rack", optNative(cql.TypeVarchar)},
+	{"rpc_address", optNative(cql.TypeInet)},
+	{"release_version", optNative(cql.TypeVarchar)},
+	{"partitioner", optNative(cql.TypeVarchar)},
+	{"tokens", optCollection(cql.TypeSet, optNative(cql.TypeVarchar))},
 }
 
-var testLocalHostID = func() cqltype.UUID {
-	u, err := cqltype.ParseUUID("8f3e2b1a-4c5d-4e6f-9a0b-1c2d3e4f5a6b")
+var testLocalHostID = func() cql.UUID {
+	u, err := cql.ParseUUID("8f3e2b1a-4c5d-4e6f-9a0b-1c2d3e4f5a6b")
 	if err != nil {
 		panic(err)
 	}

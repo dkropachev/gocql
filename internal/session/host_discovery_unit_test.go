@@ -7,13 +7,14 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 type testPeer struct {
-	hostID cqltype.UUID
+	hostID cql.UUID
 	ip     net.IP
 	dc     string
 	rack   string
@@ -21,12 +22,12 @@ type testPeer struct {
 }
 
 var systemPeersCols = []rowsCol{
-	{"peer", optNative(cqltype.TypeInet)},
-	{"data_center", optNative(cqltype.TypeVarchar)},
-	{"host_id", optNative(cqltype.TypeUUID)},
-	{"rack", optNative(cqltype.TypeVarchar)},
-	{"rpc_address", optNative(cqltype.TypeInet)},
-	{"tokens", optCollection(cqltype.TypeSet, optNative(cqltype.TypeVarchar))},
+	{"peer", optNative(cql.TypeInet)},
+	{"data_center", optNative(cql.TypeVarchar)},
+	{"host_id", optNative(cql.TypeUUID)},
+	{"rack", optNative(cql.TypeVarchar)},
+	{"rpc_address", optNative(cql.TypeInet)},
+	{"tokens", optCollection(cql.TypeSet, optNative(cql.TypeVarchar))},
 }
 
 // optBytes encodes s as a value, or as null when it is empty.
@@ -60,7 +61,7 @@ func newRingTestServer(t *testing.T, peers ...testPeer) *ringTestServer {
 			peersErr := rs.peersErr
 			rs.mu.Unlock()
 			if peersErr != "" {
-				writeErrorResult(resp, stream, protocol.CodeServer, peersErr)
+				writeErrorResult(resp, stream, cqlerr.CodeServer, peersErr)
 				return true
 			}
 			var rows [][][]byte
@@ -115,5 +116,5 @@ func ringHosts(s *implCluster.Core) []string {
 }
 
 func newTestPeer(ip string) testPeer {
-	return testPeer{hostID: cqltype.MustRandomUUID(), ip: net.ParseIP(ip), dc: "dc1", rack: "rack1", tokens: []string{"5"}}
+	return testPeer{hostID: cql.RandomUUID(), ip: net.ParseIP(ip), dc: "dc1", rack: "rack1", tokens: []string{"5"}}
 }

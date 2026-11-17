@@ -6,15 +6,17 @@ package cluster
 import (
 	"errors"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
-func (s *Core) CaptureTabletFeedback(info model.RoutingInfo, m *routing.MetadataSnapshot) routing.InternalTabletFeedbackStamp {
+func (s *Core) CaptureTabletFeedback(info routing2.Info, m *routing.MetadataSnapshot) routing.InternalTabletFeedbackStamp {
 	p := s.Peripheral()
 	if p == nil {
 		return routing.InternalTabletFeedbackStamp{}
@@ -67,7 +69,7 @@ type InternalV2PendingTabletFeedback struct {
 // applyV2TabletHint is retained for internal legacy callers/tests. Actual EXECUTE
 // responses supply the stamp captured before sending, never a receipt-time stamp.
 func sessionApplyV2TabletHint(s *Core, h tablets.TabletInfo) {
-	info := model.RoutingInfo{Keyspace: h.KeyspaceName(), Table: h.TableName()}
+	info := routing2.Info{Keyspace: h.KeyspaceName(), Table: h.TableName()}
 	s.QueueTabletFeedback(h, s.CaptureTabletFeedback(info, s.Metadata()))
 }
 func (s *Core) QueueTabletFeedback(h tablets.TabletInfo, stamp routing.InternalTabletFeedbackStamp) {
@@ -156,7 +158,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 		ensureNext()
 		routing.SnapshotData(next).InternalDiagnostics = make([]error, 0, len(routing.SnapshotData(old).InternalDiagnostics)+1)
 		for _, diagnostic := range routing.SnapshotData(old).InternalDiagnostics {
-			if v, ok := errors.AsType[*cqltype.ValidationError](diagnostic); ok && v.Field == "tablet placement" {
+			if v, ok := errors.AsType[*cql.ValidationError](diagnostic); ok && v.Field == "tablet placement" {
 				continue
 			}
 			routing.SnapshotData(next).InternalDiagnostics = append(routing.SnapshotData(next).InternalDiagnostics, diagnostic)
@@ -211,7 +213,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 	p.InternalMu.Unlock()
 	p.publishMu.Unlock()
 	if resync {
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
 	}
 }
 func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
@@ -231,7 +233,7 @@ func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 	}
 }
 
-func (s *Core) CapturedRoutingPartitioner(name string) routing.TokenPartitioner {
+func (s *Core) CapturedRoutingPartitioner(name string) routing2.TokenPartitioner {
 	p := s.Peripheral()
 	if p == nil {
 		return nil
@@ -259,7 +261,7 @@ func (s *Core) tabletSchemaIdentity(keyspace, table string) (string, bool) {
 
 // schemaSource is the live schema source map, or nil without one. The map
 // is replaced on every change, never changed in place.
-func (s *Core) schemaSource() *map[string]*implMetadata.KeyspaceMetadata {
+func (s *Core) schemaSource() *map[string]*metadata.Keyspace {
 	if s.privateStorage.InternalMetadataDescriber == nil || s.privateStorage.InternalMetadataDescriber.InternalMetadata == nil {
 		return nil
 	}
@@ -272,7 +274,7 @@ var testHookSchemaIdentity func()
 
 // schemaSourceIdentity returns the identity of a table or view in source, or
 // false when source lacks it or has invalidated it.
-func schemaSourceIdentity(source *map[string]*implMetadata.KeyspaceMetadata, keyspace, table string) (string, bool) {
+func schemaSourceIdentity(source *map[string]*metadata.Keyspace, keyspace, table string) (string, bool) {
 	if testHookSchemaIdentity != nil {
 		testHookSchemaIdentity()
 	}

@@ -6,7 +6,8 @@ package routing
 import (
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func countRackLookups(t *testing.T) *int {
@@ -18,7 +19,7 @@ func countRackLookups(t *testing.T) *int {
 }
 
 func TestDCAwareValidateSkipsRackLookupWhenUnset(t *testing.T) {
-	p := codecTestMust(NewRoutingPolicy(RoutingOptions{Datacenter: "a"}))
+	p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a"}))
 	n := countRackLookups(t)
 	m := v2TestMetadata()
 	for i := 0; i < 3; i++ {
@@ -32,7 +33,7 @@ func TestDCAwareValidateSkipsRackLookupWhenUnset(t *testing.T) {
 }
 
 func TestDCAwareValidateRackLookupOncePerIndex(t *testing.T) {
-	p := codecTestMust(NewRoutingPolicy(RoutingOptions{Datacenter: "a", Rack: "r1"}))
+	p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: "r1"}))
 	n := countRackLookups(t)
 	m := v2TestMetadata()
 	for i := 0; i < 3; i++ {
@@ -49,14 +50,14 @@ func TestDCAwareValidateRackLookupOncePerIndex(t *testing.T) {
 // valid in an old index is rejected once the snapshot has a new index
 // without it, and accepted again when it returns.
 func TestDCAwareValidateCacheFollowsIndex(t *testing.T) {
-	for _, o := range []RoutingOptions{{Datacenter: "a"}, {Datacenter: "a", Rack: "r1"}} {
+	for _, o := range []routing.Options{{Datacenter: "a"}, {Datacenter: "a", Rack: "r1"}} {
 		p := codecTestMust(NewRoutingPolicy(o))
 		old := v2TestMetadata()
 		if err := p.Validate(old); err != nil {
 			t.Fatal(err)
 		}
 		hosts := func(dc, rack string) *MetadataSnapshot {
-			h := []model.HostSnapshot{v2TestHost(1, dc, rack), v2TestHost(2, "b", "r9")}
+			h := []metadata.HostSnapshot{v2TestHost(1, dc, rack), v2TestHost(2, "b", "r9")}
 			return NewMetadataSnapshot(SnapshotState{InternalHostIndex: InternalBuildRoutingHostIndex(h), InternalHosts: h})
 		}
 		noDC := hosts("c", "r1")

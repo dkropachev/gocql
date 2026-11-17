@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestQueryAll(t *testing.T) {
@@ -23,7 +22,7 @@ func TestQueryAll(t *testing.T) {
 		served := serve(runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c"))
 		var dst []byte
 		var got []string
-		for row, err := range q.All(ctx, codec.EmptyRecord{}, &dst) {
+		for row, err := range q.All(ctx, cql.EmptyRow{}, &dst) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -44,7 +43,7 @@ func TestQueryAll(t *testing.T) {
 		served := serve(runtimeRowsBody([]byte{1}, "a", "b"))
 		var dst []byte
 		rows := 0
-		for _, err := range q.All(ctx, codec.EmptyRecord{}, &dst) {
+		for _, err := range q.All(ctx, cql.EmptyRow{}, &dst) {
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -61,7 +60,7 @@ func TestQueryAll(t *testing.T) {
 		// The query is free for its next execution, which the server answers
 		// as a new request, not a continuation.
 		served = serve(runtimeRowsBody(nil, "next"))
-		found, _, err := q.One(ctx, codec.EmptyRecord{}, &dst)
+		found, _, err := q.One(ctx, cql.EmptyRow{}, &dst)
 		<-served
 		if err != nil || !found || string(dst) != "next" {
 			t.Fatalf("query reuse: %t %q %v", found, dst, err)
@@ -75,7 +74,7 @@ func TestQueryAll(t *testing.T) {
 		served := serve(runtimeRowsBody(nil, "a"))
 		var dst []byte
 		var errs []error
-		for row, err := range q.All(ctx, codec.EmptyRecord{}, &dst) {
+		for row, err := range q.All(ctx, cql.EmptyRow{}, &dst) {
 			if row != nil {
 				t.Fatal("error yielded with a row")
 			}
@@ -90,7 +89,7 @@ func TestQueryAll(t *testing.T) {
 	t.Run("NilDestination", func(t *testing.T) {
 		q, _ := eachTestQuery(t)
 		yields := 0
-		for row, err := range q.All(ctx, codec.EmptyRecord{}, nil) {
+		for row, err := range q.All(ctx, cql.EmptyRow{}, nil) {
 			yields++
 			if row != nil || err == nil {
 				t.Fatalf("nil destination yielded %v, %v", row, err)
@@ -153,7 +152,7 @@ func TestUnpreparedAll(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	s, conns, peers := runtimeTestSession(t, 1)
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	go func() {
 		for _, body := range [][]byte{runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody(nil, "b")} {
 			stream := typedTestReadRequest(t, conns[0], peers[0])
@@ -166,7 +165,7 @@ func TestUnpreparedAll(t *testing.T) {
 	session := InternalWrapSession(s)
 	var dst []byte
 	var got []string
-	for row, err := range session.UnpreparedAll(ctx, statement, codec.EmptyRecord{}, &dst) {
+	for row, err := range session.UnpreparedAll(ctx, statement, cql.EmptyRow{}, &dst) {
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -26,11 +26,10 @@ import (
 	"testing"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	lz4 "github.com/scylladb/gocql/v2/internal/wirecompress"
 )
@@ -55,7 +54,7 @@ func TestStreamTransport(t *testing.T) {
 				cancel()
 				want := cause
 				if want == nil {
-					want = runtimeerrors.ErrClosed
+					want = cqlerr.ErrClosed
 				}
 				if called || err != want {
 					t.Fatalf("%s cause=%v: called=%v err=%v, want %v", gate, cause, called, err, want)
@@ -68,7 +67,7 @@ func TestStreamTransport(t *testing.T) {
 		cancel()
 		r := &InternalExclusiveConn{}
 		r.InternalClosing.Store(true)
-		if err := r.InternalWithIO(ctx, func() error { return nil }); err != runtimeerrors.ErrClosed {
+		if err := r.InternalWithIO(ctx, func() error { return nil }); err != cqlerr.ErrClosed {
 			t.Fatal("manual close precedence changed", err)
 		}
 	})
@@ -94,7 +93,7 @@ func TestStreamTransport(t *testing.T) {
 					runtime.ReadMemStats(&idle)
 					r := memoryReservation(5, comp, memory)
 					defer r.InternalClose(false)
-					response, e := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+					response, e := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if e != nil {
 						t.Fatal(e)
 					}
@@ -102,7 +101,7 @@ func TestStreamTransport(t *testing.T) {
 					if e = response.InternalInstallColumns(response.InternalColumns); e != nil {
 						t.Fatal(e)
 					}
-					plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 					var peak uint64
 					var peakCapacity int64
 					sample := func() {
@@ -143,14 +142,14 @@ func TestStreamTransport(t *testing.T) {
 				dst := make([]byte, 0, size)
 				source.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
 				source.end = source.start + uintptr(size)
-				response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One})
+				response, err := r.InternalExchange(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 				if err != nil {
 					t.Fatal(err)
 				}
 				if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 					t.Fatal(err)
 				}
-				plan := codecTestMust(codec.StreamOneColumn(codec.StreamBlob).Compile(response.InternalColumns))
+				plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
 				if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || !bytes.Equal(dst, payload) {
 					t.Fatal(ok, err)
 				}

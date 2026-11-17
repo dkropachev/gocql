@@ -4,96 +4,13 @@
 package cql
 
 import (
-	"math/big"
 	"time"
-
-	codec "github.com/scylladb/gocql/v2/internal/codec"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
 )
-
-var ASCIICodec = codec.ASCIICodec
-
-type BatchKind = cqltype.BatchKind
-
-// BindEncoder wraps base to encode Present, Null and Unset parameter states.
-func BindEncoder[T any](base Encoder[T]) Encoder[BindValue[T]] { return codec.BindEncoder[T](base) }
-
-// BindValue controls parameters using Present, Null, or Unset.
-// Its zero value binds the ordinary zero value of T. Binding fails for any
-// other State, EmptyCell included; to bind an empty value, wrap the base
-// codec with EmptyCodec and bind an EmptyValueOf.
-type BindValue[T any] = cqltype.BindValue[T]
-
-var BlobCodec = codec.BlobCodec
-
-var BoolCodec = codec.Bool
-
-// BorrowBytes borrows b without copying. The caller must keep it immutable until
-// all operations using the resulting view have completed.
-func BorrowBytes(b []byte) Bytes { return cqltype.BorrowBytes(b) }
-
-// BorrowText borrows a valid UTF-8 string, rejecting malformed input without a panic.
-func BorrowText(s string) (Text, error) { return cqltype.BorrowText(s) }
-
-// Bytes is an immutable view of response bytes. Cursor views expire on advancement or Close
-// unless a PageLease pins the page; One detaches them. Clone creates an owned copy.
-//
-// Clone and OwnedBytes panic with cqlerr.ErrReleased on an expired view; Copy is
-// the checked form and returns that error instead. Expiry detection is
-// best-effort: a release that races the check is not caught, so a view must
-// never be used after its page may have been released.
-type Bytes = cqltype.Bytes
-
-type CASResult[R any] = codec.CASResult[R]
-
-// CASRows decodes the [applied] column and the conditional result with decoder.
-func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] { return codec.CASRows[R](decoder) }
-
-type CellState = cqltype.CellState
 
 // Codec combines typed encoding and decoding for one CQL value.
 type Codec[T any] interface {
 	Encoder[T]
 	Decoder[T]
-}
-
-// Column maps the named result column through valueCodec into the address returned by field.
-// The accessor must return a non-nil address within the destination and must not retain it.
-func Column[R any, V any](name string, valueCodec Decoder[V], field func(*R) *V) OutputField[R] {
-	return codec.Column[R, V](name, valueCodec, field)
-}
-
-// ColumnAt maps the zero-based result column through valueCodec into field.
-func ColumnAt[R any, V any](index int, valueCodec Decoder[V], field func(*R) *V) OutputField[R] {
-	return codec.ColumnAt[R, V](index, valueCodec, field)
-}
-
-type ColumnSpec = cqltype.ColumnSpec
-type Columns = cqltype.Columns
-
-const ConditionalStatement = cqltype.ConditionalStatement
-
-type Counter = codec.Counter
-
-var CounterCodec = codec.CounterCodec
-
-type DataType = cqltype.DataType
-type Date = codec.Date
-
-var DateCodec = codec.DateCodec
-
-// DateFromTime converts a time to a CQL date, rejecting dates outside the supported range.
-func DateFromTime(t time.Time) (Date, error) { return codec.DateFromTime(t) }
-
-type Decimal = codec.Decimal
-
-var DecimalCodec = codec.DecimalCodec
-
-// DecodeValue checks the requested type before invoking the decoder. Unset is
-// an input-binding state and is never admitted as a result value.
-func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
-	return codec.DecodeValue[T](decoder, value)
 }
 
 // Decoder decodes one checked CQL value. Clone recursively detaches borrowed storage.
@@ -104,216 +21,38 @@ type Decoder[T any] interface {
 	Clone(T) T
 }
 
-type Duration = cqltype.Duration
-
-var DurationCodec = codec.DurationCodec
-
-const EmptyCell = cqltype.EmptyCell
-
-// EmptyCodec adds the explicit empty-cell state to base; it does not add NULL support.
-func EmptyCodec[T any](base Codec[T]) Codec[EmptyValueOf[T]] { return codec.EmptyCodec[T](base) }
-
-// EmptyValueOf distinguishes an empty CQL value from an ordinary value.
-// Its zero value encodes the ordinary zero value of T; Empty=true selects empty.
-type EmptyValueOf[T any] = cqltype.EmptyValueOf[T]
-
-// EncodeValueBorrowed encodes one value without copying borrowed input payloads.
-// The caller must keep those payloads immutable while the encoded value is used.
-func EncodeValueBorrowed[T any](typ DataType, encoder Encoder[T], value T) (EncodedValue, error) {
-	return codec.EncodeValueBorrowed[T](typ, encoder, value)
-}
-
-// EncodeValue encodes one value and copies every borrowed input payload, so the
-// result does not depend on the caller's buffers. Use EncodeValueBorrowed to
-// skip the copy.
-func EncodeValue[T any](typ DataType, encoder Encoder[T], value T) (EncodedValue, error) {
-	return codec.EncodeValue[T](typ, encoder, value)
-}
-
-type EncodedValue = codec.EncodedValue
-
 // Encoder writes the body of one checked CQL value.
 type Encoder[T any] interface {
 	CheckType(DataType) error
 	Encode(*ValueWriter, T) error
 }
-type Entry[K any, V any] = codec.Entry[K, V]
-
-var Float32Codec = codec.Float32
-var Float64Codec = codec.Float64
-
-// IgnoreColumn consumes the named result column without storing it.
-func IgnoreColumn[R any](name string) OutputField[R] { return codec.IgnoreColumn[R](name) }
-
-var InetCodec = codec.InetCodec
-
-type InputField[P any] = codec.InputField[P]
-
-var Int16Codec = codec.Int16
-var Int32Codec = codec.Int32
-var Int64Codec = codec.Int64
-var Int8Codec = codec.Int8
-
-// ListDecoder eagerly decodes every element into a []T. Elements may borrow
-// page storage; Clone recursively detaches them.
-func ListDecoder[T any](element Decoder[T]) Decoder[[]T] { return codec.ListDecoder[T](element) }
-
-// ListEncoder encodes a slice as a CQL list using element.
-func ListEncoder[T any](element Encoder[T]) Encoder[[]T] { return codec.ListEncoder[T](element) }
-
-// ListType constructs a CQL list type with the supplied element type.
-func ListType(element DataType) (DataType, error) { return cqltype.ListType(element) }
-
-// MapDecoder eagerly decodes ordered entries; keys need not be Go-comparable.
-// Entries may contain borrowed values; Clone recursively detaches them.
-func MapDecoder[K any, V any](key Decoder[K], value Decoder[V]) Decoder[[]Entry[K, V]] {
-	return codec.MapDecoder[K, V](key, value)
-}
-
-// MapEncoder encodes ordered entries as a CQL map; keys need not be Go-comparable.
-func MapEncoder[K any, V any](key Encoder[K], value Encoder[V]) Encoder[[]Entry[K, V]] {
-	return codec.MapEncoder[K, V](key, value)
-}
-
-// ConvertParams adapts an encoder for B to input A by converting each A to a B
-// with convert before encoding it.
-func ConvertParams[A any, B any](valueCodec ParamEncoder[B], convert func(A) B) ParamEncoder[A] {
-	return codec.ConvertParams[A, B](valueCodec, convert)
-}
-
-// ConvertRows decodes A rows with valueCodec and converts each to a B with
-// convert; cloneValue must recursively detach borrowed data in B.
-func ConvertRows[A any, B any](valueCodec RowDecoder[A], convert func(A) B, cloneValue func(B) B) RowDecoder[B] {
-	return codec.ConvertRows[A, B](valueCodec, convert, cloneValue)
-}
-
-// MapType constructs a CQL Map type from its complete type description.
-func MapType(key DataType, value DataType) (DataType, error) { return cqltype.MapType(key, value) }
 
 // MaxTimeUUID generates a "fake" time based UUID (version 1) which will be
 // the biggest possible UUID generated for the provided timestamp.
 //
 // UUIDs generated by this function are not unique and are mostly suitable only
 // in queries to select a time range of a Cassandra's TimeUUID column.
-func MaxTimeUUID(t time.Time) TimeUUID { return TimeUUID(cqltype.MaxTimeUUID(t)) }
+func MaxTimeUUID(t time.Time) TimeUUID { return TimeUUID(maxTimeUUID(t)) }
 
 // MinTimeUUID generates a "fake" time based UUID (version 1) which will be
 // the smallest possible UUID generated for the provided timestamp.
 //
 // UUIDs generated by this function are not unique and are mostly suitable only
 // in queries to select a time range of a Cassandra's TimeUUID column.
-func MinTimeUUID(t time.Time) TimeUUID { return TimeUUID(cqltype.MinTimeUUID(t)) }
-
-// NamedScalar adapts a named application type through explicitly typed conversions.
-func NamedScalar[A any, B any](base Codec[B], to func(A) B, from func(B) A) Codec[A] {
-	return codec.NamedScalar[A, B](base, to, from)
-}
-
-// NewColumns snapshots column specifications into immutable metadata.
-func NewColumns(columns ...ColumnSpec) Columns { return cqltype.NewColumns(columns...) }
-
-// NewEncodedValue checks the descriptor and state/body framing. Scalar content
-// is checked by the selected decoder when DecodeValue is called.
-func NewEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, error) {
-	return codec.NewEncodedValue(typ, state, body)
-}
+func MinTimeUUID(t time.Time) TimeUUID { return TimeUUID(minTimeUUID(t)) }
 
 // NewTimeUUID generates a new time based UUID (version 1) using the current
 // time as the timestamp.
-func NewTimeUUID() TimeUUID { return TimeUUID(cqltype.NewTimeUUID()) }
-
-var EmptyParamsEncoder = codec.EmptyParamsEncoder
-var EmptyRowDecoder = codec.EmptyRowDecoder
-
-const Null = cqltype.Null
-
-// Nullable represents a value or CQL NULL; its zero value is NULL.
-// It supports result decoding and binding nullable application fields.
-// Use BindValue for parameters that also need UNSET.
-type Nullable[T any] = cqltype.Nullable[T]
-
-// NullableCodec adds NULL encoding and decoding to base.
-func NullableCodec[T any](base Codec[T]) Codec[Nullable[T]] { return codec.NullableCodec[T](base) }
-
-// NullableDecoder preserves NULL separately from the decoded zero value.
-func NullableDecoder[T any](base Decoder[T]) Decoder[Nullable[T]] {
-	return codec.NullableDecoder[T](base)
-}
-
-// NullableEncoder encodes invalid Nullable values as NULL and valid values with base.
-func NullableEncoder[T any](base Encoder[T]) Encoder[Nullable[T]] {
-	return codec.NullableEncoder[T](base)
-}
-
-// OneColumn decodes exactly one result column using decoder.
-func OneColumn[T any](decoder Decoder[T]) RowDecoder[T] { return codec.OneColumn[T](decoder) }
-
-// OneParam encodes one positional bind marker using encoder.
-func OneParam[T any](encoder Encoder[T]) ParamEncoder[T] { return codec.OneParam[T](encoder) }
-
-const OrdinaryStatement = cqltype.OrdinaryStatement
-
-type OutputField[R any] = codec.OutputField[R]
-type Pair[A any, B any] = codec.Pair[A, B]
-
-// PairParams combines two encoders: a binds the leading parameters and b the
-// rest. a must cover a fixed number of parameters: OneParam covers one, Params
-// built only from ParamAt fields the highest index plus one, and a PairParams
-// the sum of its sides. Compile rejects any other a, such as named fields or
-// ParamsOf.
-func PairParams[A any, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
-	return codec.PairParams[A, B](a, b)
-}
-
-// PairRows combines two decoders: a decodes the leading columns and b the
-// rest. a must cover a fixed number of columns: OneColumn covers one, Row or
-// RowInto built only from ColumnAt fields the highest index plus one, and a
-// PairRows the sum of its sides. Compile rejects any other a, such as named
-// fields or RowOf.
-func PairRows[A any, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]] {
-	return codec.PairRows[A, B](a, b)
-}
-
-// Param maps a named bind marker through valueCodec from the value returned by get.
-func Param[P any, V any](name string, valueCodec Encoder[V], get func(P) V) InputField[P] {
-	return codec.Param[P, V](name, valueCodec, get)
-}
-
-// ParamAt maps a zero-based bind marker through valueCodec from get.
-func ParamAt[P any, V any](index int, valueCodec Encoder[V], get func(P) V) InputField[P] {
-	return codec.ParamAt[P, V](index, valueCodec, get)
-}
+func NewTimeUUID() TimeUUID { return TimeUUID(newTimeUUID()) }
 
 // ParamEncoder compiles a reusable parameter plan against bind-marker metadata.
 type ParamEncoder[P any] interface {
 	Compile(Columns) (ParamPlan[P], error)
 }
 
-// ParamPlan encodes typed parameters in server order using ParamWriter.
-type ParamPlan[P any] = codec.ParamPlan[P]
-type ParamWriter = codec.ParamWriter
-
-// Params builds a typed parameter encoder from field mappings. Every bind marker must be mapped.
-func Params[P any](fields ...InputField[P]) ParamEncoder[P] { return codec.Params[P](fields...) }
-
-// ParseUUID parses a 32 digit hexadecimal number (that might contain hypens)
-// representing an UUID.
-func ParseUUID(input string) (UUID, error) { return cqltype.ParseUUID(input) }
-
-// MustParseUUID is ParseUUID that panics on error.
-func MustParseUUID(input string) UUID { return cqltype.MustParseUUID(input) }
-
-type PayloadEntry = model.PayloadEntry
-
-const Present = cqltype.Present
-
 // RandomUUID generates a random UUID (version 4) as described in RFC 4122,
 // from crypto/rand, which does not fail.
-func RandomUUID() UUID { return cqltype.MustRandomUUID() }
-
-// Row builds a row decoder from field mappings. Borrowed fields follow the execution lifetime;
-// One detaches them, Each lends them during its callback, and cursors lend them until advancement.
-func Row[R any](fields ...OutputField[R]) RowDecoder[R] { return codec.Row[R](fields...) }
+func RandomUUID() UUID { return mustRandomUUID() }
 
 // RowDecoder compiles a reusable row plan against actual result metadata. Clone must
 // recursively detach response storage, including nested fields; One relies on this contract.
@@ -322,234 +61,9 @@ type RowDecoder[R any] interface {
 	Clone(R) R
 }
 
-// RowPlan decodes checked rows into caller destinations. Clone must recursively detach
-// all borrowed response storage; custom plans are cloned before One returns.
-type RowPlan[R any] = codec.RowPlan[R]
-type RowReader = codec.RowReader
-
-// ScalarType returns the shared descriptor for a supported scalar kind. It
-// fails only for non-scalar kinds; use the predeclared values such as TextType
-// when the kind is known at compile time.
-func ScalarType(kind Type) (DataType, error) { return cqltype.ScalarType(kind) }
-
 // Predeclared scalar types. Each equals ScalarType of the matching Type
 // constant. Treat them as constants: reassigning one changes only code that
 // reads the variable, not ScalarType or decoded metadata.
-var (
-	ASCIIType     = cqltype.ASCIIType
-	BigIntType    = cqltype.BigIntType
-	BlobType      = cqltype.BlobType
-	BooleanType   = cqltype.BooleanType
-	CounterType   = cqltype.CounterType
-	DecimalType   = cqltype.DecimalType
-	DoubleType    = cqltype.DoubleType
-	FloatType     = cqltype.FloatType
-	IntType       = cqltype.IntType
-	TextType      = cqltype.TextType
-	TimestampType = cqltype.TimestampType
-	UUIDType      = cqltype.UUIDType
-	VarcharType   = cqltype.VarcharType
-	VarintType    = cqltype.VarintType
-	TimeUUIDType  = cqltype.TimeUUIDType
-	InetType      = cqltype.InetType
-	DateType      = cqltype.DateType
-	TimeType      = cqltype.TimeType
-	SmallIntType  = cqltype.SmallIntType
-	TinyIntType   = cqltype.TinyIntType
-	DurationType  = cqltype.DurationType
-)
-
-// SetDecoder eagerly decodes every element into a []T. Elements may borrow
-// page storage; Clone recursively detaches them.
-func SetDecoder[T any](element Decoder[T]) Decoder[[]T] { return codec.SetDecoder[T](element) }
-
-// SetEncoder encodes a slice as a CQL set using element.
-func SetEncoder[T any](element Encoder[T]) Encoder[[]T] { return codec.SetEncoder[T](element) }
-
-// SetType constructs a CQL set type with the supplied element type.
-func SetType(element DataType) (DataType, error) { return cqltype.SetType(element) }
-
-type StatementKind = cqltype.StatementKind
-
-// StringCodec encodes a string and decodes text into a newly allocated
-// string that stays valid after the row is released. Use TextCodec to decode
-// without copying.
-var StringCodec = codec.StringCodec
-
-// ASCIIStringCodec is StringCodec for the ascii type.
-var ASCIIStringCodec = codec.ASCIIStringCodec
-
-// Text is a validated text view with the same lifetime as Bytes. String materializes
-// an owned string; cursor callers must do so before the view expires.
-//
-// String and Clone panic with cqlerr.ErrReleased on an expired view; Copy is the
-// checked form and returns that error instead. Detection is best-effort, as for
-// Bytes. fmt recovers panics from String, so printing an expired Text shows
-// %!v(PANIC=String method: ...) rather than failing.
-type Text = cqltype.Text
-
-var TextCodec = codec.TextCodec
-
-var TimeCodec = codec.TimeCodec
-
-type TimeOfDay = codec.TimeOfDay
-
-// TimeUUID is a version 1 UUID with canonical string, JSON and text forms.
-// String can format zero for diagnostics; JSON/text serialization, checked
-// parsing and CQL binding reject zero and other non-v1 values.
-type TimeUUID = codec.TimeUUID
-
-// TimeUUIDFromUUID checks that u has version 1, as required for a CQL timeuuid.
-func TimeUUIDFromUUID(u UUID) (TimeUUID, error) { return cqltype.TimeUUIDFromUUID(u) }
-
-// ParseTimeUUID parses a UUID and checks that it has version 1.
-func ParseTimeUUID(input string) (TimeUUID, error) { return cqltype.ParseTimeUUID(input) }
-
-// MustParseTimeUUID is ParseTimeUUID that panics on error.
-func MustParseTimeUUID(input string) TimeUUID { return cqltype.MustParseTimeUUID(input) }
-
-var TimeUUIDCodec = codec.TimeUUIDCodec
-
-// TimeUUIDWith builds a time based UUID (version 1) as described in RFC
-// 4122 from explicit parts. The UUID holds t in 100-nanosecond intervals
-// since 15 October 1582 in 60 bits, so t must lie between that date and the
-// year 5236. clock holds the clock sequence in its low 14 bits; the top two
-// bits carry the variant. It does not advance the process's clock sequence,
-// so uniqueness is up to the caller; NewTimeUUID and TimeUUIDFromTime
-// provide it.
-func TimeUUIDWith(t time.Time, clock uint16, node [6]byte) TimeUUID {
-	return cqltype.TimeUUIDWith(t, clock, node)
-}
-
-// TimeUUIDFromTime generates a new time based UUID (version 1) as described
-// in RFC 4122 with timestamp t. Like NewTimeUUID, it takes the next value of
-// this process's clock sequence and the node's MAC address, or a random
-// multicast node when it has none.
-func TimeUUIDFromTime(t time.Time) TimeUUID { return cqltype.TimeUUIDFromTime(t) }
-
-type Timestamp = codec.Timestamp
-
-var TimestampCodec = codec.TimestampCodec
-
-// TimestampFromTime converts a time to a CQL millisecond timestamp, rejecting overflow.
-func TimestampFromTime(t time.Time) (Timestamp, error) { return codec.TimestampFromTime(t) }
-
-// TupleDecoder consumes tuple members inside one cell without expanding result
-// columns. A missing serialized suffix is passed to member decoders as null.
-func TupleDecoder[T any](valueCodec RowDecoder[T]) Decoder[T] {
-	return codec.TupleDecoder[T](valueCodec)
-}
-
-// TupleEncoder encodes its parameters as members of one physical tuple cell.
-func TupleEncoder[T any](valueCodec ParamEncoder[T]) Encoder[T] {
-	return codec.TupleEncoder[T](valueCodec)
-}
-
-// TupleType constructs a CQL Tuple type from its complete type description.
-func TupleType(fields ...DataType) (DataType, error) { return cqltype.TupleType(fields...) }
-
-type Type = cqltype.Type
-
-const TypeAscii = cqltype.TypeAscii
-const TypeBigInt = cqltype.TypeBigInt
-const TypeBlob = cqltype.TypeBlob
-const TypeBoolean = cqltype.TypeBoolean
-const TypeCounter = cqltype.TypeCounter
-const TypeCustom = cqltype.TypeCustom
-const TypeDate = cqltype.TypeDate
-const TypeDecimal = cqltype.TypeDecimal
-const TypeDouble = cqltype.TypeDouble
-const TypeDuration = cqltype.TypeDuration
-const TypeFloat = cqltype.TypeFloat
-const TypeInet = cqltype.TypeInet
-
-const TypeInt = cqltype.TypeInt
-const TypeList = cqltype.TypeList
-const TypeMap = cqltype.TypeMap
-const TypeSet = cqltype.TypeSet
-const TypeSmallInt = cqltype.TypeSmallInt
-const TypeText = cqltype.TypeText
-const TypeTime = cqltype.TypeTime
-const TypeTimeUUID = cqltype.TypeTimeUUID
-const TypeTimestamp = cqltype.TypeTimestamp
-const TypeTinyInt = cqltype.TypeTinyInt
-const TypeTuple = cqltype.TypeTuple
-const TypeUDT = cqltype.TypeUDT
-const TypeUUID = cqltype.TypeUUID
-const TypeVarchar = cqltype.TypeVarchar
-const TypeVarint = cqltype.TypeVarint
-
-// UDTDecoder decodes UDT fields with valueCodec and explicit identity and matching options.
-func UDTDecoder[T any](valueCodec RowDecoder[T], options UDTOptions) Decoder[T] {
-	return codec.UDTDecoder[T](valueCodec, options)
-}
-
-// UDTEncoder matches fields against a complete UDT descriptor.
-func UDTEncoder[T any](valueCodec ParamEncoder[T], options UDTOptions) Encoder[T] {
-	return codec.UDTEncoder[T](valueCodec, options)
-}
-
-type UDTOptions = codec.UDTOptions
-
-// UDTOptionsFor returns options naming typ's UDT, with every relaxation off.
-// It fails when typ is not a UDT.
-func UDTOptionsFor(typ DataType) (UDTOptions, error) { return codec.UDTOptionsFor(typ) }
-
-// UDTType constructs a CQL UDT type from its complete type description.
-func UDTType(keyspace string, name string, fields ...ColumnSpec) (DataType, error) {
-	return cqltype.UDTType(keyspace, name, fields...)
-}
-
-type UUID = cqltype.UUID
-
-var UUIDCodec = codec.UUIDCodec
-
-// UUIDFromBytes converts a raw byte slice to an UUID.
-func UUIDFromBytes(input []byte) (UUID, error) { return cqltype.UUIDFromBytes(input) }
-
-const UnknownStatement = cqltype.UnknownStatement
-const Unset = cqltype.Unset
-
-type ValueCursor = codec.ValueCursor
-type ValueReader = codec.ValueReader
-type ValueWriter = codec.ValueWriter
-
-const VariantFuture = cqltype.VariantFuture
-const VariantIETF = cqltype.VariantIETF
-const VariantMicrosoft = cqltype.VariantMicrosoft
-const VariantNCSCompat = cqltype.VariantNCSCompat
-
-type Varint = codec.Varint
-
-var VarintCodec = codec.VarintCodec
-
-// VarintFromBigInt constructs a Varint from v without retaining its mutable big.Int storage.
-func VarintFromBigInt(v *big.Int) Varint { return codec.VarintFromBigInt(v) }
-
-// VarintFromBytes borrows a nonempty signed two's-complement big-endian representation.
-// Keep the input immutable until parameter capture, or clone the result.
-func VarintFromBytes(b []byte) (Varint, error) { return codec.VarintFromBytes(b) }
-
-// VectorType constructs a vector type with an element type and fixed nonzero dimension.
-func VectorType(element DataType, dimension uint16) (DataType, error) {
-	return cqltype.VectorDataType(element, dimension)
-}
-
-// VectorDecoder eagerly decodes every element into a []T. Elements may borrow
-// page storage; Clone recursively detaches them.
-func VectorDecoder[T any](element Decoder[T]) Decoder[[]T] { return codec.VectorDecoder[T](element) }
-
-// VectorEncoder encodes a vector of the declared dimension using element.
-func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] { return codec.VectorEncoder[T](element) }
-
-const (
-	LoggedBatch   = cqltype.LoggedBatch
-	UnloggedBatch = cqltype.UnloggedBatch
-	CounterBatch  = cqltype.CounterBatch
-)
 
 // EmptyParams is the input type of a statement without bind markers.
-type EmptyParams = codec.EmptyRecord
-
-// EmptyRow is the row type of a statement without result columns.
-type EmptyRow = codec.EmptyRecord
+type EmptyParams = EmptyRow

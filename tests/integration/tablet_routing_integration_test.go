@@ -6,23 +6,22 @@
 package integration
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
-	"github.com/scylladb/gocql/v2/exec"
-	routing "github.com/scylladb/gocql/v2/routing"
-
 	"context"
 	"math"
 	"slices"
 	"testing"
+
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // tabletAuthority brackets routed queries with independent server reads.
 // During a transition or disagreement it supplies no correctness credit.
 type tabletObservation struct {
 	last      int64
-	replicas  []routing.Target
+	replicas  []metadata.Target
 	readNodes []cql.UUID
 	stable    bool
 }
@@ -33,17 +32,17 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		Table cql.UUID
 		Token int64
 	}
-	statement := cql.Statement[parameters, dynamic.Row]{
+	statement := cql.Statement[parameters, cql.DynamicRow]{
 		CQL:    "SELECT last_token,replicas,new_replicas,stage FROM system.tablets WHERE table_id=? AND last_token>=? LIMIT 1",
 		Params: cql.Params(cql.Param("id", cql.UUIDCodec, func(p parameters) cql.UUID { return p.Table }), cql.Param("token", cql.Int64Codec, func(p parameters) int64 { return p.Token })),
-		Rows:   dynamic.Rows,
+		Rows:   cql.DynamicRows,
 	}
 	statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.UUIDType}, cql.ColumnSpec{Name: "token", Type: cql.BigIntType})
 	observation := tabletObservation{stable: true}
 	for index, host := range s.Metadata().Hosts() {
-		var rows []dynamic.Row
-		var cur dynamic.Row
-		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *dynamic.Row) error {
+		var rows []cql.DynamicRow
+		var cur cql.DynamicRow
+		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *cql.DynamicRow) error {
 			rows = append(rows, r.Clone())
 			return nil
 		}, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})
@@ -60,7 +59,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 		row := rows[0]
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
 		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
-		var replicas []routing.Target
+		var replicas []metadata.Target
 		for iterator.Next() {
 			tuple := codecTestMust(iterator.Value().Elements())
 			if !tuple.Next() {
@@ -77,7 +76,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 			if tuple.Next() || tuple.Err() != nil {
 				t.Fatal("authoritative replica extra member", tuple.Err())
 			}
-			replicas = append(replicas, routing.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
+			replicas = append(replicas, metadata.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
 		}
 		if iterator.Err() != nil {
 			t.Fatal(iterator.Err())
@@ -102,7 +101,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session[testDia
 
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
-func sameReplicaSet(a, b []routing.Target) bool {
+func sameReplicaSet(a, b []metadata.Target) bool {
 	if len(a) != len(b) {
 		return false
 	}

@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -29,7 +28,7 @@ func alternationRows(name string, cols int) []byte {
 		n := fmt.Sprintf("%s%d", name, i)
 		b = binary.BigEndian.AppendUint16(b, uint16(len(n)))
 		b = append(b, n...)
-		b = binary.BigEndian.AppendUint16(b, uint16(cqltype.TypeBlob))
+		b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
 	}
 	b = binary.BigEndian.AppendUint32(b, 1)
 	for i := 0; i < cols; i++ {
@@ -70,14 +69,14 @@ func (f *alternationFixture) close() {
 func newAlternationFixture(tb testing.TB, cols int) *alternationFixture {
 	s, _, peers := runtimeTestSession(tb, 1)
 	peer := peers[0]
-	key := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cqltype.IntType})
+	key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType})
 	var prepared, frames [2][]byte
 	for i, name := range []string{"a", "b"} {
-		specs := make([]cqltype.ColumnSpec, cols)
+		specs := make([]cql.ColumnSpec, cols)
 		for c := range specs {
-			specs[c] = cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: fmt.Sprintf("%s%d", name, c), Type: cqltype.BlobType}
+			specs[c] = cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: fmt.Sprintf("%s%d", name, c), Type: cql.BlobType}
 		}
-		prepared[i] = preparedBody([]byte("id-"+name), key, cqltype.NewColumns(specs...), 0)
+		prepared[i] = preparedBody([]byte("id-"+name), key, cql.NewColumns(specs...), 0)
 		frames[i] = alternationRows(name, cols)
 	}
 	go func() {
@@ -112,11 +111,11 @@ func newAlternationFixture(tb testing.TB, cols int) *alternationFixture {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	f := &alternationFixture{s: s, peer: peer, ctx: ctx, stop: cancel, dst: make([]byte, 0, 8), opts: testOptions(Options{}), fatal: tb.Fatal}
 	for i, name := range []string{"a", "b"} {
-		fields := make([]codec.OutputField[[]byte], cols)
+		fields := make([]cql.OutputField[[]byte], cols)
 		for c := range fields {
-			fields[c] = codec.Column(fmt.Sprintf("%s%d", name, c), codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst })
+			fields[c] = cql.Column(fmt.Sprintf("%s%d", name, c), cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst })
 		}
-		st := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT * FROM ks.tbl WHERE k = ? -- " + name, Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, fields...)}
+		st := binding.Statement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT * FROM ks.tbl WHERE k = ? -- " + name, Params: cql.OneParam(cql.Int32Codec), Rows: cql.RowInto(func(*[]byte) {}, fields...)}
 		p, err := Prepare(ctx, s, st, PrepareOptions{})
 		if err != nil {
 			f.close()
@@ -172,7 +171,7 @@ func BenchmarkPreparedAlternation(b *testing.B) {
 
 // typedRowsBody is a ROWS result with one column "value" of type typ, a
 // paging state when token is set, and one row per value.
-func typedRowsBody(token []byte, typ cqltype.Type, values ...[]byte) []byte {
+func typedRowsBody(token []byte, typ cql.Type, values ...[]byte) []byte {
 	b := binary.BigEndian.AppendUint32(nil, 2)
 	flags := uint32(frm.FlagGlobalTableSpec)
 	if token != nil {
@@ -199,13 +198,13 @@ func typedRowsBody(token []byte, typ cqltype.Type, values ...[]byte) []byte {
 
 // recordingDecoder records the columns of every plan it compiles and reads
 // the single column whatever its type.
-type recordingDecoder struct{ compiled *[]cqltype.Columns }
+type recordingDecoder struct{ compiled *[]cql.Columns }
 
-func (d recordingDecoder) Compile(c cqltype.Columns) (codec.RowPlan[codec.Value], error) {
+func (d recordingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Value], error) {
 	*d.compiled = append(*d.compiled, c)
-	return codec.OneColumn(codec.DynamicCodec).Compile(c)
+	return cql.OneColumn(cql.DynamicCodec).Compile(c)
 }
-func (d recordingDecoder) Clone(v codec.Value) codec.Value { return v.Clone() }
+func (d recordingDecoder) Clone(v cql.Value) cql.Value { return v.Clone() }
 
 // TestMetadataReuseDetectsChangedColumns pages one prepared statement whose
 // result column changes type between pages. The connection's metadata reuse
@@ -217,15 +216,15 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 	defer s.Close()
 	peer := peers[0]
 	defer peer.Close()
-	key := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cqltype.IntType})
-	blob := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
+	key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType})
+	blob := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 	intValue := binary.BigEndian.AppendUint32(nil, 7)
 	responses := [][]byte{
 		preparedBody([]byte("id"), key, blob, 0),
 		// Warm the connection's reuse with the old shape, unpaged.
-		typedRowsBody(nil, cqltype.TypeBlob, []byte("warm")),
-		typedRowsBody([]byte("p"), cqltype.TypeBlob, []byte("one")),
-		typedRowsBody(nil, cqltype.TypeInt, intValue),
+		typedRowsBody(nil, cql.TypeBlob, []byte("warm")),
+		typedRowsBody([]byte("p"), cql.TypeBlob, []byte("one")),
+		typedRowsBody(nil, cql.TypeInt, intValue),
 	}
 	serverDone := make(chan error, 1)
 	go func() {
@@ -244,20 +243,20 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 	}()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	var compiled []cqltype.Columns
-	st := binding.Statement[int32, codec.Value]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: recordingDecoder{compiled: &compiled}}
+	var compiled []cql.Columns
+	st := binding.Statement[int32, cql.Value]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: recordingDecoder{compiled: &compiled}}
 	p, err := Prepare(ctx, s, st, PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	read := func() []cqltype.Type {
+	read := func() []cql.Type {
 		t.Helper()
 		bound := codecTestMust(BindBorrowed(p, 1))
 		defer bound.Close()
 		rows := codecTestMust(Run(ctx, s, bound, testOptions(Options{})))
 		defer rows.Close()
-		var dst codec.Value
-		var values []cqltype.Type
+		var dst cql.Value
+		var values []cql.Type
 		for rows.NextInto(&dst) {
 			values = append(values, dst.Type().Kind())
 		}
@@ -266,11 +265,11 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 		}
 		return values
 	}
-	if got := read(); len(got) != 1 || got[0] != cqltype.TypeBlob {
+	if got := read(); len(got) != 1 || got[0] != cql.TypeBlob {
 		t.Fatal(got)
 	}
 	compiled = compiled[:0]
-	if got := read(); len(got) != 2 || got[0] != cqltype.TypeBlob || got[1] != cqltype.TypeInt {
+	if got := read(); len(got) != 2 || got[0] != cql.TypeBlob || got[1] != cql.TypeInt {
 		t.Fatalf("value types %v", got)
 	}
 	if err := <-serverDone; err != nil {
@@ -280,7 +279,7 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 		t.Fatal("no plan compiled for the changed page")
 	}
 	last := compiled[len(compiled)-1]
-	if spec, _ := last.At(0); spec.Type.Kind() != cqltype.TypeInt {
+	if spec, _ := last.At(0); spec.Type.Kind() != cql.TypeInt {
 		t.Fatalf("second page decoded with a plan for %v, want int", spec.Type)
 	}
 }

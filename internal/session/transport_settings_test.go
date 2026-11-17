@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
@@ -57,7 +57,7 @@ func testHost(t *testing.T, address net.Addr) *endpoint.HostInfo {
 		opaqueStorageValue := new(endpoint.HostInfo)
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalConnectAddress = net.ParseIP(host)
 		implEndpoint.HostInfoData(opaqueStorageValue).InternalPort = addr.Port
-		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cqltype.UUID{15: 1}
+		implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = cql.UUID{15: 1}
 		return opaqueStorageValue
 	}()
 	implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(h, endpoint.InternalTranslatedAddresses{CQL: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port)), ShardAware: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port)), ShardAwareTLS: netip.AddrPortFrom(netip.MustParseAddr(host), uint16(addr.Port))})

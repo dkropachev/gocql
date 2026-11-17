@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -42,10 +43,10 @@ func (p Safe) Decide(a Attempt) Decision {
 	if _, ok := errors.AsType[*cqlerr.SchemaChangedError](a.Err); ok {
 		return Decision{}
 	}
-	if _, ok := errors.AsType[*cqlerr.ValidationError](a.Err); ok {
+	if _, ok := errors.AsType[*cql.ValidationError](a.Err); ok {
 		return Decision{}
 	}
-	if _, ok := errors.AsType[*cqlerr.ProtocolError](a.Err); ok {
+	if _, ok := errors.AsType[*cql.ProtocolError](a.Err); ok {
 		return Decision{}
 	}
 	if a.Idempotent || a.ExecutionStatus == cqlerr.NotExecuted {

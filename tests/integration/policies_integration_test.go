@@ -3,21 +3,18 @@
 package integration
 
 import (
-	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
-	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
-	"github.com/scylladb/gocql/v2/metadata"
-	routing "github.com/scylladb/gocql/v2/routing"
-
 	"context"
 	"errors"
 	"fmt"
 	"testing"
 
+	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/exec"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
+	routing "github.com/scylladb/gocql/v2/routing"
 )
 
 func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
@@ -31,7 +28,7 @@ func testV2InvalidDatacenter(t *testing.T, options routing.Options) {
 	if err == nil {
 		t.Fatal("Connect was expected to fail with an unknown datacenter")
 	}
-	if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+	if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 		t.Fatalf("expected datacenter validation error, got %T: %v", err, err)
 	}
 }
@@ -87,14 +84,14 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	if err := v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s.%s (pk int PRIMARY KEY, v int)", keyspace, table)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), dynamic.Int(7), dynamic.Int(9)); err != nil {
+	if _, err := v2Exec(ctx, session, fmt.Sprintf("INSERT INTO %s.%s (pk, v) VALUES (?, ?)", keyspace, table), cql.IntValue(7), cql.IntValue(9)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := session.Prepare(ctx, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: dynamic.Params, Rows: dynamic.Rows}, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT pk, v FROM %s.%s WHERE pk = ?", keyspace, table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	key := []dynamic.Value{dynamic.Int(7)}
+	key := []cql.Value{cql.IntValue(7)}
 	query, err := prepared.Query(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +128,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		if err != nil {
 			t.Fatal(err)
 		}
-		var row dynamic.Row
+		var row cql.DynamicRow
 		if !rows.NextInto(&row) {
 			rows.Close()
 			t.Fatalf("missing routed row: %v", rows.Err())
@@ -171,7 +168,7 @@ type v2UnavailableHostsRouting struct {
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (metadata.Route, bool) {
 	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
@@ -180,16 +177,16 @@ func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadat
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
-	snapshot := *metadata
-	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
-	implRouting. // rebuild indices after test-only membership changes
-			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
-		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
+func (p v2UnavailableHostsRouting) unavailable(snapshot *metadata.Snapshot) *metadata.Snapshot {
+	state := *implRouting.SnapshotData(implRouting.SnapshotOf(snapshot))
+	// The routing host index is rebuilt for the changed membership.
+	state.InternalHostIndex = nil
+	state.InternalHosts = snapshot.Hosts()
+	for i := range state.InternalHosts {
+		state.InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
-		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(state.InternalHosts) > 1 {
+		state.InternalHosts = state.InternalHosts[:1]
 	}
-	return &snapshot
+	return implRouting.NewMetadataSnapshot(state).Public()
 }

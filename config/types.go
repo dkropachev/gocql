@@ -4,64 +4,15 @@
 package config
 
 import (
-	"context"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/link"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
-
-type ConvictionPolicy = implSettings.ConvictionPolicy
-
-// ConvictionEvent describes a connection failure, or a recovery, that a
-// ConvictionPolicy receives.
-type ConvictionEvent = implSettings.ConvictionEvent
-
-// ConvictionSource names what failed to connect: a pool connection or the
-// control connection.
-type ConvictionSource = implSettings.ConvictionSource
-
-const (
-	ConvictionPool    = implSettings.ConvictionPool
-	ConvictionControl = implSettings.ConvictionControl
-)
-
-type LifecycleEvent = implSettings.LifecycleEvent
-type LifecycleObserver = implSettings.LifecycleObserver
-
-// Observer instruments requests and their attempts from the client side; it
-// is the hook for client-side tracing such as OpenTelemetry. Implementations
-// are shared between executions and must be safe for concurrent use.
-//
-// StartRequest is called once per request as it is admitted, with the
-// caller's context. The context it returns is passed to StartAttempt for
-// each of the request's attempts, so a span started for the request can
-// parent the attempts' spans; the driver uses it for nothing else and never
-// derives cancellation from it. The function it returns, if not nil, is
-// called once with the completed request.
-//
-// StartAttempt is called as each attempt, retry or speculative attempt is
-// sent. The function it returns, if not nil, is called once with the
-// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
-// trace session when the request runs with exec.Options.CQLTrace.
-//
-// A speculative attempt that loses can start or end after its request has
-// ended. A panic in any of these calls is logged and otherwise ignored.
-type Observer interface {
-	StartRequest(ctx context.Context, start RequestStart) (context.Context, func(RequestEvent))
-	StartAttempt(ctx context.Context, start AttemptStart) func(AttemptEvent)
-}
-
-// RequestStart describes a request as it is admitted, before its first attempt.
-type RequestStart = implSettings.RequestStart
-
-// AttemptStart describes an attempt as it is sent to its target.
-type AttemptStart = implRouting.AttemptStart
-
-type AttemptEvent = implRouting.AttemptEvent
 
 // Profile supplies reusable execution defaults. Build one with NewProfile and
 // ProfileBuilder.Build. A Profile written as a literal, such as
@@ -74,7 +25,7 @@ type AttemptEvent = implRouting.AttemptEvent
 type Profile struct {
 	Retry                retry.Policy
 	Routing              routing.Policy
-	Speculation          SpeculationPolicy
+	Speculation          retry.SpeculationPolicy
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
 	// PageSize is the rows per page; cql.Unpaged requests the whole result
@@ -85,20 +36,9 @@ type Profile struct {
 	// built reports that ProfileBuilder.Build made the profile.
 	built bool
 }
-type ReconnectPolicy = implSettings.ReconnectPolicy
-type RequestEvent = implSettings.RequestEvent
-
-type SimpleConvictionPolicy = implSettings.SimpleConvictionPolicy
-
-// SpeculationPolicy schedules additional attempts of eligible executions.
-// Delay receives the number of attempts started so far and returns how long
-// to wait before starting another, and whether to start one at all.
-type SpeculationPolicy interface {
-	Delay(attempt int) (time.Duration, bool)
-}
 
 func internalProfile(p Profile) implSettings.Profile {
-	v := implSettings.Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
+	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
 	if !p.built {
@@ -108,12 +48,14 @@ func internalProfile(p Profile) implSettings.Profile {
 }
 
 func publicProfile(p implSettings.Profile) Profile {
-	return Profile{Retry: p.Retry, Routing: p.Routing, Speculation: p.Speculation,
+	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
 		built: p.InternalBuilt()}
 }
 
 func init() {
-	implSettings.InternalLinkPublic(Config.resolved, internalProfile, publicProfile)
+	link.Set(link.ConfigResolve, Config.resolved)
+	link.Set(link.ProfileToEngine, internalProfile)
+	link.Set(link.ProfileFromEngine, publicProfile)
 }

@@ -16,21 +16,21 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/exec"
-
-	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
+	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implCodec "github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -89,9 +89,9 @@ func TestWorkCountsPerf(t *testing.T) {
 		for _, count := range []int{1, 1000, 10000} {
 			t.Run(fmt.Sprint(count), func(t *testing.T) {
 				h := pagingHistory{InternalMaxCount: count + 4, InternalMaxBytes: 1 << 20}
-				tokens := make([]model.PageState, count)
+				tokens := make([]cql.PageState, count)
 				for i := range tokens {
-					tokens[i] = model.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)), 1)
+					tokens[i] = cqltype.PageStateOwned(binary.BigEndian.AppendUint64(nil, uint64(i)))
 					if e := h.InternalAdd(tokens[i]); e != nil {
 						t.Fatal(e)
 					}
@@ -107,16 +107,16 @@ func TestWorkCountsPerf(t *testing.T) {
 					}
 					t.Logf("history=%d token=%d counts=%+v", count, index, c)
 				}
-				empty := model.PageStateOwned([]byte{}, 1)
+				empty := cqltype.PageStateOwned([]byte{})
 				if e := h.InternalAdd(empty); e != nil {
 					t.Fatal(e)
 				}
 				if h.InternalAdd(empty) != cqlerr.ErrPagingNoProgress {
 					t.Fatal("empty")
 				}
-				collision := model.PageStateOwned([]byte("collision"), 1)
+				collision := cqltype.PageStateOwned([]byte("collision"))
 				h.InternalSpill()
-				hash := maphash.Bytes(h.InternalSeed, model.PageToken(collision))
+				hash := maphash.Bytes(h.InternalSeed, cqltype.PageToken(collision))
 				h.InternalEntries[hash] = pagingHistoryEntry{InternalState: tokens[0]}
 				paging.ResetPerfCounters()
 				if e := h.InternalAdd(collision); e != nil {
@@ -130,7 +130,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(c)
 				}
 				entry := h.InternalEntries[hash]
-				if &model.PageToken(entry.InternalState)[0] != &model.PageToken(collision)[0] {
+				if &cqltype.PageToken(entry.InternalState)[0] != &cqltype.PageToken(collision)[0] {
 					t.Fatal("copied history token")
 				}
 				t.Logf("collision=%+v token_payload_bytes=%d", c, h.InternalBytes)
@@ -203,7 +203,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			hp := testHostPrepared(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				(*implSession.Session)(s).Core().InvalidatePreparedSchema(implCluster.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				(*implSession.Session)(s).Core().InvalidatePreparedSchema(event.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")
@@ -222,14 +222,14 @@ func TestWorkCountsPerf(t *testing.T) {
 			if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 				t.Fatal(e)
 			}
-			implCodec.ResetPerfCounters()
+			cql.ResetPerfCounters()
 			for i := 0; i < 10000; i++ {
 				if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 					t.Fatal(e)
 				}
 			}
-			comp, maps := implCodec.ReadPerfCounters()
-			if comp != 0 || maps != 0 || calls.Load() != 1 || implCodec.ReadPerfTypeChecks() != 0 {
+			comp, maps := cql.ReadPerfCounters()
+			if comp != 0 || maps != 0 || calls.Load() != 1 || cql.ReadPerfTypeChecks() != 0 {
 				t.Fatal(comp, maps, calls.Load())
 			}
 			changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: cql.BlobType})
@@ -242,7 +242,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			if calls.Load() != 2 || implCodec.ReadPerfTypeChecks() != 1 {
+			if calls.Load() != 2 || cql.ReadPerfTypeChecks() != 1 {
 				t.Fatal("changed entry compiled repeatedly", calls.Load())
 			}
 			t.Logf("warm pages=10000 compiles=0 name_maps=0 changed_candidate_compiles=%d", calls.Load()-1)
@@ -255,8 +255,8 @@ func TestWorkCountsPerf(t *testing.T) {
 				for _, kind := range []string{"ordinary", "pinned", "conditional", "leader", "latency", "fallback"} {
 					t.Run(fmt.Sprintf("hosts%d/%s", hosts, kind), func(t *testing.T) {
 						m := v2TestMetadata()
-						storage := implRouting.SnapshotData(m)
-						storage.InternalHosts = make([]routing.HostSnapshot, hosts)
+						storage := implRouting.SnapshotData(implRouting.SnapshotOf(m))
+						storage.InternalHosts = make([]metadata.HostSnapshot, hosts)
 						for i := range storage.InternalHosts {
 							h := v2TestHost(0, "a", "r1")
 							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
@@ -287,7 +287,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						}
 						policy := codecTestMust(routing.NewPolicy(opts))
 						if kind == "latency" {
-							policy.(*routingPolicy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 						}
 						implRouting.ResetPerfCounters()
 						plan := routing.NewPlan(policy, info, m)
@@ -413,13 +413,13 @@ func TestWorkCountsPerf(t *testing.T) {
 
 type testObserver struct{ requests, attempts atomic.Int64 }
 
-func (o *testObserver) ObserveRequest(config.RequestEvent) { o.requests.Add(1) }
-func (o *testObserver) ObserveAttempt(config.AttemptEvent) { o.attempts.Add(1) }
+func (o *testObserver) ObserveRequest(observe.RequestEvent) { o.requests.Add(1) }
+func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) }
 
-func (o *testObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *testObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *testObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

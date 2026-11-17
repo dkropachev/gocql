@@ -9,7 +9,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -33,7 +32,7 @@ func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
 
 // Exec executes a statement with no result columns. It is safe for concurrent
 // use. At most one exec.CompiledOptions may be passed.
-func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (Result, error) {
+func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -50,7 +49,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.Comp
 // before return, while built-in owning fields retain reusable destination
 // buffers. The result stays valid after the call. One is safe for concurrent
 // use with independent destinations. At most one exec.CompiledOptions may be passed.
-func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, Result, error) {
+func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -69,7 +68,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...ex
 // dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
-func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (Result, error) {
+func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -141,7 +140,7 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 	default:
 		return nil, tooManyOptions()
 	}
-	page, err := p.internal().RunPage(ctx, value, model.PageState(state), pageSize, o)
+	page, err := p.internal().RunPage(ctx, value, cql.PageState(state), pageSize, o)
 	return (*Page[R])(page), err
 }
 
@@ -167,4 +166,4 @@ func (p *Prepared[P, R]) Parameters() cql.Columns { return p.internal().Paramete
 func (p *Prepared[P, R]) Columns() cql.Columns { return p.internal().Columns() }
 
 // Info returns the statement's preparation information.
-func (p *Prepared[P, R]) Info() PreparedInfo { return p.internal().Info() }
+func (p *Prepared[P, R]) Info() PreparedInfo { return PreparedInfo(p.internal().Info()) }

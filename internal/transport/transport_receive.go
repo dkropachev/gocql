@@ -10,7 +10,8 @@ import (
 	"io"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -25,7 +26,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 	fatal := false
 	limits := c.typedProtocolLimits()
 	if int64(head.Length) > limits.MaxFrameBytes {
-		err = protocol.ErrFrameTooBig
+		err = cqlerr.ErrFrameTooBig
 		if src.owner == nil {
 			if discardErr := c.discardFrame(src.InternalR, head); discardErr != nil {
 				err = discardErr
@@ -34,7 +35,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 		}
 	} else if src.owner != nil {
 		if !src.owner.Retain() {
-			err = cqltype.ErrReleased
+			err = cql.ErrReleased
 		} else {
 			owner = src.owner
 			body = src.chain
@@ -89,7 +90,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 						err = fmt.Errorf("gocql: unsupported typed compressor %q", c.InternalCompressor.Name())
 					}
 					if err == nil && size > uint64(limits.MaxDecompressedBytes) {
-						err = protocol.ErrFrameTooBig
+						err = cqlerr.ErrFrameTooBig
 					}
 					if err == nil {
 						if pooledDecode {
@@ -115,7 +116,7 @@ func (c *Conn) receiveTypedCall(ctx context.Context, call *InternalCallReq, src 
 				}
 			}
 			if err == nil && int64(len(data)) > limits.MaxDecompressedBytes {
-				err = protocol.ErrFrameTooBig
+				err = cqlerr.ErrFrameTooBig
 			}
 			if err == nil {
 				body, _ = wire.NewChain(wire.Borrow(data))
@@ -304,7 +305,7 @@ func appendChainSpans(dst []wire.Span, c wire.Chain) []wire.Span {
 
 func (c *Conn) InternalReadTypedSegmentPayload(hdr segment.Header) (*wire.Lease, error) {
 	if int64(hdr.UncompressedLen) > c.typedProtocolLimits().MaxDecompressedBytes {
-		return nil, protocol.ErrFrameTooBig
+		return nil, cqlerr.ErrFrameTooBig
 	}
 	var cache *wire.ReceiveCache
 	if c.InternalCfg != nil {

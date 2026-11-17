@@ -36,12 +36,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestClusterSettings(t *testing.T) {
@@ -59,8 +59,8 @@ func TestClusterSettings(t *testing.T) {
 
 			session.Close()
 
-			if err := execTestStatement(context.Background(), session, "void", CompiledOptions{}); err != runtimeerrors.ErrSessionClosed {
-				t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, runtimeerrors.ErrSessionClosed, err)
+			if err := execTestStatement(context.Background(), session, "void", CompiledOptions{}); err != cqlerr.ErrSessionClosed {
+				t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, cqlerr.ErrSessionClosed, err)
 			}
 		})
 
@@ -201,7 +201,7 @@ func TestClusterSettings(t *testing.T) {
 			select {
 			case err := <-ch:
 				if !errors.Is(err, context.DeadlineExceeded) {
-					t.Fatalf("expected to get %v for timeout got %v", runtimeerrors.ErrTimeoutNoResponse, err)
+					t.Fatalf("expected to get %v for timeout got %v", cqlerr.ErrTimeoutNoResponse, err)
 				}
 			case <-time.After(40*time.Millisecond + implCluster.SessionData(db).InternalCfg.Timeout):
 				// ensure that the query goroutines have been scheduled
@@ -240,7 +240,7 @@ func TestClusterSettings(t *testing.T) {
 			}
 
 			if !errors.Is(err, context.Canceled) {
-				t.Fatalf("expected to get %v or an error wrapping it, got %v", runtimeerrors.ErrConnectionClosed, err)
+				t.Fatalf("expected to get %v or an error wrapping it, got %v", cqlerr.ErrConnectionClosed, err)
 			}
 		})
 

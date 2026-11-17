@@ -54,7 +54,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
@@ -65,6 +64,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/testkit"
 	"github.com/scylladb/gocql/v2/internal/testkit/ccm"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
@@ -224,25 +224,25 @@ func init() {
 
 type cassandraObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	requests []observe.RequestEvent
+	attempts []routing.AttemptEvent
 }
 
-func (o *cassandraObserver) ObserveRequest(e config.RequestEvent) {
+func (o *cassandraObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *cassandraObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *cassandraObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {
@@ -251,10 +251,10 @@ func (o *cassandraObserver) reset() {
 	o.requests = nil
 	o.attempts = nil
 }
-func (o *cassandraObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *cassandraObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type cassandraRetry struct{}
@@ -413,11 +413,11 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.Co
 	if skip&fixtureCompression == 0 {
 		switch *flagCompressTest {
 		case "snappy":
-			b.WithCompression(config.SnappyCompression)
+			b.WithCompression(cql.SnappyCompression)
 		case "lz4":
-			b.WithCompression(config.LZ4Compression)
+			b.WithCompression(cql.LZ4Compression)
 		case "no-compression", "":
-			b.WithCompression(config.NoCompression)
+			b.WithCompression(cql.NoCompression)
 		default:
 			panic("invalid compressor: " + *flagCompressTest)
 		}
@@ -623,37 +623,37 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session[testDialect]
 	return false, nil
 }
 
-func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (gocql.Rows[dynamic.Row], error) {
-	statement := cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: stmt, Params: dynamic.Params, Rows: dynamic.Rows}
+func v2Query(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
+	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
 	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {
-		return gocql.Rows[dynamic.Row]{}, err
+		return gocql.Rows[cql.DynamicRow]{}, err
 	}
 	return prepared.Run(ctx, values)
 }
 
-func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...dynamic.Value) (dynamic.Row, error) {
+func v2ReadOne(ctx context.Context, session *gocql.Session[testDialect], stmt string, values ...cql.Value) (cql.DynamicRow, error) {
 	rows, err := v2Query(ctx, session, stmt, values...)
 	if err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	defer rows.Close()
-	var current dynamic.Row
+	var current cql.DynamicRow
 	if !rows.NextInto(&current) {
 		if err := rows.Err(); err != nil {
-			return dynamic.Row{}, err
+			return cql.DynamicRow{}, err
 		}
-		return dynamic.Row{}, cqlerr.ErrNoRows
+		return cql.DynamicRow{}, cqlerr.ErrNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	if rows.NextInto(&current) {
-		return dynamic.Row{}, errMultipleRows
+		return cql.DynamicRow{}, errMultipleRows
 	}
 	if err := rows.Err(); err != nil {
-		return dynamic.Row{}, err
+		return cql.DynamicRow{}, err
 	}
 	return row, rows.Close()
 }
@@ -825,7 +825,7 @@ type v2UnavailableHostsRouting struct {
 	oneHost bool
 }
 
-func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (routing.Route, bool) {
+func (p v2UnavailableHostsRouting) Pick(info routing.Info, metadata *metadata.Snapshot) (metadata.Route, bool) {
 	return p.Policy.Pick(info, p.unavailable(metadata))
 }
 
@@ -834,18 +834,18 @@ func (p v2UnavailableHostsRouting) Fallback(info routing.Info, metadata *metadat
 }
 
 // unavailable returns metadata with every host down.
-func (p v2UnavailableHostsRouting) unavailable(metadata *metadata.Snapshot) *metadata.Snapshot {
-	snapshot := *metadata
-	implRouting.SnapshotData(&snapshot).InternalHostIndex = nil
-	implRouting. // rebuild indices after test-only membership changes
-			SnapshotData(&snapshot).InternalHosts = metadata.Hosts()
-	for i := range implRouting.SnapshotData(&snapshot).InternalHosts {
-		implRouting.SnapshotData(&snapshot).InternalHosts[i].Up = false
+func (p v2UnavailableHostsRouting) unavailable(snapshot *metadata.Snapshot) *metadata.Snapshot {
+	state := *implRouting.SnapshotData(implRouting.SnapshotOf(snapshot))
+	// The routing host index is rebuilt for the changed membership.
+	state.InternalHostIndex = nil
+	state.InternalHosts = snapshot.Hosts()
+	for i := range state.InternalHosts {
+		state.InternalHosts[i].Up = false
 	}
-	if p.oneHost && len(implRouting.SnapshotData(&snapshot).InternalHosts) > 1 {
-		implRouting.SnapshotData(&snapshot).InternalHosts = implRouting.SnapshotData(&snapshot).InternalHosts[:1]
+	if p.oneHost && len(state.InternalHosts) > 1 {
+		state.InternalHosts = state.InternalHosts[:1]
 	}
-	return &snapshot
+	return implRouting.NewMetadataSnapshot(state).Public()
 }
 
 type liveDestination struct {
@@ -1063,17 +1063,17 @@ func fixtureWriteExecute(f *framer, streamID int, preparedID, resultMetadataID [
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []routing.HostSnapshot
-	targets []routing.HostSnapshot
+	hosts   []metadata.HostSnapshot
+	targets []metadata.HostSnapshot
 	verdict bool
 	resets  int
 }
 
-func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
+func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	host := e.Host
-	if e.Shard.Set || e.Source != config.ConvictionPool {
+	if e.Shard.Set || e.Source != endpoint.ConvictionPool {
 		panic("conviction event is not a whole-host pool failure")
 	}
 	if !errors.Is(e.Err, p.cause) {
@@ -1083,7 +1083,7 @@ func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(e config.ConvictionEvent) {
+func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
@@ -1190,16 +1190,16 @@ func serializationExec[P any](s *gocql.Session[testDialect], stmt string, encode
 	return err
 }
 
-func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (gocql.Rows[R], error) {
+func serializationRows[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (gocql.Rows[R], error) {
 	ctx := context.Background()
-	p, err := s.Prepare(ctx, cql.Statement[[]dynamic.Value, R]{CQL: stmt, Params: dynamic.Params, Rows: decoder}, exec.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[[]cql.Value, R]{CQL: stmt, Params: cql.DynamicParams, Rows: decoder}, exec.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[R]{}, err
 	}
 	return p.Run(ctx, values)
 }
 
-func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...dynamic.Value) (R, error) {
+func serializationOne[R any](s *gocql.Session[testDialect], stmt string, decoder cql.RowDecoder[R], values ...cql.Value) (R, error) {
 	var zero R
 	rows, err := serializationRows(s, stmt, decoder, values...)
 	if err != nil {
@@ -1306,7 +1306,7 @@ func serializationMap[K comparable, V any](k cql.Codec[K], v cql.Codec[V]) cql.C
 type serializationRawDecoder struct{}
 
 func (serializationRawDecoder) CheckType(t cql.DataType) error {
-	return dynamic.Codec.CheckType(t)
+	return cql.DynamicCodec.CheckType(t)
 }
 func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
 	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
@@ -1361,31 +1361,31 @@ func (c *OneConnTestServer) lockedClose() {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	requests []observe.RequestEvent
+	attempts []routing.AttemptEvent
 }
 
-func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
+func (o *sessionTestObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -1493,11 +1493,11 @@ func (s *testIO) snapshot() (reads, writes, readBytes, writeBytes int64) {
 
 type v2TabletAttemptObserver struct {
 	mu      sync.Mutex
-	targets []routing.Target
+	targets []metadata.Target
 }
 
-func (*v2TabletAttemptObserver) ObserveRequest(config.RequestEvent) {}
-func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
+func (*v2TabletAttemptObserver) ObserveRequest(observe.RequestEvent) {}
+func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if event.Err == nil {
@@ -1505,16 +1505,16 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event config.AttemptEvent) {
 	}
 }
 
-func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *v2TabletAttemptObserver) snapshot() []routing.Target {
+func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]routing.Target(nil), o.targets...)
+	return append([]metadata.Target(nil), o.targets...)
 }
 
 type position struct {

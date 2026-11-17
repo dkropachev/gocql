@@ -3,7 +3,7 @@ package session
 import (
 	"maps"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/model"
 )
 
@@ -13,9 +13,9 @@ import (
 // {hosts, result, resultHost} triple. The hosts map is never mutated after
 // publication.
 type preparedView struct {
-	hosts      map[cqltype.UUID]*InternalHostPrepared
+	hosts      map[cql.UUID]*InternalHostPrepared
 	result     *model.ResultSchemaIdentity
-	resultHost cqltype.UUID
+	resultHost cql.UUID
 }
 
 var emptyPreparedView = &preparedView{}
@@ -29,15 +29,15 @@ func (s *InternalPreparedState) loadView() *preparedView {
 }
 
 // host returns the prepared entry for a host without taking InternalMu.
-func (s *InternalPreparedState) host(id cqltype.UUID) *InternalHostPrepared {
+func (s *InternalPreparedState) host(id cql.UUID) *InternalHostPrepared {
 	return s.loadView().hosts[id]
 }
 
 // publishHost replaces one host entry. With adopt it also makes result, reported
 // by that host, the statement's result metadata. The caller holds InternalMu.
-func (s *InternalPreparedState) publishHost(id cqltype.UUID, entry *InternalHostPrepared, adopt bool, result *model.ResultSchemaIdentity) {
+func (s *InternalPreparedState) publishHost(id cql.UUID, entry *InternalHostPrepared, adopt bool, result *model.ResultSchemaIdentity) {
 	old := s.loadView()
-	hosts := make(map[cqltype.UUID]*InternalHostPrepared, len(old.hosts)+1)
+	hosts := make(map[cql.UUID]*InternalHostPrepared, len(old.hosts)+1)
 	maps.Copy(hosts, old.hosts)
 	hosts[id] = entry
 	v := &preparedView{hosts: hosts, result: old.result, resultHost: old.resultHost}

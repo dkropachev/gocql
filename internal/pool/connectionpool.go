@@ -36,7 +36,8 @@ import (
 
 	"log/slog"
 
-	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
@@ -63,8 +64,8 @@ type SetTablets interface {
 
 type InternalPolicyConnPool struct {
 	InternalServices      InternalPoolServices
-	InternalHostConnPools map[cqltype.UUID]*InternalHostConnPool
-	routes                map[cqltype.UUID]*HostRoute
+	InternalHostConnPools map[cql.UUID]*InternalHostConnPool
+	routes                map[cql.UUID]*HostRoute
 	InternalKeyspace      string
 	InternalPort          int
 	InternalNumConns      int
@@ -75,7 +76,7 @@ func (p *InternalPolicyConnPool) SetHosts(hosts []*implEndpoint.HostInfo) {
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 
-	toRemove := make(map[cqltype.UUID]struct{})
+	toRemove := make(map[cql.UUID]struct{})
 	for hostID := range p.InternalHostConnPools {
 		toRemove[hostID] = struct{}{}
 	}
@@ -156,7 +157,7 @@ func (p *InternalPolicyConnPool) InternalGetPool(host *implEndpoint.HostInfo) (p
 
 // Rare path (SetHostID/GetHostPoolByID); getPool is the hot path and skips this parse.
 func (p *InternalPolicyConnPool) InternalGetPoolByHostID(hostID string) (pool *InternalHostConnPool, ok bool) {
-	id, err := cqltype.ParseUUID(hostID)
+	id, err := cql.ParseUUID(hostID)
 	if err != nil {
 		return nil, false
 	}
@@ -220,7 +221,7 @@ func (p *InternalPolicyConnPool) InternalAddHost(host *implEndpoint.HostInfo) {
 	p.InternalEnsureHost(host).InternalFill_debounce()
 }
 
-func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cqltype.UUID) {
+func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cql.UUID) {
 	p.InternalMu.Lock()
 	pool, ok := p.InternalHostConnPools[hostID]
 	if !ok {
@@ -563,7 +564,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		// looking the pool up through its parent while initial SetHosts may be
 		// waiting for this fill to finish under the parent's membership lock.
 		snapshot, _ := implEndpoint.SnapshotHost(host)
-		if pool.InternalServices.Conviction.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Source: connectivity.ConvictionPool}) {
+		if pool.InternalServices.Conviction.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, Source: endpoint.ConvictionPool}) {
 			convict = true
 		}
 	}
@@ -590,7 +591,7 @@ func (pool *InternalHostConnPool) resetConviction() {
 	pool.InternalMu.Unlock()
 	if policy := pool.InternalServices.Conviction; policy != nil {
 		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Source: connectivity.ConvictionPool})
+		policy.Reset(endpoint.ConvictionEvent{Host: snapshot, Source: endpoint.ConvictionPool})
 	}
 }
 
@@ -604,7 +605,7 @@ func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
 		return
 	}
 	snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-	convict := policy.AddFailure(connectivity.ConvictionEvent{Err: err, Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
+	convict := policy.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, Shard: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
 	pool.InternalMu.Lock()
 	if pool.failedShards == nil {
 		pool.failedShards = make(map[uint32]struct{})
@@ -627,7 +628,7 @@ func (pool *InternalHostConnPool) shardConnected(shard, shards int) {
 	pool.InternalMu.Unlock()
 	if failed {
 		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-		policy.Reset(connectivity.ConvictionEvent{Host: snapshot, Shard: cqltype.Some(uint32(shard)), Source: connectivity.ConvictionPool})
+		policy.Reset(endpoint.ConvictionEvent{Host: snapshot, Shard: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
 	}
 }
 

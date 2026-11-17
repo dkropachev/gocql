@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -37,7 +37,7 @@ func TestInputOwner(t *testing.T) {
 				close(start)
 				err := <-admitted
 				if err != nil {
-					if !errors.Is(err, runtimeerrors.ErrClosed) {
+					if !errors.Is(err, cqlerr.ErrClosed) {
 						t.Fatal(err)
 					}
 					parent.InternalRelease()
@@ -63,7 +63,7 @@ func TestInputOwner(t *testing.T) {
 			dialError := errors.New("attachment startup fault")
 			var rt *InternalSessionRuntime
 			stopped := make(chan struct{})
-			config.DialHost = func(context.Context, endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(context.Context, endpoint2.DialTarget) (net.Conn, error) {
 				if rt == nil || rt.Core.CurrentExecution() != rt {
 					t.Error("startup preceded execution attachment")
 				}

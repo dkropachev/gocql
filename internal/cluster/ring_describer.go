@@ -6,11 +6,11 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
@@ -196,7 +196,7 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 
 	hosts := []*implEndpoint.HostInfo{localHost}
 	hosts = append(hosts, peerHosts...)
-	seen := make(map[cqltype.UUID]bool, len(hosts))
+	seen := make(map[cql.UUID]bool, len(hosts))
 	for _, h := range hosts {
 		if seen[implEndpoint.InternalHostInfoHostUUID(h)] {
 			return previous, partitionerBefore, cqltype.TypeValidation("topology", "duplicate host identity %s", h.HostID())

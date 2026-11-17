@@ -4,34 +4,32 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/schemafence"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/metrics"
-	"github.com/scylladb/gocql/v2/retry"
-
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 	"weak"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/metrics"
+	"github.com/scylladb/gocql/v2/observe"
+	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type prepareCacheKey struct {
@@ -59,7 +57,7 @@ type InternalSessionRuntime struct {
 	pooledWake chan struct{}
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
-	batchPool *queryPool[codec.EmptyRecord, codec.EmptyRecord]
+	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]
 	batchErr  error
 	// closing is closed when Close starts stopping executions.
 	closing              chan struct{}
@@ -217,7 +215,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	}()
 	conn := options.privateStorage.InternalConnection
 	if conn == nil {
-		conn, err = s.Core.SelectTypedConn(ctx, model.RoutingInfo{HostID: options.HostID}, nil)
+		conn, err = s.Core.SelectTypedConn(ctx, routing2.Info{HostID: options.HostID}, nil)
 	}
 	if err != nil {
 		return nil, err
@@ -237,7 +235,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		return nil, err
 	}
 	if page == nil {
-		return nil, &cqltype.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
+		return nil, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
 	}
 	info, err := s.hostPreparedInfo(conn, page, &InternalPreparedState{InternalStatement: statement, InternalKeyspace: keyspace})
 	if err != nil {
@@ -248,7 +246,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	epoch := dependencies.InternalSince(started)
 	result := &model.ResultSchemaIdentity{InternalColumns: page.Columns, InternalEpoch: epoch, InternalTracker: dependencies.InternalTracker}
 	state = &InternalPreparedState{InternalSession: s.Core, InternalProtocol: conn.InternalVersion, InternalStatement: statement, InternalKeyspace: keyspace, InternalParameters: page.BindColumns(), hasCounter: hasCounterColumn(page.BindColumns()), InternalColumns: page.Columns, InternalInfo: info, InternalDependencies: dependencies, InternalInitialEpoch: epoch, partitioner: s.Core.PreparedPartitionerName(info.Keyspace, info.Table)}
-	state.view.Store(&preparedView{hosts: map[cqltype.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}, result: result, resultHost: conn.InternalHostID()})
+	state.view.Store(&preparedView{hosts: map[cql.UUID]*InternalHostPrepared{conn.InternalHostID(): {InternalId: page.PreparedID(), InternalMetadataID: page.MetadataID, InternalColumns: page.Columns, InternalGeneration: generation, InternalRevision: 1, InternalEpoch: epoch, InternalResult: result}}, result: result, resultHost: conn.InternalHostID()})
 
 	tracker.InternalMu.RLock()
 	defer tracker.InternalMu.RUnlock()
@@ -283,7 +281,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 		return nil, err
 	}
 	if s.Core.Closed() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	if err := state.reconcilePendingConflict(); err != nil {
 		return nil, err
@@ -304,12 +302,12 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 	if flight == nil || flight.previous != cached || !flight.epoch.InternalEqual(epoch) {
 		flight = &hostPrepareFlight{done: make(chan struct{}), previous: cached, epoch: epoch, started: state.InternalDependencies.InternalTracker.InternalStart()}
 		if state.preparing == nil {
-			state.preparing = make(map[cqltype.UUID]*hostPrepareFlight)
+			state.preparing = make(map[cql.UUID]*hostPrepareFlight)
 		}
 		rt := s
 		if !rt.beginPreparedWorker(s.Core) {
 			state.InternalMu.Unlock()
-			return nil, runtimeerrors.ErrClosed
+			return nil, cqlerr.ErrClosed
 		}
 		state.preparing[id] = flight
 		parameters := values.Columns
@@ -338,7 +336,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 		return flight.result, flight.err
 	}
 }
-func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transport.Conn, state *InternalPreparedState, parameters cqltype.Columns, flight *hostPrepareFlight) (entry *InternalHostPrepared, err error) {
+func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transport.Conn, state *InternalPreparedState, parameters cql.Columns, flight *hostPrepareFlight) (entry *InternalHostPrepared, err error) {
 	conflict := false
 	defer func() {
 		if conflict {
@@ -359,17 +357,17 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 		return nil, err
 	}
 	if page == nil {
-		return nil, &cqltype.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
+		return nil, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
 	}
 	if !state.InternalParameters.Equal(page.BindColumns()) || !parameters.Equal(page.BindColumns()) {
-		return nil, &runtimeerrors.SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns()}
+		return nil, &cqlerr.SchemaChangedError{Statement: state.InternalStatement, Previous: parameters, Current: page.BindColumns()}
 	}
 	info, err := s.hostPreparedInfo(conn, page, state)
 	if err != nil {
 		return nil, err
 	}
 	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && s.Core.PreparedPartitionerName(info.Keyspace, info.Table) != state.partitioner {
-		return nil, &runtimeerrors.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
+		return nil, &cqlerr.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
 	if flight.previous != nil {
@@ -405,12 +403,12 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 func (s *InternalSessionRuntime) hostPreparedInfo(conn *transport.Conn, page *transport.InternalResponsePage, state *InternalPreparedState) (PreparedInfo, error) {
 	info := PreparedInfo{Keyspace: state.InternalKeyspace, PartitionKeyIndexes: page.PkIndexes(), Conditional: page.Lwt}
 	if conn.InternalFramers.InternalDefaults.InternalFlagLWT != 0 {
-		info.Kind = cqltype.OrdinaryStatement
+		info.Kind = cql.OrdinaryStatement
 	}
 	if page.Lwt {
-		info.Kind = cqltype.ConditionalStatement
+		info.Kind = cql.ConditionalStatement
 	}
-	for _, columns := range []cqltype.Columns{page.BindColumns(), page.Columns} {
+	for _, columns := range []cql.Columns{page.BindColumns(), page.Columns} {
 		if col, ok := columns.At(0); ok && info.Table == "" {
 			if col.Keyspace != "" {
 				info.Keyspace = col.Keyspace
@@ -420,7 +418,7 @@ func (s *InternalSessionRuntime) hostPreparedInfo(conn *transport.Conn, page *tr
 	}
 	for _, index := range info.PartitionKeyIndexes {
 		if index < 0 || index >= page.BindColumns().Len() {
-			return PreparedInfo{}, &cqltype.ProtocolError{Stage: "prepare", Err: fmt.Errorf("invalid partition key index %d", index)}
+			return PreparedInfo{}, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("invalid partition key index %d", index)}
 		}
 	}
 	return info, nil
@@ -430,24 +428,24 @@ func (s *InternalSessionRuntime) hostPreparedInfo(conn *transport.Conn, page *tr
 // immutable entry. Later schema events do not invalidate bytes already received.
 type resultMetadataObservation struct {
 	metadata                    *model.ResultSchemaIdentity
-	columns                     cqltype.Columns
+	columns                     cql.Columns
 	metadataID                  []byte
 	columnCount                 int
 	kind                        int
 	noMetadata, metadataChanged bool
 }
 
-func selectPreparedResponse(state *InternalPreparedState, host cqltype.UUID, prepared *InternalHostPrepared, sentID []byte, tracksID bool, response *transport.InternalResponsePage, observed ...uint64) error {
+func selectPreparedResponse(state *InternalPreparedState, host cql.UUID, prepared *InternalHostPrepared, sentID []byte, tracksID bool, response *transport.InternalResponsePage, observed ...uint64) error {
 	v := resultMetadataObservation{columns: response.Columns, columnCount: response.ColumnCount, kind: response.Kind, noMetadata: response.NoMetadata, metadataChanged: response.MetadataChanged, metadataID: response.MetadataID, metadata: response.InternalMetadata}
 	err := selectPreparedMetadata(state, host, prepared, sentID, tracksID, &v, observed...)
 	response.Columns = v.columns
 	response.InternalMetadata = v.metadata
 	return err
 }
-func selectPreparedMetadata(state *InternalPreparedState, host cqltype.UUID, prepared *InternalHostPrepared, sentID []byte, tracksID bool, response *resultMetadataObservation, observed ...uint64) (err error) {
+func selectPreparedMetadata(state *InternalPreparedState, host cql.UUID, prepared *InternalHostPrepared, sentID []byte, tracksID bool, response *resultMetadataObservation, observed ...uint64) (err error) {
 	if response.noMetadata {
 		if prepared == nil || prepared.InternalResult == nil || prepared.InternalColumns.Len() != response.columnCount || !bytes.Equal(prepared.InternalMetadataID, sentID) || len(response.metadataID) > 0 && !bytes.Equal(response.metadataID, prepared.InternalMetadataID) || tracksID && len(prepared.InternalMetadataID) == 0 {
-			return &cqltype.ProtocolError{Stage: "result metadata", Err: fmt.Errorf("missing matching metadata")}
+			return &cql.ProtocolError{Stage: "result metadata", Err: fmt.Errorf("missing matching metadata")}
 		}
 		response.columns = prepared.InternalColumns
 		response.metadata = prepared.InternalResult
@@ -512,11 +510,11 @@ func selectPreparedMetadata(state *InternalPreparedState, host cqltype.UUID, pre
 
 type logicalExecution struct {
 	started  time.Time
-	observer settings.Observer
+	observer observe.Observer
 	// observerCtx and requestEnd are what observer.StartRequest returned.
 	observerCtx    context.Context
-	requestEnd     func(settings.RequestEvent)
-	ddlCoordinator atomic.Pointer[cqltype.UUID]
+	requestEnd     func(observe.RequestEvent)
+	ddlCoordinator atomic.Pointer[cql.UUID]
 	rt             *InternalSessionRuntime
 	request        *InternalExecutionRequest
 	lifetime       executionLifetime
@@ -527,7 +525,7 @@ type logicalExecution struct {
 	attemptTimed bool
 }
 
-func (l *logicalExecution) InternalFinish(result model.Result, err error) {
+func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	if l == nil {
 		return
 	}
@@ -550,7 +548,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 	}
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
-		event := settings.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: model.CloneResult(result), Err: err}
+		event := observe.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
 		rt.ObserveSafely(func() { end(event) })
 	}
 }
@@ -558,7 +556,7 @@ func (l *logicalExecution) InternalFinish(result model.Result, err error) {
 // startRequest calls the observer's StartRequest with the caller's context.
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
-	start := settings.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
+	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
 	l.rt.ObserveSafely(func() {
 		observerCtx, end := l.observer.StartRequest(ctx, start)
 		if observerCtx != nil {
@@ -570,16 +568,16 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
-func (l *logicalExecution) startAttempt(start routing.AttemptStart) func(routing.AttemptEvent) {
+func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if l == nil || l.observer == nil {
 		return nil
 	}
-	var end func(routing.AttemptEvent)
+	var end func(routing2.AttemptEvent)
 	l.rt.ObserveSafely(func() { end = l.observer.StartAttempt(l.observerCtx, start) })
 	return end
 }
 
-func (l *logicalExecution) requestParameters() cqltype.Columns {
+func (l *logicalExecution) requestParameters() cql.Columns {
 	if state := l.request.InternalPrepared(); state != nil {
 		return state.InternalParameters
 	}
@@ -621,7 +619,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	}
 	s := rt.Core
 	if s.Closed() {
-		return nil, nil, nil, runtimeerrors.ErrClosed
+		return nil, nil, nil, cqlerr.ErrClosed
 	}
 	var request *InternalExecutionRequest
 	query := b.privateStorage.InternalRequest.query
@@ -678,10 +676,10 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	// retried like a conditional statement (strict replica order, no
 	// speculation, no client timestamp), but its result is ordinary rows, so
 	// the none column's up-front conditional rejection does not apply.
-	if resolved.InternalProfile.Consistency == cqltype.Serial || resolved.InternalProfile.Consistency == cqltype.LocalSerial {
-		request.routing.Kind = cqltype.ConditionalStatement
+	if resolved.InternalProfile.Consistency == cql.Serial || resolved.InternalProfile.Consistency == cql.LocalSerial {
+		request.routing.Kind = cql.ConditionalStatement
 	}
-	request.routing.Conditional = request.routing.Kind != cqltype.OrdinaryStatement
+	request.routing.Conditional = request.routing.Kind != cql.OrdinaryStatement
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return nil, nil, nil, err
 	}
@@ -753,7 +751,7 @@ func (rt *InternalSessionRuntime) run[R any](ctx context.Context, b *Bound[R], o
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	response, err := rt.executePage(runctx, request, model.StartPage())
+	response, err := rt.executePage(runctx, request, cql.StartPage)
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
@@ -819,13 +817,13 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 // RunPage executes one page of b, resuming from state. A pageSize of zero uses
 // the page size options resolve to; cqltype.Unpaged requests the whole result
 // in one response; any other positive value is this page's size.
-func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	return runtimeOf(s).runSinglePage(ctx, b, state, pageSize, options)
 }
 
-func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state model.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
-		return nil, runtimeerrors.ErrPagingComplete
+		return nil, cqlerr.ErrPagingComplete
 	}
 	if pageSize < 0 {
 		return nil, cqltype.TypeValidation("page size", "must not be negative")
@@ -837,7 +835,7 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	if err != nil {
 		return nil, err
 	}
-	if pageSize == cqltype.Unpaged {
+	if pageSize == cql.Unpaged {
 		pageSize = 0 // no page size on the wire
 	} else if pageSize == 0 {
 		pageSize = request.options.InternalProfile.PageSize
@@ -880,29 +878,29 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 		request.InternalLogical.releaseInput()
 	}
 	request.InternalLogical.installStop(stopFunc(func() {
-		request.InternalLogical.InternalFinish(response.Result, runtimeerrors.ErrClosed)
+		request.InternalLogical.InternalFinish(response.Result, cqlerr.ErrClosed)
 		request.InternalLogical.releaseInput()
 	}))
 	return page, nil
 }
 
 // Exec executes b on s; the statement must not return rows.
-func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (model.Result, error) {
+func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options CompiledOptions) (cql.Result, error) {
 	return runtimeOf(s).exec(ctx, b, options)
 }
 
-func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (model.Result, error) {
+func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (cql.Result, error) {
 	if b == nil {
-		return model.Result{}, cqltype.TypeValidation("binding", "nil binding")
+		return cql.Result{}, cqltype.TypeValidation("binding", "nil binding")
 	}
-	if b.privateStorage.InternalRequest.routing.Kind == cqltype.ConditionalStatement {
+	if b.privateStorage.InternalRequest.routing.Kind == cql.ConditionalStatement {
 		return conditionalExec()
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	response, err := rt.executePage(runctx, request, model.StartPage())
+	response, err := rt.executePage(runctx, request, cql.StartPage)
 	if err != nil {
 		cancel()
 		result := InternalExecutionErrorResult(err)
@@ -922,14 +920,14 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 	}
 	// Unexpected row results retain full draining, framing validation and the
 	// established result-columns error, including all continuation pages.
-	execution := &Bound[codec.EmptyRecord]{privateStorage: BoundStorage[codec.EmptyRecord]{InternalRows: execRowsDecoder{}}}
+	execution := &Bound[cql.EmptyRow]{privateStorage: BoundStorage[cql.EmptyRow]{InternalRows: execRowsDecoder{}}}
 	rows, err := rt.newRowsFromResponse(runctx, cancel, execution, request, response)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
 	defer rows.Close()
 	rows.impl.privateStorage.rejectColumns = true
-	var row codec.EmptyRecord
+	var row cql.EmptyRow
 	for rows.NextInto(&row) {
 	}
 	return rows.Info(), rows.Err()
@@ -940,39 +938,39 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 // nothing but a compare.
 //
 //go:noinline
-func conditionalExec() (model.Result, error) {
-	return model.Result{}, runtimeerrors.ErrConditionalExec
+func conditionalExec() (cql.Result, error) {
+	return cql.Result{}, cqlerr.ErrConditionalExec
 }
 
 type typedAttemptOutcome struct {
 	response    *transport.InternalResponsePage
 	err         error
 	conn        *transport.Conn
-	event       routing.AttemptEvent
-	consistency cqltype.Consistency
+	event       routing2.AttemptEvent
+	consistency cql.Consistency
 }
 
 // beginAttempt tells the request's observer that an attempt on conn starts
 // and returns its target, start time and the observer's end callback.
-func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (model.Target, time.Time, func(routing.AttemptEvent)) {
+func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
 	target := attemptTarget(request, conn)
 	var requestID uint64
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
 	started := time.Now()
-	end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
 // attemptOutcome reports one finished attempt to the observer's end callback
 // and the routing policy and returns it for the execution loop.
-func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionRequest, conn *transport.Conn, target model.Target, index int, started time.Time, response *transport.InternalResponsePage, err error, consistency cqltype.Consistency, speculative bool, end func(routing.AttemptEvent)) typedAttemptOutcome {
+func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionRequest, conn *transport.Conn, target metadata.Target, index int, started time.Time, response *transport.InternalResponsePage, err error, consistency cql.Consistency, speculative bool, end func(routing2.AttemptEvent)) typedAttemptOutcome {
 	var requestID uint64
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })
@@ -1021,7 +1019,7 @@ func speculationOnly(request *InternalExecutionRequest) bool {
 // speculationDelay returns the delay before the speculative attempt that
 // follows started attempts, if request speculates.
 func speculationDelay(request *InternalExecutionRequest, started int) (time.Duration, bool) {
-	if !request.options.InternalOptions.Idempotent || request.routing.Kind != cqltype.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
+	if !request.options.InternalOptions.Idempotent || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
 		return 0, false
 	}
 	perfAdd(2, 1)
@@ -1058,7 +1056,7 @@ func pinnedUsable(conn *transport.Conn) bool {
 	return conn != nil && !conn.Closed() && (conn.InternalHost == nil || conn.InternalHost.IsUp())
 }
 
-func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state model.PageState) (*transport.InternalResponsePage, error) {
+func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state cql.PageState) (*transport.InternalResponsePage, error) {
 	direct := canExecuteDirect(request)
 	if !direct {
 		pageRequest := *request
@@ -1110,7 +1108,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	type delayedAttempt struct {
 		conn        *transport.Conn
 		due         time.Time
-		consistency cqltype.Consistency
+		consistency cql.Consistency
 	}
 	// Retries waiting for their delay, and a timer for the earliest of them.
 	// The nil channels disable their receive cases until a retry actually
@@ -1137,12 +1135,12 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 		delayFired, closing = delayTimer.C, s.sessionDone()
 	}
-	aggregate := model.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
+	aggregate := cql.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
 	startedCount, active := 0, 0
 	// spec coordinates a first attempt running on this goroutine with the
 	// speculative attempts that its timer starts.
 	var spec inlineSpeculation
-	launch := func(conn *transport.Conn, consistency cqltype.Consistency, speculative bool) error {
+	launch := func(conn *transport.Conn, consistency cql.Consistency, speculative bool) error {
 		var err error
 		if conn == nil && request.connection != nil {
 			conn = request.connection
@@ -1194,12 +1192,12 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		consistency := request.options.InternalProfile.Consistency
 		conn, err := s.Core.SelectTypedConn(ctx, request.routing, plan)
 		if err != nil {
-			return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+			return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 		}
 		if conn.InternalStreamObserver != nil {
 			// A stream-observed connection keeps its attempt on a goroutine.
 			if err := launch(conn, consistency, false); err != nil {
-				return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+				return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 			}
 		} else {
 			startedCount, active = 1, 1
@@ -1267,7 +1265,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 		}
 	} else if err := launch(nil, request.options.InternalProfile.Consistency, false); err != nil {
-		return nil, newExecutionError(err, aggregate, cqltype.NotExecuted, nil)
+		return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 	}
 	var timer *time.Timer
 	var speculate <-chan time.Time
@@ -1313,13 +1311,13 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				failure := ctx.Err()
 				if active > 0 {
 					// An abandoned in-flight attempt may have been applied.
-					log.raise(cqltype.MaybeExecuted)
+					log.raise(cqlerr.MaybeExecuted)
 				}
 				if request.InternalLogical != nil {
 					if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
 						aggregate.HostID = *coordinator
 						failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
-						log.raise(cqltype.PartiallyExecuted)
+						log.raise(cqlerr.PartiallyExecuted)
 					}
 				}
 				return nil, log.error(failure, aggregate)
@@ -1328,7 +1326,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				// launching them.
 				delayed = delayed[:0]
 				armDelay()
-				lastErr = runtimeerrors.ErrClosed
+				lastErr = cqlerr.ErrClosed
 				if active == 0 {
 					return nil, log.error(lastErr, aggregate)
 				}
@@ -1381,15 +1379,15 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			aggregate.HostID = outcome.event.Target.HostID
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
-				mergeResponseResult(&aggregate, response, model.CQLTraceRef{HostID: outcome.event.Target.HostID, Attempt: outcome.event.Attempt, Failed: attemptErr != nil, Speculative: outcome.event.Speculative})
+				mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: outcome.event.Target.HostID, Attempt: outcome.event.Attempt, Failed: attemptErr != nil, Speculative: outcome.event.Speculative})
 			}
 			if attemptErr == nil {
 				response.Result = aggregate
 				response.Result.Rows = int64(response.RowCount)
 				if response.PagingState != nil {
-					response.State = model.PageStateOwned(response.PagingState, 1)
+					response.State = cqltype.PageStateOwned(response.PagingState)
 				} else {
-					response.State = model.CompletePageState()
+					response.State = cqltype.CompletePageState()
 				}
 				return response, nil
 			}
@@ -1397,7 +1395,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
 				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
-				log.raise(cqltype.PartiallyExecuted)
+				log.raise(cqlerr.PartiallyExecuted)
 				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
@@ -1407,10 +1405,10 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
-				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
+				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {
@@ -1459,7 +1457,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 // w, without the prepared statement, the batch or the parameters template.
 // The caller owns w, so an attempt that does not outlive its caller stays
 // off the heap.
-func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *transport.Conn, request *InternalExecutionRequest, state model.PageState, consistency cqltype.Consistency) error {
+func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *transport.Conn, request *InternalExecutionRequest, state cql.PageState, consistency cql.Consistency) error {
 	opts := &request.options.InternalOptions
 	version := conn.InternalWire()
 	if !version.QueryKeyspace && request.keyspace != "" && request.keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !requestQualifiedForKeyspace(request, request.keyspace) {
@@ -1473,7 +1471,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 		w.Keyspace = ""
 	}
 	if state.More() {
-		w.PagingState = model.PageToken(state)
+		w.PagingState = cqltype.PageToken(state)
 	}
 	if request.options.InternalProfile.SerialConsistency.Set {
 		w.SerialConsistency = request.options.InternalProfile.SerialConsistency.Value
@@ -1487,7 +1485,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	}
 	return nil
 }
-func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *transport.Conn, request *InternalExecutionRequest, state model.PageState, consistency cqltype.Consistency) (*transport.InternalResponsePage, error) {
+func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *transport.Conn, request *InternalExecutionRequest, state cql.PageState, consistency cql.Consistency) (*transport.InternalResponsePage, error) {
 	opts := &request.options.InternalOptions
 	wireRequest := new(model.AttemptRequest)
 	if err := s.newAttempt(wireRequest, conn, request, state, consistency); err != nil {
@@ -1530,7 +1528,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
 			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
-		if unprepared, ok := errors.AsType[*protocol.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
+		if unprepared, ok := errors.AsType[*cqlerr.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
 			repaired = unprepared.StatementID
 			if response != nil {
 				response.Owner.Release()
@@ -1559,7 +1557,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 			return response, executeErr
 		}
 		if response == nil {
-			return nil, &cqltype.ProtocolError{Stage: "execute", Err: fmt.Errorf("missing response")}
+			return nil, &cql.ProtocolError{Stage: "execute", Err: fmt.Errorf("missing response")}
 		}
 		if err := selectPreparedResponse(source.prepared(), conn.InternalHostID(), prepared, wireRequest.ResultMetadataID, conn.InternalTracksResultMetadataID(), response, observed); err != nil {
 			// Hand the rejected response back with its error, as for a
@@ -1586,7 +1584,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 				} else {
 					refreshErr = s.Core.RefreshMetadata(ctx)
 				}
-				if refreshErr != nil && !errors.Is(refreshErr, runtimeerrors.ErrKeyspaceDoesNotExist) {
+				if refreshErr != nil && !errors.Is(refreshErr, cqlerr.ErrKeyspaceDoesNotExist) {
 					return response, refreshErr
 				}
 			}
@@ -1611,21 +1609,21 @@ func (rt *InternalSessionRuntime) touchPrepare(key prepareCacheKey) {
 	rt.InternalPrepareOrder = append(rt.InternalPrepareOrder, key)
 }
 
-func InternalExecutionErrorResult(err error) model.Result {
+func InternalExecutionErrorResult(err error) cql.Result {
 	if failure, ok := errors.AsType[*ExecutionError](err); ok {
 		return failure.Result
 	}
-	return model.Result{}
+	return cql.Result{}
 }
 func attemptBytesWritten(err error) bool {
-	return runtimeerrors.ExecutionStatusOf(err) != cqltype.NotExecuted
+	return cqlerr.ExecutionStatusOf(err) != cqlerr.NotExecuted
 }
 
 // hasCounterColumn reports whether columns, a statement's parameters, include
 // a counter: executing the statement is then a counter write.
-func hasCounterColumn(columns cqltype.Columns) bool {
+func hasCounterColumn(columns cql.Columns) bool {
 	for _, column := range cqltype.ColumnSlice(columns) {
-		if column.Type.Kind() == cqltype.TypeCounter {
+		if column.Type.Kind() == cql.TypeCounter {
 			return true
 		}
 	}

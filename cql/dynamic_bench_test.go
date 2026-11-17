@@ -1,0 +1,123 @@
+// Copyright 2026 The Gocql Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license.
+
+package cql
+
+import (
+	"bytes"
+	"fmt"
+	"testing"
+
+	"github.com/scylladb/gocql/v2/internal/wire"
+)
+
+var dynamicSink DynamicRow
+
+var valueSink Value
+
+func BenchmarkDynamic(b *testing.B) {
+	// The one-time row-owned physical index is setup here. Its allocation/build cost
+	// is measured separately by BenchmarkDynamic/Rows. This measures actual J
+	// repeated late-column accesses at independently varied N and S.
+	b.Run("RepeatedAccess", func(b *testing.B) {
+		blob := BlobType
+		for _, n := range []int{1, 128, 4096} {
+			for _, fragments := range []int{1, 256, 65536} {
+				b.Run(fmt.Sprintf("N%d/S%d", n, fragments), func(b *testing.B) {
+					cols := make([]ColumnSpec, n)
+					values := make([]Value, n)
+					for i := range cols {
+						cols[i] = ColumnSpec{Name: fmt.Sprint("v", i), Type: blob}
+						values[i] = BlobValue(make([]byte, (1<<20)/n))
+					}
+					columns := NewColumns(cols...)
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					parts := make([]wire.Span, fragments)
+					for i := range parts {
+						parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
+					}
+					chain := CodecTestMust(wire.NewChain(parts...))
+					plan := CodecTestMust(DynamicRows.Compile(columns))
+					row := CodecTestMust(plan.Decode(newRowReader(columns, chain, nil)))
+					CodecTestMust(row.At(n - 1))
+					b.ReportAllocs()
+					b.ResetTimer()
+					for b.Loop() {
+						v, e := row.At(n - 1)
+						if e != nil {
+							b.Fatal(e)
+						}
+						valueSink = v
+					}
+				})
+			}
+		}
+	})
+	b.Run("Rows", func(b *testing.B) {
+		for _, cells := range []int{1, 32, 128} {
+			for _, fragments := range []int{1, 1024} {
+				b.Run(fmt.Sprintf("cells%d/fragments%d", cells, fragments), func(b *testing.B) {
+					typ := BlobType
+					cols := make([]ColumnSpec, cells)
+					values := make([]Value, cells)
+					for i := range cols {
+						cols[i] = ColumnSpec{Name: fmt.Sprint("v", i), Type: typ}
+						values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
+					}
+					columns := NewColumns(cols...)
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					spans := make([]wire.Span, fragments)
+					for i := range spans {
+						spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
+					}
+					chain := CodecTestMust(wire.NewChain(spans...))
+					plan := CodecTestMust(DynamicRows.Compile(columns))
+					var dst DynamicRow
+					b.ReportAllocs()
+					b.SetBytes(int64(len(raw)))
+					b.ResetTimer()
+					for b.Loop() {
+						reader := newRowReader(columns, chain, nil)
+						if e := plan.DecodeInto(reader, &dst); e != nil {
+							b.Fatal(e)
+						}
+						v, e := dst.At(cells - 1)
+						if e != nil {
+							b.Fatal(e)
+						}
+						valueSink = v
+					}
+					dynamicSink = dst
+				})
+			}
+		}
+	})
+	// BenchmarkDynamic/BindText binds one text and one ascii Value, whose
+	// constructors already validated them.
+	b.Run("BindText", func(b *testing.B) {
+		for _, size := range []int{32, 4096} {
+			b.Run(fmt.Sprintf("bytes%d", size), func(b *testing.B) {
+				columns := NewColumns(
+					ColumnSpec{Name: "text", Type: TextType},
+					ColumnSpec{Name: "ascii", Type: ASCIIType},
+				)
+				payload := string(bytes.Repeat([]byte{'x'}, size))
+				values := []Value{CodecTestMust(TextValue(payload)), CodecTestMust(ASCIIValue(payload))}
+				plan := CodecTestMust(DynamicParams.Compile(columns))
+				builder := wire.NewBuilder(256)
+				w := newParamWriter(builder, columns, true)
+				var storage []byte
+				b.ReportAllocs()
+				b.SetBytes(int64(2 * size))
+				for b.Loop() {
+					builder.BeginOwned(storage)
+					resetParamWriter(w, builder, columns, true)
+					if err := plan.Encode(w, values); err != nil {
+						b.Fatal(err)
+					}
+					storage = builder.OwnedBytes()[:0]
+				}
+			})
+		}
+	})
+}

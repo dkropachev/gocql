@@ -9,7 +9,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestBatchAllocs(t *testing.T) {
@@ -22,7 +22,7 @@ func TestBatchAllocs(t *testing.T) {
 		session := InternalWrapSession(s)
 		ctx := context.Background()
 		value := []byte("0123456789abcdef0123456789abcdef")
-		batch := Batch{Kind: cqltype.UnloggedBatch}
+		batch := Batch{Kind: cql.UnloggedBatch}
 		send := func() {
 			batch.Reset()
 			for i := 0; i < 8; i++ {

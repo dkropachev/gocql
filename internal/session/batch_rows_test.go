@@ -7,11 +7,10 @@ import (
 	"context"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type batchRow struct{ A, B []byte }
@@ -21,13 +20,13 @@ type batchRow struct{ A, B []byte }
 const heldQueryAllocs = 3
 
 var (
-	batchRowA = codec.Row(codec.Column("value", codec.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.A }))
-	batchRowB = codec.Row(codec.Column("value", codec.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.B }))
+	batchRowA = cql.Row(cql.Column("value", cql.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.A }))
+	batchRowB = cql.Row(cql.Column("value", cql.ByteSliceCodec, func(r *batchRow) *[]byte { return &r.B }))
 )
 
 // runBatchRows reads every row of a RunBatch and closes the rows, returning
 // the A and B fields of each row joined.
-func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder codec.RowDecoder[batchRow]) []string {
+func runBatchRows(t testing.TB, session *Session, batch *Batch, decoder cql.RowDecoder[batchRow]) []string {
 	t.Helper()
 	rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
 	if err != nil {
@@ -95,7 +94,7 @@ func TestRunBatch(t *testing.T) {
 		}
 		runBatchRows(t, session, batch, decoder)
 		var row batchRow
-		if old.NextInto(&row) || old.Err() != runtimeerrors.ErrStaleRows {
+		if old.NextInto(&row) || old.Err() != cqlerr.ErrStaleRows {
 			t.Fatalf("stale handle read rows: err %v", old.Err())
 		}
 	})
@@ -141,10 +140,10 @@ func TestUnpreparedAddToBatch(t *testing.T) {
 	s, _, _ := runtimeTestSession(t, 0)
 	session := InternalWrapSession(s)
 	var batch Batch
-	statement := binding.Statement[[]byte, codec.EmptyRecord]{
-		Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)",
-		Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder,
-		BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType}),
+	statement := binding.Statement[[]byte, cql.EmptyRow]{
+		Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)",
+		Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder,
+		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType}),
 	}
 	if err := session.UnpreparedAddToBatch(&batch, statement, []byte("abc")); err != nil {
 		t.Fatal(err)
@@ -159,11 +158,11 @@ func TestUnpreparedAddToBatch(t *testing.T) {
 		t.Fatal("an unprepared member gave the batch a token")
 	}
 	conditional := statement
-	conditional.Kind = cqltype.ConditionalStatement
+	conditional.Kind = cql.ConditionalStatement
 	if err := session.UnpreparedAddToBatch(&batch, conditional, []byte("x")); err != nil {
 		t.Fatal(err)
 	}
-	if batch.routing.Kind != cqltype.ConditionalStatement {
+	if batch.routing.Kind != cql.ConditionalStatement {
 		t.Fatalf("kind = %v", batch.routing.Kind)
 	}
 	bad := statement

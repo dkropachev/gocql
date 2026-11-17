@@ -9,7 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -159,12 +159,12 @@ func (c *Conn) enqueueTyped(ctx context.Context, t *writeTicket, packet wire.Cha
 		return reject(err)
 	}
 	if c.InternalCtx.Err() != nil {
-		return reject(runtimeerrors.ErrConnectionClosed)
+		return reject(cqlerr.ErrConnectionClosed)
 	}
 	w.mu.Lock()
 	if w.closed {
 		w.mu.Unlock()
-		return reject(runtimeerrors.ErrConnectionClosed)
+		return reject(cqlerr.ErrConnectionClosed)
 	}
 	w.queue = append(w.queue, t)
 	wake := w.parked
@@ -236,7 +236,7 @@ func (w *submissionWriter) run() {
 				if !t.phase.CompareAndSwap(0, 1) {
 					err := t.ctx.Err()
 					if err == nil {
-						err = runtimeerrors.ErrConnectionClosed
+						err = cqlerr.ErrConnectionClosed
 					}
 					t.finish(InternalWriteResult{InternalErr: err})
 					batch[end-1] = nil
@@ -287,7 +287,7 @@ func (w *submissionWriter) run() {
 					if t := batch[i]; t != nil {
 						batch[i] = nil
 						t.phase.CompareAndSwap(0, 2)
-						t.finish(InternalWriteResult{InternalErr: runtimeerrors.ErrConnectionClosed})
+						t.finish(InternalWriteResult{InternalErr: cqlerr.ErrConnectionClosed})
 					}
 				}
 				w.shutdown()
@@ -357,6 +357,6 @@ func (w *submissionWriter) shutdown() {
 	w.mu.Unlock()
 	for _, t := range queued {
 		t.phase.CompareAndSwap(0, 2)
-		t.finish(InternalWriteResult{InternalErr: runtimeerrors.ErrConnectionClosed})
+		t.finish(InternalWriteResult{InternalErr: cqlerr.ErrConnectionClosed})
 	}
 }

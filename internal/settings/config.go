@@ -15,34 +15,38 @@ import (
 
 	"log/slog"
 
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 	// DialHost opens a raw socket using immutable host metadata; TLS is applied afterward.
 )
 
 type Config struct {
 	LocalAddress      netip.Addr
-	Dialer            implEndpoint.Dialer
-	DNSResolver       implEndpoint.Resolver
-	Auth              AuthProvider
+	Dialer            endpoint.Dialer
+	DNSResolver       endpoint.Resolver
+	Auth              auth.Provider
 	Reconnect         ReconnectPolicy
-	Conviction        ConvictionPolicy
-	AddressTranslator implEndpoint.AddressTranslator
-	Observer          Observer
-	LifecycleObserver LifecycleObserver
+	Conviction        endpoint.ConvictionPolicy
+	AddressTranslator endpoint.Translator
+	Observer          observe.Observer
+	LifecycleObserver observe.LifecycleObserver
 	Logger            *slog.Logger
-	DialHost          func(context.Context, implEndpoint.DialTarget) (net.Conn, error)
+	DialHost          func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
 	// TLSSource, when set, supplies TLS for every dial; TLS then holds its
 	// config at Build, for validation.
 	TLSSource      TLSSource
-	HostFilter     func(model.HostSnapshot) bool
+	HostFilter     func(metadata.HostSnapshot) bool
 	ClientRoutes   *ClientRoutesOptions
 	DefaultProfile *Profile
-	Partitioners   map[string]routing.TokenPartitioner
+	Partitioners   map[string]routing2.TokenPartitioner
 	// Timestamps is the source of client timestamps. Its zero value sends
 	// none, so the server assigns them; DefaultConfig sets DriverTimestamps.
 	Timestamps                ClientTimestamps
@@ -52,8 +56,8 @@ type Config struct {
 	Metadata                  MetadataOptions
 	Pool                      PoolOptions
 	Limits                    ProtocolLimits
-	ReceiveBuffer, SendBuffer cqltype.Option[int]
-	Linger                    cqltype.Option[time.Duration]
+	ReceiveBuffer, SendBuffer cql.Option[int]
+	Linger                    cql.Option[time.Duration]
 	ReadTimeout               time.Duration
 	// Protocol is the native protocol version, 4 or 5, and Server the
 	// database the session expects. Connect sets both from its dialect.
@@ -65,50 +69,35 @@ type Config struct {
 	PreparedCacheSize                                 int
 	Port                                              uint16
 	NoDelay                                           bool
-	Compression                                       cqltype.Compression
+	Compression                                       cql.Compression
 	ReportConfiguration                               bool
 	Server                                            Server
 }
 
 type PoolOptions = connectivity.PoolOptions
 type AdvancedShardAwarenessOptions = connectivity.AdvancedShardAwarenessOptions
-type ReconnectPolicy = connectivity.ReconnectPolicy
+type ReconnectPolicy = endpoint.ReconnectPolicy
 type ProtocolLimits = connectivity.ProtocolLimits
 type MetadataOptions struct {
 	Keyspaces                                                     []string
-	ServerTimeout                                                 cqltype.Option[time.Duration]
+	ServerTimeout                                                 cql.Option[time.Duration]
 	PeriodicRefresh                                               time.Duration
 	RequestTimeout                                                time.Duration
 	AgreementTimeout, AgreementPoll                               time.Duration
-	Mode                                                          MetadataMode
+	Mode                                                          metadata.Mode
 	InitialDiscovery                                              bool
 	AutomaticAgreement, RefreshAfterAgreement                     bool
 	TopologyEvents, StatusEvents, SchemaEvents, ClientRouteEvents bool
 }
 
-// MetadataMode selects how much schema metadata a session loads. Topology
-// (hosts, tokens and tablets) loads in every mode.
-type MetadataMode uint8
-
-const (
-	// MetadataSchemaNone loads no schema.
-	MetadataSchemaNone MetadataMode = iota
-	// MetadataSchemaKeyspaces loads keyspaces (replication, durable writes
-	// and ScyllaDB keyspace options) without their tables, views, types,
-	// functions or aggregates.
-	MetadataSchemaKeyspaces
-	// MetadataSchemaFull loads keyspaces with everything in them.
-	MetadataSchemaFull
-)
-
 type IdentityOptions struct{ DriverName, DriverVersion, ApplicationName, ApplicationVersion, ClientID string }
 type ClientRoutesOptions = connectivity.ClientRoutesOptions
-type TLSSource = connectivity.TLSSource
+type TLSSource = endpoint.TLSSource
 
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
-	profile.Routing, _ = routing.NewRoutingPolicy(routing.RoutingOptions{TokenAware: true, ShuffleReplicas: true})
-	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: MetadataSchemaFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing.Murmur3TokenPartitioner, "Murmur3Partitioner": routing.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing.CDCTokenPartitioner, "CDCPartitioner": routing.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps()}
+	profile.Routing, _ = routing.NewRoutingPolicy(routing2.Options{TokenAware: true, ShuffleReplicas: true})
+	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: metadata.SchemaFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing2.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing2.CDCTokenPartitioner, "CDCPartitioner": routing2.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps()}
 }
 
 // TimestampMode is where client timestamps come from.
@@ -174,10 +163,10 @@ func (config Config) Validate() error {
 	if config.KeepaliveInterval > 0 && config.KeepaliveTimeout == 0 {
 		return cqltype.TypeValidation("heartbeat", "timeout must be positive when heartbeats are enabled")
 	}
-	if config.Protocol == 5 && config.Compression == cqltype.SnappyCompression {
+	if config.Protocol == 5 && config.Compression == cql.SnappyCompression {
 		return &UnsupportedSettingError{Setting: "compression", Reason: "native protocol5 supports raw or LZ4 segments"}
 	}
-	if config.Compression > cqltype.SnappyCompression {
+	if config.Compression > cql.SnappyCompression {
 		return cqltype.TypeValidation("compression", "unknown algorithm")
 	}
 	if config.DefaultProfile == nil {
@@ -207,7 +196,7 @@ func (config Config) Validate() error {
 	if config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value > 0 && config.Metadata.ServerTimeout.Value%time.Millisecond != 0 {
 		return cqltype.TypeValidation("metadata server timeout", "must use whole milliseconds")
 	}
-	if config.Metadata.Mode > MetadataSchemaFull {
+	if config.Metadata.Mode > metadata.SchemaFull {
 		return cqltype.TypeValidation("metadata mode", "unknown mode")
 	}
 	if config.Metadata.PeriodicRefresh < 0 || config.Metadata.RequestTimeout < 0 || config.Metadata.AgreementTimeout < 0 || config.Metadata.AgreementPoll < 0 || config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value < 0 {
@@ -276,7 +265,7 @@ func (config Config) Snapshot() Config {
 		config.ClientRoutes = &routes
 	}
 	if config.Partitioners != nil {
-		registry := make(map[string]routing.TokenPartitioner, len(config.Partitioners))
+		registry := make(map[string]routing2.TokenPartitioner, len(config.Partitioners))
 		for key, value := range config.Partitioners {
 			registry[key] = value
 		}

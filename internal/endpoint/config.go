@@ -9,6 +9,8 @@ import (
 	"net/netip"
 	"sync/atomic"
 	"time"
+
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
 type InternalContextBox struct{ InternalCtx context.Context }
@@ -17,7 +19,7 @@ type InternalContextBox struct{ InternalCtx context.Context }
 // user resolver, or to net.DefaultResolver when none is configured. Lookups
 // run on the caller's goroutine; the resolver must honour ctx.
 type InternalV2DNSResolver struct {
-	InternalBase                          Resolver
+	InternalBase                          endpoint.Resolver
 	InternalStartup                       atomic.Pointer[InternalContextBox]
 	InternalTimeout, InternalSetupTimeout time.Duration
 }
@@ -36,7 +38,7 @@ func (r *InternalV2DNSResolver) LookupNetIP(ctx context.Context, network, host s
 		ctx, cancel = context.WithTimeout(ctx, r.InternalTimeout)
 		defer cancel()
 	}
-	var base Resolver = net.DefaultResolver
+	var base endpoint.Resolver = net.DefaultResolver
 	if r.InternalBase != nil {
 		base = r.InternalBase
 	}

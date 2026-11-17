@@ -35,12 +35,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
@@ -58,7 +58,7 @@ func TestClusterSettings(t *testing.T) {
 			tests.AssertEqual(t, "cluster config timeout", 11*time.Second, cfg.Timeout)
 			tests.AssertEqual(t, "cluster config port", 0, cfg.Port)
 			tests.AssertEqual(t, "cluster config num-conns", 2, cfg.NumConns)
-			tests.AssertEqual(t, "cluster config consistency", cqltype.Quorum, cfg.Consistency)
+			tests.AssertEqual(t, "cluster config consistency", cql.Quorum, cfg.Consistency)
 			tests.AssertEqual(t, "cluster config max prepared statements", defaultMaxPreparedStmts, cfg.MaxPreparedStmts)
 			tests.AssertEqual(t, "cluster config max routing key info", 1000, cfg.MaxRoutingKeyInfo)
 			tests.AssertEqual(t, "cluster config page-size", 5000, cfg.PageSize)
@@ -66,7 +66,7 @@ func TestClusterSettings(t *testing.T) {
 			tests.AssertEqual(t, "cluster config max wait schema agreement", 60*time.Second, cfg.MaxWaitSchemaAgreement)
 			tests.AssertEqual(t, "cluster config reconnect interval", 60*time.Second, cfg.ReconnectInterval)
 			tests.AssertTrue(t, "cluster config conviction policy",
-				reflect.DeepEqual(&settings.SimpleConvictionPolicy{}, cfg.ConvictionPolicy))
+				reflect.DeepEqual(&endpoint2.SimpleConvictionPolicy{}, cfg.ConvictionPolicy))
 			tests.AssertTrue(t, "cluster config reconnection policy",
 				reflect.DeepEqual(&pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second}, cfg.ReconnectionPolicy))
 		})
@@ -90,7 +90,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("EmptyAddr", func(t *testing.T) {
 			t.Parallel()
 
-			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint.Peer{}, netip.AddrPort{}, nil)
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint2.Peer{}, netip.AddrPort{}, nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated address is still empty", netip.AddrPort{}, newAddr)
 		})
@@ -98,7 +98,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("NilTranslator", func(t *testing.T) {
 			t.Parallel()
 			addr := netip.MustParseAddrPort("10.0.0.1:1234")
-			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, nil, endpoint.Peer{}, addr, nil)
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, nil, endpoint2.Peer{}, addr, nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "same address as provided", addr, newAddr)
 		})
@@ -106,7 +106,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("Success", func(t *testing.T) {
 			t.Parallel()
 
-			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint.Peer{}, netip.MustParseAddrPort("10.0.0.1:2345"), nil)
+			newAddr, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), endpoint2.Peer{}, netip.MustParseAddrPort("10.0.0.1:2345"), nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated address", translated, newAddr)
 		})
@@ -116,7 +116,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("AcceptsBoundaryValues", func(t *testing.T) {
 			t.Parallel()
 
-			for _, serial := range []cqltype.Consistency{cqltype.Serial, cqltype.LocalSerial} {
+			for _, serial := range []cql.Consistency{cql.Serial, cql.LocalSerial} {
 				cfg := InternalNewClusterSettings("10.0.0.1")
 				cfg.Logger = logging.Nop()
 				cfg.SerialConsistency = serial
@@ -424,12 +424,12 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeWriteCoalesceWaitTime", func(c *InternalClusterSettings) { c.WriteCoalesceWaitTime = -time.Second }, "WriteCoalesceWaitTime"},
 				{"NegativeReconnectInterval", func(c *InternalClusterSettings) { c.ReconnectInterval = -time.Second }, "ReconnectInterval"},
 				{"NegativeMaxWaitSchemaAgreement", func(c *InternalClusterSettings) { c.MaxWaitSchemaAgreement = -time.Second }, "MaxWaitSchemaAgreement"},
-				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cqltype.Quorum }, "SERIAL or LOCAL_SERIAL"},
+				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cql.Quorum }, "SERIAL or LOCAL_SERIAL"},
 				{"NilDNSResolver", func(c *InternalClusterSettings) { c.DNSResolver = nil }, "invalid DNSResolver"},
 				{"NegativeMaxExcessShardConnectionsRate", func(c *InternalClusterSettings) { c.MaxExcessShardConnectionsRate = -1 }, "MaxExcessShardConnectionsRate"},
 				{"ClientRoutesWithAddressTranslator", func(c *InternalClusterSettings) {
 					c.ClientRoutesConfig = &ClientRoutesConfig{}
-					c.AddressTranslator = endpoint.IdentityTranslator()
+					c.AddressTranslator = endpoint2.IdentityTranslator()
 				}, "invalid AddressTranslator: cannot be combined with ClientRoutesConfig"},
 				{"InvalidClientRoutesConfig", func(c *InternalClusterSettings) { c.ClientRoutesConfig = &ClientRoutesConfig{} }, "invalid ClientRoutesConfig"},
 			}
@@ -450,7 +450,7 @@ func TestClusterSettings(t *testing.T) {
 					if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 						t.Fatalf("Validate() = %v, want an error containing %q", err, tc.wantErr)
 					}
-					if _, ok := errors.AsType[*cqltype.ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
+					if _, ok := errors.AsType[*cql.ValidationError](err); strings.HasPrefix(tc.wantErr, "invalid ") && !ok {
 						t.Fatalf("Validate() = %T, want a *ValidationError", err)
 					}
 				})

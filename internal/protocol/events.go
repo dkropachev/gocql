@@ -30,9 +30,9 @@ import (
 	"net"
 	"unsafe"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	. "github.com/scylladb/gocql/v2/internal/model"
 )
 
 func (p *TypedParser) StreamEvent(h frm.FrameHeader) frm.Frame {
@@ -79,18 +79,18 @@ func (p *TypedParser) StreamEvent(h frm.FrameHeader) frm.Frame {
 	return nil
 }
 
-func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
-	info := Result{}
-	var traces []CQLTraceRef
+func (p *TypedParser) StreamExtensions(h frm.FrameHeader) cql.Result {
+	info := cql.Result{}
+	var traces []cql.CQLTraceRef
 	var warnings []string
-	var payload []PayloadEntry
+	var payload []cql.PayloadEntry
 	if h.Flags&frm.FlagTracing != 0 {
 		b := p.Copy(16)
 		if p.Err == nil {
-			p.ReserveAllocation(int64(unsafe.Sizeof(CQLTraceRef{})))
-			var id UUID
+			p.ReserveAllocation(int64(unsafe.Sizeof(cql.CQLTraceRef{})))
+			var id cql.UUID
 			copy(id[:], b)
-			traces = []CQLTraceRef{{ID: id}}
+			traces = []cql.CQLTraceRef{{ID: id}}
 		}
 	}
 	if h.Flags&frm.FlagWarning != 0 {
@@ -100,17 +100,17 @@ func (p *TypedParser) StreamExtensions(h frm.FrameHeader) Result {
 		count := int(p.U16())
 		p.ReserveAllocation(int64(count) * 80)
 		if p.Err == nil {
-			payload = make([]PayloadEntry, count)
+			payload = make([]cql.PayloadEntry, count)
 			for i := range payload {
 				e := &payload[i]
 				e.Key = p.Str()
 				b := p.Bytes()
 				if b != nil {
-					e.Value = Nullable[Bytes]{Valid: true, Value: BorrowBytes(b)}
+					e.Value = cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(b)}
 				}
 			}
 		}
 	}
-	info.SetDiagnostics(warnings, traces, payload)
+	codec.SetDiagnostics(&info, warnings, traces, payload)
 	return info
 }

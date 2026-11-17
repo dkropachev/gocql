@@ -30,19 +30,17 @@ import (
 	"time"
 
 	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type runtimeBlockingDNS struct{ done chan struct{} }
@@ -65,7 +63,7 @@ func TestConfig(t *testing.T) {
 			}
 			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.AdvancedShardAwareness.SourcePortStart = 0 }, func(c *settings.Config) {
 				c.Pool.AdvancedShardAwareness = settings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 65535, SourcePortEnd: 49152}
-			}, func(c *settings.Config) { c.Linger = cqltype.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
+			}, func(c *settings.Config) { c.Linger = implCql.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
 				invalid := settings.DefaultConfig("localhost")
 				change(&invalid)
 				if err := invalid.Validate(); err == nil {
@@ -91,7 +89,7 @@ func TestConfig(t *testing.T) {
 		t.Run("ZeroSemantics", func(t *testing.T) {
 			c := settings.DefaultConfig("localhost")
 			p := *c.DefaultProfile
-			if c.Metadata.PeriodicRefresh != time.Minute || c.Metadata.RequestTimeout != 31*time.Second || p.Timeout != 30*time.Second || p.PageTimeout != 0 || p.Prefetch != 1 || p.PageSize != 5000 || p.Consistency != cqltype.LocalQuorum {
+			if c.Metadata.PeriodicRefresh != time.Minute || c.Metadata.RequestTimeout != 31*time.Second || p.Timeout != 30*time.Second || p.PageTimeout != 0 || p.Prefetch != 1 || p.PageSize != 5000 || p.Consistency != implCql.LocalQuorum {
 				t.Fatal(c.Metadata, p)
 			}
 			for _, edit := range []func(*settings.Config){func(c *settings.Config) { c.Metadata.AgreementTimeout = 0 }, func(c *settings.Config) { c.Metadata.AgreementPoll = 0 }, func(c *settings.Config) {
@@ -133,7 +131,7 @@ func TestConfig(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 0)
 			defer s.Close()
 			c, peer := typedTestConn(t, 4, nil)
-			id := cqltype.UUID{15: 1}
+			id := implCql.UUID{15: 1}
 			host := new(implEndpoint.HostInfo)
 			implEndpoint.HostInfoData(host).InternalHostId = id
 			implEndpoint.HostInfoData(host).InternalState.Store(implEndpoint.NodeUp)
@@ -146,15 +144,15 @@ func TestConfig(t *testing.T) {
 			c.InternalFramers.InternalDefaults.InternalScyllaUseMetadataID = true
 			c.InternalRefreshNativeProtocol()
 			go c.InternalServe(c.InternalCtx)
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: implCql.BlobType})
 			state, _ := preparedState(t, s, columns)
-			handle := new(Prepared[codec.EmptyRecord, cqltype.Bytes])
+			handle := new(Prepared[implCql.EmptyRow, implCql.Bytes])
 			storage := PreparedData(handle)
 			storage.InternalState = state
-			storage.params = codecTestMust(codec.EmptyParamsEncoder.Compile(cqltype.NewColumns()))
-			storage.rows = codec.OneColumn(codec.BlobCodec)
-			storage.plans = &InternalResultPlanCache[cqltype.Bytes]{}
-			bound := codecTestMust(BindBorrowed(handle, codec.EmptyRecord{}))
+			storage.params = codecTestMust(implCql.EmptyParamsEncoder.Compile(implCql.NewColumns()))
+			storage.rows = implCql.OneColumn(implCql.BlobCodec)
+			storage.plans = &InternalResultPlanCache[implCql.Bytes]{}
+			bound := codecTestMust(BindBorrowed(handle, implCql.EmptyRow{}))
 			defer bound.Close()
 			done := make(chan error, 1)
 			go func() {
@@ -187,8 +185,8 @@ func TestConfig(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			for _, include := range []bool{false, true, false} {
-				page := codecTestMust(RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{IncludeMetadata: include, PageSize: cqltype.Some(cqltype.Unpaged)})))
-				var row cqltype.Bytes
+				page := codecTestMust(RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{IncludeMetadata: include, PageSize: implCql.Some(implCql.Unpaged)})))
+				var row implCql.Bytes
 				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 					t.Fatal(page.Err())
 				}
@@ -211,10 +209,10 @@ func TestConfig(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 0)
 			b := runtimeQuery(t)
 			defer b.Close()
-			if _, err := InternalCompileOptions(s, Options{PageSize: cqltype.Some(cqltype.Unpaged), Prefetch: implCql.Option[int]{Set: true, Value: 1}}); !hasErrorType[*settings.UnsupportedSettingError](err) {
+			if _, err := InternalCompileOptions(s, Options{PageSize: implCql.Some(implCql.Unpaged), Prefetch: implCql.Option[int]{Set: true, Value: 1}}); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unpaged with prefetch", err)
 			}
-			_, err := RunPage(context.Background(), s, b, model.StartPage(), 0, testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
+			_, err := RunPage(context.Background(), s, b, implCql.StartPage, 0, testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
 			if !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal(err)
 			}
@@ -224,7 +222,7 @@ func TestConfig(t *testing.T) {
 			}
 			// A BATCH response is a single page: paging options compiled for
 			// statements are ignored, so the batch fails only for lack of hosts.
-			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, codec.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, implCql.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
 			if err == nil || hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("batch with a page size:", err)
 			}
@@ -235,7 +233,7 @@ func TestConfig(t *testing.T) {
 		t.Run("CurrentTypedProfile", func(t *testing.T) {
 			config := settings.DefaultConfig("127.0.0.1")
 			profile := *config.DefaultProfile
-			routing, err := implRouting.NewRoutingPolicy(implRouting.RoutingOptions{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: implRouting.LatencyOptions{Enabled: true}})
+			routing, err := implRouting.NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -303,7 +301,7 @@ func TestConfig(t *testing.T) {
 			invalid := settings.DefaultConfig("localhost")
 			edit(&invalid)
 			err := invalid.Validate()
-			if _, ok := errors.AsType[*cqltype.ValidationError](err); !ok {
+			if _, ok := errors.AsType[*implCql.ValidationError](err); !ok {
 				t.Fatalf("validation error %v", err)
 			}
 		}
@@ -326,9 +324,9 @@ func TestConfig(t *testing.T) {
 			defer peer.Close()
 			wrapped := &socketOptions{TCPConn: raw.(*net.TCPConn)}
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = cqltype.Option[int]{Set: true, Value: 4096}
-			config.SendBuffer = cqltype.Option[int]{Set: true, Value: 8192}
-			config.Linger = cqltype.Option[time.Duration]{Set: true, Value: 2 * time.Second}
+			config.ReceiveBuffer = implCql.Option[int]{Set: true, Value: 4096}
+			config.SendBuffer = implCql.Option[int]{Set: true, Value: 8192}
+			config.Linger = implCql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 			config.SocketKeepalive = 7 * time.Second
 			if err := applyV2SocketOptions(wrapped, config, "tcp"); err != nil {
 				t.Fatal(err)
@@ -337,9 +335,9 @@ func TestConfig(t *testing.T) {
 				t.Fatal("socket settings were not applied", wrapped)
 			}
 			zero := config
-			zero.ReceiveBuffer = cqltype.Option[int]{Set: true}
-			zero.SendBuffer = cqltype.Option[int]{Set: true}
-			zero.Linger = cqltype.Option[time.Duration]{Set: true}
+			zero.ReceiveBuffer = implCql.Option[int]{Set: true}
+			zero.SendBuffer = implCql.Option[int]{Set: true}
+			zero.Linger = implCql.Option[time.Duration]{Set: true}
 			if err := applyV2SocketOptions(wrapped, zero, "tcp"); err != nil {
 				t.Fatal(err)
 			}
@@ -373,7 +371,7 @@ func TestConfig(t *testing.T) {
 			defer a.Close()
 			defer b.Close()
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = cqltype.Option[int]{Value: 4096, Set: true}
+			config.ReceiveBuffer = implCql.Option[int]{Value: 4096, Set: true}
 			if err := applyV2SocketOptions(a, config, "tcp"); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unsupported backend setting", err)
 			}
@@ -412,7 +410,7 @@ func TestConfig(t *testing.T) {
 					}
 					var response []byte
 					if step == 0 {
-						response = errorResponse(t, stream, protocol.CodeServer, nil)
+						response = errorResponse(t, stream, cqlerr.CodeServer, nil)
 					} else if step == 1 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("page"), "a"))
 					} else {
@@ -434,7 +432,7 @@ func TestConfig(t *testing.T) {
 			b := runtimeQuery(t)
 			rows := codecTestMust(Run(ctx, s, b, options))
 			var count int
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			for rows.NextInto(&row) {
 				count++
 			}
@@ -450,10 +448,10 @@ func TestConfig(t *testing.T) {
 			}
 			explicit := runtimeQuery(t)
 			values := options.Values()
-			values.Timestamp = cqltype.Option[int64]{Set: true, Value: 0}
-			values.PageSize = cqltype.Some(cqltype.Unpaged)
+			values.Timestamp = implCql.Option[int64]{Set: true, Value: 0}
+			values.PageSize = implCql.Some(implCql.Unpaged)
 			opts := testOptions(values)
-			page := codecTestMust(RunPage(ctx, s, explicit, model.StartPage(), 0, opts))
+			page := codecTestMust(RunPage(ctx, s, explicit, implCql.StartPage, 0, opts))
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -461,10 +459,10 @@ func TestConfig(t *testing.T) {
 			if err := explicit.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{}))
+			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
 			unpaged := options.Values()
-			unpaged.PageSize = cqltype.Some(cqltype.Unpaged)
-			page = codecTestMust(RunPage(ctx, s, conditional, model.StartPage(), 0, testOptions(unpaged)))
+			unpaged.PageSize = implCql.Some(implCql.Unpaged)
+			page = codecTestMust(RunPage(ctx, s, conditional, implCql.StartPage, 0, testOptions(unpaged)))
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}

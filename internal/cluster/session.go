@@ -26,31 +26,31 @@ package cluster
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-
+	"io"
 	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/wire"
-
 	mrand "math/rand/v2"
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/debounce"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/pool"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/internal/wire"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 // Core owns cluster metadata, pooled connections and typed executions. It
@@ -144,7 +144,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	resync := func() {
 		s.debounceRingRefresh()
 		s.scheduleV2SchemaRetry()
-		s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
 	}
 	s.privateStorage.InternalSchemaEvents.InternalResync = resync
 	s.privateStorage.InternalNodeEvents.InternalResync = resync
@@ -166,6 +166,17 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	return s, nil
 }
 
+// randomUUID returns a version 4 UUID, or the error of the random source.
+func randomUUID() (cql.UUID, error) {
+	var u cql.UUID
+	if _, err := io.ReadFull(rand.Reader, u[:]); err != nil {
+		return u, err
+	}
+	u[6] = u[6]&0x0F | 0x40 // version 4
+	u[8] = u[8]&0x3F | 0x80 // IETF variant
+	return u, nil
+}
+
 // newSessionID generates a globally unique identifier for a session.
 //
 // Every connection reports one, so this always returns an id rather than
@@ -179,7 +190,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 // implementation does.
 func newSessionID(logger *slog.Logger) string {
 	logger = logging.Or(logger)
-	id, err := cqltype.RandomUUID()
+	id, err := randomUUID()
 	if err != nil {
 		logger.Warn("unable to generate a random session id; falling back to a pseudo-random one", logging.Err(err))
 		id = pseudoRandomUUID()
@@ -192,8 +203,8 @@ func newSessionID(logger *slog.Logger) string {
 // aborting the process. A session id merely correlates the connections of one
 // session in system.clients and is never a security token, so a weaker source
 // of randomness is preferable to no id at all.
-func pseudoRandomUUID() cqltype.UUID {
-	var u cqltype.UUID
+func pseudoRandomUUID() cql.UUID {
+	var u cql.UUID
 	binary.BigEndian.PutUint64(u[:8], mrand.Uint64())
 	binary.BigEndian.PutUint64(u[8:], mrand.Uint64())
 	u[6] = u[6]&0x0F | 0x40 // set version to 4 (random uuid)
@@ -318,7 +329,7 @@ func (s *Core) init() error {
 		// For testing purposes we populate host ids
 		for _, host := range hosts {
 			if implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() {
-				implEndpoint.HostInfoData(host).InternalHostId = cqltype.MustRandomUUID()
+				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}
 	}
@@ -572,7 +583,7 @@ func (s *Core) initialized() bool {
 
 func sessionReady(s *Core) error {
 	s.privateStorage.InternalSessionStateMu.RLock()
-	err := runtimeerrors.ErrSessionNotReady
+	err := cqlerr.ErrSessionNotReady
 	if s.privateStorage.isInitialized || s.privateStorage.initErr != nil {
 		err = s.privateStorage.initErr
 	}
@@ -587,15 +598,15 @@ func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 }
 
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
-func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetadata, error) {
+func sessionTableMetadata(s *Core, keyspace, table string) (*metadata2.Table, error) {
 	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
+		return nil, cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if keyspace == "" {
-		return nil, runtimeerrors.ErrNoKeyspace
+		return nil, cqlerr.ErrNoKeyspace
 	} else if table == "" {
-		return nil, runtimeerrors.ErrNoTable
+		return nil, cqlerr.ErrNoTable
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.GetTable(keyspace, table)
@@ -606,15 +617,15 @@ func sessionTableMetadata(s *Core, keyspace, table string) (*metadata.TableMetad
 func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.TabletEntryList, error) {
 	// fail fast
 	if s.Closed() {
-		return nil, runtimeerrors.ErrSessionClosed
+		return nil, cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if !s.privateStorage.tabletsRoutingV1 {
-		return nil, runtimeerrors.ErrTabletsNotUsed
+		return nil, cqlerr.ErrTabletsNotUsed
 	} else if keyspace == "" {
-		return nil, runtimeerrors.ErrNoKeyspace
+		return nil, cqlerr.ErrNoKeyspace
 	} else if table == "" {
-		return nil, runtimeerrors.ErrNoTable
+		return nil, cqlerr.ErrNoTable
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.getTableTablets(keyspace, table), nil
@@ -626,11 +637,11 @@ func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.Table
 func sessionForEachTablet(s *Core, fn func(keyspace, table string, entries tablets.TabletEntryList) bool) error {
 	// fail fast
 	if s.Closed() {
-		return runtimeerrors.ErrSessionClosed
+		return cqlerr.ErrSessionClosed
 	} else if err := sessionReady(s); err != nil {
 		return err
 	} else if !s.privateStorage.tabletsRoutingV1 {
-		return runtimeerrors.ErrTabletsNotUsed
+		return cqlerr.ErrTabletsNotUsed
 	}
 	if fn == nil {
 		return nil
@@ -721,7 +732,7 @@ func checkServer(want implSettings.Server, conn *transport.Conn) error {
 		got = implSettings.ServerScylla
 	}
 	if got != want {
-		return &runtimeerrors.ServerMismatchError{Want: want.String(), Got: got.String()}
+		return &cqlerr.ServerMismatchError{Want: want.String(), Got: got.String()}
 	}
 	return nil
 }

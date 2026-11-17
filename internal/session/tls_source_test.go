@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestTLSSourceSession(t *testing.T) {
@@ -36,7 +37,7 @@ func TestTLSSourceSession(t *testing.T) {
 	config := settings.DefaultConfig(srv.Address)
 	config.Protocol = 4
 	config.Metadata.InitialDiscovery = false
-	config.Metadata.Mode = settings.MetadataSchemaNone
+	config.Metadata.Mode = metadata.SchemaNone
 	config.Metadata.PeriodicRefresh = 0
 	config.ReportConfiguration = false
 	config.Pool.ConnectionsPerHost = 1

@@ -6,13 +6,13 @@ package binding
 import (
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestStatement(t *testing.T) {
 	t.Run("statementDefaults", func(t *testing.T) {
 		t.Run("FillsEmptyTypes", func(t *testing.T) {
-			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
+			s := Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "TRUNCATE ks.t"}
 			statementDefaults(&s)
 			if s.Params == nil || s.Rows == nil {
 				t.Fatalf("empty defaults not filled: %+v", s)
@@ -29,7 +29,7 @@ func TestStatement(t *testing.T) {
 
 	t.Run("validateStatement", func(t *testing.T) {
 		t.Run("AcceptsDefaultedEmptyTypes", func(t *testing.T) {
-			s := Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "TRUNCATE ks.t"}
+			s := Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "TRUNCATE ks.t"}
 			statementDefaults(&s)
 			if err := validateStatement(s); err != nil {
 				t.Fatal(err)

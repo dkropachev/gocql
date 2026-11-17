@@ -25,6 +25,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -82,30 +83,30 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 		for _, key := range keys {
 			v, ok := values[key]
 			if !ok || len(v) != 1 || v[0] == "" {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("missing/ambiguous %s", key)}
+				return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("missing/ambiguous %s", key)}
 			}
 		}
 		count, err := strconv.ParseUint(values["SCYLLA_NR_SHARDS"][0], 10, 16)
 		if err != nil || count == 0 {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("invalid 16-bit nonzero shard count")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("invalid 16-bit nonzero shard count")}
 		}
 		shard, err := strconv.ParseUint(values["SCYLLA_SHARD"][0], 10, 16)
 		if err != nil || shard >= count {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("shard ID outside advertised count")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("shard ID outside advertised count")}
 		}
 		msb, err := strconv.ParseUint(values["SCYLLA_SHARDING_IGNORE_MSB"][0], 10, 6)
 		if err != nil || msb > 63 {
-			return &cqltype.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("ignored MSB count outside 0..63")}
+			return &cql.ProtocolError{Stage: "SUPPORTED sharding", Err: fmt.Errorf("ignored MSB count outside 0..63")}
 		}
 		shards = int(count)
 	}
 	for _, key := range []string{"SCYLLA_SHARD_AWARE_PORT", "SCYLLA_SHARD_AWARE_PORT_SSL"} {
 		if v, ok := values[key]; ok {
 			if len(v) != 1 {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED port", Err: fmt.Errorf("missing/ambiguous %s", key)}
+				return &cql.ProtocolError{Stage: "SUPPORTED port", Err: fmt.Errorf("missing/ambiguous %s", key)}
 			}
 			if _, err := strconv.ParseUint(v[0], 10, 16); err != nil {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED port", Err: err}
+				return &cql.ProtocolError{Stage: "SUPPORTED port", Err: err}
 			}
 		}
 	}
@@ -116,15 +117,15 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 				continue
 			}
 			if !ok || value == "" {
-				return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: fmt.Errorf("invalid %s", param)}
+				return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: fmt.Errorf("invalid %s", param)}
 			}
 			if key == implEndpoint.InternalLwtAddMetadataMarkKey {
 				if _, err := strconv.ParseUint(value, 10, 32); err != nil {
-					return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: err}
+					return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: err}
 				}
 			} else {
 				if _, err := strconv.ParseInt(value, 10, 32); err != nil {
-					return &cqltype.ProtocolError{Stage: "SUPPORTED extension", Err: err}
+					return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: err}
 				}
 			}
 		}

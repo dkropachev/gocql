@@ -25,10 +25,12 @@ import (
 	"fmt"
 	"slices"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 const InternalMaxPreparedRefreshScopes = 64
@@ -40,11 +42,11 @@ func (s *Core) ScheduleV2PreparedRefresh(keyspace string) error {
 	p.InternalMu.Lock()
 	if p.closed || s.Closed() {
 		p.InternalMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if _, exists := p.InternalPreparedRefreshScopes[keyspace]; !exists && len(p.InternalPreparedRefreshScopes) >= InternalMaxPreparedRefreshScopes {
 		p.InternalMu.Unlock()
-		return &cqltype.ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
+		return &cql.ProtocolError{Stage: "prepared schema reconciliation", Err: fmt.Errorf("pending keyspace limit %d exceeded", InternalMaxPreparedRefreshScopes)}
 	}
 	if p.InternalPreparedRefreshScopes == nil {
 		p.InternalPreparedRefreshScopes = make(map[string]uint64)
@@ -83,11 +85,11 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
 	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), keyspace)
-	absent := errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist)
+	absent := errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist)
 	if err != nil && !absent {
 		return err
 	}
-	var schema, minimal *metadata.KeyspaceMetadata
+	var schema, minimal *metadata2.Keyspace
 	if !absent {
 		copyBase := *base
 		minimal = &copyBase
@@ -96,18 +98,18 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 			return err
 		}
 	}
-	publish := config.Metadata.Mode != settings.MetadataSchemaNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
+	publish := config.Metadata.Mode != metadata2.SchemaNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
 	p.InternalMu.Lock()
 	if p.schemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
-		return &metadata.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
+		return &cqlerr.PartialRefreshError{Keyspaces: map[string]error{keyspace: errors.New("schema changed during prepared reconciliation")}}
 	}
 	if publish && s.privateStorage.InternalMetadataDescriber != nil {
 		p.schemaRevision[keyspace]++
 		if absent {
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(keyspace)
 		} else {
-			if config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+			if config.Metadata.Mode == metadata2.SchemaKeyspaces {
 				schema = minimal
 			}
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalSet(keyspace, schema)
@@ -116,7 +118,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	delete(p.schemaStale, keyspace)
 	p.InternalMu.Unlock()
 	if absent {
-		s.InvalidatePreparedSchema(Event{Keyspace: keyspace, Target: "KEYSPACE"})
+		s.InvalidatePreparedSchema(event.Event{Keyspace: keyspace, Target: "KEYSPACE"})
 	}
 	if publish {
 		s.PublishV2Metadata()

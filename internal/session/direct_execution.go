@@ -9,14 +9,18 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // canExecuteDirect reports whether request's pages run on the calling
@@ -51,9 +55,9 @@ func canUseDirectProfile(profile settings.Profile) bool {
 // outcome channel or per-attempt goroutine. Observers and latency-aware
 // routing are told about each attempt on this goroutine; speculation and
 // custom routing policies keep the general execution path.
-func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state model.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
+func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request *InternalExecutionRequest, state cql.PageState, plan routing.QueryPlan) (*transport.InternalResponsePage, error) {
 	consistency := request.options.InternalProfile.Consistency
-	aggregate := model.Result{AchievedConsistency: consistency}
+	aggregate := cql.Result{AchievedConsistency: consistency}
 	var log *attemptLog // allocated on the first failed attempt
 	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
 	var conn *transport.Conn
@@ -108,7 +112,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		} else {
 			started = time.Now()
 		}
-		var end func(routing.AttemptEvent)
+		var end func(routing2.AttemptEvent)
 		var observed time.Time
 		if observe {
 			end, observed = startDirectAttempt(request, conn, attempt)
@@ -122,7 +126,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		aggregate.Latency += latency
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
-		mergeResponseResult(&aggregate, response, model.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
+		mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
 		trace := responseTraceID(response)
 		if err == nil {
 			// Attempts run one at a time here, and a failed attempt's response
@@ -132,9 +136,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			response.Result = aggregate
 			response.Result.Rows = int64(response.RowCount)
 			if response.PagingState != nil {
-				response.State = model.PageStateOwned(response.PagingState, 1)
+				response.State = cqltype.PageStateOwned(response.PagingState)
 			} else {
-				response.State = model.CompletePageState()
+				response.State = cqltype.CompletePageState()
 			}
 			return response, nil
 		}
@@ -146,7 +150,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 					log = new(attemptLog)
 				}
 				log.fail(err, conn, attempt, consistency, trace)
-				log.raise(cqltype.PartiallyExecuted)
+				log.raise(cqlerr.PartiallyExecuted)
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
 		}
@@ -156,11 +160,11 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		attemptStatus := log.fail(err, conn, attempt, consistency, trace)
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqltype.NotExecuted, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:
-			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: model.CompletePageState(), Result: aggregate}}, nil
+			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:
@@ -186,7 +190,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				// No attempt is in flight during the delay, so a closing
 				// session ends the execution here.
 				timer.Stop()
-				return failure(runtimeerrors.ErrClosed)
+				return failure(cqlerr.ErrClosed)
 			case <-timer.C:
 			}
 		}
@@ -201,7 +205,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 // pinned connection: it omits that connection's host.
 type skipHostPlan struct {
 	plan routing.QueryPlan
-	host cqltype.UUID
+	host cql.UUID
 }
 
 func (p *skipHostPlan) Next() (routing.Route, bool) {
@@ -215,21 +219,21 @@ func (p *skipHostPlan) Next() (routing.Route, bool) {
 
 // mergeResponseResult adds a response's diagnostics to result. A trace
 // session the response names is recorded as attempt, with its ID filled in.
-func mergeResponseResult(result *model.Result, response *transport.InternalResponsePage, attempt model.CQLTraceRef) {
+func mergeResponseResult(result *cql.Result, response *transport.InternalResponsePage, attempt cql.CQLTraceRef) {
 	// Warnings, trace IDs and custom payload all live in the rare extras.
 	if response == nil || response.Extras == nil {
 		return
 	}
-	result.AddWarnings(response.Warnings()...)
+	codec.AddWarnings(result, response.Warnings())
 	if id := response.CQLTraceID(); id.Set {
 		attempt.ID = id.Value
-		result.AddCQLTraces(attempt)
+		codec.AddCQLTrace(result, attempt)
 	}
 	for _, entry := range response.Payload() {
 		if entry.Value.Valid {
 			entry.Value.Value = entry.Value.Value.Clone()
 		}
-		result.AddCustomPayload(entry)
+		codec.AddCustomPayload(result, entry)
 	}
 }
 
@@ -240,10 +244,10 @@ func routingObservesLatency(policy routing.RoutingPolicy) bool {
 }
 
 // attemptTarget is the host and shard an attempt on conn goes to.
-func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) model.Target {
-	target := model.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
+func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) metadata.Target {
+	target := metadata.Target{HostID: conn.InternalHostID(), ShardID: request.routing.ShardID}
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-		target.ShardID = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+		target.ShardID = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 	}
 	return target
 }
@@ -254,18 +258,18 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) mode
 // although the execution's own latency may include it.
 //
 //go:noinline
-func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing.AttemptEvent), time.Time) {
+func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(routing.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
+	return l.startAttempt(routing2.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end
 // callback and to a latency-aware routing policy, on the calling goroutine.
 //
 //go:noinline
-func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing.AttemptEvent)) {
-	event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
+	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

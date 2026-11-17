@@ -7,12 +7,15 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // inputOwner serializes close against admission. Each admitted operation and
@@ -79,7 +82,7 @@ func (o *inputOwner) InternalAdmit() error {
 	for {
 		v := o.state.Load()
 		if v&ownerClosed != 0 {
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		if o.state.CompareAndSwap(v, v+1) {
 			return nil
@@ -195,7 +198,7 @@ type InternalExecutionRequest struct {
 	keyspace       string
 	InternalValues model.EncodedValues
 	tabletFeedback routing.InternalTabletFeedbackStamp
-	routing        model.RoutingInfo
+	routing        routing2.Info
 	// timestamp is the client timestamp the request sends when
 	// hasTimestamp: its options' own or one admission generated.
 	timestamp          int64
@@ -237,8 +240,8 @@ func (r *InternalExecutionRequest) optionsScratch() *InternalResolvedOptions {
 	return q.optionsScratch
 }
 
-type ExecutionError = runtimeerrors.ExecutionError
+type ExecutionError = cqlerr.ExecutionError
 
-func newExecutionError(err error, result model.Result, status cqltype.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
+func newExecutionError(err error, result cql.Result, status cqlerr.ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
 	return runtimeerrors.NewExecutionError(err, result, status, attempts)
 }

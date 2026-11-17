@@ -17,17 +17,16 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/paging"
-
 	"bytes"
 	"context"
 	"encoding/binary"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/paging"
 )
 
 func FuzzStreamExecutionBoundary(f *testing.F) {
@@ -50,7 +49,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 
 		reservation.InternalConn.InternalHost = func() *endpoint.HostInfo {
 			opaqueStorageValuex := new(endpoint.HostInfo)
-			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cqltype.UUID{15: 1}
+			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cql.UUID{15: 1}
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalState.Store(endpoint.NodeUp)
 			return opaqueStorageValuex
 		}()
@@ -68,7 +67,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 			RowStreamData(opaqueStorageValuexx).cancel = cancel
 			RowStreamData(opaqueStorageValuexx).session = s
 			RowStreamData(opaqueStorageValuexx).request = request
-			RowStreamData(opaqueStorageValuexx).decoder = codec.StreamOneColumn(codec.StreamBlob)
+			RowStreamData(opaqueStorageValuexx).decoder = cql.StreamOneColumn(cql.StreamBlob)
 			RowStreamData(opaqueStorageValuexx).reservation = reservation
 			RowStreamData(opaqueStorageValuexx).history = paging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 64}
 			return opaqueStorageValuexx

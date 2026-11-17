@@ -10,8 +10,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/segment"
@@ -26,9 +26,9 @@ func codecTestMust[T any](v T, err error) T {
 	}
 	return v
 }
-func foundationScalar(t testing.TB, kind cqltype.Type) cqltype.DataType {
+func foundationScalar(t testing.TB, kind cql.Type) cql.DataType {
 	t.Helper()
-	d, err := cqltype.ScalarType(kind)
+	d, err := cql.ScalarType(kind)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -41,11 +41,11 @@ func streamCell(body []byte) []byte {
 	copy(b[4:], body)
 	return b
 }
-func streamDecodeFixture[T any](t testing.TB, typ cqltype.DataType, decoder codec.StreamDecoder[T], data []byte, dst *T, step int) error {
+func streamDecodeFixture[T any](t testing.TB, typ cql.DataType, decoder cql.StreamDecoder[T], data []byte, dst *T, step int) error {
 	t.Helper()
-	columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})
+	columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 	r, scope := streamReaderFixture(t, columns, &streamChunkSource{data: data, step: step}, len(data))
-	plan, err := codec.StreamOneColumn(decoder).Compile(columns)
+	plan, err := cql.StreamOneColumn(decoder).Compile(columns)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func (s *streamChunkSource) Read(p []byte) (int, error) {
 	return n, nil
 }
 
-func streamReaderFixture(t testing.TB, columns cqltype.Columns, source io.Reader, size int) (*codec.StreamRowReader, *wire.Stream) {
+func streamReaderFixture(t testing.TB, columns cql.Columns, source io.Reader, size int) (*cql.StreamRowReader, *wire.Stream) {
 	t.Helper()
 	scope, err := wire.NewStream(context.Background(), source, int64(size), wire.StreamLimits{MaxDepth: 130, DiscardBytes: 127})
 	if err != nil {

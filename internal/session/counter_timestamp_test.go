@@ -11,10 +11,9 @@ import (
 	"testing"
 	"time"
 
+	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
@@ -37,12 +36,12 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 			var response []byte
 			if op == byte(frm.OpPrepare) {
 				cql := string(body[4 : 4+int(binary.BigEndian.Uint32(body))])
-				id, typ := "plain", cqltype.BigIntType
+				id, typ := "plain", implCql.BigIntType
 				if strings.Contains(cql, "c + ?") {
-					id, typ = "counter", cqltype.CounterType
+					id, typ = "counter", implCql.CounterType
 				}
-				params := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "c", Type: typ})
-				response = preparedBody([]byte(id), params, cqltype.NewColumns())
+				params := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "c", Type: typ})
+				response = preparedBody([]byte(id), params, implCql.NewColumns())
 			} else {
 				n := int(binary.BigEndian.Uint16(body))
 				id := string(body[2 : 2+n])
@@ -68,11 +67,11 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 		}
 	}
 	t.Run("Counter", func(t *testing.T) {
-		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = c + ? WHERE k = 1", codec.CounterCodec, 1)
+		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = c + ? WHERE k = 1", implCql.CounterCodec, 1)
 		check(t, "counter", false)
 	})
 	t.Run("Ordinary", func(t *testing.T) {
-		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = ? WHERE k = 1", codec.Int64, 1)
+		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = ? WHERE k = 1", implCql.Int64Codec, 1)
 		check(t, "plain", true)
 	})
 	// A counter batch sends no timestamp: its body is a timestamp's eight bytes
@@ -87,7 +86,7 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 		if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 			t.Fatal(err)
 		}
-		size := func(kind cqltype.BatchKind) int {
+		size := func(kind implCql.BatchKind) int {
 			t.Helper()
 			served := make(chan int, 1)
 			go func() {
@@ -100,7 +99,7 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 			}
 			return <-served
 		}
-		if unlogged, counter := size(cqltype.UnloggedBatch), size(cqltype.CounterBatch); unlogged-counter != 8 {
+		if unlogged, counter := size(implCql.UnloggedBatch), size(implCql.CounterBatch); unlogged-counter != 8 {
 			t.Fatalf("unlogged batch body %d bytes, counter batch %d: want the counter batch without a timestamp", unlogged, counter)
 		}
 	})
@@ -108,9 +107,9 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 
 // counterTimestampWrites prepares cql and executes it once each as a
 // prepared statement's pooled query, as a query and as a bound statement.
-func counterTimestampWrites[P any](t *testing.T, ctx context.Context, s *cluster.Core, cql string, encoder codec.Encoder[P], value P) {
+func counterTimestampWrites[P any](t *testing.T, ctx context.Context, s *cluster.Core, cql string, encoder implCql.Encoder[P], value P) {
 	t.Helper()
-	p, err := Prepare(ctx, s, binding.Statement[P, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: cql, Params: codec.OneParam(encoder), Rows: codec.EmptyRowDecoder}, PrepareOptions{})
+	p, err := Prepare(ctx, s, binding.Statement[P, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.OneParam(encoder), Rows: implCql.EmptyRowDecoder}, PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

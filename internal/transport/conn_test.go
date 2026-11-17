@@ -27,14 +27,13 @@ package transport
 import (
 	"context"
 	"encoding/binary"
+	"log/slog"
 	"math"
 	"sync"
 	"testing"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -93,7 +92,7 @@ func TestConn(t *testing.T) {
 		if id := c.InternalHostID(); !id.IsEmpty() {
 			t.Fatalf("got %v for a host without an ID", id)
 		}
-		want := cqltype.UUID{15: 7}
+		want := cql.UUID{15: 7}
 		data := implEndpoint.HostInfoData(host)
 		data.InternalMu.Lock()
 		data.InternalHostId = want
@@ -102,7 +101,7 @@ func TestConn(t *testing.T) {
 			t.Fatalf("got %v, want %v", id, want)
 		}
 		data.InternalMu.Lock()
-		data.InternalHostId = cqltype.UUID{}
+		data.InternalHostId = cql.UUID{}
 		data.InternalMu.Unlock()
 		if id := c.InternalHostID(); id != want {
 			t.Fatalf("cached ID not used: got %v", id)

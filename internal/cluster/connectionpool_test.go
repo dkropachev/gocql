@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
@@ -67,7 +67,7 @@ func newUndialedHostPool(t *testing.T, session *Core, ip string) *implPool.Inter
 	}
 	host := func() *endpoint.HostInfo {
 		opaqueStorageValuexxxx := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalHostId = cqltype.MustRandomUUID()
+		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalHostId = cql.RandomUUID()
 		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalConnectAddress = addr
 		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalBroadcastAddress = addr
 		implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalPort = 9042

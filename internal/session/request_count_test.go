@@ -8,20 +8,20 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/observe"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type countingObserver struct{ requests atomic.Uint64 }
 
-func (o *countingObserver) ObserveRequest(settings.RequestEvent) { o.requests.Add(1) }
-func (o *countingObserver) ObserveAttempt(routing.AttemptEvent)  {}
+func (o *countingObserver) ObserveRequest(observe.RequestEvent)  { o.requests.Add(1) }
+func (o *countingObserver) ObserveAttempt(routing2.AttemptEvent) {}
 
-func (o *countingObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o *countingObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *countingObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *countingObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 
@@ -52,7 +52,7 @@ func TestRequestCount(t *testing.T) {
 		go func() { _ = s.Close(); close(closed) }()
 		spinUntil(t, "Close marked the session", s.Closed)
 		release()
-		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if err := receiveWithin(t, "Exec", refused); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
 		receiveWithin(t, "Close", closed)
@@ -88,7 +88,7 @@ func TestRequestCount(t *testing.T) {
 			// A registration that checked the mark before waiting for the
 			// lock would be registered after Close marked, and is listed only
 			// if Close reaches its shard after it: that is the miss.
-			if err := receiveWithin(t, "Exec", result); !errors.Is(err, runtimeerrors.ErrClosed) {
+			if err := receiveWithin(t, "Exec", result); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("Exec on a session Close was stopping: %v", err)
 			}
 			if refused := rt.refusedRegistrations.Load(); refused != 1 {

@@ -37,18 +37,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/config"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
-	"github.com/scylladb/gocql/v2/cql/stream"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 func TestPaging(t *testing.T) {
@@ -64,7 +60,7 @@ func TestPaging(t *testing.T) {
 		table := testTableName(t)
 		const targetP1, targetP2, totalExpectedResults, pageSize, deletedRangeStart, deletedRangeEnd = 50, 50, 30, 5, 10, 20
 		selectCQL := fmt.Sprintf("SELECT c1,f1 FROM %s WHERE p1=50 AND p2=50 AND f1<30 ALLOW FILTERING", table)
-		validate := func(t *testing.T, rows []dynamic.Row) {
+		validate := func(t *testing.T, rows []cql.DynamicRow) {
 			t.Helper()
 			var got []int
 			for _, row := range rows {
@@ -84,24 +80,24 @@ func TestPaging(t *testing.T) {
 		t.Run("Prepare", func(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (p1 int,p2 int,c1 int,f1 int,PRIMARY KEY ((p1,p2),c1)) WITH CLUSTERING ORDER BY (c1 DESC)", table))
 			for i := int32(0); i < 100; i++ {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), dynamic.Int(i), dynamic.Int(i), dynamic.Int(i), dynamic.Int(i))
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), dynamic.Int(targetP1), dynamic.Int(targetP2), dynamic.Int(i), dynamic.Int(i))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), cql.IntValue(i), cql.IntValue(i), cql.IntValue(i), cql.IntValue(i))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (p1,p2,c1,f1) VALUES (?,?,?,?)", table), cql.IntValue(targetP1), cql.IntValue(targetP2), cql.IntValue(i), cql.IntValue(i))
 			}
-			cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), dynamic.Int(targetP1), dynamic.Int(targetP2), dynamic.Int(deletedRangeStart), dynamic.Int(deletedRangeEnd))
+			cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), cql.IntValue(targetP1), cql.IntValue(targetP2), cql.IntValue(deletedRangeStart), cql.IntValue(deletedRangeEnd))
 		})
 		// Manual paging needs a page cursor, which only prepared statements return.
-		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: selectCQL, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, exec.PrepareOptions{})
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: selectCQL, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 		t.Run("AutoPagination", func(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
-					validate(t, cassandraUnpreparedAll(t, session, selectCQL, dynamic.Rows, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
+					validate(t, cassandraUnpreparedAll(t, session, selectCQL, cql.DynamicRows, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 				})
 			}
 		})
 		t.Run("ManualPagination", func(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
-					var result []dynamic.Row
+					var result []cql.DynamicRow
 					state := cql.StartPage
 					for {
 						page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
@@ -111,7 +107,7 @@ func TestPaging(t *testing.T) {
 						// RunPage exposes empty tombstone/filter pages. Their continuation
 						// must still advance, and their reported count must match decoded rows.
 						pageRows := int64(0)
-						var cur dynamic.Row
+						var cur cql.DynamicRow
 						for page.NextInto(&cur) {
 							pageRows++
 							row, err := page.Clone()
@@ -143,9 +139,9 @@ func TestPaging(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
 			for i := int32(0); i < 100; i++ {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), dynamic.Int(i))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), cql.IntValue(i))
 			}
-			rows := cassandraUnpreparedAll(t, session, fmt.Sprintf("SELECT id FROM %s", table), dynamic.Rows, exec.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}})
+			rows := cassandraUnpreparedAll(t, session, fmt.Sprintf("SELECT id FROM %s", table), cql.DynamicRows, exec.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}})
 			require.Len(t, rows, 100)
 		})
 		t.Run("ReusedPrepared", func(t *testing.T) {
@@ -155,11 +151,11 @@ func TestPaging(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int,val int,PRIMARY KEY(id,val))", table))
 			for i := int32(0); i < 100; i++ {
-				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES (?,?)", table), dynamic.Int(1), dynamic.Int(i))
+				cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES (?,?)", table), cql.IntValue(1), cql.IntValue(i))
 			}
-			prepared := cassandraPrepared(t, session, cql.Statement[[]dynamic.Value, dynamic.Row]{CQL: fmt.Sprintf("SELECT val FROM %s WHERE id=? AND val<?", table), Params: dynamic.Params, Rows: dynamic.Rows}, exec.PrepareOptions{})
-			first := []dynamic.Value{dynamic.Int(1), dynamic.Int(50)}
-			second := []dynamic.Value{dynamic.Int(1), dynamic.Int(20)}
+			prepared := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT val FROM %s WHERE id=? AND val<?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
+			first := []cql.Value{cql.IntValue(1), cql.IntValue(50)}
+			second := []cql.Value{cql.IntValue(1), cql.IntValue(20)}
 			options := exec.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}}
 			require.Len(t, cassandraRows(t, session, prepared, first, options), 50)
 			require.Len(t, cassandraRows(t, session, prepared, second, options), 20)
@@ -175,17 +171,17 @@ func TestPaging(t *testing.T) {
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,count int)", table))
 		for i := int32(0); i < count; i++ {
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), dynamic.Int(i), dynamic.Int(i*i))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(i), cql.IntValue(i*i))
 		}
 		// Manual paging needs a page cursor, which only prepared statements return.
-		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, exec.PrepareOptions{})
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 		state := cql.StartPage
 		fetched := 0
 		for {
 			page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, exec.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))
 			require.NoError(t, err)
 			defer page.Close()
-			var row dynamic.Row
+			var row cql.DynamicRow
 			for page.NextInto(&row) {
 				id := cassandraInt(t, row, "id")
 				require.Equal(t, id*id, cassandraInt(t, row, "count"))
@@ -218,7 +214,7 @@ func TestPaging(t *testing.T) {
 		}()
 		payload := bytes.Repeat([]byte("live-borrowed"), 512)
 		for i := int32(0); i < 64; i++ {
-			cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", dynamic.Int(1), dynamic.Int(i), dynamic.Blob(payload))
+			cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", cql.IntValue(1), cql.IntValue(i), cql.BlobValue(payload))
 		}
 		var calls atomic.Int32
 		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32Codec, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
@@ -317,7 +313,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		statement := cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}
+		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
 		selectPrepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
 		type output struct {
 			ID     int32
@@ -325,9 +321,9 @@ func TestPaging(t *testing.T) {
 			Pieces [][]byte
 			Text   []byte
 		}
-		decoder := stream.RowInto(func(*output) {}, stream.Column("id", stream.Int32, func(r *output) *int32 { return &r.ID }), stream.Column("value", stream.Blob, func(r *output) *[]byte { return &r.Value }), stream.Column("pieces", stream.List(stream.Blob), func(r *output) *[][]byte { return &r.Pieces }), stream.Column("txt", stream.Text, func(r *output) *[]byte { return &r.Text }))
+		decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *output) *[][]byte { return &r.Pieces }), cql.StreamColumn("txt", cql.StreamText, func(r *output) *[]byte { return &r.Text }))
 		options := exec.StreamOptions{Incremental: true, Options: exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}
-		streamStatement := stream.Statement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}
+		streamStatement := cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}
 		streamPrepared, err := s.PrepareStream(ctx, streamStatement)
 		if err != nil {
 			t.Fatal(err)
@@ -346,7 +342,7 @@ func TestPaging(t *testing.T) {
 		}
 		if *flagProto < 5 && fixtureCompressed() {
 			_, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
-			if _, ok := errors.AsType[*cqlerr.StreamCapabilityError](err); !ok {
+			if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 				t.Fatal("frame compression pre-submit capability", err)
 			}
 			t.Log("frame-compressed streaming explicitly rejected before query")
@@ -424,7 +420,7 @@ func TestPaging(t *testing.T) {
 			t.Fatal(err)
 		}
 		count := 0
-		var row dynamic.Row
+		var row cql.DynamicRow
 		for rows.NextInto(&row) {
 			count++
 		}

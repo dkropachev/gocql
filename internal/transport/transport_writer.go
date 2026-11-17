@@ -8,7 +8,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -74,7 +74,7 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	case <-w.InternalQuit:
-		return 0, runtimeerrors.ErrConnectionClosed
+		return 0, cqlerr.ErrConnectionClosed
 	case w.InternalSemaphore <- struct{}{}:
 	}
 	defer func() { <-w.InternalSemaphore }()
@@ -126,7 +126,7 @@ func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain w
 		return 0, ctx.Err()
 	case <-w.InternalQuit:
 		writeResultChanPool.Put(resultChan)
-		return 0, runtimeerrors.ErrConnectionClosed
+		return 0, cqlerr.ErrConnectionClosed
 	case w.InternalWriteCh <- req:
 	}
 	if w.InternalTestEnqueuedHook != nil {

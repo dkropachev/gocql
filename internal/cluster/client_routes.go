@@ -7,20 +7,18 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
 	"slices"
 	"sync"
-
 	"time"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 type ClientRoutesEndpoint struct {
@@ -287,7 +285,7 @@ type ClientRoutesHandler struct {
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
-func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
 	if peer.HostID.IsEmpty() {
 		return addr, nil
 	}
@@ -333,7 +331,7 @@ func (p *ClientRoutesHandler) Initialize(s *Core) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
 		p.privateStorage.queueMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	default:
 	}
 	p.privateStorage.InternalSession = s
@@ -382,7 +380,7 @@ func (p *ClientRoutesHandler) UpdateHostPortMappingAsync(task InternalUpdateTask
 func clientRoutesHandlerUpdateHostPortMappingSync(p *ClientRoutesHandler, task InternalUpdateTask) error {
 	select {
 	case <-p.privateStorage.InternalCloseChan:
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	default:
 	}
 	return p.updateHostPortMappingContext(metadata.InternalV2SchemaContext(p.privateStorage.InternalSession.NewSchemaSource()), task)
@@ -463,7 +461,7 @@ func (p *ClientRoutesHandler) StartUpdateWorker() {
 						task.InternalRelease()
 					}
 					if task.result != nil {
-						task.result <- runtimeerrors.ErrClosed
+						task.result <- cqlerr.ErrClosed
 					}
 				default:
 					return
@@ -503,7 +501,7 @@ func (p *ClientRoutesHandler) updateHostPortMapping(task InternalUpdateTask) err
 
 func NewClientRoutesAddressTranslator(
 	cfg ClientRoutesConfig,
-	resolver endpoint.Resolver,
+	resolver endpoint2.Resolver,
 	pickTLSPorts bool,
 	log *slog.Logger,
 ) *ClientRoutesHandler {
@@ -533,7 +531,7 @@ func NewClientRoutesAddressTranslator(
 
 func (p *ClientRoutesHandler) logger() *slog.Logger { return logging.Or(p.privateStorage.log) }
 
-var _ endpoint.AddressTranslator = func() *ClientRoutesHandler {
+var _ endpoint2.Translator = func() *ClientRoutesHandler {
 	opaqueStorageValuex := new(ClientRoutesHandler)
 	return opaqueStorageValuex
 }()

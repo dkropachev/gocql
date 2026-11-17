@@ -8,9 +8,8 @@ import (
 	"testing"
 	"time"
 
+	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -176,9 +175,9 @@ func TestStartTimestamps(t *testing.T) {
 	})
 }
 
-func timestampQuery(t testing.TB, cql string) *Bound[cqltype.Bytes] {
+func timestampQuery(t testing.TB, cql string) *Bound[implCql.Bytes] {
 	t.Helper()
-	b, err := BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.OrdinaryStatement, CQL: cql, Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{})
+	b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 	if err != nil {
 		t.Fatal(err)
 	}

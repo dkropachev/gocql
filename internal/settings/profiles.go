@@ -4,11 +4,10 @@
 package settings
 
 import (
-	"context"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -16,12 +15,12 @@ import (
 type Profile struct {
 	Retry                retry.Policy
 	Routing              routing.RoutingPolicy
-	Speculation          SpeculationPolicy
+	Speculation          retry.SpeculationPolicy
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
 	PageSize             int32
-	SerialConsistency    cqltype.Option[cqltype.Consistency]
-	Consistency          cqltype.Consistency
+	SerialConsistency    cql.Option[cql.Consistency]
+	Consistency          cql.Consistency
 	// unbuilt marks a public Profile that ProfileBuilder.Build did not make,
 	// such as a struct literal: its unset fields are zero, not the driver's
 	// defaults, so validation rejects it.
@@ -36,7 +35,7 @@ func (p *Profile) InternalMarkUnbuilt() { p.unbuilt = true }
 func (p *Profile) InternalBuilt() bool { return !p.unbuilt }
 
 func InternalDefaultProfile() Profile {
-	return Profile{Consistency: cqltype.LocalQuorum, SerialConsistency: cqltype.Option[cqltype.Consistency]{Value: cqltype.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
+	return Profile{Consistency: cql.LocalQuorum, SerialConsistency: cql.Option[cql.Consistency]{Value: cql.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
 func (p Profile) ValidateProfile() error {
 	if p.unbuilt {
@@ -45,7 +44,7 @@ func (p Profile) ValidateProfile() error {
 	if !InternalValidConsistency(p.Consistency) {
 		return cqltype.TypeValidation("consistency", "invalid consistency")
 	}
-	if p.SerialConsistency.Set && p.SerialConsistency.Value != cqltype.Serial && p.SerialConsistency.Value != cqltype.LocalSerial {
+	if p.SerialConsistency.Set && p.SerialConsistency.Value != cql.Serial && p.SerialConsistency.Value != cql.LocalSerial {
 		return cqltype.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
 	}
 	if p.Timeout < 0 || p.PageTimeout < 0 {
@@ -59,38 +58,29 @@ func (p Profile) ValidateProfile() error {
 	}
 	return nil
 }
-func InternalValidConsistency(c cqltype.Consistency) bool {
-	return c >= cqltype.Any && c <= cqltype.LocalOne
+func InternalValidConsistency(c cql.Consistency) bool {
+	return c >= cql.Any && c <= cql.LocalOne
 }
 
-type SpeculationPolicy interface {
-	Delay(attempt int) (time.Duration, bool)
-}
+// SpeculationPolicy schedules additional attempts of eligible executions.
+// Delay receives the number of attempts started so far and returns how long
+// to wait before starting another, and whether to start one at all.
 
-type Observer interface {
-	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
-	StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
-}
-
-// RequestStart describes a request as it is admitted, before its first
-// attempt.
-type RequestStart struct {
-	Started         time.Time
-	Statement       string
-	BatchStatements []string
-	Parameters      cqltype.Columns
-	Routing         model.RoutingInfo
-	ID              uint64
-	// CQLTrace reports that the request's attempts ask the cluster to record
-	// CQL trace sessions.
-	CQLTrace bool
-}
-type RequestEvent struct {
-	Err             error
-	Statement       string
-	BatchStatements []string
-	Parameters      cqltype.Columns
-	Result          model.Result
-	Routing         model.RoutingInfo
-	ID              uint64
-}
+// Observer instruments requests and their attempts from the client side; it
+// is the hook for client-side tracing such as OpenTelemetry. Implementations
+// are shared between executions and must be safe for concurrent use.
+//
+// StartRequest is called once per request as it is admitted, with the
+// caller's context. The context it returns is passed to StartAttempt for
+// each of the request's attempts, so a span started for the request can
+// parent the attempts' spans; the driver uses it for nothing else and never
+// derives cancellation from it. The function it returns, if not nil, is
+// called once with the completed request.
+//
+// StartAttempt is called as each attempt, retry or speculative attempt is
+// sent. The function it returns, if not nil, is called once with the
+// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
+// trace session when the request runs with exec.Options.CQLTrace.
+//
+// A speculative attempt that loses can start or end after its request has
+// ended. A panic in any of these calls is logged and otherwise ignored.

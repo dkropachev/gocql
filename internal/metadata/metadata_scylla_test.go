@@ -4,9 +4,13 @@
 
 package metadata
 
-import "testing"
+import (
+	"testing"
 
-func assertPartitionKey(t *testing.T, keyspaceName, tableName string, actual, expected []*ColumnMetadata) {
+	"github.com/scylladb/gocql/v2/metadata"
+)
+
+func assertPartitionKey(t *testing.T, keyspaceName, tableName string, actual, expected []*metadata.Column) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Tables[%s].PartitionKey) to be %v but was %v", keyspaceName, tableName, len(expected), len(actual))
 	} else {
@@ -26,13 +30,13 @@ func assertPartitionKey(t *testing.T, keyspaceName, tableName string, actual, ex
 			if i != actual[i].ComponentIndex {
 				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].ComponentIndex to be %v but was %v", keyspaceName, tableName, i, i, actual[i].ComponentIndex)
 			}
-			if ColumnPartitionKey != actual[i].Kind {
-				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, ColumnPartitionKey, actual[i].Kind)
+			if metadata.ColumnPartitionKey != actual[i].Kind {
+				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnPartitionKey, actual[i].Kind)
 			}
 		}
 	}
 }
-func assertClusteringColumns(t *testing.T, keyspaceName, tableName string, actual, expected []*ColumnMetadata) {
+func assertClusteringColumns(t *testing.T, keyspaceName, tableName string, actual, expected []*metadata.Column) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Tables[%s].ClusteringColumns) to be %v but was %v", keyspaceName, tableName, len(expected), len(actual))
 	} else {
@@ -58,14 +62,14 @@ func assertClusteringColumns(t *testing.T, keyspaceName, tableName string, actua
 			if expected[i].Order != actual[i].Order {
 				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Order to be %v but was %v", keyspaceName, tableName, i, expected[i].Order, actual[i].Order)
 			}
-			if ColumnClusteringKey != actual[i].Kind {
-				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, ColumnClusteringKey, actual[i].Kind)
+			if metadata.ColumnClusteringKey != actual[i].Kind {
+				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnClusteringKey, actual[i].Kind)
 			}
 		}
 	}
 }
 
-func assertColumns(t *testing.T, keyspaceName, tableName string, actual, expected map[string]*ColumnMetadata) {
+func assertColumns(t *testing.T, keyspaceName, tableName string, actual, expected map[string]*metadata.Column) {
 	if len(expected) != len(actual) {
 		eKeys := make([]string, 0, len(expected))
 		for key := range expected {
@@ -120,7 +124,7 @@ func assertOrderedColumns(t *testing.T, keyspaceName, tableName string, actual, 
 	}
 }
 
-func assertTableMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*TableMetadata) {
+func assertTableMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*metadata.Table) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Tables) to be %v but was %v", keyspaceName, len(expected), len(actual))
 	}
@@ -142,7 +146,7 @@ func assertTableMetadata(t *testing.T, keyspaceName string, actual, expected map
 	}
 }
 
-func assertViewsMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*ViewMetadata) {
+func assertViewsMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*metadata.View) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Views) to be %v but was %v", keyspaceName, len(expected), len(actual))
 	}
@@ -164,7 +168,7 @@ func assertViewsMetadata(t *testing.T, keyspaceName string, actual, expected map
 	}
 }
 
-func assertIndicesMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*IndexMetadata) {
+func assertIndicesMetadata(t *testing.T, keyspaceName string, actual, expected map[string]*metadata.Index) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Indexes) to be %v but was %v", keyspaceName, len(expected), len(actual))
 	}
@@ -187,7 +191,7 @@ func assertIndicesMetadata(t *testing.T, keyspaceName string, actual, expected m
 	}
 }
 
-func assertKeyspaceMetadata(t *testing.T, actual, expected *KeyspaceMetadata) {
+func assertKeyspaceMetadata(t *testing.T, actual, expected *metadata.Keyspace) {
 	assertTableMetadata(t, expected.Name, actual.Tables, expected.Tables)
 	assertViewsMetadata(t, expected.Name, actual.Views, expected.Views)
 	assertIndicesMetadata(t, expected.Name, actual.Indexes, expected.Indexes)

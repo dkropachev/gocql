@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -40,16 +39,10 @@ func TestGeneratedCodec(t *testing.T) {
 		}
 		cols := columns(t)
 		v := value()
-		withPoint := cql.WithCodec[Fixture](PointCodec)
-		withAttrs := cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
-		reflectedParams, err := codec.ReflectParams(withPoint, withAttrs)
-		if err != nil {
-			t.Fatal(err)
-		}
-		reflectedRows, err := codec.ReflectRow(withPoint, withAttrs)
-		if err != nil {
-			t.Fatal(err)
-		}
+		withPoint := cql.WithCodec[reflectedFixture](PointCodec)
+		withAttrs := cql.WithCodec[reflectedFixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
+		reflectedParams := reflectParams(t, withPoint, withAttrs)
+		reflectedRows := reflectRows(t, withPoint, withAttrs)
 		genChain, gen := encode(t, cols, cql.MustParamsOf[Fixture](), v)
 		refChain, ref := encode(t, cols, reflectedParams, v)
 		if !bytes.Equal(gen, ref) {
@@ -119,12 +112,8 @@ func TestGeneratedCodec(t *testing.T) {
 		if _, err := chain.CopyTo(data); err != nil {
 			t.Fatal(err)
 		}
-		reflected, err := codec.ReflectStreamRow[StreamFixture]()
-		if err != nil {
-			t.Fatal(err)
-		}
-		gen := streamDecode(t, cols, stream.MustRowOf[StreamFixture](), data)
-		ref := streamDecode(t, cols, reflected, data)
+		gen := streamDecode(t, cols, cql.MustStreamRowOf[StreamFixture](), data)
+		ref := reflectStreamDecode(t, cols, data)
 		if !reflect.DeepEqual(gen, ref) || !reflect.DeepEqual(gen, want) {
 			t.Fatalf("stream rows differ:\ngenerated %+v\nreflected %+v\nwant      %+v", gen, ref, want)
 		}

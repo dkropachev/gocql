@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // answerOneShot answers the next EXECUTE with rows, reporting its page size.
@@ -51,7 +51,7 @@ func dropPreparedHandle(t *testing.T, p *Prepared[int32, []byte], page bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if page {
-		if _, err := p.RunPage(ctx, 1, model.StartPage(), 0, CompiledOptions{}); err != nil {
+		if _, err := p.RunPage(ctx, 1, cql.StartPage, 0, CompiledOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -122,7 +122,7 @@ func TestPreparedHandles(t *testing.T) {
 			t.Fatal(err)
 		}
 		answerOneShot(t, peer, requests, "b")
-		second, err := p.RunPage(ctx, 2, model.StartPage(), 0, CompiledOptions{})
+		second, err := p.RunPage(ctx, 2, cql.StartPage, 0, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		sizes := answerOneShot(t, peer, requests, "a")
-		page, err := p.RunPage(ctx, 1, model.StartPage(), 9, CompiledOptions{})
+		page, err := p.RunPage(ctx, 1, cql.StartPage, 9, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestPreparedHandles(t *testing.T) {
 		var dst []byte
 		for rows.NextInto(&dst) {
 		}
-		if err := rows.Err(); !errors.Is(err, runtimeerrors.ErrClosed) {
+		if err := rows.Err(); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("rows after Session.Close: %v", err)
 		}
 		_ = rows.Close()
@@ -254,7 +254,7 @@ func TestCloseStopsRowsOfBusyPooledQuery(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("NextInto after Session.Close blocked")
 	}
-	if err := rows.Err(); !errors.Is(err, runtimeerrors.ErrClosed) {
+	if err := rows.Err(); !errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatalf("rows after Session.Close: %v", err)
 	}
 }
@@ -285,7 +285,7 @@ func TestCancelStopsRowsMidPage(t *testing.T) {
 	if rows.NextInto(&dst) {
 		t.Fatalf("NextInto after cancel decoded %q", dst)
 	}
-	if err := rows.Err(); !errors.Is(err, context.Canceled) || errors.Is(err, runtimeerrors.ErrClosed) {
+	if err := rows.Err(); !errors.Is(err, context.Canceled) || errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatalf("rows after cancel: %v", err)
 	}
 	if s.Closed() {

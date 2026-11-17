@@ -38,7 +38,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -90,8 +91,8 @@ func TestFramer(t *testing.T) {
 			framer.WriteHeader(0, frm.OpStartup, 1)
 			framer.WriteBytes(make([]byte, frm.MaxFrameSize+1))
 			err := framer.Finish()
-			if err != ErrFrameTooBig {
-				t.Fatalf("expected to get %v got %v", ErrFrameTooBig, err)
+			if err != cqlerr.ErrFrameTooBig {
+				t.Fatalf("expected to get %v got %v", cqlerr.ErrFrameTooBig, err)
 			}
 		})
 		// Covers the asymmetry between the
@@ -113,7 +114,7 @@ func TestFramer(t *testing.T) {
 
 			// The body above passes the pre-compression check; only the compressed size is
 			// over, so reaching ErrFrameTooBig proves the second check is the one that fired.
-			require.ErrorIs(t, f.Finish(), ErrFrameTooBig)
+			require.ErrorIs(t, f.Finish(), cqlerr.ErrFrameTooBig)
 		})
 		// This is the uncompressed control for
 		// TestFramer/Finish/V4SnappyRoundTrip: same framer, same payload, no compressor. It pins that
@@ -250,7 +251,7 @@ func TestFramer(t *testing.T) {
 			writer.WriteHeader(0, frm.OpOptions, 0)
 			writer.Buf = append(writer.Buf, 1, 2, 3, 4)
 			err := writer.Finish()
-			if budget == 3 && !errors.Is(err, ErrFrameTooBig) || budget == 4 && err != nil {
+			if budget == 3 && !errors.Is(err, cqlerr.ErrFrameTooBig) || budget == 4 && err != nil {
 				t.Fatal("handshake write bound", budget, err)
 			}
 		}
@@ -582,7 +583,7 @@ func TestFramer(t *testing.T) {
 					req := fixtureQueryFrame{
 						statement: strings.Repeat("SELECT * FROM system.local ", 32),
 						params: fixtureQueryParams{
-							consistency: Quorum,
+							consistency: cql.Quorum,
 							keyspace:    "gocql_test",
 						},
 					}
@@ -633,7 +634,7 @@ func TestFramer(t *testing.T) {
 			err = rf.ReadFrame(r, &head)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), "no compressor available with compressed frame body")
-			var violation *ProtocolError
+			var violation *cql.ProtocolError
 			require.ErrorAs(t, err, &violation)
 			require.Equal(t, "frame", violation.Stage)
 			require.Equal(t, int64(-1), violation.Offset)
@@ -650,7 +651,7 @@ func TestFramer(t *testing.T) {
 
 			err := f.ReadFrame(errReader{timeoutErr{}}, &head)
 			require.Error(t, err)
-			require.NotErrorIs(t, err, ErrFrameTooBig, "the discard failed, so the frame was not skipped")
+			require.NotErrorIs(t, err, cqlerr.ErrFrameTooBig, "the discard failed, so the frame was not skipped")
 
 			_, isNetErr := errors.AsType[net.Error](err)
 			require.True(t, isNetErr, "errors.AsType[net.Error] on %q", err)
@@ -676,8 +677,8 @@ func TestFramer(t *testing.T) {
 			}
 
 			err := framer.ReadFrame(r, &head)
-			if err != ErrFrameTooBig {
-				t.Fatalf("expected to get %v got %v", ErrFrameTooBig, err)
+			if err != cqlerr.ErrFrameTooBig {
+				t.Fatalf("expected to get %v got %v", cqlerr.ErrFrameTooBig, err)
 			}
 
 			head, err = readHeader(r, make([]byte, 9))
@@ -743,7 +744,7 @@ func TestFramer(t *testing.T) {
 					req := fixtureQueryFrame{
 						statement: "SELECT * FROM system.local",
 						params: fixtureQueryParams{
-							consistency: Quorum,
+							consistency: cql.Quorum,
 							keyspace:    "gocql_test",
 						},
 					}

@@ -29,11 +29,10 @@ import (
 	"fmt"
 	"hash/fnv"
 	"net/netip"
-
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/endpoint"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 )
 
 // extractKeyspaceTableFromDDL extracts the keyspace and table names from a DDL
@@ -105,8 +104,8 @@ func testTableName(t testing.TB, parts ...string) string {
 	return name
 }
 
-func staticAddressTranslator(newAddr netip.AddrPort) endpoint.AddressTranslator {
-	return endpoint.AddressTranslatorFunc(func(context.Context, endpoint.Peer, netip.AddrPort) (netip.AddrPort, error) {
+func staticAddressTranslator(newAddr netip.AddrPort) endpoint2.Translator {
+	return endpoint2.TranslatorFunc(func(context.Context, endpoint2.Peer, netip.AddrPort) (netip.AddrPort, error) {
 		return newAddr, nil
 	})
 }

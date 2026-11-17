@@ -4,23 +4,6 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	logging "github.com/scylladb/gocql/v2/internal/logging"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/metrics"
-
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"context"
 	"errors"
 	"fmt"
@@ -28,12 +11,28 @@ import (
 	"net/netip"
 	"slices"
 	"sort"
-
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
+	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	model "github.com/scylladb/gocql/v2/internal/model"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/metrics"
+	"github.com/scylladb/gocql/v2/observe"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type v2LatencySummary struct{ p50, p95, p99 time.Duration }
@@ -42,7 +41,7 @@ type InternalV2PeripheralState struct {
 	routeDiagnostic     error
 	InternalSnapshot    atomic.Pointer[routing.MetadataSnapshot]
 	InternalSubscribers map[*Subscription]struct{}
-	partitioners        atomic.Pointer[map[string]routing.TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
+	partitioners        atomic.Pointer[map[string]routing2.TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
 	schemaEpoch         map[string]uint64
 	schemaRevision      map[string]uint64
 	tableRevision       map[routing.InternalMetadataTable]uint64
@@ -135,7 +134,7 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		}
 	}
-	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
@@ -218,7 +217,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		diagnostics = append(diagnostics, p.routeDiagnostic)
 	}
 	p.InternalMu.Unlock()
-	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*implMetadata.KeyspaceMetadata), InternalRanges: make(map[string][]routing.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]routing.TokenRange)})
+	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*metadata.Keyspace), InternalRanges: make(map[string][]metadata.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]metadata.TokenRange)})
 	routing.SnapshotData(m).InternalDiagnostics = diagnostics
 	routing.SnapshotData(m).InternalPartitioners = config.Partitioners
 	if old != nil {
@@ -235,7 +234,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		s.privateStorage.InternalHostSource.mu.RUnlock()
 	}
-	var schemaSource *map[string]*implMetadata.KeyspaceMetadata
+	var schemaSource *map[string]*metadata.Keyspace
 	if s.privateStorage.InternalMetadataDescriber != nil && s.privateStorage.InternalMetadataDescriber.InternalMetadata != nil {
 		schemaSource = s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalKeyspaceMap.Load()
 	}
@@ -283,11 +282,11 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		if md.privateStorage.InternalTabletsMetadata != nil && (old == nil || routing.SnapshotData(old).InternalPlacements == nil) {
 			md.privateStorage.InternalTabletsMetadata.ForEach(func(ks, table string, entries tablets.TabletEntryList) bool {
-				r := make([]routing.TokenRange, len(entries))
+				r := make([]metadata.TokenRange, len(entries))
 				for i, e := range entries {
-					r[i] = routing.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
+					r[i] = metadata.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
 					for _, replica := range e.ReplicasUnsafe() {
-						r[i].Replicas = append(r[i].Replicas, model.Target{HostID: cqltype.UUID(replica.HostUUIDValue()), ShardID: cqltype.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
+						r[i].Replicas = append(r[i].Replicas, metadata.Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
 					}
 				}
 				routing.SnapshotData(m).InternalTablets[routing.InternalMetadataTable{InternalKeyspace: ks, InternalTable: table}] = r
@@ -371,7 +370,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
-	if config.Metadata.Mode != settings.MetadataSchemaFull {
+	if config.Metadata.Mode != metadata.SchemaFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
 	for keyspace, ks := range routing.SnapshotData(m).InternalKeyspaces {
@@ -412,7 +411,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	p.InternalSnapshot.Store(m)
 	return true
 }
-func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, error) {
+func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, error) {
 	out, tokenErr := implEndpoint.SnapshotHost(h)
 	if h == nil {
 		return out, tokenErr
@@ -433,7 +432,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (model.HostSnapshot, erro
 	}
 	return out, tokenErr
 }
-func sessionObserveV2Lifecycle(s *Core, event settings.LifecycleEvent) {
+func sessionObserveV2Lifecycle(s *Core, event observe.LifecycleEvent) {
 	p := s.Peripheral()
 	if p == nil {
 		return
@@ -457,14 +456,14 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 		return err
 	}
 	if s == nil || s.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if s.privateStorage.InternalRingRefresher == nil {
 		return implMetadata.InternalErrNoControl
 	}
 	p := s.Peripheral()
 	if !p.admitMetadataWork() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	defer p.workers.Done()
 	var topologyErr error
@@ -473,7 +472,7 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 		return ctx.Err()
 	case err, ok := <-s.privateStorage.InternalRingRefresher.RefreshNow():
 		if !ok {
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		topologyErr = err
 	}
@@ -483,20 +482,20 @@ func (s *Core) RefreshMetadata(ctx context.Context) error {
 	}
 	schemaErr := s.RefreshV2AllSchema(ctx)
 	if topologyErr != nil || routeErr != nil {
-		return errors.Join(&implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: topologyErr, ClientRoutes: routeErr}, schemaErr)
+		return errors.Join(&cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: topologyErr, ClientRoutes: routeErr}, schemaErr)
 	}
 	return schemaErr
 }
 
 // readV2SystemRows is the context-bound typed control-query seam. It detaches
 // metadata values before releasing each page and never invokes legacy Scan.
-func InternalReadV2SystemRows[P, R any](ctx context.Context, conn *transport.Conn, statement binding.Statement[P, R], columns cqltype.Columns, value P) ([]R, error) {
+func InternalReadV2SystemRows[P, R any](ctx context.Context, conn *transport.Conn, statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if conn == nil {
 		return nil, cqltype.TypeValidation("system query", "nil connection")
 	}
 	return readV2SystemRowsVia(ctx, conn.InternalVersion, conn.InternalGetSystemRequestState().InternalTimeout, conn.InternalExecuteV2System, statement, columns, value)
 }
-func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error), statement binding.Statement[P, R], columns cqltype.Columns, value P) ([]R, error) {
+func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error), statement binding.Statement[P, R], columns cql.Columns, value P) ([]R, error) {
 	if ctx == nil || execute == nil {
 		return nil, cqltype.TypeValidation("system query", "nil context or connection")
 	}
@@ -513,8 +512,8 @@ func readV2SystemRowsVia[P, R any](ctx context.Context, version byte, timeout ti
 }
 
 type agreementPeer struct {
-	id      cqltype.Nullable[cqltype.UUID]
-	version cqltype.Nullable[cqltype.UUID]
+	id      cql.Nullable[cql.UUID]
+	version cql.Nullable[cql.UUID]
 }
 
 func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
@@ -522,23 +521,23 @@ func (s *Core) awaitV2SchemaAgreement(ctx context.Context) error {
 		return cqltype.TypeValidation("schema agreement context", "nil context")
 	}
 	if s == nil || s.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
-	return s.awaitV2SchemaAgreementUsing(ctx, nil, cqltype.UUID{})
+	return s.awaitV2SchemaAgreementUsing(ctx, nil, cql.UUID{})
 }
 func (s *Core) AwaitV2SchemaAgreementOn(ctx context.Context, conn *transport.Conn) error {
 	if ctx == nil || conn == nil || conn.InternalHost == nil {
 		return cqltype.TypeValidation("schema agreement", "nil context or coordinator")
 	}
 	if s == nil || s.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	return s.awaitV2SchemaAgreementUsing(ctx, conn, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 }
-func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *transport.Conn, required cqltype.UUID) error {
+func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *transport.Conn, required cql.UUID) error {
 	p := s.Peripheral()
 	if !p.admitMetadataWork() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	defer p.workers.Done()
 	p.InternalMu.Lock()
@@ -562,11 +561,11 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 			return err
 		}
 		if s.Closed() {
-			return runtimeerrors.ErrClosed
+			return cqlerr.ErrClosed
 		}
 		// Retain one immutable scope for this check. A missing/down enabled host
 		// prevents agreement; each retry takes a fresh snapshot.
-		scope := make(map[cqltype.UUID][]*transport.Conn)
+		scope := make(map[cql.UUID][]*transport.Conn)
 		for _, h := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if h.Enabled {
 				scope[h.ID] = s.v2AgreementConnections(h.ID)
@@ -576,22 +575,22 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 			scope[required] = append([]*transport.Conn{coordinator}, scope[required]...)
 		}
 		if len(scope) == 0 {
-			return &implMetadata.NoHostsError{Operation: "schema agreement", Causes: []error{runtimeerrors.ErrNoConnections}}
+			return &cqlerr.NoHostsError{Operation: "schema agreement", Causes: []error{cqlerr.ErrNoConnections}}
 		}
 		type observation struct {
 			err     error
-			version cqltype.UUID
+			version cql.UUID
 		}
 		results := make(chan observation, len(scope))
 		// Fixed worker count bounds goroutines even with large topologies.
 		jobs := make(chan struct {
 			conns []*transport.Conn
-			id    cqltype.UUID
+			id    cql.UUID
 		}, len(scope))
 		for id, conns := range scope {
 			jobs <- struct {
 				conns []*transport.Conn
-				id    cqltype.UUID
+				id    cql.UUID
 			}{conns: conns, id: id}
 		}
 		close(jobs)
@@ -609,7 +608,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		workers.Wait()
 		close(results)
 		complete := true
-		versions := make(map[cqltype.UUID]bool)
+		versions := make(map[cql.UUID]bool)
 		var terminal error
 		for result := range results {
 			if result.err != nil {
@@ -636,9 +635,9 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		}
 	}
 }
-func readV2AgreementHost(ctx context.Context, id cqltype.UUID, conns []*transport.Conn) (cqltype.UUID, error) {
-	stmt := binding.Statement[codec.EmptyRecord, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: codec.EmptyParamsEncoder, Rows: codec.Row(codec.Column("host_id", codec.NullableCodec(codec.UUIDCodec), func(r *agreementPeer) *cqltype.Nullable[cqltype.UUID] { return &r.id }), codec.Column("schema_version", codec.NullableCodec(codec.UUIDCodec), func(r *agreementPeer) *cqltype.Nullable[cqltype.UUID] { return &r.version }))}
-	var last error = runtimeerrors.ErrNoConnections
+func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Conn) (cql.UUID, error) {
+	stmt := binding.Statement[cql.EmptyRow, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: cql.EmptyParamsEncoder, Rows: cql.Row(cql.Column("host_id", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.id }), cql.Column("schema_version", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.version }))}
+	var last error = cqlerr.ErrNoConnections
 	for _, conn := range conns {
 		if conn == nil || conn.Closed() {
 			continue
@@ -647,38 +646,38 @@ func readV2AgreementHost(ctx context.Context, id cqltype.UUID, conns []*transpor
 		if conn.InternalCfg != nil && conn.InternalCfg.TypedConfig != nil {
 			timeout = conn.InternalCfg.TypedConfig.Metadata.RequestTimeout
 		}
-		rows, err := readV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, cqltype.NewColumns(), codec.EmptyRecord{})
+		rows, err := readV2SystemRowsVia(ctx, conn.InternalVersion, timeout, conn.InternalExecuteV2System, stmt, cql.NewColumns(), cql.EmptyRow{})
 		if err != nil {
 			if terminalV2AgreementError(err) {
-				return cqltype.UUID{}, err
+				return cql.UUID{}, err
 			}
 			last = err
 			continue
 		}
 		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsEmpty() {
-			return cqltype.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
+			return cql.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
 		}
 		return rows[0].version.Value, nil
 	}
-	return cqltype.UUID{}, last
+	return cql.UUID{}, last
 }
 func terminalV2AgreementError(err error) bool {
-	if _, ok := errors.AsType[*cqltype.ProtocolError](err); ok {
+	if _, ok := errors.AsType[*cql.ProtocolError](err); ok {
 		return true
 	}
-	if _, ok := errors.AsType[*cqltype.ValidationError](err); ok {
+	if _, ok := errors.AsType[*cql.ValidationError](err); ok {
 		return true
 	}
-	if server, ok := errors.AsType[protocol.ServerError](err); ok {
-		switch runtimeerrors.KindOf(server) {
-		case runtimeerrors.KindOverloaded, runtimeerrors.KindTimeout:
+	if server, ok := errors.AsType[cqlerr.ServerError](err); ok {
+		switch cqlerr.KindOf(server) {
+		case cqlerr.KindOverloaded, cqlerr.KindTimeout:
 			return false
 		}
-		return server.Code() != protocol.CodeUnprepared
+		return server.Code() != cqlerr.CodeUnprepared
 	}
 	return false
 }
-func (s *Core) v2AgreementConnections(id cqltype.UUID) []*transport.Conn {
+func (s *Core) v2AgreementConnections(id cql.UUID) []*transport.Conn {
 	if s.privateStorage.InternalPool == nil {
 		return nil
 	}
@@ -722,7 +721,7 @@ type v2SystemQueryer interface {
 func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request *model.AttemptRequest) (*transport.InternalResponsePage, error) {
 	h := c.InternalGetConn()
 	if h == nil || h.InternalConn == nil {
-		return nil, runtimeerrors.ErrNoConnections
+		return nil, cqlerr.ErrNoConnections
 	}
 	conn, ok := h.InternalConn.(*transport.Conn)
 	if !ok {
@@ -734,7 +733,7 @@ func (c *InternalControlConn) InternalQueryV2System(ctx context.Context, request
 func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	p := s.Peripheral()
 	if !p.admitMetadataWork() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	defer p.workers.Done()
 	if err := ctx.Err(); err != nil {
@@ -745,7 +744,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	epochs := maps.Clone(p.schemaEpoch)
 	revisions := maps.Clone(p.schemaRevision)
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaNone {
+	if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaNone {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
@@ -755,7 +754,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	keyspaces := make(map[string]*implMetadata.KeyspaceMetadata, len(rows))
+	keyspaces := make(map[string]*metadata.Keyspace, len(rows))
 	allowed := make(map[string]bool, len(config.Metadata.Keyspaces))
 	for _, name := range config.Metadata.Keyspaces {
 		allowed[name] = true
@@ -790,7 +789,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 			p.InternalMu.Unlock()
 			if attempt > 0 {
 				base, err = implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-				if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
+				if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
 						break
@@ -802,10 +801,10 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 					break
 				}
 			}
-			var ks *implMetadata.KeyspaceMetadata
-			if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+			var ks *metadata.Keyspace
+			if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaKeyspaces {
 				ks = base
-				ks.Tables = make(map[string]*implMetadata.TableMetadata)
+				ks.Tables = make(map[string]*metadata.Table)
 			} else {
 				ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 			}
@@ -824,7 +823,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 				// Empty table/type result sets are legal, so they cannot by
 				// themselves reveal a keyspace dropped during this fetch.
 				current, checkErr := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-				if errors.Is(checkErr, runtimeerrors.ErrKeyspaceDoesNotExist) {
+				if errors.Is(checkErr, cqlerr.ErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
 						break
@@ -902,14 +901,14 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 	}
 	if len(failures) > 0 {
 		s.scheduleV2SchemaRetry()
-		return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: failures}
+		return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: failures}
 	}
 	return nil
 }
 func (s *Core) RefreshV2Keyspace(ctx context.Context, name string) error {
 	p := s.Peripheral()
 	if !p.admitMetadataWork() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	defer p.workers.Done()
 	return s.refreshV2KeyspaceAttempt(ctx, name, 0)
@@ -926,14 +925,14 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	tables := p.captureTableRevisionsLocked(name)
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
-	if config.DefaultProfile != nil && (config.Metadata.Mode == settings.MetadataSchemaNone || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
+	if config.DefaultProfile != nil && (config.Metadata.Mode == metadata.SchemaNone || len(config.Metadata.Keyspaces) > 0 && !slices.Contains(config.Metadata.Keyspaces, name)) {
 		if !s.PublishV2Metadata() {
 			return s.v2MetadataPublicationError()
 		}
 		return nil
 	}
 	base, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-	if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
+	if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
 		p.InternalMu.Lock()
 		if p.schemaEpoch[name] == epoch && p.schemaRevision[name] == revision {
 			p.schemaRevision[name]++
@@ -950,10 +949,10 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 	if err != nil {
 		return s.v2SchemaRefreshFailure(name, err)
 	}
-	var ks *implMetadata.KeyspaceMetadata
-	if config.DefaultProfile != nil && config.Metadata.Mode == settings.MetadataSchemaKeyspaces {
+	var ks *metadata.Keyspace
+	if config.DefaultProfile != nil && config.Metadata.Mode == metadata.SchemaKeyspaces {
 		ks = base
-		ks.Tables = make(map[string]*implMetadata.TableMetadata)
+		ks.Tables = make(map[string]*metadata.Table)
 	} else {
 		ks, err = implMetadata.InternalFetchV2Keyspace(ctx, s.NewSchemaSource(), base)
 	}
@@ -964,7 +963,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 			if !s.PublishV2Metadata() {
 				return s.v2MetadataPublicationError()
 			}
-			return runtimeerrors.ErrKeyspaceDoesNotExist
+			return cqlerr.ErrKeyspaceDoesNotExist
 		}
 		if attempt < 7 && waitV2SchemaRetry(ctx, attempt) {
 			return s.refreshV2KeyspaceAttempt(ctx, name, attempt+1)
@@ -977,7 +976,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 		if attempt < 7 {
 			return s.refreshV2KeyspaceAttempt(ctx, name, attempt+1)
 		}
-		return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: fmt.Errorf("schema changed during refresh")}}
+		return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: fmt.Errorf("schema changed during refresh")}}
 	}
 	s.invalidateV2ChangedTablets(name, ks)
 	s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalSet(name, ks)
@@ -1147,7 +1146,7 @@ func (s *Core) MarkV2SchemaStale(keyspace string, dropped bool) {
 	}
 	p.InternalMu.Unlock()
 }
-func (s *Core) invalidateV2ChangedTablets(keyspace string, current *implMetadata.KeyspaceMetadata) {
+func (s *Core) invalidateV2ChangedTablets(keyspace string, current *metadata.Keyspace) {
 	if s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -1198,7 +1197,7 @@ func (s *Core) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool,
 	revision := p.schemaRevision[name]
 	p.InternalMu.Unlock()
 	_, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-	if errors.Is(err, runtimeerrors.ErrKeyspaceDoesNotExist) {
+	if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
 		return s.dropV2KeyspaceIfCurrent(name, epoch, revision), nil
 	}
 	return false, err
@@ -1298,16 +1297,16 @@ func (s *Core) v2SchemaRefreshFailure(name string, cause error) error {
 	p.InternalMu.Unlock()
 	s.PublishV2Metadata()
 	s.scheduleV2SchemaRetry()
-	return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: cause}}
+	return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{name: cause}}
 }
 
 func (s *Core) v2MetadataPublicationError() error {
-	return &implMetadata.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
+	return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
 }
 
 // sessionRoutingHostIndex indexes hosts with the session's routes to
 // them, so that plans route to their pools without looking them up.
-func sessionRoutingHostIndex(s *Core, hosts []model.HostSnapshot) *routing.InternalRoutingHostIndex {
+func sessionRoutingHostIndex(s *Core, hosts []metadata.HostSnapshot) *routing.InternalRoutingHostIndex {
 	if s.privateStorage.InternalPool == nil {
 		return routing.InternalBuildRoutingHostIndex(hosts)
 	}

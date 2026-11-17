@@ -33,21 +33,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 func BenchmarkExecution(b *testing.B) {
 	b.Run("DurationDecode", func(b *testing.B) {
-		reader := scalarReader(b, cqltype.TypeDuration, cqltype.Present, []byte{2, 4, 6})
+		reader := scalarReader(b, cql.TypeDuration, cql.Present, []byte{2, 4, 6})
 		b.ReportAllocs()
 		for b.Loop() {
-			if _, err := codec.DurationCodec.Decode(reader); err != nil {
+			if _, err := cql.DurationCodec.Decode(reader); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -61,7 +59,7 @@ func BenchmarkExecution(b *testing.B) {
 		for _, c := range []struct {
 			name   string
 			values Options
-		}{{"plain", Options{}}, {"timestamp", Options{Timestamp: cqltype.Option[int64]{Value: 1, Set: true}}}} {
+		}{{"plain", Options{}}, {"timestamp", Options{Timestamp: cql.Option[int64]{Value: 1, Set: true}}}} {
 			b.Run(c.name, func(b *testing.B) {
 				b.ReportAllocs()
 				for i := 0; i < b.N; i++ {
@@ -79,9 +77,9 @@ func BenchmarkExecution(b *testing.B) {
 	// keeps queries in a sync.Pool; prepared calls Prepared.Exec and One. ns/op
 	// is wall time per completed operation.
 	b.Run("OneShotLoopback", func(b *testing.B) {
-		options := testOptions(Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
-		writeStmt := binding.Statement[loopbackRow, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: codec.Params(codec.ParamAt(0, codec.Int32, func(r loopbackRow) int32 { return r.k }), codec.ParamAt(1, codec.ByteSliceCodec, func(r loopbackRow) []byte { return r.value })), Rows: codec.EmptyRowDecoder}
-		readStmt := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+		options := testOptions(Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+		writeStmt := binding.Statement[loopbackRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(k, value) VALUES(?, ?)", Params: cql.Params(cql.ParamAt(0, cql.Int32Codec, func(r loopbackRow) int32 { return r.k }), cql.ParamAt(1, cql.ByteSliceCodec, func(r loopbackRow) []byte { return r.value })), Rows: cql.EmptyRowDecoder}
+		readStmt := binding.Statement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 		variants := []string{"bind", "bindborrowed", "query", "userpool", "prepared"}
 		for _, op := range []string{"exec", "one", "each", "all"} {
 			workload := map[string]string{"exec": "pwrite", "one": "pone", "each": "pone", "all": "pone"}[op]
@@ -97,7 +95,7 @@ func BenchmarkExecution(b *testing.B) {
 						// One-shot calls take options compiled for their session, as
 						// the public API requires.
 						bound := codecTestMust(InternalCompileOptions(s, options.Values()))
-						var wp *Prepared[loopbackRow, codec.EmptyRecord]
+						var wp *Prepared[loopbackRow, cql.EmptyRow]
 						var rp *Prepared[int32, []byte]
 						var wpool, rpool sync.Pool
 						if op == "exec" {
@@ -112,7 +110,7 @@ func BenchmarkExecution(b *testing.B) {
 							input := loopbackRow{k: int32(i), value: []byte(loopbackValue)}
 							key := int32(i)
 							dst := make([]byte, 0, len(loopbackValue))
-							check := func(found bool, _ model.Result, err error) error {
+							check := func(found bool, _ cql.Result, err error) error {
 								if err != nil {
 									return err
 								}
@@ -130,7 +128,7 @@ func BenchmarkExecution(b *testing.B) {
 								}
 								return nil
 							}
-							var wq *Query[loopbackRow, codec.EmptyRecord]
+							var wq *Query[loopbackRow, cql.EmptyRow]
 							var rq *Query[int32, []byte]
 							if variant == "query" && op == "exec" {
 								wq = codecTestMust(wp.Query(options.Values()))
@@ -143,7 +141,7 @@ func BenchmarkExecution(b *testing.B) {
 							case "bind/exec", "bindborrowed/exec":
 								borrowed := variant == "bindborrowed"
 								run[i] = func(ctx context.Context) error {
-									var bound *Bound[codec.EmptyRecord]
+									var bound *Bound[cql.EmptyRow]
 									var err error
 									if borrowed {
 										bound, err = BindBorrowed(wp, input)
@@ -177,7 +175,7 @@ func BenchmarkExecution(b *testing.B) {
 								run[i] = func(ctx context.Context) error { return check(rq.One(ctx, key, &dst)) }
 							case "userpool/exec":
 								run[i] = func(ctx context.Context) error {
-									q := wpool.Get().(*Query[loopbackRow, codec.EmptyRecord])
+									q := wpool.Get().(*Query[loopbackRow, cql.EmptyRow])
 									_, err := q.Exec(ctx, input)
 									wpool.Put(q)
 									return err
@@ -337,7 +335,7 @@ func benchmarkSharedAdmission(b *testing.B, parallelism int, configure func(*Int
 				return
 			}
 			_ = ctx
-			request.InternalLogical.InternalFinish(model.Result{}, nil)
+			request.InternalLogical.InternalFinish(cql.Result{}, nil)
 			cancel()
 			request.InternalLogical.releaseInput()
 		}

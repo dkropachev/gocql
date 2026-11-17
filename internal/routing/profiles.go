@@ -4,13 +4,11 @@
 package routing
 
 import (
-	"time"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-type Target = model.Target
+type Target = metadata.Target
 
 // QueryPlan returns the routes a request tries, in order, until one of
 // them has a connection.
@@ -30,28 +28,7 @@ type QueryPlan interface{ Next() (Route, bool) }
 // Fallback into the plan a request follows.
 type RoutingPolicy interface {
 	Validate(*MetadataSnapshot) error
-	Pick(model.RoutingInfo, *MetadataSnapshot) (Route, bool)
-	Fallback(model.RoutingInfo, *MetadataSnapshot) QueryPlan
-	Observe(AttemptEvent)
-}
-
-// AttemptStart describes an attempt as it is sent to its target.
-type AttemptStart struct {
-	Started     time.Time
-	RequestID   uint64
-	Attempt     int
-	Target      Target
-	Speculative bool
-}
-type AttemptEvent struct {
-	Started   time.Time
-	Err       error
-	RequestID uint64
-	Attempt   int
-	Latency   time.Duration
-	Target    Target
-	// CQLTraceID is the CQL trace session the attempt's response named, when
-	// the execution ran with CQL tracing and a response arrived.
-	CQLTraceID             cqltype.Option[cqltype.UUID]
-	Cancelled, Speculative bool
+	Pick(routing.Info, *MetadataSnapshot) (Route, bool)
+	Fallback(routing.Info, *MetadataSnapshot) QueryPlan
+	Observe(routing.AttemptEvent)
 }

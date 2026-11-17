@@ -6,16 +6,13 @@ package pool
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
-
 	"sync"
 	"sync/atomic"
-
 	"time"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -47,7 +44,7 @@ type InternalScyllaConnPicker struct {
 	InternalMsbIgnore                  uint64
 	InternalNrConns                    int
 	InternalExcessConnsLimitRate       float32
-	InternalHostId                     cqltype.UUID
+	InternalHostId                     cql.UUID
 	InternalShardAwarePortDisabled     bool
 }
 

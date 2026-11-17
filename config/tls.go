@@ -11,18 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/cql"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
-
-// TLSSource supplies the TLS configuration of each new connection, so the
-// configuration can change while sessions run. The driver calls TLSConfig on
-// every dial, from many goroutines, and copies the result; it must be fast and
-// must not return nil. Connections already open keep the configuration they
-// were dialed with. Pass a source to ConfigBuilder.WithTLSSource;
-// TLSFileSource is a ready-made one. Use ConfigBuilder.WithTLS for a fixed
-// configuration.
-type TLSSource = implSettings.TLSSource
 
 // staticTLS is the source ConfigBuilder.WithTLS makes.
 type staticTLS struct{ config *tls.Config }
@@ -41,7 +32,7 @@ type TLSFiles struct {
 	Interval time.Duration
 }
 
-// TLSFileSource is a TLSSource that loads the client certificate and key, and
+// TLSFileSource is an endpoint.TLSSource that loads the client certificate and key, and
 // the CA certificates that replace RootCAs, from files over a base
 // configuration, and reloads them when their content changes. It runs no
 // goroutine: a dial checks the files when Interval has passed since the last
@@ -69,7 +60,7 @@ type TLSFileSource struct {
 // cannot be loaded.
 func NewTLSFiles(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
 	invalid := func(reason string) error {
-		return &cqlerr.ValidationError{Field: "NewTLSFiles", Err: errors.New(reason)}
+		return &cql.ValidationError{Field: "NewTLSFiles", Err: errors.New(reason)}
 	}
 	switch {
 	case (files.CertFile == "") != (files.KeyFile == ""):

@@ -4,8 +4,7 @@
 package model
 
 import (
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
-
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -15,10 +14,10 @@ type ResponseData struct {
 	// warned or payload-carrying responses have. It is nil for others.
 	Extras                  *ResponseExtras
 	Rows                    wire.Chain
-	Columns                 Columns
+	Columns                 cql.Columns
 	PagingState, MetadataID []byte
-	State                   PageState
-	Result                  Result
+	State                   cql.PageState
+	Result                  cql.Result
 	// InternalParseCursor is the response parser's cursor. It lives in the
 	// already heap-allocated response so that parsing allocates no cursor.
 	InternalParseCursor wire.Cursor
@@ -34,10 +33,10 @@ type ResponseData struct {
 type ResponseExtras struct {
 	Keyspace     string
 	PreparedID   []byte
-	BindColumns  Columns
+	BindColumns  cql.Columns
 	PkIndexes    []int
 	TraceID      []byte
-	Payload      []PayloadEntry
+	Payload      []cql.PayloadEntry
 	Warnings     []string
 	SchemaChange bool
 }
@@ -65,9 +64,9 @@ func (r *ResponseData) PreparedID() []byte {
 	}
 	return r.Extras.PreparedID
 }
-func (r *ResponseData) BindColumns() Columns {
+func (r *ResponseData) BindColumns() cql.Columns {
 	if r.Extras == nil {
-		return Columns{}
+		return cql.Columns{}
 	}
 	return r.Extras.BindColumns
 }
@@ -79,15 +78,15 @@ func (r *ResponseData) PkIndexes() []int {
 }
 
 // CQLTraceID returns the CQL trace session the response names, if any.
-func (r *ResponseData) CQLTraceID() Option[UUID] {
-	var id Option[UUID]
+func (r *ResponseData) CQLTraceID() cql.Option[cql.UUID] {
+	var id cql.Option[cql.UUID]
 	if r.Extras != nil && len(r.Extras.TraceID) == len(id.Value) {
 		copy(id.Value[:], r.Extras.TraceID)
 		id.Set = true
 	}
 	return id
 }
-func (r *ResponseData) Payload() []PayloadEntry {
+func (r *ResponseData) Payload() []cql.PayloadEntry {
 	if r.Extras == nil {
 		return nil
 	}

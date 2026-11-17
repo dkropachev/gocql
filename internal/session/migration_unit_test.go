@@ -20,9 +20,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -34,17 +32,17 @@ func (*customRetry) Decide(retry.Attempt) retry.Decision {
 
 // scalarParity checks canonical validation against incremental conversion
 // across every short read and every truncated scalar body.
-func scalarParity[T any](t *testing.T, kind cqltype.Type, buffered codec.Decoder[T], incremental codec.StreamDecoder[T], bodies ...[]byte) {
+func scalarParity[T any](t *testing.T, kind cql.Type, buffered cql.Decoder[T], incremental cql.StreamDecoder[T], bodies ...[]byte) {
 	t.Helper()
 	typ := foundationScalar(t, kind)
 	for _, body := range bodies {
 		for length := 0; length <= len(body); length++ {
 			prefix := body[:length]
-			encoded, err := codec.NewEncodedValue(typ, cqltype.Present, cqltype.BorrowBytes(prefix))
+			encoded, err := cql.NewEncodedValue(typ, cql.Present, cql.BorrowBytes(prefix))
 			if err != nil {
 				t.Fatal(err)
 			}
-			want, wantErr := codec.DecodeValue(buffered, encoded)
+			want, wantErr := cql.DecodeValue(buffered, encoded)
 			for step := 1; step <= len(prefix)+4; step++ {
 				var got T
 				err := streamDecodeFixture(t, typ, incremental, streamCell(prefix), &got, step)

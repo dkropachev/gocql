@@ -7,9 +7,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type v2ScyllaKeyspaceRow struct {
@@ -19,14 +20,14 @@ type v2ScyllaKeyspaceRow struct {
 
 // SELECT * avoids guessing whether an experimental consistency column exists.
 // Only the negotiated V2 connection can authorize its leader meaning.
-func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[string]*KeyspaceMetadata, name string) error {
+func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[string]*metadata.Keyspace, name string) error {
 	settings := s.InternalSchemaSettings()
 	if !settings.Scylla {
 		return nil
 	}
 	decoder := InternalV2SchemaRows[v2ScyllaKeyspaceRow]{initialize: func() *v2ScyllaKeyspaceRow { return &v2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[v2ScyllaKeyspaceRow]{
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.name }),
-		InternalV2SchemaColumn("initial_tablets", codec.Int32, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
+		InternalV2SchemaColumn("initial_tablets", cql.Int32Codec, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
 		InternalV2SchemaColumn("consistency", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.consistency }),
 	}}
 	stmt := `SELECT * FROM system_schema.scylla_keyspaces`
@@ -37,7 +38,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	}
 	rows, err := InternalQueryV2SchemaRows(ctx, s, stmt, args, decoder)
 	if err != nil {
-		if invalid, ok := errors.AsType[protocol.ServerError](err); ok && invalid.Code() == protocol.CodeInvalid {
+		if invalid, ok := errors.AsType[cqlerr.ServerError](err); ok && invalid.Code() == cqlerr.CodeInvalid {
 			return nil
 		}
 		return err

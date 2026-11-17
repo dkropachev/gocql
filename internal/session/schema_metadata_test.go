@@ -11,14 +11,16 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestSchemaMetadata(t *testing.T) {
@@ -65,11 +67,11 @@ func TestSchemaMetadata(t *testing.T) {
 			profile.Routing = unstablePolicy{RoutingPolicy: profile.Routing, session: s}
 			config.DefaultProfile = &profile
 			s.ConfigureV2Peripheral(config)
-			sub, _ := s.Subscribe(cluster.EventFilter{Capacity: 4})
+			sub, _ := s.Subscribe(event.Filter{Capacity: 4})
 			s.HandleNodeEvent([]protocol.Frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})
-			event := <-sub.Events()
-			if event.Kind != cluster.OverflowEvent || event.Change != "PUBLICATION_RESYNC" {
-				t.Fatal("unpublished delta escaped", event)
+			ev := <-sub.Events()
+			if ev.Kind != event.Overflow || ev.Change != "PUBLICATION_RESYNC" {
+				t.Fatal("unpublished delta escaped", ev)
 			}
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("resync marker was not terminal")
@@ -89,7 +91,7 @@ func TestSchemaMetadata(t *testing.T) {
 				}
 			}
 			implCluster.SessionData(s).InternalUseSystemSchema = true
-			for _, mode := range []settings.MetadataMode{settings.MetadataSchemaNone, settings.MetadataSchemaKeyspaces, settings.MetadataSchemaFull} {
+			for _, mode := range []metadata.Mode{metadata.SchemaNone, metadata.SchemaKeyspaces, metadata.SchemaFull} {
 				config := settings.DefaultConfig("localhost")
 				config.Metadata.Mode = mode
 				config.Metadata.Keyspaces = []string{"ks1"}
@@ -103,7 +105,7 @@ func TestSchemaMetadata(t *testing.T) {
 				mock.mu.Lock()
 				queries := append([]queryRecord(nil), mock.queries...)
 				mock.mu.Unlock()
-				if mode == settings.MetadataSchemaNone && len(queries) != 0 {
+				if mode == metadata.SchemaNone && len(queries) != 0 {
 					t.Fatal("disabled schema issued optional queries", queries)
 				}
 				for _, q := range queries {
@@ -111,7 +113,7 @@ func TestSchemaMetadata(t *testing.T) {
 						t.Fatal("filtered keyspace queried", q)
 					}
 				}
-				if mode == settings.MetadataSchemaKeyspaces {
+				if mode == metadata.SchemaKeyspaces {
 					ks, _ := s.Metadata().Keyspace("ks1")
 					if ks == nil || len(ks.Tables) != 0 {
 						t.Fatal("minimal metadata expanded schema")
@@ -126,7 +128,7 @@ func TestSchemaMetadata(t *testing.T) {
 			mock.queryError = errors.New("base schema denied temporarily")
 			mock.mu.Unlock()
 			err := s.RefreshV2Keyspace(context.Background(), "ks1")
-			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
+			if _, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok {
 				t.Fatal("retained stale base schema lacks partial error", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks == nil || ks.Tables["t1"] == nil {
@@ -156,7 +158,7 @@ func TestSchemaMetadata(t *testing.T) {
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks1", Table: "t1"})
 			close(release)
 			err := <-done
-			if _, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok {
+			if _, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok {
 				t.Fatal("stale table refresh accepted", err)
 			}
 			if ks, _ := s.Metadata().Keyspace("ks1"); ks.Tables["t1"] != nil {

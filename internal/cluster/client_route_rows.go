@@ -13,8 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/events"
@@ -28,20 +30,20 @@ type v2RouteRow struct {
 }
 type v2RouteID struct{}
 
-func (v2RouteID) CheckType(t cqltype.DataType) error {
-	if t.Kind() == cqltype.TypeUUID {
-		return codec.UUIDCodec.CheckType(t)
+func (v2RouteID) CheckType(t cql.DataType) error {
+	if t.Kind() == cql.TypeUUID {
+		return cql.UUIDCodec.CheckType(t)
 	}
 	return (metadata.InternalV2MetadataText{}).CheckType(t)
 }
-func (v2RouteID) Decode(r codec.ValueReader) (string, error) {
-	if r.Type().Kind() == cqltype.TypeUUID {
+func (v2RouteID) Decode(r cql.ValueReader) (string, error) {
+	if r.Type().Kind() == cql.TypeUUID {
 		return (metadata.InternalV2MetadataUUIDString{}).Decode(r)
 	}
 	return (metadata.InternalV2MetadataText{}).Decode(r)
 }
 func (v2RouteID) Clone(v string) string { return v }
-func v2DecodeRoutes() codec.RowDecoder[v2RouteRow] {
+func v2DecodeRoutes() cql.RowDecoder[v2RouteRow] {
 	return metadata.InternalV2SchemaRows[v2RouteRow]{InternalFields: []metadata.InternalV2SchemaField[v2RouteRow]{
 		metadata.InternalV2RequiredSchemaColumn("connection_id", v2RouteID{}, func(r *v2RouteRow) *string { return &r.connection }),
 		metadata.InternalV2RequiredSchemaColumn("host_id", v2RouteID{}, func(r *v2RouteRow) *string { return &r.host }),
@@ -51,31 +53,31 @@ func v2DecodeRoutes() codec.RowDecoder[v2RouteRow] {
 	}}
 }
 
-type v2RouteParams struct{ columns cqltype.Columns }
+type v2RouteParams struct{ columns cql.Columns }
 
-func (v2RouteParams) Compile(c cqltype.Columns) (codec.ParamPlan[[][]string], error) {
+func (v2RouteParams) Compile(c cql.Columns) (cql.ParamPlan[[][]string], error) {
 	return v2RouteParams{c}, nil
 }
-func (p v2RouteParams) Encode(w *codec.ParamWriter, values [][]string) error {
+func (p v2RouteParams) Encode(w *cql.ParamWriter, values [][]string) error {
 	if len(values) != p.columns.Len() {
 		return cqltype.TypeValidation("route query", "wrong argument count")
 	}
 	for i, vs := range values {
 		c, _ := p.columns.At(i)
 		element, _ := c.Type.Element()
-		if element.Kind() == cqltype.TypeUUID {
-			ids := make([]cqltype.UUID, len(vs))
+		if element.Kind() == cql.TypeUUID {
+			ids := make([]cql.UUID, len(vs))
 			for j, v := range vs {
-				id, err := cqltype.ParseUUID(v)
+				id, err := cql.ParseUUID(v)
 				if err != nil {
 					return err
 				}
 				ids[j] = id
 			}
-			if err := w.WriteParam(codec.ListEncoder(codec.UUIDCodec), ids); err != nil {
+			if err := w.WriteParam(cql.ListEncoder(cql.UUIDCodec), ids); err != nil {
 				return err
 			}
-		} else if err := w.WriteParam(codec.ListEncoder(codec.StringCodec), vs); err != nil {
+		} else if err := w.WriteParam(cql.ListEncoder(cql.StringCodec), vs); err != nil {
 			return err
 		}
 	}
@@ -89,24 +91,24 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 	if !ok {
 		return nil, cqltype.TypeValidation("client routes", "control does not support typed queries")
 	}
-	columns := make([]cqltype.ColumnSpec, len(bounds))
+	columns := make([]cql.ColumnSpec, len(bounds))
 	for i, vs := range bounds {
-		kind := cqltype.TypeUUID
+		kind := cql.TypeUUID
 		for _, v := range vs {
-			if _, err := cqltype.ParseUUID(v); err != nil {
-				kind = cqltype.TypeVarchar
+			if _, err := cql.ParseUUID(v); err != nil {
+				kind = cql.TypeVarchar
 				break
 			}
 		}
-		typ, _ := cqltype.ScalarType(kind)
-		list, _ := cqltype.ListType(typ)
-		columns[i] = cqltype.ColumnSpec{Type: list}
+		typ, _ := cql.ScalarType(kind)
+		list, _ := cql.ListType(typ)
+		columns[i] = cql.ColumnSpec{Type: list}
 	}
 	timeout := time.Minute
 	if s := c.InternalGetSession(); s != nil && s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout > 0 {
 		timeout = s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout
 	}
-	rows, err := readV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[[][]string, v2RouteRow]{CQL: stmt, Params: v2RouteParams{}, Rows: v2DecodeRoutes()}, cqltype.NewColumns(columns...), bounds)
+	rows, err := readV2SystemRowsVia(ctx, 4, timeout, backend.InternalQueryV2System, binding.Statement[[][]string, v2RouteRow]{CQL: stmt, Params: v2RouteParams{}, Rows: v2DecodeRoutes()}, cql.NewColumns(columns...), bounds)
 	if err != nil {
 		return nil, fmt.Errorf("error reading %s table: %w", table, err)
 	}
@@ -334,10 +336,10 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 			state.InternalMu.Unlock()
 			p.privateStorage.InternalSession.PublishV2Metadata()
 		}
-		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: err}
+		return &cqlerr.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: err}
 	}
 	if !p.ApplyRouteRead(task, epochs, rows) {
-		return &metadata.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: fmt.Errorf("routes changed during refresh")}
+		return &cqlerr.PartialRefreshError{Generation: p.routeGeneration(), ClientRoutes: fmt.Errorf("routes changed during refresh")}
 	}
 	if p.privateStorage.InternalSession != nil {
 		state := p.privateStorage.InternalSession.Peripheral()
@@ -347,7 +349,7 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 		if !p.privateStorage.InternalSession.PublishV2Metadata() {
 			return p.privateStorage.InternalSession.v2MetadataPublicationError()
 		}
-		p.privateStorage.InternalSession.PublishV2LocalEvent(Event{Kind: ClientRouteEvent, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
+		p.privateStorage.InternalSession.PublishV2LocalEvent(event.Event{Kind: event.ClientRoute, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: "REFRESHED"})
 	}
 	return nil
 }

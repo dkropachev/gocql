@@ -18,8 +18,9 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
-	"github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresent bool) {
@@ -34,7 +35,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 	if err := s.AwaitSchemaAgreement(ctx); err != nil {
 		t.Fatal("namespace observation schema agreement", err)
 	}
-	value, err := dynamic.Text(namespace)
+	value, err := cql.TextValue(namespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 		t.Fatal(err)
 	}
 	defer rows.Close()
-	var row dynamic.Row
+	var row cql.DynamicRow
 	present := rows.NextInto(&row)
 	if err := rows.Err(); err != nil {
 		t.Fatal(err)
@@ -118,17 +119,17 @@ func ownedChild(t *testing.T, binary string, args, env []string, kill bool, cfg 
 type testConviction struct {
 	mu      sync.Mutex
 	cause   error
-	hosts   []routing.HostSnapshot
-	targets []routing.HostSnapshot
+	hosts   []metadata.HostSnapshot
+	targets []metadata.HostSnapshot
 	verdict bool
 	resets  int
 }
 
-func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
+func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	host := e.Host
-	if e.Shard.Set || e.Source != config.ConvictionPool {
+	if e.Shard.Set || e.Source != endpoint.ConvictionPool {
 		panic("conviction event is not a whole-host pool failure")
 	}
 	if !errors.Is(e.Err, p.cause) {
@@ -138,7 +139,7 @@ func (p *testConviction) AddFailure(e config.ConvictionEvent) bool {
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }
-func (p *testConviction) Reset(e config.ConvictionEvent) {
+func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {

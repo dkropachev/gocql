@@ -7,17 +7,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/routing"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 // Cold-path replica precomputation uses the same distinct-node/rack-budget
 // traversal for every factor, then retains its global ring order for LWT.
-func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metadata.KeyspaceMetadata) ([]routing.TokenRange, error) {
-	hosts := make(map[cqltype.UUID]*implEndpoint.HostInfo)
+func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metadata2.Keyspace) ([]metadata2.TokenRange, error) {
+	hosts := make(map[cql.UUID]*implEndpoint.HostInfo)
 	dcHosts := make(map[string]int)
 	dcRacks := make(map[string]map[string]bool)
 	for _, entry := range ring.InternalTokens {
@@ -67,14 +66,14 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 	case strings.HasSuffix(ks.StrategyClass, "EverywhereStrategy"):
 		rf = len(hosts)
 	}
-	out := make([]routing.TokenRange, len(ring.InternalTokens))
+	out := make([]metadata2.TokenRange, len(ring.InternalTokens))
 	for i, entry := range ring.InternalTokens {
 		token, ok := entry.InternalToken.(implEndpoint.InternalInt64Token)
 		if !ok {
 			return nil, cqltype.TypeValidation("replica placement", "non-int64 token")
 		}
 		out[i].End = int64(token)
-		seen := make(map[cqltype.UUID]bool)
+		seen := make(map[cql.UUID]bool)
 		counts := make(map[string]int)
 		racks := make(map[string]map[string]bool)
 		repeats := make(map[string]int)
@@ -109,7 +108,7 @@ func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metada
 			} else if len(out[i].Replicas) >= rf {
 				break
 			}
-			out[i].Replicas = append(out[i].Replicas, model.Target{HostID: id})
+			out[i].Replicas = append(out[i].Replicas, metadata2.Target{HostID: id})
 		}
 	}
 	for i := range out {

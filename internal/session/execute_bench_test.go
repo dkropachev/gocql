@@ -25,15 +25,14 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-
-	"github.com/scylladb/gocql/v2/internal/wire"
-
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func scalarReader(t testing.TB, kind cqltype.Type, state cqltype.CellState, chunks ...[]byte) codec.ValueReader {
+func scalarReader(t testing.TB, kind cql.Type, state cql.CellState, chunks ...[]byte) cql.ValueReader {
 	t.Helper()
 	spans := make([]wire.Span, len(chunks))
 	for i, b := range chunks {

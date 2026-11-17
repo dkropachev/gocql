@@ -13,9 +13,9 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -51,7 +51,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ZeroConfigRejected", func(t *testing.T) {
 		_, err := implSettings.InternalResolvePublic(Config{})
-		if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || !strings.Contains(err.Error(), "config.New") {
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok || !strings.Contains(err.Error(), "config.New") {
 			t.Fatalf("resolving Config{} = %v, want a validation error naming config.New", err)
 		}
 	})
@@ -60,7 +60,7 @@ func TestConfigBuilder(t *testing.T) {
 		b := New("h").WithPort(0).WithConnectionsPerShard(-1)
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an invalid port")
-		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "port" {
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "port" {
 			t.Fatalf("Build = %v, want a port ValidationError", err)
 		}
 		b.WithPort(9042)
@@ -75,7 +75,7 @@ func TestConfigBuilder(t *testing.T) {
 		b := New("h").WithApplication("", "1.0.0")
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an application version without a name")
-		} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "application" {
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "application" {
 			t.Fatalf("Build = %v, want an application ValidationError", err)
 		}
 		mustBuildConfig(t, b.WithApplication("app", "1.0.0"))
@@ -147,7 +147,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
 		b := New().WithContactPoints("h").
 			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
-			WithIgnoreEvents(implCluster.OverflowEvent).WithIgnoreEvents(implCluster.StatusEvent).
+			WithIgnoreEvents(event.Overflow).WithIgnoreEvents(event.Status).
 			WithTLSSource(staticTLS{}).WithTLS(nil).
 			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a"))).WithClientRoutes(ClientRoutes{}).
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
@@ -245,7 +245,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
 					t.Fatal("Build accepted the routes")
-				} else if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "client routes" {
+				} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "client routes" {
 					t.Fatalf("Build = %v, want a client routes ValidationError", err)
 				}
 			})
@@ -283,18 +283,18 @@ func TestConfigBuilder(t *testing.T) {
 		id := cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")
 		other := cql.MustParseUUID("10112233-4455-4677-8899-aabbccddeeff")
 		keep := mustBuildConfig(t, New("h").WithOnlyHost(id)).settings.HostFilter
-		if keep == nil || !keep(routing.HostSnapshot{ID: id}) || keep(routing.HostSnapshot{ID: other}) {
+		if keep == nil || !keep(metadata.HostSnapshot{ID: id}) || keep(metadata.HostSnapshot{ID: other}) {
 			t.Fatal("WithOnlyHost did not keep exactly its host")
 		}
 		keep = mustBuildConfig(t, New("h").WithOnlyHost(id).
-			WithHostFilter(func(h routing.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
-		if !keep(routing.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(routing.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
-			keep(routing.HostSnapshot{ID: other, Datacenter: "dc1"}) {
+			WithHostFilter(func(h metadata.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
+		if !keep(metadata.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(metadata.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
+			keep(metadata.HostSnapshot{ID: other, Datacenter: "dc1"}) {
 			t.Fatal("WithOnlyHost and WithHostFilter must both pass")
 		}
 		if _, err := New("h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
 			t.Fatal("Build accepted an empty host ID")
-		} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+		} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 			t.Fatalf("Build = %v, want a ValidationError", err)
 		}
 	})
@@ -321,7 +321,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
 					t.Fatal("Build accepted the pool size")
-				} else if _, ok := errors.AsType[*cqlerr.ValidationError](err); !ok {
+				} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 					t.Fatalf("Build = %v, want a ValidationError", err)
 				}
 			})
@@ -343,7 +343,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DefaultProfileMustBeBuilt", func(t *testing.T) {
 		_, err := New("h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
-		if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 		}
 		_, err = New("h").WithDefaultProfile(Profile{PageSize: 1000}).
@@ -411,11 +411,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("IgnoreEvents", func(t *testing.T) {
-		m := mustBuildConfig(t, New("h").WithIgnoreEvents(implCluster.SchemaEvent, implCluster.StatusEvent)).settings.Metadata
+		m := mustBuildConfig(t, New("h").WithIgnoreEvents(event.Schema, event.Status)).settings.Metadata
 		if m.SchemaEvents || m.StatusEvents || !m.TopologyEvents || !m.ClientRouteEvents {
 			t.Fatalf("events = %+v", m)
 		}
-		if _, err := New("h").WithIgnoreEvents(implCluster.OverflowEvent).Build(); err == nil {
+		if _, err := New("h").WithIgnoreEvents(event.Overflow).Build(); err == nil {
 			t.Fatal("IgnoreEvents accepted a client-side event")
 		}
 	})

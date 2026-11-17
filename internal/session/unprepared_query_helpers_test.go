@@ -4,9 +4,9 @@
 package session
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -28,7 +28,7 @@ func unpreparedQuery[P, R any](s *implCluster.Core, statement binding.Statement[
 // unpreparedStreamQuery uses the same owned input and receive-mode contract
 // for a streaming statement executed without server preparation.
 func unpreparedStreamQuery[P, R any](session *implCluster.Core, statement StreamStatement[P, R], options StreamOptions) (*StreamQuery[P, R], error) {
-	base := binding.Statement[P, codec.EmptyRecord]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}
+	base := binding.Statement[P, cql.EmptyRow]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: execRowsDecoder{}, BindMarkers: statement.BindMarkers}
 	if err := binding.ValidateStatement(&base); err != nil {
 		return nil, err
 	}

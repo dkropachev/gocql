@@ -1,13 +1,6 @@
 package session
 
 import (
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/schemafence"
-
 	"bytes"
 	"context"
 	"encoding/binary"
@@ -16,7 +9,13 @@ import (
 	"testing"
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/schemafence"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func streamReconcile(t *testing.T, failContinuation bool) {
@@ -24,14 +23,14 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	defer peer.Close()
 	defer s.Close()
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	blob := codecTestMust(implCqltype.ScalarType(implCqltype.TypeBlob))
-	columns := implCqltype.NewColumns(implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
+	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
+	columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
 	state, _ := preparedState(t, s, columns)
-	changed := implCqltype.NewColumns(cqltype.ColumnSlice(columns)[0], implCqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
-	bound := func() *Bound[implCqltype.Bytes] {
-		opaqueStorageValue := new(Bound[implCqltype.Bytes])
-		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: implCqltype.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: implCqltype.OrdinaryStatement}}
-		BoundData(opaqueStorageValue).InternalRows = codec.OneColumn(codec.BlobCodec)
+	changed := cql.NewColumns(cqltype.ColumnSlice(columns)[0], cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
+	bound := func() *Bound[cql.Bytes] {
+		opaqueStorageValue := new(Bound[cql.Bytes])
+		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
+		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BlobCodec)
 		return opaqueStorageValue
 	}()
 	defer bound.Close()
@@ -48,7 +47,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 					done <- fmt.Errorf("continuation preflight must PREPARE, got %d", op)
 					return
 				}
-				_, err = peer.Write(typedTestResponse(t, 4, id, preparedBody([]byte("changed"), implCqltype.NewColumns(), changed)))
+				_, err = peer.Write(typedTestResponse(t, 4, id, preparedBody([]byte("changed"), cql.NewColumns(), changed)))
 			} else {
 				if op != 10 {
 					done <- fmt.Errorf("expected EXECUTE, got %d", op)
@@ -66,7 +65,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 						return
 					}
 					if failContinuation {
-						_, err = peer.Write(errorResponse(t, id, protocol.CodeServer, nil))
+						_, err = peer.Write(errorResponse(t, id, cqlerr.CodeServer, nil))
 						done <- err
 						return
 					}
@@ -80,7 +79,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 					for _, name := range []string{"value", "added"} {
 						reply = binary.BigEndian.AppendUint16(reply, uint16(len(name)))
 						reply = append(reply, name...)
-						reply = binary.BigEndian.AppendUint16(reply, uint16(implCqltype.TypeBlob))
+						reply = binary.BigEndian.AppendUint16(reply, uint16(cql.TypeBlob))
 					}
 					reply = binary.BigEndian.AppendUint32(reply, 1)
 					reply = binary.BigEndian.AppendUint32(reply, 4)
@@ -97,7 +96,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		done <- nil
 	}()
 	resets := 0
-	decoder := codec.StreamRowInto(func(*[]byte) { resets++ }, codec.StreamColumn("value", codec.StreamBlob, func(v *[]byte) *[]byte { return v }))
+	decoder := cql.StreamRowInto(func(*[]byte) { resets++ }, cql.StreamColumn("value", cql.StreamBlob, func(v *[]byte) *[]byte { return v }))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	cursor, err := RunStream(ctx, s, bound, decoder, StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
@@ -121,7 +120,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		if cursor.NextInto(&dst) {
 			t.Fatal("failed continuation delivered output")
 		}
-		if server, ok := errors.AsType[protocol.ServerError](cursor.Err()); !ok || server.Code() != protocol.CodeServer {
+		if server, ok := errors.AsType[cqlerr.ServerError](cursor.Err()); !ok || server.Code() != cqlerr.CodeServer {
 			t.Fatal(cursor.Err())
 		}
 		info := cursor.Info()

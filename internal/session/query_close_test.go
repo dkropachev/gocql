@@ -9,8 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 // TestQueryCloseCancelsRunningCall checks that Close from another goroutine
@@ -51,7 +50,7 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 				if !errors.Is(err, context.Canceled) {
 					t.Fatalf("cancelled call returned %v, want context.Canceled", err)
 				}
-				if status := runtimeerrors.ExecutionStatusOf(err); status != cqltype.MaybeExecuted {
+				if status := cqlerr.ExecutionStatusOf(err); status != cqlerr.MaybeExecuted {
 					t.Fatalf("cancelled call status %v, want MaybeExecuted", status)
 				}
 			case <-time.After(5 * time.Second):
@@ -62,7 +61,7 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 			if err := q.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := q.Exec(context.Background(), 2); !errors.Is(err, runtimeerrors.ErrClosed) {
+			if _, err := q.Exec(context.Background(), 2); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("call after Close: %v", err)
 			}
 		})

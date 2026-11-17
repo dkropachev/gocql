@@ -1,24 +1,25 @@
 package protocol
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // typeOption writes a CQL [option] type description the way a server does.
 type typeOption func(f *framer)
 
-func optNative(t Type) typeOption {
+func optNative(t cql.Type) typeOption {
 	return func(f *framer) { f.WriteShort(uint16(t)) }
 }
 
 func optCustom(class string) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(TypeCustom))
+		f.WriteShort(uint16(cql.TypeCustom))
 		f.WriteString(class)
 	}
 }
 
-func optCollection(t Type, elems ...typeOption) typeOption {
+func optCollection(t cql.Type, elems ...typeOption) typeOption {
 	return func(f *framer) {
 		f.WriteShort(uint16(t))
 		for _, e := range elems {
@@ -29,7 +30,7 @@ func optCollection(t Type, elems ...typeOption) typeOption {
 
 func optTuple(elems ...typeOption) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(TypeTuple))
+		f.WriteShort(uint16(cql.TypeTuple))
 		f.WriteShort(uint16(len(elems)))
 		for _, e := range elems {
 			e(f)
@@ -44,7 +45,7 @@ type optField struct {
 
 func optUDT(keyspace, name string, fields ...optField) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(TypeUDT))
+		f.WriteShort(uint16(cql.TypeUDT))
 		f.WriteString(keyspace)
 		f.WriteString(name)
 		f.WriteShort(uint16(len(fields)))

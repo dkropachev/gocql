@@ -44,16 +44,12 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	"github.com/stretchr/testify/require"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
@@ -61,12 +57,16 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	clustertestkit "github.com/scylladb/gocql/v2/internal/testkit/cluster"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-func sessionTestInt(t testing.TB, row dynamic.Row, name string) int64 {
+func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	t.Helper()
 	value, err := row.Get(name)
 	if err != nil {
@@ -81,31 +81,31 @@ func sessionTestInt(t testing.TB, row dynamic.Row, name string) int64 {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
-	requests []config.RequestEvent
-	attempts []config.AttemptEvent
+	requests []observe.RequestEvent
+	attempts []routing.AttemptEvent
 }
 
-func (o *sessionTestObserver) ObserveRequest(e config.RequestEvent) {
+func (o *sessionTestObserver) ObserveRequest(e observe.RequestEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.requests = append(o.requests, e)
 }
-func (o *sessionTestObserver) ObserveAttempt(e config.AttemptEvent) {
+func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *sessionTestObserver) StartRequest(ctx context.Context, _ config.RequestStart) (context.Context, func(config.RequestEvent)) {
+func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, config.AttemptStart) func(config.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
-func (o *sessionTestObserver) snapshot() ([]config.RequestEvent, []config.AttemptEvent) {
+func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return append([]config.RequestEvent(nil), o.requests...), append([]config.AttemptEvent(nil), o.attempts...)
+	return append([]observe.RequestEvent(nil), o.requests...), append([]routing.AttemptEvent(nil), o.attempts...)
 }
 
 type sessionTestRetry struct {
@@ -332,7 +332,7 @@ func TestSession(t *testing.T) {
 			if owner.Alive() {
 				t.Fatal("owner final release did not finish")
 			}
-			if _, e = old.At(0); !errors.Is(e, cqlerr.ErrReleased) {
+			if _, e = old.At(0); !errors.Is(e, cql.ErrReleased) {
 				t.Fatal("old backing remained accessible", e)
 			}
 			if n, c := cache.Storage(); n != 0 || c != 0 {
@@ -437,7 +437,7 @@ func TestSession(t *testing.T) {
 
 				rows, err := v2Query(context.Background(), s, "select * from system.peers")
 				if err == nil {
-					var row dynamic.Row
+					var row cql.DynamicRow
 					for rows.NextInto(&row) {
 					}
 					err = rows.Err()
@@ -565,7 +565,7 @@ func TestSession(t *testing.T) {
 		// The dialect fixes the protocol version; nothing is negotiated.
 		t.Run("DialectProtocol", func(t *testing.T) {
 			t.Parallel()
-			cfg := createV2ClusterWithout(fixtureCompression).WithCompression(config.NoCompression)
+			cfg := createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression)
 			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
 			require.NoError(t, err)
 			defer session.Close()
@@ -574,7 +574,7 @@ func TestSession(t *testing.T) {
 		// A dialect naming the other database fails to connect.
 		t.Run("DialectMismatch", func(t *testing.T) {
 			t.Parallel()
-			cfg := mustBuild(t, createV2ClusterWithout(fixtureCompression).WithCompression(config.NoCompression))
+			cfg := mustBuild(t, createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression))
 			var err error
 			if testDialectDistribution == "scylla" {
 				var s *gocql.Session[gocql.CassandraV4]
@@ -970,9 +970,9 @@ func TestSession(t *testing.T) {
 			})
 		switch v2SmokeOption("compressor", "no-compression") {
 		case "lz4":
-			cfg.WithCompression(config.LZ4Compression)
+			cfg.WithCompression(cql.LZ4Compression)
 		case "snappy":
-			cfg.WithCompression(config.SnappyCompression)
+			cfg.WithCompression(cql.SnappyCompression)
 		}
 		if v2SmokeOption("runauth", "false") == "true" {
 			cfg.WithAuth(auth.Password("cassandra", "cassandra"))

@@ -8,8 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // TestRunPageSize checks that RunPage's page size argument reaches the wire:
@@ -23,7 +22,7 @@ func TestRunPageSize(t *testing.T) {
 	defer peers[0].Close()
 	requests := make(chan oneShotRequest, 4)
 	p := oneShotPrepare(t, s, peers[0], requests)
-	q := codecTestMust(p.Query(Options{PageSize: cqltype.Some[int32](25)}))
+	q := codecTestMust(p.Query(Options{PageSize: cql.Some[int32](25)}))
 	defer q.Close()
 	for _, tc := range []struct {
 		name string
@@ -32,7 +31,7 @@ func TestRunPageSize(t *testing.T) {
 	}{
 		{"Resolved", 0, 25},
 		{"Explicit", 7, 7},
-		{"Unpaged", cqltype.Unpaged, -1},
+		{"Unpaged", cql.Unpaged, -1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := make(chan int32, 1)
@@ -41,7 +40,7 @@ func TestRunPageSize(t *testing.T) {
 				got <- r.pageSize
 				_, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "a")))
 			}()
-			page, err := q.RunPage(ctx, 1, model.StartPage(), tc.size)
+			page, err := q.RunPage(ctx, 1, cql.StartPage, tc.size)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -54,7 +53,7 @@ func TestRunPageSize(t *testing.T) {
 		})
 	}
 	t.Run("Negative", func(t *testing.T) {
-		if _, err := q.RunPage(ctx, 1, model.StartPage(), -1); err == nil {
+		if _, err := q.RunPage(ctx, 1, cql.StartPage, -1); err == nil {
 			t.Fatal("negative page size accepted")
 		}
 		select {
@@ -67,7 +66,7 @@ func TestRunPageSize(t *testing.T) {
 			r := <-requests
 			_, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "a")))
 		}()
-		page, err := q.RunPage(ctx, 1, model.StartPage(), 0)
+		page, err := q.RunPage(ctx, 1, cql.StartPage, 0)
 		if err != nil {
 			t.Fatal(err)
 		}

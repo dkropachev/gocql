@@ -29,7 +29,6 @@ package integration
 import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -217,9 +216,9 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	_, err := session.UnpreparedExec(ctx, cql.Command("CREATE TABLE "+qualified+"(id int PRIMARY KEY)"), cql.EmptyParams{}, exec.Options{HostID: host})
 	require.NoError(t, err)
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", prepareOptions).Exec(ctx, []dynamic.Value{dynamic.Int(1)}, bindOptions(session, options))
+	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", prepareOptions).Exec(ctx, []cql.Value{cql.IntValue(1)}, bindOptions(session, options))
 	require.NoError(t, err)
-	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: dynamic.Rows}, prepareOptions)
+	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, prepareOptions)
 	row := cassandraReadOne(t, session, prepared, cql.EmptyParams{}, options)
 	require.Equal(t, 1, row.Columns().Len())
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))
@@ -238,15 +237,15 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session[testDialect], c
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
-	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", prepareOptions).Exec(ctx, []dynamic.Value{dynamic.Int(2), dynamic.Int(10)}, bindOptions(session, options))
+	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id,new_col) VALUES(?,?)", prepareOptions).Exec(ctx, []cql.Value{cql.IntValue(2), cql.IntValue(10)}, bindOptions(session, options))
 	require.NoError(t, err)
 	checkRows := func() {
 		t.Helper()
 		rows, err := prepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, options))
 		require.NoError(t, err)
 		defer rows.Close()
-		found := map[int64]dynamic.Value{}
-		var row dynamic.Row
+		found := map[int64]cql.Value{}
+		var row cql.DynamicRow
 		for rows.NextInto(&row) {
 			require.Equal(t, 2, row.Columns().Len())
 			found[cassandraInt(t, row, "id")] = cassandraField(t, row, "new_col").Clone()

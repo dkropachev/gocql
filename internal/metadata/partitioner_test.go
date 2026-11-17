@@ -33,6 +33,7 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 )
@@ -51,7 +52,7 @@ func TestPartitioner(t *testing.T) {
 
 			// at least verify that the partitioner
 			// doesn't return nil
-			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cqltype.TypeInt), 1)
+			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
 			token = endpoint.InternalMurmur3Partitioner{}.Hash(pk)
 			if token == nil {
 				t.Fatal("token was nil")
@@ -124,7 +125,7 @@ func TestPartitioner(t *testing.T) {
 		// at least verify that the partitioner
 		// doesn't return nil
 		p := endpoint.InternalOrderedPartitioner{}
-		pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cqltype.TypeInt), 1)
+		pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
 		token := p.Hash(pk)
 		if token == nil {
 			t.Fatal("token was nil")
@@ -151,7 +152,7 @@ func TestPartitioner(t *testing.T) {
 			// at least verify that the partitioner
 			// doesn't return nil
 			p := endpoint.InternalRandomPartitioner{}
-			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cqltype.TypeInt), 1)
+			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
 			token := p.Hash(pk)
 			if token == nil {
 				t.Fatal("token was nil")

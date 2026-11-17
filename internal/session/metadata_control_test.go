@@ -1,19 +1,6 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	implPool "github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
 	"encoding/binary"
 	"io"
 	"net"
@@ -21,7 +8,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	implPool "github.com/scylladb/gocql/v2/internal/pool"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 type blockingPolicy struct {
@@ -37,7 +36,7 @@ func (p *blockingPolicy) Validate(*implRouting.MetadataSnapshot) error {
 	}
 	return nil
 }
-func uuidRows(id, version cqltype.UUID) []byte {
+func uuidRows(id, version cql.UUID) []byte {
 	body := binary.BigEndian.AppendUint32(nil, frm.ResultKindRows)
 	body = binary.BigEndian.AppendUint32(body, 1)
 	body = binary.BigEndian.AppendUint32(body, 2)
@@ -46,16 +45,16 @@ func uuidRows(id, version cqltype.UUID) []byte {
 	str("local")
 	for _, name := range []string{"host_id", "schema_version"} {
 		str(name)
-		body = binary.BigEndian.AppendUint16(body, uint16(cqltype.TypeUUID))
+		body = binary.BigEndian.AppendUint16(body, uint16(cql.TypeUUID))
 	}
 	body = binary.BigEndian.AppendUint32(body, 1)
-	for _, id := range []cqltype.UUID{id, version} {
+	for _, id := range []cql.UUID{id, version} {
 		body = binary.BigEndian.AppendUint32(body, 16)
 		body = append(body, id[:]...)
 	}
 	return body
 }
-func agreementConn(t *testing.T, s *cluster.Core, id, version cqltype.UUID, code protocol.ErrorCode) (*transport.Conn, *atomic.Int32) {
+func agreementConn(t *testing.T, s *cluster.Core, id, version cql.UUID, code cqlerr.ErrorCode) (*transport.Conn, *atomic.Int32) {
 	t.Helper()
 	c, server := typedTestConn(t, 4, nil)
 	c.InternalHost = func() *endpoint.HostInfo {
@@ -94,7 +93,7 @@ func agreementConn(t *testing.T, s *cluster.Core, id, version cqltype.UUID, code
 	t.Cleanup(func() { c.Close(); server.Close(); <-done; c.InternalWaitEventDispatch() })
 	return c, count
 }
-func agreementSession(t *testing.T) (*cluster.Core, cqltype.UUID, cqltype.UUID) {
+func agreementSession(t *testing.T) (*cluster.Core, cql.UUID, cql.UUID) {
 	t.Helper()
 	s := func() *cluster.Core {
 		opaqueStorageValuexxx := new(cluster.Core)
@@ -105,17 +104,17 @@ func agreementSession(t *testing.T) (*cluster.Core, cqltype.UUID, cqltype.UUID) 
 	config.Metadata.AgreementTimeout = 35 * time.Millisecond
 	config.Metadata.AgreementPoll = time.Millisecond
 	s.ConfigureV2Peripheral(config)
-	implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: make(map[cqltype.UUID]*implPool.InternalHostConnPool)}
+	implCluster.SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalHostConnPools: make(map[cql.UUID]*implPool.InternalHostConnPool)}
 	t.Cleanup(func() { s.Close() })
-	return s, cqltype.MustRandomUUID(), cqltype.MustRandomUUID()
+	return s, cql.RandomUUID(), cql.RandomUUID()
 }
 func agreementPool(s *cluster.Core, c *transport.Conn) {
 	implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)] = &implPool.InternalHostConnPool{InternalHost: c.InternalHost, InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{c}}}
 }
 
-type lifecycleFunc func(settings.LifecycleEvent)
+type lifecycleFunc func(observe.LifecycleEvent)
 
-func (f lifecycleFunc) ObserveLifecycle(e settings.LifecycleEvent) { f(e) }
+func (f lifecycleFunc) ObserveLifecycle(e observe.LifecycleEvent) { f(e) }
 
 type unstablePolicy struct {
 	RoutingPolicy

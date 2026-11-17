@@ -1,22 +1,8 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-// Package endpoint controls how hosts are addressed and dialed: address
-// translation, DNS resolution and custom dialers.
+// Package endpoint controls how a session reaches hosts: address
+// translation, DNS resolution, custom dialers and TLS, and the policies
+// that decide when to reconnect to a node (ReconnectPolicy) and when its
+// connection failures mark it down (ConvictionPolicy).
 package endpoint
-
-import implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-type (
-	Translator     = implEndpoint.AddressTranslator
-	TranslatorFunc = implEndpoint.AddressTranslatorFunc
-	Peer           = implEndpoint.Peer
-	Resolver       = implEndpoint.Resolver
-	Dialer         = implEndpoint.Dialer
-	DialerFunc     = implEndpoint.DialerFunc
-	DefaultDialer  = implEndpoint.DefaultDialer
-	DialTarget     = implEndpoint.DialTarget
-)
-
-// IdentityTranslator returns a translator that leaves addresses unchanged.
-func IdentityTranslator() Translator { return implEndpoint.IdentityTranslator() }

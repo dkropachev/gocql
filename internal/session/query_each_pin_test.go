@@ -11,11 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -55,8 +53,8 @@ func (p *pinServe) take() []string {
 	return seen
 }
 
-func pinTestQuery(t *testing.T, s *cluster.Core, options CompiledOptions) *Query[codec.EmptyRecord, []byte] {
-	statement := binding.Statement[codec.EmptyRecord, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: codec.EmptyParamsEncoder, Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+func pinTestQuery(t *testing.T, s *cluster.Core, options CompiledOptions) *Query[cql.EmptyRow, []byte] {
+	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(unpreparedQuery(s, statement, options.Values()))
 	t.Cleanup(q.Close)
 	return q
@@ -73,13 +71,13 @@ func pinPages(t *testing.T, stream int, token string) []byte {
 	}
 }
 
-func pinEach(t *testing.T, q *Query[codec.EmptyRecord, []byte]) {
+func pinEach(t *testing.T, q *Query[cql.EmptyRow, []byte]) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	var got string
 	dst := make([]byte, 0, 8)
-	if _, err := q.Each(ctx, codec.EmptyRecord{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
+	if _, err := q.Each(ctx, cql.EmptyRow{}, &dst, func(row *[]byte) error { got += string(*row); return nil }); err != nil || got != "abc" {
 		t.Fatal(got, err)
 	}
 }

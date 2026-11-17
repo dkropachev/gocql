@@ -5,8 +5,6 @@ package cql
 
 import (
 	"strings"
-
-	codec "github.com/scylladb/gocql/v2/internal/codec"
 )
 
 // Statement pairs CQL text with a typed parameter encoder and row decoder.
@@ -25,20 +23,6 @@ type Statement[P, R any] struct {
 	BindMarkers Columns
 	// Kind classifies ordinary and conditional statements for safe execution.
 	Kind StatementKind
-}
-
-// ByteSliceCodec encodes a []byte and decodes a blob into caller-owned
-// storage, the []byte counterpart of StringCodec. RowInto and ReuseBuffers
-// preserve a seeded slice when its capacity is sufficient. The decoded bytes
-// survive response release, including One returning. Use BlobCodec to decode
-// without copying.
-var ByteSliceCodec = codec.ByteSliceCodec
-
-// RowInto maps columns into the actual destination after calling reset. The
-// callback clears application state and may preserve owned slices for reuse.
-// Borrowed fields follow the execution's normal lifetime; One detaches them.
-func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
-	return codec.RowInto(reset, fields...)
 }
 
 // ParseConsistency parses a consistency name, ignoring case.

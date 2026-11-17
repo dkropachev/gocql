@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
-
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 const driverConfigSchemaPath = "../../docs/driver-config-schema.json"
@@ -95,11 +95,11 @@ func driverConfigCases() []struct {
 		},
 		{
 			name: "serial default consistency",
-			cfg:  func(c *InternalClusterSettings) { c.Consistency = cqltype.LocalSerial },
+			cfg:  func(c *InternalClusterSettings) { c.Consistency = cql.LocalSerial },
 		},
 		{
 			name: "serial consistency set",
-			cfg:  func(c *InternalClusterSettings) { c.SerialConsistency = cqltype.LocalSerial },
+			cfg:  func(c *InternalClusterSettings) { c.SerialConsistency = cql.LocalSerial },
 		},
 		{
 			name: "no reconnection policy",

@@ -6,14 +6,16 @@ package session
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/metrics"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -66,7 +68,7 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 // conditional batch. The zero CompiledOptions uses the session's default
 // profile. ExecBatch is safe for concurrent use with other session calls, but
 // a Batch must not be changed while it is sent.
-func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (model.Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (cql.Result, error) {
 	if s == nil {
 		err := cqltype.TypeValidation("session", "nil session")
 		return InternalExecutionErrorResult(err), err
@@ -90,7 +92,7 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledO
 // closed, as Prepared.Run's do. A batch sent again once its rows are closed
 // reuses their storage, and allocates nothing while R and decoder stay the
 // same.
-func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder codec.RowDecoder[R], options CompiledOptions) (Rows[R], error) {
+func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options CompiledOptions) (Rows[R], error) {
 	if s == nil {
 		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
 	}
@@ -115,7 +117,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	}
 	core := s.Core()
 	if core.Closed() {
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return err
@@ -124,7 +126,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err != nil {
 		return err
 	}
-	routing := model.RoutingInfo{Kind: statement.Kind, Conditional: statement.Kind != cqltype.OrdinaryStatement}
+	routing := routing2.Info{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}
 	return batch.addValue(core, cqlText{}, statement.CQL, &routing, plan, statement.BindMarkers, value, true)
 }
 
@@ -166,6 +168,6 @@ func (s *Session) RefreshMetadata(ctx context.Context) error { return s.core.Ref
 
 // Subscribe returns a subscription to the session's events that match
 // filter.
-func (s *Session) Subscribe(filter implCluster.EventFilter) (*implCluster.Subscription, error) {
+func (s *Session) Subscribe(filter event.Filter) (*implCluster.Subscription, error) {
 	return s.core.Subscribe(filter)
 }

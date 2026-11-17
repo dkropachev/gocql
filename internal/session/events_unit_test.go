@@ -19,16 +19,9 @@
 package session
 
 import (
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cluster"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	implCqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"runtime"
 	"sort"
 	"strings"
@@ -36,34 +29,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/tests/mock"
 )
 
 var (
-	typeVarchar = cqltype.NewCustomType(4, implCqltype.TypeVarchar, "")
-	typeBoolean = cqltype.NewCustomType(4, implCqltype.TypeBoolean, "")
-	typeDouble  = cqltype.NewCustomType(4, implCqltype.TypeDouble, "")
-	typeInt     = cqltype.NewCustomType(4, implCqltype.TypeInt, "")
-	typeMapSS   = implCqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, implCqltype.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, implCqltype.TypeVarchar, ""),
-		Elem:       cqltype.NewCustomType(4, implCqltype.TypeVarchar, ""),
+	typeVarchar = cqltype.NewCustomType(4, cql.TypeVarchar, "")
+	typeBoolean = cqltype.NewCustomType(4, cql.TypeBoolean, "")
+	typeDouble  = cqltype.NewCustomType(4, cql.TypeDouble, "")
+	typeInt     = cqltype.NewCustomType(4, cql.TypeInt, "")
+	typeMapSS   = cqltype.CollectionType{
+		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
+		Key:        cqltype.NewCustomType(4, cql.TypeVarchar, ""),
+		Elem:       cqltype.NewCustomType(4, cql.TypeVarchar, ""),
 	}
-	typeMapSB = implCqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, implCqltype.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, implCqltype.TypeVarchar, ""),
-		Elem:       cqltype.NewCustomType(4, implCqltype.TypeBlob, ""),
+	typeMapSB = cqltype.CollectionType{
+		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
+		Key:        cqltype.NewCustomType(4, cql.TypeVarchar, ""),
+		Elem:       cqltype.NewCustomType(4, cql.TypeBlob, ""),
 	}
-	typeSetS = implCqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, implCqltype.TypeSet, ""),
-		Elem:       cqltype.NewCustomType(4, implCqltype.TypeVarchar, ""),
+	typeSetS = cqltype.CollectionType{
+		NativeType: cqltype.NewCustomType(4, cql.TypeSet, ""),
+		Elem:       cqltype.NewCustomType(4, cql.TypeVarchar, ""),
 	}
 )
 
 var keyspaceMeta = protocol.ResultMetadata{
-	Columns: []implCqltype.ColumnInfo{
+	Columns: []cqltype.ColumnInfo{
 		{Name: "durable_writes", TypeInfo: typeBoolean},
 		{Name: "replication", TypeInfo: typeMapSS},
 	},
@@ -72,7 +70,7 @@ var keyspaceMeta = protocol.ResultMetadata{
 }
 
 var tableMeta = protocol.ResultMetadata{
-	Columns: []implCqltype.ColumnInfo{
+	Columns: []cqltype.ColumnInfo{
 		{Name: "table_name", TypeInfo: typeVarchar},
 		{Name: "bloom_filter_fp_chance", TypeInfo: typeDouble},
 		{Name: "caching", TypeInfo: typeMapSS},
@@ -88,14 +86,14 @@ var tableMeta = protocol.ResultMetadata{
 		{Name: "speculative_retry", TypeInfo: typeVarchar},
 		{Name: "flags", TypeInfo: typeSetS},
 		{Name: "extensions", TypeInfo: typeMapSB},
-		{Name: "id", TypeInfo: cqltype.NewCustomType(4, implCqltype.TypeUUID, "")},
+		{Name: "id", TypeInfo: cqltype.NewCustomType(4, cql.TypeUUID, "")},
 	},
 	ActualColCount: 16,
 	ColCount:       16,
 }
 
 var columnMeta = protocol.ResultMetadata{
-	Columns: []implCqltype.ColumnInfo{
+	Columns: []cqltype.ColumnInfo{
 		{Name: "table_name", TypeInfo: typeVarchar},
 		{Name: "column_name", TypeInfo: typeVarchar},
 		{Name: "clustering_order", TypeInfo: typeVarchar},
@@ -107,7 +105,7 @@ var columnMeta = protocol.ResultMetadata{
 	ColCount:       6,
 }
 
-func mustMarshal(info implCqltype.TypeInfo, value any) []byte {
+func mustMarshal(info cqltype.TypeInfo, value any) []byte {
 	b, err := encodeFixtureCell(info, value)
 	if err != nil {
 		panic(fmt.Sprintf("mustMarshal(%v, %v): %v", info, value, err))
@@ -136,7 +134,7 @@ func makeKeyspaceRow(durableWrites bool) [][]byte {
 
 func makeTableRow(tableName string) [][]byte {
 	digest := sha256.Sum256([]byte(tableName))
-	var id implCqltype.UUID
+	var id cql.UUID
 	copy(id[:], digest[:16])
 	id[6] = id[6]&15 | 64
 	id[8] = id[8]&63 | 128
@@ -266,7 +264,7 @@ func (m *schemaDataMock) querySystem(statement string, values ...any) *nativeRes
 
 	if statement == "SELECT keyspace_name, durable_writes, replication FROM system_schema.keyspaces" {
 		meta := protocol.ResultMetadata{
-			Columns:        append([]implCqltype.ColumnInfo{{Name: "keyspace_name", TypeInfo: typeVarchar}}, keyspaceMeta.Columns...),
+			Columns:        append([]cqltype.ColumnInfo{{Name: "keyspace_name", TypeInfo: typeVarchar}}, keyspaceMeta.Columns...),
 			ActualColCount: 3,
 			ColCount:       3,
 		}

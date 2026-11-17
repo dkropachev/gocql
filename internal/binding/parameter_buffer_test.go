@@ -8,8 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestParameterBuffer(t *testing.T) {
@@ -17,8 +16,8 @@ func TestParameterBuffer(t *testing.T) {
 	// caller storage keeps the existing bytes, uses spare capacity in place,
 	// and copies only when it outgrows that capacity.
 	t.Run("EncodeAppend", func(t *testing.T) {
-		columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.BlobType})
-		plan, err := codec.OneParam(codec.ByteSliceCodec).Compile(columns)
+		columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: cql.BlobType})
+		plan, err := cql.OneParam(cql.ByteSliceCodec).Compile(columns)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -45,14 +44,14 @@ func TestParameterBuffer(t *testing.T) {
 
 	t.Run("EncodeParameters", func(t *testing.T) {
 		t.Run("EmptyHasPresentWireState", func(t *testing.T) {
-			typ := cqltype.IntType
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
-			plan, err := codec.OneParam(codec.EmptyCodec(codec.Int32)).Compile(columns)
+			typ := cql.IntType
+			columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
+			plan, err := cql.OneParam(cql.EmptyCodec(cql.Int32Codec)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			value := cqltype.EmptyValueOf[int32]{Empty: true}
+			value := cql.EmptyValueOf[int32]{Empty: true}
 			got, err := storage.Encode(plan, columns, value, true)
 			if err != nil {
 				t.Fatal(err)
@@ -61,22 +60,22 @@ func TestParameterBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Cells[0].State != want.Cells[0].State || got.Cells[0].State != cqltype.Present {
+			if got.Cells[0].State != want.Cells[0].State || got.Cells[0].State != cql.Present {
 				t.Fatal(got.Cells[0].State, want.Cells[0].State)
 			}
 		})
 
 		t.Run("MatchesCheckedGenericEncoding", func(t *testing.T) {
-			typ := cqltype.BlobType
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: typ})
-			plan, err := codec.OneParam(codec.BindEncoder(codec.ByteSliceCodec)).Compile(columns)
+			typ := cql.BlobType
+			columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
+			plan, err := cql.OneParam(cql.BindEncoder(cql.ByteSliceCodec)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			for _, state := range []cqltype.CellState{cqltype.Present, cqltype.Null, cqltype.Unset} {
+			for _, state := range []cql.CellState{cql.Present, cql.Null, cql.Unset} {
 				for _, size := range []int{0, 1, 257, 128 << 10} {
-					input := cqltype.BindValue[[]byte]{State: state, Value: bytes.Repeat([]byte{41}, size)}
+					input := cql.BindValue[[]byte]{State: state, Value: bytes.Repeat([]byte{41}, size)}
 					got, err := storage.Encode(plan, columns, input, true)
 					if err != nil {
 						t.Fatal(err)
@@ -110,20 +109,20 @@ func TestParameterBuffer(t *testing.T) {
 
 	t.Run("Retire", func(t *testing.T) {
 		t.Run("BoundsDescriptorStorage", func(t *testing.T) {
-			typ := cqltype.IntType
-			columns := make([]cqltype.ColumnSpec, 2048)
-			fields := make([]codec.InputField[codec.EmptyRecord], len(columns))
+			typ := cql.IntType
+			columns := make([]cql.ColumnSpec, 2048)
+			fields := make([]cql.InputField[cql.EmptyRow], len(columns))
 			for i := range columns {
-				columns[i] = cqltype.ColumnSpec{Name: fmt.Sprint(i), Type: typ}
-				fields[i] = codec.ParamAt(i, codec.Int32, func(codec.EmptyRecord) int32 { return 42 })
+				columns[i] = cql.ColumnSpec{Name: fmt.Sprint(i), Type: typ}
+				fields[i] = cql.ParamAt(i, cql.Int32Codec, func(cql.EmptyRow) int32 { return 42 })
 			}
-			metadata := cqltype.NewColumns(columns...)
-			plan, err := codec.Params(fields...).Compile(metadata)
+			metadata := cql.NewColumns(columns...)
+			plan, err := cql.Params(fields...).Compile(metadata)
 			if err != nil {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			values, err := storage.Encode(plan, metadata, codec.EmptyRecord{}, true)
+			values, err := storage.Encode(plan, metadata, cql.EmptyRow{}, true)
 			if err != nil {
 				t.Fatal(err)
 			}

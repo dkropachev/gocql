@@ -29,20 +29,21 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
 	"sync/atomic"
 	"time"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -76,7 +77,7 @@ type InternalClusterSettings struct {
 	// ApplicationInfo reports application information to the server by inserting it into options of the STARTUP frame
 	ApplicationInfo endpoint.ApplicationInfo
 	// DNSResolver Resolves DNS names to IP addresses
-	DNSResolver endpoint.Resolver
+	DNSResolver endpoint2.Resolver
 	// Logger for this clusterSettings.
 	// If not specified, defaults to the gocql.defaultLogger.
 	Logger *slog.Logger
@@ -98,7 +99,7 @@ type InternalClusterSettings struct {
 	// Use it to collect metrics / stats from queries by providing an implementation of QueryObserver.
 	// AddressTranslator will translate addresses found on peer discovery and/or
 	// node change events.
-	AddressTranslator endpoint.AddressTranslator
+	AddressTranslator endpoint2.Translator
 	// HostFilter will filter all incoming events for host, any which don't pass
 	// the filter will be ignored. If set will take precedence over any options set
 	// via Discovery
@@ -115,7 +116,7 @@ type InternalClusterSettings struct {
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.
 	// Default: SimpleConvictionPolicy
-	ConvictionPolicy settings.ConvictionPolicy
+	ConvictionPolicy endpoint2.ConvictionPolicy
 	// Default reconnection policy to use for reconnecting before trying to mark host as down.
 	ReconnectionPolicy pool.ReconnectionPolicy
 	// A reconnection policy to use for reconnecting when connecting to the cluster first time.
@@ -260,10 +261,10 @@ type InternalClusterSettings struct {
 	MaxExcessShardConnectionsRate float32
 	// Consistency for the serial part of queries, values can be either SERIAL or LOCAL_SERIAL.
 	// Default: unset
-	SerialConsistency cqltype.Consistency
+	SerialConsistency cql.Consistency
 	// Default consistency level.
 	// Default: Quorum
-	Consistency cqltype.Consistency
+	Consistency cql.Consistency
 	// Configure events the driver will register for
 	Events struct {
 		// disable registering for status events (node up/down)
@@ -372,7 +373,7 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		WriteTimeout:                  11 * time.Second,
 		MaxExcessShardConnectionsRate: 2,
 		NumConns:                      2,
-		Consistency:                   cqltype.Quorum,
+		Consistency:                   cql.Quorum,
 		MaxPreparedStmts:              defaultMaxPreparedStmts,
 		MaxRoutingKeyInfo:             1000,
 		PageSize:                      5000,
@@ -381,7 +382,7 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		DriverVersion:                 settings.InternalDefaultDriverVersion,
 		MaxWaitSchemaAgreement:        60 * time.Second,
 		ReconnectInterval:             60 * time.Second,
-		ConvictionPolicy:              &settings.SimpleConvictionPolicy{},
+		ConvictionPolicy:              &endpoint2.SimpleConvictionPolicy{},
 		ReconnectionPolicy:            &pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second},
 		InitialReconnectionPolicy:     &pool.NoReconnectionPolicy{},
 		SocketKeepalive:               15 * time.Second,
@@ -641,7 +642,7 @@ func (cfg *InternalClusterSettings) Validate() error {
 			return cqltype.TypeValidation("AddressTranslator", "cannot be combined with ClientRoutesConfig")
 		}
 		if err := cfg.ClientRoutesConfig.Validate(); err != nil {
-			return &cqltype.ValidationError{Field: "ClientRoutesConfig", Err: err}
+			return &cql.ValidationError{Field: "ClientRoutesConfig", Err: err}
 		}
 	}
 
@@ -651,8 +652,8 @@ func (cfg *InternalClusterSettings) Validate() error {
 const defaultCQLPort = 9042
 
 var (
-	ErrNoHosts              = runtimeerrors.ErrNoHosts
-	ErrNoConnectionsStarted = runtimeerrors.ErrNoConnectionsStarted
+	ErrNoHosts              = cqlerr.ErrNoHosts
+	ErrNoConnectionsStarted = cqlerr.ErrNoConnectionsStarted
 )
 
 // learnPortFromHosts inspects the host entries for embedded ports.

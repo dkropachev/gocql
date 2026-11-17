@@ -8,27 +8,29 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type PrepareOptions struct {
 	privateStorage PrepareOptionsStorage
 	Keyspace       string
-	HostID         cqltype.Option[cqltype.UUID]
+	HostID         cql.Option[cql.UUID]
 	CQLTrace       bool
 }
 type PreparedInfo struct {
 	Keyspace, Table     string
 	PartitionKeyIndexes []int
-	Kind                cqltype.StatementKind
+	Kind                cql.StatementKind
 	Conditional         bool
 	Generation          uint64
 }
@@ -36,7 +38,7 @@ type InternalHostPrepared struct {
 	InternalResult                 *model.ResultSchemaIdentity
 	InternalEpoch                  schemafence.InternalPreparedSchemaStamp
 	InternalId, InternalMetadataID []byte
-	InternalColumns                cqltype.Columns
+	InternalColumns                cql.Columns
 	InternalRevision               uint64
 	InternalGeneration             uint64
 	InternalMetadataChanged        bool
@@ -44,7 +46,7 @@ type InternalHostPrepared struct {
 type InternalPreparedState struct {
 	InternalSession      *implCluster.Core
 	view                 atomic.Pointer[preparedView]
-	preparing            map[cqltype.UUID]*hostPrepareFlight
+	preparing            map[cql.UUID]*hostPrepareFlight
 	InternalDependencies *schemafence.InternalPreparedDependencies
 	// tabletPlacement caches where the statement's table is placed in the
 	// snapshot it last routed by: its tablet placement, or else its token
@@ -52,7 +54,7 @@ type InternalPreparedState struct {
 	tabletPlacement                     routing.InternalPlacementCache
 	InternalStatement, InternalKeyspace string
 	partitioner                         string
-	InternalParameters, InternalColumns cqltype.Columns
+	InternalParameters, InternalColumns cql.Columns
 	InternalInitialEpoch                schemafence.InternalPreparedSchemaStamp
 	InternalInfo                        PreparedInfo
 	conflictEpoch                       atomic.Uint64
@@ -85,9 +87,9 @@ type Bound[R any] struct {
 // by buffered and streaming preparation. Result decoding is selected separately.
 type preparedStatement[P any] struct {
 	state   *InternalPreparedState
-	params  codec.ParamPlan[P]
-	columns cqltype.Columns
-	kind    cqltype.StatementKind
+	params  cql.ParamPlan[P]
+	columns cql.Columns
+	kind    cql.StatementKind
 }
 
 func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statement *binding.Statement[P, R], options PrepareOptions) (preparedStatement[P], error) {
@@ -99,7 +101,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 		return empty, err
 	}
 	if s.Closed() {
-		return empty, runtimeerrors.ErrClosed
+		return empty, cqlerr.ErrClosed
 	}
 	if options.HostID.Set && options.HostID.Value.IsEmpty() {
 		return empty, cqltype.TypeValidation("prepare host", "empty UUID")
@@ -127,7 +129,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 		return empty, err
 	}
 	kind := statement.Kind
-	if confirmedKind == cqltype.ConditionalStatement || kind == cqltype.UnknownStatement {
+	if confirmedKind == cql.ConditionalStatement || kind == cql.UnknownStatement {
 		kind = confirmedKind
 	}
 	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind}, nil
@@ -139,7 +141,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 		return nil, err
 	}
 	state, plan, columns, kind := prepared.state, prepared.params, prepared.columns, prepared.kind
-	var rows codec.RowPlan[R]
+	var rows cql.RowPlan[R]
 	// Cassandra omits conditional result metadata from PREPARE. Unknown and
 	// conditional statements therefore defer absent result shapes until EXECUTE;
 	// actual metadata still selects and validates the plan before any row output.
@@ -148,9 +150,9 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	// statement's plan still compiles at EXECUTE when it does not fit here,
 	// as on Cassandra, so Exec rejects it with ErrConditionalExec instead of
 	// Prepare failing on the [applied] column.
-	if columns.Len() != 0 || kind == cqltype.OrdinaryStatement {
+	if columns.Len() != 0 || kind == cql.OrdinaryStatement {
 		rows, err = codec.CompileRowPlan(statement.Rows, columns)
-		if err != nil && kind != cqltype.ConditionalStatement {
+		if err != nil && kind != cql.ConditionalStatement {
 			return nil, err
 		}
 	}
@@ -165,17 +167,17 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	}(), nil
 }
 
-func (p *Prepared[P, R]) Parameters() cqltype.Columns {
+func (p *Prepared[P, R]) Parameters() cql.Columns {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return cqltype.Columns{}
+		return cql.Columns{}
 	}
 	p.privateStorage.InternalState.InternalMu.RLock()
 	defer p.privateStorage.InternalState.InternalMu.RUnlock()
 	return p.privateStorage.InternalState.InternalParameters
 }
-func (p *Prepared[P, R]) Columns() cqltype.Columns {
+func (p *Prepared[P, R]) Columns() cql.Columns {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return cqltype.Columns{}
+		return cql.Columns{}
 	}
 	p.privateStorage.InternalState.InternalMu.RLock()
 	defer p.privateStorage.InternalState.InternalMu.RUnlock()
@@ -189,7 +191,7 @@ func (p *Prepared[P, R]) Info() PreparedInfo {
 	defer p.privateStorage.InternalState.InternalMu.RUnlock()
 	v := p.privateStorage.InternalState.InternalInfo
 	v.Kind = p.privateStorage.kind
-	v.Conditional = p.privateStorage.kind == cqltype.ConditionalStatement
+	v.Conditional = p.privateStorage.kind == cql.ConditionalStatement
 	v.PartitionKeyIndexes = append([]int(nil), v.PartitionKeyIndexes...)
 	return v
 }
@@ -219,19 +221,19 @@ func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], 
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuex := new(Bound[R])
-		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind, Conditional: p.privateStorage.kind != cqltype.OrdinaryStatement}, hasCounter: p.privateStorage.InternalState.hasCounter}
+		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind, Conditional: p.privateStorage.kind != cql.OrdinaryStatement}, hasCounter: p.privateStorage.InternalState.hasCounter}
 		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.rows
 		opaqueStorageValuex.privateStorage.plans = p.privateStorage.plans
 		return opaqueStorageValuex
 	}(), nil
 }
-func BindUnpreparedBorrowed[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P) (*Bound[R], error) {
+func BindUnpreparedBorrowed[P, R any](s binding.Statement[P, R], columns cql.Columns, value P) (*Bound[R], error) {
 	return bindUnprepared(s, columns, value, false)
 }
-func BindUnpreparedOwned[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P) (*Bound[R], error) {
+func BindUnpreparedOwned[P, R any](s binding.Statement[P, R], columns cql.Columns, value P) (*Bound[R], error) {
 	return bindUnprepared(s, columns, value, true)
 }
-func bindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype.Columns, value P, owned bool) (*Bound[R], error) {
+func bindUnprepared[P, R any](s binding.Statement[P, R], columns cql.Columns, value P, owned bool) (*Bound[R], error) {
 	if err := binding.ValidateStatement(&s); err != nil {
 		return nil, err
 	}
@@ -245,7 +247,7 @@ func bindUnprepared[P, R any](s binding.Statement[P, R], columns cqltype.Columns
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuexx := new(Bound[R])
-		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: model.RoutingInfo{Kind: s.Kind, Conditional: s.Kind != cqltype.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
+		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Kind: s.Kind, Conditional: s.Kind != cql.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
 		opaqueStorageValuexx.privateStorage.InternalRows = s.Rows
 		opaqueStorageValuexx.privateStorage.plans = &InternalResultPlanCache[R]{}
 		return opaqueStorageValuexx
@@ -266,9 +268,9 @@ func (b *Bound[R]) Wait(ctx context.Context) error {
 	}
 	return b.privateStorage.InternalRequest.InternalOwner.InternalWait(ctx)
 }
-func (b *Bound[R]) Routing() model.RoutingInfo {
+func (b *Bound[R]) Routing() routing2.Info {
 	if b == nil {
-		return model.RoutingInfo{}
+		return routing2.Info{}
 	}
 	return b.privateStorage.InternalRequest.routing
 }
@@ -278,18 +280,18 @@ type PrepareOptionsStorage struct {
 }
 
 type PreparedStorage[P, R any] struct {
-	params        codec.ParamPlan[P]
-	rows          codec.RowDecoder[R]
+	params        cql.ParamPlan[P]
+	rows          cql.RowDecoder[R]
 	poolErr       error
 	InternalState *InternalPreparedState
 	plans         *InternalResultPlanCache[R]
 	pool          *queryPool[P, R]
 	poolOnce      sync.Once
-	kind          cqltype.StatementKind
+	kind          cql.StatementKind
 }
 
 type BoundStorage[R any] struct {
-	InternalRows    codec.RowDecoder[R]
+	InternalRows    cql.RowDecoder[R]
 	plans           *InternalResultPlanCache[R]
 	rows            *rowsHolder[R] // a reusable query's iterator storage
 	InternalRequest InternalExecutionRequest

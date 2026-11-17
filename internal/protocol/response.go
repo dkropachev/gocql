@@ -4,18 +4,17 @@
 package protocol
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/logging"
-
 	"bytes"
 	"fmt"
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	"net"
 	"strconv"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-
+	"github.com/scylladb/gocql/v2/internal/logging"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -30,7 +29,7 @@ type TypedParser struct {
 	owner  *wire.Lease
 	// expect is the result columns the request expects, typically a prepared
 	// statement's; equal parsed columns are returned as expect itself.
-	expect     Columns
+	expect     cql.Columns
 	MaxDepth   int
 	Proto      byte
 	MetadataID bool
@@ -51,15 +50,15 @@ const metadataReuseEntries = 4
 
 type metadataReuseEntry struct {
 	encoded []byte
-	columns Columns
+	columns cql.Columns
 	// owner is the expected columns of the request that filled the entry, or
 	// last matched it; a request expecting them probes this entry first, and
 	// replaces it when its result metadata changes.
-	owner Columns
+	owner cql.Columns
 	// hit is what a byte-identical response returns to owner's requests:
 	// owner when it equals columns, so that checking the response against
 	// the expected columns compares identities, otherwise columns.
-	hit    Columns
+	hit    cql.Columns
 	depth  int32
 	global bool
 }
@@ -93,7 +92,7 @@ func (e *metadataReuseEntry) match(cursor *wire.Cursor, count int, global bool, 
 // lookup returns the remembered columns for metadata encoded exactly as the
 // next bytes of cursor, probing first the entry of the request's expected
 // columns. On a hit it advances cursor past the metadata.
-func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, global bool, depth int) (Columns, bool) {
+func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect cql.Columns, count int, global bool, depth int) (cql.Columns, bool) {
 	start := *cursor
 	tried := -1
 	if expect.Len() > 0 {
@@ -130,13 +129,13 @@ func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect Columns, count int, g
 		}
 		return e.columns, true
 	}
-	return Columns{}, false
+	return cql.Columns{}, false
 }
 
 // store remembers parsed columns for the encoded metadata, replacing the
 // entry of the request's expected columns, or else the next one in turn. It
 // returns what the response carries: expect when equal to columns.
-func (r *MetadataReuse) store(encoded wire.Chain, columns, expect Columns, global bool, depth int) Columns {
+func (r *MetadataReuse) store(encoded wire.Chain, columns, expect cql.Columns, global bool, depth int) cql.Columns {
 	hit := columns
 	if expect.Len() == columns.Len() && expect.Len() > 0 && columns.Equal(expect) {
 		hit = expect
@@ -244,7 +243,7 @@ func (p *TypedParser) Str() string {
 	_ = c.Each(func(s wire.Span) error { _, err := b.Write(s.Bytes()); return err })
 	return b.String()
 }
-func (p *TypedParser) shortBytes() []byte { return p.Copy(int(p.U16())) }
+func (p *TypedParser) ShortBytes() []byte { return p.Copy(int(p.U16())) }
 func (p *TypedParser) Bytes() []byte {
 	n := p.I32()
 	if n == -1 {
@@ -280,69 +279,69 @@ func (p *TypedParser) Strings() []string {
 	}
 	return out
 }
-func (p *TypedParser) dataType(depth int) DataType {
+func (p *TypedParser) dataType(depth int) cql.DataType {
 	maxDepth := p.MaxDepth
 	if maxDepth == 0 {
 		maxDepth = 64
 	}
 	if depth > maxDepth {
 		p.Check(fmt.Errorf("gocql: metadata nesting exceeds %d", maxDepth))
-		return DataType{}
+		return cql.DataType{}
 	}
 	p.ReserveAllocation(160)
-	kind := Type(p.U16())
+	kind := cql.Type(p.U16())
 	if p.Err != nil {
-		return DataType{}
+		return cql.DataType{}
 	}
-	var result DataType
+	var result cql.DataType
 	var err error
 	switch kind {
-	case TypeList, TypeSet:
+	case cql.TypeList, cql.TypeSet:
 		element := p.dataType(depth + 1)
-		if kind == TypeList {
-			result, err = ListType(element)
+		if kind == cql.TypeList {
+			result, err = cql.ListType(element)
 		} else {
-			result, err = SetType(element)
+			result, err = cql.SetType(element)
 		}
-	case TypeMap:
+	case cql.TypeMap:
 		key := p.dataType(depth + 1)
 		element := p.dataType(depth + 1)
-		result, err = MapType(key, element)
-	case TypeTuple:
+		result, err = cql.MapType(key, element)
+	case cql.TypeTuple:
 		n := int(p.U16())
 		if int64(n) > p.Cursor.Remaining()/2 {
 			p.Check(fmt.Errorf("gocql: truncated tuple metadata"))
-			return DataType{}
+			return cql.DataType{}
 		}
 		p.ReserveAllocation(int64(n) * 8)
 		if p.Err != nil {
-			return DataType{}
+			return cql.DataType{}
 		}
-		fields := make([]DataType, n)
+		fields := make([]cql.DataType, n)
 		for i := range fields {
 			fields[i] = p.dataType(depth + 1)
 		}
-		result, err = TupleType(fields...)
-	case TypeUDT:
+		result, err = cql.TupleType(fields...)
+	case cql.TypeUDT:
 		keyspace, name := p.Str(), p.Str()
 		n := int(p.U16())
 		if int64(n) > p.Cursor.Remaining()/4 {
 			p.Check(fmt.Errorf("gocql: truncated UDT metadata"))
-			return DataType{}
+			return cql.DataType{}
 		}
 		p.ReserveAllocation(int64(n) * 96)
 		if p.Err != nil {
-			return DataType{}
+			return cql.DataType{}
 		}
-		fields := make([]ColumnSpec, n)
+		fields := make([]cql.ColumnSpec, n)
 		for i := range fields {
-			fields[i] = ColumnSpec{Name: p.Str(), Type: p.dataType(depth + 1)}
+			fields[i] = cql.ColumnSpec{Name: p.Str(), Type: p.dataType(depth + 1)}
 		}
-		result, err = UDTType(keyspace, name, fields...)
-	case TypeCustom:
+		result, err = cql.UDTType(keyspace, name, fields...)
+	case cql.TypeCustom:
 		name := p.Str()
-		if scalar := GetApacheCassandraType(name); scalar != TypeCustom {
-			result, err = ScalarType(scalar)
+		if scalar := GetApacheCassandraType(name); scalar != cql.TypeCustom {
+			result, err = cql.ScalarType(scalar)
 			break
 		}
 		prefix := ApacheCassandraTypePrefix + "VectorType("
@@ -364,12 +363,12 @@ func (p *TypedParser) dataType(depth int) DataType {
 				err = parseErr
 				break
 			}
-			result, err = VectorDataType(element, uint16(dim))
+			result, err = cql.VectorType(element, uint16(dim))
 		} else {
 			err = fmt.Errorf("gocql: unsupported custom protocol type %q", name)
 		}
 	default:
-		result, err = ScalarType(kind)
+		result, err = cql.ScalarType(kind)
 	}
 	p.Check(err)
 	return result
@@ -395,7 +394,7 @@ func (p *TypedParser) ReserveAllocation(n int64) {
 		p.Check(v.ReserveMetadata(n))
 	}
 }
-func (p *TypedParser) metadata(page *model.ResponseData, prepared bool, flagLWT int) (Columns, int) {
+func (p *TypedParser) metadata(page *model.ResponseData, prepared bool, flagLWT int) (cql.Columns, int) {
 	m := ParsedMetadata{}
 	cols, count := p.MetadataFields(&m, prepared, flagLWT)
 	if prepared {
@@ -413,7 +412,7 @@ func (p *TypedParser) metadata(page *model.ResponseData, prepared bool, flagLWT 
 	}
 	return cols, count
 }
-func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLWT int) (Columns, int) {
+func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLWT int) (cql.Columns, int) {
 	flags := uint32(p.I32())
 	allowed := uint32(frm.FlagGlobalTableSpec | frm.FlagHasMorePages | frm.FlagNoMetaData | frm.FlagMetaDataChanged)
 	if prepared {
@@ -428,7 +427,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	count := p.I32()
 	if count < 0 {
 		p.Check(fmt.Errorf("gocql: negative column count %d", count))
-		return Columns{}, 0
+		return cql.Columns{}, 0
 	}
 	if prepared {
 		n := p.Count(2)
@@ -450,7 +449,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		}
 	}
 	if !prepared && p.MetadataID && flags&uint32(frm.FlagMetaDataChanged) != 0 {
-		page.MetadataID = p.shortBytes()
+		page.MetadataID = p.ShortBytes()
 	}
 	if flags&uint32(frm.FlagNoMetaData) != 0 {
 		if !prepared && flags&uint32(frm.FlagMetaDataChanged) != 0 {
@@ -459,7 +458,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 		if !prepared {
 			page.NoMetadata = true
 		}
-		return Columns{}, count
+		return cql.Columns{}, count
 	}
 	global := flags&uint32(frm.FlagGlobalTableSpec) != 0
 	var checkpoint wire.Cursor
@@ -476,20 +475,20 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 	}
 	if int64(count) > p.Cursor.Remaining()/4 {
 		p.Check(fmt.Errorf("gocql: column count %d exceeds remaining metadata", count))
-		return Columns{}, 0
+		return cql.Columns{}, 0
 	}
 	p.ReserveAllocation(int64(count) * 96)
 	if p.Err != nil {
-		return Columns{}, 0
+		return cql.Columns{}, 0
 	}
-	columns := make([]ColumnSpec, count)
+	columns := make([]cql.ColumnSpec, count)
 	for i := range columns {
 		if !global {
 			keyspace, table = p.Str(), p.Str()
 		}
-		columns[i] = ColumnSpec{Keyspace: keyspace, Table: table, Name: p.Str(), Type: p.dataType(0)}
+		columns[i] = cql.ColumnSpec{Keyspace: keyspace, Table: table, Name: p.Str(), Type: p.dataType(0)}
 	}
-	result := cqltype.ColumnsOwned(columns)
+	result := ColumnsOwned(columns)
 	if buffered && !prepared && p.reuse != nil && p.Err == nil {
 		n := checkpoint.Remaining() - cursor.Remaining()
 		if n > 0 && n <= 64<<10 {
@@ -504,7 +503,7 @@ func (p *TypedParser) MetadataFields(page *ParsedMetadata, prepared bool, flagLW
 func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain, owner *wire.Lease, page *model.ResponseData) (*model.ResponseData, error) {
 
 	if body.Len() > c.MaxDecompressedBytes {
-		return nil, ErrFrameTooBig
+		return nil, cqlerr.ErrFrameTooBig
 	}
 	// A caller's page arrives with the result columns it expects.
 	expect := page.Columns
@@ -521,7 +520,7 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 		if int64(count) > p.Cursor.Remaining()/6 {
 			p.Check(fmt.Errorf("gocql: payload count exceeds remaining body"))
 		} else {
-			payload := make([]model.PayloadEntry, count)
+			payload := make([]cql.PayloadEntry, count)
 			page.Extra().Payload = payload
 			for i := range payload {
 				entry := &payload[i]
@@ -535,7 +534,7 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 					break
 				}
 				value := p.Take(int64(length))
-				entry.Value = Nullable[Bytes]{Valid: true, Value: cqltype.BytesView(value, wire.RefOf(owner))}
+				entry.Value = cql.Nullable[cql.Bytes]{Valid: true, Value: BytesView(value, wire.RefOf(owner))}
 			}
 		}
 	}
@@ -567,9 +566,9 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 			}
 			page.Rows = p.Take(p.Cursor.Remaining())
 		case frm.ResultKindPrepared:
-			page.Extra().PreparedID = p.shortBytes()
+			page.Extra().PreparedID = p.ShortBytes()
 			if p.MetadataID {
-				page.MetadataID = p.shortBytes()
+				page.MetadataID = p.ShortBytes()
 			}
 			page.Extra().BindColumns, _ = p.metadata(page, true, c.FlagLWT)
 			page.Columns, page.ColumnCount = p.metadata(page, false, 0)
@@ -605,13 +604,13 @@ func (c *Settings) ParseTypedResponseInto(head frm.FrameHeader, body wire.Chain,
 	return page, nil
 }
 
-func (p *TypedParser) errorMap() ErrorMap {
+func (p *TypedParser) ReadErrorMap() cqlerr.ErrorMap {
 	n := p.Count(4)
 	p.ReserveAllocation(int64(n) * 64)
 	if p.Err != nil {
 		return nil
 	}
-	out := make(ErrorMap, n)
+	out := make(cqlerr.ErrorMap, n)
 	for i := 0; i < n; i++ {
 		length := int(p.U8())
 		if length != 4 && length != 16 {

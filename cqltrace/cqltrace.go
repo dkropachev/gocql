@@ -3,13 +3,13 @@
 
 // Package cqltrace reads CQL trace sessions: the server-side query traces a
 // cluster records in system_traces for executions run with
-// exec.Options.CQLTrace. Result.CQLTraces names the sessions to read, with the
+// exec.Options.CQLTrace. cql.Result.CQLTraces names the sessions to read, with the
 // attempt each one records; a failed execution's Result lists its failed
 // attempts' sessions too.
 //
 // CQL tracing is unrelated to client-side tracing such as OpenTelemetry,
-// which instruments the driver through config.Observer. An observer can link
-// the two through config.AttemptEvent.CQLTraceID.
+// which instruments the driver through observe.Observer. An observer can link
+// the two through routing.AttemptEvent.CQLTraceID.
 package cqltrace
 
 import (

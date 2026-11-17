@@ -11,22 +11,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type nopObserver struct{}
 
-func (nopObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
-	return ctx, func(settings.RequestEvent) {}
+func (nopObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	return ctx, func(observe.RequestEvent) {}
 }
 
-func (nopObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
-	return func(routing.AttemptEvent) {}
+func (nopObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+	return func(routing2.AttemptEvent) {}
 }
 
 // constantSpeculation starts each speculative attempt delay after the last.
@@ -54,7 +54,7 @@ func BenchmarkGoroutines(b *testing.B) {
 					workload = "poneerr"
 				}
 				s := loopbackTestSession(b, workload)
-				values := Options{Timeout: cqltype.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+				values := Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 				switch variant {
 				case "observer":
 					values.Observer = nopObserver{}
@@ -70,7 +70,7 @@ func BenchmarkGoroutines(b *testing.B) {
 					values.Retry = delayRetry{delay: 20 * time.Microsecond}
 				}
 				options := testOptions(values)
-				statement := binding.Statement[int32, []byte]{Kind: cqltype.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.RowInto(func(*[]byte) {}, codec.Column("value", codec.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+				statement := binding.Statement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 				prepared := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 				run := make([]func(context.Context) error, workers)
 				for i := range run {

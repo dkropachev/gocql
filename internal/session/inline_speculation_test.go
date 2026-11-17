@@ -11,11 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -66,7 +65,7 @@ func TestInlineSpeculation(t *testing.T) {
 		}
 		// The first attempt gets no answer until the speculative one won,
 		// whose traced response names trace.
-		trace := cqltype.UUID{15: 7}
+		trace := cql.UUID{15: 7}
 		first, winner := make(chan request, 1), make(chan int, 1)
 		go func() {
 			slow, ok := next()
@@ -84,18 +83,18 @@ func TestInlineSpeculation(t *testing.T) {
 			_, _ = peers[fast.peer].Write(frame)
 		}()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 		if err != nil {
 			t.Fatal(err)
 		}
-		var row cqltype.Bytes
+		var row cql.Bytes
 		if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
 			t.Fatal("page is not the speculative winner's", page.Err())
 		}
 		traces := page.Info().CQLTraces()
 		page.Close()
 		host := implEndpoint.InternalHostInfoHostUUID(conns[<-winner].InternalHost)
-		if len(traces) != 1 || traces[0] != (model.CQLTraceRef{ID: trace, HostID: host, Attempt: 2, Speculative: true}) {
+		if len(traces) != 1 || traces[0] != (cql.CQLTraceRef{ID: trace, HostID: host, Attempt: 2, Speculative: true}) {
 			t.Fatalf("traces %+v, want the speculative winner's ref from %v", traces, host)
 		}
 		bound.Close()
@@ -135,7 +134,7 @@ func TestInlineSpeculation(t *testing.T) {
 		defer cancel()
 		for range 50 {
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+			page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -197,7 +196,7 @@ func TestInlineSpeculation(t *testing.T) {
 			if first.peer < 0 {
 				return
 			}
-			_, _ = peers[first.peer].Write(errorResponse(t, first.stream, protocol.CodeServer, nil))
+			_, _ = peers[first.peer].Write(errorResponse(t, first.stream, cqlerr.CodeServer, nil))
 			second := next()
 			if second.peer < 0 {
 				return
@@ -206,7 +205,7 @@ func TestInlineSpeculation(t *testing.T) {
 			served <- second.at.Sub(first.at)
 		}()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 		if err != nil {
 			t.Fatal(err)
 		}

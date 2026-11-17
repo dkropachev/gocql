@@ -16,15 +16,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestClientRoutes(t *testing.T) {
@@ -42,7 +44,7 @@ func TestClientRoutes(t *testing.T) {
 			if snapshot.ClientRoutes.ConnectionIDs[0] != "one" || snapshot.ClientRoutes.HostnameOverrides["one"] != "proxy.example" {
 				t.Fatal("route config aliases input")
 			}
-			edits := []func(*settings.Config){func(c *settings.Config) { c.AddressTranslator = implEndpoint.AddressTranslatorFunc(nil) }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }}
+			edits := []func(*settings.Config){func(c *settings.Config) { c.AddressTranslator = endpoint2.TranslatorFunc(nil) }, func(c *settings.Config) { c.ClientRoutes.ConnectionIDs = []string{"one", "one"} }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["unknown"] = "host" }, func(c *settings.Config) { c.ClientRoutes.HostnameOverrides["one"] = "" }}
 			for _, edit := range edits {
 				c := snapshot.Snapshot()
 				edit(&c)
@@ -60,7 +62,7 @@ func TestClientRoutes(t *testing.T) {
 
 	t.Run("Connect", func(t *testing.T) {
 		t.Run("DNSAndFallbackShareDeadline", func(t *testing.T) {
-			ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
+			ids := []cql.UUID{cql.RandomUUID(), cql.RandomUUID(), cql.RandomUUID()}
 			srv := newControlTestServer(t, func(srv *controlTestServer) {
 				srv.queries = func(query string, stream int, resp *protocol.Framer) bool {
 					if !strings.Contains(query, "system.client_routes") {
@@ -69,7 +71,7 @@ func TestClientRoutes(t *testing.T) {
 					_, port, _ := net.SplitHostPort(srv.Address)
 					var goodPort int
 					fmt.Sscan(port, &goodPort)
-					columns := []rowsCol{{"connection_id", optNative(cqltype.TypeUUID)}, {"host_id", optNative(cqltype.TypeUUID)}, {"address", optNative(cqltype.TypeVarchar)}, {"port", optNative(cqltype.TypeInt)}, {"tls_port", optNative(cqltype.TypeInt)}}
+					columns := []rowsCol{{"connection_id", optNative(cql.TypeUUID)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeVarchar)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
 					var rows [][][]byte
 					for i, id := range ids {
 						port := 1
@@ -85,7 +87,7 @@ func TestClientRoutes(t *testing.T) {
 			})
 			config := settings.DefaultConfig(srv.Address)
 			config.Protocol = 4
-			config.Metadata.Mode = settings.MetadataSchemaNone
+			config.Metadata.Mode = metadata.SchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Pool.AdvancedShardAwareness.Enabled = false
 			config.Pool.ConnectionsPerHost = 1
@@ -100,7 +102,7 @@ func TestClientRoutes(t *testing.T) {
 			var mu sync.Mutex
 			var deadlines []time.Time
 			var targets []string
-			config.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
 				if !target.Host.ID.IsEmpty() {
 					deadline, _ := ctx.Deadline()
 					mu.Lock()
@@ -108,7 +110,7 @@ func TestClientRoutes(t *testing.T) {
 					targets = append(targets, target.Address)
 					mu.Unlock()
 				}
-				return (endpoint.DefaultDialer{}).DialContext(ctx, target)
+				return (endpoint2.DefaultDialer{}).DialContext(ctx, target)
 			}
 			s, err := Connect(context.Background(), config)
 			if err != nil {
@@ -132,7 +134,7 @@ func TestClientRoutes(t *testing.T) {
 			p := cluster.NewClientRoutesAddressTranslator(cluster.ClientRoutesConfig{}, nil, false, logging.Nop())
 			host := func() *endpoint.HostInfo {
 				opaqueStorageValuexxxxxxxxxxx := new(endpoint.HostInfo)
-				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalHostId = cqltype.MustRandomUUID()
+				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalHostId = cql.RandomUUID()
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalConnectAddress = net.IPv4(127, 0, 0, 1)
 				implEndpoint.HostInfoData(opaqueStorageValuexxxxxxxxxxx).InternalPort = 9042
 				return opaqueStorageValuexxxxxxxxxxx

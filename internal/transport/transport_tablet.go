@@ -4,22 +4,22 @@
 package transport
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"encoding/binary"
 	"fmt"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 // parseTypedTabletHint consumes the tuple<bigint,bigint,list<tuple<uuid,int>>>
 // custom payload without materializing a potentially fragmented payload.
-func InternalParseTypedTabletHint(value cqltype.Bytes, keyspace, table string) (tablets.TabletInfo, error) {
+func InternalParseTypedTabletHint(value cql.Bytes, keyspace, table string) (tablets.TabletInfo, error) {
 	return InternalParseTypedTabletPayload(value, keyspace, table, false)
 }
 
-func InternalParseTypedTabletPayload(value cqltype.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
+func InternalParseTypedTabletPayload(value cql.Bytes, keyspace, table string, v2 bool) (tablets.TabletInfo, error) {
 	if err := cqltype.CheckBytesAlive(value); err != nil {
 		return tablets.TabletInfo{}, err
 	}

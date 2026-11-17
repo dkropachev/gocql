@@ -8,23 +8,22 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
 type streamPlanCache[R any] struct {
-	plan    codec.StreamRowPlan[R]
-	columns cqltype.Columns
+	plan    cql.StreamRowPlan[R]
+	columns cql.Columns
 	mu      sync.Mutex
 }
 
 // rememberPlan carries an incremental cursor's checked plan back to its query.
 // Buffered cursors update the same cache while selecting their page plan.
-func (s *RowStream[R]) rememberPlan(columns cqltype.Columns, plan codec.StreamRowPlan[R]) {
+func (s *RowStream[R]) rememberPlan(columns cql.Columns, plan cql.StreamRowPlan[R]) {
 	if cache := s.privateStorage.bufferedPlans; cache != nil {
 		cache.mu.Lock()
 		cache.columns, cache.plan = columns, plan
@@ -36,14 +35,14 @@ func (s *RowStream[R]) rememberPlan(columns cqltype.Columns, plan codec.StreamRo
 // Page buffering is the default; Incremental explicitly bounds receive storage.
 type StreamQuery[P, R any] struct {
 	plans   streamPlanCache[R]
-	decoder codec.StreamRowDecoder[R]
-	query   *Query[P, codec.EmptyRecord]
+	decoder cql.StreamRowDecoder[R]
+	query   *Query[P, cql.EmptyRow]
 	options StreamOptions
 }
 
 // newStreamQuery returns a reusable query that runs prepared and streams each
 // row into decoder instead of prepared's buffered row decoder.
-func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder codec.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
+func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRowDecoder[R], options StreamOptions) (*StreamQuery[P, R], error) {
 	if prepared == nil || prepared.privateStorage.InternalState == nil {
 		return nil, cqltype.TypeValidation("prepared", "nil handle")
 	}
@@ -56,7 +55,7 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder codec.StreamR
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, codec.EmptyRecord]{privateStorage: PreparedStorage[P, codec.EmptyRecord]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
+	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := p.Query(options.Options)
 	if err != nil {
 		return nil, err
@@ -114,7 +113,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 // mergeBufferedFailure adds a page execution that produced no page to the
 // stream's Result: its attempts, latency and CQL trace refs, all marked
 // failed, so that a failed stream still names its traced attempts.
-func (s *RowStream[R]) mergeBufferedFailure(result model.Result) {
+func (s *RowStream[R]) mergeBufferedFailure(result cql.Result) {
 	p := &s.privateStorage
 	refs := slices.Clone(result.CQLTraces())
 	for i := range refs {
@@ -126,7 +125,7 @@ func (s *RowStream[R]) mergeBufferedFailure(result model.Result) {
 	r.Attempts += result.Attempts
 	r.Latency += result.Latency
 	if len(refs) > 0 {
-		r.SetDiagnostics(r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
+		codec.SetDiagnostics(r, r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
 	}
 }
 
@@ -166,7 +165,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 		cache.mu.Lock()
 		defer cache.mu.Unlock()
 	}
-	var plan codec.StreamRowPlan[R]
+	var plan cql.StreamRowPlan[R]
 	if cache != nil && cache.plan != nil && cache.columns.Equal(response.Columns) {
 		plan = cache.plan
 	} else if p.plan != nil && p.columns.Equal(response.Columns) {
@@ -195,7 +194,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 		// CQL trace refs accumulate page after page; the response owns its
 		// own slice, so build a fresh one.
 		r := &p.info.Result
-		r.SetDiagnostics(r.Warnings(), slices.Concat(traces, r.CQLTraces()), r.CustomPayload())
+		codec.SetDiagnostics(r, r.Warnings(), slices.Concat(traces, r.CQLTraces()), r.CustomPayload())
 	}
 	p.info.Pages++
 	p.mu.Unlock()

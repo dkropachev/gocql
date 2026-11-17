@@ -26,20 +26,17 @@ package cluster
 
 import (
 	"context"
-
+	"log/slog"
 	"sync"
 	"sync/atomic"
 
-	"log/slog"
-
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/debounce"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/eventbus"
 	"github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/schemafence"
 	"github.com/scylladb/gocql/v2/internal/transport"
-
-	"github.com/scylladb/gocql/v2/internal/eventbus"
 )
 
 type SessionStorage struct {
@@ -53,7 +50,7 @@ type SessionStorage struct {
 	frameObserver               transport.FrameHeaderObserver
 	streamObserver              transport.StreamObserver
 	initErr                     error
-	InternalAddressTranslator   endpoint.AddressTranslator
+	InternalAddressTranslator   endpoint2.Translator
 	schema                      *schemafence.InternalPreparedSchemaTracker
 	v2Peripheral                atomic.Pointer[InternalV2PeripheralState]
 	InternalNodeEvents          *InternalEventDebouncer

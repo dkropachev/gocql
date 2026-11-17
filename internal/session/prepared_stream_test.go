@@ -13,8 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestPreparedStream(t *testing.T) {
@@ -23,13 +22,13 @@ func TestPreparedStream(t *testing.T) {
 		session := InternalWrapSession(s)
 		statement := StreamStatement[int32, []byte]{
 			CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
-			Params: codec.OneParam(codec.Int32),
-			Rows:   codec.StreamOneColumn(codec.StreamBlob),
+			Params: cql.OneParam(cql.Int32Codec),
+			Rows:   cql.StreamOneColumn(cql.StreamBlob),
 		}
 		if _, err := unpreparedStreamQuery(session.Core(), statement, StreamOptions{}); err == nil {
 			t.Fatal("missing bind metadata accepted")
 		}
-		statement.BindMarkers = cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})
+		statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})
 		q := codecTestMust(unpreparedStreamQuery(session.Core(), statement, StreamOptions{}))
 		defer q.Close()
 		served := make(chan struct{})
@@ -66,7 +65,7 @@ func TestPreparedStream(t *testing.T) {
 						err = fmt.Errorf("expected PREPARE, got %d", op)
 					}
 					if err == nil {
-						_, err = peer.Write(typedTestResponse(t, 4, stream, preparedBody([]byte("conditional"), cqltype.NewColumns(), cqltype.NewColumns())))
+						_, err = peer.Write(typedTestResponse(t, 4, stream, preparedBody([]byte("conditional"), cql.NewColumns(), cql.NewColumns())))
 					}
 					if err == nil {
 						op, stream, _, err = readRequest(peer)
@@ -80,7 +79,7 @@ func TestPreparedStream(t *testing.T) {
 					served <- err
 				}()
 				decoder := new(countStreamDecoder)
-				p, err := PrepareStream(ctx, s, StreamStatement[codec.EmptyRecord, []byte]{CQL: "UPDATE ks.tbl SET value='x' WHERE k=1 IF EXISTS", Kind: cqltype.ConditionalStatement, Rows: decoder}, PrepareOptions{})
+				p, err := PrepareStream(ctx, s, StreamStatement[cql.EmptyRow, []byte]{CQL: "UPDATE ks.tbl SET value='x' WHERE k=1 IF EXISTS", Kind: cql.ConditionalStatement, Rows: decoder}, PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -92,7 +91,7 @@ func TestPreparedStream(t *testing.T) {
 					t.Fatal(err)
 				}
 				defer q.Close()
-				rows, err := q.Run(ctx, codec.EmptyRecord{})
+				rows, err := q.Run(ctx, cql.EmptyRow{})
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -122,7 +121,7 @@ func TestPreparedStream(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		decoder := new(countStreamDecoder)
-		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: codec.OneParam(codec.Int32), Rows: decoder}, PrepareOptions{})
+		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +158,7 @@ func TestPreparedStream(t *testing.T) {
 		oneShotServer(t, peers[0], requests)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		statement := StreamStatement[int32, int32]{CQL: oneShotStatement().CQL, Params: codec.OneParam(codec.Int32), Rows: codec.StreamOneColumn(codec.StreamInt32)}
+		statement := StreamStatement[int32, int32]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamInt32)}
 		if _, err := PrepareStream(ctx, s, statement, PrepareOptions{}); err == nil {
 			t.Fatal("blob metadata accepted by integer stream decoder")
 		}
@@ -176,7 +175,7 @@ func TestPreparedStream(t *testing.T) {
 		decoder := new(countStreamDecoder)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: codec.OneParam(codec.Int32), Rows: decoder}, PrepareOptions{})
+		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -235,7 +234,7 @@ func TestPreparedStream(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		decoder := new(countStreamDecoder)
-		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: codec.OneParam(codec.Int32), Rows: decoder}, PrepareOptions{})
+		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -271,7 +270,7 @@ func TestPreparedStream(t *testing.T) {
 		// An incompatible actual type is rejected before any destination access.
 		invalid := runtimeRowsBody(nil, "1234")
 		typeAt := bytes.Index(invalid, []byte("value")) + len("value")
-		binary.BigEndian.PutUint16(invalid[typeAt:], uint16(cqltype.TypeInt))
+		binary.BigEndian.PutUint16(invalid[typeAt:], uint16(cql.TypeInt))
 		go func() { r := <-requests; _, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, invalid)) }()
 		dst = append(dst[:0], "untouched"...)
 		if rows, err := q.Run(ctx, 1); err == nil || rows != nil {
@@ -296,14 +295,14 @@ func TestPreparedStream(t *testing.T) {
 		oneShotServer(t, peers[0], requests)
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: codec.OneParam(codec.Int32), Rows: nilPreparedStreamPlan{}}, PrepareOptions{})
+		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: nilPreparedStreamPlan{}}, PrepareOptions{})
 		if err == nil {
 			t.Fatal("nil streaming plan accepted")
 		}
 	})
 
 	t.Run("RejectsNilDecoderAndHandle", func(t *testing.T) {
-		if _, err := PrepareStream(context.Background(), nil, StreamStatement[codec.EmptyRecord, []byte]{CQL: "SELECT value FROM ks.tbl"}, PrepareOptions{}); err == nil {
+		if _, err := PrepareStream(context.Background(), nil, StreamStatement[cql.EmptyRow, []byte]{CQL: "SELECT value FROM ks.tbl"}, PrepareOptions{}); err == nil {
 			t.Fatal("nil decoder accepted")
 		}
 		var p *PreparedStream[int32, []byte]
@@ -313,7 +312,7 @@ func TestPreparedStream(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		s, _ := attachmentSession()
-		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: "SELECT value FROM ks.tbl", Params: codec.OneParam(codec.Int32), Rows: codec.StreamOneColumn(codec.StreamBlob)}, PrepareOptions{})
+		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: "SELECT value FROM ks.tbl", Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamBlob)}, PrepareOptions{})
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancelled preparation: %v", err)
 		}
@@ -322,6 +321,6 @@ func TestPreparedStream(t *testing.T) {
 
 type nilPreparedStreamPlan struct{}
 
-func (nilPreparedStreamPlan) Compile(cqltype.Columns) (codec.StreamRowPlan[[]byte], error) {
+func (nilPreparedStreamPlan) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
 	return nil, nil
 }

@@ -27,13 +27,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type poolState uint8
@@ -165,7 +166,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 	if p.closed {
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return runtimeerrors.ErrClosed
+		return cqlerr.ErrClosed
 	}
 	shards := max(1, implEndpoint.ScyllaHostFeaturesData(&c.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards)
 	shard := implEndpoint.ScyllaConnectionFeaturesData(&c.InternalScyllaSupported).InternalShard
@@ -203,7 +204,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return runtimeerrors.ErrNoStreams
+		return cqlerr.ErrNoStreams
 	}
 	if p.options.ConnectionsPerHost > 0 || len(p.InternalConns[shard]) < p.options.ConnectionsPerShard {
 		p.InternalConns[shard] = append(p.InternalConns[shard], c)
@@ -213,7 +214,7 @@ func (p *InternalTypedConnPicker) putMode(c *transport.Conn, expected uint64, ch
 		p.retired = append(p.retired, retired...)
 		p.publishLocked()
 		p.InternalMu.Unlock()
-		return runtimeerrors.ErrNoStreams
+		return cqlerr.ErrNoStreams
 	}
 	if p.InternalCount() >= p.InternalTarget() {
 		retired = append(retired, p.InternalExcess...)
@@ -283,12 +284,12 @@ func (p *InternalTypedConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 	if raw, ok := t.(implEndpoint.InternalInt64Token); ok {
 		return p.PickInt64(int64(raw))
 	}
-	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{})
 }
 func (p *InternalTypedConnPicker) PickInt64(t int64) *transport.Conn {
-	return p.InternalPickTarget(model.Target{}, model.RoutingInfo{Token: cqltype.Option[int64]{Value: t, Set: true}})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{Token: cql.Option[int64]{Value: t, Set: true}})
 }
-func (p *InternalTypedConnPicker) InternalPickTarget(target model.Target, routing model.RoutingInfo) *transport.Conn {
+func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, routing routing.Info) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()
 	if p.closed {
@@ -355,21 +356,21 @@ func (pool *InternalHostConnPool) signalReservation() {
 	pool.signalReservationLocked()
 	pool.InternalMu.Unlock()
 }
-func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target model.Target, routing model.RoutingInfo) (*transport.InternalExclusiveConn, error) {
+func (pool *InternalHostConnPool) InternalReserveStream(ctx context.Context, target metadata.Target, routing routing.Info) (*transport.InternalExclusiveConn, error) {
 	return pool.InternalReserveStreamWithLimits(ctx, target, routing, transport.StreamLimits{})
 }
-func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target model.Target, routing model.RoutingInfo, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
+func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Context, target metadata.Target, routing routing.Info, limits transport.StreamLimits) (*transport.InternalExclusiveConn, error) {
 	if ctx == nil {
 		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
 	if (!target.HostID.IsEmpty() && target.HostID != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)) || routing.HostID.Set && routing.HostID.Value != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) {
-		return nil, runtimeerrors.ErrNoConnections
+		return nil, cqlerr.ErrNoConnections
 	}
 	for {
 		pool.InternalMu.RLock()
 		if pool.InternalClosed {
 			pool.InternalMu.RUnlock()
-			return nil, runtimeerrors.ErrClosed
+			return nil, cqlerr.ErrClosed
 		}
 		var candidates []*transport.Conn
 		if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
@@ -386,7 +387,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				} else if strict {
 					p.InternalMu.RUnlock()
 					pool.InternalMu.RUnlock()
-					return nil, runtimeerrors.ErrNoConnections
+					return nil, cqlerr.ErrNoConnections
 				}
 			} else if routing.Token.Set {
 				shard = p.InternalShardOf(routing.Token.Value)
@@ -394,7 +395,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 			if strict && shard >= len(p.InternalConns) {
 				p.InternalMu.RUnlock()
 				pool.InternalMu.RUnlock()
-				return nil, runtimeerrors.ErrNoConnections
+				return nil, cqlerr.ErrNoConnections
 			}
 			for i, cs := range p.InternalConns {
 				if strict && shard >= 0 && i != shard {
@@ -447,7 +448,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 				if ctx.Err() != nil {
 					return nil, ctx.Err()
 				}
-				if _, ok := errors.AsType[*codec.StreamCapabilityError](err); ok {
+				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); ok {
 					capability = err
 				}
 			}
@@ -458,7 +459,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		pool.InternalMu.Lock()
 		if pool.InternalClosed {
 			pool.InternalMu.Unlock()
-			return nil, runtimeerrors.ErrClosed
+			return nil, cqlerr.ErrClosed
 		}
 		if pool.reservationChanged == nil {
 			pool.reservationChanged = make(chan struct{})
@@ -480,7 +481,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-pool.InternalRepairCtx.Done():
-			return nil, runtimeerrors.ErrClosed
+			return nil, cqlerr.ErrClosed
 		case <-changed:
 		}
 	}

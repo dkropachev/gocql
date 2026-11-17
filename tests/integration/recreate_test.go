@@ -16,7 +16,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -33,8 +32,8 @@ func cassandraOverride(base, override string) string {
 func isDescribeKeyspaceSupported(t *testing.T, s *gocql.Session[testDialect]) bool {
 	t.Helper()
 
-	var row dynamic.Row
-	_, err := s.UnpreparedEach(context.Background(), cql.Statement[cql.EmptyParams, dynamic.Row]{CQL: `DESCRIBE KEYSPACE system WITH INTERNALS`, Rows: dynamic.Rows}, cql.EmptyParams{}, &row, func(*dynamic.Row) error { return nil })
+	var row cql.DynamicRow
+	_, err := s.UnpreparedEach(context.Background(), cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: `DESCRIBE KEYSPACE system WITH INTERNALS`, Rows: cql.DynamicRows}, cql.EmptyParams{}, &row, func(*cql.DynamicRow) error { return nil })
 	if err != nil {
 		if server, ok := errors.AsType[cqlerr.ServerError](err); ok && server.Code() == cqlerr.CodeSyntax {
 			// DESCRIBE KEYSPACE is not supported on older versions of Cassandra and Scylla
@@ -103,9 +102,9 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session[test
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
-func recreateExec(t testing.TB, s *gocql.Session[testDialect], stmt string) (gocql.Result, error) {
+func recreateExec(t testing.TB, s *gocql.Session[testDialect], stmt string) (cql.Result, error) {
 	t.Helper()
-	var result gocql.Result
+	var result cql.Result
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)

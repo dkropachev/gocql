@@ -35,9 +35,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	. "github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 func TestResponse(t *testing.T) {
@@ -246,9 +249,9 @@ func TestResponse(t *testing.T) {
 				fr.WriteString("test_ks")
 				fr.WriteString("test_tbl")
 				fr.WriteString("pk_a")
-				fr.WriteShort(uint16(TypeInt))
+				fr.WriteShort(uint16(cql.TypeInt))
 				fr.WriteString("pk_b")
-				fr.WriteShort(uint16(TypeVarchar))
+				fr.WriteShort(uint16(cql.TypeVarchar))
 				// result metadata
 				fr.WriteInt(int32(frm.FlagNoMetaData))
 				fr.WriteInt(0)
@@ -328,7 +331,7 @@ func TestResponse(t *testing.T) {
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_a")
-			fr.WriteShort(uint16(TypeInt))
+			fr.WriteShort(uint16(cql.TypeInt))
 
 			meta := fr.ParseResultMetadata()
 
@@ -397,7 +400,7 @@ func TestResponse(t *testing.T) {
 					fr.WriteString(keyspace)
 					fr.WriteString(table)
 					fr.WriteString("col_a")
-					fr.WriteShort(uint16(TypeInt))
+					fr.WriteShort(uint16(cql.TypeInt))
 
 					meta := fr.ParseResultMetadata()
 
@@ -434,19 +437,19 @@ func TestResponse(t *testing.T) {
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_a")
-			fr.WriteShort(uint16(TypeInt))
+			fr.WriteShort(uint16(cql.TypeInt))
 
 			// Column 1: same keyspace/table (will be skipped by optimization)
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_b")
-			fr.WriteShort(uint16(TypeVarchar))
+			fr.WriteShort(uint16(cql.TypeVarchar))
 
 			// Column 2: same keyspace/table
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_c")
-			fr.WriteShort(uint16(TypeBoolean))
+			fr.WriteShort(uint16(cql.TypeBoolean))
 
 			meta := fr.ParseResultMetadata()
 
@@ -476,7 +479,7 @@ func TestResponse(t *testing.T) {
 			}
 
 			// Verify column types
-			expectedTypes := []Type{TypeInt, TypeVarchar, TypeBoolean}
+			expectedTypes := []cql.Type{cql.TypeInt, cql.TypeVarchar, cql.TypeBoolean}
 			for i, col := range meta.Columns {
 				nt, ok := col.TypeInfo.(NativeType)
 				if !ok {
@@ -548,14 +551,14 @@ func TestResponse(t *testing.T) {
 			{
 				name:   "not a vector type",
 				custom: vp + "Xxx(" + p + "FloatType, 3)",
-				want:   NewCustomType(protoVersion4, TypeCustom, vp+"Xxx("+p+"FloatType, 3)"),
+				want:   NewCustomType(protoVersion4, cql.TypeCustom, vp+"Xxx("+p+"FloatType, 3)"),
 			},
 			{
 				name:   "float vector",
 				custom: vp + "(" + p + "FloatType, 3)",
 				want: VectorType{
-					NativeType: NewCustomType(protoVersion4, TypeCustom, vp+"("+p+"FloatType, 3)"),
-					SubType:    NewNativeType(protoVersion4, TypeFloat),
+					NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp+"("+p+"FloatType, 3)"),
+					SubType:    NewNativeType(protoVersion4, cql.TypeFloat),
 					Dimensions: 3,
 				},
 			},
@@ -563,10 +566,10 @@ func TestResponse(t *testing.T) {
 				name:   "nested vector",
 				custom: vp + "(" + vp + "(" + p + "InetAddressType, 2), 3)",
 				want: VectorType{
-					NativeType: NewCustomType(protoVersion4, TypeCustom, vp+"("+vp+"("+p+"InetAddressType, 2), 3)"),
+					NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp+"("+vp+"("+p+"InetAddressType, 2), 3)"),
 					SubType: VectorType{
-						NativeType: NewCustomType(protoVersion4, TypeCustom, vp),
-						SubType:    NewNativeType(protoVersion4, TypeInet),
+						NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp),
+						SubType:    NewNativeType(protoVersion4, cql.TypeInet),
 						Dimensions: 2,
 					},
 					Dimensions: 3,
@@ -609,8 +612,8 @@ func TestResponse(t *testing.T) {
 		t.Run("NegativeCountIsEmpty", func(t *testing.T) {
 			t.Parallel()
 
-			body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
-				f.WriteConsistency(cqltype.One)
+			body := errBody(ProtoVersion5, cqlerr.CodeReadFailure, "rf", func(f *Framer) {
+				f.WriteConsistency(cql.One)
 				f.WriteInt(0)
 				f.WriteInt(1)
 				f.WriteInt(-1)
@@ -620,7 +623,7 @@ func TestResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			rf := got.(*ErrorResponseFrame).Err.(*ReadFailureError)
+			rf := got.(*ErrorResponseFrame).Err.(*cqlerr.ReadFailureError)
 			if len(rf.ErrorMap) != 0 || rf.NumFailures != 0 {
 				t.Fatalf("ErrorMap = %v, NumFailures = %d; want empty", rf.ErrorMap, rf.NumFailures)
 			}
@@ -660,8 +663,8 @@ func TestResponse(t *testing.T) {
 			for _, tc := range tests {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Parallel()
-					body := errBody(ProtoVersion5, CodeReadFailure, "rf", func(f *Framer) {
-						f.WriteConsistency(cqltype.One)
+					body := errBody(ProtoVersion5, cqlerr.CodeReadFailure, "rf", func(f *Framer) {
+						f.WriteConsistency(cql.One)
 						f.WriteInt(0)
 						f.WriteInt(1)
 						tc.write(f)
@@ -678,46 +681,46 @@ func TestResponse(t *testing.T) {
 	t.Run("ReadTypeInfo", func(t *testing.T) {
 		t.Parallel()
 
-		native := func(t Type) NativeType { return cqltype.NewCustomType(protoVersion4, t, "") }
+		native := func(t cql.Type) NativeType { return cqltype.NewCustomType(protoVersion4, t, "") }
 
 		tests := []struct {
 			name string
 			opt  typeOption
 			want TypeInfo
 		}{
-			{"Native", optNative(TypeInt), native(TypeInt)},
-			{"NativeDuration", optNative(TypeDuration), native(TypeDuration)},
+			{"Native", optNative(cql.TypeInt), native(cql.TypeInt)},
+			{"NativeDuration", optNative(cql.TypeDuration), native(cql.TypeDuration)},
 			// Cassandra's marshal class names for native types resolve to the
 			// native type, keeping the class name.
-			{"CustomNativeClass", optCustom("org.apache.cassandra.db.marshal.Int32Type"), cqltype.NewCustomType(protoVersion4, TypeInt, "org.apache.cassandra.db.marshal.Int32Type")},
-			{"CustomUnknownClass", optCustom("com.example.MyType"), cqltype.NewCustomType(protoVersion4, TypeCustom, "com.example.MyType")},
-			{"List", optCollection(TypeList, optNative(TypeVarchar)),
-				CollectionType{NativeType: native(TypeList), Elem: native(TypeVarchar)}},
-			{"Set", optCollection(TypeSet, optNative(TypeUUID)),
-				CollectionType{NativeType: native(TypeSet), Elem: native(TypeUUID)}},
-			{"Map", optCollection(TypeMap, optNative(TypeVarchar), optNative(TypeBigInt)),
-				CollectionType{NativeType: native(TypeMap), Key: native(TypeVarchar), Elem: native(TypeBigInt)}},
-			{"Tuple", optTuple(optNative(TypeInt), optNative(TypeBoolean)),
-				TupleTypeInfo{NativeType: native(TypeTuple), Elems: []TypeInfo{native(TypeInt), native(TypeBoolean)}}},
-			{"EmptyTuple", optTuple(), TupleTypeInfo{NativeType: native(TypeTuple), Elems: []TypeInfo{}}},
+			{"CustomNativeClass", optCustom("org.apache.cassandra.db.marshal.Int32Type"), cqltype.NewCustomType(protoVersion4, cql.TypeInt, "org.apache.cassandra.db.marshal.Int32Type")},
+			{"CustomUnknownClass", optCustom("com.example.MyType"), cqltype.NewCustomType(protoVersion4, cql.TypeCustom, "com.example.MyType")},
+			{"List", optCollection(cql.TypeList, optNative(cql.TypeVarchar)),
+				CollectionType{NativeType: native(cql.TypeList), Elem: native(cql.TypeVarchar)}},
+			{"Set", optCollection(cql.TypeSet, optNative(cql.TypeUUID)),
+				CollectionType{NativeType: native(cql.TypeSet), Elem: native(cql.TypeUUID)}},
+			{"Map", optCollection(cql.TypeMap, optNative(cql.TypeVarchar), optNative(cql.TypeBigInt)),
+				CollectionType{NativeType: native(cql.TypeMap), Key: native(cql.TypeVarchar), Elem: native(cql.TypeBigInt)}},
+			{"Tuple", optTuple(optNative(cql.TypeInt), optNative(cql.TypeBoolean)),
+				TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{native(cql.TypeInt), native(cql.TypeBoolean)}}},
+			{"EmptyTuple", optTuple(), TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{}}},
 			{"UDT", optUDT("ks", "addr",
-				optField{"street", optNative(TypeVarchar)},
-				optField{"zip", optNative(TypeInt)},
-			), UDTTypeInfo{NativeType: native(TypeUDT), KeySpace: "ks", Name: "addr", Elements: []UDTField{
-				{Name: "street", Type: native(TypeVarchar)},
-				{Name: "zip", Type: native(TypeInt)},
+				optField{"street", optNative(cql.TypeVarchar)},
+				optField{"zip", optNative(cql.TypeInt)},
+			), UDTTypeInfo{NativeType: native(cql.TypeUDT), KeySpace: "ks", Name: "addr", Elements: []UDTField{
+				{Name: "street", Type: native(cql.TypeVarchar)},
+				{Name: "zip", Type: native(cql.TypeInt)},
 			}}},
-			{"Nested", optCollection(TypeMap,
-				optNative(TypeVarchar),
-				optCollection(TypeList, optTuple(optNative(TypeInt), optUDT("ks", "u", optField{"f", optNative(TypeBlob)}))),
+			{"Nested", optCollection(cql.TypeMap,
+				optNative(cql.TypeVarchar),
+				optCollection(cql.TypeList, optTuple(optNative(cql.TypeInt), optUDT("ks", "u", optField{"f", optNative(cql.TypeBlob)}))),
 			), CollectionType{
-				NativeType: native(TypeMap),
-				Key:        native(TypeVarchar),
-				Elem: CollectionType{NativeType: native(TypeList), Elem: TupleTypeInfo{
-					NativeType: native(TypeTuple),
-					Elems: []TypeInfo{native(TypeInt), UDTTypeInfo{
-						NativeType: native(TypeUDT), KeySpace: "ks", Name: "u",
-						Elements: []UDTField{{Name: "f", Type: native(TypeBlob)}},
+				NativeType: native(cql.TypeMap),
+				Key:        native(cql.TypeVarchar),
+				Elem: CollectionType{NativeType: native(cql.TypeList), Elem: TupleTypeInfo{
+					NativeType: native(cql.TypeTuple),
+					Elems: []TypeInfo{native(cql.TypeInt), UDTTypeInfo{
+						NativeType: native(cql.TypeUDT), KeySpace: "ks", Name: "u",
+						Elements: []UDTField{{Name: "f", Type: native(cql.TypeBlob)}},
 					}},
 				}},
 			}},
@@ -738,16 +741,16 @@ func TestResponse(t *testing.T) {
 	})
 	t.Run("ServerErrorCode", func(t *testing.T) {
 		for _, err := range []error{
-			NewOtherServerError(CodeSyntax, "syntax"),
-			&UnavailableError{serverError: serverError{message: "unavailable"}},
-			&WriteTimeoutError{serverError: serverError{message: "write timeout"}},
-			&UnpreparedError{serverError: serverError{message: "unprepared"}},
+			cqlerr.NewOtherServerError(cqlerr.CodeSyntax, "syntax"),
+			runtimeerrors.WithMessage(&cqlerr.UnavailableError{}, "unavailable"),
+			runtimeerrors.WithMessage(&cqlerr.WriteTimeoutError{}, "write timeout"),
+			runtimeerrors.WithMessage(&cqlerr.UnpreparedError{}, "unprepared"),
 		} {
-			direct, ok := errors.AsType[ServerError](err)
+			direct, ok := errors.AsType[cqlerr.ServerError](err)
 			if !ok {
 				t.Fatalf("%T does not satisfy server error contract", err)
 			}
-			if wrapped, ok := errors.AsType[ServerError](fmt.Errorf("outer: %w", err)); !ok || wrapped.Code() != direct.Code() || wrapped.Message() != direct.Message() {
+			if wrapped, ok := errors.AsType[cqlerr.ServerError](fmt.Errorf("outer: %w", err)); !ok || wrapped.Code() != direct.Code() || wrapped.Message() != direct.Message() {
 				t.Fatalf("wrapped %T lost server details", err)
 			}
 		}
@@ -755,7 +758,7 @@ func TestResponse(t *testing.T) {
 	t.Run("TypeString", func(t *testing.T) {
 		t.Parallel()
 
-		if got := Type(0x00ff).String(); got != "unknown_type_255" {
+		if got := cql.Type(0x00ff).String(); got != "unknown_type_255" {
 			t.Fatalf("String() = %q, want unknown_type_255", got)
 		}
 	})

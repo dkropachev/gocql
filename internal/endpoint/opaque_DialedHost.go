@@ -27,14 +27,14 @@ package endpoint
 import (
 	"context"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type DialedHostStorage struct {
 	InternalValidateTarget func(context.Context) error
 	InternalTargetEpoch    uint64
 	InternalSharderEpoch   uint64
-	InternalShardTarget    cqltype.Option[uint32]
+	InternalShardTarget    cql.Option[uint32]
 }
 
 func DialedHostData(v *DialedHost) *DialedHostStorage { return &v.privateStorage }

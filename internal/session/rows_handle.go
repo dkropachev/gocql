@@ -4,12 +4,11 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
-var ErrStaleRows = runtimeerrors.ErrStaleRows
+var ErrStaleRows = cqlerr.ErrStaleRows
 
 // Rows iterates the rows of one execution across its pages.
 //
@@ -77,7 +76,7 @@ func (r Rows[R]) Retain() (*PageLease, error) {
 	if impl := r.live(); impl != nil {
 		return impl.Retain()
 	}
-	return nil, runtimeerrors.ErrNoRows
+	return nil, cqlerr.ErrNoRows
 }
 
 // Clone returns an owned copy of the row the last NextInto decoded.
@@ -86,23 +85,23 @@ func (r Rows[R]) Clone() (R, error) {
 		return impl.Clone()
 	}
 	var zero R
-	return zero, runtimeerrors.ErrNoRows
+	return zero, cqlerr.ErrNoRows
 }
 
 // Info returns the execution's result information so far.
-func (r Rows[R]) Info() model.Result {
+func (r Rows[R]) Info() cql.Result {
 	if impl := r.live(); impl != nil {
 		return impl.Info()
 	}
-	return model.Result{}
+	return cql.Result{}
 }
 
 // Columns returns the current page's actual physical result metadata.
-func (r Rows[R]) Columns() cqltype.Columns {
+func (r Rows[R]) Columns() cql.Columns {
 	if impl := r.live(); impl != nil {
 		return impl.Columns()
 	}
-	return cqltype.Columns{}
+	return cql.Columns{}
 }
 
 // rowsHolder is a Rows iterator with its first page, allocated together. A

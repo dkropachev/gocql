@@ -8,12 +8,12 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strconv"
 	"syscall"
 
-	"log/slog"
-
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
@@ -116,10 +116,8 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 
 func (sd *InternalScyllaDialer) logger() *slog.Logger { return logging.Or(sd.InternalLogger) }
 
-var ErrScyllaSourcePortAlreadyInUse = errors.New("scylla: source port is already in use")
-
 func isLocalAddrInUseErr(err error) bool {
-	return errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, ErrScyllaSourcePortAlreadyInUse)
+	return errors.Is(err, syscall.EADDRINUSE) || errors.Is(err, cqlerr.ErrScyllaSourcePortAlreadyInUse)
 }
 
 type scyllaPortIterator struct {

@@ -4,25 +4,21 @@
 package transport
 
 import (
-	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/model"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/syncx"
-
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"context"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-
 	"errors"
 	"fmt"
-
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/protocol"
+	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -118,7 +114,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	}
 	if req.Lease != nil {
 		if !req.Lease.Retain() {
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.ErrReleased})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cql.ErrReleased})
 		}
 		// The writer's completion is an explicit input lifetime boundary.
 		x.inputHeld = true
@@ -126,7 +122,7 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 	for _, entry := range req.Payload {
 		if owner := cqltype.BytesLease(entry.Value.Value); entry.Value.Valid && !owner.IsZero() {
 			if !owner.Retain() {
-				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqltype.ErrReleased})
+				return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cql.ErrReleased})
 			}
 			x.payloadOwners = append(x.payloadOwners, owner.Lease())
 		}
@@ -301,19 +297,19 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 				x.releaseStream = true
 				x.recycleCall = true
 			}
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalTimeout: req.Timeout})
 		}
 		if c.markOrphan(call) {
 			x.closeErr = errOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-attemptDone(ctx):
 		return abandon()
 	case <-parentDone:
 		return abandon()
 	case <-connDone:
 		x.stopWaiting = true
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrConnectionClosed, InternalPotentiallyExecuted: potentiallyExecuted()})
 	}
 }
 
@@ -395,7 +391,7 @@ func (c *Conn) InternalKeepOnCancel() {
 // InternalHostID returns the ID of the connection's host without taking the
 // host lock once it is known. A host ID is filled in at most once and never
 // changes afterwards, so the first non-empty value is cached.
-func (c *Conn) InternalHostID() cqltype.UUID {
+func (c *Conn) InternalHostID() cql.UUID {
 	if id := c.hostID.Load(); id != nil {
 		return *id
 	}

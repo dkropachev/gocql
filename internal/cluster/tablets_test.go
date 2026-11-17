@@ -29,11 +29,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestTablets(t *testing.T) {
@@ -45,10 +46,10 @@ func TestTablets(t *testing.T) {
 		SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 		defer MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.Close()
 		defer s.CloseV2Peripheral()
-		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata.KeyspaceMetadata{Name: "ks", Tables: map[string]*metadata.TableMetadata{"t": {Name: "t"}}})
+		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata2.Keyspace{Name: "ks", Tables: map[string]*metadata2.Table{"t": {Name: "t"}}})
 		p := s.Peripheral()
 		p.InternalFeedbackOnce.Do(func() {}) // Hold the consumer while filling the bounded queue.
-		sub, err := s.Subscribe(EventFilter{Kinds: []EventKind{OverflowEvent}, Capacity: 1})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Overflow}, Capacity: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,9 +72,9 @@ func TestTablets(t *testing.T) {
 		p.InternalMu.Unlock()
 		go sessionRunV2TabletFeedback(s, p)
 		select {
-		case event := <-sub.Events():
-			if event.Kind != OverflowEvent || event.Change != "TABLET_RESYNC" {
-				t.Fatal(event)
+		case ev := <-sub.Events():
+			if ev.Kind != event.Overflow || ev.Change != "TABLET_RESYNC" {
+				t.Fatal(ev)
 			}
 		case <-time.After(time.Second):
 			t.Fatal("feedback resync was not published")
@@ -163,7 +164,7 @@ func TestTablets(t *testing.T) {
 				t.Fatal("callback should not be called on closed session")
 				return true
 			})
-			if !errors.Is(err, runtimeerrors.ErrSessionClosed) {
+			if !errors.Is(err, cqlerr.ErrSessionClosed) {
 				t.Fatalf("expected ErrSessionClosed, got %v", err)
 			}
 		})
@@ -180,7 +181,7 @@ func TestTablets(t *testing.T) {
 				t.Fatal("callback should not be called when tablets not enabled")
 				return true
 			})
-			if !errors.Is(err, runtimeerrors.ErrTabletsNotUsed) {
+			if !errors.Is(err, cqlerr.ErrTabletsNotUsed) {
 				t.Fatalf("expected ErrTabletsNotUsed, got %v", err)
 			}
 		})
@@ -237,7 +238,7 @@ func TestTablets(t *testing.T) {
 			sessionMarkClosed(s)
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrSessionClosed) {
+			if !errors.Is(err, cqlerr.ErrSessionClosed) {
 				t.Fatalf("expected ErrSessionClosed, got %v", err)
 			}
 		})
@@ -251,7 +252,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrSessionNotReady) {
+			if !errors.Is(err, cqlerr.ErrSessionNotReady) {
 				t.Fatalf("expected ErrSessionNotReady, got %v", err)
 			}
 		})
@@ -265,7 +266,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).isInitialized = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "tb")
-			if !errors.Is(err, runtimeerrors.ErrTabletsNotUsed) {
+			if !errors.Is(err, cqlerr.ErrTabletsNotUsed) {
 				t.Fatalf("expected ErrTabletsNotUsed, got %v", err)
 			}
 		})
@@ -280,7 +281,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "", "tb")
-			if !errors.Is(err, runtimeerrors.ErrNoKeyspace) {
+			if !errors.Is(err, cqlerr.ErrNoKeyspace) {
 				t.Fatalf("expected ErrNoKeyspace, got %v", err)
 			}
 		})
@@ -295,7 +296,7 @@ func TestTablets(t *testing.T) {
 			SessionData(s).tabletsRoutingV1 = true
 
 			_, err := sessionTableTabletsMetadata(s, "ks", "")
-			if !errors.Is(err, runtimeerrors.ErrNoTable) {
+			if !errors.Is(err, cqlerr.ErrNoTable) {
 				t.Fatalf("expected ErrNoTable, got %v", err)
 			}
 		})

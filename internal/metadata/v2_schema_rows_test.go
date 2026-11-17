@@ -6,15 +6,15 @@ package metadata
 import (
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // TestV2SchemaRowsManageDestination checks that the schema row plan clears
 // its own destination, so the session skips its per-row clear.
 func TestV2SchemaRowsManageDestination(t *testing.T) {
 	type row struct{ Name string }
-	plan, err := codec.CompileRowPlan[row](InternalV2SchemaRows[row]{}, cqltype.NewColumns())
+	plan, err := codec.CompileRowPlan[row](InternalV2SchemaRows[row]{}, cql.NewColumns())
 	if err != nil {
 		t.Fatal(err)
 	}

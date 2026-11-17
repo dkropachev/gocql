@@ -5,17 +5,17 @@
 package cluster
 
 import (
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
 	"fmt"
 	"sync"
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type Metadata struct {
@@ -51,7 +51,7 @@ func (session *Core) NewMetadataDescriber() *InternalMetadataDescriber {
 	}
 }
 
-func (s *InternalMetadataDescriber) getKeyspaceInternal(keyspaceName string) (metadata *implMetadata.KeyspaceMetadata, wasReloaded bool, err error) {
+func (s *InternalMetadataDescriber) getKeyspaceInternal(keyspaceName string) (metadata *metadata.Keyspace, wasReloaded bool, err error) {
 	var found bool
 	metadata, found = s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName)
 	if !found {
@@ -63,20 +63,20 @@ func (s *InternalMetadataDescriber) getKeyspaceInternal(keyspaceName string) (me
 
 		metadata, found = s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName)
 		if !found {
-			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, runtimeerrors.ErrNotFound)
+			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, cqlerr.ErrNotFound)
 		}
 	}
 
 	return metadata, wasReloaded, nil
 }
 
-func (s *InternalMetadataDescriber) GetKeyspace(keyspaceName string) (*implMetadata.KeyspaceMetadata, error) {
+func (s *InternalMetadataDescriber) GetKeyspace(keyspaceName string) (*metadata.Keyspace, error) {
 	metadata, _, err := s.getKeyspaceInternal(keyspaceName)
 	return metadata, err
 }
 
 func tableNotFoundError(keyspaceName, tableName string) error {
-	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, runtimeerrors.ErrNotFound)
+	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, cqlerr.ErrNotFound)
 }
 
 // getTableFromSnapshot resolves a table lookup against a keyspace snapshot.
@@ -85,9 +85,9 @@ func tableNotFoundError(keyspaceName, tableName string) error {
 // for callers holding a stale snapshot.
 func (s *InternalMetadataDescriber) getTableFromSnapshot(
 	keyspaceName, tableName string,
-	keyspaceMetadata *implMetadata.KeyspaceMetadata,
+	keyspaceMetadata *metadata.Keyspace,
 	wasReloaded bool,
-) (tableMetadata *implMetadata.TableMetadata, refreshNeeded bool, err error) {
+) (tableMetadata *metadata.Table, refreshNeeded bool, err error) {
 	if tableMetadata, found := keyspaceMetadata.Tables[tableName]; found {
 		return tableMetadata, false, nil
 	}
@@ -110,7 +110,7 @@ func (s *InternalMetadataDescriber) getTableFromSnapshot(
 	return nil, true, nil
 }
 
-func (s *InternalMetadataDescriber) GetTable(keyspaceName, tableName string) (*implMetadata.TableMetadata, error) {
+func (s *InternalMetadataDescriber) GetTable(keyspaceName, tableName string) (*metadata.Table, error) {
 	keyspaceMetadata, wasReloaded, err := s.getKeyspaceInternal(keyspaceName)
 	if err != nil {
 		return nil, err
@@ -269,7 +269,7 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 	}
 
 	ks, _ := s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName)
-	var types []implMetadata.TypeMetadata
+	var types []metadata.Type
 	if ks != nil {
 		for _, typ := range ks.Types {
 			if typ != nil {
@@ -277,7 +277,7 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 			}
 		}
 	}
-	if err := implMetadata.InternalValidateV2SchemaParts(&implMetadata.KeyspaceMetadata{Name: keyspaceName}, tables, columns, types, nil, nil, indexes, views, s.InternalSession.v2MetadataDepthLimit()); err != nil {
+	if err := implMetadata.InternalValidateV2SchemaParts(&metadata.Keyspace{Name: keyspaceName}, tables, columns, types, nil, nil, indexes, views, s.InternalSession.v2MetadataDepthLimit()); err != nil {
 		return err
 	}
 	// Atomically clone-and-swap the keyspace metadata to avoid data races
@@ -286,9 +286,9 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 	if p.schemaEpoch[keyspaceName] != epoch || p.schemaRevision[keyspaceName] != revision || p.tableRevision[tableKey] != tableRevision || p.schemaDropped[keyspaceName] {
 		p.InternalMu.Unlock()
 		s.InternalSession.scheduleV2SchemaRetry()
-		return &implMetadata.PartialRefreshError{Generation: s.InternalSession.Metadata().Generation(), Keyspaces: map[string]error{keyspaceName: fmt.Errorf("schema changed during table refresh")}}
+		return &cqlerr.PartialRefreshError{Generation: s.InternalSession.Metadata().Generation(), Keyspaces: map[string]error{keyspaceName: fmt.Errorf("schema changed during table refresh")}}
 	}
-	applied := s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(keyspaceName, func(ks *implMetadata.KeyspaceMetadata) {
+	applied := s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(keyspaceName, func(ks *metadata.Keyspace) {
 		if len(tables) == 0 {
 			implMetadata.InternalKeyspaceMetadataRemoveTable(ks, tableName)
 		} else {
@@ -312,18 +312,18 @@ func (s *InternalMetadataDescriber) InternalRefreshTableSchema(keyspaceName, tab
 	return nil
 }
 
-func getKeyspaceMetadata(s *Core, keyspace string) (*implMetadata.KeyspaceMetadata, error) {
+func getKeyspaceMetadata(s *Core, keyspace string) (*metadata.Keyspace, error) {
 	return implMetadata.InternalGetV2KeyspaceMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace)
 }
-func getTableMetadataByName(s *Core, keyspace, table string) ([]implMetadata.TableMetadata, error) {
+func getTableMetadataByName(s *Core, keyspace, table string) ([]metadata.Table, error) {
 	return implMetadata.InternalGetV2TableMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }
-func getColumnMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.ColumnMetadata, error) {
+func getColumnMetadataByTable(s *Core, keyspace, table string) ([]metadata.Column, error) {
 	return implMetadata.InternalGetV2ColumnMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }
-func getIndexMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.IndexMetadata, error) {
+func getIndexMetadataByTable(s *Core, keyspace, table string) ([]metadata.Index, error) {
 	return implMetadata.InternalGetV2IndexMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }
-func getViewMetadataByTable(s *Core, keyspace, table string) ([]implMetadata.ViewMetadata, error) {
+func getViewMetadataByTable(s *Core, keyspace, table string) ([]metadata.View, error) {
 	return implMetadata.InternalGetV2ViewMetadata(implMetadata.InternalV2SchemaContext(s.NewSchemaSource()), s.NewSchemaSource(), keyspace, table)
 }

@@ -28,7 +28,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
@@ -97,7 +97,7 @@ func TestNodeEvents(t *testing.T) {
 
 			f := newNodeEventFixture(t)
 			host := f.addHost(t, "127.0.10.1")
-			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
 			f.session.HandleNodeDown(net.ParseIP("127.0.10.1"), 9042)
 
 			if state := host.State(); state != endpoint.NodeDown {
@@ -116,7 +116,7 @@ func TestNodeEvents(t *testing.T) {
 				cfg.HostFilter = HostFilterFunc(func(*endpoint.HostInfo) bool { return false })
 			})
 			host := f.addHost(t, "127.0.10.1")
-			SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
 			f.session.HandleNodeDown(net.ParseIP("127.0.10.1"), 9042)
 
 			// setState happens before the filter check, so it still lands.
@@ -425,7 +425,7 @@ func TestNodeEvents(t *testing.T) {
 		// newHostConnPool is a pure constructor, so neither pool dials.
 		hostPool, hostPicker := newSignallingHostPool(f.session, host)
 		otherPool, otherPicker := newSignallingHostPool(f.session, other)
-		SessionData(f.session).InternalPool.InternalHostConnPools = map[cqltype.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): hostPool, implEndpoint.InternalHostInfoHostUUID(other): otherPool}
+		SessionData(f.session).InternalPool.InternalHostConnPools = map[cql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): hostPool, implEndpoint.InternalHostInfoHostUUID(other): otherPool}
 
 		if _, ok := SessionData(f.session).InternalHostSource.getHostByIP("127.0.20.1"); !ok {
 			t.Fatal("precondition: host is not in the host source")

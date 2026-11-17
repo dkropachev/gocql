@@ -31,10 +31,9 @@ import (
 	"strconv"
 	"strings"
 	"sync/atomic"
-
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type InternalNodeState int32
@@ -176,10 +175,10 @@ type HostInfoBuilder struct {
 }
 
 func (b HostInfoBuilder) Build() HostInfo {
-	var hostUUID cqltype.UUID
+	var hostUUID cql.UUID
 	if b.HostId != "" {
 		var err error
-		hostUUID, err = cqltype.ParseUUID(b.HostId)
+		hostUUID, err = cql.ParseUUID(b.HostId)
 		if err != nil {
 			// Fall back: treat as opaque identifier (for tests with non-UUID strings).
 			copy(hostUUID[:], b.HostId)
@@ -362,7 +361,7 @@ func (h *HostInfo) HostID() string {
 //
 // A host ID is filled in at most once, so the first non-empty value is cached
 // for lock-free reads.
-func InternalHostInfoHostUUID(h *HostInfo) cqltype.UUID {
+func InternalHostInfoHostUUID(h *HostInfo) cql.UUID {
 	if id := h.privateStorage.hostID.Load(); id != nil {
 		return *id
 	}

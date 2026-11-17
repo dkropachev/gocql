@@ -31,11 +31,12 @@ import (
 	"net"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
 func checkSystemSchema(control InternalControlConnection) (bool, error) {
@@ -56,12 +57,12 @@ func checkSystemSchema(control InternalControlConnection) (bool, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	page, err := backend.InternalQueryV2System(ctx, &model.AttemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: cqltype.One, PageSize: 1, Timeout: timeout})
+	page, err := backend.InternalQueryV2System(ctx, &model.AttemptRequest{Statement: "SELECT * FROM system_schema.keyspaces", Consistency: cql.One, PageSize: 1, Timeout: timeout})
 	if page != nil && page.Owner != nil {
 		defer page.Owner.Release()
 	}
 	if err != nil {
-		if server, ok := errors.AsType[protocol.ServerError](err); ok && server.Code() == protocol.CodeSyntax {
+		if server, ok := errors.AsType[cqlerr.ServerError](err); ok && server.Code() == cqlerr.CodeSyntax {
 			return false, nil
 		}
 		return false, err
@@ -97,7 +98,7 @@ func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInf
 				return nil, fmt.Errorf(assertErrorMsg, "rack")
 			}
 		case "host_id":
-			hostId, ok := value.(cqltype.UUID)
+			hostId, ok := value.(cql.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "host_id")
 			}
@@ -166,7 +167,7 @@ func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInf
 				return nil, fmt.Errorf(assertErrorMsg, "tokens")
 			}
 		case "schema_version":
-			schemaVersion, ok := value.(cqltype.UUID)
+			schemaVersion, ok := value.(cql.UUID)
 			if !ok {
 				return nil, fmt.Errorf(assertErrorMsg, "schema_version")
 			}
@@ -216,7 +217,7 @@ func (s *Core) refreshRing() error {
 		hosts, partitioner, err = r.GetHostsFromSystem()
 	}
 	if err != nil {
-		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: err}
+		return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: err}
 	}
 	enabled := make(map[string]bool, len(hosts))
 	for _, h := range hosts {
@@ -225,7 +226,7 @@ func (s *Core) refreshRing() error {
 	r.mu.Lock()
 	if r.eventEpoch != epoch || r.refreshSequence != sequence {
 		r.mu.Unlock()
-		return &metadata.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cqltype.TypeValidation("topology generation", "topology changed during refresh")}
+		return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: cqltype.TypeValidation("topology generation", "topology changed during refresh")}
 	}
 	before := r.InternalHosts
 	next := make(map[string]*implEndpoint.HostInfo, len(hosts))

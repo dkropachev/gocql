@@ -7,10 +7,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
 )
 
 func TestOneOwnsBorrowedResult(t *testing.T) {
@@ -18,11 +16,11 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			s := loopbackTestSession(t, "pone")
 			session := InternalWrapSession(s)
-			statement := binding.Statement[int32, cqltype.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: codec.OneParam(codec.Int32), Rows: codec.OneColumn(codec.BlobCodec), BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "k", Type: cqltype.IntType})}
+			statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BlobCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
 			p := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 			q := codecTestMust(p.Query(Options{}))
 			defer q.Close()
-			read := func(dst *cqltype.Bytes) (bool, model.Result, error) {
+			read := func(dst *cql.Bytes) (bool, cql.Result, error) {
 				switch mode {
 				case "prepared":
 					return p.One(context.Background(), int32(1), dst, CompiledOptions{})
@@ -32,7 +30,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 					return session.UnpreparedOne(context.Background(), statement, int32(1), dst)
 				}
 			}
-			var first, second cqltype.Bytes
+			var first, second cql.Bytes
 			if found, _, err := read(&first); err != nil || !found {
 				t.Fatal(found, err)
 			}
@@ -52,7 +50,7 @@ func TestOnePreservesOwnedBuffer(t *testing.T) {
 	backing := &dst[:cap(dst)][0]
 	for range 2 {
 		served := serve(runtimeRowsBody(nil, "owned"))
-		if found, _, err := q.One(context.Background(), codec.EmptyRecord{}, &dst); err != nil || !found {
+		if found, _, err := q.One(context.Background(), cql.EmptyRow{}, &dst); err != nil || !found {
 			t.Fatal(found, err)
 		}
 		<-served

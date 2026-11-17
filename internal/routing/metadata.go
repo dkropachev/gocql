@@ -5,23 +5,21 @@ package routing
 
 import (
 	"fmt"
-
-	codec "github.com/scylladb/gocql/v2/internal/codec"
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	model "github.com/scylladb/gocql/v2/internal/model"
-
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	model "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-type TokenRange struct {
-	Replicas   []Target
-	Start, End int64
-}
 type MetadataSnapshot struct {
-	state SnapshotState
+	// public is the handle package metadata exposes for the snapshot.
+	public *metadata.Snapshot
+	state  SnapshotState
 	// id is unique among the snapshots of the process, so a cache can key
 	// what it found in a snapshot by id without keeping the snapshot alive.
 	id uint64
@@ -48,7 +46,7 @@ func (m *MetadataSnapshot) Hosts() []HostSnapshot {
 	}
 	return out
 }
-func (m *MetadataSnapshot) Keyspace(name string) (*implMetadata.KeyspaceMetadata, bool) {
+func (m *MetadataSnapshot) Keyspace(name string) (*metadata.Keyspace, bool) {
 	if m == nil {
 		return nil, false
 	}
@@ -72,16 +70,16 @@ func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Targ
 // statement's routing key is, and hashed with the table's partitioner. It
 // needs loaded schema metadata; a key of the wrong arity or type, or a null
 // component, is a validation error.
-func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (int64, error) {
+func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
 	if m == nil {
-		return 0, runtimeerrors.ErrNoKeyspace
+		return 0, cqlerr.ErrNoKeyspace
 	}
 	data := SnapshotData(m)
 	ks := data.InternalKeyspaces[keyspace]
 	if ks == nil {
-		return 0, fmt.Errorf("%s: %w", keyspace, runtimeerrors.ErrNoKeyspace)
+		return 0, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
 	}
-	var columns []*implMetadata.ColumnMetadata
+	var columns []*metadata.Column
 	partitioner := data.InternalPartitioner
 	if t := ks.Tables[table]; t != nil {
 		columns = t.PartitionKey
@@ -94,7 +92,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 			partitioner = v.Options.Partitioner
 		}
 	} else {
-		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
+		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
 	}
 	if len(columns) == 0 {
 		return 0, cqltype.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
@@ -113,10 +111,10 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}
-		if key[i].State() != cqltype.Present {
+		if key[i].State() != cql.Present {
 			return 0, cqltype.TypeValidation("partition key", "column %q must have a value", column.Name)
 		}
-		encoded, err := codec.EncodeValueBorrowed(typ, codec.DynamicCodec, key[i])
+		encoded, err := cql.EncodeValueBorrowed(typ, cql.DynamicCodec, key[i])
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}
@@ -132,12 +130,12 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...codec.Value) (in
 	}
 	return token.Value, nil
 }
-func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, error) {
+func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]metadata.TokenRange, error) {
 	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
 		if _, _, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err != nil {
 			return nil, err
 		}
-		var out []TokenRange
+		var out []metadata.TokenRange
 		for _, r := range root.All() {
 			v := r.InternalSpan
 			v.Replicas = append([]Target(nil), v.Replicas...)
@@ -149,24 +147,24 @@ func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]TokenRange, er
 	if e != nil {
 		return nil, e
 	}
-	out := append([]TokenRange(nil), r...)
+	out := append([]metadata.TokenRange(nil), r...)
 	for i := range out {
 		out[i].Replicas = append([]Target(nil), out[i].Replicas...)
 	}
 	return out, nil
 }
-func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]TokenRange, bool, error) {
+func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
 	if m == nil {
-		return nil, false, runtimeerrors.ErrNoKeyspace
+		return nil, false, cqlerr.ErrNoKeyspace
 	}
 	ks, ok := SnapshotData(m).InternalKeyspaces[keyspace]
 	if !ok {
-		return nil, false, fmt.Errorf("%s: %w", keyspace, runtimeerrors.ErrNoKeyspace)
+		return nil, false, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
 	}
 	if table != "" {
 		if _, ok := ks.Tables[table]; !ok {
 			if _, ok := ks.Views[table]; !ok {
-				return nil, false, fmt.Errorf("%s.%s: %w", keyspace, table, runtimeerrors.ErrNoTable)
+				return nil, false, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
 			}
 		}
 		if r, ok := SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}]; ok {
@@ -188,13 +186,13 @@ type SnapshotState struct {
 	InternalHostIndex       *InternalRoutingHostIndex
 	InternalPlacements      *tabletPlacementTree
 	InternalPlacementSignal *atomic.Uint64
-	InternalKeyspaces       map[string]*implMetadata.KeyspaceMetadata
-	InternalSchemaSources   map[string]*implMetadata.KeyspaceMetadata
-	InternalRanges          map[string][]TokenRange
-	InternalTablets         map[InternalMetadataTable][]TokenRange
+	InternalKeyspaces       map[string]*metadata.Keyspace
+	InternalSchemaSources   map[string]*metadata.Keyspace
+	InternalRanges          map[string][]metadata.TokenRange
+	InternalTablets         map[InternalMetadataTable][]metadata.TokenRange
 	// InternalPartitioners is the session's partitioner registry, by name,
 	// for Token. It is shared and never mutated.
-	InternalPartitioners   map[string]TokenPartitioner
+	InternalPartitioners   map[string]routing.TokenPartitioner
 	InternalPartitioner    string
 	InternalHosts          []HostSnapshot
 	InternalDiagnostics    []error
@@ -202,4 +200,4 @@ type SnapshotState struct {
 	InternalGeneration     uint64
 }
 
-type HostSnapshot = model.HostSnapshot
+type HostSnapshot = metadata.HostSnapshot

@@ -5,333 +5,29 @@
 package metadata
 
 import (
-	"bytes"
 	"fmt"
 	"maps"
-	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
+
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
-// schema metadata for a keyspace
-type KeyspaceMetadata struct {
-	StrategyOptions map[string]string
-	Tables          map[string]*TableMetadata
-	Functions       map[string]*FunctionMetadata
-	Aggregates      map[string]*AggregateMetadata
-	Types           map[string]*TypeMetadata
-	Indexes         map[string]*IndexMetadata
-	Views           map[string]*ViewMetadata
-	state           KeyspaceState
-	ConsistencyMode string
-	Name            string
-	StrategyClass   string
-	CreateStmts     string
-	TabletBased     bool
-	DurableWrites   bool
-}
-
-// Clone returns a shallow copy of the keyspace metadata with
-// cloned Tables, Indexes, Views, and tablesInvalidated maps so that mutations
-// do not race with concurrent readers of the original.
-func (ks *KeyspaceMetadata) Clone() *KeyspaceMetadata {
-	cloned := &KeyspaceMetadata{
-		TabletBased: ks.TabletBased, ConsistencyMode: ks.ConsistencyMode,
-		Name:            ks.Name,
-		DurableWrites:   ks.DurableWrites,
-		StrategyClass:   ks.StrategyClass,
-		StrategyOptions: maps.Clone(ks.StrategyOptions),
-		Tables:          maps.Clone(ks.Tables),
-		Functions:       maps.Clone(ks.Functions),
-		Aggregates:      maps.Clone(ks.Aggregates),
-		Types:           maps.Clone(ks.Types),
-		Indexes:         maps.Clone(ks.Indexes),
-		Views:           maps.Clone(ks.Views),
-		CreateStmts:     ks.CreateStmts,
-	}
-	if KeyspaceData(ks).InternalTablesInvalidated != nil {
-		KeyspaceData(cloned).InternalTablesInvalidated = maps.Clone(KeyspaceData(ks).InternalTablesInvalidated)
-	}
-	return cloned
-}
-
-func (ks *KeyspaceMetadata) removeTableData(tableName string) {
-	if ks.Tables != nil {
-		delete(ks.Tables, tableName)
-	}
-	for name, idx := range ks.Indexes {
-		if idx != nil && idx.TableName == tableName {
-			delete(ks.Indexes, name)
-		}
-	}
-	for name, view := range ks.Views {
-		if view != nil && view.BaseTableName == tableName {
-			delete(ks.Views, name)
-		}
-	}
-}
-
-func (ks *KeyspaceMetadata) invalidateTable(tableName string) {
-	ks.removeTableData(tableName)
-	if KeyspaceData(ks).InternalTablesInvalidated == nil {
-		KeyspaceData(ks).InternalTablesInvalidated = make(map[string]struct{})
-	}
-	KeyspaceData(ks).InternalTablesInvalidated[tableName] = struct{}{}
-}
-
-func InternalKeyspaceMetadataRemoveTable(ks *KeyspaceMetadata, tableName string) {
-	ks.removeTableData(tableName)
+func InternalKeyspaceMetadataRemoveTable(ks *metadata2.Keyspace, tableName string) {
+	removeTableData(ks, tableName)
 	if KeyspaceData(ks).InternalTablesInvalidated != nil {
 		delete(KeyspaceData(ks).InternalTablesInvalidated, tableName)
 	}
 }
 
-// schema metadata for a table (a.k.a. column family)
-type TableMetadata struct {
-	ID                string
-	Columns           map[string]*ColumnMetadata
-	Extensions        map[string][]byte
-	Keyspace          string
-	Name              string
-	PartitionKey      []*ColumnMetadata
-	ClusteringColumns []*ColumnMetadata
-	OrderedColumns    []string
-	Flags             []string
-	Options           TableMetadataOptions
-}
-
-type TableMetadataOptions struct {
-	Caching                 map[string]string
-	Compaction              map[string]string
-	Compression             map[string]string
-	CDC                     map[string]string
-	SpeculativeRetry        string
-	Comment                 string
-	Version                 string
-	Partitioner             string
-	GcGraceSeconds          int
-	MaxIndexInterval        int
-	MemtableFlushPeriodInMs int
-	MinIndexInterval        int
-	ReadRepairChance        float64
-	BloomFilterFpChance     float64
-	DefaultTimeToLive       int
-	DcLocalReadRepairChance float64
-	CrcCheckChance          float64
-	InMemory                bool
-}
-
-func (t *TableMetadataOptions) Equals(other *TableMetadataOptions) bool {
-	if t == nil || other == nil {
-		return t == other // Both must be nil to be equal
-	}
-
-	if t.BloomFilterFpChance != other.BloomFilterFpChance ||
-		t.Comment != other.Comment ||
-		t.CrcCheckChance != other.CrcCheckChance ||
-		t.DcLocalReadRepairChance != other.DcLocalReadRepairChance ||
-		t.DefaultTimeToLive != other.DefaultTimeToLive ||
-		t.GcGraceSeconds != other.GcGraceSeconds ||
-		t.MaxIndexInterval != other.MaxIndexInterval ||
-		t.MemtableFlushPeriodInMs != other.MemtableFlushPeriodInMs ||
-		t.MinIndexInterval != other.MinIndexInterval ||
-		t.ReadRepairChance != other.ReadRepairChance ||
-		t.SpeculativeRetry != other.SpeculativeRetry ||
-		t.InMemory != other.InMemory ||
-		t.Partitioner != other.Partitioner ||
-		t.Version != other.Version {
-		return false
-	}
-
-	if !compareStringMaps(t.Caching, other.Caching) ||
-		!compareStringMaps(t.Compaction, other.Compaction) ||
-		!compareStringMaps(t.Compression, other.Compression) ||
-		!compareStringMaps(t.CDC, other.CDC) {
-		return false
-	}
-
-	return true
-}
-
-type ViewMetadata struct {
-	Columns                 map[string]*ColumnMetadata
-	Extensions              map[string][]byte
-	WhereClause             string
-	BaseTableName           string
-	ID                      string
-	KeyspaceName            string
-	BaseTableID             string
-	ViewName                string
-	OrderedColumns          []string
-	PartitionKey            []*ColumnMetadata
-	ClusteringColumns       []*ColumnMetadata
-	Options                 TableMetadataOptions
-	DcLocalReadRepairChance float64 // After Scylla 4.2 by default read_repair turned off
-	ReadRepairChance        float64 // After Scylla 4.2 by default read_repair turned off
-	IncludeAllColumns       bool
-}
-
-type ColumnMetadata struct {
-	Index           ColumnIndexMetadata
-	Keyspace        string
-	Table           string
-	Name            string
-	Type            string
-	ClusteringOrder string
-	ComponentIndex  int
-	Kind            ColumnKind
-	Order           ColumnOrder
-}
-
-func (c *ColumnMetadata) Equals(other *ColumnMetadata) bool {
-	if c == nil || other == nil {
-		return c == other
-	}
-
-	return c.Keyspace == other.Keyspace &&
-		c.Table == other.Table &&
-		c.Name == other.Name &&
-		c.ComponentIndex == other.ComponentIndex &&
-		c.Kind == other.Kind &&
-		c.Type == other.Type &&
-		c.ClusteringOrder == other.ClusteringOrder &&
-		c.Order == other.Order &&
-		c.Index.Equals(&other.Index)
-}
-
-// FunctionMetadata holds metadata for function constructs
-type FunctionMetadata struct {
-	Keyspace          string
-	Name              string
-	Body              string
-	Language          string
-	ReturnType        string
-	ArgumentTypes     []string
-	ArgumentNames     []string
-	CalledOnNullInput bool
-}
-
-// AggregateMetadata holds metadata for aggregate constructs
-type AggregateMetadata struct {
-	privateStorage AggregateMetadataStorage
-	Keyspace       string
-	Name           string
-	InitCond       string
-	ReturnType     string
-	StateType      string
-	ArgumentTypes  []string
-	FinalFunc      FunctionMetadata
-	StateFunc      FunctionMetadata
-}
-
-// TypeMetadata holds the metadata for views.
-type TypeMetadata struct {
-	Keyspace   string
-	Name       string
-	FieldNames []string
-	FieldTypes []string
-}
-
-type IndexMetadata struct {
-	Name              string
-	KeyspaceName      string
-	TableName         string // Name of corresponding view.
-	Kind              IndexKind
-	Options           map[string]string
-	Columns           map[string]*ColumnMetadata
-	OrderedColumns    []string
-	PartitionKey      []*ColumnMetadata
-	ClusteringColumns []*ColumnMetadata
-}
-
-func (t *TableMetadata) Equals(other *TableMetadata) bool {
-	if t == nil || other == nil {
-		return t == other
-	}
-
-	if t.ID != other.ID || t.Keyspace != other.Keyspace || t.Name != other.Name {
-		return false
-	}
-
-	if len(t.PartitionKey) != len(other.PartitionKey) || !compareColumnSlices(t.PartitionKey, other.PartitionKey) {
-		return false
-	}
-
-	if len(t.ClusteringColumns) != len(other.ClusteringColumns) || !compareColumnSlices(t.ClusteringColumns, other.ClusteringColumns) {
-		return false
-	}
-
-	if len(t.Columns) != len(other.Columns) || !compareColumnsMap(t.Columns, other.Columns) {
-		return false
-	}
-
-	if len(t.OrderedColumns) != len(other.OrderedColumns) || !compareStringSlices(t.OrderedColumns, other.OrderedColumns) {
-		return false
-	}
-
-	if !t.Options.Equals(&other.Options) {
-		return false
-	}
-
-	if len(t.Flags) != len(other.Flags) || !compareStringSlices(t.Flags, other.Flags) {
-		return false
-	}
-
-	if !maps.EqualFunc(t.Extensions, other.Extensions, bytes.Equal) {
-		return false
-	}
-
-	return true
-}
-
-func compareColumnSlices(a, b []*ColumnMetadata) bool {
-	for i := range a {
-		if !a[i].Equals(b[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-func compareColumnsMap(a, b map[string]*ColumnMetadata) bool {
-	for k, v := range a {
-		otherValue, exists := b[k]
-		if !exists || !v.Equals(otherValue) {
-			return false
-		}
-	}
-	return true
-}
-
-func compareStringSlices(a, b []string) bool {
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
-func compareStringMaps(a, b map[string]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for k, v := range a {
-		if otherValue, exists := b[k]; !exists || v != otherValue {
-			return false
-		}
-	}
-	return true
-}
-
 // cowTabletList implements a copy on write keyspace metadata map, its equivalent type is map[string]*KeyspaceMetadata
 type InternalCowKeyspaceMetadataMap struct {
-	InternalKeyspaceMap atomic.Pointer[map[string]*KeyspaceMetadata]
+	InternalKeyspaceMap atomic.Pointer[map[string]*metadata2.Keyspace]
 	mu                  sync.Mutex
 }
 
-func (c *InternalCowKeyspaceMetadataMap) InternalGet() map[string]*KeyspaceMetadata {
+func (c *InternalCowKeyspaceMetadataMap) InternalGet() map[string]*metadata2.Keyspace {
 	l := c.InternalKeyspaceMap.Load()
 	if l == nil {
 		return nil
@@ -339,7 +35,7 @@ func (c *InternalCowKeyspaceMetadataMap) InternalGet() map[string]*KeyspaceMetad
 	return *l
 }
 
-func (c *InternalCowKeyspaceMetadataMap) InternalGetKeyspace(keyspaceName string) (*KeyspaceMetadata, bool) {
+func (c *InternalCowKeyspaceMetadataMap) InternalGetKeyspace(keyspaceName string) (*metadata2.Keyspace, bool) {
 	m := c.InternalKeyspaceMap.Load()
 	if m == nil {
 		return nil, false
@@ -348,13 +44,13 @@ func (c *InternalCowKeyspaceMetadataMap) InternalGetKeyspace(keyspaceName string
 	return val, ok
 }
 
-func (c *InternalCowKeyspaceMetadataMap) InternalSet(keyspaceName string, keyspaceMetadata *KeyspaceMetadata) bool {
+func (c *InternalCowKeyspaceMetadataMap) InternalSet(keyspaceName string, keyspaceMetadata *metadata2.Keyspace) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	m := c.InternalGet()
 
-	newM := map[string]*KeyspaceMetadata{}
+	newM := map[string]*metadata2.Keyspace{}
 	for name, metadata := range m {
 		newM[name] = metadata
 	}
@@ -365,8 +61,8 @@ func (c *InternalCowKeyspaceMetadataMap) InternalSet(keyspaceName string, keyspa
 }
 
 func (c *InternalCowKeyspaceMetadataMap) InternalInvalidateTable(keyspaceName, tableName string) {
-	c.InternalUpdateKeyspace(keyspaceName, func(ks *KeyspaceMetadata) {
-		ks.invalidateTable(tableName)
+	c.InternalUpdateKeyspace(keyspaceName, func(ks *metadata2.Keyspace) {
+		invalidateTable(ks, tableName)
 	})
 }
 
@@ -385,7 +81,7 @@ func (c *InternalCowKeyspaceMetadataMap) InternalRemoveKeyspace(keyspaceName str
 // the clone, and publishes the result. This prevents data races between
 // concurrent readers and writers of the same KeyspaceMetadata.
 // Returns false if the keyspace was not found (no update applied).
-func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName string, fn func(ks *KeyspaceMetadata)) bool {
+func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName string, fn func(ks *metadata2.Keyspace)) bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -404,120 +100,40 @@ func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName str
 	return true
 }
 
-// IndexKind is the kind of a secondary index, as system_schema.indexes
-// stores it.
-type IndexKind string
-
-const (
-	IndexKindKeys       IndexKind = "KEYS"
-	IndexKindComposites IndexKind = "COMPOSITES"
-	IndexKindCustom     IndexKind = "CUSTOM"
-)
-
-// ColumnOrder is the ordering of a clustering column with regard to its
-// comparator.
-type ColumnOrder bool
-
-const (
-	ASC  ColumnOrder = false
-	DESC ColumnOrder = true
-)
-
-type ColumnIndexMetadata struct {
-	Options map[string]any
-	Name    string
-	Type    string
-}
-
-func (c *ColumnIndexMetadata) Equals(other *ColumnIndexMetadata) bool {
-	if c == nil || other == nil {
-		return c == other
-	}
-
-	if c.Name != other.Name || c.Type != other.Type {
-		return false
-	}
-
-	// Compare the Options map
-	if len(c.Options) != len(other.Options) {
-		return false
-	}
-	for k, v := range c.Options {
-		otherValue, exists := other.Options[k]
-		if !exists || !reflect.DeepEqual(v, otherValue) {
-			return false
-		}
-	}
-
-	return true
-}
-
-type ColumnKind int
-
-const (
-	ColumnKindUnknown ColumnKind = iota
-	ColumnPartitionKey
-	ColumnClusteringKey
-	ColumnRegular
-	ColumnCompact
-	ColumnStatic
-)
-
-func (c ColumnKind) String() string {
-	switch c {
-	case ColumnPartitionKey:
-		return "partition_key"
-	case ColumnClusteringKey:
-		return "clustering_key"
-	case ColumnRegular:
-		return "regular"
-	case ColumnCompact:
-		return "compact"
-	case ColumnStatic:
-		return "static"
-	default:
-		return fmt.Sprintf("unknown_column_%d", c)
-	}
-}
-
-func columnKindFromSchema(kind string) (ColumnKind, error) {
+func columnKindFromSchema(kind string) (metadata2.ColumnKind, error) {
 	switch kind {
 	case "partition_key":
-		return ColumnPartitionKey, nil
+		return metadata2.ColumnPartitionKey, nil
 	case "clustering_key", "clustering":
-		return ColumnClusteringKey, nil
+		return metadata2.ColumnClusteringKey, nil
 	case "regular":
-		return ColumnRegular, nil
+		return metadata2.ColumnRegular, nil
 	case "compact_value":
-		return ColumnCompact, nil
+		return metadata2.ColumnCompact, nil
 	case "static":
-		return ColumnStatic, nil
+		return metadata2.ColumnStatic, nil
 	default:
 		return -1, fmt.Errorf("unknown column kind: %q", kind)
 	}
 }
 
-type KeyspaceState struct {
-	InternalTablesInvalidated map[string]struct{}
-}
-
 func compileMetadata(
-	keyspace *KeyspaceMetadata,
-	tables []TableMetadata,
-	columns []ColumnMetadata,
-	functions []FunctionMetadata,
-	aggregates []AggregateMetadata,
-	types []TypeMetadata,
-	indexes []IndexMetadata,
-	views []ViewMetadata,
+	keyspace *metadata2.Keyspace,
+	tables []metadata2.Table,
+	columns []metadata2.Column,
+	functions []metadata2.Function,
+	aggregates []metadata2.Aggregate,
+	types []metadata2.Type,
+	indexes []metadata2.Index,
+	views []metadata2.View,
 	createStmts []byte,
 ) {
-	keyspace.Tables = make(map[string]*TableMetadata)
+	keyspace.Tables = make(map[string]*metadata2.Table)
 	for i := range tables {
-		tables[i].Columns = make(map[string]*ColumnMetadata)
+		tables[i].Columns = make(map[string]*metadata2.Column)
 		keyspace.Tables[tables[i].Name] = &tables[i]
 	}
-	keyspace.Functions = make(map[string]*FunctionMetadata, len(functions))
+	keyspace.Functions = make(map[string]*metadata2.Function, len(functions))
 	functionNames := make(map[string]int, len(functions))
 	for _, function := range functions {
 		functionNames[function.Name]++
@@ -529,20 +145,20 @@ func compileMetadata(
 		}
 		keyspace.Functions[key] = &functions[i]
 	}
-	keyspace.Aggregates = make(map[string]*AggregateMetadata, len(aggregates))
+	keyspace.Aggregates = make(map[string]*metadata2.Aggregate, len(aggregates))
 	aggregateNames := make(map[string]int, len(aggregates))
 	for _, aggregate := range aggregates {
 		aggregateNames[aggregate.Name]++
 	}
 	for _, aggregate := range aggregates {
-		if f := resolveV2Function(functions, aggregate.privateStorage.InternalFinalFunc, []string{aggregate.StateType}); f != nil {
+		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalFinalFunc, []string{aggregate.StateType}); f != nil {
 			aggregate.FinalFunc = *f
-		} else if f := keyspace.Functions[aggregate.privateStorage.InternalFinalFunc]; f != nil {
+		} else if f := keyspace.Functions[AggregateMetadataData(&aggregate).InternalFinalFunc]; f != nil {
 			aggregate.FinalFunc = *f
 		}
-		if f := resolveV2Function(functions, aggregate.privateStorage.InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
+		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
 			aggregate.StateFunc = *f
-		} else if f := keyspace.Functions[aggregate.privateStorage.InternalStateFunc]; f != nil {
+		} else if f := keyspace.Functions[AggregateMetadataData(&aggregate).InternalStateFunc]; f != nil {
 			aggregate.StateFunc = *f
 		}
 		key := aggregate.Name
@@ -551,32 +167,32 @@ func compileMetadata(
 		}
 		keyspace.Aggregates[key] = &aggregate
 	}
-	keyspace.Types = make(map[string]*TypeMetadata, len(types))
+	keyspace.Types = make(map[string]*metadata2.Type, len(types))
 	for i := range types {
 		keyspace.Types[types[i].Name] = &types[i]
 	}
-	keyspace.Indexes = make(map[string]*IndexMetadata, len(indexes))
+	keyspace.Indexes = make(map[string]*metadata2.Index, len(indexes))
 	for i := range indexes {
-		indexes[i].Columns = make(map[string]*ColumnMetadata)
+		indexes[i].Columns = make(map[string]*metadata2.Column)
 		keyspace.Indexes[indexes[i].Name] = &indexes[i]
 
 	}
-	keyspace.Views = make(map[string]*ViewMetadata, len(views))
+	keyspace.Views = make(map[string]*metadata2.View, len(views))
 	for i := range views {
 		v := &views[i]
 		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.ViewName, "_index")]; ok {
 			continue
 		}
 
-		v.Columns = make(map[string]*ColumnMetadata)
+		v.Columns = make(map[string]*metadata2.Column)
 		keyspace.Views[v.ViewName] = v
 	}
 
 	for i := range columns {
 		col := &columns[i]
-		col.Order = ASC
+		col.Order = metadata2.ASC
 		if col.ClusteringOrder == "desc" {
-			col.Order = DESC
+			col.Order = metadata2.DESC
 		}
 
 		table, ok := keyspace.Tables[col.Table]
@@ -623,22 +239,22 @@ func compileMetadata(
 }
 
 func InternalCompileTableMetadata(
-	keyspace *KeyspaceMetadata,
-	tables []TableMetadata,
-	columns []ColumnMetadata,
-	indexes []IndexMetadata,
-	views []ViewMetadata,
+	keyspace *metadata2.Keyspace,
+	tables []metadata2.Table,
+	columns []metadata2.Column,
+	indexes []metadata2.Index,
+	views []metadata2.View,
 ) {
 	if keyspace.Tables == nil {
-		keyspace.Tables = make(map[string]*TableMetadata)
+		keyspace.Tables = make(map[string]*metadata2.Table)
 	}
 	for i := range tables {
-		tables[i].Columns = make(map[string]*ColumnMetadata)
+		tables[i].Columns = make(map[string]*metadata2.Column)
 		keyspace.Tables[tables[i].Name] = &tables[i]
 	}
 
 	if keyspace.Indexes == nil {
-		keyspace.Indexes = make(map[string]*IndexMetadata)
+		keyspace.Indexes = make(map[string]*metadata2.Index)
 	}
 	for name, ix := range keyspace.Indexes {
 		for i := range tables {
@@ -648,12 +264,12 @@ func InternalCompileTableMetadata(
 		}
 	}
 	for i := range indexes {
-		indexes[i].Columns = make(map[string]*ColumnMetadata)
+		indexes[i].Columns = make(map[string]*metadata2.Column)
 		keyspace.Indexes[indexes[i].Name] = &indexes[i]
 	}
 
 	if keyspace.Views == nil {
-		keyspace.Views = make(map[string]*ViewMetadata)
+		keyspace.Views = make(map[string]*metadata2.View)
 	}
 	for name, v := range keyspace.Views {
 		for i := range tables {
@@ -667,15 +283,15 @@ func InternalCompileTableMetadata(
 		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.ViewName, "_index")]; ok {
 			continue
 		}
-		v.Columns = make(map[string]*ColumnMetadata)
+		v.Columns = make(map[string]*metadata2.Column)
 		keyspace.Views[v.ViewName] = v
 	}
 
 	for i := range columns {
 		col := &columns[i]
-		col.Order = ASC
+		col.Order = metadata2.ASC
 		if col.ClusteringOrder == "desc" {
-			col.Order = DESC
+			col.Order = metadata2.DESC
 		}
 
 		table, ok := keyspace.Tables[col.Table]
@@ -717,20 +333,20 @@ func InternalCompileTableMetadata(
 	}
 }
 
-func compileColumns(columns map[string]*ColumnMetadata, orderedColumns []string) (
-	partitionKey, clusteringColumns []*ColumnMetadata, sortedColumns []string) {
-	clusteringColumnCount := componentColumnCountOfType(columns, ColumnClusteringKey)
-	clusteringColumns = make([]*ColumnMetadata, clusteringColumnCount)
+func compileColumns(columns map[string]*metadata2.Column, orderedColumns []string) (
+	partitionKey, clusteringColumns []*metadata2.Column, sortedColumns []string) {
+	clusteringColumnCount := componentColumnCountOfType(columns, metadata2.ColumnClusteringKey)
+	clusteringColumns = make([]*metadata2.Column, clusteringColumnCount)
 
-	partitionKeyCount := componentColumnCountOfType(columns, ColumnPartitionKey)
-	partitionKey = make([]*ColumnMetadata, partitionKeyCount)
+	partitionKeyCount := componentColumnCountOfType(columns, metadata2.ColumnPartitionKey)
+	partitionKey = make([]*metadata2.Column, partitionKeyCount)
 
 	var otherColumns []string
 	for _, columnName := range orderedColumns {
 		column := columns[columnName]
-		if column.Kind == ColumnPartitionKey {
+		if column.Kind == metadata2.ColumnPartitionKey {
 			partitionKey[column.ComponentIndex] = column
-		} else if column.Kind == ColumnClusteringKey {
+		} else if column.Kind == metadata2.ColumnClusteringKey {
 			clusteringColumns[column.ComponentIndex] = column
 		} else {
 			otherColumns = append(otherColumns, columnName)
@@ -751,7 +367,7 @@ func compileColumns(columns map[string]*ColumnMetadata, orderedColumns []string)
 	return
 }
 
-func componentColumnCountOfType(columns map[string]*ColumnMetadata, kind ColumnKind) int {
+func componentColumnCountOfType(columns map[string]*metadata2.Column, kind metadata2.ColumnKind) int {
 	maxComponentIndex := -1
 	for _, column := range columns {
 		if column.Kind == kind && column.ComponentIndex > maxComponentIndex {

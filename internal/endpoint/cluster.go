@@ -26,17 +26,8 @@ package endpoint
 
 import (
 	"context"
-
 	"net"
-	"net/netip"
 )
-
-// Resolver resolves host names to IP addresses. *net.Resolver satisfies it.
-// network is "ip", "ip4" or "ip6", as for net.Resolver.LookupNetIP.
-// Implementations must return promptly once ctx is done.
-type Resolver interface {
-	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
-}
 
 type ApplicationInfo interface {
 	UpdateStartupOptions(map[string]string)

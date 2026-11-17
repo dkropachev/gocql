@@ -31,21 +31,22 @@ import (
 	"time"
 	"unsafe"
 
+	implCql "github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type countSpeculation struct{ calls atomic.Int32 }
@@ -57,23 +58,23 @@ func (p *countSpeculation) Delay(int) (time.Duration, bool) {
 
 type panicObserver struct{}
 
-func (panicObserver) ObserveRequest(settings.RequestEvent) { panic("request") }
-func (panicObserver) ObserveAttempt(routing.AttemptEvent)  { panic("attempt") }
+func (panicObserver) ObserveRequest(observe.RequestEvent)  { panic("request") }
+func (panicObserver) ObserveAttempt(routing2.AttemptEvent) { panic("attempt") }
 
-func (o panicObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o panicObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o panicObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o panicObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 
 // panicStartObserver panics when a request or attempt starts.
 type panicStartObserver struct{}
 
-func (panicStartObserver) StartRequest(context.Context, settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (panicStartObserver) StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	panic("request start")
 }
-func (panicStartObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (panicStartObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	panic("attempt start")
 }
 
@@ -84,8 +85,8 @@ type observerKey struct{}
 type pairingObserver struct {
 	mu     sync.Mutex
 	calls  []string
-	starts []settings.RequestStart
-	ends   []settings.RequestEvent
+	starts []observe.RequestStart
+	ends   []observe.RequestEvent
 	ctxErr bool
 }
 
@@ -95,12 +96,12 @@ func (o *pairingObserver) record(call string) {
 	o.mu.Unlock()
 }
 
-func (o *pairingObserver) StartRequest(ctx context.Context, start settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o *pairingObserver) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	o.mu.Lock()
 	o.starts = append(o.starts, start)
 	o.mu.Unlock()
 	o.record("request start")
-	return context.WithValue(ctx, observerKey{}, "span"), func(e settings.RequestEvent) {
+	return context.WithValue(ctx, observerKey{}, "span"), func(e observe.RequestEvent) {
 		o.mu.Lock()
 		o.ends = append(o.ends, e)
 		o.mu.Unlock()
@@ -108,14 +109,14 @@ func (o *pairingObserver) StartRequest(ctx context.Context, start settings.Reque
 	}
 }
 
-func (o *pairingObserver) StartAttempt(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *pairingObserver) StartAttempt(ctx context.Context, start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if ctx.Value(observerKey{}) != "span" {
 		o.mu.Lock()
 		o.ctxErr = true
 		o.mu.Unlock()
 	}
 	o.record(fmt.Sprintf("attempt %d start", start.Attempt))
-	return func(e routing.AttemptEvent) { o.record(fmt.Sprintf("attempt %d end", e.Attempt)) }
+	return func(e routing2.AttemptEvent) { o.record(fmt.Sprintf("attempt %d end", e.Attempt)) }
 }
 
 type panicHandler struct{}
@@ -131,12 +132,12 @@ func TestExecution(t *testing.T) {
 				for _, proto := range []byte{4, 5} {
 					for _, owned := range []bool{false, true} {
 						t.Run(fmt.Sprintf("bytes%d/v%d/owned%t", size, proto, owned), func(t *testing.T) {
-							typ := cqltype.BlobType
-							cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})
+							typ := implCql.BlobType
+							cols := implCql.NewColumns(implCql.ColumnSpec{Name: "v", Type: typ})
 							calls := 0
 							input := bytes.Repeat([]byte{0x71}, size)
-							statement := binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: codec.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: codec.EmptyRowDecoder}
-							var bound *Bound[codec.EmptyRecord]
+							statement := binding.Statement[[]byte, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: implCql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: implCql.EmptyRowDecoder}
+							var bound *Bound[implCql.EmptyRow]
 							if owned {
 								bound = codecTestMust(BindUnpreparedOwned(statement, cols, input))
 							} else {
@@ -148,9 +149,9 @@ func TestExecution(t *testing.T) {
 							c.InternalInitFramerCache()
 							for _, batch := range []bool{false, true} {
 								for attempt := 0; attempt < 4; attempt++ {
-									request := &model.AttemptRequest{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1, Consistency: cqltype.One}
+									request := &model.AttemptRequest{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1, Consistency: implCql.One}
 									if batch {
-										request.Batch = &model.TypedBatchRequest{Kind: cqltype.LoggedBatch, Items: []model.TypedBatchItem{{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}, {Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}}}
+										request.Batch = &model.TypedBatchRequest{Kind: implCql.LoggedBatch, Items: []model.TypedBatchItem{{Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}, {Statement: statement.CQL, Values: canonical.Framed, ValueCount: 1}}}
 									}
 									frame := codecTestMust(c.InternalBuildTypedRequest(request, attempt))
 									retained := int64(0)
@@ -192,13 +193,13 @@ func TestExecution(t *testing.T) {
 		})
 
 		t.Run("KindDeclarationAndServerRefinement", func(t *testing.T) {
-			for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
+			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
 				for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
-					b, err := BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: cql, Kind: kind, Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{})
+					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.EmptyParamsEncoder, Rows: implCql.EmptyRowDecoder}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}
-					if b.Routing().Kind != kind || b.Routing().Conditional != (kind != cqltype.OrdinaryStatement) {
+					if b.Routing().Kind != kind || b.Routing().Conditional != (kind != implCql.OrdinaryStatement) {
 						t.Fatal(cql, b.Routing())
 					}
 					b.Close()
@@ -207,8 +208,8 @@ func TestExecution(t *testing.T) {
 			s, cs, _ := runtimeTestSession(t, 1)
 			for _, test := range []struct {
 				negotiated, lwt bool
-				want            cqltype.StatementKind
-			}{{false, false, cqltype.UnknownStatement}, {true, false, cqltype.OrdinaryStatement}, {true, true, cqltype.ConditionalStatement}, {false, true, cqltype.ConditionalStatement}} {
+				want            implCql.StatementKind
+			}{{false, false, implCql.UnknownStatement}, {true, false, implCql.OrdinaryStatement}, {true, true, implCql.ConditionalStatement}, {false, true, implCql.ConditionalStatement}} {
 				cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 0
 				if test.negotiated {
 					cs[0].InternalFramers.InternalDefaults.InternalFlagLWT = 1 << 30
@@ -265,7 +266,7 @@ func TestExecution(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
 					acknowledged := make(chan struct{})
 					continueAttempt := make(chan struct{})
-					observer := &execVoidObserver{onAttempt: func(event routing.AttemptEvent) {
+					observer := &execVoidObserver{onAttempt: func(event routing2.AttemptEvent) {
 						if event.Err == nil {
 							// The native VOID reply has been parsed, but execution has not
 							// accepted the successful attempt's outcome yet.
@@ -298,7 +299,7 @@ func TestExecution(t *testing.T) {
 					}
 					select {
 					case err := <-done:
-						if !errors.Is(err, context.Canceled) && !errors.Is(err, runtimeerrors.ErrClosed) {
+						if !errors.Is(err, context.Canceled) && !errors.Is(err, cqlerr.ErrClosed) {
 							t.Fatal(err)
 						}
 					case <-time.After(time.Second):
@@ -370,7 +371,7 @@ func TestExecution(t *testing.T) {
 					}
 					select {
 					case err := <-done:
-						if !errors.Is(err, context.Canceled) && !errors.Is(err, runtimeerrors.ErrClosed) {
+						if !errors.Is(err, context.Canceled) && !errors.Is(err, cqlerr.ErrClosed) {
 							t.Fatal(err)
 						}
 					case <-time.After(time.Second):
@@ -444,7 +445,7 @@ func TestExecution(t *testing.T) {
 
 		t.Run("VoidCompletionAndMetadata", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			trace := cqltype.UUID{15: 42}
+			trace := implCql.UUID{15: 42}
 			served := make(chan struct{})
 			go func() {
 				defer close(served)
@@ -470,7 +471,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: observer}))
-			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (model.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
+			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
 			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
@@ -539,7 +540,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !rows.NextInto(&row) {
 				t.Fatal(rows.Err())
 			}
@@ -562,7 +563,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !rows.NextInto(&row) {
 				t.Fatal(rows.Err())
 			}
@@ -587,7 +588,7 @@ func TestExecution(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			for rows.NextInto(&row) {
 			}
 			if err := rows.Close(); err != nil {
@@ -632,7 +633,7 @@ func TestExecution(t *testing.T) {
 				defer close(done)
 				for attempt := 0; attempt < 3; attempt++ {
 					stream := typedTestReadRequest(t, conns[0], peers[0])
-					response := errorResponse(t, stream, protocol.CodeOverloaded, nil)
+					response := errorResponse(t, stream, cqlerr.CodeOverloaded, nil)
 					if attempt == 2 {
 						response = typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "retried"))
 					}
@@ -645,11 +646,11 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
 			if err != nil {
 				t.Fatal(err)
 			}
-			var row cqltype.Bytes
+			var row implCql.Bytes
 			if !page.NextInto(&row) || string(row.OwnedBytes()) != "retried" {
 				t.Fatal("delayed retry result", page.Err())
 			}
@@ -672,14 +673,14 @@ func TestExecution(t *testing.T) {
 			handle := new(profile)
 			go func() {
 				stream := typedTestReadRequest(t, conns[0], peers[0])
-				_, _ = peers[0].Write(errorResponse(t, stream, protocol.CodeOverloaded, nil))
+				_, _ = peers[0].Write(errorResponse(t, stream, cqlerr.CodeOverloaded, nil))
 			}()
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 			bound := runtimeQuery(t)
 			finished := make(chan error, 1)
 			go func() {
-				page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle}))
+				page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
 				if page != nil {
 					page.Close()
 				}
@@ -713,7 +714,7 @@ func TestExecution(t *testing.T) {
 		t.Run("SafeBytesWritten", func(t *testing.T) {
 			for _, written := range []bool{false, true} {
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
-				status := runtimeerrors.ExecutionStatusOf(err)
+				status := cqlerr.ExecutionStatusOf(err)
 				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, BytesWritten: attemptBytesWritten(err), ExecutionStatus: status})
 				if (decision.Action == retry.Next) == written {
 					t.Fatal(written, decision)
@@ -737,12 +738,12 @@ func TestExecution(t *testing.T) {
 		t.Run("SpeculativeTraceRef", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 2)
 			second := implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)
-			policy := &runtimePolicy{targets: []model.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: second}}}
+			policy := &runtimePolicy{targets: []metadata.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: second}}}
 			profile := settings.InternalDefaultProfile()
 			profile.Routing = policy
 			profile.Speculation = runtimeSpeculation{}
 			handle := new(profile)
-			id := cqltype.UUID{15: 5}
+			id := implCql.UUID{15: 5}
 			go func() {
 				stream := typedTestReadRequest(t, conns[1], peers[1])
 				frame := typedTestResponse(t, 4, stream, append(append([]byte{}, id[:]...), runtimeRowsBody(nil, "winner")...))
@@ -752,7 +753,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -775,8 +776,8 @@ func TestExecution(t *testing.T) {
 		})
 
 		t.Run("UnknownConditionalNever", func(t *testing.T) {
-			for _, kind := range []cqltype.StatementKind{cqltype.UnknownStatement, cqltype.OrdinaryStatement, cqltype.ConditionalStatement} {
-				t.Run(map[cqltype.StatementKind]string{cqltype.UnknownStatement: "unknown", cqltype.OrdinaryStatement: "ordinary", cqltype.ConditionalStatement: "conditional"}[kind], func(t *testing.T) {
+			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
+				t.Run(map[implCql.StatementKind]string{implCql.UnknownStatement: "unknown", implCql.OrdinaryStatement: "ordinary", implCql.ConditionalStatement: "conditional"}[kind], func(t *testing.T) {
 					s, cs, ps := runtimeTestSession(t, 1)
 					spec := &countSpeculation{}
 					profile := settings.InternalDefaultProfile()
@@ -795,10 +796,10 @@ func TestExecution(t *testing.T) {
 					}()
 					b := runtimeQuery(t)
 					BoundData(b).InternalRequest.routing.Kind = kind
-					BoundData(b).InternalRequest.routing.Conditional = kind != cqltype.OrdinaryStatement
+					BoundData(b).InternalRequest.routing.Conditional = kind != implCql.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, model.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true}))
 						if page != nil {
 							page.Close()
 						}
@@ -810,7 +811,7 @@ func TestExecution(t *testing.T) {
 						t.Fatal(err)
 					}
 					want := int32(0)
-					if kind == cqltype.OrdinaryStatement {
+					if kind == implCql.OrdinaryStatement {
 						want = 1
 					}
 					if spec.calls.Load() != want {

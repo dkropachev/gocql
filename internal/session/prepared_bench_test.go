@@ -31,15 +31,16 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func BenchmarkPrepared(b *testing.B) {
@@ -52,18 +53,18 @@ func BenchmarkPrepared(b *testing.B) {
 				b.Run(fmt.Sprintf("updates%t/owned%t", updates, owned), func(b *testing.B) {
 					s := testSession(b)
 					rt := InternalRuntimeFor(s)
-					columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
+					columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 					tracker := rt.InternalSchemaTracker()
 					deps := tracker.InternalDependencies("ks", columns, columns)
 					hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}
-					id := cqltype.UUID{15: 1}
+					id := cql.UUID{15: 1}
 					state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalStatement: "SELECT value FROM ks.tbl WHERE value=?", InternalParameters: columns, InternalColumns: columns, InternalDependencies: deps, InternalInitialEpoch: deps.InternalSnapshot(), InternalInfo: PreparedInfo{Keyspace: "ks", Table: "tbl", PartitionKeyIndexes: []int{0}}}
-					newTestPreparedState(state, map[cqltype.UUID]*InternalHostPrepared{id: hp}, nil, cqltype.UUID{})
-					prepared := new(Prepared[[]byte, cqltype.Bytes])
+					newTestPreparedState(state, map[cql.UUID]*InternalHostPrepared{id: hp}, nil, cql.UUID{})
+					prepared := new(Prepared[[]byte, cql.Bytes])
 					PreparedData(prepared).InternalState = state
-					PreparedData(prepared).kind = cqltype.OrdinaryStatement
-					PreparedData(prepared).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
-					PreparedData(prepared).rows = codec.OneColumn(codec.BlobCodec)
+					PreparedData(prepared).kind = cql.OrdinaryStatement
+					PreparedData(prepared).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
+					PreparedData(prepared).rows = cql.OneColumn(cql.BlobCodec)
 					host := new(endpoint.HostInfo)
 					implEndpoint.HostInfoData(host).InternalHostId = id
 					conn := &transport.Conn{InternalHost: host}
@@ -80,12 +81,12 @@ func BenchmarkPrepared(b *testing.B) {
 									return
 								default:
 								}
-								s.InvalidatePreparedSchema(cluster.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
+								s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "unrelated", Target: "TABLE"})
 								p := s.Peripheral()
 								current := s.Metadata()
-								info := model.RoutingInfo{Keyspace: "ks", Table: "table"}
+								info := routing.Info{Keyspace: "ks", Table: "table"}
 								stamp := s.CaptureTabletFeedback(info, current)
-								hint := testHint(b, 0, 1, cqltype.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
+								hint := testHint(b, 0, 1, cql.Option[uint64]{Set: true, Value: i}, hTarget(1, 0))
 								s.PublishTabletFeedback(p, map[cluster.InternalV2TabletFeedbackKey]cluster.InternalV2PendingTabletFeedback{{InternalKeyspace: "ks", InternalTable: "table", InternalEnd: 1}: {InternalHint: hint, InternalStamp: stamp}}, false)
 								runtime.Gosched()
 							}
@@ -97,7 +98,7 @@ func BenchmarkPrepared(b *testing.B) {
 					b.ResetTimer()
 					b.RunParallel(func(pb *testing.PB) {
 						for pb.Next() {
-							var bound *Bound[cqltype.Bytes]
+							var bound *Bound[cql.Bytes]
 							var e error
 							if owned {
 								bound, e = BindOwned(prepared, input)
@@ -135,12 +136,12 @@ func BenchmarkPrepared(b *testing.B) {
 			implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 			return opaqueStorageValue
 		}()
-		columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cqltype.BlobType})
+		columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 		tracker := InternalRuntimeFor(s).InternalSchemaTracker()
-		deps := tracker.InternalDependencies("ks", cqltype.NewColumns(), columns)
+		deps := tracker.InternalDependencies("ks", cql.NewColumns(), columns)
 		hp := &InternalHostPrepared{InternalEpoch: deps.InternalSnapshot()}
-		id := cqltype.UUID{15: 1}
-		state := newTestPreparedState(&InternalPreparedState{InternalDependencies: deps}, map[cqltype.UUID]*InternalHostPrepared{id: hp}, nil, cqltype.UUID{})
+		id := cql.UUID{15: 1}
+		state := newTestPreparedState(&InternalPreparedState{InternalDependencies: deps}, map[cql.UUID]*InternalHostPrepared{id: hp}, nil, cql.UUID{})
 		conn := &transport.Conn{InternalHost: func() *endpoint.HostInfo {
 			opaqueStorageValuex := new(endpoint.HostInfo)
 			implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = id

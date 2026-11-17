@@ -22,27 +22,26 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"net"
+	"net/netip"
+	"slices"
+	"strconv"
+	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
-
-	"net"
-	"net/netip"
-
-	"slices"
-	"strconv"
-
-	"time"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type InternalV2TLSHostDialer struct {
-	InternalUnixHostID func() cqltype.UUID
+	InternalUnixHostID func() cql.UUID
 	InternalConfig     connectivity.Config
 }
 
-func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.HostSnapshot) (*tls.Config, error) {
+func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host metadata.HostSnapshot) (*tls.Config, error) {
 	c := d.InternalConfig.TLS
 	if source := d.InternalConfig.TLSSource; source != nil {
 		if c = source.TLSConfig(); c == nil {
@@ -54,7 +53,7 @@ func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host model.Ho
 	}
 	return c, nil
 }
-func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.DialTarget) (net.Conn, error) {
+func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -65,7 +64,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target implEndpoint.D
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
-		c, err = (implEndpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {
@@ -185,7 +184,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
 			}
 		}
-		c, e := d.raw(ctx, implEndpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})
+		c, e := d.raw(ctx, endpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})
 		if e != nil {
 			return nil, e
 		}
@@ -207,12 +206,12 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
 		address = translated.CQL.String()
 	}
-	target := implEndpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
+	target := endpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)
 	}
 	var c net.Conn
-	var selectedShard cqltype.Option[uint32]
+	var selectedShard cql.Option[uint32]
 	if shards > 0 && d.InternalConfig.Pool.AdvancedShardAwareness.Enabled && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
 		if shard < 0 || shard >= shards {
 			return nil, cqltype.TypeValidation("shard", "target out of range")
@@ -233,7 +232,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 				}
 				attempt := target
 				attempt.Address = endpoint
-				attempt.ShardID = cqltype.Option[uint32]{Value: uint32(shard), Set: true}
+				attempt.ShardID = cql.Option[uint32]{Value: uint32(shard), Set: true}
 				ip := d.InternalConfig.LocalAddress
 				if !ip.IsValid() {
 					ip = netip.IPv4Unspecified()
@@ -286,11 +285,11 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	return result, nil
 }
 
-func cloneV2HostSnapshot(v model.HostSnapshot) model.HostSnapshot {
+func cloneV2HostSnapshot(v metadata.HostSnapshot) metadata.HostSnapshot {
 	v.Tokens = slices.Clone(v.Tokens)
 	return v
 }
-func cloneV2DialTarget(v implEndpoint.DialTarget) implEndpoint.DialTarget {
+func cloneV2DialTarget(v endpoint.DialTarget) endpoint.DialTarget {
 	v.Host = cloneV2HostSnapshot(v.Host)
 	return v
 }

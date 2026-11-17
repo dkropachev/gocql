@@ -6,20 +6,20 @@ package session
 import (
 	"context"
 
-	"github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type directTestObserver struct{}
 
-func (directTestObserver) ObserveRequest(settings.RequestEvent) {}
-func (directTestObserver) ObserveAttempt(routing.AttemptEvent)  {}
+func (directTestObserver) ObserveRequest(observe.RequestEvent)  {}
+func (directTestObserver) ObserveAttempt(routing2.AttemptEvent) {}
 
-func (o directTestObserver) StartRequest(ctx context.Context, _ settings.RequestStart) (context.Context, func(settings.RequestEvent)) {
+func (o directTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o directTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o directTestObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

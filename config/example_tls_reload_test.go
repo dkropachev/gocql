@@ -38,14 +38,14 @@ func ExampleNewTLSFiles() {
 	// files.Err reports a change that could not be loaded.
 }
 
-// rotatingTLS is a TLSSource the application updates, for example from a
+// rotatingTLS is an endpoint.TLSSource the application updates, for example from a
 // secrets manager.
 type rotatingTLS struct{ current atomic.Pointer[tls.Config] }
 
 func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
 
 // Replace the whole TLS configuration of running sessions.
-func ExampleTLSSource() {
+func ExampleConfigBuilder_WithTLSSource() {
 	source := &rotatingTLS{}
 	source.current.Store(&tls.Config{MinVersion: tls.VersionTLS13})
 	cfg, err := config.New("192.168.1.1").WithTLSSource(source).Build()

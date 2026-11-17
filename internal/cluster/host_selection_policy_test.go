@@ -30,12 +30,11 @@ package cluster
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"testing"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -179,7 +178,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 					if got := hosts.hostByID(tUUID(9999)); got != nil {
 						t.Fatalf("hostByID(missing) = %v, want nil", got)
 					}
-					if got := hosts.hostByID(cqltype.UUID{}); got != nil {
+					if got := hosts.hostByID(cql.UUID{}); got != nil {
 						t.Fatalf("hostByID(zero) = %v, want nil", got)
 					}
 				})
@@ -393,7 +392,7 @@ func TestHostSelectionPolicy(t *testing.T) {
 			replicas, _, labels := busyHosts(t, []bool{false, false, false, false})
 			session := func() *Core {
 				opaqueStorageValuex := new(Core)
-				SessionData(opaqueStorageValuex).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*pool.InternalHostConnPool{}}
+				SessionData(opaqueStorageValuex).InternalPool = &pool.InternalPolicyConnPool{InternalHostConnPools: map[cql.UUID]*pool.InternalHostConnPool{}}
 				return opaqueStorageValuex
 			}()
 

@@ -36,17 +36,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/metadata"
+	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 // tUUID returns a deterministic UUID for testing. Byte 0 is always set to
 // a non-zero sentinel (0xFE) so that even tUUID(0) is distinguishable from
 // the zero UUID, and the last two bytes encode n.
-func tUUID(n int) cqltype.UUID {
-	var u cqltype.UUID
+func tUUID(n int) cql.UUID {
+	var u cql.UUID
 	u[0] = 0xFE
 	u[14] = byte(n >> 8)
 	u[15] = byte(n)
@@ -63,15 +63,15 @@ func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
 	policy := TokenAwareHostPolicy(RoundRobinHostPolicy())
 	policyInternal := policy.(*tokenAwareHostPolicy)
 	tokenAwareHostPolicyData(policyInternal).getKeyspaceName = func() string { return keyspace }
-	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(ks string) (*metadata.KeyspaceMetadata, error) {
+	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(ks string) (*metadata2.Keyspace, error) {
 		return nil, errors.New("not initalized")
 	}
 	policy.SetPartitioner("OrderedPartitioner")
-	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(keyspaceName string) (*metadata.KeyspaceMetadata, error) {
+	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(keyspaceName string) (*metadata2.Keyspace, error) {
 		if keyspaceName != keyspace {
 			return nil, fmt.Errorf("unknown keyspace: %s", keyspaceName)
 		}
-		return &metadata.KeyspaceMetadata{
+		return &metadata2.Keyspace{
 			Name:          keyspace,
 			StrategyClass: "SimpleStrategy",
 			StrategyOptions: map[string]string{

@@ -31,7 +31,8 @@ import (
 	"net/netip"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/tests"
@@ -43,17 +44,17 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("ZeroAddr", func(t *testing.T) {
 			t.Parallel()
 
-			var tr endpoint.AddressTranslator = endpoint.IdentityTranslator()
-			got, err := tr.Translate(ctx, endpoint.Peer{}, netip.AddrPort{})
+			var tr endpoint2.Translator = endpoint2.IdentityTranslator()
+			got, err := tr.Translate(ctx, endpoint2.Peer{}, netip.AddrPort{})
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated addr", netip.AddrPort{}, got)
 		})
 		t.Run("HostProvided", func(t *testing.T) {
 			t.Parallel()
 
-			var tr endpoint.AddressTranslator = endpoint.IdentityTranslator()
+			var tr endpoint2.Translator = endpoint2.IdentityTranslator()
 			addr := netip.MustParseAddrPort("10.1.2.3:9042")
-			got, err := tr.Translate(ctx, endpoint.Peer{}, addr)
+			got, err := tr.Translate(ctx, endpoint2.Peer{}, addr)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated addr", addr, got)
 		})
@@ -63,7 +64,7 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("NoScyllaPorts", func(t *testing.T) {
 			t.Parallel()
 
-			translator := endpoint.AddressTranslatorFunc(func(context.Context, endpoint.Peer, netip.AddrPort) (netip.AddrPort, error) {
+			translator := endpoint2.TranslatorFunc(func(context.Context, endpoint2.Peer, netip.AddrPort) (netip.AddrPort, error) {
 				return netip.MustParseAddrPort("10.10.10.10:9142"), nil
 			})
 			host := endpoint.HostInfoBuilder{
@@ -92,8 +93,8 @@ func TestAddressTranslation(t *testing.T) {
 			t.Parallel()
 
 			translatedIP := netip.MustParseAddr("192.0.2.10")
-			wantPeer := endpoint.Peer{
-				HostID:            cqltype.MustParseUUID("a0000000-0000-0000-0000-000000000001"),
+			wantPeer := endpoint2.Peer{
+				HostID:            cql.MustParseUUID("a0000000-0000-0000-0000-000000000001"),
 				Datacenter:        "dc1",
 				Rack:              "r1",
 				RPCAddress:        netip.MustParseAddr("10.0.1.1"),
@@ -102,7 +103,7 @@ func TestAddressTranslation(t *testing.T) {
 				ShardAwarePort:    19042,
 				ShardAwarePortTLS: 19043,
 			}
-			translator := endpoint.AddressTranslatorFunc(func(_ context.Context, peer endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+			translator := endpoint2.TranslatorFunc(func(_ context.Context, peer endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
 				if peer != wantPeer {
 					t.Errorf("peer %+v, want %+v", peer, wantPeer)
 				}
@@ -145,10 +146,10 @@ func TestAddressTranslation(t *testing.T) {
 			"UnspecifiedIPv6AddrRejected": netip.MustParseAddrPort("[::]:9042"),
 		} {
 			t.Run(name, func(t *testing.T) {
-				translator := endpoint.AddressTranslatorFunc(func(context.Context, endpoint.Peer, netip.AddrPort) (netip.AddrPort, error) {
+				translator := endpoint2.TranslatorFunc(func(context.Context, endpoint2.Peer, netip.AddrPort) (netip.AddrPort, error) {
 					return result, nil
 				})
-				if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint.Peer{}, addr, nil); err == nil {
+				if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint2.Peer{}, addr, nil); err == nil {
 					t.Fatalf("expected translated %v to be rejected", result)
 				}
 			})
@@ -156,13 +157,13 @@ func TestAddressTranslation(t *testing.T) {
 		t.Run("ContextPassed", func(t *testing.T) {
 			type key struct{}
 			ctx := context.WithValue(ctx, key{}, true)
-			translator := endpoint.AddressTranslatorFunc(func(ctx context.Context, _ endpoint.Peer, a netip.AddrPort) (netip.AddrPort, error) {
+			translator := endpoint2.TranslatorFunc(func(ctx context.Context, _ endpoint2.Peer, a netip.AddrPort) (netip.AddrPort, error) {
 				if ctx.Value(key{}) == nil {
 					t.Error("translator did not receive the setup context")
 				}
 				return a, nil
 			})
-			if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint.Peer{}, addr, nil); err != nil {
+			if _, err := endpoint.InternalTranslateAddressPort(ctx, translator, endpoint2.Peer{}, addr, nil); err != nil {
 				t.Fatal(err)
 			}
 		})

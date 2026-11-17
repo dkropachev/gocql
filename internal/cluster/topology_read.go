@@ -7,8 +7,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -28,7 +28,7 @@ func readV2Topology(ctx context.Context, conn transport.ConnInterface, stmt stri
 	if c, ok := conn.(*transport.Conn); ok {
 		execute = c.InternalExecuteV2System
 	}
-	rows, err := readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[codec.EmptyRecord, metadata.InternalV2TopologyRow]{CQL: stmt, Params: codec.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cqltype.NewColumns(), codec.EmptyRecord{})
+	rows, err := readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func timeForTopology(conn transport.ConnInterface) time.Duration {
 func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*implEndpoint.HostInfo) ([]*implEndpoint.HostInfo, error) {
 	var hosts []*implEndpoint.HostInfo
 	current := s.privateStorage.InternalControl.InternalGetConn()
-	seen := make(map[cqltype.UUID]bool)
+	seen := make(map[cql.UUID]bool)
 	for _, contact := range contacts {
 		var conn *transport.Conn
 		if current != nil {

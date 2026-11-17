@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -29,14 +30,14 @@ type QuerySettings struct {
 	Depth                                                  int
 }
 type Query[P, R any] struct {
-	Params codec.ParamEncoder[P]
-	Rows   codec.RowDecoder[R]
+	Params cql.ParamEncoder[P]
+	Rows   cql.RowDecoder[R]
 	CQL    string
 }
 
 // ReadRows uses the canonical binding and row plans. System metadata is
 // explicitly detached before each leased response is released.
-func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*model.ResponseData, error), query Query[P, R], columns cqltype.Columns, value P) ([]R, error) {
+func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration, execute func(context.Context, *model.AttemptRequest) (*model.ResponseData, error), query Query[P, R], columns cql.Columns, value P) ([]R, error) {
 	if ctx == nil || execute == nil {
 		return nil, cqltype.TypeValidation("system query", "nil context or connection")
 	}
@@ -51,7 +52,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 	if err != nil {
 		return nil, err
 	}
-	req := &model.AttemptRequest{Statement: query.CQL, Values: values.Framed, ValueCount: len(values.Cells), Consistency: cqltype.One, PageSize: 1000, Timeout: timeout}
+	req := &model.AttemptRequest{Statement: query.CQL, Values: values.Framed, ValueCount: len(values.Cells), Consistency: cql.One, PageSize: 1000, Timeout: timeout}
 	var rows []R
 	var history paging.InternalPagingHistory
 	for {
@@ -75,12 +76,12 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 		}
 		if response == nil {
 			cancel()
-			return nil, &cqltype.ProtocolError{Stage: "system query", Err: fmt.Errorf("missing response")}
+			return nil, &cql.ProtocolError{Stage: "system query", Err: fmt.Errorf("missing response")}
 		}
 		if response.NoMetadata {
 			cancel()
 			response.Owner.Release()
-			return nil, &cqltype.ProtocolError{Stage: "system query", Err: fmt.Errorf("unexpected omitted metadata")}
+			return nil, &cql.ProtocolError{Stage: "system query", Err: fmt.Errorf("unexpected omitted metadata")}
 		}
 		rows, err = decodeSystemPage(pageCtx, response, query.Rows, rows)
 		token := append([]byte(nil), response.PagingState...)
@@ -93,7 +94,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 		if !more {
 			return rows, nil
 		}
-		if err := history.InternalAdd(model.PageStateOwned(token, 1)); err != nil {
+		if err := history.InternalAdd(cqltype.PageStateOwned(token)); err != nil {
 			return nil, err
 		}
 		if token == nil {
@@ -102,13 +103,13 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 		req.PagingState = token
 	}
 }
-func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, decoder codec.RowDecoder[R], rows []R) ([]R, error) {
+func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, decoder cql.RowDecoder[R], rows []R) ([]R, error) {
 	plan, err := codec.CompileRowPlan(decoder, response.Columns)
 	if err != nil {
 		return rows, err
 	}
 	if response.RowCount < 0 {
-		return rows, &cqltype.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
+		return rows, &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
 	cursor := wire.NewCursor(response.Rows)
 	for i := int32(0); i < response.RowCount; i++ {
@@ -132,7 +133,7 @@ func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, 
 		return rows, err
 	}
 	if err := cursor.RequireEnd(); err != nil {
-		return rows, &cqltype.ProtocolError{Stage: "rows", Err: err}
+		return rows, &cql.ProtocolError{Stage: "rows", Err: err}
 	}
 	return rows, nil
 }

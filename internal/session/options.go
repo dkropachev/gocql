@@ -4,8 +4,8 @@
 package session
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -75,7 +75,7 @@ func NewCompiledOptions(session *implCluster.Core, values Options) (CompiledOpti
 // CompiledOptions.
 func (o CompiledOptions) Values() Options {
 	v := *o.values()
-	v.CustomPayload = append([]model.PayloadEntry(nil), v.CustomPayload...)
+	v.CustomPayload = append([]cql.PayloadEntry(nil), v.CustomPayload...)
 	if v.Profile != nil {
 		profile := *v.Profile
 		v.Profile = &profile

@@ -27,16 +27,15 @@ package endpoint
 import (
 	"context"
 	"fmt"
-
 	"net"
 	"net/netip"
-
 	"strconv"
-
 	"time"
+
+	"github.com/scylladb/gocql/v2/endpoint"
 )
 
-func InternalResolveInitialEndpoint(resolver Resolver, addr string, defaultPort int) ([]*HostInfo, error) {
+func InternalResolveInitialEndpoint(resolver endpoint.Resolver, addr string, defaultPort int) ([]*HostInfo, error) {
 	var port int
 	host, portStr, err := net.SplitHostPort(addr)
 	if err != nil {

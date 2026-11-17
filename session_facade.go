@@ -8,7 +8,6 @@ import (
 	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -47,7 +46,7 @@ func (s *Session[D]) Prepare[P, R any](ctx context.Context, statement cql.Statem
 // decoder against server metadata when available; conditional result metadata
 // unavailable during preparation is checked on execution. At most one
 // exec.PrepareOptions may be supplied.
-func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement stream.Statement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
+func (s *Session[D]) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
 	case 0:
@@ -75,7 +74,7 @@ func (s *Session[D]) CompileOptions(options exec.Options) (exec.CompiledOptions,
 // leaving a query to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers. At most one exec.Options may be passed; the
 // call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session[D]) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (Result, error) {
+func (s *Session[D]) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
@@ -84,7 +83,7 @@ func (s *Session[D]) UnpreparedExec[P any](ctx context.Context, statement cql.St
 // are detached before return; there is no query or cursor to close. Parameters
 // are described by statement.BindMarkers. At most one exec.Options may be passed;
 // the call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session[D]) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, Result, error) {
+func (s *Session[D]) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error) {
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
@@ -96,7 +95,7 @@ func (s *Session[D]) UnpreparedOne[P, R any](ctx context.Context, statement cql.
 // dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
 // that keeps slices, []byte fields reuse their capacity, so a slice kept from
 // one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
-func (s *Session[D]) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (Result, error) {
+func (s *Session[D]) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
@@ -115,7 +114,7 @@ func (s *Session[D]) UnpreparedAll[P, R any](ctx context.Context, statement cql.
 // paging options are ignored, because a BATCH response is a single page. Do
 // not modify batch until the call returns. A reused batch sends without
 // allocating.
-func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (Result, error) {
+func (s *Session[D]) ExecBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -200,7 +199,7 @@ func (s *Session[D]) Close() error { return s.internal().Close() }
 func (s *Session[D]) Closed() bool { return s.internal().Closed() }
 
 // Metadata returns the current immutable cluster metadata snapshot.
-func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata() }
+func (s *Session[D]) Metadata() *metadata.Snapshot { return s.internal().Metadata().Public() }
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session[D]) Metrics() metrics.Snapshot { return s.internal().Metrics() }
@@ -214,5 +213,6 @@ func (s *Session[D]) RefreshMetadata(ctx context.Context) error {
 // Subscribe subscribes to matching session events. Close the subscription when
 // done consuming it.
 func (s *Session[D]) Subscribe(filter event.Filter) (*event.Subscription, error) {
-	return s.internal().Subscribe(filter)
+	sub, err := s.internal().Subscribe(filter)
+	return sub.Public(), err
 }

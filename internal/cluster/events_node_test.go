@@ -22,16 +22,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/settings"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
 // Session.handleNodeEvent and Session.handleNodeUp had no unit coverage at all
@@ -145,11 +144,11 @@ func newNodeEventFixture(t *testing.T, opts ...func(*InternalClusterSettings)) *
 		SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
-	SessionData(s).InternalCfg.ConvictionPolicy = &settings.SimpleConvictionPolicy{}
+	SessionData(s).InternalCfg.ConvictionPolicy = &endpoint2.SimpleConvictionPolicy{}
 	for _, opt := range opts {
 		opt(&SessionData(s).InternalCfg)
 	}
-	SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: s.NewPoolServices(), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+	SessionData(s).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: s.NewPoolServices(), InternalHostConnPools: map[cql.UUID]*implPool.InternalHostConnPool{}}
 	SessionData(s).InternalHostSource = &InternalRingDescriber{InternalCfg: &SessionData(s).InternalCfg, InternalLogger: SessionData(s).InternalLogger}
 	SessionData(s).InternalRingRefresher = debounce.NewRefreshDebouncer(nodeEventRefreshInterval, func() error {
 		select {
@@ -179,7 +178,7 @@ func (f *nodeEventFixture) addHost(t *testing.T, ip string) *endpoint.HostInfo {
 	}
 	host := func() *endpoint.HostInfo {
 		opaqueStorageValuex := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cqltype.MustRandomUUID()
+		implEndpoint.HostInfoData(opaqueStorageValuex).InternalHostId = cql.RandomUUID()
 		implEndpoint.HostInfoData(opaqueStorageValuex).InternalConnectAddress = addr
 		implEndpoint.HostInfoData(opaqueStorageValuex).InternalBroadcastAddress = addr
 		implEndpoint.HostInfoData(opaqueStorageValuex).InternalPort = 9042

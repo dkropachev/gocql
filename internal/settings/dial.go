@@ -22,8 +22,8 @@ package settings
 import (
 	"crypto/tls"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 )
 
 // Parsed keys, callbacks, session caches and provider objects remain shared by
@@ -33,7 +33,7 @@ func InternalCloneV2TLSConfig(source *tls.Config) *tls.Config {
 	return connectivity.CloneTLSConfig(source)
 }
 
-type UnsupportedSettingError = runtimeerrors.UnsupportedSettingError
+type UnsupportedSettingError = cqlerr.UnsupportedSettingError
 
 // InternalUnixSocketPath reports the Unix socket contactPoints name, if any.
 func InternalUnixSocketPath(contactPoints []string) (string, error) {

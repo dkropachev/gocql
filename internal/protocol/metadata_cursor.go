@@ -17,11 +17,10 @@
 package protocol
 
 import (
-	. "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"io"
 	"sync"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -36,7 +35,7 @@ func (b *StreamMetadataBudget) Reserve(n int64) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if n < 0 || n > b.Limit-b.live {
-		return &ProtocolError{Stage: "stream metadata budget", Err: wire.ErrLimit}
+		return &cql.ProtocolError{Stage: "stream metadata budget", Err: wire.ErrLimit}
 	}
 	b.live += n
 	return nil

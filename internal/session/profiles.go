@@ -6,10 +6,11 @@ package session
 import (
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	// IncludeMetadata requests full result metadata even when a validated cache exists.
 )
@@ -18,19 +19,19 @@ import (
 // Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
-	Observer             settings.Observer
+	Observer             observe.Observer
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
 	Keyspace             string
-	CustomPayload        []model.PayloadEntry
-	Timeout, PageTimeout cqltype.Option[time.Duration]
-	Prefetch             cqltype.Option[int]
-	Timestamp            cqltype.Option[int64]
-	PageSize             cqltype.Option[int32]
-	NowInSeconds         cqltype.Option[int32]
-	ShardID              cqltype.Option[uint32]
-	Consistency          cqltype.Option[cqltype.Consistency]
-	HostID               cqltype.Option[cqltype.UUID]
+	CustomPayload        []cql.PayloadEntry
+	Timeout, PageTimeout cql.Option[time.Duration]
+	Prefetch             cql.Option[int]
+	Timestamp            cql.Option[int64]
+	PageSize             cql.Option[int32]
+	NowInSeconds         cql.Option[int32]
+	ShardID              cql.Option[uint32]
+	Consistency          cql.Option[cql.Consistency]
+	HostID               cql.Option[cql.UUID]
 	// SerialConsistency overrides the profile's serial consistency.
 	SerialConsistency SerialOverride
 	IncludeMetadata   bool
@@ -80,11 +81,11 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	switch options.SerialConsistency {
 	case SerialInherit:
 	case SerialSerial:
-		p.SerialConsistency = cqltype.Some(cqltype.Serial)
+		p.SerialConsistency = cql.Some(cql.Serial)
 	case SerialLocal:
-		p.SerialConsistency = cqltype.Some(cqltype.LocalSerial)
+		p.SerialConsistency = cql.Some(cql.LocalSerial)
 	case SerialOmit:
-		p.SerialConsistency = cqltype.Option[cqltype.Consistency]{}
+		p.SerialConsistency = cql.Option[cql.Consistency]{}
 	default:
 		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
@@ -112,7 +113,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.PageSize.Set && p.PageSize <= 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive")
 	}
-	if p.PageSize == cqltype.Unpaged {
+	if p.PageSize == cql.Unpaged {
 		if options.Prefetch.Set && options.Prefetch.Value != 0 {
 			return InternalResolvedOptions{}, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "an unpaged result has no next page"}
 		}

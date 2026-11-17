@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // An Exec of a statement or batch known to be conditional is rejected before
@@ -23,13 +23,13 @@ import (
 func TestConditionalExecRejected(t *testing.T) {
 	check := func(t *testing.T, err error) {
 		t.Helper()
-		if !errors.Is(err, runtimeerrors.ErrConditionalExec) {
+		if !errors.Is(err, cqlerr.ErrConditionalExec) {
 			t.Fatalf("err = %v, want ErrConditionalExec", err)
 		}
-		if status := runtimeerrors.ExecutionStatusOf(err); status != cqltype.NotExecuted {
+		if status := cqlerr.ExecutionStatusOf(err); status != cqlerr.NotExecuted {
 			t.Fatalf("status = %v, want NotExecuted", status)
 		}
-		if kind := runtimeerrors.KindOf(err); kind != runtimeerrors.KindInvalid {
+		if kind := cqlerr.KindOf(err); kind != cqlerr.KindInvalid {
 			t.Fatalf("kind = %v, want invalid", kind)
 		}
 	}
@@ -37,7 +37,7 @@ func TestConditionalExecRejected(t *testing.T) {
 		// The session has no connections: a request that was sent would fail
 		// with a connection error instead.
 		s, _, _ := runtimeTestSession(t, 0)
-		b, err := BindUnpreparedBorrowed(binding.Statement[codec.EmptyRecord, cqltype.Bytes]{Kind: cqltype.ConditionalStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1 IF v = 0", Params: codec.EmptyParamsEncoder, Rows: codec.OneColumn(codec.BlobCodec)}, cqltype.NewColumns(), codec.EmptyRecord{})
+		b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.ConditionalStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1 IF v = 0", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, cql.NewColumns(), cql.EmptyRow{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -50,13 +50,13 @@ func TestConditionalExecRejected(t *testing.T) {
 	})
 	t.Run("Batch", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
-		for _, kinds := range [][]cqltype.StatementKind{
-			{cqltype.ConditionalStatement},
-			{cqltype.OrdinaryStatement, cqltype.ConditionalStatement},
+		for _, kinds := range [][]cql.StatementKind{
+			{cql.ConditionalStatement},
+			{cql.OrdinaryStatement, cql.ConditionalStatement},
 		} {
 			var batch Batch
 			for _, kind := range kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &model.RoutingInfo{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -75,7 +75,7 @@ func TestExecSerialConsistencyReadIsNotRejectedUpFront(t *testing.T) {
 	requests := make(chan oneShotRequest, 1)
 	p := oneShotPrepare(t, s, peers[0], requests)
 	sizes := answerOneShot(t, peers[0], requests, "v")
-	opts := testOptions(Options{Consistency: cqltype.Option[cqltype.Consistency]{Set: true, Value: cqltype.Serial}})
+	opts := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Serial}})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_, err := p.Exec(ctx, 1, opts)
@@ -87,7 +87,7 @@ func TestExecSerialConsistencyReadIsNotRejectedUpFront(t *testing.T) {
 	if err == nil {
 		t.Fatal("Exec of a row-returning statement succeeded")
 	}
-	if errors.Is(err, runtimeerrors.ErrConditionalExec) {
+	if errors.Is(err, cqlerr.ErrConditionalExec) {
 		t.Fatalf("err = %v, rejected up front as conditional", err)
 	}
 	if !strings.Contains(err.Error(), "result columns require Run") {

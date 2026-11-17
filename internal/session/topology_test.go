@@ -10,19 +10,21 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestTopology(t *testing.T) {
 	t.Run("Contacts", func(t *testing.T) {
 		t.Run("DistinctIdentities", func(t *testing.T) {
-			ids := []cqltype.UUID{cqltype.MustRandomUUID(), cqltype.MustRandomUUID()}
+			ids := []cql.UUID{cql.RandomUUID(), cql.RandomUUID()}
 			contacts := make([]string, 2)
 			for i := range contacts {
 				id := ids[i]
@@ -37,7 +39,7 @@ func TestTopology(t *testing.T) {
 			}
 			config := settings.DefaultConfig(contacts...)
 			config.Protocol = 4
-			config.Metadata.Mode = settings.MetadataSchemaNone
+			config.Metadata.Mode = metadata.SchemaNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.AdvancedShardAwareness.Enabled = false
@@ -82,7 +84,7 @@ func TestTopology(t *testing.T) {
 			incomplete.rack = ""
 			srv.setPeers(incomplete)
 			err := s.RefreshRingNow()
-			if partial, ok := errors.AsType[*implMetadata.PartialRefreshError](err); !ok || partial.Topology == nil {
+			if partial, ok := errors.AsType[*cqlerr.PartialRefreshError](err); !ok || partial.Topology == nil {
 				t.Fatal("incomplete read was not a visible partial failure", err)
 			}
 			if got := ringHosts(s); !reflect.DeepEqual(got, before) {

@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -54,10 +53,8 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 		t.Fatal("mapping options leaked into shared registration")
 	}
 	// Compare against reflection with the custom-expression types supplied explicitly.
-	reflected, err := codec.ReflectParams(first, cql.WithCodec[Fixture](PointCodec), cql.WithCodec[Fixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
-	if err != nil {
-		t.Fatal(err)
-	}
+	reflected := reflectParams(t, cql.WithCodec[reflectedFixture](codecFor("first/")), cql.WithCodec[reflectedFixture](PointCodec),
+		cql.WithCodec[reflectedFixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
 	_, ref := encode(t, cols, reflected, input)
 	if !bytes.Equal(again, ref) {
 		t.Fatal("generated and reflected option precedence differ")
@@ -79,7 +76,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	for _, check := range []func() error{
 		func() error { _, err := cql.ParamsOf[Fixture](nil); return err },
 		func() error { _, err := cql.RowOf[Fixture](nil); return err },
-		func() error { _, err := stream.RowOf[StreamFixture](nil); return err },
+		func() error { _, err := cql.StreamRowOf[StreamFixture](nil); return err },
 	} {
 		if err := check(); err == nil {
 			t.Fatal("generated mapping accepted a nil option")
@@ -88,21 +85,21 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 }
 
 type offsetStreamInt[T ~int32 | ~int64] struct {
-	base   stream.Decoder[T]
+	base   cql.StreamDecoder[T]
 	amount T
 }
 type offsetStreamIntPlan[T ~int32 | ~int64] struct {
-	base   stream.ValuePlan[T]
+	base   cql.StreamValuePlan[T]
 	amount T
 }
 
-func (d offsetStreamInt[T]) Compile(typ cql.DataType) (stream.ValuePlan[T], error) {
+func (d offsetStreamInt[T]) Compile(typ cql.DataType) (cql.StreamValuePlan[T], error) {
 	base, err := d.base.Compile(typ)
 	return offsetStreamIntPlan[T]{base: base, amount: d.amount}, err
 }
 func (d offsetStreamInt[T]) Reset(dst *T)     { *dst = 0 }
 func (p offsetStreamIntPlan[T]) Reset(dst *T) { p.base.Reset(dst) }
-func (p offsetStreamIntPlan[T]) DecodeInto(reader *stream.ValueReader, dst *T) error {
+func (p offsetStreamIntPlan[T]) DecodeInto(reader *cql.StreamValueReader, dst *T) error {
 	if err := p.base.DecodeInto(reader, dst); err != nil {
 		return err
 	}
@@ -138,9 +135,9 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, amount := range []int32{10, 20, 0} {
-		rows := stream.MustRowOf(
-			stream.WithCodec[StreamFixture](offsetStreamInt[int32]{base: stream.Int32, amount: amount}),
-			stream.WithCodec[StreamFixture](offsetStreamInt[int64]{base: stream.Int64, amount: int64(amount)}),
+		rows := cql.MustStreamRowOf(
+			cql.WithStreamCodec[StreamFixture](offsetStreamInt[int32]{base: cql.StreamInt32, amount: amount}),
+			cql.WithStreamCodec[StreamFixture](offsetStreamInt[int64]{base: cql.StreamInt64, amount: int64(amount)}),
 		)
 		scope, err := wire.NewStream(context.Background(), bytes.NewReader(data), int64(len(data)), wire.StreamLimits{MaxDepth: 8})
 		if err != nil {

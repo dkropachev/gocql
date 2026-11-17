@@ -9,7 +9,7 @@ import (
 	"net/netip"
 	"strconv"
 
-	"github.com/scylladb/gocql/v2/internal/codec"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
@@ -22,25 +22,25 @@ type InternalV2TopologyRow struct {
 	dc, rack, release, cluster, partitioner         string
 	InternalTokens                                  []string
 	InternalPort                                    int
-	id                                              cqltype.UUID
-	schema                                          cqltype.UUID
+	id                                              cql.UUID
+	schema                                          cql.UUID
 }
 
-func InternalV2DecodeTopology() codec.RowDecoder[InternalV2TopologyRow] {
+func InternalV2DecodeTopology() cql.RowDecoder[InternalV2TopologyRow] {
 	return InternalV2SchemaRows[InternalV2TopologyRow]{InternalFields: []InternalV2SchemaField[InternalV2TopologyRow]{
-		InternalV2SchemaColumn("host_id", codec.UUIDCodec, func(r *InternalV2TopologyRow) *cqltype.UUID { return &r.id }),
-		InternalV2SchemaColumn("schema_version", codec.UUIDCodec, func(r *InternalV2TopologyRow) *cqltype.UUID { return &r.schema }),
+		InternalV2SchemaColumn("host_id", cql.UUIDCodec, func(r *InternalV2TopologyRow) *cql.UUID { return &r.id }),
+		InternalV2SchemaColumn("schema_version", cql.UUIDCodec, func(r *InternalV2TopologyRow) *cql.UUID { return &r.schema }),
 		InternalV2SchemaColumn("data_center", InternalV2MetadataText{}, func(r *InternalV2TopologyRow) *string { return &r.dc }),
 		InternalV2SchemaColumn("rack", InternalV2MetadataText{}, func(r *InternalV2TopologyRow) *string { return &r.rack }),
 		InternalV2SchemaColumn("release_version", InternalV2MetadataText{}, func(r *InternalV2TopologyRow) *string { return &r.release }),
 		InternalV2SchemaColumn("cluster_name", InternalV2MetadataText{}, func(r *InternalV2TopologyRow) *string { return &r.cluster }),
 		InternalV2SchemaColumn("partitioner", InternalV2MetadataText{}, func(r *InternalV2TopologyRow) *string { return &r.partitioner }),
-		InternalV2SchemaColumn("rpc_address", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.rpc }),
-		InternalV2SchemaColumn("native_address", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.native }),
-		InternalV2SchemaColumn("peer", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.peer }),
-		InternalV2SchemaColumn("broadcast_address", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.broadcast }),
-		InternalV2SchemaColumn("listen_address", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.listen }),
-		InternalV2SchemaColumn("preferred_ip", codec.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.preferred }),
+		InternalV2SchemaColumn("rpc_address", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.rpc }),
+		InternalV2SchemaColumn("native_address", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.native }),
+		InternalV2SchemaColumn("peer", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.peer }),
+		InternalV2SchemaColumn("broadcast_address", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.broadcast }),
+		InternalV2SchemaColumn("listen_address", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.listen }),
+		InternalV2SchemaColumn("preferred_ip", cql.InetCodec, func(r *InternalV2TopologyRow) *netip.Addr { return &r.preferred }),
 		InternalV2SchemaColumn("native_port", InternalV2MetadataInt{}, func(r *InternalV2TopologyRow) *int { return &r.InternalPort }),
 		InternalV2SchemaColumn("tokens", v2MetadataStrings{}, func(r *InternalV2TopologyRow) *[]string { return &r.InternalTokens }),
 	}}

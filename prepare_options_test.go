@@ -9,10 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/exec"
-
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/exec"
 )
 
 func TestPrepareOptions(t *testing.T) {
@@ -36,7 +34,7 @@ func TestPrepareOptions(t *testing.T) {
 				}
 			}
 			_, err := s.Prepare(ctx, statement, exec.PrepareOptions{}, exec.PrepareOptions{})
-			if v, ok := errors.AsType[*cqlerr.ValidationError](err); !ok || v.Field != "options" || !strings.Contains(err.Error(), "at most one") {
+			if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "options" || !strings.Contains(err.Error(), "at most one") {
 				t.Fatalf("two PrepareOptions: %v, want an options ValidationError", err)
 			}
 		})

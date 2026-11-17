@@ -6,22 +6,17 @@ package model
 import (
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-type PayloadEntry struct {
-	Key   string
-	Value cqltype.Nullable[cqltype.Bytes]
-}
-
 type EncodedCell struct {
-	Typ   cqltype.DataType
+	Typ   cql.DataType
 	Body  wire.Chain
-	State cqltype.CellState
+	State cql.CellState
 }
 type EncodedValues struct {
-	Columns cqltype.Columns
+	Columns cql.Columns
 	Cells   []EncodedCell
 	Framed  wire.Chain
 }
@@ -39,7 +34,7 @@ type AttemptRequest struct {
 	Keyspace                     string
 	PreparedID, ResultMetadataID []byte
 	PagingState                  []byte
-	Payload                      []PayloadEntry
+	Payload                      []cql.PayloadEntry
 	Values                       wire.Chain
 	ValueCount                   int
 	PageSize                     int
@@ -47,7 +42,7 @@ type AttemptRequest struct {
 	Timeout                      time.Duration
 	// NowInSeconds is sent when HasNowInSeconds is set.
 	NowInSeconds                   int32
-	Consistency, SerialConsistency cqltype.Consistency
+	Consistency, SerialConsistency cql.Consistency
 	TabletVersionBlock             byte
 	DefaultTimestamp, SkipMetadata bool
 	Trace, HasNowInSeconds         bool
@@ -73,7 +68,7 @@ type ParamsTemplate struct {
 	NowInSeconds int32
 	// Flags holds the flags of the fixed options.
 	Flags             uint32
-	SerialConsistency cqltype.Consistency
+	SerialConsistency cql.Consistency
 	// The options the template encodes, compared by Matches.
 	Protocol         byte
 	DefaultTimestamp bool
@@ -90,7 +85,7 @@ func (t *ParamsTemplate) Matches(r *AttemptRequest, protocol byte) bool {
 
 type TypedBatchRequest struct {
 	Items []TypedBatchItem
-	Kind  cqltype.BatchKind
+	Kind  cql.BatchKind
 }
 type TypedBatchItem struct {
 	Statement  string

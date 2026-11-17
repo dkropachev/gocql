@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -34,7 +34,7 @@ func reuseMetadataBody(name string, kind uint16) []byte {
 func TestMetadataReuseInterleaved(t *testing.T) {
 	settings := protocolSettings(4)
 	settings.MetadataReuse = new(MetadataReuse)
-	parse := func(data []byte, expect cqltype.Columns) cqltype.Columns {
+	parse := func(data []byte, expect cql.Columns) cql.Columns {
 		chain, _ := wire.NewChain(wire.Borrow(data))
 		lease := wire.NewLease(chain, nil)
 		page := &model.ResponseData{Columns: expect}
@@ -46,13 +46,13 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	}
 	const n = 5
 	var bodies [n][]byte
-	var expect [n]cqltype.Columns
+	var expect [n]cql.Columns
 	for i := range bodies {
 		name := fmt.Sprintf("v%d", i)
-		bodies[i] = reuseMetadataBody(name, uint16(cqltype.TypeBlob))
+		bodies[i] = reuseMetadataBody(name, uint16(cql.TypeBlob))
 		// Expected columns as a prepared statement holds them: equal to the
 		// parsed ones, never the same.
-		expect[i] = cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "table", Name: name, Type: cqltype.BlobType})
+		expect[i] = cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: name, Type: cql.BlobType})
 	}
 	for i := 0; i < 4; i++ {
 		parse(bodies[i], expect[i])
@@ -85,7 +85,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	for i := 0; i < 4; i++ {
 		parse(bodies[i], expect[i])
 	}
-	owns := func(e cqltype.Columns) *metadataReuseEntry {
+	owns := func(e cql.Columns) *metadataReuseEntry {
 		for j := range settings.MetadataReuse.entries {
 			if entry := &settings.MetadataReuse.entries[j]; entry.owner.Same(e) {
 				return entry
@@ -99,13 +99,13 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 			t.Fatal("statement has no entry of its own", i)
 		}
 	}
-	changedBody := reuseMetadataBody("v0", uint16(cqltype.TypeInt))
+	changedBody := reuseMetadataBody("v0", uint16(cql.TypeInt))
 	for range 2 {
 		changed := parse(changedBody, expect[0])
 		if changed.Equal(expect[0]) {
 			t.Fatal("changed metadata returned stale columns")
 		}
-		if spec, _ := changed.At(0); spec.Type.Kind() != cqltype.TypeInt {
+		if spec, _ := changed.At(0); spec.Type.Kind() != cql.TypeInt {
 			t.Fatal("changed metadata parsed to", spec.Type)
 		}
 	}

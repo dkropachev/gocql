@@ -31,20 +31,8 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/logging"
-	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/internal/syncx"
-
-	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-
-	frm "github.com/scylladb/gocql/v2/internal/frame"
-
 	"io"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strconv"
@@ -53,9 +41,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/internal/logging"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/streams"
+	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -145,7 +144,7 @@ type SslOptions struct {
 }
 
 type ConnConfig struct {
-	TypedAuth            connectivity.AuthProvider
+	TypedAuth            auth.Provider
 	Dialer               implEndpoint.InternalLegacyDialer
 	Logger               *slog.Logger
 	Authenticator        Authenticator
@@ -229,7 +228,7 @@ type Conn struct {
 	// typedSettings is published once the framer cache is initialised, when
 	// every input to the native protocol settings is final.
 	typedSettings                             atomic.Pointer[protocol.Settings]
-	hostID                                    atomic.Pointer[cqltype.UUID] // InternalHost's ID once known
+	hostID                                    atomic.Pointer[cql.UUID] // InternalHost's ID once known
 	stopCloseOnCancel                         func() bool
 	typedWriter                               *submissionWriter
 	eventDone                                 chan struct{}
@@ -298,7 +297,7 @@ type Conn struct {
 	eventMu                     sync.Mutex
 	InternalPoolPolicy          InternalConnectionPoolPolicy
 	InternalMu                  sync.Mutex
-	InternalRequestedShard      cqltype.Option[uint32]
+	InternalRequestedShard      cql.Option[uint32]
 	// admission packs the shared-operation count with the closed and
 	// exclusive flags; see connection_state.go.
 	admission        atomic.Uint64
@@ -396,7 +395,7 @@ func (c *Conn) InternalGetScyllaSupported() implEndpoint.ScyllaConnectionFeature
 	return c.InternalScyllaSupported
 }
 
-func InternalTranslateHostAddresses(ctx context.Context, addressTranslator implEndpoint.AddressTranslator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
+func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
 	logger = logging.Or(logger)
 	port := host.Port()
 	if port < 1 || port > 65535 {
@@ -825,7 +824,7 @@ func (c *Conn) InternalCloseWithError(err error) {
 		} else if req.typed {
 			// Typed callers of a connection that closes on cancellation do
 			// not watch InternalCtx; tell them directly.
-			req.deliver(InternalCallResp{InternalErr: runtimeerrors.ErrConnectionClosed})
+			req.deliver(InternalCallResp{InternalErr: cqlerr.ErrConnectionClosed})
 		}
 		req.waitExecDone("closeWithError")
 		if req.streamObserverContext != nil {
@@ -927,7 +926,7 @@ func (c *Conn) InternalServe(ctx context.Context) {
 			continue
 		}
 
-		if errors.Is(err, protocol.ErrReadHeaderTimeout) {
+		if errors.Is(err, cqlerr.ErrReadHeaderTimeout) {
 			// An exclusive reservation interrupts the idle header wait on
 			// purpose to pause this reader; that is not a timeout.
 			if !c.pauseRequested.Load() {
@@ -1159,12 +1158,12 @@ func (c *Conn) processFrameSource(ctx context.Context, src InternalFrameSource, 
 	// The reader takes the call over by emptying its slot. Losing the CAS means
 	// the caller withdrew an unsent request or close took the call.
 	if c.admission.Load()&admissionClosed != 0 {
-		return runtimeerrors.ErrConnectionClosed
+		return cqlerr.ErrConnectionClosed
 	}
 	call := c.InternalCalls.Get(head.Stream)
 	if call != nil && !c.InternalCalls.remove(head.Stream, call) {
 		if c.admission.Load()&admissionClosed != 0 {
-			return runtimeerrors.ErrConnectionClosed
+			return cqlerr.ErrConnectionClosed
 		}
 		call = nil
 	}
@@ -1338,7 +1337,7 @@ func (c *Conn) InternalReadFirstSegmentHeader() (segment.Header, error) {
 	hdr, err := segment.ReadHeaderInto(&c.headerReader, c.InternalSegCompressor != nil, c.headerBuf[:])
 	if err != nil {
 		if netErr, ok := errors.AsType[net.Error](err); c.headerReader.n == 0 && ok && netErr.Timeout() {
-			return segment.Header{}, fmt.Errorf("%w: %w", protocol.ErrReadHeaderTimeout, err)
+			return segment.Header{}, fmt.Errorf("%w: %w", cqlerr.ErrReadHeaderTimeout, err)
 		}
 		return segment.Header{}, err
 	}
@@ -1635,7 +1634,7 @@ func InternalDrainWake(ch chan InternalCallResp) {
 func (c *Conn) allocCall(call *InternalCallReq) error {
 	stream, ok := c.InternalStreams.GetStream()
 	if !ok {
-		return runtimeerrors.ErrNoStreams
+		return cqlerr.ErrNoStreams
 	}
 	call.InternalStreamID = stream
 	if !c.InternalCalls.register(stream, call) {
@@ -1672,7 +1671,7 @@ func (c *Conn) registeredOnClosed(call *InternalCallReq) error {
 		return nil
 	}
 	c.freeStream(call.InternalStreamID)
-	return runtimeerrors.ErrConnectionClosed
+	return cqlerr.ErrConnectionClosed
 }
 
 // allocSharedCall is beginShared followed by allocCall. Admission takes the
@@ -1866,7 +1865,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		if c.markOrphan(call) {
 			closeErr = errOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-ctxDone:
 		stopWaiting = true
 		if c.markOrphan(call) {
@@ -1875,7 +1874,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-c.InternalCtx.Done():
 		stopWaiting = true
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: runtimeerrors.ErrConnectionClosed, InternalPotentiallyExecuted: true})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrConnectionClosed, InternalPotentiallyExecuted: true})
 	}
 }
 
@@ -2390,7 +2389,7 @@ func (c *InternalDeadlineContextWriter) InternalWriteContext(ctx context.Context
 	case <-ctx.Done():
 		return 0, ctx.Err()
 	case <-c.InternalQuit:
-		return 0, runtimeerrors.ErrConnectionClosed
+		return 0, cqlerr.ErrConnectionClosed
 	case c.InternalSemaphore <- struct{}{}:
 
 	}

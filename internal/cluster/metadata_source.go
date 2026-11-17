@@ -6,10 +6,10 @@ package cluster
 import (
 	"context"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -46,7 +46,7 @@ func (source schemaSource) InternalQuerySystem(ctx context.Context, request *mod
 	} else {
 		h := s.privateStorage.InternalControl.InternalGetConn()
 		if h == nil || h.InternalConn == nil {
-			return nil, runtimeerrors.ErrNoConnections
+			return nil, cqlerr.ErrNoConnections
 		}
 		c, ok := h.InternalConn.(*transport.Conn)
 		if !ok {

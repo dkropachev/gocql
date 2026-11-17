@@ -35,13 +35,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestSchemaAgreement(t *testing.T) {
@@ -90,11 +89,11 @@ func TestSchemaAgreement(t *testing.T) {
 			for _, success := range []bool{false, true} {
 				t.Run(fmt.Sprint(success), func(t *testing.T) {
 					s, id, missing := agreementSession(t)
-					hosts := []model.HostSnapshot{{ID: missing, Enabled: true, Up: false}}
+					hosts := []metadata.HostSnapshot{{ID: missing, Enabled: true, Up: false}}
 					if success {
-						c, _ := agreementConn(t, s, id, cqltype.MustRandomUUID(), 0)
+						c, _ := agreementConn(t, s, id, cql.RandomUUID(), 0)
 						agreementPool(s, c)
-						hosts = append(hosts, model.HostSnapshot{ID: id, Enabled: true, Up: true})
+						hosts = append(hosts, metadata.HostSnapshot{ID: id, Enabled: true, Up: true})
 					}
 					s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
 					if err := s.AwaitSchemaAgreement(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
@@ -106,18 +105,18 @@ func TestSchemaAgreement(t *testing.T) {
 
 		t.Run("RetainsExcludedCoordinator", func(t *testing.T) {
 			s, id, coordinatorID := agreementSession(t)
-			version := cqltype.MustRandomUUID()
+			version := cql.RandomUUID()
 			c, _ := agreementConn(t, s, id, version, 0)
 			agreementPool(s, c)
 			coordinator, count := agreementConn(t, s, coordinatorID, version, 0)
-			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}, {ID: cqltype.MustRandomUUID(), Enabled: false}}}))
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{ID: id, Enabled: true}, {ID: cql.RandomUUID(), Enabled: false}}}))
 			if err := s.AwaitV2SchemaAgreementOn(context.Background(), coordinator); err != nil {
 				t.Fatal(err)
 			}
 			if count.Load() != 1 {
 				t.Fatal("excluded exact coordinator not queried", count.Load())
 			}
-			different, _ := agreementConn(t, s, coordinatorID, cqltype.MustRandomUUID(), 0)
+			different, _ := agreementConn(t, s, coordinatorID, cql.RandomUUID(), 0)
 			if err := s.AwaitV2SchemaAgreementOn(context.Background(), different); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal("older topology agreement ignored coordinator schema", err)
 			}
@@ -125,11 +124,11 @@ func TestSchemaAgreement(t *testing.T) {
 
 		t.Run("TerminalAuthorization", func(t *testing.T) {
 			s, id, _ := agreementSession(t)
-			c, count := agreementConn(t, s, id, cqltype.MustRandomUUID(), protocol.CodeUnauthorized)
+			c, count := agreementConn(t, s, id, cql.RandomUUID(), cqlerr.CodeUnauthorized)
 			agreementPool(s, c)
-			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []model.HostSnapshot{{ID: id, Enabled: true}}}))
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{ID: id, Enabled: true}}}))
 			err := s.AwaitSchemaAgreement(context.Background())
-			if request, ok := errors.AsType[protocol.ServerError](err); !ok || request.Code() != protocol.CodeUnauthorized {
+			if request, ok := errors.AsType[cqlerr.ServerError](err); !ok || request.Code() != cqlerr.CodeUnauthorized {
 				t.Fatal(err)
 			}
 			if count.Load() != 1 {
@@ -148,11 +147,11 @@ func TestSchemaAgreement(t *testing.T) {
 			config.Metadata.AgreementTimeout = 100 * time.Millisecond
 			InternalRuntimeFor(s).config = config
 			s.ConfigureV2Peripheral(config)
-			metadata := s.Metadata()
-			metadataCopy := *metadata
-			routing.SnapshotData(&metadataCopy).InternalHosts = append([]model.HostSnapshot(nil), routing.SnapshotData(metadata).InternalHosts...)
-			routing.SnapshotData(&metadataCopy).InternalHosts = append(routing.SnapshotData(&metadataCopy).InternalHosts, model.HostSnapshot{ID: cqltype.MustRandomUUID(), Enabled: true})
-			s.Peripheral().InternalSnapshot.Store(&metadataCopy)
+			snapshot := s.Metadata()
+			snapshotCopy := *snapshot
+			routing.SnapshotData(&snapshotCopy).InternalHosts = append([]metadata.HostSnapshot(nil), routing.SnapshotData(snapshot).InternalHosts...)
+			routing.SnapshotData(&snapshotCopy).InternalHosts = append(routing.SnapshotData(&snapshotCopy).InternalHosts, metadata.HostSnapshot{ID: cql.RandomUUID(), Enabled: true})
+			s.Peripheral().InternalSnapshot.Store(&snapshotCopy)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			var ddl atomic.Int32
@@ -188,13 +187,13 @@ func TestSchemaAgreement(t *testing.T) {
 							return
 						}
 					} else {
-						if _, err := peers[0].Write(errorResponse(t, stream, protocol.CodeUnauthorized, nil)); err != nil {
+						if _, err := peers[0].Write(errorResponse(t, stream, cqlerr.CodeUnauthorized, nil)); err != nil {
 							return
 						}
 					}
 				}
 			}()
-			b := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "CREATE KEYSPACE schema_events", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{}))
+			b := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyRow{}))
 			defer b.Close()
 			_, err := Exec(ctx, s, b, testOptions(*func() *Options {
 				opaqueStorageValuexxxxxx := new(Options)
@@ -240,7 +239,7 @@ func TestSchemaAgreement(t *testing.T) {
 				close(entered)
 				<-ctx.Done()
 			}()
-			bound := codecTestMust(BindUnpreparedOwned(binding.Statement[codec.EmptyRecord, codec.EmptyRecord]{CQL: "CREATE KEYSPACE schema_events", Params: codec.EmptyParamsEncoder, Rows: codec.EmptyRowDecoder}, cqltype.NewColumns(), codec.EmptyRecord{}))
+			bound := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyRow{}))
 			defer bound.Close()
 			result := make(chan error, 1)
 			go func() {

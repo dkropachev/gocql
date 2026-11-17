@@ -4,53 +4,48 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/settings"
-
 	"net"
 	"net/netip"
 	"slices"
 	"time"
 
-	routing "github.com/scylladb/gocql/v2/internal/routing"
-
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	oldevents "github.com/scylladb/gocql/v2/internal/events"
+	"github.com/scylladb/gocql/v2/internal/link"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
+	routing "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
-type EventKind uint8
+// Kind classifies an Event.
 
-const (
-	TopologyEvent EventKind = iota
-	StatusEvent
-	SchemaEvent
-	ControlEvent
-	ClientRouteEvent
-	OverflowEvent
-)
-
-type Event struct {
-	Address                          netip.AddrPort
-	Change, Target, Keyspace, Object string
-	ArgumentTypes                    []string
-	Generation                       uint64
-	HostID                           cqltype.UUID
-	Kind                             EventKind
-}
-type EventFilter struct {
-	Keyspace string
-	Kinds    []EventKind
-	Capacity int
-}
+// Event is one cluster change delivered to a Subscription.
+// Filter selects the kinds of events a Subscription receives and its queue
+// capacity.
 
 // Subscription owns a bounded queue. Overflow discards queued deltas and emits
 // OverflowEvent, then closes. Subscribe again before reading Session.Metadata.
 type Subscription struct {
+	// public is the handle package event exposes.
+	public         *event.Subscription
 	privateStorage SubscriptionStorage
 }
 
-func (s *Subscription) Events() <-chan Event {
+var newPublicSubscription = link.Get[func(<-chan event.Event, func()) *event.Subscription](link.NewSubscription)
+
+// Public returns the event.Subscription handle of s.
+func (s *Subscription) Public() *event.Subscription {
+	if s == nil {
+		return nil
+	}
+	return s.public
+}
+
+func (s *Subscription) Events() <-chan event.Event {
 	if s == nil {
 		return nil
 	}
@@ -72,8 +67,8 @@ func (s *Subscription) Close() {
 		s.privateStorage.parent.InternalMu.Unlock()
 	}
 }
-func (s *Subscription) accepts(e Event) bool {
-	if e.Kind == OverflowEvent {
+func (s *Subscription) accepts(e event.Event) bool {
+	if e.Kind == event.Overflow {
 		return true
 	}
 	if s.privateStorage.filter.Keyspace != "" && e.Keyspace != s.privateStorage.filter.Keyspace {
@@ -89,14 +84,14 @@ func (s *Subscription) accepts(e Event) bool {
 	}
 	return false
 }
-func InternalSubscriptionPublish(s *Subscription, e Event) {
+func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 	s.privateStorage.mu.Lock()
 	defer s.privateStorage.mu.Unlock()
 	if s.privateStorage.closed || !s.accepts(e) {
 		return
 	}
 	e.ArgumentTypes = append([]string(nil), e.ArgumentTypes...)
-	if e.Kind != OverflowEvent {
+	if e.Kind != event.Overflow {
 		select {
 		case s.privateStorage.events <- e:
 			return
@@ -112,19 +107,19 @@ func InternalSubscriptionPublish(s *Subscription, e Event) {
 			}
 		default:
 			change := "RESYNC"
-			if e.Kind == OverflowEvent && e.Change != "" {
+			if e.Kind == event.Overflow && e.Change != "" {
 				change = e.Change
 			}
-			s.privateStorage.events <- Event{Kind: OverflowEvent, Generation: highest, Change: change}
+			s.privateStorage.events <- event.Event{Kind: event.Overflow, Generation: highest, Change: change}
 			s.privateStorage.closed = true
 			close(s.privateStorage.events)
 			return
 		}
 	}
 }
-func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
+func (s *Core) Subscribe(filter event.Filter) (*Subscription, error) {
 	if s == nil || s.Closed() {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	if filter.Capacity < 0 {
 		return nil, cqltype.TypeValidation("subscription capacity", "must not be negative")
@@ -133,22 +128,23 @@ func (s *Core) Subscribe(filter EventFilter) (*Subscription, error) {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
-		if kind > OverflowEvent {
+		if kind > event.Overflow {
 			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
 		}
 	}
-	filter.Kinds = append([]EventKind(nil), filter.Kinds...)
+	filter.Kinds = append([]event.Kind(nil), filter.Kinds...)
 	p := s.Peripheral()
 	p.InternalMu.Lock()
 	defer p.InternalMu.Unlock()
 	if p.closed {
-		return nil, runtimeerrors.ErrClosed
+		return nil, cqlerr.ErrClosed
 	}
 	sub := func() *Subscription {
 		opaqueStorageValue := new(Subscription)
-		opaqueStorageValue.privateStorage.events = make(chan Event, filter.Capacity)
+		opaqueStorageValue.privateStorage.events = make(chan event.Event, filter.Capacity)
 		opaqueStorageValue.privateStorage.filter = filter
 		opaqueStorageValue.privateStorage.parent = p
+		opaqueStorageValue.public = newPublicSubscription(opaqueStorageValue.privateStorage.events, opaqueStorageValue.Close)
 		return opaqueStorageValue
 	}()
 	p.InternalSubscribers[sub] = struct{}{}
@@ -174,7 +170,7 @@ func (s *Core) CloseV2Peripheral() {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
 }
 func eventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)
@@ -193,60 +189,60 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	if p == nil {
 		return
 	}
-	e := Event{Generation: s.Metadata().Generation()}
+	e := event.Event{Generation: s.Metadata().Generation()}
 	switch v := source.(type) {
 	case *oldevents.TopologyChangeEvent:
-		e.Kind = TopologyEvent
+		e.Kind = event.Topology
 		e.Change = v.Change
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.StatusChangeEvent:
-		e.Kind = StatusEvent
+		e.Kind = event.Status
 		e.Change = v.Change
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.SchemaChangeKeyspaceEvent:
-		e.Kind = SchemaEvent
+		e.Kind = event.Schema
 		e.Target = "KEYSPACE"
 		e.Change = v.Change
 		e.Keyspace = v.Keyspace
 	case *oldevents.SchemaChangeTableEvent:
-		e.Kind = SchemaEvent
+		e.Kind = event.Schema
 		e.Target = "TABLE"
 		e.Change = v.Change
 		e.Keyspace = v.Keyspace
 		e.Object = v.Table
 	case *oldevents.SchemaChangeTypeEvent:
-		e.Kind = SchemaEvent
+		e.Kind = event.Schema
 		e.Target = "TYPE"
 		e.Change = v.Change
 		e.Keyspace = v.Keyspace
 		e.Object = v.TypeName
 	case *oldevents.SchemaChangeFunctionEvent:
-		e.Kind = SchemaEvent
+		e.Kind = event.Schema
 		e.Target = "FUNCTION"
 		e.Change = v.Change
 		e.Keyspace = v.Keyspace
 		e.Object = v.Function
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.SchemaChangeAggregateEvent:
-		e.Kind = SchemaEvent
+		e.Kind = event.Schema
 		e.Target = "AGGREGATE"
 		e.Change = v.Change
 		e.Keyspace = v.Keyspace
 		e.Object = v.Aggregate
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.ClientRoutesChangedEvent:
-		e.Kind = ClientRouteEvent
+		e.Kind = event.ClientRoute
 		e.Change = v.ChangeType
 		e.ArgumentTypes = append(append([]string(nil), v.ConnectionIDs...), v.HostIDs...)
 	case *oldevents.ControlConnectionRecreatedEvent:
-		e.Kind = ControlEvent
+		e.Kind = event.Control
 		e.Change = "RECONNECTED"
 		e.Address = eventV2Address(v.NewHost.Host, v.NewHost.Port)
-		e.HostID, _ = cqltype.ParseUUID(v.NewHost.HostID)
+		e.HostID, _ = cql.ParseUUID(v.NewHost.HostID)
 	default:
 		return
 	}
-	if e.Kind == SchemaEvent && invalidate {
+	if e.Kind == event.Schema && invalidate {
 		s.InvalidatePreparedSchema(e)
 		p.InternalMu.Lock()
 		p.InternalPublicationRevision++
@@ -265,7 +261,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 			if e.Target == "KEYSPACE" {
 				md.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(e.Keyspace)
 			} else {
-				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *implMetadata.KeyspaceMetadata) {
+				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *metadata.Keyspace) {
 					switch e.Target {
 					case "TABLE":
 						implMetadata.InternalKeyspaceMetadataRemoveTable(ks, e.Object)
@@ -290,7 +286,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		p.InternalMu.Unlock()
 		if deliver || e.Change == "DROPPED" {
 			if !s.PublishV2Metadata() {
-				s.PublishV2LocalEvent(Event{Kind: OverflowEvent, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+				s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
 				return
 			}
 			e.Generation = s.Metadata().Generation()
@@ -299,7 +295,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	if !deliver {
 		return
 	}
-	if e.HostID == (cqltype.UUID{}) && e.Address.IsValid() {
+	if e.HostID == (cql.UUID{}) && e.Address.IsValid() {
 		for _, host := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if host.Address == e.Address {
 				e.HostID = host.ID
@@ -326,7 +322,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	}
 }
 
-func (s *Core) PublishV2LocalEvent(event Event) {
+func (s *Core) PublishV2LocalEvent(event event.Event) {
 	p := s.Peripheral()
 	if p == nil {
 		return

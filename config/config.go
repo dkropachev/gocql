@@ -14,12 +14,12 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
-	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -73,12 +73,12 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		}
 	}
 	if settings.Identity.ApplicationVersion != "" && settings.Identity.ApplicationName == "" {
-		return Config{}, &cqlerr.ValidationError{Field: "application", Err: errors.New("version requires a name")}
+		return Config{}, &cql.ValidationError{Field: "application", Err: errors.New("version requires a name")}
 	}
 	if settings.TLSSource != nil {
 		settings.TLS = settings.TLSSource.TLSConfig()
 		if settings.TLS == nil {
-			return Config{}, &cqlerr.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
+			return Config{}, &cql.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
 		}
 	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
@@ -86,33 +86,33 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if b.perHost {
 		if b.shardAwarenessChosen && settings.Pool.AdvancedShardAwareness.Enabled {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
 		}
 		if b.maxExcessChosen {
-			return Config{}, &cqlerr.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
 		}
 		settings.Pool.AdvancedShardAwareness.Enabled = false
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
 		if id.IsEmpty() {
-			return Config{}, &cqlerr.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
+			return Config{}, &cql.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter
-		settings.HostFilter = func(host routing.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
+		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
-		case implCluster.TopologyEvent:
+		case event.Topology:
 			settings.Metadata.TopologyEvents = false
-		case implCluster.StatusEvent:
+		case event.Status:
 			settings.Metadata.StatusEvents = false
-		case implCluster.SchemaEvent:
+		case event.Schema:
 			settings.Metadata.SchemaEvents = false
-		case implCluster.ClientRouteEvent:
+		case event.ClientRoute:
 			settings.Metadata.ClientRouteEvents = false
 		default:
-			return Config{}, &cqlerr.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
+			return Config{}, &cql.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
 		}
 	}
 	if err := settings.Validate(); err != nil {
@@ -162,16 +162,16 @@ func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
 
 // WithTLSSource encrypts every connection with the configuration source
 // returns when the connection is dialed, for one that changes while the
-// session runs: NewTLSFiles or your own TLSSource. Build validates the
+// session runs: NewTLSFiles or your own endpoint.TLSSource. Build validates the
 // configuration source returns at that time. Verification is as for WithTLS.
 // A nil source selects plaintext. It replaces WithTLS.
-func (b *ConfigBuilder) WithTLSSource(source TLSSource) *ConfigBuilder {
+func (b *ConfigBuilder) WithTLSSource(source endpoint.TLSSource) *ConfigBuilder {
 	b.settings.TLSSource = source
 	return b
 }
 
 // WithCompression sets frame compression. Default none.
-func (b *ConfigBuilder) WithCompression(compression Compression) *ConfigBuilder {
+func (b *ConfigBuilder) WithCompression(compression cql.Compression) *ConfigBuilder {
 	b.settings.Compression = compression
 	return b
 }
@@ -390,7 +390,7 @@ func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 }
 
 // WithHostFilter skips nodes for which keep returns false. Default all nodes.
-func (b *ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder {
+func (b *ConfigBuilder) WithHostFilter(keep func(metadata.HostSnapshot) bool) *ConfigBuilder {
 	b.settings.HostFilter = keep
 	return b
 }
@@ -423,7 +423,7 @@ func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
 // WithReconnect sets the delay between attempts to reopen a node's connections.
 // Nil disables reconnection attempts.
 // Default jittered backoff from 1s to 32s.
-func (b *ConfigBuilder) WithReconnect(policy ReconnectPolicy) *ConfigBuilder {
+func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBuilder {
 	b.settings.Reconnect = policy
 	return b
 }
@@ -431,7 +431,7 @@ func (b *ConfigBuilder) WithReconnect(policy ReconnectPolicy) *ConfigBuilder {
 // WithConviction decides when connection errors mark a node down.
 // Default SimpleConvictionPolicy: a node is down once opening its connections
 // leaves it with none, or the control connection fails to dial it.
-func (b *ConfigBuilder) WithConviction(policy ConvictionPolicy) *ConfigBuilder {
+func (b *ConfigBuilder) WithConviction(policy endpoint.ConvictionPolicy) *ConfigBuilder {
 	b.settings.Conviction = policy
 	return b
 }
@@ -581,13 +581,13 @@ func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 }
 
 // WithObserver receives every request and attempt. Default none.
-func (b *ConfigBuilder) WithObserver(observer Observer) *ConfigBuilder {
+func (b *ConfigBuilder) WithObserver(observer observe.Observer) *ConfigBuilder {
 	b.settings.Observer = observer
 	return b
 }
 
 // WithLifecycleObserver receives session and connection lifecycle events.
-func (b *ConfigBuilder) WithLifecycleObserver(observer LifecycleObserver) *ConfigBuilder {
+func (b *ConfigBuilder) WithLifecycleObserver(observer observe.LifecycleObserver) *ConfigBuilder {
 	b.settings.LifecycleObserver = observer
 	return b
 }
@@ -621,7 +621,7 @@ func (c Config) String() string {
 // Config.
 func (c Config) resolved() (implSettings.Config, error) {
 	if c.settings == nil {
-		return implSettings.Config{}, &cqlerr.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with config.New")}
+		return implSettings.Config{}, &cql.ValidationError{Field: "Config", Err: errors.New("zero Config; build one with config.New")}
 	}
 	return *c.settings, nil
 }
@@ -717,13 +717,13 @@ func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
 // selection without a request-specific routing plan. Default token-aware with
 // shuffled replicas.
 func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
-	p.profile.Routing = policy
+	p.profile.Routing = implRouting.EngineOf(policy)
 	return p
 }
 
 // WithSpeculation sets the speculative execution policy; nil disables it.
 // Default none.
-func (p *ProfileBuilder) WithSpeculation(policy SpeculationPolicy) *ProfileBuilder {
+func (p *ProfileBuilder) WithSpeculation(policy retry.SpeculationPolicy) *ProfileBuilder {
 	p.profile.Speculation = policy
 	return p
 }

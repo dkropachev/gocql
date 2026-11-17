@@ -34,5 +34,5 @@ func (p *PreparedStream[P, R]) Columns() cql.Columns {
 
 // Info returns preparation information.
 func (p *PreparedStream[P, R]) Info() PreparedInfo {
-	return (*implSession.PreparedStream[P, R])(p).Info()
+	return PreparedInfo((*implSession.PreparedStream[P, R])(p).Info())
 }

@@ -3,34 +3,24 @@
 
 package settings
 
+import "github.com/scylladb/gocql/v2/internal/link"
+
 // Package config defines the public Config and Profile, and package gocql
 // consumes them. config cannot export the conversions without making them
-// public API, so it registers them here from its init; gocql imports config,
-// so the registration runs before gocql uses them. The stored values are
-// func(C) ... of config's concrete types: calls assert the func, never box C.
-var (
-	publicResolve    any
-	publicProfileIn  any
-	publicProfileOut any
-)
-
-// InternalLinkPublic registers package config's conversions. Only package
-// config calls it.
-func InternalLinkPublic[C, P any](resolve func(C) (Config, error), in func(P) Profile, out func(Profile) P) {
-	publicResolve, publicProfileIn, publicProfileOut = resolve, in, out
-}
+// public API, so it registers them in internal/link from its init. The type
+// parameters are config's types, which this package cannot import.
 
 // InternalResolvePublic returns the settings of a public config.Config.
 func InternalResolvePublic[C any](c C) (Config, error) {
-	return publicResolve.(func(C) (Config, error))(c)
+	return link.Get[func(C) (Config, error)](link.ConfigResolve)(c)
 }
 
 // InternalProfileFromPublic converts a public config.Profile.
 func InternalProfileFromPublic[P any](p P) Profile {
-	return publicProfileIn.(func(P) Profile)(p)
+	return link.Get[func(P) Profile](link.ProfileToEngine)(p)
 }
 
 // InternalProfileToPublic converts to a public config.Profile.
 func InternalProfileToPublic[P any](p Profile) P {
-	return publicProfileOut.(func(Profile) P)(p)
+	return link.Get[func(Profile) P](link.ProfileFromEngine)(p)
 }

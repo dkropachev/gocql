@@ -26,21 +26,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/model"
-	implRuntimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
-
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
-	"github.com/scylladb/gocql/v2/internal/protocol"
+	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, codec.EmptyRecord] {
+func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, cql.EmptyRow] {
 	t.Helper()
-	typ := cqltype.BlobType
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam(codec.ByteSliceCodec), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	typ := cql.BlobType
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +106,7 @@ func TestBatch(t *testing.T) {
 			b := runtimeQuery(t)
 			b.Close()
 			var batch Batch
-			if err := InternalAddBound(&batch, s, b); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+			if err := InternalAddBound(&batch, s, b); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatal(err)
 			}
 			if batch.Len() != 0 {
@@ -181,7 +179,7 @@ func TestBatch(t *testing.T) {
 		// error leaves the batch as it was.
 		t.Run("FailedEncodingKeepsBatch", func(t *testing.T) {
 			s, _ := attachmentSession()
-			q, err := unpreparedQuery(s, binding.Statement[[]byte, codec.EmptyRecord]{Kind: cqltype.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: codec.OneParam[[]byte](failingBlobEncoder{}), Rows: codec.EmptyRowDecoder, BindMarkers: cqltype.NewColumns(cqltype.ColumnSpec{Name: "v", Type: cqltype.BlobType})}, Options{})
+			q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam[[]byte](failingBlobEncoder{}), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -294,19 +292,19 @@ func TestBatch(t *testing.T) {
 		t.Run("RepairsEveryEvictedStatement", func(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			typ := cqltype.BlobType
-			columns := cqltype.NewColumns(cqltype.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
-			query := func(id string) *Query[[]byte, codec.EmptyRecord] {
-				state, hp := preparedState(t, s, cqltype.NewColumns())
+			typ := cql.BlobType
+			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
+			query := func(id string) *Query[[]byte, cql.EmptyRow] {
+				state, hp := preparedState(t, s, cql.NewColumns())
 				hp.InternalId = []byte(id)
 				state.InternalStatement = "INSERT INTO ks.tbl(value) VALUES(?) -- " + id
 				state.InternalParameters = columns
 				state.InternalInfo.PartitionKeyIndexes = []int{0}
-				handle := new(Prepared[[]byte, codec.EmptyRecord])
+				handle := new(Prepared[[]byte, cql.EmptyRow])
 				PreparedData(handle).InternalState = state
-				PreparedData(handle).params = codecTestMust(codec.OneParam(codec.ByteSliceCodec).Compile(columns))
-				PreparedData(handle).rows = codec.EmptyRowDecoder
-				PreparedData(handle).plans = &InternalResultPlanCache[codec.EmptyRecord]{}
+				PreparedData(handle).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
+				PreparedData(handle).rows = cql.EmptyRowDecoder
+				PreparedData(handle).plans = &InternalResultPlanCache[cql.EmptyRow]{}
 				q := codecTestMust(handle.Query(Options{}))
 				t.Cleanup(q.Close)
 				return q
@@ -323,13 +321,13 @@ func TestBatch(t *testing.T) {
 			go func() {
 				// BATCH -> UNPREPARED id1, PREPARE, BATCH -> UNPREPARED id2, PREPARE, BATCH -> void.
 				responses := []func(stream int) []byte{
-					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id1")) },
+					func(stream int) []byte { return errorResponse(t, stream, cqlerr.CodeUnprepared, []byte("id1")) },
 					func(stream int) []byte {
-						return typedTestResponse(t, 4, stream, preparedBody([]byte("id1"), columns, cqltype.NewColumns(), 0))
+						return typedTestResponse(t, 4, stream, preparedBody([]byte("id1"), columns, cql.NewColumns(), 0))
 					},
-					func(stream int) []byte { return errorResponse(t, stream, protocol.CodeUnprepared, []byte("id2")) },
+					func(stream int) []byte { return errorResponse(t, stream, cqlerr.CodeUnprepared, []byte("id2")) },
 					func(stream int) []byte {
-						return typedTestResponse(t, 4, stream, preparedBody([]byte("id2"), columns, cqltype.NewColumns(), 0))
+						return typedTestResponse(t, 4, stream, preparedBody([]byte("id2"), columns, cql.NewColumns(), 0))
 					},
 					func(stream int) []byte {
 						return typedTestResponse(t, 4, stream, binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid))
@@ -388,7 +386,7 @@ func TestBatch(t *testing.T) {
 					t.Fatal(err)
 				}
 				r := <-requests
-				if r.op != byte(frm.OpBatch) || r.body[0] != byte(cqltype.LoggedBatch) || !bytes.Contains(r.body, []byte("first")) || !bytes.Contains(r.body, []byte("second")) {
+				if r.op != byte(frm.OpBatch) || r.body[0] != byte(cql.LoggedBatch) || !bytes.Contains(r.body, []byte("first")) || !bytes.Contains(r.body, []byte("second")) {
 					t.Fatalf("request %d: op %#x body %q", i, r.op, r.body)
 				}
 			}
@@ -396,9 +394,9 @@ func TestBatch(t *testing.T) {
 				t.Fatal("a completed execution did not drain")
 			}
 			values := &batch.values[0]
-			batch.Kind = cqltype.UnloggedBatch
+			batch.Kind = cql.UnloggedBatch
 			batch.Reset()
-			if batch.Len() != 0 || batch.Kind != cqltype.UnloggedBatch {
+			if batch.Len() != 0 || batch.Kind != cql.UnloggedBatch {
 				t.Fatal(batch.Len(), batch.Kind)
 			}
 			if err := q.AddToBatch(&batch, []byte("third")); err != nil {
@@ -411,7 +409,7 @@ func TestBatch(t *testing.T) {
 				t.Fatal(err)
 			}
 			r := <-requests
-			if r.body[0] != byte(cqltype.UnloggedBatch) || !bytes.Contains(r.body, []byte("third")) || bytes.Contains(r.body, []byte("first")) {
+			if r.body[0] != byte(cql.UnloggedBatch) || !bytes.Contains(r.body, []byte("third")) || bytes.Contains(r.body, []byte("first")) {
 				t.Fatalf("body %q", r.body)
 			}
 		})
@@ -472,17 +470,17 @@ func TestBatch(t *testing.T) {
 	t.Run("StatementKind", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		for _, tc := range []struct {
-			kinds []cqltype.StatementKind
-			want  cqltype.StatementKind
+			kinds []cql.StatementKind
+			want  cql.StatementKind
 		}{
-			{[]cqltype.StatementKind{cqltype.OrdinaryStatement, cqltype.OrdinaryStatement}, cqltype.OrdinaryStatement},
-			{[]cqltype.StatementKind{cqltype.UnknownStatement}, cqltype.UnknownStatement},
-			{[]cqltype.StatementKind{cqltype.OrdinaryStatement, cqltype.UnknownStatement}, cqltype.UnknownStatement},
-			{[]cqltype.StatementKind{cqltype.UnknownStatement, cqltype.ConditionalStatement, cqltype.OrdinaryStatement}, cqltype.ConditionalStatement},
+			{[]cql.StatementKind{cql.OrdinaryStatement, cql.OrdinaryStatement}, cql.OrdinaryStatement},
+			{[]cql.StatementKind{cql.UnknownStatement}, cql.UnknownStatement},
+			{[]cql.StatementKind{cql.OrdinaryStatement, cql.UnknownStatement}, cql.UnknownStatement},
+			{[]cql.StatementKind{cql.UnknownStatement, cql.ConditionalStatement, cql.OrdinaryStatement}, cql.ConditionalStatement},
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &model.RoutingInfo{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}
@@ -515,11 +513,11 @@ func TestBatch(t *testing.T) {
 		if _, err := otherSession.ExecBatch(ctx, &batch, CompiledOptions{}); err == nil {
 			t.Fatal("batch sent on another session")
 		}
-		batch.Kind = cqltype.BatchKind(42)
+		batch.Kind = cql.BatchKind(42)
 		if _, err := session.ExecBatch(ctx, &batch, CompiledOptions{}); err == nil {
 			t.Fatal("unknown batch kind sent")
 		}
-		batch.Kind = cqltype.LoggedBatch
+		batch.Kind = cql.LoggedBatch
 		if err := q.state.begin(ctx); err != nil {
 			t.Fatal(err)
 		}
@@ -534,7 +532,7 @@ func TestBatch(t *testing.T) {
 		if err := q.Wait(closeCtx); err != nil {
 			t.Fatal(err)
 		}
-		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, implRuntimeerrors.ErrClosed) {
+		if err := q.AddToBatch(&batch, []byte("v")); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatal("closed query appended", err)
 		}
 		if batch.Len() != 2 {

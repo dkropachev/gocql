@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -35,7 +35,7 @@ func TestConn(t *testing.T) {
 			}()
 			returned := make(chan error, 1)
 			go func() {
-				page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "q", Consistency: cqltype.One, Lease: input})
+				page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "q", Consistency: cql.One, Lease: input})
 				if page != nil {
 					page.Owner.Release()
 				}

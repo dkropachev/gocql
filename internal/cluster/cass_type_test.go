@@ -22,6 +22,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
@@ -52,7 +53,7 @@ func TestCassType(t *testing.T) {
 			t.Run(test.name, func(t *testing.T) {
 				t.Parallel()
 
-				got, ok := asVectorType(cqltype.NewCustomType(protocol.ProtoVersion4, cqltype.TypeCustom, test.typ))
+				got, ok := asVectorType(cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeCustom, test.typ))
 				if ok != test.wantOK {
 					t.Fatalf("asVectorType(%q) ok = %t, want %t (got %#v)", test.typ, ok, test.wantOK, got)
 				}
@@ -114,14 +115,14 @@ func TestCassType(t *testing.T) {
 				typ  string
 				want cqltype.TypeInfo
 			}{
-				{name: "negative dimensions", typ: p + "VectorType(" + p + "FloatType, -3)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType("+p+"FloatType, -3)")},
-				{name: "zero dimensions", typ: p + "VectorType(" + p + "FloatType, 0)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType("+p+"FloatType, 0)")},
+				{name: "negative dimensions", typ: p + "VectorType(" + p + "FloatType, -3)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType("+p+"FloatType, -3)")},
+				{name: "zero dimensions", typ: p + "VectorType(" + p + "FloatType, 0)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType("+p+"FloatType, 0)")},
 				{
 					// The outer vector is well-formed; only its element type degrades.
 					name: "negative dimensions nested in a valid vector",
 					typ:  p + "VectorType(" + p + "VectorType(" + p + "FloatType, -3), 2)",
 					want: cqltype.VectorType{
-						SubType:    cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType("+p+"FloatType, -3)"),
+						SubType:    cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType("+p+"FloatType, -3)"),
 						Dimensions: 2,
 					},
 				},
@@ -149,18 +150,18 @@ func TestCassType(t *testing.T) {
 				typ  string
 				want cqltype.TypeInfo
 			}{
-				{name: "vector without arguments", typ: p + "VectorType", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType")},
-				{name: "vector without dimensions", typ: p + "VectorType(" + p + "FloatType)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType("+p+"FloatType)")},
-				{name: "udt without arguments", typ: p + "UserType", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"UserType")},
-				{name: "udt without a name", typ: p + "UserType(gocql_test)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"UserType(gocql_test)")},
-				{name: "udt field without a type", typ: p + "UserType(gocql_test,706572736f6e,616765)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"UserType(gocql_test,706572736f6e,616765)")},
-				{name: "vector without an element type", typ: p + "VectorType(, 3)", want: cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType(, 3)")},
+				{name: "vector without arguments", typ: p + "VectorType", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType")},
+				{name: "vector without dimensions", typ: p + "VectorType(" + p + "FloatType)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType("+p+"FloatType)")},
+				{name: "udt without arguments", typ: p + "UserType", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"UserType")},
+				{name: "udt without a name", typ: p + "UserType(gocql_test)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"UserType(gocql_test)")},
+				{name: "udt field without a type", typ: p + "UserType(gocql_test,706572736f6e,616765)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"UserType(gocql_test,706572736f6e,616765)")},
+				{name: "vector without an element type", typ: p + "VectorType(, 3)", want: cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType(, 3)")},
 				{
 					// The outer vector is well-formed; only its element type degrades.
 					name: "vector whose element has no element type",
 					typ:  p + "VectorType(" + p + "VectorType(, 3), 2)",
 					want: cqltype.VectorType{
-						SubType:    cqltype.NewCustomType(0, cqltype.TypeCustom, p+"VectorType(, 3)"),
+						SubType:    cqltype.NewCustomType(0, cql.TypeCustom, p+"VectorType(, 3)"),
 						Dimensions: 2,
 					},
 				},
@@ -168,7 +169,7 @@ func TestCassType(t *testing.T) {
 					name: "vector of float",
 					typ:  p + "VectorType(" + p + "FloatType, 3)",
 					want: cqltype.VectorType{
-						SubType:    cqltype.NewNativeType(0, cqltype.TypeFloat),
+						SubType:    cqltype.NewNativeType(0, cql.TypeFloat),
 						Dimensions: 3,
 					},
 				},
@@ -176,10 +177,10 @@ func TestCassType(t *testing.T) {
 					name: "udt",
 					typ:  p + "UserType(gocql_test,706572736f6e,616765:" + p + "Int32Type)",
 					want: cqltype.UDTTypeInfo{
-						NativeType: cqltype.NewNativeType(0, cqltype.TypeUDT),
+						NativeType: cqltype.NewNativeType(0, cql.TypeUDT),
 						KeySpace:   "gocql_test",
 						Name:       "person",
-						Elements:   []cqltype.UDTField{{Name: "age", Type: cqltype.NewNativeType(0, cqltype.TypeInt)}},
+						Elements:   []cqltype.UDTField{{Name: "age", Type: cqltype.NewNativeType(0, cql.TypeInt)}},
 					},
 				},
 			}

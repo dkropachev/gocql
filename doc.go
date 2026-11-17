@@ -33,7 +33,7 @@
 // for concurrent use and run on queries the statement keeps for them, so they
 // allocate no per-call execution state. Each takes at most one exec.CompiledOptions,
 // made once by Session.CompileOptions; none uses the session's default profile.
-// Exec and Each return (Result, error) and One returns (bool, Result, error),
+// Exec and Each return (cql.Result, error) and One returns (bool, cql.Result, error),
 // on Prepared and Query alike. One detaches borrowed fields before returning;
 // Each lends them only until its callback returns. Returning StopIteration
 // from Each stops successfully; other callback errors are returned. All is the
@@ -51,7 +51,7 @@
 // and without a query to close; prepare a statement that runs repeatedly. Parameters are
 // copied during execution admission. A call while
 // a Rows, Page or RowStream of the query is open, or while another goroutine's
-// call runs, returns ErrBusy; a call after an execution that already returned
+// call runs, returns cqlerr.ErrBusy; a call after an execution that already returned
 // waits until its accepted writes drain. Close stops a query and waits for its
 // drain. Do not keep Query values in a sync.Pool: a query the pool drops stays
 // open until it is closed.
@@ -63,7 +63,7 @@
 // reports whether the batch applied, and rejects a batch known to have no
 // conditional member.
 //
-// Session.PrepareStream prepares a stream.Statement directly for caller
+// Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A
 // StreamQuery decodes into seeded caller storage and buffers one response page
 // on normal multiplexed connections by default. exec.StreamOptions.Incremental opts into bounded
@@ -71,7 +71,7 @@
 // Page-buffered memory scales with concurrent response pages and is bounded by
 // configured frame and decompression limits. Borrowed result views expire on
 // advancement or cursor Close unless a PageLease retains their page.
-// ByteSliceCodec fills reusable owned slices with RowInto.
+// cql.ByteSliceCodec fills reusable owned slices with cql.RowInto.
 //
 // The driver logs through log/slog, to slog.Default() unless
 // config.ConfigBuilder.WithLogger supplies another logger. Debug carries

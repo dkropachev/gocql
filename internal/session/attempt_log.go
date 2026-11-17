@@ -6,21 +6,21 @@ package session
 import (
 	"errors"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-type AttemptFailure = runtimeerrors.AttemptFailure
+type AttemptFailure = cqlerr.AttemptFailure
 
 // attemptLog collects the failed attempts of one request. Its zero value is
 // empty and allocates nothing until an attempt fails; a nil *attemptLog reads
 // as empty, so a hot loop can allocate one on its first failed attempt.
 type attemptLog struct {
 	failures []AttemptFailure
-	worst    cqltype.ExecutionStatus
+	worst    cqlerr.ExecutionStatus
 	raised   bool
 }
 
@@ -28,14 +28,14 @@ type attemptLog struct {
 // out of line so the request loops keep their happy-path frame small.
 //
 //go:noinline
-func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cqltype.Consistency, trace cqltype.Option[cqltype.UUID]) cqltype.ExecutionStatus {
-	status := runtimeerrors.ExecutionStatusOf(err)
+func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID]) cqlerr.ExecutionStatus {
+	status := cqlerr.ExecutionStatusOf(err)
 	failure := AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}
 	if conn != nil {
 		failure.Address = conn.Address()
 		failure.HostID = conn.InternalHostID()
 		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-			failure.Shard = cqltype.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+			failure.Shard = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 		}
 	}
 	l.failures = append(l.failures, failure)
@@ -44,15 +44,15 @@ func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consisten
 }
 
 // responseTraceID returns the CQL trace session a possibly nil response names.
-func responseTraceID(response *transport.InternalResponsePage) cqltype.Option[cqltype.UUID] {
+func responseTraceID(response *transport.InternalResponsePage) cql.Option[cql.UUID] {
 	if response == nil {
-		return cqltype.Option[cqltype.UUID]{}
+		return cql.Option[cql.UUID]{}
 	}
 	return response.CQLTraceID()
 }
 
 // raise records that the request reached at least status.
-func (l *attemptLog) raise(status cqltype.ExecutionStatus) {
+func (l *attemptLog) raise(status cqlerr.ExecutionStatus) {
 	if !l.raised {
 		l.worst, l.raised = status, true
 		return
@@ -60,9 +60,9 @@ func (l *attemptLog) raise(status cqltype.ExecutionStatus) {
 	l.worst = l.worst.Worse(status)
 }
 
-func (l *attemptLog) status() cqltype.ExecutionStatus {
+func (l *attemptLog) status() cqlerr.ExecutionStatus {
 	if l == nil || !l.raised {
-		return cqltype.NotExecuted
+		return cqlerr.NotExecuted
 	}
 	return l.worst
 }
@@ -70,16 +70,16 @@ func (l *attemptLog) status() cqltype.ExecutionStatus {
 func (l *attemptLog) empty() bool { return l == nil || !l.raised }
 
 // error returns the request failure err with every recorded attempt.
-func (l *attemptLog) error(err error, result model.Result) *ExecutionError {
+func (l *attemptLog) error(err error, result cql.Result) *ExecutionError {
 	if l == nil {
-		return runtimeerrors.NewExecutionError(err, result, cqltype.NotExecuted, nil)
+		return runtimeerrors.NewExecutionError(err, result, cqlerr.NotExecuted, nil)
 	}
 	return runtimeerrors.NewExecutionError(err, result, l.status(), l.failures)
 }
 
 // merge folds a later execution's failure, such as a hand-off to the general
 // path, into this log's earlier attempts.
-func (l *attemptLog) merge(err error, result model.Result) error {
+func (l *attemptLog) merge(err error, result cql.Result) error {
 	if l.empty() {
 		return err
 	}

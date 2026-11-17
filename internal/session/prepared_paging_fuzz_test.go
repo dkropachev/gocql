@@ -17,17 +17,15 @@
 package session
 
 import (
-	"github.com/scylladb/gocql/v2/internal/codec"
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implModel "github.com/scylladb/gocql/v2/internal/model"
-	model "github.com/scylladb/gocql/v2/internal/model"
-	"github.com/scylladb/gocql/v2/internal/paging"
-	"github.com/scylladb/gocql/v2/internal/runtimeerrors"
-	"github.com/scylladb/gocql/v2/internal/transport"
-
 	"errors"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
+	implModel "github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/internal/paging"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -38,10 +36,10 @@ func FuzzV2PageDestinationFraming(f *testing.F) {
 		if len(data) > 4096 {
 			return
 		}
-		cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "value", Type: cqltype.IntType})
+		cols := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: cql.IntType})
 		chain := codecTestMust(wire.NewChain(wire.Borrow(data)))
 		owner := wire.NewLease(chain, nil)
-		p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: chain, RowCount: int32(count % 8), Owner: owner}}, codec.OneColumn(codec.Int32), nil))
+		p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: chain, RowCount: int32(count % 8), Owner: owner}}, cql.OneColumn(cql.Int32Codec), nil))
 		defer p.Close()
 		dst := int32(99)
 		for i := 0; i < 9; i++ {
@@ -76,16 +74,16 @@ func FuzzV2PagingHistoryBudgets(f *testing.F) {
 			}
 			token := append([]byte{}, data[:n]...)
 			data = data[n:]
-			state := model.PageStateOwned(token, 1)
+			state := cqltype.PageStateOwned(token)
 			err := h.InternalAdd(state)
 			if seen[string(token)] {
-				if !errors.Is(err, runtimeerrors.ErrPagingNoProgress) {
+				if !errors.Is(err, cqlerr.ErrPagingNoProgress) {
 					t.Fatal("duplicate", err)
 				}
 				continue
 			}
 			if len(seen) >= 16 || len(token) > 128-bytesUsed {
-				if !errors.Is(err, runtimeerrors.ErrPagingStateLimit) {
+				if !errors.Is(err, cqlerr.ErrPagingStateLimit) {
 					t.Fatal("budget", err)
 				}
 				continue

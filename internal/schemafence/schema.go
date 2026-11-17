@@ -20,10 +20,11 @@
 package schemafence
 
 import (
-	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
-
 	"sync"
 	"sync/atomic"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 // Prepared epochs are dependency-local clocks. Snapshot publication numbers and
@@ -96,7 +97,7 @@ func (t *InternalPreparedSchemaTracker) InternalBump(keys ...InternalPreparedDep
 		c.Store(sequence)
 	}
 }
-func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, parameters, columns cqltype.Columns) *InternalPreparedDependencies {
+func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, parameters, columns cql.Columns) *InternalPreparedDependencies {
 	keys := []InternalPreparedDependencyKey{{InternalKind: 'p'}}
 	seen := make(map[InternalPreparedDependencyKey]bool)
 	add := func(k InternalPreparedDependencyKey) {
@@ -107,14 +108,14 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 	}
 	knownTable := false
 	visited := make(map[*cqltype.DataTypeDescriptor]bool)
-	var typ func(cqltype.DataType)
-	typ = func(v cqltype.DataType) {
+	var typ func(cql.DataType)
+	typ = func(v cql.DataType) {
 		d := cqltype.DescriptorOf(v)
 		if d == nil || visited[d] {
 			return
 		}
 		visited[d] = true
-		if d.Kind == cqltype.TypeUDT {
+		if d.Kind == cql.TypeUDT {
 			add(InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: d.Keyspace, InternalName: ""})
 			add(InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: d.Keyspace, InternalName: d.Name})
 		}
@@ -124,7 +125,7 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 			typ(f.Type)
 		}
 	}
-	for _, set := range []cqltype.Columns{parameters, columns} {
+	for _, set := range []cql.Columns{parameters, columns} {
 		for _, c := range cqltype.ColumnSlice(set) {
 			ks := c.Keyspace
 			if ks == "" {
@@ -166,7 +167,7 @@ func (d *InternalPreparedDependencies) InternalSince(start uint64) InternalPrepa
 }
 
 // extend registers newly observed result UDTs without invalidating prior pages.
-func (d *InternalPreparedDependencies) InternalExtend(keyspace string, parameters, columns cqltype.Columns) {
+func (d *InternalPreparedDependencies) InternalExtend(keyspace string, parameters, columns cql.Columns) {
 	other := d.InternalTracker.InternalDependencies(keyspace, parameters, columns)
 	d.mu.Lock()
 	defer d.mu.Unlock()

@@ -11,7 +11,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/dynamic"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -47,16 +46,16 @@ func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session[testDialect], 
 	}
 }
 
-func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session[testDialect], stmt string, options exec.Options, values ...dynamic.Value) (gocql.Result, error) {
-	statement := cql.Statement[[]dynamic.Value, cql.EmptyRow]{CQL: stmt, Params: dynamic.Params, Rows: cql.EmptyRowDecoder}
+func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session[testDialect], stmt string, options exec.Options, values ...cql.Value) (cql.Result, error) {
+	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {
-		return gocql.Result{}, err
+		return cql.Result{}, err
 	}
 	return prepared.Exec(ctx, values, bindOptions(session, options))
 }
 
-func v2SchemaRoutingInt(t testing.TB, row dynamic.Row, name string) int32 {
+func v2SchemaRoutingInt(t testing.TB, row cql.DynamicRow, name string) int32 {
 	t.Helper()
 	value, err := row.Get(name)
 	if err != nil {

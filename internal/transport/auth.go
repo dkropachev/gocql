@@ -5,33 +5,33 @@ package transport
 
 import (
 	"context"
-
 	"sync"
 
-	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/auth"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // The bridge only adapts the handshake's state machine; no value marshaler is
 // involved. One bridge is created for each connection and closed on every exit.
 type v2Authenticator struct {
 	ctx      context.Context
-	provider connectivity.AuthProvider
-	exchange connectivity.AuthExchange
-	host     model.HostSnapshot
+	provider auth.Provider
+	exchange auth.Exchange
+	host     metadata.HostSnapshot
 	once     sync.Once
 	started  bool
 }
 
-func InternalNewV2Authenticator(ctx context.Context, host model.HostSnapshot, provider connectivity.AuthProvider) *v2Authenticator {
+func InternalNewV2Authenticator(ctx context.Context, host metadata.HostSnapshot, provider auth.Provider) *v2Authenticator {
 	return &v2Authenticator{ctx: ctx, host: host, provider: provider}
 }
 func (a *v2Authenticator) Challenge(req []byte) ([]byte, Authenticator, error) {
 	if err := a.ctx.Err(); err != nil {
 		return nil, nil, err
 	}
-	var response cqltype.Nullable[[]byte]
+	var response cql.Nullable[[]byte]
 	var err error
 	if !a.started {
 		a.started = true
@@ -69,9 +69,9 @@ func (a *v2Authenticator) Close() {
 		}
 	})
 }
-func nullableAuthBytes(data []byte) cqltype.Nullable[cqltype.Bytes] {
+func nullableAuthBytes(data []byte) cql.Nullable[cql.Bytes] {
 	if data == nil {
-		return cqltype.Nullable[cqltype.Bytes]{}
+		return cql.Nullable[cql.Bytes]{}
 	}
-	return cqltype.Nullable[cqltype.Bytes]{Value: cqltype.BorrowBytes(data), Valid: true}
+	return cql.Nullable[cql.Bytes]{Value: cql.BorrowBytes(data), Valid: true}
 }

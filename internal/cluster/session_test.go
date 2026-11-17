@@ -27,6 +27,7 @@ package cluster
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/netip"
 	"strings"
@@ -34,9 +35,7 @@ import (
 	"testing"
 	"time"
 
-	"log/slog"
-
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -48,6 +47,7 @@ import (
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 func TestSession(t *testing.T) {
@@ -102,11 +102,11 @@ func TestSession(t *testing.T) {
 			SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.Nop()
 			return opaqueStorageValuexxxxxx
 		}()
-		SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: session.NewPoolServices(), InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+		SessionData(session).InternalPool = &implPool.InternalPolicyConnPool{InternalServices: session.NewPoolServices(), InternalHostConnPools: map[cql.UUID]*implPool.InternalHostConnPool{}}
 
 		present := func() *endpoint.HostInfo {
 			opaqueStorageValuexxxxxxx := new(endpoint.HostInfo)
-			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalHostId = cqltype.MustRandomUUID()
+			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalHostId = cql.RandomUUID()
 			implEndpoint.HostInfoData(opaqueStorageValuexxxxxxx).InternalConnectAddress = net.ParseIP("127.0.40.1")
 			return opaqueStorageValuexxxxxxx
 		}()
@@ -126,7 +126,7 @@ func TestSession(t *testing.T) {
 			name   string
 			hostID string
 		}{
-			{"absent id", cqltype.MustRandomUUID().String()},
+			{"absent id", cql.RandomUUID().String()},
 			{"malformed id", "not-a-uuid"},
 			{"empty id", ""},
 		} {
@@ -160,7 +160,7 @@ func TestSession(t *testing.T) {
 				SessionData(opaqueStorageValuexxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxx
 			}()
-			p := &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cqltype.UUID]*implPool.InternalHostConnPool{}}
+			p := &implPool.InternalPolicyConnPool{InternalHostConnPools: map[cql.UUID]*implPool.InternalHostConnPool{}}
 			for _, ip := range ips {
 				hp := newUndialedHostPool(t, session, ip)
 				p.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(hp.InternalHost)] = hp
@@ -458,7 +458,7 @@ func TestSession(t *testing.T) {
 
 		p := s.Peripheral()
 		p.InternalConfig.LifecycleObserver = panicLifecycle{}
-		sessionObserveV2Lifecycle(s, settings.LifecycleEvent{Kind: "test", At: time.Now()})
+		sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "test", At: time.Now()})
 		s.CloseV2Peripheral()
 	})
 
@@ -473,11 +473,11 @@ func TestSession(t *testing.T) {
 		if first == second {
 			t.Errorf("expected distinct uuids, got %q twice", first)
 		}
-		for _, u := range []cqltype.UUID{first, second} {
+		for _, u := range []cql.UUID{first, second} {
 			if got := u.Version(); got != 4 {
 				t.Errorf("expected uuid %q to be version 4, got %d", u, got)
 			}
-			if got := u.Variant(); got != cqltype.VariantIETF {
+			if got := u.Variant(); got != cql.VariantIETF {
 				t.Errorf("expected uuid %q to use the IETF variant, got %d", u, got)
 			}
 		}

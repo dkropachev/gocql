@@ -27,7 +27,7 @@ package cluster
 import (
 	"net"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -79,7 +79,7 @@ func newPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
 		InternalPort:          session.privateStorage.InternalCfg.Port,
 		InternalNumConns:      session.privateStorage.InternalCfg.NumConns,
 		InternalKeyspace:      session.privateStorage.InternalCfg.Keyspace,
-		InternalHostConnPools: map[cqltype.UUID]*pool.InternalHostConnPool{},
+		InternalHostConnPools: map[cql.UUID]*pool.InternalHostConnPool{},
 	}
 
 	return pool

@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -59,7 +59,7 @@ func TestReceiveTypedCallParseFailureClearsDest(t *testing.T) {
 	dest := new(InternalResponsePage)
 	done := make(chan error, 1)
 	go func() {
-		page, err := c.InternalExecuteTypedInto(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cqltype.One}, dest)
+		page, err := c.InternalExecuteTypedInto(context.Background(), &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}, dest)
 		if page != nil {
 			t.Error("page returned for failed parse")
 		}
@@ -98,7 +98,7 @@ func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 		ctxA, cancelA := context.WithCancel(context.Background())
 		aErr := make(chan error, 1)
 		go func() {
-			page, err := c.InternalExecuteTyped(ctxA, &model.AttemptRequest{Statement: "SELECT a", Consistency: cqltype.One})
+			page, err := c.InternalExecuteTyped(ctxA, &model.AttemptRequest{Statement: "SELECT a", Consistency: cql.One})
 			if page != nil {
 				page.Owner.Release()
 			}
@@ -119,7 +119,7 @@ func TestLateResponseAfterCancelDoesNotDelayOthers(t *testing.T) {
 		}
 		bDone := make(chan error, 1)
 		go func() {
-			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT b", Consistency: cqltype.One})
+			page, err := c.InternalExecuteTyped(context.Background(), &model.AttemptRequest{Statement: "SELECT b", Consistency: cql.One})
 			if err == nil {
 				page.Owner.Release()
 			}

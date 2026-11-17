@@ -10,23 +10,19 @@ import (
 
 	"github.com/scylladb/gocql/v2/config"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	routing "github.com/scylladb/gocql/v2/routing"
-
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	implSession "github.com/scylladb/gocql/v2/internal/session"
-
 	model "github.com/scylladb/gocql/v2/internal/model"
 	paging "github.com/scylladb/gocql/v2/internal/paging"
 	pool "github.com/scylladb/gocql/v2/internal/pool"
 	protocol "github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	implTransport "github.com/scylladb/gocql/v2/internal/transport"
-
-	"github.com/scylladb/gocql/v2/internal/wirecompress"
-
 	"github.com/scylladb/gocql/v2/internal/tablets"
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/internal/wirecompress"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 type hostPrepared = implSession.InternalHostPrepared
@@ -103,7 +99,7 @@ type retiredSnappyCompressor = wirecompress.SnappyCompressor
 
 type responseData = model.ResponseData
 
-func buildRoutingHostIndex(a0 []routing.HostSnapshot) *routingHostIndex {
+func buildRoutingHostIndex(a0 []metadata.HostSnapshot) *routingHostIndex {
 	return implRouting.InternalBuildRoutingHostIndex(a0)
 }
 
@@ -122,3 +118,12 @@ func updateTabletRange(a0 *tabletRangeTree, a1 tablets.TabletInfo) (*tabletRange
 }
 
 type routingHostIndex = implRouting.InternalRoutingHostIndex
+
+// builtinPolicy returns the session's default policy behind p.
+func builtinPolicy(p routing.Policy) *routingPolicy {
+	b, ok := implRouting.InternalBuiltin(p)
+	if !ok {
+		panic("not a built-in routing policy")
+	}
+	return b
+}

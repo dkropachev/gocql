@@ -7,12 +7,11 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func internalOptions(o exec.Options) implSession.Options {
@@ -34,7 +33,7 @@ func internalOptions(o exec.Options) implSession.Options {
 }
 
 func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
-	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: o.Limits, Incremental: o.Incremental}
+	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: implTransport.StreamLimits(o.Limits), Incremental: o.Incremental}
 }
 
 // tooManyPrepareOptions is the error of a call given more than one
@@ -42,7 +41,7 @@ func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
 //
 //go:noinline
 func tooManyPrepareOptions() error {
-	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
 // internalOptionList converts the optional exec.Options of a throwaway call; the
@@ -64,13 +63,13 @@ func internalOptionList(options []exec.Options) []implSession.Options {
 //
 //go:noinline
 func tooManyOptions() error {
-	return &cqlerr.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one CompiledOptions")}
 }
 
 // tooManyOptionsResult returns tooManyOptions with its execution result.
 //
 //go:noinline
-func tooManyOptionsResult() (Result, error) {
+func tooManyOptionsResult() (cql.Result, error) {
 	err := tooManyOptions()
 	return implSession.InternalExecutionErrorResult(err), err
 }
@@ -79,7 +78,7 @@ func tooManyOptionsResult() (Result, error) {
 // whether a row was found.
 //
 //go:noinline
-func tooManyOptionsFound() (bool, Result, error) {
+func tooManyOptionsFound() (bool, cql.Result, error) {
 	r, err := tooManyOptionsResult()
 	return false, r, err
 }
@@ -88,6 +87,6 @@ func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P,
 	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind}
 }
 
-func internalStreamStatement[P, R any](s stream.Statement[P, R]) implSession.StreamStatement[P, R] {
+func internalStreamStatement[P, R any](s cql.StreamStatement[P, R]) implSession.StreamStatement[P, R] {
 	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind}
 }

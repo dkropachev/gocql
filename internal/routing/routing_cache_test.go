@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
-	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
-	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // vnodeCacheSnapshot is a snapshot of keyspace ks, with table t, whose one
@@ -20,16 +20,16 @@ import (
 func vnodeCacheSnapshot(hosts ...byte) *MetadataSnapshot {
 	replicas := make([]Target, len(hosts))
 	for i, h := range hosts {
-		replicas[i] = Target{HostID: cqltype.UUID{15: h}}
+		replicas[i] = Target{HostID: cql.UUID{15: h}}
 	}
 	return NewMetadataSnapshot(SnapshotState{
-		InternalKeyspaces: map[string]*implMetadata.KeyspaceMetadata{"ks": {Name: "ks", Tables: map[string]*implMetadata.TableMetadata{"t": {Name: "t"}}}},
-		InternalRanges:    map[string][]TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: replicas}}},
+		InternalKeyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata.Table{"t": {Name: "t"}}}},
+		InternalRanges:    map[string][]metadata.TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: replicas}}},
 	})
 }
 
 func cachedReplicas(m *MetadataSnapshot, c *InternalPlacementCache) []Target {
-	info := model.RoutingInfo{Keyspace: "ks", Table: "t", Token: cqltype.Option[int64]{Value: 7, Set: true}}
+	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Option[int64]{Value: 7, Set: true}}
 	l := InternalLookupTabletCached(m, info, c)
 	r, _ := m.lookupReplicas(&l, info.Keyspace, info.Table, info.Token.Value)
 	return r
@@ -54,7 +54,7 @@ func TestRoutingCacheReusesRanges(t *testing.T) {
 	}
 	// Snapshots are never changed once published; changing this one's ranges
 	// shows whether the second request looked them up again.
-	SnapshotData(m).InternalRanges = map[string][]TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: []Target{{HostID: cqltype.UUID{15: 9}}}}}}
+	SnapshotData(m).InternalRanges = map[string][]metadata.TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: []Target{{HostID: cql.UUID{15: 9}}}}}}
 	if got := replicaHosts(cachedReplicas(m, &c)); string(got) != "\x01\x02\x03" {
 		t.Fatalf("second route on the same snapshot looked the ranges up again: replicas %v", got)
 	}
@@ -109,15 +109,15 @@ func TestRoutingCacheStalePlacementSignal(t *testing.T) {
 func TestRoutingCacheTabletRanges(t *testing.T) {
 	var c InternalPlacementCache
 	m := vnodeCacheSnapshot(1, 2, 3)
-	SnapshotData(m).InternalTablets = map[InternalMetadataTable][]TokenRange{
-		{InternalKeyspace: "ks", InternalTable: "t"}: {{Start: 0, End: 100, Replicas: []Target{{HostID: cqltype.UUID{15: 4}}}}},
+	SnapshotData(m).InternalTablets = map[InternalMetadataTable][]metadata.TokenRange{
+		{InternalKeyspace: "ks", InternalTable: "t"}: {{Start: 0, End: 100, Replicas: []Target{{HostID: cql.UUID{15: 4}}}}},
 	}
 	for range 2 {
 		if got := replicaHosts(cachedReplicas(m, &c)); string(got) != "\x04" {
 			t.Fatalf("token in a tablet: replicas %v", got)
 		}
 	}
-	info := model.RoutingInfo{Keyspace: "ks", Table: "t", Token: cqltype.Option[int64]{Value: 200, Set: true}}
+	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Option[int64]{Value: 200, Set: true}}
 	l := InternalLookupTabletCached(m, info, &c)
 	if l.cached() == nil {
 		t.Fatal("the lookup did not carry the cached ranges")

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
@@ -115,40 +116,40 @@ func v2SchemaMockResponse(statement string, fixture *nativeResultFixture) (*tran
 		Rows:        chain,
 		RowCount:    int32(fixture.numRows),
 		Owner:       wire.NewLease(chain, release),
-		State:       model.CompletePageState()},
+		State:       cqltype.CompletePageState()},
 	}, nil
 }
 
-func v2SchemaMockEmptyColumns(statement string) (cqltype.Columns, error) {
-	textType := cqltype.VarcharType
-	boolType := cqltype.BooleanType
-	uuidType := cqltype.UUIDType
-	listText, _ := cqltype.ListType(textType)
-	mapText, _ := cqltype.MapType(textType, textType)
-	textColumn := func(name string) cqltype.ColumnSpec { return cqltype.ColumnSpec{Name: name, Type: textType} }
+func v2SchemaMockEmptyColumns(statement string) (cql.Columns, error) {
+	textType := cql.VarcharType
+	boolType := cql.BooleanType
+	uuidType := cql.UUIDType
+	listText, _ := cql.ListType(textType)
+	mapText, _ := cql.MapType(textType, textType)
+	textColumn := func(name string) cql.ColumnSpec { return cql.ColumnSpec{Name: name, Type: textType} }
 	switch {
 	case strings.Contains(statement, "FROM system_schema.keyspaces"):
-		return cqltype.NewColumns(textColumn("keyspace_name"), cqltype.ColumnSpec{Name: "durable_writes", Type: boolType}, cqltype.ColumnSpec{Name: "replication", Type: mapText}), nil
+		return cql.NewColumns(textColumn("keyspace_name"), cql.ColumnSpec{Name: "durable_writes", Type: boolType}, cql.ColumnSpec{Name: "replication", Type: mapText}), nil
 	case strings.Contains(statement, "FROM system_schema.tables"):
 		return cqltype.ColumnsFromInfo(tableMeta.Columns)
 	case strings.Contains(statement, "FROM system_schema.columns"):
 		return cqltype.ColumnsFromInfo(columnMeta.Columns)
 	case strings.Contains(statement, "FROM system_schema.scylla_tables"):
-		return cqltype.NewColumns(textColumn("table_name")), nil
+		return cql.NewColumns(textColumn("table_name")), nil
 	case strings.Contains(statement, "FROM system_schema.types"):
-		return cqltype.NewColumns(textColumn("type_name"), cqltype.ColumnSpec{Name: "field_names", Type: listText}, cqltype.ColumnSpec{Name: "field_types", Type: listText}), nil
+		return cql.NewColumns(textColumn("type_name"), cql.ColumnSpec{Name: "field_names", Type: listText}, cql.ColumnSpec{Name: "field_types", Type: listText}), nil
 	case strings.Contains(statement, "FROM system_schema.functions"):
-		return cqltype.NewColumns(textColumn("function_name"), cqltype.ColumnSpec{Name: "argument_types", Type: listText}, cqltype.ColumnSpec{Name: "argument_names", Type: listText}, textColumn("body"), cqltype.ColumnSpec{Name: "called_on_null_input", Type: boolType}, textColumn("language"), textColumn("return_type")), nil
+		return cql.NewColumns(textColumn("function_name"), cql.ColumnSpec{Name: "argument_types", Type: listText}, cql.ColumnSpec{Name: "argument_names", Type: listText}, textColumn("body"), cql.ColumnSpec{Name: "called_on_null_input", Type: boolType}, textColumn("language"), textColumn("return_type")), nil
 	case strings.Contains(statement, "FROM system_schema.aggregates"):
-		return cqltype.NewColumns(textColumn("aggregate_name"), cqltype.ColumnSpec{Name: "argument_types", Type: listText}, textColumn("final_func"), textColumn("initcond"), textColumn("return_type"), textColumn("state_func"), textColumn("state_type")), nil
+		return cql.NewColumns(textColumn("aggregate_name"), cql.ColumnSpec{Name: "argument_types", Type: listText}, textColumn("final_func"), textColumn("initcond"), textColumn("return_type"), textColumn("state_func"), textColumn("state_type")), nil
 	case strings.Contains(statement, "FROM system_schema.indexes"):
-		return cqltype.NewColumns(textColumn("index_name"), textColumn("keyspace_name"), textColumn("table_name"), textColumn("kind"), cqltype.ColumnSpec{Name: "options", Type: mapText}), nil
+		return cql.NewColumns(textColumn("index_name"), textColumn("keyspace_name"), textColumn("table_name"), textColumn("kind"), cql.ColumnSpec{Name: "options", Type: mapText}), nil
 	case strings.Contains(statement, "FROM system_schema.views"):
-		return cqltype.NewColumns(cqltype.ColumnSpec{Name: "id", Type: uuidType}, textColumn("view_name"), cqltype.ColumnSpec{Name: "base_table_id", Type: uuidType}, textColumn("base_table_name"), cqltype.ColumnSpec{Name: "include_all_columns", Type: boolType}, textColumn("where_clause")), nil
+		return cql.NewColumns(cql.ColumnSpec{Name: "id", Type: uuidType}, textColumn("view_name"), cql.ColumnSpec{Name: "base_table_id", Type: uuidType}, textColumn("base_table_name"), cql.ColumnSpec{Name: "include_all_columns", Type: boolType}, textColumn("where_clause")), nil
 	case strings.HasPrefix(statement, "DESCRIBE KEYSPACE "):
-		return cqltype.NewColumns(textColumn("create_statement")), nil
+		return cql.NewColumns(textColumn("create_statement")), nil
 	default:
-		return cqltype.Columns{}, fmt.Errorf("schema mock has no result metadata for %q", statement)
+		return cql.Columns{}, fmt.Errorf("schema mock has no result metadata for %q", statement)
 	}
 }
 
@@ -189,9 +190,9 @@ func (f *fakeControlConn) InternalQueryV2System(ctx context.Context, r *model.At
 	if f.iter != nil {
 		return v2SchemaMockResponse(r.Statement, f.iter)
 	}
-	text := cqltype.VarcharType
-	integer := cqltype.IntType
-	cols := cqltype.NewColumns(cqltype.ColumnSpec{Name: "connection_id", Type: text}, cqltype.ColumnSpec{Name: "host_id", Type: text}, cqltype.ColumnSpec{Name: "address", Type: text}, cqltype.ColumnSpec{Name: "port", Type: integer}, cqltype.ColumnSpec{Name: "tls_port", Type: integer})
+	text := cql.VarcharType
+	integer := cql.IntType
+	cols := cql.NewColumns(cql.ColumnSpec{Name: "connection_id", Type: text}, cql.ColumnSpec{Name: "host_id", Type: text}, cql.ColumnSpec{Name: "address", Type: text}, cql.ColumnSpec{Name: "port", Type: integer}, cql.ColumnSpec{Name: "tls_port", Type: integer})
 	chain, _ := wire.NewChain()
 	return &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: cols, ColumnCount: 5, Rows: chain, Owner: wire.NewLease(chain, nil)}}, nil
 }

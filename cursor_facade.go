@@ -45,7 +45,7 @@ func (r Rows[R]) Columns() cql.Columns { return (implSession.Rows[R])(r).Columns
 func (r Rows[R]) Clone() (R, error) { return (implSession.Rows[R])(r).Clone() }
 
 // Info returns execution information accumulated so far.
-func (r Rows[R]) Info() Result { return (implSession.Rows[R])(r).Info() }
+func (r Rows[R]) Info() cql.Result { return (implSession.Rows[R])(r).Info() }
 
 // CASBatchRows are the rows of a conditional batch sent with
 // Session.RunConditionalBatch. Each row reports whether the batch applied, and
@@ -93,7 +93,7 @@ func (r CASBatchRows[X]) Clone() (cql.CASResult[X], error) {
 }
 
 // Info returns execution information accumulated so far.
-func (r CASBatchRows[X]) Info() Result { return (implSession.CASBatchRows[X])(r).Info() }
+func (r CASBatchRows[X]) Info() cql.Result { return (implSession.CASBatchRows[X])(r).Info() }
 
 // Page iterates exactly one response page. Borrowed fields expire on
 // advancement or Close unless Retain pins the page. State remains available
@@ -122,7 +122,7 @@ func (r *Page[R]) Columns() cql.Columns { return (*implSession.Page[R])(r).Colum
 func (r *Page[R]) Clone() (R, error) { return (*implSession.Page[R])(r).Clone() }
 
 // Info returns execution information accumulated so far.
-func (r *Page[R]) Info() Result { return (*implSession.Page[R])(r).Info() }
+func (r *Page[R]) Info() cql.Result { return (*implSession.Page[R])(r).Info() }
 
 // State returns the paging state, which remains available after Close.
 func (r *Page[R]) State() cql.PageState { return cql.PageState((*implSession.Page[R])(r).State()) }
@@ -147,4 +147,4 @@ func (r *RowStream[R]) Close() error { return (*implSession.RowStream[R])(r).Clo
 func (r *RowStream[R]) Columns() cql.Columns { return (*implSession.RowStream[R])(r).Columns() }
 
 // Info reports delivered rows, pages and execution progress.
-func (r *RowStream[R]) Info() StreamInfo { return (*implSession.RowStream[R])(r).Info() }
+func (r *RowStream[R]) Info() StreamInfo { return StreamInfo((*implSession.RowStream[R])(r).Info()) }

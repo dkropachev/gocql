@@ -41,11 +41,11 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cql/stream"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -89,8 +89,8 @@ func TestPool(t *testing.T) {
 					t.Fatal("failed data connection unexpectedly connected")
 				}
 				policy.mu.Lock()
-				hosts := append([]routing.HostSnapshot(nil), policy.hosts...)
-				targets := append([]routing.HostSnapshot(nil), policy.targets...)
+				hosts := append([]metadata.HostSnapshot(nil), policy.hosts...)
+				targets := append([]metadata.HostSnapshot(nil), policy.targets...)
 				resets := policy.resets
 				policy.mu.Unlock()
 				if len(hosts) == 0 || len(targets) == 0 {
@@ -107,7 +107,7 @@ func TestPool(t *testing.T) {
 				if resets != 0 {
 					t.Fatal("reset reported although no pool connection opened")
 				}
-				policy.Reset(config.ConvictionEvent{Host: hosts[0]})
+				policy.Reset(endpoint.ConvictionEvent{Host: hosts[0]})
 				policy.mu.Lock()
 				resets = policy.resets
 				policy.mu.Unlock()
@@ -131,7 +131,7 @@ func TestPool(t *testing.T) {
 		cfg := createV2ClusterWithout(skip)
 		cfg.WithConnectionsPerHost(1).WithHeartbeat(0, 0)
 		if *flagProto < 5 {
-			cfg.WithCompression(config.NoCompression)
+			cfg.WithCompression(cql.NoCompression)
 		}
 		s := createV2SessionFromConfig(cfg, t, false)
 		defer s.Close()
@@ -174,12 +174,12 @@ func TestPool(t *testing.T) {
 		if !ok {
 			t.Fatal("pool missing")
 		}
-		r, err := pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
+		r, err := pool.InternalReserveStream(ctx, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer r.InternalClose(false)
-		decoder := stream.RowInto(func(*cql.Pair[int32, []byte]) {}, stream.Column("id", stream.Int32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), stream.Column("value", stream.Blob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
+		decoder := cql.StreamRowInto(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
 		request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: cql.Quorum, PageSize: 2}
 		seen := map[int32]bool{}
 		pages := 0
@@ -228,7 +228,7 @@ func TestPool(t *testing.T) {
 		}
 		// Early abandonment discards the reserved slot, and ordinary bounded pool
 		// repair restores healthy shared execution without growing its target.
-		r, err = pool.InternalReserveStream(ctx, routing.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
+		r, err = pool.InternalReserveStream(ctx, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost)}, routing.Info{})
 		if err != nil {
 			t.Fatal(err)
 		}

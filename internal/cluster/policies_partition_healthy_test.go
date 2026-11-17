@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
@@ -120,7 +120,7 @@ func hostsWithPickers(t *testing.T, pickers []pool.ConnPicker) ([]*endpoint.Host
 	t.Helper()
 	requireUsableThreshold(t)
 
-	pools := make(map[cqltype.UUID]*pool.InternalHostConnPool, len(pickers))
+	pools := make(map[cql.UUID]*pool.InternalHostConnPool, len(pickers))
 	replicas := make([]*endpoint.HostInfo, len(pickers))
 	labels := make(hostLabels, len(pickers))
 
