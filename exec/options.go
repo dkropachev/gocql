@@ -12,12 +12,14 @@
 // overrides the matching field of the profile: a cql.Option whose Set is
 // true, a non-nil Retry, and a SerialConsistency other than SerialInherit.
 //
-// Time limits combine rather than replace each other. The call's context and
-// the resolved Timeout (Options.Timeout when set, else the profile's) both
-// bound the whole execution, retries and every page Rows fetches included,
-// and whichever expires first ends it; a zero Timeout leaves only the
-// context. The resolved PageTimeout bounds each page fetch on its own, within
-// the execution's deadline.
+// Time limits combine rather than replace each other. The call's context,
+// the profile's Timeout and Options.Timeout all bound the whole execution,
+// retries and every page Rows fetches included, and whichever expires first
+// ends it. Options.Timeout therefore only tightens the profile's limit: a
+// longer one, or a zero one, leaves the profile's in force. PageTimeout
+// combines the same way, the earliest of the profile's and
+// Options.PageTimeout bounding each page fetch on its own, within the
+// execution's deadline.
 package exec
 
 import (
@@ -45,7 +47,9 @@ type Options struct {
 	Profile  *config.Profile
 	Keyspace string
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.
-	CustomPayload        []cql.PayloadEntry
+	CustomPayload []cql.PayloadEntry
+	// Timeout and PageTimeout add a limit to the profile's: the earlier one
+	// applies, so a longer or zero value leaves the profile's limit in force.
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
 	// Timestamp is the write timestamp in microseconds since the Unix epoch,

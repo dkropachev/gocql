@@ -1311,7 +1311,7 @@ type Options struct {
     Profile *config.Profile                       // copied when resolved
     Consistency cql.Option[cql.Consistency]
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
-    Timeout cql.Option[time.Duration]             // 0 disables profile timeout
+    Timeout cql.Option[time.Duration]             // tightens the profile timeout; 0 adds no limit
     PageTimeout cql.Option[time.Duration]
     PageSize cql.Option[int32]                    // cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page

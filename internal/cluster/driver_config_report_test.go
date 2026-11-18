@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -111,7 +110,7 @@ func TestDriverConfigReport(t *testing.T) {
 			if report.Write == nil || report.Write.TimeoutMs != 7000 {
 				t.Errorf("expected write.timeout-ms 7000, got %+v", report.Write)
 			}
-			if report.TLS == nil || !report.TLS.HostnameVerification {
+			if report.TLS == nil || report.TLS.HostnameVerification == nil || !*report.TLS.HostnameVerification {
 				t.Errorf("expected tls.hostname-verification true, got %+v", report.TLS)
 			}
 
@@ -241,7 +240,7 @@ func TestDriverConfigReport(t *testing.T) {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.MetadataSchemaRequestTimeout = tt.timeout
 				cfg.MaxWaitSchemaAgreement = tt.agreement
-				got := buildControlPlaneReport(&cfg, tt.isScyllaConn)
+				got := buildControlPlaneReport(&cfg, nil, tt.isScyllaConn)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildControlPlaneReport() mismatch:\n%s", diff)
 				}
@@ -649,7 +648,7 @@ func TestDriverConfigReport(t *testing.T) {
 				if got == nil {
 					t.Fatal("expected a tls group when SslOpts is set")
 				}
-				if got.HostnameVerification != want {
+				if got.HostnameVerification == nil || *got.HostnameVerification != want {
 					t.Errorf("hostname-verification = %v, but the effective tls.Config verifies = %v",
 						got.HostnameVerification, want)
 				}
@@ -659,7 +658,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// test reaches the reporter.
 				pristine := *InternalNewClusterSettings("127.0.0.1")
 				pristine.SslOpts = tt.opts
-				if fallback := buildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification != want {
+				if fallback := buildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification == nil || *fallback.HostnameVerification != want {
 					t.Errorf("without a resolved tls.Config: hostname-verification = %v, want %v", fallback, want)
 				}
 			})
@@ -903,46 +902,6 @@ func TestDriverConfigReport(t *testing.T) {
 						t.Errorf("report does not conform to %s:\n%v\n\nreport: %s", driverConfigSchemaPath, err, encoded)
 					}
 				})
-			}
-		})
-
-		// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound guards the schema property the report
-		// depends on. Nothing in this driver bounds orphaned requests, so it has no
-		// value for connection.requests.orphaned; if that key were required again,
-		// every report this driver produces would fail validation, and the conformance
-		// test below would be the only thing standing between that and a release.
-		t.Run("PermitsAbsentOrphanBound", func(t *testing.T) {
-			f, err := os.Open(driverConfigSchemaPath)
-			if err != nil {
-				t.Fatalf("unable to open %s: %v", driverConfigSchemaPath, err)
-			}
-			defer f.Close()
-
-			doc, err := jsonschema.UnmarshalJSON(f)
-			if err != nil {
-				t.Fatalf("unable to parse %s: %v", driverConfigSchemaPath, err)
-			}
-			root, ok := doc.(map[string]any)
-			if !ok {
-				t.Fatalf("expected the schema root to be an object, got %T", doc)
-			}
-			defs, ok := root["$defs"].(map[string]any)
-			if !ok {
-				t.Fatal("expected the schema to have $defs")
-			}
-			requests, ok := defs["requests"].(map[string]any)
-			if !ok {
-				t.Fatal("expected the schema to have $defs.requests")
-			}
-			required, ok := requests["required"].([]any)
-			if !ok {
-				t.Fatal("expected $defs.requests.required to be an array")
-			}
-			for _, key := range required {
-				if key == "orphaned" {
-					t.Error("$defs.requests.required lists \"orphaned\", which this driver cannot report: " +
-						"nothing bounds orphaned requests, so every report would fail validation")
-				}
 			}
 		})
 

@@ -179,6 +179,10 @@ func (c *Conn) freeStream(stream int) {
 	}
 }
 
+// InternalDefaultOrphanBudget is the number of orphaned streams a connection
+// without a typed configuration tolerates before it is recycled.
+const InternalDefaultOrphanBudget = 1024
+
 // markOrphan records that call stopped waiting for a response that may still
 // arrive: the call keeps its slot and stream until that response or close. It
 // reports whether the connection exceeded its orphan budget. Only call's
@@ -190,7 +194,7 @@ func (c *Conn) markOrphan(call *InternalCallReq) bool {
 	}
 	call.orphaned = true
 	n := int(c.orphans.Add(1))
-	budget := 1024
+	budget := InternalDefaultOrphanBudget
 	if c.InternalCfg != nil {
 		if c.InternalCfg.InternalOrphans != nil {
 			c.InternalCfg.InternalOrphans.Add(1)

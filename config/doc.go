@@ -36,9 +36,12 @@
 //     SerialConsistency other than exec.SerialInherit.
 //
 // Time limits combine rather than replace each other. The context passed to
-// the call and the resolved Timeout (the profile's, or exec.Options.Timeout
-// when set) both bound the whole execution, retries and every page Rows
-// fetches included, and whichever expires first ends it; a zero Timeout leaves
-// only the context. The resolved PageTimeout bounds each page fetch on its
-// own, within the execution's deadline.
+// the call, the profile's Timeout and exec.Options.Timeout all bound the whole
+// execution, retries and every page Rows fetches included, and whichever
+// expires first ends it. An option therefore only tightens the profile's
+// limit: a longer exec.Options.Timeout, or a zero one, leaves the profile's in
+// force, and a zero profile Timeout leaves the option's and the context's.
+// PageTimeout combines the same way, the earliest of the profile's and
+// exec.Options.PageTimeout bounding each page fetch on its own, within the
+// execution's deadline.
 package config
