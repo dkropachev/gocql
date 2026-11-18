@@ -3,6 +3,21 @@
 
 // Package exec holds the per-execution settings of gocql statements: Options
 // and its compiled form, the options of preparation and of streaming queries.
+//
+// # Which setting wins
+//
+// A request starts from the session's default profile
+// (config.ConfigBuilder.WithDefaultProfile). Options.Profile, when set,
+// replaces that profile whole, and then each Options field that is set
+// overrides the matching field of the profile: a cql.Option whose Set is
+// true, a non-nil Retry, and a SerialConsistency other than SerialInherit.
+//
+// Time limits combine rather than replace each other. The call's context and
+// the resolved Timeout (Options.Timeout when set, else the profile's) both
+// bound the whole execution, retries and every page Rows fetches included,
+// and whichever expires first ends it; a zero Timeout leaves only the
+// context. The resolved PageTimeout bounds each page fetch on its own, within
+// the execution's deadline.
 package exec
 
 import (
