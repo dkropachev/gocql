@@ -1472,7 +1472,6 @@ type Policy interface {
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
     Observe(config.AttemptEvent)
 }
-func NewPlan(Policy, Info, *metadata.Snapshot) Plan  // combines Pick and Fallback
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
 
 // package config

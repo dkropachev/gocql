@@ -28,9 +28,6 @@ func TestWithoutSession(t *testing.T) {
 		t.Error("Fallback found a route without a session")
 	}
 	p.Observe(routing.AttemptEvent{})
-	if _, ok := routing.NewPlan(p, routing.Info{}, nil).Next(); ok {
-		t.Error("NewPlan found a route without a session")
-	}
 	if r := routing.HostRoutes(nil); r != nil {
 		t.Errorf("HostRoutes = %v", r)
 	}

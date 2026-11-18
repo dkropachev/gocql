@@ -9,8 +9,7 @@
 // by the session. An application can implement Policy itself, often by
 // wrapping a built-in one. In a program that links no session, such as the
 // tests of a policy library, the built-in policies find no route and
-// Validate fails, and NewPlan, HostRoutes and ReplicaRoutes return no
-// routes.
+// Validate fails, and HostRoutes and ReplicaRoutes return no routes.
 package routing
 
 import (
@@ -37,8 +36,8 @@ type Plan interface{ Next() (metadata.Route, bool) }
 //     false, and skips the picked route if Fallback returns it again.
 //
 // Validate checks the policy against a snapshot before the session uses it,
-// and Observe receives the outcome of every attempt. NewPlan combines Pick
-// and Fallback into the plan a request follows. Methods may be called
+// and Observe receives the outcome of every attempt. The session combines
+// Pick and Fallback into the plan a request follows. Methods may be called
 // concurrently.
 type Policy interface {
 	Validate(*metadata.Snapshot) error
@@ -62,16 +61,6 @@ func NewPolicy(options Options) (Policy, error) {
 // set, a request goes to target's shard only.
 func SingleTarget(target metadata.Target) Policy {
 	return &builtinPolicy{single: true, target: target}
-}
-
-// NewPlan returns the routes policy would try for a request described by
-// info, given snapshot.
-func NewPlan(policy Policy, info Info, snapshot *metadata.Snapshot) Plan {
-	newPlan, ok := link.Lookup[func(Policy, Info, *metadata.Snapshot) Plan](link.NewPlan)
-	if !ok {
-		return emptyPlan{}
-	}
-	return newPlan(policy, info, snapshot)
 }
 
 // HostRoutes returns a route to every host of snapshot, to any shard.
