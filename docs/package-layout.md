@@ -143,10 +143,10 @@ documented methods.
 
 - **One owner per responsibility.** Connection pools live in `internal/pool`,
   the control connection and topology in `internal/cluster`, execution in
-  `internal/session`. Today several files with the same name (`policies.go`,
-  `host_source.go`, `session.go`) exist
-  in `internal/cluster`, `internal/pool` and `internal/endpoint`, left over
-  from splitting the v1 package. Merge each into its owner.
+  `internal/session`. Today several files with the same name (`config.go`,
+  `control.go`, `host_source.go`, `policies.go`, `scylla.go`, `session.go`)
+  exist in `internal/cluster`, `internal/pool` and `internal/endpoint`, left
+  over from splitting the v1 package. Merge each into its owner.
 - **Name packages after what they do, not after a v1 file.** The `opaque_*.go`
   files and the `runtime_types.go` grab-bags each move to the package that
   owns the concept.
@@ -334,8 +334,8 @@ In short:
   connection pickers, a pool's own dial retries. Not which hosts exist.
 - **`internal/cluster`:** the cluster view and the session core: control
   connection, system-table discovery, events, metadata, partitioners and the
-  token ring, replica placement,
-  downed-host reconnection, and the wiring of pools to the session.
+  token ring, replica placement, downed-host reconnection, and the wiring of
+  pools to the session.
 
 ### `cmd/cqlgen`
 
@@ -383,9 +383,9 @@ internal type, no public package imports an engine package, and
 `TestPackageLayers` allows no exception. Two parts of the internals still
 need work, tracked in the release review:
 
-- The v1 package split left files with the same names (`policies.go`,
-  `host_source.go`, `session.go`) in
-  `internal/cluster`, `internal/pool` and `internal/endpoint`, and some
+- The v1 package split left files with the same names (`config.go`,
+  `control.go`, `host_source.go`, `policies.go`, `scylla.go`, `session.go`)
+  in `internal/cluster`, `internal/pool` and `internal/endpoint`, and some
   code still sits outside the package its `doc.go` says owns it. The moves
   are tracked in section 11 of the v2 release review (#1188).
 - Several public types still lack doc comments of their own; the API
