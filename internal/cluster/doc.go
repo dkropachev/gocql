@@ -14,7 +14,8 @@
 // pools and the metadata together. It also wires internal/pool to the
 // session: the pool services and the connection configuration built from
 // the cluster settings (pool_wiring.go), and the per-shard dial with its
-// observers.
+// observers and the hooks through which a connection calls back into the
+// session (dial.go).
 //
 // It must not contain connection pool internals (internal/pool), the
 // request/response transport or socket dialing (internal/transport), node

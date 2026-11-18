@@ -29,6 +29,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/internal/connectivity"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/protocol"
 
 	"time"
 
@@ -120,4 +121,27 @@ func sessionDialWithoutObserver(s *Core, ctx context.Context, host *implEndpoint
 		reporter = s.privateStorage.driverConfigReporter
 	}
 	return implTransport.Dial(ctx, host, cfg, errorHandler, shardID, nrShards, implTransport.Opening{Context: s.privateStorage.InternalCtx, Hooks: s.NewConnectionHooks(), Identity: implTransport.InternalStartupIdentity{DriverName: s.privateStorage.InternalCfg.DriverName, DriverVersion: s.privateStorage.InternalCfg.DriverVersion, ApplicationInfo: s.privateStorage.InternalCfg.ApplicationInfo, SessionID: s.privateStorage.id}, Reporter: reporter, MetadataTimeout: s.privateStorage.InternalCfg.MetadataSchemaRequestTimeout, CoalesceWait: s.privateStorage.InternalCfg.WriteCoalesceWaitTime, PoolPolicy: implTransport.InternalConnectionPoolPolicy{InternalDisableShardAware: !advancedShardAwareness(cfg.TypedConfig), InternalMaxExcessRate: s.privateStorage.InternalCfg.MaxExcessShardConnectionsRate}, MaxRequests: s.privateStorage.InternalCfg.MaxRequestsPerConn, FrameObserver: s.privateStorage.frameObserver, StreamObserver: s.privateStorage.streamObserver})
+}
+
+type sessionConnectionHooks struct{ session *Core }
+
+func (s *Core) NewConnectionHooks() implTransport.InternalConnectionHooks {
+	return sessionConnectionHooks{s}
+}
+
+func (h sessionConnectionHooks) InternalStartConnectionWorker(f func()) bool {
+	return h.session.Peripheral().InternalStartWorker(f)
+}
+
+func (h sessionConnectionHooks) InternalConnectionWorkersDone() <-chan struct{} {
+	return h.session.Peripheral().InternalDone
+}
+
+func (h sessionConnectionHooks) InternalHandleConnectionEvent(ctx context.Context, f protocol.Frame, release func()) bool {
+	return h.session.handleEventOwnedContext(ctx, f, release)
+}
+
+func InternalConnectionOwnedBy(c *implTransport.Conn, s *Core) bool {
+	h, ok := c.InternalHooks.(sessionConnectionHooks)
+	return ok && h.session == s
 }
