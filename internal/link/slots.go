@@ -113,8 +113,6 @@ var (
 	// session's implementation behind a policy NewPolicy or SingleTarget
 	// returned. Package routing fills it.
 	BuiltinPolicy = NewSlot("routing.builtinPolicy")
-	// NewPlan holds func(routing.Policy, routing.Info, *metadata.Snapshot) routing.Plan.
-	NewPlan = NewSlot("routing.newPlan")
 	// HostRoutes holds func(*metadata.Snapshot) []metadata.Route.
 	HostRoutes = NewSlot("routing.hostRoutes")
 	// ReplicaRoutes holds func(*metadata.Snapshot, routing.Info) []metadata.Route.

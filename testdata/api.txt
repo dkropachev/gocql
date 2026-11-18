@@ -1390,10 +1390,6 @@ package metadata
 
 package metrics
 	type metrics.Snapshot struct
-		metrics.Snapshot field ReceiveCacheHits uint64
-		metrics.Snapshot field ReceiveCacheMisses uint64
-		metrics.Snapshot field ReceiveCacheBytes int
-		metrics.Snapshot field ReceiveCacheObjects int
 		metrics.Snapshot field Requests uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
@@ -1505,7 +1501,6 @@ package routing
 		routing.LatencyOptions field RetryPeriod time.Duration
 		routing.LatencyOptions field UpdateInterval time.Duration
 	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
-	func routing.NewPlan(policy routing.Policy, info routing.Info, snapshot *metadata.Snapshot) routing.Plan
 	func routing.NewPolicy(options routing.Options) (routing.Policy, error)
 	type routing.Options struct
 		routing.Options field Datacenter string

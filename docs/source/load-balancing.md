@@ -19,9 +19,9 @@ path, where the first route serves the request:
   from routes already in a slice.
 - `Observe` receives every attempt's outcome.
 
-`routing.NewPlan(policy, info, snapshot)` combines Pick and Fallback into the plan
-a request follows. `Plan.Next` lazily returns `metadata.Route` values; Pick and Next
-must not perform I/O or mutate inputs. A Route is a host and, optionally, a shard
+The session combines Pick and Fallback into the plan a request follows.
+`Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
+perform I/O or mutate inputs. A Route is a host and, optionally, a shard
 (`Route.Shard`, a `cql.Option[uint32]`), resolved by the plan: a request takes a
 connection for exactly that shard of that host, or any connection of the host
 when the route has no shard, and does not move to another shard or host on its own;

@@ -1472,7 +1472,6 @@ type Policy interface {
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
     Observe(config.AttemptEvent)
 }
-func NewPlan(Policy, Info, *metadata.Snapshot) Plan  // combines Pick and Fallback
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
 
 // package config
@@ -1752,9 +1751,8 @@ func (m *Snapshot) Generation() uint64
 type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
 
 // package metrics
+// Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
-    ReceiveCacheHits, ReceiveCacheMisses uint64
-    ReceiveCacheBytes, ReceiveCacheObjects int
     Requests, Attempts uint64
     Errors, Cancelled uint64
     Retries, Speculations uint64

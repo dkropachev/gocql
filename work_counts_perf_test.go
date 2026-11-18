@@ -291,7 +291,7 @@ func TestWorkCountsPerf(t *testing.T) {
 							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
 						}
 						implRouting.ResetPerfCounters()
-						plan := routing.NewPlan(policy, info, m)
+						plan := implRouting.PlanFor(policy, info, m)
 						target, ok := plan.Next()
 						if !ok {
 							t.Fatal("no target")

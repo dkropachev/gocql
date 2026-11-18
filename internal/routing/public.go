@@ -47,6 +47,13 @@ func EngineOf(p routing.Policy) RoutingPolicy {
 	return applicationPolicy{p}
 }
 
+// PlanFor returns the plan a request described by info follows under the
+// application's policy p, given m: Pick's route first, then Fallback's. It
+// replaces the public routing.NewPlan for tests that inspect a policy's plan.
+func PlanFor(p routing.Policy, info routing.Info, m *metadata.Snapshot) routing.Plan {
+	return publicPlan{NewPlan(EngineOf(p), info, SnapshotOf(m))}
+}
+
 // InternalBuiltin returns the session's default policy behind p, if p is one.
 func InternalBuiltin(p routing.Policy) (*InternalRoutingPolicy, bool) {
 	b, ok := EngineOf(p).(*InternalRoutingPolicy)
@@ -66,9 +73,6 @@ func init() {
 			panic(err)
 		}
 		return publicPolicy{p}
-	})
-	link.Set(link.NewPlan, func(p routing.Policy, info routing.Info, m *metadata.Snapshot) routing.Plan {
-		return publicPlan{NewPlan(EngineOf(p), info, SnapshotOf(m))}
 	})
 	link.Set(link.HostRoutes, func(m *metadata.Snapshot) []metadata.Route {
 		return PublicRoutes(SnapshotOf(m).HostRoutes())

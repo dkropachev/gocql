@@ -280,7 +280,7 @@ func TestRouting(t *testing.T) {
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
-			plan := routing.NewPlan(rr, routing.Info{}, session.Metadata())
+			plan := implRouting.PlanFor(rr, routing.Info{}, session.Metadata())
 			targets := make(map[cql.UUID]bool)
 			for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 				targets[target.HostID()] = true
@@ -316,7 +316,7 @@ func TestRouting(t *testing.T) {
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
-			plan := routing.NewPlan(rr, routing.Info{}, session.Metadata())
+			plan := implRouting.PlanFor(rr, routing.Info{}, session.Metadata())
 			targets := make(map[cql.UUID]bool)
 			for target, ok := plan.Next(); ok; target, ok = plan.Next() {
 				targets[target.HostID()] = true
