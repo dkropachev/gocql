@@ -5,6 +5,9 @@ package cql
 
 import "fmt"
 
+// Compression is the frame compression a connection negotiates. The zero
+// Compression is NoCompression. Later releases may add values, so a switch over
+// them needs a default case.
 type Compression uint8
 
 const (

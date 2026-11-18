@@ -13,6 +13,8 @@ import (
 // Keyspace is the schema of a keyspace: its replication and the tables,
 // views, types, functions, aggregates and indexes in it, as far as Mode
 // loads them.
+//
+// The driver fills it; its zero value is empty.
 type Keyspace struct {
 	StrategyOptions map[string]string
 	Tables          map[string]*Table
@@ -54,6 +56,8 @@ func (ks *Keyspace) Clone() *Keyspace {
 }
 
 // Table is the schema of a table (a column family).
+//
+// The driver fills it; its zero value is empty.
 type Table struct {
 	ID                string
 	Columns           map[string]*Column
@@ -68,6 +72,8 @@ type Table struct {
 }
 
 // TableOptions are the options a table was created with.
+//
+// The driver fills it; its zero value is empty.
 type TableOptions struct {
 	Caching                 map[string]string
 	Compaction              map[string]string
@@ -122,6 +128,8 @@ func (t *TableOptions) Equals(other *TableOptions) bool {
 }
 
 // View is the schema of a materialized view.
+//
+// The driver fills it; its zero value is empty.
 type View struct {
 	Columns                 map[string]*Column
 	Extensions              map[string][]byte
@@ -141,6 +149,8 @@ type View struct {
 }
 
 // Column is the schema of a column of a table or view.
+//
+// The driver fills it; its zero value is empty.
 type Column struct {
 	Index           ColumnIndex
 	Keyspace        string
@@ -170,6 +180,8 @@ func (c *Column) Equals(other *Column) bool {
 }
 
 // Function is a user-defined function.
+//
+// The driver fills it; its zero value is empty.
 type Function struct {
 	Keyspace          string
 	Name              string
@@ -182,6 +194,8 @@ type Function struct {
 }
 
 // Aggregate is a user-defined aggregate.
+//
+// The driver fills it; its zero value is empty.
 type Aggregate struct {
 	privateStorage aggregateStorage
 	Keyspace       string
@@ -195,6 +209,8 @@ type Aggregate struct {
 }
 
 // Type is a user-defined type: its fields' names and types, in order.
+//
+// The driver fills it; its zero value is empty.
 type Type struct {
 	Keyspace   string
 	Name       string
@@ -203,6 +219,8 @@ type Type struct {
 }
 
 // Index is a secondary index.
+//
+// The driver fills it; its zero value is empty.
 type Index struct {
 	Name              string
 	KeyspaceName      string
@@ -296,7 +314,9 @@ func compareStringMaps(a, b map[string]string) bool {
 }
 
 // IndexKind is the kind of a secondary index, as system_schema.indexes
-// stores it.
+// stores it; a kind the driver does not name keeps the server's text. The
+// zero IndexKind is empty and names no kind. Later releases may add values,
+// so a switch over them needs a default case.
 type IndexKind string
 
 // The kinds of secondary indexes.
@@ -317,6 +337,8 @@ const (
 )
 
 // ColumnIndex is the index on a column, in the schema of older servers.
+//
+// The driver fills it; its zero value is empty.
 type ColumnIndex struct {
 	Options map[string]any
 	Name    string
@@ -346,7 +368,9 @@ func (c *ColumnIndex) Equals(other *ColumnIndex) bool {
 	return true
 }
 
-// ColumnKind is the role of a column in its table.
+// ColumnKind is the role of a column in its table. The zero ColumnKind is
+// ColumnKindUnknown. Later releases may add values, so a switch over them needs
+// a default case.
 type ColumnKind int
 
 // The kinds of columns.
@@ -359,8 +383,12 @@ const (
 	ColumnStatic
 )
 
+// String returns the kind name, or ColumnKind(n) for a value it does not
+// define.
 func (c ColumnKind) String() string {
 	switch c {
+	case ColumnKindUnknown:
+		return "unknown"
 	case ColumnPartitionKey:
 		return "partition_key"
 	case ColumnClusteringKey:
@@ -372,7 +400,7 @@ func (c ColumnKind) String() string {
 	case ColumnStatic:
 		return "static"
 	default:
-		return fmt.Sprintf("unknown_column_%d", c)
+		return fmt.Sprintf("ColumnKind(%d)", int(c))
 	}
 }
 

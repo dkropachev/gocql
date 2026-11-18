@@ -37,6 +37,8 @@ var (
 )
 
 // QueryError is the failure of a single attempt on one connection.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type QueryError struct {
 	state queryErrorState
 }
@@ -55,7 +57,10 @@ func (e *QueryError) ExecutionStatus() ExecutionStatus {
 
 func (e *QueryError) Error() string {
 	d := &e.state
-	msg := d.InternalErr.Error()
+	msg := "unknown failure" // a zero QueryError
+	if d.InternalErr != nil {
+		msg = d.InternalErr.Error()
+	}
 	if d.InternalTimeout > 0 {
 		msg = fmt.Sprintf("%s (timeout: %v, in-flight: %d)", msg, d.InternalTimeout, d.InternalInFlight)
 	}

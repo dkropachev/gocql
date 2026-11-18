@@ -6,7 +6,8 @@ package metadata
 import "fmt"
 
 // Mode selects how much schema a session loads. Topology (hosts, tokens and
-// tablets) loads in every mode.
+// tablets) loads in every mode. The zero Mode is SchemaNone. Later releases may
+// add values, so a switch over them needs a default case.
 type Mode uint8
 
 // The metadata modes.

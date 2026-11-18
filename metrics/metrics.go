@@ -20,6 +20,8 @@ import "time"
 // composite literal, and do not compare whole Snapshots with == or use them
 // as map keys, since a field added later may not be comparable or may make
 // two otherwise equal snapshots differ.
+//
+// The zero Snapshot counts nothing.
 type Snapshot struct {
 	// Requests counts executions started, and Attempts the requests they
 	// sent to nodes, including retries and speculative attempts. While an

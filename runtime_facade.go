@@ -64,6 +64,8 @@ func Connect(ctx context.Context, cfg config.Config, dialect Dialect) (*Session,
 }
 
 // PreparedInfo describes a prepared statement.
+//
+// The driver fills it; its zero value is empty.
 type PreparedInfo struct {
 	// Keyspace and Table name the statement's table, when the server
 	// reported it.
@@ -79,6 +81,8 @@ type PreparedInfo struct {
 }
 
 // StreamInfo reports delivered rows, pages and execution progress.
+//
+// The driver fills it; its zero value is empty.
 type StreamInfo struct {
 	// Result describes the execution so far.
 	Result cql.Result

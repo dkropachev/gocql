@@ -12,6 +12,8 @@ import (
 // payload are rare, so they live behind one pointer that is nil when absent;
 // read them with the methods of the same names. A Result is a value: copies
 // never observe each other's later additions.
+//
+// The zero Result is empty: no warnings, CQL traces or custom payload.
 type Result struct {
 	diag                *resultDiagnostics
 	HostID              UUID
@@ -29,6 +31,8 @@ type resultDiagnostics struct {
 
 // CQLTraceRef names a server-side CQL trace session and the attempt it
 // records. Read the session with package cqltrace.
+//
+// The zero CQLTraceRef names no session.
 type CQLTraceRef struct {
 	// ID is the trace session ID.
 	ID UUID

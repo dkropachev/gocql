@@ -28,7 +28,8 @@ import (
 // error on a session of another dialect, before anything is sent.
 //
 // The dialects are ScyllaV4, CassandraV4 and CassandraV5. The zero Dialect
-// names none, and Connect rejects it.
+// names none, and Connect rejects it with a cql.ValidationError. Later releases
+// may add values, so a switch over them needs a default case.
 type Dialect uint8
 
 const (
@@ -45,7 +46,8 @@ const (
 	CassandraV5
 )
 
-// String returns the dialect's Go name, such as "ScyllaV4".
+// String returns the dialect's Go name, such as "ScyllaV4", or Dialect(n)
+// for a value it does not define.
 func (d Dialect) String() string {
 	switch d {
 	case ScyllaV4:

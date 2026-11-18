@@ -9,6 +9,8 @@ import (
 )
 
 // HostError is the failure to connect to one host.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type HostError struct {
 	Err error
 	// Address is the host:port that was dialed.
@@ -17,6 +19,8 @@ type HostError struct {
 
 // ConnectError reports that no host was reachable while a session was
 // connecting; it matches ErrNoConnectionsStarted.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ConnectError struct {
 	// Stage names the step that failed, such as "protocol discovery".
 	Stage string

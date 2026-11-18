@@ -10,9 +10,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
+// Varint is a CQL varint, an integer of any size; BigInt converts it. The zero
+// Varint is 0.
 type Varint struct{ bytes Bytes }
 
 // Decimal represents Unscaled * 10^-Scale without rounding.
+//
+// The zero Decimal is 0.
 type Decimal struct {
 	Unscaled Varint
 	Scale    int32

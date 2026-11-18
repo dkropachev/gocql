@@ -10,9 +10,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// UDTOptions explicitly relaxes field matching. AllowMissingFields concerns
-// fields absent from metadata, not null or absent serialized field values.
-
+// UDTOptions names the UDT a UDTEncoder or UDTDecoder expects and explicitly
+// relaxes field matching. AllowMissingFields concerns fields absent from
+// metadata, not null or absent serialized field values. The zero UDTOptions
+// names no UDT, which those codecs reject with a ValidationError.
 type UDTOptions struct {
 	Keyspace, Name           string
 	AllowExtraDatabaseFields bool

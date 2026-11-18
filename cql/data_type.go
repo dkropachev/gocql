@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-// DataType is an immutable, complete CQL type descriptor. Its zero value is invalid.
+// DataType is an immutable, complete CQL type descriptor. Its zero value is
+// invalid: functions that take a DataType reject it with a ValidationError.
 type DataType struct{ descriptor *dataTypeDescriptor }
 type dataTypeDescriptor struct {
 	Element, Key   DataType
@@ -23,12 +24,16 @@ type dataTypeDescriptor struct {
 }
 
 // ColumnSpec identifies one physical column and its complete type.
+//
+// The zero ColumnSpec names no column and has the invalid zero DataType.
 type ColumnSpec struct {
 	Type                  DataType
 	Keyspace, Table, Name string
 }
 
 // Columns is an immutable, ordered set of column specifications.
+//
+// The zero Columns is empty.
 type Columns struct{ columns []ColumnSpec }
 
 // scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
@@ -356,6 +361,9 @@ func typeValidation(field, format string, args ...any) error {
 	return &ValidationError{Field: field, Err: fmt.Errorf(format, args...)}
 }
 
+// CellState is the state of a cell: present, NULL, UNSET or empty. The zero
+// CellState is Present. Later releases may add values, so a switch over them
+// needs a default case.
 type CellState uint8
 
 const (
@@ -399,8 +407,8 @@ type BindValue[T any] struct {
 	State CellState
 }
 
-// MaybeEmpty distinguishes an empty CQL value from an ordinary value.
-// Its zero value encodes the ordinary zero value of T; Empty=true selects empty.
+// MaybeEmpty distinguishes an empty CQL value from an ordinary value. Its zero
+// value encodes the ordinary zero value of T; Empty=true selects empty.
 type MaybeEmpty[T any] struct {
 	Value T
 	Empty bool

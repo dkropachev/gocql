@@ -12,7 +12,9 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
-// Action is what the driver does after a failed attempt.
+// Action is what the driver does after a failed attempt. The zero Action is
+// Stop. Later releases may add values, so a switch over them needs a default
+// case.
 type Action uint8
 
 const (
@@ -45,6 +47,8 @@ func (a Action) String() string {
 
 // Attempt describes a failed attempt. The driver fills it; policies only
 // read it.
+//
+// Its zero value describes no failure.
 type Attempt struct {
 	Err error
 	// Number is the 1-based number of the failed attempt.
@@ -79,6 +83,8 @@ type Policy interface {
 
 // Never stops after the first failed attempt. Set exec.Options.Retry to Never{}
 // to disable retries for an execution while nil inherits the profile's policy.
+//
+// It has no fields; its zero value is ready to use.
 type Never struct{}
 
 // Decide always returns Stop.

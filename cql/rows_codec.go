@@ -11,9 +11,13 @@ import (
 )
 
 // EmptyRow is the row type of a statement without result columns.
+//
+// It has no fields, so its zero value is its only value.
 type EmptyRow struct{}
 
 // Pair composes two independently typed parameter or row values.
+//
+// Its zero value holds the zero A and B.
 type Pair[A, B any] struct {
 	First  A
 	Second B
@@ -33,6 +37,9 @@ type CompiledRow[R any] interface {
 }
 
 // ParamWriter writes parameters in server order. It is confined to one binding.
+//
+// The driver passes one to a parameter encoder; a zero ParamWriter rejects
+// writes with a ValidationError.
 type ParamWriter struct {
 	builder     *wire.Builder
 	columns     Columns
@@ -73,7 +80,7 @@ func finishParamWriter(w *ParamWriter) error {
 // WriteParam encodes one typed parameter with transactional cell framing.
 func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 	if w == nil || w.builder == nil || encoder == nil {
-		return fmt.Errorf("gocql: nil parameter writer or encoder")
+		return typeValidation("writer", "nil or zero parameter writer, or nil encoder")
 	}
 	column, ok := w.columns.At(w.index)
 	if !ok {
@@ -107,6 +114,9 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 }
 
 // RowReader consumes physical columns without tuple expansion or reflection.
+//
+// The driver passes one to a row decoder; a zero RowReader rejects reads with a
+// ValidationError.
 type RowReader struct {
 	cursor       *wire.Cursor
 	lease        wire.Ref
@@ -128,7 +138,7 @@ func finishRowReader(r *RowReader) error {
 
 func (r *RowReader) nextValue() (ValueReader, error) {
 	if r == nil || r.cursor == nil {
-		return ValueReader{}, fmt.Errorf("gocql: nil row reader")
+		return ValueReader{}, typeValidation("reader", "nil or zero row reader")
 	}
 	column, ok := r.columns.At(r.index)
 	if !ok {

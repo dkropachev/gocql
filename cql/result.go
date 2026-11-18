@@ -3,6 +3,9 @@
 
 package cql
 
+// CASResult is a row of a conditional statement's result: Applied reports
+// whether the statement applied, and Previous holds the existing row the server
+// returned with it, if any. Its zero value did not apply and holds no row.
 type CASResult[R any] struct {
 	Previous Option[R]
 	Applied  bool

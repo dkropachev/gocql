@@ -18,6 +18,8 @@ import (
 // the checked form and returns that error instead. Expiry detection is
 // best-effort: a release that races the check is not caught, so a view must
 // never be used after its page may have been released.
+//
+// The zero Bytes is empty.
 type Bytes struct {
 	lease wire.Ref
 	chain wire.Chain
@@ -30,6 +32,8 @@ type Bytes struct {
 // checked form and returns that error instead. Detection is best-effort, as for
 // Bytes. fmt recovers panics from String, so printing an expired Text shows
 // %!v(PANIC=String method: ...) rather than failing.
+//
+// The zero Text is empty.
 type Text struct{ bytes Bytes }
 
 // BorrowBytes borrows b without copying. The caller must keep it immutable until

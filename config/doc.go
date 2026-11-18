@@ -21,4 +21,24 @@
 // which reloads certificates while the session runs. WithObserver and
 // WithLifecycleObserver install an observe.Observer and an
 // observe.LifecycleObserver.
+//
+// # Which setting wins
+//
+// A request's execution settings resolve in three steps, each overriding the
+// one before:
+//
+//  1. The session's default profile: the one ConfigBuilder.WithDefaultProfile
+//     or ConfigureDefaultProfile chose, or the driver's defaults.
+//  2. exec.Options.Profile, when set, replaces that profile whole. A field the
+//     profile did not choose keeps the driver's default, not the session's.
+//  3. Each exec.Options field that is set overrides the matching field of the
+//     profile: a cql.Option whose Set is true, a non-nil Retry, and a
+//     SerialConsistency other than exec.SerialInherit.
+//
+// Time limits combine rather than replace each other. The context passed to
+// the call and the resolved Timeout (the profile's, or exec.Options.Timeout
+// when set) both bound the whole execution, retries and every page Rows
+// fetches included, and whichever expires first ends it; a zero Timeout leaves
+// only the context. The resolved PageTimeout bounds each page fetch on its
+// own, within the execution's deadline.
 package config

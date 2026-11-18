@@ -12,6 +12,9 @@ import (
 
 // Info describes a request for routing: what it reads or writes, and any
 // host or shard it must go to.
+//
+// The driver fills it; its zero value describes a request with no keyspace,
+// token or target.
 type Info struct {
 	// Keyspace and Table name the statement's table, when known.
 	Keyspace, Table string
@@ -28,6 +31,8 @@ type Info struct {
 }
 
 // AttemptStart describes an attempt as it is sent to its target.
+//
+// The driver fills it; its zero value is empty.
 type AttemptStart struct {
 	Started     time.Time
 	RequestID   uint64
@@ -37,6 +42,8 @@ type AttemptStart struct {
 }
 
 // AttemptEvent describes how an attempt ended.
+//
+// The driver fills it; its zero value is empty.
 type AttemptEvent struct {
 	Started   time.Time
 	Err       error

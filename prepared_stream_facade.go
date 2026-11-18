@@ -13,6 +13,9 @@ import (
 // Share it between goroutines and create one Query per worker. It needs no Close.
 // PrepareStream validates the streaming decoder against known result metadata;
 // execution revalidates it whenever the actual result metadata changes.
+//
+// Session.PrepareStream makes a PreparedStream. A zero PreparedStream has no
+// columns, and its Query returns a cql.ValidationError.
 type PreparedStream[P, R any] implSession.PreparedStream[P, R]
 
 // Query creates a reusable stream query with fixed options. Close the query when

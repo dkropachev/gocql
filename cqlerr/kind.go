@@ -3,9 +3,12 @@
 
 package cqlerr
 
-// Kind groups errors by what a caller can do about them. Server errors and
-// the driver's error types report theirs with a Kind method; KindOf
-// classifies any error.
+import "fmt"
+
+// Kind groups errors by what a caller can do about them. Server errors and the
+// driver's error types report theirs with a Kind method; KindOf classifies any
+// error. The zero Kind is KindUnknown. Later releases may add values, so a
+// switch over them needs a default case.
 type Kind uint8
 
 const (
@@ -36,8 +39,11 @@ const (
 	KindServer
 )
 
+// String returns the kind name, or Kind(n) for a value it does not define.
 func (k Kind) String() string {
 	switch k {
+	case KindUnknown:
+		return "unknown"
 	case KindTimeout:
 		return "timeout"
 	case KindUnavailable:
@@ -61,7 +67,7 @@ func (k Kind) String() string {
 	case KindServer:
 		return "server"
 	default:
-		return "unknown"
+		return fmt.Sprintf("Kind(%d)", uint8(k))
 	}
 }
 

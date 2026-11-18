@@ -24,6 +24,8 @@
 
 package cql
 
+// Duration is a CQL duration: months, days and nanoseconds, which the server
+// keeps apart. The zero Duration has zero length.
 type Duration struct {
 	Months      int32
 	Days        int32

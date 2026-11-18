@@ -10,7 +10,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// Kind classifies an Event.
+// Kind classifies an Event. The zero Kind is Unknown. Later releases may add
+// values, so a switch over them needs a default case.
 type Kind uint8
 
 const (
@@ -56,6 +57,8 @@ func (k Kind) String() string {
 }
 
 // Event is one cluster change delivered to a Subscription.
+//
+// The driver fills it; its zero value is empty, of Kind Unknown.
 type Event struct {
 	Address                          netip.AddrPort
 	Change, Target, Keyspace, Object string
@@ -67,9 +70,9 @@ type Event struct {
 
 // Filter selects the kinds of events a Subscription receives and its queue
 // capacity.
-
-// Filter selects the kinds of events a Subscription receives and its queue
-// capacity.
+//
+// The zero Filter receives every kind of event, of every keyspace, through a
+// queue of 64 events.
 type Filter struct {
 	Keyspace string
 	Kinds    []Kind

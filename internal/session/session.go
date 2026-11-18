@@ -60,6 +60,9 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 	if s == nil {
 		return CompiledOptions{}, cqltype.TypeValidation("session", "nil session")
 	}
+	if s.core == nil {
+		return CompiledOptions{}, errZeroSession()
+	}
 	return InternalCompileOptions(s.Core(), options)
 }
 
@@ -116,6 +119,9 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	core := s.Core()
+	if core == nil {
+		return errZeroSession()
+	}
 	if core.Closed() {
 		return cqlerr.ErrClosed
 	}
@@ -139,7 +145,17 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 //
 // The id is assigned when the session is created and never changes, so it is
 // safe to call concurrently and safe to read after the session is closed.
-func (s *Session) ID() string { return s.core.ID() }
+func (s *Session) ID() string {
+	if s.Core() == nil {
+		return ""
+	}
+	return s.core.ID()
+}
+
+// errZeroSession is the error of a zero Session's methods.
+func errZeroSession() error {
+	return cqltype.TypeValidation("session", "zero Session; open one with gocql.Connect")
+}
 
 // AwaitSchemaAgreement waits until schema versions across all nodes in the
 // cluster are the same, as seen from the control connection. The
@@ -147,27 +163,50 @@ func (s *Session) ID() string { return s.core.ID() }
 // elapses with versions still differing, AwaitSchemaAgreement returns an
 // error.
 func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
+	if s.Core() == nil {
+		return errZeroSession()
+	}
 	return s.core.AwaitSchemaAgreement(ctx)
 }
 
 // Close closes the session, its connections and its in-flight executions.
-func (s *Session) Close() error { return s.core.Close() }
+func (s *Session) Close() error {
+	if s.Core() == nil {
+		return errZeroSession()
+	}
+	return s.core.Close()
+}
 
-// Closed reports whether Close has been called.
-func (s *Session) Closed() bool { return s.core.Closed() }
+// Closed reports whether Close has been called. A zero Session was never
+// open, so it reports true.
+func (s *Session) Closed() bool { return s.Core() == nil || s.core.Closed() }
 
-// Metadata returns the current cluster metadata snapshot.
-func (s *Session) Metadata() *routing.MetadataSnapshot { return s.core.Metadata() }
+// Metadata returns the current cluster metadata snapshot, or nil for a zero
+// Session.
+func (s *Session) Metadata() *routing.MetadataSnapshot {
+	if s.Core() == nil {
+		return nil
+	}
+	return s.core.Metadata()
+}
 
 // Metrics returns a snapshot of the session's metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.Core().Metrics() }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
 // context. Metadata queries themselves use the session metadata timeout.
-func (s *Session) RefreshMetadata(ctx context.Context) error { return s.core.RefreshMetadata(ctx) }
+func (s *Session) RefreshMetadata(ctx context.Context) error {
+	if s.Core() == nil {
+		return errZeroSession()
+	}
+	return s.core.RefreshMetadata(ctx)
+}
 
 // Subscribe returns a subscription to the session's events that match
 // filter.
 func (s *Session) Subscribe(filter event.Filter) (*implCluster.Subscription, error) {
+	if s.Core() == nil {
+		return nil, errZeroSession()
+	}
 	return s.core.Subscribe(filter)
 }

@@ -61,7 +61,8 @@ type StreamInfo struct {
 }
 
 // RowStream writes only during NextInto. Incremental mode owns a pool slot.
-// Output belongs to the caller and remains valid after Close.
+// Output belongs to the caller and remains valid after Close. A nil or zero
+// RowStream has no rows.
 type RowStream[R any] struct {
 	state          cql.PageState
 	privateStorage rowStreamStorage[R]
@@ -192,7 +193,7 @@ func (s *RowStream[R]) Columns() cql.Columns {
 	return s.privateStorage.columns
 }
 func (s *RowStream[R]) Close() error {
-	if s == nil {
+	if s == nil || s.privateStorage.session == nil { // nil or zero: nothing to close
 		return nil
 	}
 	if !s.privateStorage.cursor.current() {
@@ -317,7 +318,7 @@ func rowStreamCleanup[R any](s *RowStream[R], reusable bool) {
 	s.privateStorage.request.InternalLogical.releaseInput()
 }
 func (s *RowStream[R]) NextInto(dst *R) bool {
-	if s == nil {
+	if s == nil || s.privateStorage.session == nil { // nil or zero: no rows
 		return false
 	}
 	if !s.privateStorage.cursor.current() {

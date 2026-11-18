@@ -11,6 +11,8 @@ import (
 
 // HostSnapshot is what a session knows about a host: its address, place in
 // the cluster, tokens, sharding and state.
+//
+// The driver fills it; its zero value is empty.
 type HostSnapshot struct {
 	Address          netip.AddrPort
 	Datacenter, Rack string

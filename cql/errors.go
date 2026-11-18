@@ -11,6 +11,8 @@ import (
 var ErrReleased = errors.New("gocql: borrowed value has been released")
 
 // ValidationError describes an invalid API argument or type descriptor.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ValidationError struct {
 	Err   error
 	Field string
@@ -21,6 +23,8 @@ func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s
 func (e *ValidationError) Unwrap() error { return e.Err }
 
 // CodecError records the physical column and nested path of a codec failure.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type CodecError struct {
 	Err    error
 	Column string
@@ -37,6 +41,8 @@ func (e *CodecError) Unwrap() error { return e.Err }
 
 // ProtocolError reports that a peer violated the CQL protocol: a frame the
 // driver cannot accept, or data that does not decode.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ProtocolError struct {
 	Err error
 	// Stage names where the violation was found. A violation of the frame

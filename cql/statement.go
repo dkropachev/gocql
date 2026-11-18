@@ -11,6 +11,9 @@ import (
 // Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
 // BindMarkers supplies parameter metadata for unprepared execution; Prepare
 // takes that metadata from the server. Kind classifies conditional statements.
+//
+// The zero Statement has no CQL, which preparation and execution reject with a
+// ValidationError.
 type Statement[P, R any] struct {
 	// CQL is the statement text sent to the server.
 	CQL string

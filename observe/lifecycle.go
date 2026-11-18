@@ -16,6 +16,8 @@ type LifecycleObserver interface{ ObserveLifecycle(LifecycleEvent) }
 
 // LifecycleEvent is one step of a session's or connection's life: Kind names
 // what happened, Stage how far it got, and Err why it failed, if it did.
+//
+// The driver fills it; its zero value is empty.
 type LifecycleEvent struct {
 	At          time.Time
 	Err         error

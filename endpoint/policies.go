@@ -34,7 +34,8 @@ type TLSSource interface {
 }
 
 // ConvictionSource names what failed to connect: a pool connection or the
-// control connection.
+// control connection. The zero ConvictionSource is ConvictionPool. Later
+// releases may add values, so a switch over them needs a default case.
 type ConvictionSource uint8
 
 const (
@@ -61,6 +62,8 @@ func (s ConvictionSource) String() string {
 
 // ConvictionEvent describes a connection failure, or a recovery, that a
 // ConvictionPolicy receives.
+//
+// The driver fills it; its zero value is empty.
 type ConvictionEvent struct {
 	// Err is the connection error; nil in Reset.
 	Err error

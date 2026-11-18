@@ -5,7 +5,9 @@ package cql
 
 import "fmt"
 
-// StatementKind is an explicit classification; the driver never parses CQL to infer it.
+// StatementKind is an explicit classification; the driver never parses CQL to
+// infer it. The zero StatementKind is UnknownStatement. Later releases may add
+// values, so a switch over them needs a default case.
 type StatementKind uint8
 
 const (

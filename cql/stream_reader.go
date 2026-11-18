@@ -28,7 +28,7 @@ import (
 )
 
 // StreamCapacityError reports required final storage without implicit growth.
-
+// The driver returns it filled in; its zero value is an error without detail.
 type StreamCapacityError struct {
 	Path                string
 	Required, Available int64
@@ -39,6 +39,8 @@ func (e *StreamCapacityError) Error() string {
 }
 
 // StreamCapabilityError identifies a mode or mapping without an incremental path.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type StreamCapabilityError struct {
 	Reason      string
 	Protocol    int
@@ -113,6 +115,9 @@ func (s *streamDecodeState) fail(err error) error {
 }
 
 // StreamValueReader is a scoped, limited reader over one streamed value.
+//
+// The driver passes one to a stream decoder; a zero StreamValueReader rejects
+// reads with a ValidationError.
 type StreamValueReader struct {
 	scope        *wire.Stream
 	typ          DataType
@@ -387,6 +392,9 @@ func (r *StreamValueReader) vectorLength() (int64, error) {
 // StreamRowReader is a scoped, checked reader over one streamed row. Custom plans
 // read each column with its ReadColumn method and skip one with SkipColumn;
 // it never exposes retained byte views.
+//
+// The driver passes one to a stream row decoder; a zero StreamRowReader rejects
+// reads with a ValidationError.
 type StreamRowReader struct {
 	scope        *wire.Stream
 	shared       *streamDecodeState

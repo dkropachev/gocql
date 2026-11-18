@@ -7,7 +7,9 @@ import (
 	"fmt"
 )
 
-// Type is the kind of a CQL data type, as the native protocol numbers it.
+// Type is the kind of a CQL data type, as the native protocol numbers it, so
+// the zero Type is TypeCustom. Later releases may add values, so a switch over
+// them needs a default case.
 type Type int
 
 // The kinds of CQL data types.
@@ -41,7 +43,8 @@ const (
 	TypeTuple     Type = 0x0031
 )
 
-// String returns the name of the identifier.
+// String returns the kind's CQL name, such as "bigint", or Type(n) for a
+// value it does not define.
 func (t Type) String() string {
 	switch t {
 	case TypeCustom:
@@ -96,7 +99,9 @@ func (t Type) String() string {
 		return "varint"
 	case TypeTuple:
 		return "tuple"
+	case TypeUDT:
+		return "udt"
 	default:
-		return fmt.Sprintf("unknown_type_%d", t)
+		return fmt.Sprintf("Type(%d)", int(t))
 	}
 }

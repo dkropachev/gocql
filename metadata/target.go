@@ -8,6 +8,9 @@ import (
 )
 
 // Target names a host, and optionally a shard of it, a request goes to.
+//
+// The zero Target names no host; a request that routing.SingleTarget sends to
+// it fails with a cql.ValidationError.
 type Target struct {
 	StrictShard bool
 	HostID      cql.UUID

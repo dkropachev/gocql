@@ -3,6 +3,21 @@
 
 // Package exec holds the per-execution settings of gocql statements: Options
 // and its compiled form, the options of preparation and of streaming queries.
+//
+// # Which setting wins
+//
+// A request starts from the session's default profile
+// (config.ConfigBuilder.WithDefaultProfile). Options.Profile, when set,
+// replaces that profile whole, and then each Options field that is set
+// overrides the matching field of the profile: a cql.Option whose Set is
+// true, a non-nil Retry, and a SerialConsistency other than SerialInherit.
+//
+// Time limits combine rather than replace each other. The call's context and
+// the resolved Timeout (Options.Timeout when set, else the profile's) both
+// bound the whole execution, retries and every page Rows fetches included,
+// and whichever expires first ends it; a zero Timeout leaves only the
+// context. The resolved PageTimeout bounds each page fetch on its own, within
+// the execution's deadline.
 package exec
 
 import (
@@ -19,8 +34,8 @@ import (
 
 // Options overrides execution settings. Its zero value uses session defaults.
 // Query constructors validate and snapshot Options once. Compile recurring
-// overrides with gocql.Session.CompileOptions for concurrent one-shot calls. Use context
-// deadlines for request time limits without rebuilding options.
+// overrides with gocql.Session.CompileOptions for concurrent one-shot calls.
+// Use context deadlines for request time limits without rebuilding options.
 type Options struct {
 	Retry    retry.Policy
 	Observer observe.Observer
@@ -56,8 +71,10 @@ type Options struct {
 	CQLTrace bool
 }
 
-// SerialOverride chooses the serial consistency an execution sends, relative
-// to its profile's config.Profile.SerialConsistency. The zero value inherits it.
+// SerialOverride chooses the serial consistency an execution sends, relative to
+// its profile's config.Profile.SerialConsistency. The zero value,
+// SerialInherit, inherits it. Later releases may add values, so a switch over
+// them needs a default case.
 type SerialOverride uint8
 
 const (
@@ -89,12 +106,13 @@ func (s SerialOverride) String() string {
 	}
 }
 
-// CompiledOptions is an immutable snapshot made by gocql.Session.CompileOptions. Reuse it
-// for recurring one-shot execution settings; the zero value uses session
-// defaults. Compiling validates overrides, copies payloads and precomputes request
-// settings. Reuse on another session resolves the original overrides against
-// that session's defaults instead.
-// CompiledOptions controls execution; PrepareOptions controls statement preparation.
+// CompiledOptions is an immutable snapshot made by
+// gocql.Session.CompileOptions. Reuse it for recurring one-shot execution
+// settings; the zero value uses session defaults. Compiling validates
+// overrides, copies payloads and precomputes request settings. Reuse on another
+// session resolves the original overrides against that session's defaults
+// instead. CompiledOptions controls execution; PrepareOptions controls
+// statement preparation.
 type CompiledOptions implSession.CompiledOptions
 
 // Values returns an independent copy of the original overrides for deriving
@@ -126,6 +144,8 @@ type StreamOptions struct {
 }
 
 // StreamLimits bounds the receive scratch of an incremental stream.
+//
+// Zero fields take defaults, so the zero StreamLimits is ready to use.
 type StreamLimits struct {
 	// MaxMetadataBytes caps a page's result metadata. Default 1 MiB.
 	MaxMetadataBytes int64

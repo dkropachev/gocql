@@ -11,7 +11,8 @@ import (
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
-// ClientRoute is one client connection of a ClientRoutes.
+// ClientRoute is one client connection of a ClientRoutes. It is a plain
+// record; its zero value names no connection.
 type ClientRoute struct {
 	// ConnectionID is the client connection ID the cluster publishes routes
 	// for.
@@ -48,7 +49,8 @@ func (r ClientRoutes) options() *implSettings.ClientRoutesOptions {
 }
 
 // ClientRoutesBuilder assembles a ClientRoutes. The last call for a setting
-// wins. A ClientRoutesBuilder is not safe for concurrent use.
+// wins. A ClientRoutesBuilder is not safe for concurrent use. The zero
+// ClientRoutesBuilder is ready to use, like one NewClientRoutes returns.
 type ClientRoutesBuilder struct {
 	routes []ClientRoute
 }

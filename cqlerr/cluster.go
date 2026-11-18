@@ -16,6 +16,8 @@ var ErrBusy = errors.New("gocql: query is busy")
 
 // ServerMismatchError reports that Connect reached a database other than
 // the one its dialect names.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ServerMismatchError struct {
 	Want, Got string
 }

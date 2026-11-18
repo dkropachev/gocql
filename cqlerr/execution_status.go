@@ -3,8 +3,12 @@
 
 package cqlerr
 
-// ExecutionStatus reports what a failed request may have done on the
-// cluster. States are ordered by severity.
+import "fmt"
+
+// ExecutionStatus reports what a failed request may have done on the cluster.
+// States are ordered by severity. The zero ExecutionStatus is MaybeExecuted,
+// the safe assumption. Later releases may add values, so a switch over them
+// needs a default case.
 type ExecutionStatus uint8
 
 const (
@@ -18,6 +22,8 @@ const (
 	PartiallyExecuted
 )
 
+// String returns the status name, or ExecutionStatus(n) for a value it does
+// not define.
 func (e ExecutionStatus) String() string {
 	switch e {
 	case NotExecuted:
@@ -27,7 +33,7 @@ func (e ExecutionStatus) String() string {
 	case PartiallyExecuted:
 		return "partially executed"
 	default:
-		return "unknown execution status"
+		return fmt.Sprintf("ExecutionStatus(%d)", uint8(e))
 	}
 }
 

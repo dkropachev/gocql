@@ -17,6 +17,9 @@ import (
 // Close the query when done, including when execution fails. Prepared.Exec, One
 // and Each manage their own state and are convenient for concurrent request
 // handlers.
+//
+// Prepared.Query makes a Query. A zero Query's executions return a
+// cql.ValidationError, and its Close does nothing.
 type Query[P, R any] implSession.Query[P, R]
 
 func (q *Query[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(q) }
@@ -120,6 +123,9 @@ func (q *Query[P, R]) Wait(ctx context.Context) error { return q.internal().Wait
 // Close it when done and close each Run cursor before starting another run.
 // Page buffering is the default; exec.StreamOptions.Incremental reserves a connection
 // for bounded incremental receive. It must not be copied or used concurrently.
+//
+// PreparedStream.Query makes a StreamQuery. A zero StreamQuery's Run returns a
+// cql.ValidationError, and its Close does nothing.
 type StreamQuery[P, R any] implSession.StreamQuery[P, R]
 
 // Run starts a stream. Only successful NextInto calls publish complete rows.

@@ -71,7 +71,7 @@ func (r *RowReader) scalarColumn(kind, alternative Type, compiled bool, width in
 //go:noinline
 func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, width int64) (int64, error) {
 	if r == nil || r.cursor == nil {
-		return 0, fmt.Errorf("gocql: nil row reader")
+		return 0, typeValidation("reader", "nil or zero row reader")
 	}
 	column, ok := r.columns.At(r.index)
 	if !ok {

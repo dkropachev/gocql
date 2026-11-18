@@ -11,6 +11,9 @@ import (
 // PageLease pins response storage independently of cursor advancement and
 // session shutdown. Close it once all borrowed views it protects are unused.
 // Do not copy a lease or access protected views concurrently with its final Close.
+//
+// Rows.Retain, Page.Retain and CASBatchRows.Retain make leases; Close on a zero
+// PageLease does nothing.
 type PageLease implSession.PageLease
 
 // Close releases the retained page. It is idempotent and accepts a nil receiver.
@@ -55,6 +58,9 @@ func (r Rows[R]) Info() cql.Result { return (implSession.Rows[R])(r).Info() }
 // that statement, while on Cassandra rows belong to rows of the partition;
 // see the server differences documentation. Ownership and staleness are as
 // for Rows. CASBatchRows must not be used concurrently.
+//
+// The zero CASBatchRows has no rows, and its Applied returns a
+// cql.ValidationError.
 type CASBatchRows[X any] implSession.CASBatchRows[X]
 
 // NextInto decodes the next row into dst, reporting whether one exists.
@@ -98,6 +104,8 @@ func (r CASBatchRows[X]) Info() cql.Result { return (implSession.CASBatchRows[X]
 // Page iterates exactly one response page. Borrowed fields expire on
 // advancement or Close unless Retain pins the page. State remains available
 // after Close to resume explicit paging. A Page must not be copied or used concurrently.
+//
+// The zero Page has no rows, and its State is complete.
 type Page[R any] implSession.Page[R]
 
 // Retain keeps the current row's physical page alive until the lease closes.
@@ -131,6 +139,8 @@ func (r *Page[R]) State() cql.PageState { return cql.PageState((*implSession.Pag
 // publishes a complete row; errors can leave partial destination contents. Buffer
 // capacity must be provisioned before decoding. Output survives Close and is
 // overwritten when its destination is reused. Concurrent NextInto is rejected.
+//
+// The zero RowStream has no rows.
 type RowStream[R any] implSession.RowStream[R]
 
 // NextInto decodes the next row into dst, reporting whether one exists.
