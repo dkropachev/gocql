@@ -53,9 +53,9 @@ the statement repeatedly, so it prepares the statement.
 column's verb and its row's options form, and every other exported method of
 `Session`, `Query` and `Prepared` is either a cell or on the test's list of
 methods outside the grid. `TestExecutionGridBehavior` runs the same statement
-through each row against a fake node and fails if the rows differ in rows,
-error classification, or the consistency, page size, value and page state of
-the requests they send.
+through each row against a fake node and fails if a row misses a case's
+expected outcome, or if the rows differ in rows, error classification, or the
+consistency, page size, value and page state of the requests they send.
 
 ## Options
 
