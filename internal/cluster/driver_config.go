@@ -468,7 +468,8 @@ func buildTypedTLSReport(config *tls.Config) *tlsReport {
 
 // buildTypedSocketReport describes the socket options a typed session's
 // dialer sets on every TCP connection, whichever endpoint.Dialer opened it. A
-// Unix socket gets none of them. A buffer size of zero is left to the kernel's
+// Unix socket gets none of them, nor does a connection a custom dialer returns
+// without a TCP local address, which the configuration cannot foresee. A buffer size of zero is left to the kernel's
 // minimum, which the schema's positive size cannot express, so it is omitted.
 func buildTypedSocketReport(typed *connectivity.Config) socketReport {
 	if path, _ := connectivity.UnixSocketPath(typed.ContactPoints); path != "" {

@@ -99,10 +99,11 @@ func connectReport(t *testing.T, edit func(*settings.Config)) string {
 
 // TestDriverConfigReportFromSettings connects sessions with the settings
 // config.ConfigBuilder produces (config's tests pin which setter sets which
-// field; this package may not import config) and checks that the DRIVER_CONFIG
-// they send conforms to docs/driver-config-schema.json, reports what was chosen,
-// carries no secret, and that every key the schema defines is either reported by some
-// configuration here or listed as one the driver cannot report.
+// field; this package may not import config) and checks that the
+// DRIVER_CONFIG they send conforms to docs/driver-config-schema.json, reports
+// what was chosen and carries no secret. Every key the schema defines must be
+// reported by some configuration here or listed as one the driver cannot
+// report, and every listed key must exist and go unreported.
 func TestDriverConfigReportFromSettings(t *testing.T) {
 	schema := compileDriverConfigSchema(t)
 	const password = "report-secret-password"
@@ -147,11 +148,14 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 		},
 		{
 			name: "Tuned",
-			// As config.New(...).WithAuth(...).WithDialer(...).WithNagle(true)
-			// .WithTCPKeepalive(time.Minute).WithSocketBuffers(65536, 32768)
-			// .WithLinger(2s).WithConnectionsPerHost(2).WithReconnect(nil)
-			// .WithServerTimestamps() and a profile with no retry policy and a
-			// speculation policy would set them.
+			// The fields the ConfigBuilder setters WithAuth, WithDialer,
+			// WithConnectTimeout, WithReadTimeout, WithWriteTimeout,
+			// WithNagle(true), WithTCPKeepalive, WithSocketBuffers, WithLinger,
+			// WithConnectionsPerHost, WithMaxRequestsPerConnection,
+			// WithMaxOrphanedStreams, WithReconnect(nil), WithMetadataTimeout,
+			// WithSchemaAgreement and WithServerTimestamps set, and a default
+			// profile with consistency ONE, no serial consistency, 10-row pages,
+			// no timeout, no retry policy and a speculation policy.
 			edit: func(c *settings.Config) {
 				c.Auth = auth.Password("report-user", password)
 				c.Dialer = secretDialer{token: dialerToken}
@@ -311,6 +315,17 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			continue
 		}
 		t.Errorf("schema key %s is neither reported for any configuration here nor listed as unreported", path)
+	}
+	known := map[string]bool{}
+	for _, path := range schemaPaths(t) {
+		known[path] = true
+	}
+	for _, path := range sortedKeys(unreported) {
+		if !known[path] {
+			t.Errorf("unreported key %s is not in the schema", path)
+		} else if seen[path] {
+			t.Errorf("unreported key %s is reported; drop it from the list", path)
+		}
 	}
 }
 

@@ -19,8 +19,9 @@ import (
 
 // TestDriverConfigTypedReport covers the parts of the report of a session
 // built from a config.Config that the fake server of
-// TestDriverConfigReportFromBuilder cannot reach: TLS, the ScyllaDB server
-// timeout of system queries, and the absence of secrets.
+// TestDriverConfigReportFromSettings cannot reach: TLS, the ScyllaDB server
+// timeout of system queries, Unix sockets, the orphan bound and the absence
+// of secrets.
 func TestDriverConfigTypedReport(t *testing.T) {
 	t.Run("TLS", func(t *testing.T) {
 		verify := func(v bool) *bool { return &v }
