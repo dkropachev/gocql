@@ -37,9 +37,10 @@ import (
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
-// sessionIDStartupKey is the STARTUP option correlating the connections that
-// belong to one session in system.clients. Unlike driverConfigStartupKey it is
-// sent on every connection, since correlating them is the whole point.
+// InternalSessionIDStartupKey is the STARTUP option correlating the
+// connections that belong to one session in system.clients. Unlike the
+// driver-config report (internal/cluster's driverConfigStartupKey) it is sent
+// on every connection, since correlating them is the whole point.
 const InternalSessionIDStartupKey = "SESSION_ID"
 
 // ApplicationInfo adds the application's own STARTUP options, such as its
