@@ -27,6 +27,7 @@ package cluster
 import (
 	"fmt"
 	"log/slog"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -254,12 +255,17 @@ func (n *networkTopology) InternalReplicaMap(tokenRing *endpoint.InternalTokenRi
 
 		replicas := make([]*endpoint.HostInfo, 0, totalRF)
 		for j := 0; j < len(tokens) && (len(replicas) < totalRF && !n.haveRF(replicasInDC)); j++ {
-			// TODO: ensure we dont add the same host twice
 			p := i + j
 			if p >= len(tokens) {
 				p -= len(tokens)
 			}
 			h := tokens[p].InternalHost
+			// The walk meets a host once per token it owns, so with an RF above
+			// the DC's host count it comes back to hosts it has already taken or
+			// set aside.
+			if slices.Contains(replicas, h) || slices.Contains(skipped[h.DataCenter()], h) {
+				continue
+			}
 
 			dc := h.DataCenter()
 			rack := h.Rack()

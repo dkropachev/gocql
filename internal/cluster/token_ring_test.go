@@ -349,3 +349,45 @@ func TestTokenRing(t *testing.T) {
 		})
 	})
 }
+
+// TestNetworkTopologyReplicasAreDistinct checks that a token's replicas never
+// name a host twice. Walking the ring meets each host once per token it owns,
+// so with more tokens than hosts and an RF above the DC's host count, the walk
+// reaches a host it has already taken before the walk ends.
+func TestNetworkTopologyReplicasAreDistinct(t *testing.T) {
+	t.Parallel()
+
+	var (
+		hosts  []*endpoint.HostInfo
+		tokens []endpoint.InternalHostToken
+	)
+	for i := 0; i < 2; i++ {
+		h := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(h).InternalHostId = tUUID(i)
+		implEndpoint.HostInfoData(h).InternalDataCenter = "dc1"
+		implEndpoint.HostInfoData(h).InternalRack = "rack1"
+		hosts = append(hosts, h)
+		for v := 0; v < 2; v++ {
+			tokens = append(tokens, endpoint.InternalHostToken{
+				InternalToken: endpoint.InternalOrderedToken(fmt.Sprintf("%d:%d", v, i)),
+				InternalHost:  h,
+			})
+		}
+	}
+	sort.Sort(&endpoint.InternalTokenRing{InternalTokens: tokens})
+
+	strat := &networkTopology{dcs: map[string]int{"dc1": 3}}
+	ring := strat.InternalReplicaMap(&endpoint.InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
+	for _, ht := range ring {
+		seen := make(map[*endpoint.HostInfo]bool, len(ht.hosts))
+		for _, h := range ht.hosts {
+			if seen[h] {
+				t.Fatalf("token %v lists host %v twice: %v", ht.token, implEndpoint.InternalHostInfoHostUUID(h), ht.hosts)
+			}
+			seen[h] = true
+		}
+		if len(ht.hosts) != len(hosts) {
+			t.Fatalf("token %v has %d replicas, want %d", ht.token, len(ht.hosts), len(hosts))
+		}
+	}
+}
