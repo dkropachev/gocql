@@ -1050,18 +1050,18 @@ type Statement[P, R any] struct {
     Kind cql.StatementKind
 }
 type RowDecoder[R any] interface {
-    Compile(Columns) (CompiledRow[R], error)
+    Compile(Columns) (CompiledStreamRow[R], error)
 }
-type CompiledRow[R any] interface {
+type CompiledStreamRow[R any] interface {
     Reset(*R)
     DecodeInto(*RowReader, *R) error
 }
 type Decoder[T any] interface {
-    Compile(DataType) (CompiledValue[T], error)
+    Compile(DataType) (CompiledStreamValue[T], error)
 }
 // Optional declaration capability; no server DataType is needed.
 type Resetter[T any] interface { Reset(*T) }
-type CompiledValue[T any] interface {
+type CompiledStreamValue[T any] interface {
     Reset(*T)
     DecodeInto(*ValueReader, *T) error
 }
@@ -1076,7 +1076,7 @@ func WithCodec[P, V any](Decoder[V]) cql.StructOption[P]
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type RowReader struct { /* checked count and column cursor */ }
-func (r *RowReader) ReadColumn[T any](CompiledValue[T], *T) error
+func (r *RowReader) ReadColumn[T any](CompiledStreamValue[T], *T) error
 func (r *RowReader) Context() context.Context
 func (r *RowReader) SkipColumn() error
 func (r *RowReader) RequireEnd() error
@@ -1126,8 +1126,8 @@ func Vector[T any](Decoder[T]) Decoder[[]T]
 func Tuple[R any](RowDecoder[R]) Decoder[R]
 func UDT[R any](RowDecoder[R], UDTOptions) Decoder[R]
 // Explicit final encoded storage for dynamic/custom representations.
-type Cell struct { Type DataType; State CellState; Bytes []byte }
-var Encoded Decoder[Cell]
+type StreamCell struct { Type DataType; State CellState; Bytes []byte }
+var Encoded Decoder[StreamCell]
 
 // package cqlerr
 type StreamCapabilityError struct { Protocol int; Compression config.Compression; Reason string }
@@ -1151,7 +1151,7 @@ runs incrementally and does not allocate a complete cell in driver storage.
 
 A streaming execution uses the same parameter encoding, routing, per-host
 prepared IDs, metadata revisions and Close/Wait admission as a buffered query.
-Actual streaming response metadata selects this query's stream.CompiledRow; cache
+Actual streaming response metadata selects this query's stream.CompiledStreamRow; cache
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
@@ -1202,7 +1202,7 @@ stream.Resetter allows that custom field to participate. The declaration Reset
 clears its logical value while preserving seeded storage, just like built-in
 reset. This also applies recursively to missing fields inside compositions.
 Mapped custom fields continue to use their successfully compiled
-stream.CompiledValue.Reset and need not implement declaration stream.Resetter.
+stream.CompiledStreamValue.Reset and need not implement declaration stream.Resetter.
 Custom row declarations used as tuple/UDT compositions follow the same rule
 when metadata-independent reset is required. No synthetic DataType, reflection,
 whole-row temporary or zero-assignment of arbitrary V supplies a substitute.
