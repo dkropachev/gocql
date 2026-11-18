@@ -6,7 +6,6 @@ package cluster
 
 import (
 	"fmt"
-	"sync"
 
 	"golang.org/x/sync/singleflight"
 
@@ -28,14 +27,6 @@ type InternalMetadataDescriber struct {
 	tableGroup       singleflight.Group
 	InternalSession  *Core
 	InternalMetadata *Metadata
-
-	// mu serialises refreshAllSchema calls so the snapshot-compare-refresh
-	// cycle runs as an atomic batch.  Individual keyspace/table refreshes
-	// are deduplicated by the singleflight groups above and do NOT need
-	// this lock.
-	//
-	// Lock ordering: s.mu → cowKeyspaceMetadataMap.mu (never reversed).
-	mu sync.Mutex
 }
 
 // creates a session bound schema describer which will query and cache

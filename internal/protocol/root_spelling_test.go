@@ -18,15 +18,12 @@ func asSegmentCompressor(a0 Compressor) (segment.Compressor, error) {
 	return AsSegmentCompressor(a0)
 }
 
-const defaultBufSize = DefaultBufSize
-
 func defaultFramerFlags(a0 Compressor, a1 byte) byte { return DefaultFramerFlags(a0, a1) }
 
 type frame = Frame
 type frameBuilder = FrameBuilder
-type frameWriterFunc = FrameWriterFunc
+
 type framer = Framer
-type framerInterface = FramerInterface
 
 const headSize = HeadSize
 
@@ -42,23 +39,14 @@ type preparedMetadata = PreparedMetadata
 const protoDirectionMask = ProtoDirectionMask
 const protoVersion4 = ProtoVersion4
 const protoVersion5 = ProtoVersion5
-const protoVersionMask = ProtoVersionMask
 
 func readHeader(a0 io.Reader, a1 []byte) (frm.FrameHeader, error) {
 	return ReadHeader(a0, a1)
 }
-func readInt(a0 []byte) int32                 { return ReadInt(a0) }
+
 func recoverMalformedFrame(a0 any, a1 *error) { RecoverMalformedFrame(a0, a1) }
 
-type resultKeyspaceFrame = ResultKeyspaceFrame
-type resultMetadata = ResultMetadata
 type resultPreparedFrame = ResultPreparedFrame
 type resultRowsFrame = ResultRowsFrame
-type useKeyspaceFrame = UseKeyspaceFrame
 
 func validateShortBytes(a0 string, a1 []byte) error { return ValidateShortBytes(a0, a1) }
-
-type writeAuthResponseFrame = WriteAuthResponseFrame
-type writeOptionsFrame = WriteOptionsFrame
-type writeRegisterFrame = WriteRegisterFrame
-type writeStartupFrame = WriteStartupFrame

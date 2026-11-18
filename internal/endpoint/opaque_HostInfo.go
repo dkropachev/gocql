@@ -61,7 +61,6 @@ type HostInfoStorage struct {
 	InternalMu     sync.RWMutex
 	InternalState  NodeStateCell // read without InternalMu; written under it
 	InternalHostId cql.UUID
-	graph          bool
 }
 
 func HostInfoData(v *HostInfo) *HostInfoStorage { return &v.privateStorage }

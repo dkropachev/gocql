@@ -256,12 +256,6 @@ type TestServer struct {
 	executeHook func(id uint64, stream int, resp *implProtocol.Framer) bool
 }
 
-func (srv *TestServer) setExecuteHook(hook func(id uint64, stream int, resp *implProtocol.Framer) bool) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.executeHook = hook
-}
-
 func (srv *TestServer) setQueryHook(hook func(query string, stream int, resp *implProtocol.Framer) bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
@@ -274,46 +268,12 @@ func (srv *TestServer) setRegisterHook(hook func(events []string, stream int, re
 	srv.registerHook = hook
 }
 
-func (srv *TestServer) setAuthHook(hook func(req *implProtocol.Framer, stream int, resp *implProtocol.Framer)) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.authHook = hook
-}
-
 // testPrepareHook answers a PREPARE for query. writeResultMetadataID must be
 // called right after the prepared id, as the canned statements do; it is a no-op
 // unless the server advertised SCYLLA_USE_METADATA_ID.
 type testPrepareHook func(query string, stream int, resp *implProtocol.Framer, writeResultMetadataID func(preparedID uint64)) bool
 
-func (srv *TestServer) setBatchHook(hook func(req *implProtocol.Framer, stream int, resp *implProtocol.Framer)) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.batchHook = hook
-}
-
-func (srv *TestServer) setPrepareHook(hook testPrepareHook) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.prepareHook = hook
-}
-
 type testSupportedFactory func(conn net.Conn) map[string][]string
-
-func (srv *TestServer) port() int {
-	return srv.listen.Addr().(*net.TCPAddr).Port
-}
-
-func (srv *TestServer) session() (*Core, error) {
-	return testCluster(frm.ProtoVersion(srv.protocol), srv.Address).Open()
-}
-
-func (srv *TestServer) host() *endpoint.HostInfo {
-	hosts, err := endpoint.InternalResolveInitialEndpoint(nil, srv.Address, 9042)
-	if err != nil {
-		srv.t.Fatal(err)
-	}
-	return hosts[0]
-}
 
 func (srv *TestServer) closeWatch() {
 	<-srv.ctx.Done()

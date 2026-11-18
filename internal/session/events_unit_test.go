@@ -217,25 +217,6 @@ func (m *schemaDataMock) InternalAwaitSchemaAgreement() error {
 	return nil
 }
 
-func (m *schemaDataMock) query(statement string, values ...any) *nativeResultFixture {
-	m.mu.Lock()
-	m.queries = append(m.queries, queryRecord{method: "query", stmt: statement})
-	delay := m.queryDelay
-	iterFor := m.iterFor
-	m.mu.Unlock()
-
-	if delay > 0 {
-		time.Sleep(delay)
-	}
-	if iterFor != nil {
-		if iter := iterFor(statement); iter != nil {
-			return iter
-		}
-	}
-
-	return &nativeResultFixture{}
-}
-
 func (m *schemaDataMock) querySystem(statement string, values ...any) *nativeResultFixture {
 	m.mu.Lock()
 	m.queries = append(m.queries, queryRecord{method: "querySystem", stmt: statement})
@@ -376,40 +357,6 @@ func (m *schemaDataMock) querySystem(statement string, values ...any) *nativeRes
 	return &nativeResultFixture{}
 }
 
-func (m *schemaDataMock) setQueryError(err error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.queryError = err
-}
-
-func (m *schemaDataMock) resetQueries() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.queries = nil
-}
-
-func (m *schemaDataMock) getStatements() []string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	stmts := make([]string, len(m.queries))
-	for i, q := range m.queries {
-		stmts[i] = q.stmt
-	}
-	return stmts
-}
-
-func (m *schemaDataMock) getQueryCount() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return len(m.queries)
-}
-
-func (m *schemaDataMock) getAwaitSchemaAgreementCalls() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.awaitSchemaAgreementCalls
-}
-
 func newSchemaEventTestSession(control cluster.InternalControlConnection, policy cluster.HostSelectionPolicy, keyspace string) *cluster.Core {
 	s := func() *cluster.Core {
 		opaqueStorageValue := new(cluster.Core)
@@ -451,14 +398,6 @@ func (t *trackingPolicy) KeyspaceChanged(event cluster.KeyspaceUpdateEvent) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.keyspaceChangedCalls = append(t.keyspaceChangedCalls, event)
-}
-
-func (t *trackingPolicy) getKeyspaceChangedCalls() []cluster.KeyspaceUpdateEvent {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	dst := make([]cluster.KeyspaceUpdateEvent, len(t.keyspaceChangedCalls))
-	copy(dst, t.keyspaceChangedCalls)
-	return dst
 }
 
 type queryRecord struct {

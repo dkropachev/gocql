@@ -176,10 +176,6 @@ func (*mockConnection) InternalGetScyllaSupported() endpoint.ScyllaConnectionFea
 
 type mockControlConn struct{}
 
-func (m *mockControlConn) querySystem(statement string, values ...any) (iter *nativeResultFixture) {
-	return nil
-}
-
 func (m *mockControlConn) InternalReconnect() error {
 	return nil
 }
@@ -195,9 +191,7 @@ func (m *mockControlConn) InternalGetConn() *InternalConnHost {
 }
 
 func (m *mockControlConn) InternalAwaitSchemaAgreement() error { return nil }
-func (m *mockControlConn) query(statement string, values ...any) (iter *nativeResultFixture) {
-	return nil
-}
+
 func (m *mockControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (m *mockControlConn) InternalClose()                                   {}
 func (m *mockControlConn) InternalGetSession() *Core                        { return nil }

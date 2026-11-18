@@ -559,15 +559,6 @@ func (s *Core) Close() error {
 	return nil
 }
 
-// sessionMarkClosed marks the session closed without shutting it down,
-// for tests of closed-session behaviour.
-func sessionMarkClosed(s *Core) {
-	s.privateStorage.InternalSessionStateMu.Lock()
-	s.privateStorage.InternalIsClosed = true
-	s.privateStorage.closedOrClosing.Store(true)
-	s.privateStorage.InternalSessionStateMu.Unlock()
-}
-
 func (s *Core) Closed() bool {
 	return s.privateStorage.closedOrClosing.Load()
 }

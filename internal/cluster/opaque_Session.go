@@ -72,7 +72,6 @@ type SessionStorage struct {
 	id                     string
 	InternalCfg            InternalClusterSettings
 	nextTypedHost          atomic.Uint64
-	mu                     sync.RWMutex
 	InternalSessionStateMu sync.RWMutex
 	InternalTypedMu        sync.Mutex
 	schemaMu               sync.Mutex

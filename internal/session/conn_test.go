@@ -128,10 +128,6 @@ func newTestSession(proto frm.ProtoVersion, addresses ...string) (*implCluster.C
 
 var _ endpoint2.Resolver = brokenDNSResolver{}
 
-type testRetryPolicy struct {
-	NumRetries int
-}
-
 type TestReconnectionPolicy struct {
 	NumRetries       int
 	GetIntervalCalls []int
@@ -518,12 +514,6 @@ type TestServer struct {
 	executeHook func(id uint64, stream int, resp *implProtocol.Framer) bool
 }
 
-func (srv *TestServer) setExecuteHook(hook func(id uint64, stream int, resp *implProtocol.Framer) bool) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.executeHook = hook
-}
-
 func (srv *TestServer) setQueryHook(hook func(query string, stream int, resp *implProtocol.Framer) bool) {
 	srv.mu.Lock()
 	defer srv.mu.Unlock()
@@ -547,34 +537,10 @@ func (srv *TestServer) setAuthHook(hook func(req *implProtocol.Framer, stream in
 // unless the server advertised SCYLLA_USE_METADATA_ID.
 type testPrepareHook func(query string, stream int, resp *implProtocol.Framer, writeResultMetadataID func(preparedID uint64)) bool
 
-func (srv *TestServer) setBatchHook(hook func(req *implProtocol.Framer, stream int, resp *implProtocol.Framer)) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.batchHook = hook
-}
-
-func (srv *TestServer) setPrepareHook(hook testPrepareHook) {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	srv.prepareHook = hook
-}
-
 type testSupportedFactory func(conn net.Conn) map[string][]string
 
 func (srv *TestServer) port() int {
 	return srv.listen.Addr().(*net.TCPAddr).Port
-}
-
-func (srv *TestServer) session() (*implCluster.Core, error) {
-	return testCluster(frm.ProtoVersion(srv.protocol), srv.Address).Open()
-}
-
-func (srv *TestServer) host() *endpoint.HostInfo {
-	hosts, err := endpoint.InternalResolveInitialEndpoint(nil, srv.Address, 9042)
-	if err != nil {
-		srv.t.Fatal(err)
-	}
-	return hosts[0]
 }
 
 func (srv *TestServer) closeWatch() {
