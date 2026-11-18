@@ -27,9 +27,10 @@ import (
 // control connection to keep the other STARTUP frames small.
 const InternalDriverConfigStartupKey = "DRIVER_CONFIG"
 
-// driverConfigVersion is the major version of the reported configuration schema.
-// Adding keys to the report is backwards compatible and does not bump it, only
-// changing or removing the meaning of an existing key does.
+// InternalDriverConfigVersion is the major version of the reported
+// configuration schema. Adding keys to the report is backwards compatible and
+// does not bump it, only changing or removing the meaning of an existing key
+// does.
 const InternalDriverConfigVersion = 1
 
 // maxDriverConfigSize bounds the size of the DRIVER_CONFIG STARTUP option.
