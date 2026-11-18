@@ -33,7 +33,8 @@ types also report their own kind with a `Kind` method.
 
 ## Server errors
 
-Every server error implements `cqlerr.ServerError`, whose `Code`, `Message`
+Every server error implements `cqlerr.ServerError`, which is sealed: only
+the driver's error types, and types that embed one, implement it. Its `Code`, `Message`
 and `Warnings` report the error code, the server's message and the warnings
 sent with it. Each is a pointer to a type named after its code:
 `*WriteTimeoutError`, `*UnavailableError`, `*RateLimitReachedError`, ..., and

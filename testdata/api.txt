@@ -1007,7 +1007,7 @@ package cqlerr
 		cqlerr.SchemaChangedError field Current cql.Columns
 		cqlerr.SchemaChangedError method (*T) Error() string
 		cqlerr.SchemaChangedError method (*T) Kind() cqlerr.Kind
-	type cqlerr.ServerError interface
+	type cqlerr.ServerError interface (sealed)
 		cqlerr.ServerError method Code() cqlerr.ErrorCode
 		cqlerr.ServerError method Error() string
 		cqlerr.ServerError method Message() string
@@ -1405,6 +1405,8 @@ package metrics
 		metrics.Snapshot field LatencyP99 time.Duration
 
 package observe
+	type observe.AttemptObserver interface
+		observe.AttemptObserver method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
 	type observe.LifecycleEvent struct
 		observe.LifecycleEvent field At time.Time
 		observe.LifecycleEvent field Err error
@@ -1415,8 +1417,6 @@ package observe
 	type observe.LifecycleObserver interface
 		observe.LifecycleObserver method ObserveLifecycle(observe.LifecycleEvent)
 	type observe.Observer interface
-		observe.Observer method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
-		observe.Observer method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
 		observe.RequestEvent field Statement string
@@ -1425,6 +1425,8 @@ package observe
 		observe.RequestEvent field Result cql.Result
 		observe.RequestEvent field Routing routing.Info
 		observe.RequestEvent field ID uint64
+	type observe.RequestObserver interface
+		observe.RequestObserver method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
@@ -1516,6 +1518,7 @@ package routing
 		routing.PartitionKey method (T) Len() int64
 	type routing.Plan interface
 		routing.Plan method Next() (metadata.Route, bool)
+	func routing.PlanOf(routes ...metadata.Route) routing.Plan
 	type routing.Policy interface
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
 		routing.Policy method Observe(routing.AttemptEvent)

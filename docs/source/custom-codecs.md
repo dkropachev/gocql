@@ -98,7 +98,8 @@ capacity is insufficient rather than growing payload buffers. Only a true
 fields changed. See [streaming](statements/streaming.md) for cursor ownership,
 receive modes and complete caller-storage examples.
 
-For request observations, implement `observe.Observer` (see
+For request observations, implement `observe.RequestObserver` or
+`observe.AttemptObserver` (see
 [Tracing](tracing.md)). The driver shares observer and policy objects across
 executions; implementations must support concurrent calls. `Each` treats a
 callback's `gocql.StopIteration` as success before notifying observers. Actual

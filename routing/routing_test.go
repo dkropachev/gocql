@@ -6,6 +6,7 @@ package routing_test
 import (
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -48,5 +49,21 @@ func TestNewPolicyValidates(t *testing.T) {
 	var zero metadata.Route
 	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1).Set || zero.Shard().Set {
 		t.Error("the zero Route has a host")
+	}
+}
+
+func TestPlanOf(t *testing.T) {
+	if _, ok := routing.PlanOf().Next(); ok {
+		t.Fatal("an empty plan returned a route")
+	}
+	a := metadata.Route{}.WithShard(cql.Option[uint32]{})
+	plan := routing.PlanOf(a, a, a)
+	for i := range 3 {
+		if _, ok := plan.Next(); !ok {
+			t.Fatalf("route %d missing", i)
+		}
+	}
+	if _, ok := plan.Next(); ok {
+		t.Fatal("the plan returned a fourth route")
 	}
 }

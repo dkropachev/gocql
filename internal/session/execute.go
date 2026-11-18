@@ -58,7 +58,9 @@ type InternalSessionRuntime struct {
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]
-	batchErr  error
+	// observerHooks are config.Observer's hooks; setConfig finds them.
+	observerHooks *settings.ObserverHooks
+	batchErr      error
 	// closing is closed when Close starts stopping executions.
 	closing              chan struct{}
 	InternalPrepareOrder []prepareCacheKey
@@ -509,9 +511,11 @@ func selectPreparedMetadata(state *InternalPreparedState, host cql.UUID, prepare
 }
 
 type logicalExecution struct {
-	started  time.Time
-	observer observe.Observer
-	// observerCtx and requestEnd are what observer.StartRequest returned.
+	started time.Time
+	// hooks are the observer's hooks, nil without an observer.
+	hooks *settings.ObserverHooks
+	// observerCtx and requestEnd are what the observer's StartRequest
+	// returned; observerCtx is the caller's context without that hook.
 	observerCtx    context.Context
 	requestEnd     func(observe.RequestEvent)
 	ddlCoordinator atomic.Pointer[cql.UUID]
@@ -558,7 +562,7 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
 	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
 	l.rt.ObserveSafely(func() {
-		observerCtx, end := l.observer.StartRequest(ctx, start)
+		observerCtx, end := l.hooks.Request.StartRequest(ctx, start)
 		if observerCtx != nil {
 			l.observerCtx = observerCtx
 		}
@@ -566,14 +570,19 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 	})
 }
 
+// observesAttempts reports whether the observer has an attempt hook.
+func (l *logicalExecution) observesAttempts() bool {
+	return l != nil && l.hooks != nil && l.hooks.Attempt != nil
+}
+
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
 func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
-	if l == nil || l.observer == nil {
+	if l == nil || l.hooks == nil || l.hooks.Attempt == nil {
 		return nil
 	}
 	var end func(routing2.AttemptEvent)
-	l.rt.ObserveSafely(func() { end = l.observer.StartAttempt(l.observerCtx, start) })
+	l.rt.ObserveSafely(func() { end = l.hooks.Attempt.StartAttempt(l.observerCtx, start) })
 	return end
 }
 
@@ -680,12 +689,21 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		request.routing.Kind = cql.ConditionalStatement
 	}
 	request.routing.Conditional = request.routing.Kind != cql.OrdinaryStatement
+	hooks := rt.observerHooks
+	if values.Observer != nil {
+		// NewCompiledOptions found the hooks; options resolved elsewhere
+		// find them here.
+		hooks = resolved.observerHooks
+		if hooks == nil {
+			h, err := settings.NewObserverHooks(values.Observer)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			hooks = h
+		}
+	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return nil, nil, nil, err
-	}
-	observer := values.Observer
-	if observer == nil {
-		observer = rt.config.Observer
 	}
 	inline := query != nil && canUseDirectProfile(resolved.InternalProfile)
 	var runctx context.Context
@@ -714,7 +732,7 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	if request.query == nil {
 		done = make(chan struct{})
 	}
-	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, observer: observer, rt: rt, request: request}
+	*logical = logicalExecution{lifetime: executionLifetime{cancel: stop, done: done}, id: rt.requestID.Add(1), started: started, hooks: hooks, rt: rt, request: request}
 	request.InternalLogical = logical
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		// registerExecution refuses a closing or closed session or a closed
@@ -725,8 +743,12 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 		return nil, nil, nil, err
 	}
 	rt.inflight.Add(1)
-	if observer != nil {
-		logical.startRequest(ctx)
+	if hooks != nil {
+		if hooks.Request != nil {
+			logical.startRequest(ctx)
+		} else {
+			logical.observerCtx = ctx
+		}
 	}
 	if values.Timestamp.Set {
 		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
@@ -959,6 +981,9 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 		requestID = request.InternalLogical.id
 	}
 	started := time.Now()
+	if !request.InternalLogical.observesAttempts() {
+		return target, started, nil
+	}
 	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }

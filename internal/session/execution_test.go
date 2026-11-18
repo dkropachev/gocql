@@ -239,7 +239,7 @@ func TestExecution(t *testing.T) {
 			t.Fatal("query execution should run direct")
 		}
 		r = request()
-		r.InternalLogical.observer = directTestObserver{}
+		r.InternalLogical.hooks, _ = settings.NewObserverHooks(directTestObserver{})
 		if !canExecuteDirect(r) {
 			t.Fatal("an observer must keep the direct path")
 		}

@@ -13,7 +13,7 @@ import (
 func Connect(ctx context.Context, config settings.Config) (*Session, error) {
 	core, err := implCluster.InternalConnectCluster(ctx, config, func(s *implCluster.Core, c settings.Config) *settings.Config {
 		rt := InternalRuntimeFor(s)
-		rt.config = c
+		rt.setConfig(c)
 		rt.InternalSetProfile(c.DefaultProfile)
 		return &rt.config
 	})
@@ -21,4 +21,11 @@ func Connect(ctx context.Context, config settings.Config) (*Session, error) {
 		return nil, err
 	}
 	return InternalWrapSession(core), nil
+}
+
+// setConfig installs c and finds its observer's hooks. Config.Build has
+// validated the observer.
+func (rt *InternalSessionRuntime) setConfig(c settings.Config) {
+	rt.config = c
+	rt.observerHooks, _ = settings.NewObserverHooks(c.Observer)
 }

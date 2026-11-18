@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -120,6 +121,7 @@ func requestCountRound(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	observer := new(countingObserver)
 	InternalRuntimeFor(s).config.Observer = observer
+	InternalRuntimeFor(s).observerHooks, _ = settings.NewObserverHooks(observer)
 	void := binary.BigEndian.AppendUint32(nil, 1)
 	go serveLoopback(peers[0], func([]byte) []byte { return void }, nil)
 	b := runtimeQuery(t)

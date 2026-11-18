@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
 func TestEachStopIteration(t *testing.T) {
@@ -31,6 +32,7 @@ func TestEachStopIteration(t *testing.T) {
 			observer := new(execVoidObserver)
 			rt := q.state.runtime
 			rt.config.Observer = observer
+			rt.observerHooks, _ = settings.NewObserverHooks(observer)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			pages := [][]byte{runtimeRowsBody([]byte{1}, "a", "b")}

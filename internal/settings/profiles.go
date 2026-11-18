@@ -65,22 +65,3 @@ func InternalValidConsistency(c cql.Consistency) bool {
 // SpeculationPolicy schedules additional attempts of eligible executions.
 // Delay receives the number of attempts started so far and returns how long
 // to wait before starting another, and whether to start one at all.
-
-// Observer instruments requests and their attempts from the client side; it
-// is the hook for client-side tracing such as OpenTelemetry. Implementations
-// are shared between executions and must be safe for concurrent use.
-//
-// StartRequest is called once per request as it is admitted, with the
-// caller's context. The context it returns is passed to StartAttempt for
-// each of the request's attempts, so a span started for the request can
-// parent the attempts' spans; the driver uses it for nothing else and never
-// derives cancellation from it. The function it returns, if not nil, is
-// called once with the completed request.
-//
-// StartAttempt is called as each attempt, retry or speculative attempt is
-// sent. The function it returns, if not nil, is called once with the
-// completed attempt; AttemptEvent.CQLTraceID links it to the server-side CQL
-// trace session when the request runs with exec.Options.CQLTrace.
-//
-// A speculative attempt that loses can start or end after its request has
-// ended. A panic in any of these calls is logged and otherwise ignored.

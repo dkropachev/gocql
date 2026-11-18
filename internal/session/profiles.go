@@ -57,7 +57,10 @@ const (
 type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
 	// resolved; nil for options resolved for one execution.
-	templates       *optionTemplates
+	templates *optionTemplates
+	// observerHooks are InternalOptions.Observer's hooks, found when the
+	// options were compiled; nil without an observer.
+	observerHooks   *settings.ObserverHooks
 	InternalProfile settings.Profile
 	InternalOptions Options
 }

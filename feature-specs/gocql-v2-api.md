@@ -1469,6 +1469,7 @@ type Policy interface {
     Observe(config.AttemptEvent)
 }
 func NewPlan(Policy, Info, *metadata.Snapshot) Plan  // combines Pick and Fallback
+func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
 
 // package config
 type AttemptEvent struct {
@@ -1489,8 +1490,11 @@ type AttemptStart struct {
     Speculative bool
 }
 type SpeculationPolicy interface { Delay(attempt int) (time.Duration, bool) }
-type Observer interface {
+type Observer any // one or more of the hook interfaces below; hooks are found once at install
+type RequestObserver interface {
     StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+}
+type AttemptObserver interface {
     StartAttempt(context.Context, AttemptStart) func(AttemptEvent)
 }
 type RequestStart struct {
@@ -1927,7 +1931,7 @@ conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `PartialRefreshError`, `NoHostsError`, `StreamCapabilityError` and
 `StreamCapacityError`. `cqlerr` exports only sentinels the driver returns.
 
-Every server error implements `ServerError` (`Code() ErrorCode`,
+Every server error implements the sealed `ServerError` (`Code() ErrorCode`,
 `Message() string`, `Warnings() []string`) and is a concrete `XxxError` type
 per code with its details (`WriteTimeoutError`, `UnavailableError`, ...);
 codes without details are `OtherServerError`. `ErrorCode` is a typed `uint16`

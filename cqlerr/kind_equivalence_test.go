@@ -183,22 +183,6 @@ func TestKindOfMatchesReference(t *testing.T) {
 	}
 }
 
-// A user's own ServerError implementation, without the driver's Kind
-// method, is classified by its code.
-type customServerError struct{ code ErrorCode }
-
-func (e customServerError) Error() string      { return "custom" }
-func (e customServerError) Code() ErrorCode    { return e.code }
-func (e customServerError) Message() string    { return "" }
-func (e customServerError) Warnings() []string { return nil }
-
-func TestKindOfCustomServerError(t *testing.T) {
-	t.Parallel()
-	if got := KindOf(fmt.Errorf("x: %w", customServerError{code: CodeOverloaded})); got != KindOverloaded {
-		t.Fatalf("KindOf = %v, want overloaded", got)
-	}
-}
-
 // KindOf and ExecutionStatusOf run on every failed attempt, so they must not
 // allocate.
 func TestKindOfAllocs(t *testing.T) {

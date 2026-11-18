@@ -93,6 +93,22 @@ func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	return replicaRoutes(snapshot, info)
 }
 
+// PlanOf returns a plan of routes, in order. The plan keeps the slice
+// without copying it, so the caller must not modify it afterwards. A plan is followed by
+// one request, so it is not safe for concurrent use.
+func PlanOf(routes ...metadata.Route) Plan { return &slicePlan{routes: routes} }
+
+type slicePlan struct{ routes []metadata.Route }
+
+func (p *slicePlan) Next() (metadata.Route, bool) {
+	if len(p.routes) == 0 {
+		return metadata.Route{}, false
+	}
+	r := p.routes[0]
+	p.routes = p.routes[1:]
+	return r, true
+}
+
 // emptyPlan is the plan of a program without a session: it has no routes.
 type emptyPlan struct{}
 

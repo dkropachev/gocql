@@ -49,13 +49,24 @@ does not report that session's ID, so find it in `system_traces.sessions`.
 
 ## Client-side tracing
 
-`observe.Observer` is the hook for client-side tracing. `StartRequest`
-receives the caller's context as a request is admitted and returns the
-context for its attempts, so a span started for the request can parent one
-span per attempt, retry or speculative attempt from `StartAttempt`. Each start
-returns the function the driver calls when that request or attempt finishes.
-Set the observer for the session with `config.ConfigBuilder.WithObserver`, or
-per execution with `exec.Options.Observer`.
+`observe.Observer` is the hook for client-side tracing. An observer is any
+value that implements one or more hook interfaces:
+
+- `observe.RequestObserver`: its `StartRequest` receives the caller's
+  context as a request is admitted and returns the context for its attempts,
+  so a span started for the request can parent one span per attempt.
+- `observe.AttemptObserver`: its `StartAttempt` is called for each attempt,
+  retry or speculative attempt.
+
+Each start returns the function the driver calls when that request or
+attempt finishes. The driver looks the hooks up once, when the observer is
+installed, and skips the call and its event for a hook the observer does
+not implement, so an observer that only needs attempts builds no request
+events. An observer
+that implements no hook is rejected. Later releases add hooks as new
+interfaces, so an existing observer keeps compiling. Set the observer for the
+session with `config.ConfigBuilder.WithObserver`, or per execution with
+`exec.Options.Observer`.
 
 Attempt hooks usually run on the goroutine that called the execution, the
 start hook before each attempt and its end function after it, so an observer
