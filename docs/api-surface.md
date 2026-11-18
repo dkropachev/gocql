@@ -54,7 +54,8 @@ column's verb and its row's options form, and every other exported method of
 `Session`, `Query` and `Prepared` is either a cell or on the test's list of
 methods outside the grid. `TestExecutionGridBehavior` runs the same statement
 through each row against a fake node and fails if the rows differ in rows,
-errors or the requests they send.
+error classification, or the consistency, page size, value and page state of
+the requests they send.
 
 ## Options
 
@@ -114,14 +115,16 @@ page state. Explicit paging is the pages column only.
   before sending it. A conditional result reports whether the write applied,
   and the none shape cannot return that. The kind is known when the statement
   declares it or the server marks it, as ScyllaDB does in prepared metadata.
-  An undeclared kind on Cassandra stays unknown: the driver never parses CQL,
-  so such a request is sent and its result columns are rejected afterwards.
+  An undeclared kind stays unknown on Cassandra, and for a throwaway
+  statement on any server, since it has no prepared metadata: the driver never
+  parses CQL, so such a request is sent and its result columns are rejected
+  afterwards.
   A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read:
   it is not rejected up front, and `Exec` fails on its result columns like any
   other row-returning statement.
-- Each column uses the same verbs in every row: `Exec`, `One`, `Each` with
-  `All` and `Run`, `RunPage`.
-  Throwaway methods carry the `Unprepared` prefix in front of that verb.
+- Each column uses the same verbs in every row that fills it: `Exec`, `One`,
+  `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
+  Throwaway methods carry the `Unprepared` prefix in front of the verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where
   an execution with the given values would go, and lives on `Query`.
 - Batches follow the batch rules below, not the grid.

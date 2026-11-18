@@ -36,15 +36,18 @@ type gridRequest struct {
 // PREPARE with a statement of one int parameter and, for a SELECT, one blob
 // column, records each QUERY and EXECUTE, and answers it with answer.
 type gridServer struct {
-	mu       sync.Mutex
-	requests []gridRequest
+	mu         sync.Mutex
+	requests   []gridRequest
+	unexpected []byte // opcodes it could not answer
+	done       chan struct{}
 }
 
 func newGridServer(t *testing.T, peer net.Conn, answer func(gridRequest) []byte) *gridServer {
-	srv := &gridServer{}
+	srv := &gridServer{done: make(chan struct{})}
 	key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType})
 	value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 	go func() {
+		defer close(srv.done)
 		for {
 			var h [9]byte
 			if _, err := io.ReadFull(peer, h[:]); err != nil {
@@ -71,7 +74,9 @@ func newGridServer(t *testing.T, peer net.Conn, answer func(gridRequest) []byte)
 				srv.mu.Unlock()
 				response = answer(r)
 			default:
-				t.Errorf("unexpected opcode %#x", h[4])
+				srv.mu.Lock()
+				srv.unexpected = append(srv.unexpected, h[4])
+				srv.mu.Unlock()
 				return
 			}
 			if _, err := peer.Write(response); err != nil {
@@ -80,6 +85,21 @@ func newGridServer(t *testing.T, peer net.Conn, answer func(gridRequest) []byte)
 		}
 	}()
 	return srv
+}
+
+// stop closes peer, waits for the server to return and fails t if it saw a
+// request it could not answer.
+func (srv *gridServer) stop(t *testing.T, peer net.Conn) {
+	t.Helper()
+	_ = peer.Close()
+	select {
+	case <-srv.done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the grid server did not stop")
+	}
+	if len(srv.unexpected) != 0 {
+		t.Errorf("the grid server got unexpected opcodes %#x", srv.unexpected)
+	}
 }
 
 func (srv *gridServer) sent() []gridRequest {
@@ -367,6 +387,9 @@ func gridClassify(o *gridOutcome, err error, sentinels ...error) {
 	if errors.As(err, &coded) {
 		o.errCode = coded.Code()
 	}
+	if o.errCode != 0 {
+		o.errMatch = "server"
+	}
 	var validation *cql.ValidationError
 	if errors.As(err, &validation) {
 		o.errMatch = "validation"
@@ -389,6 +412,10 @@ type gridCase struct {
 	name   string
 	answer func(*testing.T) func(gridRequest) []byte
 	call   func(context.Context, *Session, gridMode) (gridOutcome, bool)
+	// The outcome every row must have: its rows, its errMatch ("" for
+	// success) and the number of requests it sent.
+	rows, err string
+	sent      int
 }
 
 func gridRowsOf(seq iter.Seq2[*[]byte, error], stopAfter int) (string, error) {
@@ -425,6 +452,7 @@ func gridEach(ctx context.Context, s *Session, m gridMode, fn func(row []byte, n
 var gridCases = []gridCase{
 	{
 		name: "Exec",
+		rows: "", err: "", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte {
 				return typedTestResponse(t, 4, r.stream, binary.BigEndian.AppendUint32(nil, 1))
@@ -438,7 +466,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "ExecConditional",
+		name: "ExecConditional",
+		rows: "", err: cqlerr.ErrConditionalExec.Error(), sent: 0,
 		answer: func(t *testing.T) func(gridRequest) []byte { return gridPages(t) },
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			var o gridOutcome
@@ -449,6 +478,7 @@ var gridCases = []gridCase{
 	},
 	{
 		name: "ExecServerError",
+		rows: "", err: "server", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte { return gridError(t, r.stream, cqlerr.CodeInvalid) }
 		},
@@ -460,7 +490,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "One",
+		name: "One",
+		rows: "a", err: "", sent: 1,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			var o gridOutcome
@@ -473,6 +504,7 @@ var gridCases = []gridCase{
 	},
 	{
 		name: "OneNoRow",
+		rows: "", err: "", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte { return typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil)) }
 		},
@@ -487,6 +519,7 @@ var gridCases = []gridCase{
 	},
 	{
 		name: "OneServerError",
+		rows: "", err: "server", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte { return gridError(t, r.stream, cqlerr.CodeInvalid) }
 		},
@@ -500,14 +533,16 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "Each",
+		name: "Each",
+		rows: "a,b,c", err: "", sent: 2,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			return gridEach(ctx, s, m, func([]byte, int) error { return nil }, false)
 		},
 	},
 	{
-		name:   "EachStop",
+		name: "EachStop",
+		rows: "a", err: "", sent: 1,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			return gridEach(ctx, s, m, func(_ []byte, n int) error {
@@ -519,7 +554,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "EachCallbackError",
+		name: "EachCallbackError",
+		rows: "a,b,c", err: errGridCallback.Error(), sent: 2,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			return gridEach(ctx, s, m, func(_ []byte, n int) error {
@@ -531,7 +567,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "EachNilCallback",
+		name: "EachNilCallback",
+		rows: "", err: "validation", sent: 0,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			return gridEach(ctx, s, m, nil, true)
@@ -539,6 +576,7 @@ var gridCases = []gridCase{
 	},
 	{
 		name: "EachServerError",
+		rows: "", err: "server", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte { return gridError(t, r.stream, cqlerr.CodeInvalid) }
 		},
@@ -547,7 +585,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "All",
+		name: "All",
+		rows: "a,b,c", err: "", sent: 2,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			var o gridOutcome
@@ -559,7 +598,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "AllBreak",
+		name: "AllBreak",
+		rows: "a", err: "", sent: 1,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			var o gridOutcome
@@ -572,6 +612,7 @@ var gridCases = []gridCase{
 	},
 	{
 		name: "AllServerError",
+		rows: "", err: "server", sent: 1,
 		answer: func(t *testing.T) func(gridRequest) []byte {
 			return func(r gridRequest) []byte { return gridError(t, r.stream, cqlerr.CodeInvalid) }
 		},
@@ -585,7 +626,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "Run",
+		name: "Run",
+		rows: "a,b,c", err: "", sent: 2,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			if m.run == nil {
@@ -608,7 +650,8 @@ var gridCases = []gridCase{
 		},
 	},
 	{
-		name:   "RunPage",
+		name: "RunPage",
+		rows: "a,b|c", err: "", sent: 2,
 		answer: gridPages,
 		call: func(ctx context.Context, s *Session, m gridMode) (gridOutcome, bool) {
 			if m.runPage == nil {
@@ -646,6 +689,20 @@ var gridCases = []gridCase{
 	},
 }
 
+func init() {
+	// Run and RunPage against a server error, with the calls of the success
+	// cases.
+	serverError := func(t *testing.T) func(gridRequest) []byte {
+		return func(r gridRequest) []byte { return gridError(t, r.stream, cqlerr.CodeInvalid) }
+	}
+	for _, name := range []string{"Run", "RunPage"} {
+		i := slices.IndexFunc(gridCases, func(c gridCase) bool { return c.name == name })
+		c := gridCases[i]
+		c.name, c.answer, c.rows, c.err, c.sent = name+"ServerError", serverError, "", "server", 1
+		gridCases = append(gridCases, c)
+	}
+}
+
 // TestExecutionGridBehavior runs the same statement through each row of the
 // execution grid that has the cell and checks that the rows agree: the same
 // rows, the same error classification, and the same requests on the wire,
@@ -656,19 +713,17 @@ func TestExecutionGridBehavior(t *testing.T) {
 			var want *gridOutcome
 			var wantMode string
 			for _, m := range gridModes {
-				s, _, peers := runtimeTestSession(t, 1)
-				srv := newGridServer(t, peers[0], c.answer(t))
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				got, ok := c.call(ctx, s, m)
-				cancel()
-				_ = s.Close()
-				_ = peers[0].Close()
+				got, ok := gridRun(t, c, m)
 				if !ok {
 					continue
 				}
-				got.sent = srv.sent()
-				for i := range got.sent {
-					got.sent[i].stream = 0
+				if got.rows != c.rows || got.errMatch != c.err || len(got.sent) != c.sent {
+					t.Errorf("%s: rows %q, error %q, %d requests; want %q, %q, %d", m.name, got.rows, got.errMatch, len(got.sent), c.rows, c.err, c.sent)
+				}
+				for _, r := range got.sent {
+					if r.consistency != cql.Three || r.pageSize != 2 || r.key != gridKey {
+						t.Errorf("%s: request %+v does not carry the options and value", m.name, r)
+					}
 				}
 				if want == nil {
 					want, wantMode = &got, m.name
@@ -682,6 +737,22 @@ func TestExecutionGridBehavior(t *testing.T) {
 	}
 }
 
+// gridRun runs c on the row m against its own session and fake node.
+func gridRun(t *testing.T, c gridCase, m gridMode) (gridOutcome, bool) {
+	s, _, peers := runtimeTestSession(t, 1)
+	srv := newGridServer(t, peers[0], c.answer(t))
+	defer srv.stop(t, peers[0])
+	defer func() { _ = s.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	got, ok := c.call(ctx, s, m)
+	got.sent = srv.sent()
+	for i := range got.sent {
+		got.sent[i].stream = 0
+	}
+	return got, ok
+}
+
 func gridOutcomeEqual(a, b gridOutcome) bool {
 	sent := slices.Equal(a.sent, b.sent)
 	a.sent, b.sent = nil, nil
@@ -692,8 +763,9 @@ func gridOutcomeEqual(a, b gridOutcome) bool {
 // options rejects a second value before sending anything.
 func TestExecutionGridTooManyOptions(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
-	defer func() { _ = s.Close(); _ = peers[0].Close() }()
 	srv := newGridServer(t, peers[0], gridPages(t))
+	defer srv.stop(t, peers[0])
+	defer func() { _ = s.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	sel, upd := gridSelect(), gridUpdate(cql.OrdinaryStatement)
@@ -713,16 +785,16 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 		return err
 	}
 	for name, err := range map[string]error{
-		"Session.UnpreparedExec": second(s.UnpreparedExec(ctx, upd, gridKey, o, o)),
-		"Session.UnpreparedOne":  third(s.UnpreparedOne(ctx, sel, gridKey, &dst, o, o)),
-		"Session.UnpreparedEach": second(s.UnpreparedEach(ctx, sel, gridKey, &dst, nop, o, o)),
+		"Session.UnpreparedExec": gridErr2(s.UnpreparedExec(ctx, upd, gridKey, o, o)),
+		"Session.UnpreparedOne":  gridErr3(s.UnpreparedOne(ctx, sel, gridKey, &dst, o, o)),
+		"Session.UnpreparedEach": gridErr2(s.UnpreparedEach(ctx, sel, gridKey, &dst, nop, o, o)),
 		"Session.UnpreparedAll":  firstErr(s.UnpreparedAll(ctx, sel, gridKey, &dst, o, o)),
-		"Prepared.Exec":          second(pu.Exec(ctx, gridKey, c, c)),
-		"Prepared.One":           third(p.One(ctx, gridKey, &dst, c, c)),
-		"Prepared.Each":          second(p.Each(ctx, gridKey, &dst, nop, c, c)),
+		"Prepared.Exec":          gridErr2(pu.Exec(ctx, gridKey, c, c)),
+		"Prepared.One":           gridErr3(p.One(ctx, gridKey, &dst, c, c)),
+		"Prepared.Each":          gridErr2(p.Each(ctx, gridKey, &dst, nop, c, c)),
 		"Prepared.All":           firstErr(p.All(ctx, gridKey, &dst, c, c)),
-		"Prepared.Run":           second(p.Run(ctx, gridKey, c, c)),
-		"Prepared.RunPage":       second(p.RunPage(ctx, gridKey, cql.StartPage, 0, c, c)),
+		"Prepared.Run":           gridErr2(p.Run(ctx, gridKey, c, c)),
+		"Prepared.RunPage":       gridErr2(p.RunPage(ctx, gridKey, cql.StartPage, 0, c, c)),
 	} {
 		var validation *cql.ValidationError
 		if !errors.As(err, &validation) {
@@ -734,6 +806,7 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 	}
 }
 
-func second[A any](_ A, err error) error { return err }
+// gridErr2 and gridErr3 keep the error of a call with two or three results.
+func gridErr2[A any](_ A, err error) error { return err }
 
-func third[A, B any](_ A, _ B, err error) error { return err }
+func gridErr3[A, B any](_ A, _ B, err error) error { return err }

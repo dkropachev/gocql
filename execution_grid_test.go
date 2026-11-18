@@ -48,7 +48,7 @@ var gridNonExecution = map[string][]string{
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI
 // keeps equal to the compiled API.
-var apiMethod = regexp.MustCompile(`^\t\tgocql\.(\w+) method \(\*?T\) (\w+)(?:\[[^\]]*\])?\((.*)$`)
+var apiMethod = regexp.MustCompile(`^\t\tgocql\.(\w+) method \(\*?T\) (\w+)(.*)$`)
 
 // TestExecutionGrid checks the grid of docs/api-surface.md against the public
 // API: every documented cell method exists, uses its column's verb and its
@@ -66,7 +66,11 @@ func TestExecutionGrid(t *testing.T) {
 	}
 	for _, line := range strings.Split(string(raw), "\n") {
 		if m := apiMethod.FindStringSubmatch(line); m != nil {
-			params[m[1]+"."+m[2]] = parameterList(m[3])
+			p, ok := parameterList(m[3])
+			if !ok {
+				t.Fatalf("cannot read the parameters of %s.%s in %q", m[1], m[2], line)
+			}
+			params[m[1]+"."+m[2]] = p
 		}
 	}
 
@@ -148,28 +152,32 @@ func TestExecutionGrid(t *testing.T) {
 }
 
 // parameterList returns the parameters of a signature from rest, the text
-// after its opening parenthesis.
-func parameterList(rest string) string {
-	depth := 0
+// after the method name: optional type parameters, then the parenthesised
+// parameter list. Brackets and parentheses nest.
+func parameterList(rest string) (string, bool) {
+	depth, start := 0, -1
 	for i, r := range rest {
 		switch r {
-		case '(':
-			depth++
-		case ')':
-			if depth == 0 {
-				return rest[:i]
+		case '[', '(':
+			if depth == 0 && r == '(' {
+				start = i + 1
 			}
+			depth++
+		case ']', ')':
 			depth--
+			if depth == 0 && r == ')' && start >= 0 {
+				return rest[start:i], true
+			}
 		}
 	}
-	return rest
+	return "", false
 }
 
 // optionsForm reports whether the parameter list params ends in options, or,
 // with options "", takes no options at all.
 func optionsForm(params, options string) bool {
 	if options == "" {
-		return !strings.Contains(params, "options ")
+		return !strings.Contains(params, "exec.Options") && !strings.Contains(params, "exec.CompiledOptions")
 	}
 	return strings.HasSuffix(params, ", "+options)
 }
