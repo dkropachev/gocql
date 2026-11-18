@@ -567,3 +567,13 @@ func (pool *InternalHostConnPool) InternalScheduleTypedRepair() {
 		}
 	}()
 }
+
+type HostPoolInfo interface {
+	GetConnectionCount() int
+	GetExcessConnectionCount() int
+	GetShardCount() int
+	String() string
+	InFlight() int
+	Host() implEndpoint.HostInformation
+	IsClosed() bool
+}
