@@ -319,7 +319,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			direct := 0
-			for _, op := range plan.(paramsPlan[structFixture]).ops {
+			for _, op := range plan.(compiledParams[structFixture]).ops {
 				if op.kind != directNone {
 					direct++
 				}
@@ -328,12 +328,12 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal("no reflected parameter compiled to a direct op")
 			}
 			rows, _ := reflectRow[structFixture]()
-			rowPlanValue, err := rows.Compile(columns)
+			compiledRowValue, err := rows.Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
 			direct = 0
-			for _, op := range rowPlanValue.(rowPlan[structFixture]).ops {
+			for _, op := range compiledRowValue.(compiledRow[structFixture]).ops {
 				if op.kind != directNone {
 					direct++
 				}

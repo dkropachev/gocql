@@ -14,7 +14,7 @@ import (
 // its own destination, so the session skips its per-row clear.
 func TestV2SchemaRowsManageDestination(t *testing.T) {
 	type row struct{ Name string }
-	plan, err := codec.CompileRowPlan[row](InternalV2SchemaRows[row]{}, cql.NewColumns())
+	plan, err := codec.CompileRow[row](InternalV2SchemaRows[row]{}, cql.NewColumns())
 	if err != nil {
 		t.Fatal(err)
 	}

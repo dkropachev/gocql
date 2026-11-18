@@ -24,7 +24,7 @@
 //
 // DataType and ColumnSpec describe public CQL types and columns. Option is for
 // inherited settings, Nullable for nullable application data and results,
-// BindValue for parameters that also need UNSET, and EmptyValueOf for supported
+// BindValue for parameters that also need UNSET, and MaybeEmpty for supported
 // empty CQL values. Their zero values mean inherited, NULL, present zero value,
 // and ordinary zero value, respectively.
 //
@@ -35,7 +35,7 @@
 //
 // Value holds a CQL value whose type is known only from metadata at run time.
 // It carries its DataType and cell state explicitly; the constructors
-// (BoolValue, TextValue, ListValue, UDTValue, ...) validate the payload, so
+// (BooleanValue, TextValue, ListValue, UDTValue, ...) validate the payload, so
 // binding does not check it again. DynamicParams and NamedDynamicParams bind
 // []Value and []ValueField, DynamicRows decodes a DynamicRow, and DynamicCodec
 // encodes and decodes a single Value, as in Statement[[]Value, DynamicRow].

@@ -77,8 +77,8 @@ func EmptyValue(t DataType) (Value, error) {
 	return Value{typ: t, state: EmptyCell}, nil
 }
 
-// BoolValue constructs a dynamic CQL boolean value.
-func BoolValue(b bool) Value {
+// BooleanValue constructs a dynamic CQL boolean value.
+func BooleanValue(b bool) Value {
 	v := dynamicScalar(TypeBoolean)
 	if b {
 		v.bits = 1
@@ -679,7 +679,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	}
 	switch r.Type().Kind() {
 	case TypeBoolean:
-		return decodeDynamicScalar(r, BoolCodec, BoolValue)
+		return decodeDynamicScalar(r, BoolCodec, BooleanValue)
 	case TypeTinyInt:
 		return decodeDynamicScalar(r, Int8Codec, TinyIntValue)
 	case TypeSmallInt:
@@ -1015,7 +1015,7 @@ func checkDynamicColumns(columns Columns) error {
 	}
 	return nil
 }
-func (dynamicParamsCodec) Compile(columns Columns) (ParamPlan[[]Value], error) {
+func (dynamicParamsCodec) Compile(columns Columns) (CompiledParams[[]Value], error) {
 	if err := checkDynamicColumns(columns); err != nil {
 		return nil, err
 	}
@@ -1025,7 +1025,7 @@ func (dynamicParamsCodec) Compile(columns Columns) (ParamPlan[[]Value], error) {
 	}
 	return dynamicParamsPlan{columns: columns, shapes: shapes}, nil
 }
-func (namedDynamicParamsCodec) Compile(columns Columns) (ParamPlan[[]ValueField], error) {
+func (namedDynamicParamsCodec) Compile(columns Columns) (CompiledParams[[]ValueField], error) {
 	if err := checkDynamicColumns(columns); err != nil {
 		return nil, err
 	}
@@ -1223,7 +1223,7 @@ func (r DynamicRow) Get(name string) (Value, error) {
 	}
 	return r.At(index)
 }
-func (dynamicRowsCodec) Compile(columns Columns) (RowPlan[DynamicRow], error) {
+func (dynamicRowsCodec) Compile(columns Columns) (CompiledRow[DynamicRow], error) {
 	perfCompile()
 	perfNameMap()
 	if err := checkDynamicColumns(columns); err != nil {

@@ -26,12 +26,12 @@ type customStreamPair struct {
 }
 type customStreamDecoder struct{ checks *int }
 type customStreamPlan struct {
-	integer           StreamValuePlan[int32]
-	blob              StreamValuePlan[[]byte]
+	integer           CompiledStreamValue[int32]
+	blob              CompiledStreamValue[[]byte]
 	intType, blobType DataType
 }
 
-func (c customStreamDecoder) Compile(t DataType) (StreamValuePlan[customStreamPair], error) {
+func (c customStreamDecoder) Compile(t DataType) (CompiledStreamValue[customStreamPair], error) {
 	*c.checks++
 	fields := t.Fields()
 	if fields.Len() != 2 {
@@ -62,24 +62,24 @@ func (p customStreamPlan) DecodeInto(r *StreamValueReader, dst *customStreamPair
 
 type nilStreamValue struct{}
 
-func (nilStreamValue) Compile(DataType) (StreamValuePlan[int32], error) { return nil, nil }
+func (nilStreamValue) Compile(DataType) (CompiledStreamValue[int32], error) { return nil, nil }
 
 type nilStreamRows struct{}
 
-func (nilStreamRows) Compile(Columns) (StreamRowPlan[int32], error) { return nil, nil }
+func (nilStreamRows) Compile(Columns) (CompiledStreamRow[int32], error) { return nil, nil }
 
 type nilBufferedRows struct{}
 
-func (nilBufferedRows) Compile(Columns) (RowPlan[int32], error) { return nil, nil }
-func (nilBufferedRows) Clone(v int32) int32                     { return v }
+func (nilBufferedRows) Compile(Columns) (CompiledRow[int32], error) { return nil, nil }
+func (nilBufferedRows) Clone(v int32) int32                         { return v }
 
 type nilBufferedParams struct{}
 
-func (nilBufferedParams) Compile(Columns) (ParamPlan[int32], error) { return nil, nil }
+func (nilBufferedParams) Compile(Columns) (CompiledParams[int32], error) { return nil, nil }
 
 type customStreamNoReset struct{}
 
-func (customStreamNoReset) Compile(t DataType) (StreamValuePlan[int32], error) {
+func (customStreamNoReset) Compile(t DataType) (CompiledStreamValue[int32], error) {
 	return StreamInt32.Compile(t)
 }
 

@@ -39,7 +39,7 @@ type streamScalarPlan[T any] struct {
 	minimum, maximum int64
 }
 
-func (c streamScalarCodec[T]) Compile(t DataType) (StreamValuePlan[T], error) {
+func (c streamScalarCodec[T]) Compile(t DataType) (CompiledStreamValue[T], error) {
 	if err := checkScalarType(t, c.kind, 0); err != nil {
 		return nil, err
 	}
@@ -185,7 +185,7 @@ var (
 type streamBytesCodec struct{ kind Type }
 type streamBytesPlan struct{ typ DataType }
 
-func (c streamBytesCodec) Compile(t DataType) (StreamValuePlan[[]byte], error) {
+func (c streamBytesCodec) Compile(t DataType) (CompiledStreamValue[[]byte], error) {
 	if err := validateDataType(t); err != nil {
 		return nil, err
 	}
@@ -247,30 +247,30 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 	return r.RequireEnd()
 }
 
-// StreamDecimalValue is a decimal decoded into caller storage: the unscaled
+// DecimalParts is a decimal decoded into caller storage: the unscaled
 // two's-complement big-endian integer and the scale.
-type StreamDecimalValue struct {
+type DecimalParts struct {
 	Unscaled []byte
 	Scale    int32
 }
 type streamDecimalCodec struct{}
 type streamDecimalPlan struct{ typ DataType }
 
-var StreamDecimal StreamDecoder[StreamDecimalValue] = streamDecimalCodec{}
+var StreamDecimal StreamDecoder[DecimalParts] = streamDecimalCodec{}
 
-func (streamDecimalCodec) Compile(t DataType) (StreamValuePlan[StreamDecimalValue], error) {
+func (streamDecimalCodec) Compile(t DataType) (CompiledStreamValue[DecimalParts], error) {
 	if err := DecimalCodec.CheckType(t); err != nil {
 		return nil, err
 	}
 	return streamDecimalPlan{typ: t}, nil
 }
-func (streamDecimalPlan) Reset(dst *StreamDecimalValue) {
+func (streamDecimalPlan) Reset(dst *DecimalParts) {
 	if dst != nil {
 		dst.Scale = 0
 		dst.Unscaled = dst.Unscaled[:0]
 	}
 }
-func (p streamDecimalPlan) DecodeInto(r *StreamValueReader, dst *StreamDecimalValue) error {
+func (p streamDecimalPlan) DecodeInto(r *StreamValueReader, dst *DecimalParts) error {
 	if dst == nil {
 		return r.fail(typeValidation("destination", "nil decimal destination"))
 	}
@@ -299,7 +299,7 @@ func (p streamDecimalPlan) DecodeInto(r *StreamValueReader, dst *StreamDecimalVa
 
 type streamNullableCodec[T any] struct{ base StreamDecoder[T] }
 type streamNullablePlan[T any] struct {
-	base StreamValuePlan[T]
+	base CompiledStreamValue[T]
 	typ  DataType
 }
 
@@ -307,11 +307,11 @@ type streamNullablePlan[T any] struct {
 func StreamNullable[T any](base StreamDecoder[T]) StreamDecoder[Nullable[T]] {
 	return streamNullableCodec[T]{base}
 }
-func (c streamNullableCodec[T]) Compile(t DataType) (StreamValuePlan[Nullable[T]], error) {
+func (c streamNullableCodec[T]) Compile(t DataType) (CompiledStreamValue[Nullable[T]], error) {
 	if c.base == nil {
 		return nil, typeValidation("stream codec", "nil nullable child")
 	}
-	p, e := compileStreamValuePlan(c.base, t)
+	p, e := compileStreamValue(c.base, t)
 	if e != nil {
 		return nil, e
 	}
@@ -346,19 +346,19 @@ func (p streamNullablePlan[T]) DecodeInto(r *StreamValueReader, dst *Nullable[T]
 
 type streamEmptyCodec[T any] struct{ base StreamDecoder[T] }
 type streamEmptyPlan[T any] struct {
-	base StreamValuePlan[T]
+	base CompiledStreamValue[T]
 	typ  DataType
 }
 
 // StreamEmpty adds empty-cell decoding to base while preserving caller buffer capacity.
-func StreamEmpty[T any](base StreamDecoder[T]) StreamDecoder[EmptyValueOf[T]] {
+func StreamEmpty[T any](base StreamDecoder[T]) StreamDecoder[MaybeEmpty[T]] {
 	return streamEmptyCodec[T]{base}
 }
-func (c streamEmptyCodec[T]) Compile(t DataType) (StreamValuePlan[EmptyValueOf[T]], error) {
+func (c streamEmptyCodec[T]) Compile(t DataType) (CompiledStreamValue[MaybeEmpty[T]], error) {
 	if c.base == nil {
 		return nil, typeValidation("stream codec", "nil empty child")
 	}
-	p, e := compileStreamValuePlan(c.base, t)
+	p, e := compileStreamValue(c.base, t)
 	if e != nil {
 		return nil, e
 	}
@@ -367,13 +367,13 @@ func (c streamEmptyCodec[T]) Compile(t DataType) (StreamValuePlan[EmptyValueOf[T
 	}
 	return streamEmptyPlan[T]{base: p, typ: t}, nil
 }
-func (p streamEmptyPlan[T]) Reset(dst *EmptyValueOf[T]) {
+func (p streamEmptyPlan[T]) Reset(dst *MaybeEmpty[T]) {
 	if dst != nil {
 		p.base.Reset(&dst.Value)
 		dst.Empty = false
 	}
 }
-func (p streamEmptyPlan[T]) DecodeInto(r *StreamValueReader, dst *EmptyValueOf[T]) error {
+func (p streamEmptyPlan[T]) DecodeInto(r *StreamValueReader, dst *MaybeEmpty[T]) error {
 	if dst == nil {
 		return r.fail(typeValidation("destination", "nil empty destination"))
 	}
@@ -409,7 +409,7 @@ func (c streamBytesCodec) Reset(dst *[]byte) {
 		*dst = (*dst)[:0]
 	}
 }
-func (c streamDecimalCodec) Reset(dst *StreamDecimalValue) {
+func (c streamDecimalCodec) Reset(dst *DecimalParts) {
 	if dst != nil {
 		dst.Scale = 0
 		dst.Unscaled = dst.Unscaled[:0]
@@ -422,7 +422,7 @@ func (c streamNullableCodec[T]) Reset(dst *Nullable[T]) {
 	}
 }
 func (c streamNullableCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.base) }
-func (c streamEmptyCodec[T]) Reset(dst *EmptyValueOf[T]) {
+func (c streamEmptyCodec[T]) Reset(dst *MaybeEmpty[T]) {
 	if dst != nil {
 		resetStreamDeclaration(c.base, &dst.Value)
 		dst.Empty = false

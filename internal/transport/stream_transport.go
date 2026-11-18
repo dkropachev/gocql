@@ -430,7 +430,7 @@ func (r *InternalStreamResponse) InternalInstallColumnsReusing(columns cql.Colum
 	r.InternalReader = reader
 	return nil
 }
-func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan cql.StreamRowPlan[R], dst *R) (ok bool, err error) {
+func InternalDecodeStreamRow[R any](response *InternalStreamResponse, plan cql.CompiledStreamRow[R], dst *R) (ok bool, err error) {
 	if response == nil {
 		return false, cqltype.TypeValidation("stream response", "nil response")
 	}

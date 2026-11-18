@@ -768,7 +768,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 type rowStreamStorage[R any] struct {
 	ctx             context.Context
 	decoder         cql.StreamRowDecoder[R]
-	plan            cql.StreamRowPlan[R]
+	plan            cql.CompiledStreamRow[R]
 	err             error
 	bufferedPage    *transport.InternalResponsePage
 	bufferedBody    *wire.Stream

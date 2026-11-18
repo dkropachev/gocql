@@ -32,7 +32,7 @@ func BenchmarkStream(b *testing.B) {
 		plan := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
 		for _, size := range []int{32, 4096, 512000} {
 			b.Run(fmt.Sprint(size), func(b *testing.B) {
-				data := StreamCell(bytes.Repeat([]byte{0x71}, size))
+				data := streamCellBytes(bytes.Repeat([]byte{0x71}, size))
 				source := &streamRepeatSource{cell: data}
 				const batch = 32
 				first := CodecTestMust(wire.NewStream(context.Background(), source, int64(batch*len(data)), wire.StreamLimits{}))

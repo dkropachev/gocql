@@ -190,7 +190,7 @@ type T struct {
 
 import "github.com/scylladb/gocql/v2/cql"
 
-type T struct{ D cql.StreamDecimalValue }
+type T struct{ D cql.DecimalParts }
 `, "T")
 			if err != nil {
 				t.Fatal(err)

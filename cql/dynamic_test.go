@@ -644,7 +644,7 @@ func TestDynamic(t *testing.T) {
 				value Value
 				wire  string
 			}{
-				{"bool", BoolValue(true), "01"},
+				{"bool", BooleanValue(true), "01"},
 				{"tinyint", TinyIntValue(-1), "ff"},
 				{"smallint", SmallIntValue(-2), "fffe"},
 				{"int", IntValue(-3), "fffffffd"},

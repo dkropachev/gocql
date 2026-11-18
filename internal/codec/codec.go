@@ -115,8 +115,8 @@ func NewStreamRowReaderReusingValidation(columns cql.Columns, scope *wire.Stream
 // StreamReaderWorkingStorageBytes reports the working storage r holds.
 func StreamReaderWorkingStorageBytes(r *cql.StreamRowReader) int64 { return streamReaderBytes(r) }
 
-// CompileParamPlan compiles encoder's plan for columns.
-func CompileParamPlan[P any](encoder cql.ParamEncoder[P], columns cql.Columns) (cql.ParamPlan[P], error) {
+// CompileParams compiles encoder's plan for columns.
+func CompileParams[P any](encoder cql.ParamEncoder[P], columns cql.Columns) (cql.CompiledParams[P], error) {
 	if encoder == nil {
 		return nil, cqltype.TypeValidation("encoder", "nil parameter encoder")
 	}
@@ -127,8 +127,8 @@ func CompileParamPlan[P any](encoder cql.ParamEncoder[P], columns cql.Columns) (
 	return plan, err
 }
 
-// CompileRowPlan compiles decoder's plan for columns.
-func CompileRowPlan[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.RowPlan[R], error) {
+// CompileRow compiles decoder's plan for columns.
+func CompileRow[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.CompiledRow[R], error) {
 	if decoder == nil {
 		return nil, cqltype.TypeValidation("decoder", "nil row decoder")
 	}
@@ -142,7 +142,7 @@ func CompileRowPlan[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.
 // DetachRow makes the fields of the row at dst independent of the response
 // before its page is released. Built-in plans detach only borrowed fields and
 // keep owned buffers; other plans use their Clone.
-func DetachRow[R any](plan cql.RowPlan[R], dst *R) {
+func DetachRow[R any](plan cql.CompiledRow[R], dst *R) {
 	if !detachRow(plan, unsafe.Pointer(dst)) {
 		*dst = plan.Clone(*dst)
 	}
@@ -157,7 +157,7 @@ func (ManagedRowDestination) managesRowDestination() {}
 // ManagesRowDestination reports whether plan clears, or resets, the whole
 // destination itself before decoding a row: a built-in plan of package cql or
 // an engine plan that embeds ManagedRowDestination.
-func ManagesRowDestination[R any](plan cql.RowPlan[R]) bool {
+func ManagesRowDestination[R any](plan cql.CompiledRow[R]) bool {
 	if _, ok := plan.(interface{ managesRowDestination() }); ok {
 		return true
 	}
@@ -166,7 +166,9 @@ func ManagesRowDestination[R any](plan cql.RowPlan[R]) bool {
 
 // PreservesRowDestination reports whether plan resets the destination with a
 // caller's reset function, which may keep owned slices.
-func PreservesRowDestination[R any](plan cql.RowPlan[R]) bool { return preservesRowDestination(plan) }
+func PreservesRowDestination[R any](plan cql.CompiledRow[R]) bool {
+	return preservesRowDestination(plan)
+}
 
 // CloneResult returns a copy of result that shares nothing mutable with it.
 func CloneResult(result cql.Result) cql.Result { return cloneResult(result) }

@@ -243,7 +243,7 @@ type v2SchemaRowPlan[R any] struct {
 	steps      []func(*R, *cql.RowReader) error
 }
 
-func (d InternalV2SchemaRows[R]) Compile(columns cql.Columns) (cql.RowPlan[R], error) {
+func (d InternalV2SchemaRows[R]) Compile(columns cql.Columns) (cql.CompiledRow[R], error) {
 	fields := make(map[string]InternalV2SchemaField[R], len(d.InternalFields))
 	for _, f := range d.InternalFields {
 		if _, exists := fields[f.name]; exists {
@@ -319,7 +319,7 @@ type v2MetadataExtensions struct{}
 
 type v2SchemaParams struct{ count int }
 
-func (v2SchemaParams) Compile(columns cql.Columns) (cql.ParamPlan[[]string], error) {
+func (v2SchemaParams) Compile(columns cql.Columns) (cql.CompiledParams[[]string], error) {
 	for i := 0; i < columns.Len(); i++ {
 		c, _ := columns.At(i)
 		if err := cql.StringCodec.CheckType(c.Type); err != nil {

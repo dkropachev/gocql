@@ -31,7 +31,7 @@ func UDTOptionsFor(typ DataType) (UDTOptions, error) {
 
 type recordEncoder[T any] struct {
 	codec   ParamEncoder[T]
-	plan    ParamPlan[T]
+	plan    CompiledParams[T]
 	typ     DataType
 	options UDTOptions
 	columns Columns
@@ -77,11 +77,11 @@ func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) 
 	if c.codec == nil {
 		return nil, typeValidation("encoder", "nil tuple/UDT parameter encoder")
 	}
-	var plan ParamPlan[T]
+	var plan CompiledParams[T]
 	if c.kind == TypeUDT {
 		plan, err = compileUDTParamEncoder(c.codec, columns, c.options)
 	} else {
-		plan, err = compileParamPlan(c.codec, columns)
+		plan, err = compileParams(c.codec, columns)
 	}
 	if err != nil {
 		return nil, err
@@ -113,7 +113,7 @@ func (c recordEncoder[T]) Encode(w *ValueWriter, value T) error {
 
 type recordDecoder[T any] struct {
 	codec   RowDecoder[T]
-	plan    RowPlan[T]
+	plan    CompiledRow[T]
 	typ     DataType
 	readers *syncx.Pool[*recordReaderState]
 	values  *syncx.Pool[*T]
@@ -156,11 +156,11 @@ func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) 
 	if c.codec == nil {
 		return nil, typeValidation("decoder", "nil tuple/UDT row decoder")
 	}
-	var plan RowPlan[T]
+	var plan CompiledRow[T]
 	if c.kind == TypeUDT {
 		plan, err = compileUDTRowDecoder(c.codec, columns, c.options)
 	} else {
-		plan, err = compileRowPlan(c.codec, columns)
+		plan, err = compileRow(c.codec, columns)
 	}
 	if err != nil {
 		return nil, err
@@ -301,7 +301,7 @@ func (f nullUDTField[T]) encode(w *ParamWriter, _ T) error {
 	w.index++
 	return nil
 }
-func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTOptions) (ParamPlan[T], error) {
+func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTOptions) (CompiledParams[T], error) {
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
@@ -313,7 +313,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 	if err != nil {
 		return nil, err
 	}
-	plan := paramsPlan[T]{ordered: make([]InputField[T], len(mapping))}
+	plan := compiledParams[T]{ordered: make([]InputField[T], len(mapping))}
 	for index, field := range mapping {
 		if field == -1 {
 			plan.ordered[index] = nullUDTField[T]{}
@@ -328,7 +328,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 	plan.ops = paramOps(plan.ordered)
 	return plan, nil
 }
-func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOptions) (RowPlan[T], error) {
+func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOptions) (CompiledRow[T], error) {
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
@@ -340,7 +340,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 	if err != nil {
 		return nil, err
 	}
-	plan := rowPlan[T]{ordered: make([]OutputField[T], len(mapping)), scratch: syncx.NewPool(func() *T { return new(T) })}
+	plan := compiledRow[T]{ordered: make([]OutputField[T], len(mapping)), scratch: syncx.NewPool(func() *T { return new(T) })}
 	for index, field := range mapping {
 		if field == -1 {
 			plan.ordered[index] = ignoredField[T]{}
@@ -359,44 +359,44 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 // Preserve UDT matching policy through the public row/parameter composition
 // adapters. Arbitrary custom compilers retain their own metadata contract.
 type udtParamCompiler[T any] interface {
-	compileUDT(Columns, UDTOptions) (ParamPlan[T], error)
+	compileUDT(Columns, UDTOptions) (CompiledParams[T], error)
 }
 type udtRowCompiler[T any] interface {
-	compileUDT(Columns, UDTOptions) (RowPlan[T], error)
+	compileUDT(Columns, UDTOptions) (CompiledRow[T], error)
 }
 
-func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, options UDTOptions) (ParamPlan[T], error) {
+func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, options UDTOptions) (CompiledParams[T], error) {
 	if codec == nil {
 		return nil, typeValidation("encoder", "nil UDT parameter encoder")
 	}
 	if compiler, ok := codec.(udtParamCompiler[T]); ok {
 		return compiler.compileUDT(columns, options)
 	}
-	return compileParamPlan(codec, columns)
+	return compileParams(codec, columns)
 }
-func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options UDTOptions) (RowPlan[T], error) {
+func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options UDTOptions) (CompiledRow[T], error) {
 	if codec == nil {
 		return nil, typeValidation("decoder", "nil UDT row decoder")
 	}
 	if compiler, ok := codec.(udtRowCompiler[T]); ok {
 		return compiler.compileUDT(columns, options)
 	}
-	return compileRowPlan(codec, columns)
+	return compileRow(codec, columns)
 }
-func (c paramsCodec[T]) compileUDT(columns Columns, options UDTOptions) (ParamPlan[T], error) {
+func (c paramsCodec[T]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[T], error) {
 	return compileUDTParams(c, columns, options)
 }
-func (c rowCodec[T]) compileUDT(columns Columns, options UDTOptions) (RowPlan[T], error) {
+func (c rowCodec[T]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[T], error) {
 	return compileUDTRows(c, columns, options)
 }
-func (c singleColumnRows[T]) compileUDT(columns Columns, options UDTOptions) (RowPlan[T], error) {
+func (c singleColumnRows[T]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[T], error) {
 	if columns.Len() == 1 {
 		return c.Compile(columns)
 	}
 	codec := rowCodec[T]{fields: []OutputField[T]{ColumnAt(0, c.decoder, func(value *T) *T { return value })}}
 	return compileUDTRows(codec, columns, options)
 }
-func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (ParamPlan[A], error) {
+func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[A], error) {
 	if c.mapValue == nil {
 		return nil, typeValidation("encoder", "nil UDT parameter mapping")
 	}
@@ -404,9 +404,9 @@ func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Par
 	if err != nil {
 		return nil, err
 	}
-	return mappedParamPlan[A, B]{plan: plan, mapValue: c.mapValue}, nil
+	return compiledMappedParams[A, B]{plan: plan, mapValue: c.mapValue}, nil
 }
-func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPlan[B], error) {
+func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[B], error) {
 	if c.mapValue == nil || c.cloneValue == nil {
 		return nil, typeValidation("decoder", "nil UDT row mapping")
 	}
@@ -414,9 +414,9 @@ func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPl
 	if err != nil {
 		return nil, err
 	}
-	return mappedRowPlan[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
+	return compiledMappedRow[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
-func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (ParamPlan[Pair[A, B]], error) {
+func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[Pair[A, B]], error) {
 	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
@@ -429,9 +429,9 @@ func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Par
 	if err != nil {
 		return nil, err
 	}
-	return pairedParamPlan[A, B]{left: left, right: right, a: a, b: b}, nil
+	return compiledPairedParams[A, B]{left: left, right: right, a: a, b: b}, nil
 }
-func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPlan[Pair[A, B]], error) {
+func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[Pair[A, B]], error) {
 	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
@@ -444,7 +444,7 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (RowPl
 	if err != nil {
 		return nil, err
 	}
-	return pairedRowPlan[A, B]{left: left, right: right, a: a, b: b}, nil
+	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
 }
 
 func checkUDTIdentity(typ DataType, options UDTOptions) error {

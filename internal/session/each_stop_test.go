@@ -101,10 +101,10 @@ func TestEachStopIteration(t *testing.T) {
 // happens to be the same sentinel.
 type stopDecodeRows struct{}
 
-func (d stopDecodeRows) Compile(cql.Columns) (cql.RowPlan[[]byte], error) { return d, nil }
-func (d stopDecodeRows) Clone(v []byte) []byte                            { return append([]byte(nil), v...) }
-func (stopDecodeRows) Decode(*cql.RowReader) ([]byte, error)              { return nil, StopIteration }
-func (stopDecodeRows) DecodeInto(*cql.RowReader, *[]byte) error           { return StopIteration }
+func (d stopDecodeRows) Compile(cql.Columns) (cql.CompiledRow[[]byte], error) { return d, nil }
+func (d stopDecodeRows) Clone(v []byte) []byte                                { return append([]byte(nil), v...) }
+func (stopDecodeRows) Decode(*cql.RowReader) ([]byte, error)                  { return nil, StopIteration }
+func (stopDecodeRows) DecodeInto(*cql.RowReader, *[]byte) error               { return StopIteration }
 
 func TestEachStopIterationOnlyFromCallback(t *testing.T) {
 	q, serve := eachTestQuery(t)

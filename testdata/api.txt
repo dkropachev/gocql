@@ -251,7 +251,7 @@ package cql
 	var cql.BlobType cql.DataType
 	func cql.BlobValue(b []byte) cql.Value
 	var cql.BoolCodec cql.Codec[bool]
-	func cql.BoolValue(b bool) cql.Value
+	func cql.BooleanValue(b bool) cql.Value
 	var cql.BooleanType cql.DataType
 	func cql.BorrowBytes(b []byte) cql.Bytes
 	func cql.BorrowText(s string) (cql.Text, error)
@@ -365,15 +365,15 @@ package cql
 	var cql.DynamicRows cql.RowDecoder[cql.DynamicRow]
 	const cql.EachQuorum cql.Consistency = 7
 	const cql.EmptyCell cql.CellState = 3
-	func cql.EmptyCodec[T any](base cql.Codec[T]) cql.Codec[cql.EmptyValueOf[T]]
+	func cql.EmptyCodec[T any](base cql.Codec[T]) cql.Codec[cql.MaybeEmpty[T]]
 	type cql.EmptyParams = cql.EmptyRow
 	var cql.EmptyParamsEncoder cql.ParamEncoder[cql.EmptyRow]
 	type cql.EmptyRow struct
 	var cql.EmptyRowDecoder cql.RowDecoder[cql.EmptyRow]
 	func cql.EmptyValue(t cql.DataType) (cql.Value, error)
-	type cql.EmptyValueOf[T any] struct
-		cql.EmptyValueOf field Value T
-		cql.EmptyValueOf field Empty bool
+	type cql.MaybeEmpty[T any] struct
+		cql.MaybeEmpty field Value T
+		cql.MaybeEmpty field Empty bool
 	func cql.EncodeValue[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
 	func cql.EncodeValueBorrowed[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
 	type cql.EncodedValue struct
@@ -462,9 +462,9 @@ package cql
 	func cql.Param[P, V any](name string, codec cql.Encoder[V], get func(P) V) cql.InputField[P]
 	func cql.ParamAt[P, V any](index int, codec cql.Encoder[V], get func(P) V) cql.InputField[P]
 	type cql.ParamEncoder[P any] interface
-		cql.ParamEncoder method Compile(cql.Columns) (cql.ParamPlan[P], error)
-	type cql.ParamPlan[P any] interface
-		cql.ParamPlan method Encode(*cql.ParamWriter, P) error
+		cql.ParamEncoder method Compile(cql.Columns) (cql.CompiledParams[P], error)
+	type cql.CompiledParams[P any] interface
+		cql.CompiledParams method Encode(*cql.ParamWriter, P) error
 	type cql.ParamWriter struct
 		cql.ParamWriter method (*T) WriteParam[T any](encoder cql.Encoder[T], value T) error
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
@@ -497,13 +497,13 @@ package cql
 	func cql.Row[R any](fields ...cql.OutputField[R]) cql.RowDecoder[R]
 	type cql.RowDecoder[R any] interface
 		cql.RowDecoder method Clone(R) R
-		cql.RowDecoder method Compile(cql.Columns) (cql.RowPlan[R], error)
+		cql.RowDecoder method Compile(cql.Columns) (cql.CompiledRow[R], error)
 	func cql.RowInto[R any](reset func(*R), fields ...cql.OutputField[R]) cql.RowDecoder[R]
 	func cql.RowOf[R any](opts ...cql.StructOption[R]) (cql.RowDecoder[R], error)
-	type cql.RowPlan[R any] interface
-		cql.RowPlan method Clone(R) R
-		cql.RowPlan method Decode(*cql.RowReader) (R, error)
-		cql.RowPlan method DecodeInto(*cql.RowReader, *R) error
+	type cql.CompiledRow[R any] interface
+		cql.CompiledRow method Clone(R) R
+		cql.CompiledRow method Decode(*cql.RowReader) (R, error)
+		cql.CompiledRow method DecodeInto(*cql.RowReader, *R) error
 	type cql.RowReader struct
 		cql.RowReader method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		cql.RowReader method (*T) SkipColumn() error
@@ -544,19 +544,19 @@ package cql
 	func cql.StreamColumnAt[R, V any](index int, decoder cql.StreamDecoder[V], field func(*R) *V) cql.StreamOutputField[R]
 	var cql.StreamCounter cql.StreamDecoder[cql.Counter]
 	var cql.StreamDate cql.StreamDecoder[cql.Date]
-	var cql.StreamDecimal cql.StreamDecoder[cql.StreamDecimalValue]
-	type cql.StreamDecimalValue struct
-		cql.StreamDecimalValue field Unscaled []byte
-		cql.StreamDecimalValue field Scale int32
+	var cql.StreamDecimal cql.StreamDecoder[cql.DecimalParts]
+	type cql.DecimalParts struct
+		cql.DecimalParts field Unscaled []byte
+		cql.DecimalParts field Scale int32
 	type cql.StreamDecoder[T any] interface
-		cql.StreamDecoder method Compile(cql.DataType) (cql.StreamValuePlan[T], error)
+		cql.StreamDecoder method Compile(cql.DataType) (cql.CompiledStreamValue[T], error)
 	var cql.StreamDuration cql.StreamDecoder[cql.Duration]
-	func cql.StreamEmpty[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.EmptyValueOf[T]]
-	var cql.StreamEncoded cql.StreamDecoder[cql.StreamEncodedValue]
-	type cql.StreamEncodedValue struct
-		cql.StreamEncodedValue field Type cql.DataType
-		cql.StreamEncodedValue field Bytes []byte
-		cql.StreamEncodedValue field State cql.CellState
+	func cql.StreamEmpty[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.MaybeEmpty[T]]
+	var cql.StreamEncoded cql.StreamDecoder[cql.StreamCell]
+	type cql.StreamCell struct
+		cql.StreamCell field Type cql.DataType
+		cql.StreamCell field Bytes []byte
+		cql.StreamCell field State cql.CellState
 	var cql.StreamFloat32 cql.StreamDecoder[float32]
 	var cql.StreamFloat64 cql.StreamDecoder[float64]
 	var cql.StreamInet cql.StreamDecoder[net/netip.Addr]
@@ -572,15 +572,15 @@ package cql
 	type cql.StreamResetter[T any] interface
 		cql.StreamResetter method Reset(*T)
 	type cql.StreamRowDecoder[R any] interface
-		cql.StreamRowDecoder method Compile(cql.Columns) (cql.StreamRowPlan[R], error)
+		cql.StreamRowDecoder method Compile(cql.Columns) (cql.CompiledStreamRow[R], error)
 	func cql.StreamRowInto[R any](reset func(*R), fields ...cql.StreamOutputField[R]) cql.StreamRowDecoder[R]
 	func cql.StreamRowOf[R any](opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
-	type cql.StreamRowPlan[R any] interface
-		cql.StreamRowPlan method DecodeInto(*cql.StreamRowReader, *R) error
-		cql.StreamRowPlan method Reset(*R)
+	type cql.CompiledStreamRow[R any] interface
+		cql.CompiledStreamRow method DecodeInto(*cql.StreamRowReader, *R) error
+		cql.CompiledStreamRow method Reset(*R)
 	type cql.StreamRowReader struct
 		cql.StreamRowReader method (*T) Context() context.Context
-		cql.StreamRowReader method (*T) ReadColumn[T any](plan cql.StreamValuePlan[T], dst *T) error
+		cql.StreamRowReader method (*T) ReadColumn[T any](plan cql.CompiledStreamValue[T], dst *T) error
 		cql.StreamRowReader method (*T) RequireEnd() error
 		cql.StreamRowReader method (*T) SkipColumn() error
 	func cql.StreamSet[T any](child cql.StreamDecoder[T]) cql.StreamDecoder[[]T]
@@ -596,9 +596,9 @@ package cql
 	func cql.StreamTuple[R any](decoder cql.StreamRowDecoder[R]) cql.StreamDecoder[R]
 	func cql.StreamUDT[R any](decoder cql.StreamRowDecoder[R], options cql.UDTOptions) cql.StreamDecoder[R]
 	var cql.StreamUUID cql.StreamDecoder[cql.UUID]
-	type cql.StreamValuePlan[T any] interface
-		cql.StreamValuePlan method DecodeInto(*cql.StreamValueReader, *T) error
-		cql.StreamValuePlan method Reset(*T)
+	type cql.CompiledStreamValue[T any] interface
+		cql.CompiledStreamValue method DecodeInto(*cql.StreamValueReader, *T) error
+		cql.CompiledStreamValue method Reset(*T)
 	type cql.StreamValueReader struct
 		cql.StreamValueReader method (*T) Child(typ cql.DataType, fn func(*cql.StreamValueReader) error) error
 		cql.StreamValueReader method (*T) Context() context.Context

@@ -441,7 +441,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			return serializationFixtureValue(kind, v.Int64())
 		}
 	case bool:
-		return cql.BoolValue(v), nil
+		return cql.BooleanValue(v), nil
 	case int8:
 		return serializationFixtureValue(kind, int64(v))
 	case int16:

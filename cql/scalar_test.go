@@ -167,7 +167,7 @@ func TestScalar(t *testing.T) {
 		}
 		abortValueWriter(writer)
 		wrapped := EmptyCodec(Int32Codec)
-		frame, err = scalarEncode(t, wrapped, TypeInt, EmptyValueOf[int32]{Empty: true})
+		frame, err = scalarEncode(t, wrapped, TypeInt, MaybeEmpty[int32]{Empty: true})
 		if err != nil || len(frame) != 4 {
 			t.Fatal("empty encoding incorrect")
 		}
@@ -548,7 +548,7 @@ func TestScalar(t *testing.T) {
 			if b, _ := ownedBytes.At(0); b != 1 {
 				t.Fatal("owned encoding retained input alias")
 			}
-			empty, err := EncodeValueBorrowed(scalarType(t, TypeInt), EmptyCodec(Int32Codec), EmptyValueOf[int32]{Empty: true})
+			empty, err := EncodeValueBorrowed(scalarType(t, TypeInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil || empty.State() != EmptyCell || empty.Bytes().Len() != 0 {
 				t.Fatalf("explicit Empty state lost: %v", err)
 			}

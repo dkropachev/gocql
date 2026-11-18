@@ -222,9 +222,9 @@ func (r *StreamValueReader) failIf(err error) error {
 	return nil
 }
 
-// StreamEncodedValue is a validated cell of any type decoded into caller storage:
+// StreamCell is a validated cell of any type decoded into caller storage:
 // its type, state and body bytes.
-type StreamEncodedValue struct {
+type StreamCell struct {
 	Type  DataType
 	Bytes []byte
 	State CellState
@@ -233,24 +233,24 @@ type streamEncodedCodec struct{}
 type streamEncodedPlan struct{ validation *streamValidationPlan }
 
 // StreamEncoded decodes a cell of any type, validated against its metadata,
-// into a StreamEncodedValue.
-var StreamEncoded StreamDecoder[StreamEncodedValue] = streamEncodedCodec{}
+// into a StreamCell.
+var StreamEncoded StreamDecoder[StreamCell] = streamEncodedCodec{}
 
-func (streamEncodedCodec) Compile(t DataType) (StreamValuePlan[StreamEncodedValue], error) {
+func (streamEncodedCodec) Compile(t DataType) (CompiledStreamValue[StreamCell], error) {
 	p, e := compileStreamValidation(t, 0)
 	if e != nil {
 		return nil, e
 	}
 	return streamEncodedPlan{p}, nil
 }
-func (streamEncodedPlan) Reset(dst *StreamEncodedValue) {
+func (streamEncodedPlan) Reset(dst *StreamCell) {
 	if dst != nil {
 		dst.Type = DataType{}
 		dst.State = Present
 		dst.Bytes = dst.Bytes[:0]
 	}
 }
-func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamEncodedValue) error {
+func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamCell) error {
 	if dst == nil {
 		return r.fail(typeValidation("destination", "nil encoded destination"))
 	}
@@ -278,7 +278,7 @@ func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamEncodedVa
 	return nil
 }
 
-func (streamEncodedCodec) Reset(dst *StreamEncodedValue) {
+func (streamEncodedCodec) Reset(dst *StreamCell) {
 	if dst != nil {
 		dst.Type = DataType{}
 		dst.State = Present

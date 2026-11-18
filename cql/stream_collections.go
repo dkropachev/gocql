@@ -26,7 +26,7 @@ type streamSequenceCodec[T any] struct {
 }
 type streamSequencePlan[T any] struct {
 	typ, element DataType
-	plan         StreamValuePlan[T]
+	plan         CompiledStreamValue[T]
 	validation   *streamValidationPlan
 	width        int64
 }
@@ -47,7 +47,7 @@ func StreamSet[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeCustom, element: child}
 }
-func (c streamSequenceCodec[T]) Compile(t DataType) (StreamValuePlan[[]T], error) {
+func (c streamSequenceCodec[T]) Compile(t DataType) (CompiledStreamValue[[]T], error) {
 	if c.element == nil {
 		return nil, typeValidation("stream codec", "nil sequence child")
 	}
@@ -55,7 +55,7 @@ func (c streamSequenceCodec[T]) Compile(t DataType) (StreamValuePlan[[]T], error
 	if err != nil {
 		return nil, err
 	}
-	plan, err := compileStreamValuePlan(c.element, e)
+	plan, err := compileStreamValue(c.element, e)
 	if err != nil {
 		return nil, err
 	}
@@ -136,8 +136,8 @@ type streamMapCodec[K, V any] struct {
 }
 type streamMapPlan[K, V any] struct {
 	typ, keyType, valueType        DataType
-	key                            StreamValuePlan[K]
-	value                          StreamValuePlan[V]
+	key                            CompiledStreamValue[K]
+	value                          CompiledStreamValue[V]
 	keyValidation, valueValidation *streamValidationPlan
 }
 
@@ -146,7 +146,7 @@ type streamMapPlan[K, V any] struct {
 func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return streamMapCodec[K, V]{key, value}
 }
-func (c streamMapCodec[K, V]) Compile(t DataType) (StreamValuePlan[[]Entry[K, V]], error) {
+func (c streamMapCodec[K, V]) Compile(t DataType) (CompiledStreamValue[[]Entry[K, V]], error) {
 	kt, vt, ok := t.KeyValue()
 	if !ok {
 		return nil, typeValidation("type", "expected map, got %s", t)
@@ -154,11 +154,11 @@ func (c streamMapCodec[K, V]) Compile(t DataType) (StreamValuePlan[[]Entry[K, V]
 	if c.key == nil || c.value == nil {
 		return nil, typeValidation("stream codec", "nil map child")
 	}
-	key, e := compileStreamValuePlan(c.key, kt)
+	key, e := compileStreamValue(c.key, kt)
 	if e != nil {
 		return nil, e
 	}
-	value, e := compileStreamValuePlan(c.value, vt)
+	value, e := compileStreamValue(c.value, vt)
 	if e != nil {
 		return nil, e
 	}

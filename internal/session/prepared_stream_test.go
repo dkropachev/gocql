@@ -321,6 +321,6 @@ func TestPreparedStream(t *testing.T) {
 
 type nilPreparedStreamPlan struct{}
 
-func (nilPreparedStreamPlan) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (nilPreparedStreamPlan) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	return nil, nil
 }

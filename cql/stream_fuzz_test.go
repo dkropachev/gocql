@@ -22,7 +22,7 @@ import (
 
 func FuzzV2StreamingValues(f *testing.F) {
 	f.Add(byte(0), []byte{0, 0, 0, 1, 1}, uint8(1))
-	f.Add(byte(1), StreamCell([]byte("€")), uint8(1))
+	f.Add(byte(1), streamCellBytes([]byte("€")), uint8(1))
 	f.Add(byte(2), []byte{0, 0, 0, 4, 0, 0, 0, 0}, uint8(3))
 	f.Add(byte(3), []byte{255, 255, 255, 254}, uint8(1))
 	boolean, text, blob := BooleanType, TextType, BlobType
@@ -45,7 +45,7 @@ func FuzzV2StreamingValues(f *testing.F) {
 			}
 			_ = StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &value, int(chunk)+1)
 		case 3:
-			value := StreamEncodedValue{Bytes: make([]byte, 0, 128)}
+			value := StreamCell{Bytes: make([]byte, 0, 128)}
 			_ = StreamDecodeFixture(t, list, StreamEncoded, data, &value, int(chunk)+1)
 		}
 	})

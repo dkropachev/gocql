@@ -27,9 +27,9 @@ type dirtyRow struct {
 type dirtyRows struct{}
 type dirtyPlan struct{}
 
-func (dirtyRows) Compile(cql.Columns) (cql.RowPlan[dirtyRow], error) { return dirtyPlan{}, nil }
-func (dirtyRows) Clone(v dirtyRow) dirtyRow                          { return v }
-func (dirtyPlan) Clone(v dirtyRow) dirtyRow                          { return v }
+func (dirtyRows) Compile(cql.Columns) (cql.CompiledRow[dirtyRow], error) { return dirtyPlan{}, nil }
+func (dirtyRows) Clone(v dirtyRow) dirtyRow                              { return v }
+func (dirtyPlan) Clone(v dirtyRow) dirtyRow                              { return v }
 func (p dirtyPlan) Decode(r *cql.RowReader) (dirtyRow, error) {
 	var v dirtyRow
 	return v, p.DecodeInto(r, &v)
@@ -225,7 +225,7 @@ func clearsStaleRow[R any](t *testing.T, decoder cql.RowDecoder[R], columns cql.
 }
 
 func manages[R any](decoder cql.RowDecoder[R], columns cql.Columns) (bool, error) {
-	plan, err := codec.CompileRowPlan(decoder, columns)
+	plan, err := codec.CompileRow(decoder, columns)
 	if err != nil {
 		return false, err
 	}

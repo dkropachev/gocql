@@ -53,7 +53,7 @@ generated defaults. Each option has a scope, and the other functions ignore it:
 `cql.StreamRowOf`, and `ReuseBuffers` to `RowOf`, keeping slice field storage
 between rows; `cql.StreamRowOf` always reuses that storage. `BindValue` binds
 Present, Null and Unset only; binding fails for `EmptyCell`, so bind an
-`EmptyValueOf` through `EmptyCodec` for an empty value.
+`MaybeEmpty` through `EmptyCodec` for an empty value.
 
 See [custom codec contracts](custom-codecs.md) for extension interfaces and plan
 ownership requirements.

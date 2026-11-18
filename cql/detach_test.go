@@ -63,7 +63,7 @@ func TestDetachRow(t *testing.T) {
 		defer lease.Release()
 		base := CodecTestMust(OneColumn(BlobCodec).Compile(columns))
 		calls := 0
-		plan := cloneCountingPlan{RowPlan: base, calls: &calls}
+		plan := cloneCountingPlan{CompiledRow: base, calls: &calls}
 		var dst Bytes
 		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
@@ -165,7 +165,7 @@ func TestDetachNestedValues(t *testing.T) {
 }
 
 type cloneCountingPlan struct {
-	RowPlan[Bytes]
+	CompiledRow[Bytes]
 	calls *int
 }
 

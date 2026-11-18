@@ -164,7 +164,7 @@ func TestConditional(t *testing.T) {
 		rev := cql.NewTimeUUID()
 		modified := cql.Timestamp(time.Now().UnixMilli())
 		insert := cassandraCASPrepared(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), cql.DynamicRows)
-		values := []cql.Value{codecTestMust(cql.TextValue("baz")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev))), cql.TimestampValue(modified), cql.BoolValue(false)}
+		values := []cql.Value{codecTestMust(cql.TextValue("baz")), cassandraValue(cql.TimeUUIDValue(cql.TimeUUID(rev))), cql.TimestampValue(modified), cql.BooleanValue(false)}
 		require.True(t, cassandraReadOne(t, session, insert, values, exec.Options{}).Applied)
 		result := cassandraReadOne(t, session, insert, values, exec.Options{})
 		require.False(t, result.Applied)

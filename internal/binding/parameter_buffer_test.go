@@ -51,7 +51,7 @@ func TestParameterBuffer(t *testing.T) {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			value := cql.EmptyValueOf[int32]{Empty: true}
+			value := cql.MaybeEmpty[int32]{Empty: true}
 			got, err := storage.Encode(plan, columns, value, true)
 			if err != nil {
 				t.Fatal(err)

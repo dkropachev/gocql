@@ -517,7 +517,7 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
 	add(streamBuiltin[P](StreamInet, "netip.Addr", "Inet", true)...)
 	add(streamBuiltin[P](StreamCounter, "cql.Counter", "Counter", true)...)
-	add(streamBuiltin[P](StreamDecimal, "cql.StreamDecimalValue", "Decimal", true)...)
+	add(streamBuiltin[P](StreamDecimal, "cql.DecimalParts", "Decimal", true)...)
 	add(streamBuiltin[P](StreamDate, "cql.Date", "Date", true)...)
 	add(streamBuiltin[P](StreamTime, "cql.TimeOfDay", "Time", true)...)
 	add(streamBuiltin[P](StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)

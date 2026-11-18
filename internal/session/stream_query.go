@@ -16,14 +16,14 @@ import (
 )
 
 type streamPlanCache[R any] struct {
-	plan    cql.StreamRowPlan[R]
+	plan    cql.CompiledStreamRow[R]
 	columns cql.Columns
 	mu      sync.Mutex
 }
 
 // rememberPlan carries an incremental cursor's checked plan back to its query.
 // Buffered cursors update the same cache while selecting their page plan.
-func (s *RowStream[R]) rememberPlan(columns cql.Columns, plan cql.StreamRowPlan[R]) {
+func (s *RowStream[R]) rememberPlan(columns cql.Columns, plan cql.CompiledStreamRow[R]) {
 	if cache := s.privateStorage.bufferedPlans; cache != nil {
 		cache.mu.Lock()
 		cache.columns, cache.plan = columns, plan
@@ -165,7 +165,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 		cache.mu.Lock()
 		defer cache.mu.Unlock()
 	}
-	var plan cql.StreamRowPlan[R]
+	var plan cql.CompiledStreamRow[R]
 	if cache != nil && cache.plan != nil && cache.columns.Equal(response.Columns) {
 		plan = cache.plan
 	} else if p.plan != nil && p.columns.Equal(response.Columns) {

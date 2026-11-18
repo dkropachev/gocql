@@ -8,22 +8,22 @@ type CASResult[R any] struct {
 	Applied  bool
 }
 type casRows[R any] struct{ decoder RowDecoder[R] }
-type casRowPlan[R any] struct {
-	previous RowPlan[R]
+type compiledCASRow[R any] struct {
+	previous CompiledRow[R]
 	columns  Columns
 }
 
 // lenientRowDecoder is a field-mapped decoder that can compile a plan which
 // skips columns it has no field for and leaves fields without a column zero.
 type lenientRowDecoder[R any] interface {
-	compileLenient(columns Columns) (RowPlan[R], error)
+	compileLenient(columns Columns) (CompiledRow[R], error)
 }
 
 // CASRows decodes the [applied] column and the conditional result with decoder.
 func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 	return casRows[R]{decoder: decoder}
 }
-func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
+func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) {
 	first, ok := columns.At(0)
 	if !ok || first.Name != "[applied]" {
 		return nil, typeValidation("CAS result", "first column must be [applied]")
@@ -35,7 +35,7 @@ func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
 	if err != nil {
 		return nil, err
 	}
-	p := casRowPlan[R]{columns: previous}
+	p := compiledCASRow[R]{columns: previous}
 	if previous.Len() > 0 {
 		if c.decoder == nil {
 			return nil, typeValidation("CAS result", "nil previous-value decoder")
@@ -45,7 +45,7 @@ func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
 		if lenient, ok := c.decoder.(lenientRowDecoder[R]); ok {
 			p.previous, err = lenient.compileLenient(previous)
 		} else {
-			p.previous, err = compileRowPlan(c.decoder, previous)
+			p.previous, err = compileRow(c.decoder, previous)
 		}
 		if err != nil {
 			return nil, err
@@ -53,7 +53,7 @@ func (c casRows[R]) Compile(columns Columns) (RowPlan[CASResult[R]], error) {
 	}
 	return p, nil
 }
-func (p casRowPlan[R]) Decode(reader *RowReader) (CASResult[R], error) {
+func (p compiledCASRow[R]) Decode(reader *RowReader) (CASResult[R], error) {
 	var result CASResult[R]
 	err := p.DecodeInto(reader, &result)
 	if err != nil {
@@ -61,7 +61,7 @@ func (p casRowPlan[R]) Decode(reader *RowReader) (CASResult[R], error) {
 	}
 	return result, nil
 }
-func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
+func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	if dst == nil {
 		return typeValidation("destination", "nil CAS destination")
 	}
@@ -89,7 +89,7 @@ func (p casRowPlan[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	dst.Previous.Set = true
 	return nil
 }
-func (p casRowPlan[R]) Clone(value CASResult[R]) CASResult[R] {
+func (p compiledCASRow[R]) Clone(value CASResult[R]) CASResult[R] {
 	if value.Previous.Set {
 		value.Previous.Value = p.previous.Clone(value.Previous.Value)
 	}

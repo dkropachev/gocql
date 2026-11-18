@@ -8,7 +8,7 @@ import "unsafe"
 // DetachRow makes decoded fields independent of the response before its page
 // is released. Built-in plans preserve owned destination buffers and detach
 // only borrowed fields. Custom plans use their recursive Clone contract.
-func detachRowFor[R any](plan RowPlan[R], dst *R) {
+func detachRowFor[R any](plan CompiledRow[R], dst *R) {
 	if p, ok := plan.(interface{ detachRow(*R) }); ok {
 		p.detachRow(dst)
 	} else {
@@ -24,7 +24,7 @@ func detachValue[T any](decoder Decoder[T], dst *T) {
 	}
 }
 
-func (p rowPlan[R]) detachRow(dst *R) {
+func (p compiledRow[R]) detachRow(dst *R) {
 	for _, field := range p.ordered {
 		field.detachField(dst)
 	}
@@ -35,7 +35,7 @@ func (f ignoredField[R]) detachField(*R)       {}
 
 func (p singleColumnPlan[T]) detachRow(dst *T) { detachValue(p.decoder, dst) }
 
-func (p pairedRowPlan[A, B]) detachRow(dst *Pair[A, B]) {
+func (p compiledPairedRow[A, B]) detachRow(dst *Pair[A, B]) {
 	detachRowFor(p.a, &dst.First)
 	detachRowFor(p.b, &dst.Second)
 }
@@ -58,7 +58,7 @@ func (c nullableDecoder[T]) detachValue(dst *Nullable[T]) {
 	}
 }
 
-func (c emptyCodec[T]) detachValue(dst *EmptyValueOf[T]) {
+func (c emptyCodec[T]) detachValue(dst *MaybeEmpty[T]) {
 	if !dst.Empty {
 		decoder := c.decoder
 		if decoder == nil {
@@ -86,6 +86,6 @@ func (c mapDecoder[K, V]) detachValue(dst *[]Entry[K, V]) {
 func (c recordDecoder[T]) detachValue(dst *T) { detachRowFor(c.plan, dst) }
 
 // detachRowAt is detachRow for a destination the engine passes untyped.
-func (p rowPlan[R]) detachRowAt(dst unsafe.Pointer)          { p.detachRow((*R)(dst)) }
-func (p singleColumnPlan[T]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*T)(dst)) }
-func (p pairedRowPlan[A, B]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*Pair[A, B])(dst)) }
+func (p compiledRow[R]) detachRowAt(dst unsafe.Pointer)          { p.detachRow((*R)(dst)) }
+func (p singleColumnPlan[T]) detachRowAt(dst unsafe.Pointer)     { p.detachRow((*T)(dst)) }
+func (p compiledPairedRow[A, B]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*Pair[A, B])(dst)) }

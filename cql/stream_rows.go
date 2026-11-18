@@ -71,7 +71,7 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 		if decoder == nil || field == nil {
 			return streamFieldPlan[R]{}, typeValidation("stream field", "nil codec or accessor")
 		}
-		plan, err := compileStreamValuePlan(decoder, t)
+		plan, err := compileStreamValue(decoder, t)
 		if err != nil {
 			return streamFieldPlan[R]{}, err
 		}
@@ -108,10 +108,10 @@ type streamRowsPlan[R any] struct {
 func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
 	return streamRowsCodec[R]{reset: reset, fields: streamDeclarations(fields)}
 }
-func (c streamRowsCodec[R]) Compile(columns Columns) (StreamRowPlan[R], error) {
+func (c streamRowsCodec[R]) Compile(columns Columns) (CompiledStreamRow[R], error) {
 	return c.compile(columns, false, UDTOptions{})
 }
-func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOptions) (StreamRowPlan[R], error) {
+func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOptions) (CompiledStreamRow[R], error) {
 	if c.reset == nil {
 		return nil, typeValidation("stream row", "nil application reset callback")
 	}
@@ -190,7 +190,7 @@ func (p streamRowsPlan[R]) DecodeInto(r *StreamRowReader, dst *R) error {
 
 type streamOneColumn[T any] struct{ decoder StreamDecoder[T] }
 type streamOneColumnPlan[T any] struct {
-	plan    StreamValuePlan[T]
+	plan    CompiledStreamValue[T]
 	columns Columns
 }
 
@@ -198,14 +198,14 @@ type streamOneColumnPlan[T any] struct {
 func StreamOneColumn[T any](decoder StreamDecoder[T]) StreamRowDecoder[T] {
 	return streamOneColumn[T]{decoder}
 }
-func (c streamOneColumn[T]) Compile(columns Columns) (StreamRowPlan[T], error) {
+func (c streamOneColumn[T]) Compile(columns Columns) (CompiledStreamRow[T], error) {
 	if columns.Len() != 1 {
 		return nil, typeValidation("stream row", "expected one column, got %d", columns.Len())
 	}
 	if c.decoder == nil {
 		return nil, typeValidation("stream codec", "nil decoder")
 	}
-	p, e := compileStreamValuePlan(c.decoder, columnSlice(columns)[0].Type)
+	p, e := compileStreamValue(c.decoder, columnSlice(columns)[0].Type)
 	if e != nil {
 		return nil, e
 	}
@@ -240,7 +240,7 @@ type streamRecordCodec[R any] struct {
 type streamRecordPlan[R any] struct {
 	typ         DataType
 	columns     Columns
-	plan        StreamRowPlan[R]
+	plan        CompiledStreamRow[R]
 	validations []*streamValidationPlan
 }
 
@@ -253,7 +253,7 @@ func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: TypeUDT, options: options, decoder: decoder}
 }
-func (c streamRecordCodec[R]) Compile(t DataType) (StreamValuePlan[R], error) {
+func (c streamRecordCodec[R]) Compile(t DataType) (CompiledStreamValue[R], error) {
 	columns, err := recordColumns(t, c.kind)
 	if err != nil {
 		return nil, err
@@ -266,14 +266,14 @@ func (c streamRecordCodec[R]) Compile(t DataType) (StreamValuePlan[R], error) {
 			return nil, err
 		}
 	}
-	var plan StreamRowPlan[R]
+	var plan CompiledStreamRow[R]
 	if builtin, ok := c.decoder.(streamRowsCodec[R]); ok {
 		plan, err = builtin.compile(columns, true, c.options)
 	} else if single, ok := c.decoder.(streamOneColumn[R]); ok {
 		composed := streamRowsCodec[R]{reset: func(*R) {}, fields: []*streamOutputField[R]{StreamColumnAt(0, single.decoder, func(value *R) *R { return value }).streamDeclaration()}}
 		plan, err = composed.compile(columns, true, c.options)
 	} else {
-		plan, err = compileStreamRowPlan(c.decoder, columns)
+		plan, err = compileStreamRow(c.decoder, columns)
 	}
 	if err != nil {
 		return nil, err

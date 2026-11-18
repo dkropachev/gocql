@@ -55,7 +55,7 @@ func v2DecodeRoutes() cql.RowDecoder[v2RouteRow] {
 
 type v2RouteParams struct{ columns cql.Columns }
 
-func (v2RouteParams) Compile(c cql.Columns) (cql.ParamPlan[[][]string], error) {
+func (v2RouteParams) Compile(c cql.Columns) (cql.CompiledParams[[][]string], error) {
 	return v2RouteParams{c}, nil
 }
 func (p v2RouteParams) Encode(w *cql.ParamWriter, values [][]string) error {

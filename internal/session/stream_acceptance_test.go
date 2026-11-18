@@ -184,7 +184,7 @@ func await(t testing.TB, ch <-chan struct{}) {
 
 type decoderError struct{ cause error }
 
-func (d decoderError) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (d decoderError) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	return d, nil
 }
 func (d decoderError) Reset(dst *[]byte) { *dst = (*dst)[:0] }

@@ -27,7 +27,7 @@ func (b *ParameterBuffer) RetainedBytes() int {
 	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
 
-func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) (model.EncodedValues, error) {
+func (b *ParameterBuffer) Encode[P any](plan cql.CompiledParams[P], columns cql.Columns, value P, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
 		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}
@@ -79,7 +79,7 @@ func (b *ParameterBuffer) Encode[P any](plan cql.ParamPlan[P], columns cql.Colum
 // the next call; b keeps its cell scratch but not storage. On error the caller
 // keeps its own storage. Encode keeps its own body so the execution path takes
 // no extra call.
-func (b *ParameterBuffer) EncodeAppend[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
+func (b *ParameterBuffer) EncodeAppend[P any](plan cql.CompiledParams[P], columns cql.Columns, value P, allowUnset bool, storage []byte) ([]byte, model.EncodedValues, error) {
 	if columns.Len() > 65535 {
 		return storage, model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}

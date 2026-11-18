@@ -28,7 +28,7 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()

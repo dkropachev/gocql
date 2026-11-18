@@ -19,14 +19,14 @@ type Pair[A, B any] struct {
 	Second B
 }
 
-// ParamPlan encodes typed parameters in server order using ParamWriter.
-type ParamPlan[P any] interface {
+// CompiledParams encodes typed parameters in server order using ParamWriter.
+type CompiledParams[P any] interface {
 	Encode(*ParamWriter, P) error
 }
 
-// RowPlan decodes checked rows into caller destinations. Clone must recursively detach
+// CompiledRow decodes checked rows into caller destinations. Clone must recursively detach
 // all borrowed response storage; custom plans are cloned before One returns.
-type RowPlan[R any] interface {
+type CompiledRow[R any] interface {
 	Decode(*RowReader) (R, error)
 	DecodeInto(*RowReader, *R) error
 	Clone(R) R
@@ -218,7 +218,7 @@ type paramsCodec[P any] struct {
 	fields   []InputField[P]
 	optional bool // fields without a column are skipped (struct mappings)
 }
-type paramsPlan[P any] struct {
+type compiledParams[P any] struct {
 	ordered []InputField[P]
 	ops     []paramOp[P] // ordered, with built-in codecs as direct ops
 }
@@ -281,7 +281,7 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 	return ordered, nil
 }
 
-func (c paramsCodec[P]) Compile(columns Columns) (ParamPlan[P], error) {
+func (c paramsCodec[P]) Compile(columns Columns) (CompiledParams[P], error) {
 	locations := make([]fieldLocation, len(c.fields))
 	for i, field := range c.fields {
 		if field == nil {
@@ -293,7 +293,7 @@ func (c paramsCodec[P]) Compile(columns Columns) (ParamPlan[P], error) {
 	if err != nil {
 		return nil, err
 	}
-	plan := paramsPlan[P]{ordered: make([]InputField[P], len(mapping))}
+	plan := compiledParams[P]{ordered: make([]InputField[P], len(mapping))}
 	for index, field := range mapping {
 		column, _ := columns.At(index)
 		compiled, err := c.fields[field].compile(column.Type)
@@ -306,7 +306,7 @@ func (c paramsCodec[P]) Compile(columns Columns) (ParamPlan[P], error) {
 	return plan, nil
 }
 
-func (p paramsPlan[P]) Encode(w *ParamWriter, value P) error {
+func (p compiledParams[P]) Encode(w *ParamWriter, value P) error {
 	mark := w.builder.Mark()
 	start := w.index
 	for i := range p.ops {
@@ -390,7 +390,7 @@ type rowCodec[R any] struct {
 	fields   []OutputField[R]
 	optional bool // fields without a column are skipped (struct mappings)
 }
-type rowPlan[R any] struct {
+type compiledRow[R any] struct {
 	reset func(*R)
 	// Scratch addresses are confined to Decode; accessors must not retain them.
 	// The returned R is copied before scratch is cleared and recycled.
@@ -411,7 +411,7 @@ func Row[R any](fields ...OutputField[R]) RowDecoder[R] {
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] {
 	return rowCodec[R]{fields: append([]OutputField[R](nil), fields...), reset: reset}
 }
-func (p rowPlan[R]) preserveDestination() bool { return p.reset != nil }
+func (p compiledRow[R]) preserveDestination() bool { return p.reset != nil }
 
 // rowDestinationManager marks a built-in row plan whose DecodeInto zeroes, or
 // resets, the whole destination before it decodes, so the caller need not
@@ -426,12 +426,12 @@ type managedRowDestination struct{}
 
 func (managedRowDestination) managesRowDestination() {}
 
-func (rowPlan[R]) managesRowDestination()          {}
-func (singleColumnPlan[T]) managesRowDestination() {}
-func (mappedRowPlan[A, B]) managesRowDestination() {}
-func (pairedRowPlan[A, B]) managesRowDestination() {}
-func (casRowPlan[R]) managesRowDestination()       {}
-func (dynamicRowsPlan) managesRowDestination()     {}
+func (compiledRow[R]) managesRowDestination()          {}
+func (singleColumnPlan[T]) managesRowDestination()     {}
+func (compiledMappedRow[A, B]) managesRowDestination() {}
+func (compiledPairedRow[A, B]) managesRowDestination() {}
+func (compiledCASRow[R]) managesRowDestination()       {}
+func (dynamicRowsPlan) managesRowDestination()         {}
 func (c rowCodec[R]) Clone(source R) R {
 	dst := source
 	for _, field := range c.fields {
@@ -442,18 +442,18 @@ func (c rowCodec[R]) Clone(source R) R {
 	}
 	return dst
 }
-func (c rowCodec[R]) Compile(columns Columns) (RowPlan[R], error) {
+func (c rowCodec[R]) Compile(columns Columns) (CompiledRow[R], error) {
 	return c.compile(columns, c.optional, false)
 }
 
 // compileLenient compiles the previous-row plan of a conditional result,
 // whose columns differ by server and outcome: a field without a column is
 // left at its zero value and a column without a field is skipped.
-func (c rowCodec[R]) compileLenient(columns Columns) (RowPlan[R], error) {
+func (c rowCodec[R]) compileLenient(columns Columns) (CompiledRow[R], error) {
 	return c.compile(columns, true, true)
 }
 
-func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (RowPlan[R], error) {
+func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow[R], error) {
 	locations := make([]fieldLocation, len(c.fields))
 	for i, field := range c.fields {
 		if field == nil {
@@ -465,7 +465,7 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (RowPlan[R],
 	if err != nil {
 		return nil, err
 	}
-	plan := rowPlan[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: syncx.NewPool(func() *R { return new(R) })}
+	plan := compiledRow[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: syncx.NewPool(func() *R { return new(R) })}
 	for index, field := range mapping {
 		column, _ := columns.At(index)
 		if field < 0 {
@@ -481,7 +481,7 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (RowPlan[R],
 	plan.ops = rowOps(plan.ordered)
 	return plan, nil
 }
-func (p rowPlan[R]) Decode(reader *RowReader) (R, error) {
+func (p compiledRow[R]) Decode(reader *RowReader) (R, error) {
 	row := p.scratch.Get()
 	err := p.DecodeInto(reader, row)
 	result := *row
@@ -493,7 +493,7 @@ func (p rowPlan[R]) Decode(reader *RowReader) (R, error) {
 	}
 	return result, nil
 }
-func (p rowPlan[R]) DecodeInto(reader *RowReader, dst *R) error {
+func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
 	}
@@ -517,7 +517,7 @@ func (p rowPlan[R]) DecodeInto(reader *RowReader, dst *R) error {
 	}
 	return nil
 }
-func (p rowPlan[R]) Clone(source R) R {
+func (p compiledRow[R]) Clone(source R) R {
 	dst := source
 	for _, field := range p.ordered {
 		field.clone(&dst, &source)
@@ -538,7 +538,7 @@ func OneColumn[T any](decoder Decoder[T]) RowDecoder[T] {
 type singleColumnRows[T any] struct{ decoder Decoder[T] }
 type singleColumnPlan[T any] struct{ decoder Decoder[T] }
 
-func (c singleColumnRows[T]) Compile(columns Columns) (RowPlan[T], error) {
+func (c singleColumnRows[T]) Compile(columns Columns) (CompiledRow[T], error) {
 	if columns.Len() != 1 {
 		return nil, fmt.Errorf("gocql: single column decoder expected 1 column, got %d", columns.Len())
 	}
@@ -570,8 +570,8 @@ type mappedParams[A, B any] struct {
 	codec    ParamEncoder[B]
 	mapValue func(A) B
 }
-type mappedParamPlan[A, B any] struct {
-	plan     ParamPlan[B]
+type compiledMappedParams[A, B any] struct {
+	plan     CompiledParams[B]
 	mapValue func(A) B
 }
 
@@ -580,17 +580,17 @@ type mappedParamPlan[A, B any] struct {
 func ConvertParams[A, B any](codec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
 	return mappedParams[A, B]{codec: codec, mapValue: mapValue}
 }
-func (c mappedParams[A, B]) Compile(columns Columns) (ParamPlan[A], error) {
+func (c mappedParams[A, B]) Compile(columns Columns) (CompiledParams[A], error) {
 	if c.codec == nil || c.mapValue == nil {
 		return nil, fmt.Errorf("gocql: nil parameter mapping")
 	}
-	plan, err := compileParamPlan(c.codec, columns)
+	plan, err := compileParams(c.codec, columns)
 	if err != nil {
 		return nil, err
 	}
-	return mappedParamPlan[A, B]{plan: plan, mapValue: c.mapValue}, nil
+	return compiledMappedParams[A, B]{plan: plan, mapValue: c.mapValue}, nil
 }
-func (p mappedParamPlan[A, B]) Encode(w *ParamWriter, value A) error {
+func (p compiledMappedParams[A, B]) Encode(w *ParamWriter, value A) error {
 	return p.plan.Encode(w, p.mapValue(value))
 }
 
@@ -599,8 +599,8 @@ type mappedRows[A, B any] struct {
 	mapValue   func(A) B
 	cloneValue func(B) B
 }
-type mappedRowPlan[A, B any] struct {
-	plan       RowPlan[A]
+type compiledMappedRow[A, B any] struct {
+	plan       CompiledRow[A]
 	mapValue   func(A) B
 	cloneValue func(B) B
 }
@@ -616,17 +616,17 @@ func (c mappedRows[A, B]) Clone(value B) B {
 	}
 	return c.cloneValue(value)
 }
-func (c mappedRows[A, B]) Compile(columns Columns) (RowPlan[B], error) {
+func (c mappedRows[A, B]) Compile(columns Columns) (CompiledRow[B], error) {
 	if c.codec == nil || c.mapValue == nil || c.cloneValue == nil {
 		return nil, fmt.Errorf("gocql: nil row mapping")
 	}
-	plan, err := compileRowPlan(c.codec, columns)
+	plan, err := compileRow(c.codec, columns)
 	if err != nil {
 		return nil, err
 	}
-	return mappedRowPlan[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
+	return compiledMappedRow[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
-func (p mappedRowPlan[A, B]) Decode(reader *RowReader) (B, error) {
+func (p compiledMappedRow[A, B]) Decode(reader *RowReader) (B, error) {
 	v, err := p.plan.Decode(reader)
 	if err != nil {
 		var zero B
@@ -634,7 +634,7 @@ func (p mappedRowPlan[A, B]) Decode(reader *RowReader) (B, error) {
 	}
 	return p.mapValue(v), nil
 }
-func (p mappedRowPlan[A, B]) DecodeInto(reader *RowReader, dst *B) error {
+func (p compiledMappedRow[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
 	}
@@ -647,7 +647,7 @@ func (p mappedRowPlan[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	*dst = p.mapValue(value) // Explicit value-returning application mapping.
 	return nil
 }
-func (p mappedRowPlan[A, B]) Clone(value B) B { return p.cloneValue(value) }
+func (p compiledMappedRow[A, B]) Clone(value B) B { return p.cloneValue(value) }
 
 func splitColumns(columns Columns, split int) (Columns, Columns, error) {
 	if split < 0 || split > columns.Len() {
@@ -721,9 +721,9 @@ type pairedParams[A, B any] struct {
 	a ParamEncoder[A]
 	b ParamEncoder[B]
 }
-type pairedParamPlan[A, B any] struct {
-	a           ParamPlan[A]
-	b           ParamPlan[B]
+type compiledPairedParams[A, B any] struct {
+	a           CompiledParams[A]
+	b           CompiledParams[B]
 	left, right Columns
 }
 
@@ -735,7 +735,7 @@ type pairedParamPlan[A, B any] struct {
 func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pair[A, B]] {
 	return pairedParams[A, B]{a: a, b: b}
 }
-func (c pairedParams[A, B]) Compile(columns Columns) (ParamPlan[Pair[A, B]], error) {
+func (c pairedParams[A, B]) Compile(columns Columns) (CompiledParams[Pair[A, B]], error) {
 	if c.a == nil || c.b == nil {
 		return nil, fmt.Errorf("gocql: nil paired parameter codec")
 	}
@@ -743,17 +743,17 @@ func (c pairedParams[A, B]) Compile(columns Columns) (ParamPlan[Pair[A, B]], err
 	if err != nil {
 		return nil, err
 	}
-	a, err := compileParamPlan(c.a, left)
+	a, err := compileParams(c.a, left)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compileParamPlan(c.b, right)
+	b, err := compileParams(c.b, right)
 	if err != nil {
 		return nil, err
 	}
-	return pairedParamPlan[A, B]{left: left, right: right, a: a, b: b}, nil
+	return compiledPairedParams[A, B]{left: left, right: right, a: a, b: b}, nil
 }
-func (p pairedParamPlan[A, B]) Encode(w *ParamWriter, value Pair[A, B]) error {
+func (p compiledPairedParams[A, B]) Encode(w *ParamWriter, value Pair[A, B]) error {
 	mark := w.builder.Mark()
 	columns, index := w.columns, w.index
 	completed := false
@@ -787,9 +787,9 @@ type pairedRows[A, B any] struct {
 	a RowDecoder[A]
 	b RowDecoder[B]
 }
-type pairedRowPlan[A, B any] struct {
-	a           RowPlan[A]
-	b           RowPlan[B]
+type compiledPairedRow[A, B any] struct {
+	a           CompiledRow[A]
+	b           CompiledRow[B]
 	left, right Columns
 }
 
@@ -804,7 +804,7 @@ func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
 func (c pairedRows[A, B]) Clone(value Pair[A, B]) Pair[A, B] {
 	return Pair[A, B]{First: c.a.Clone(value.First), Second: c.b.Clone(value.Second)}
 }
-func (c pairedRows[A, B]) Compile(columns Columns) (RowPlan[Pair[A, B]], error) {
+func (c pairedRows[A, B]) Compile(columns Columns) (CompiledRow[Pair[A, B]], error) {
 	if c.a == nil || c.b == nil {
 		return nil, fmt.Errorf("gocql: nil paired row codec")
 	}
@@ -812,17 +812,17 @@ func (c pairedRows[A, B]) Compile(columns Columns) (RowPlan[Pair[A, B]], error) 
 	if err != nil {
 		return nil, err
 	}
-	a, err := compileRowPlan(c.a, left)
+	a, err := compileRow(c.a, left)
 	if err != nil {
 		return nil, err
 	}
-	b, err := compileRowPlan(c.b, right)
+	b, err := compileRow(c.b, right)
 	if err != nil {
 		return nil, err
 	}
-	return pairedRowPlan[A, B]{left: left, right: right, a: a, b: b}, nil
+	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
 }
-func (p pairedRowPlan[A, B]) Decode(r *RowReader) (Pair[A, B], error) {
+func (p compiledPairedRow[A, B]) Decode(r *RowReader) (Pair[A, B], error) {
 	var result Pair[A, B]
 	err := p.DecodeInto(r, &result)
 	if err != nil {
@@ -830,7 +830,7 @@ func (p pairedRowPlan[A, B]) Decode(r *RowReader) (Pair[A, B], error) {
 	}
 	return result, nil
 }
-func (p pairedRowPlan[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
+func (p compiledPairedRow[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
 	}
@@ -862,7 +862,7 @@ func (p pairedRowPlan[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	completed = true
 	return nil
 }
-func (p pairedRowPlan[A, B]) Clone(value Pair[A, B]) Pair[A, B] {
+func (p compiledPairedRow[A, B]) Clone(value Pair[A, B]) Pair[A, B] {
 	return Pair[A, B]{First: p.a.Clone(value.First), Second: p.b.Clone(value.Second)}
 }
 
@@ -941,7 +941,7 @@ func readColumnInto[T any](r *RowReader, decoder Decoder[T], dst *T) error {
 	return err
 }
 
-func compileRowPlan[R any](decoder RowDecoder[R], columns Columns) (RowPlan[R], error) {
+func compileRow[R any](decoder RowDecoder[R], columns Columns) (CompiledRow[R], error) {
 	if decoder == nil {
 		return nil, typeValidation("decoder", "nil row decoder")
 	}
@@ -951,7 +951,7 @@ func compileRowPlan[R any](decoder RowDecoder[R], columns Columns) (RowPlan[R], 
 	}
 	return plan, err
 }
-func compileParamPlan[P any](encoder ParamEncoder[P], columns Columns) (ParamPlan[P], error) {
+func compileParams[P any](encoder ParamEncoder[P], columns Columns) (CompiledParams[P], error) {
 	if encoder == nil {
 		return nil, typeValidation("encoder", "nil parameter encoder")
 	}

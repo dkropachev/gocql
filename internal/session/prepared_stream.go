@@ -26,7 +26,7 @@ type StreamStatement[P, R any] struct {
 type PreparedStream[P, R any] struct {
 	prepared *Prepared[P, cql.EmptyRow]
 	decoder  cql.StreamRowDecoder[R]
-	plan     cql.StreamRowPlan[R]
+	plan     cql.CompiledStreamRow[R]
 	columns  cql.Columns
 }
 
@@ -43,7 +43,7 @@ func PrepareStream[P, R any](ctx context.Context, session *implCluster.Core, sta
 	if err != nil {
 		return nil, err
 	}
-	var plan cql.StreamRowPlan[R]
+	var plan cql.CompiledStreamRow[R]
 	// Conditional PREPARE responses can omit result metadata. In that case
 	// the first actual response validates the stream decoder before any output.
 	if prepared.columns.Len() != 0 || prepared.kind == cql.OrdinaryStatement {

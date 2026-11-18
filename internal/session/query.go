@@ -88,7 +88,7 @@ func (c queryCursor) current() bool {
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
-	params  cql.ParamPlan[P]
+	params  cql.CompiledParams[P]
 	options CompiledOptions
 	columns cql.Columns
 	scratch eachScratch   // Each and One decoding state
@@ -195,7 +195,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 		return nil, err
 	}
 	columns := statement.BindMarkers
-	plan, err := codec.CompileParamPlan(statement.Params, columns)
+	plan, err := codec.CompileParams(statement.Params, columns)
 	if err != nil {
 		return nil, err
 	}

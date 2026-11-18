@@ -761,7 +761,7 @@ type reflectedStreamRows struct {
 	rows cql.StreamRowDecoder[reflectedStreamEvent]
 }
 
-func (r reflectedStreamRows) Compile(columns cql.Columns) (cql.StreamRowPlan[mapped.StreamEvent], error) {
+func (r reflectedStreamRows) Compile(columns cql.Columns) (cql.CompiledStreamRow[mapped.StreamEvent], error) {
 	plan, err := r.rows.Compile(columns)
 	if err != nil {
 		return nil, err
@@ -770,7 +770,7 @@ func (r reflectedStreamRows) Compile(columns cql.Columns) (cql.StreamRowPlan[map
 }
 
 type reflectedStreamPlan struct {
-	plan cql.StreamRowPlan[reflectedStreamEvent]
+	plan cql.CompiledStreamRow[reflectedStreamEvent]
 }
 
 func (p reflectedStreamPlan) Reset(dst *mapped.StreamEvent) {

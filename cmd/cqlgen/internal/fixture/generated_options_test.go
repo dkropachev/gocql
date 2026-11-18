@@ -89,11 +89,11 @@ type offsetStreamInt[T ~int32 | ~int64] struct {
 	amount T
 }
 type offsetStreamIntPlan[T ~int32 | ~int64] struct {
-	base   cql.StreamValuePlan[T]
+	base   cql.CompiledStreamValue[T]
 	amount T
 }
 
-func (d offsetStreamInt[T]) Compile(typ cql.DataType) (cql.StreamValuePlan[T], error) {
+func (d offsetStreamInt[T]) Compile(typ cql.DataType) (cql.CompiledStreamValue[T], error) {
 	base, err := d.base.Compile(typ)
 	return offsetStreamIntPlan[T]{base: base, amount: d.amount}, err
 }
