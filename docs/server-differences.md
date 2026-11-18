@@ -48,8 +48,9 @@ No package holds dialect-only functions: `scylla.BatchStatement`, the last
 one, was replaced by `Session.RunConditionalBatch`, and the `scylla` package
 went with it (`docs/package-layout.md`, Dialect packages). Every
 dialect-only feature is a setting or a server behaviour, so none can be gated
-at compile time. A setting the caller asks for fails on another dialect
-before anything is sent. Settings that the session's dialect alone decides
+at compile time. A setting that cannot work on another dialect fails there
+before anything is sent; one that has nothing to act on there is a
+documented no-op. Settings that the session's dialect alone decides
 fail with `cqlerr.UnsupportedSettingError` (kind `KindInvalid`), whose
 `Setting` names the feature and whose message names the dialect that supports
 it and the session's dialect. `settings.ScyllaOnly` and
@@ -74,7 +75,7 @@ when the server reports it, is a documented no-op on the other dialect.
 | `routing.CDCTokenPartitioner`, `config.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
 | `event.ClientRoute` events | ScyllaV4 | Never delivered | Events |
-| Shard and shard-aware port outputs (`endpoint.DialTarget.ShardID`, `endpoint.Peer.ShardAwarePort`, `endpoint.ConvictionEvent.Shard`, `metadata.HostSnapshot.Shards` and `ShardingIgnoreMSB`, `metadata.Route.Shard` and `ShardOf`, `routing.Info.ShardID` when no option sets it, `cqlerr.AttemptFailure.Shard`, `cqlerr.ErrScyllaSourcePortAlreadyInUse`) | ScyllaV4 | Unset, zero or never returned | Pool and metadata |
+| Shard and shard-aware port outputs (`endpoint.DialTarget.ShardID`, `endpoint.Peer.ShardAwarePort`, `endpoint.ConvictionEvent.Shard`, `metadata.HostSnapshot.Shards` and `ShardingIgnoreMSB`, `metadata.Route.Shard`, `routing.Info.ShardID` when no option sets it, `cqlerr.AttemptFailure.Shard`, `cqlerr.ErrScyllaSourcePortAlreadyInUse`) | ScyllaV4 | Unset, zero or never returned; `metadata.Route.ShardOf` returns shard 0, since a Cassandra node counts as one shard | Pool and metadata |
 | A custom `routing.Policy` route or target with a shard (`metadata.Route.WithShard`, `metadata.Target.ShardID`) | ScyllaV4 | A shard the node lacks, any but 0 on Cassandra, finds no connection: the plan moves to its next route, and with none left the execution fails with `cqlerr.ErrNoConnections`, as for a ScyllaDB node with fewer shards | `internal/pool/pool.go`, `internal/cluster/execute.go` |
 
 ## Conditional statements (LWT)
