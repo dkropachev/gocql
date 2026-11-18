@@ -680,21 +680,22 @@ func (p *ProfileBuilder) NoSerialConsistency() *ProfileBuilder {
 	return p
 }
 
-// WithTimeout bounds one execution, including retries. It replaces NoTimeout.
-// Default 30s.
+// WithTimeout bounds one execution, including retries. The context and
+// exec.Options.Timeout can only shorten it. It replaces NoTimeout. Default 30s.
 func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.Timeout = d
 	return p
 }
 
-// NoTimeout leaves executions bounded only by their context. It replaces
-// WithTimeout.
+// NoTimeout leaves executions bounded only by their context and
+// exec.Options.Timeout. It replaces WithTimeout.
 func (p *ProfileBuilder) NoTimeout() *ProfileBuilder {
 	p.profile.Timeout = 0
 	return p
 }
 
-// WithPageTimeout bounds fetching one page. Default none.
+// WithPageTimeout bounds fetching one page; exec.Options.PageTimeout can only
+// shorten it. Default none.
 func (p *ProfileBuilder) WithPageTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.PageTimeout = d
 	return p

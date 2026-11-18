@@ -52,6 +52,51 @@ func TestOptionPrecedence(t *testing.T) {
 	}
 }
 
+// TestOptionTimeoutsTighten checks that Options.Timeout and
+// Options.PageTimeout add a limit to the profile's rather than replace it: the
+// earlier one applies, and a longer or zero option leaves the profile's.
+func TestOptionTimeoutsTighten(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		profile, option time.Duration
+		want            time.Duration
+	}{
+		{name: "OptionEarlier", profile: time.Minute, option: time.Second, want: time.Second},
+		{name: "ProfileEarlier", profile: time.Second, option: time.Minute, want: time.Second},
+		{name: "ZeroOptionKeepsProfile", profile: time.Second, option: 0, want: time.Second},
+		{name: "ZeroProfileTakesOption", profile: 0, option: time.Second, want: time.Second},
+		{name: "BothZero", profile: 0, option: 0, want: 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			profile := settings.InternalDefaultProfile()
+			profile.Timeout, profile.PageTimeout = tc.profile, tc.profile
+			for _, base := range []struct {
+				name    string
+				session *settings.Profile
+				options Options
+			}{
+				{name: "SessionProfile", session: &profile},
+				{name: "OptionsProfile", options: Options{Profile: &profile}},
+			} {
+				options := base.options
+				options.Timeout, options.PageTimeout = cql.Some(tc.option), cql.Some(tc.option)
+				r, err := resolveOptionValues(base.session, options)
+				if err != nil {
+					t.Fatalf("%s: %v", base.name, err)
+				}
+				if r.InternalProfile.Timeout != tc.want || r.InternalProfile.PageTimeout != tc.want {
+					t.Errorf("%s: timeout %v, page timeout %v, want %v", base.name, r.InternalProfile.Timeout, r.InternalProfile.PageTimeout, tc.want)
+				}
+			}
+		})
+	}
+	for _, options := range []Options{{Timeout: cql.Some(-time.Second)}, {PageTimeout: cql.Some(-time.Second)}} {
+		if _, err := resolveOptionValues(nil, options); err == nil {
+			t.Errorf("negative option %+v accepted", options)
+		}
+	}
+}
+
 // TestExecutionDeadline checks that the call's context deadline and the
 // resolved timeout both bound an execution, and the earlier one wins.
 func TestExecutionDeadline(t *testing.T) {

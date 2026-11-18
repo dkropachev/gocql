@@ -54,6 +54,15 @@ const (
 	SerialOmit
 )
 
+// earliestTimeout combines two timeouts, where zero means none: the shorter
+// positive one applies.
+func earliestTimeout(a, b time.Duration) time.Duration {
+	if a <= 0 || b > 0 && b < a {
+		return b
+	}
+	return a
+}
+
 type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
 	// resolved; nil for options resolved for one execution.
@@ -92,11 +101,13 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	default:
 		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
+	// A timeout option adds a bound; it never loosens or removes the
+	// profile's, so the earlier of the two applies and zero adds none.
 	if options.Timeout.Set {
-		p.Timeout = options.Timeout.Value
+		p.Timeout = earliestTimeout(p.Timeout, options.Timeout.Value)
 	}
 	if options.PageTimeout.Set {
-		p.PageTimeout = options.PageTimeout.Value
+		p.PageTimeout = earliestTimeout(p.PageTimeout, options.PageTimeout.Value)
 	}
 	if options.PageSize.Set {
 		p.PageSize = options.PageSize.Value
@@ -110,7 +121,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.Consistency.Set && !settings.InternalValidConsistency(p.Consistency) {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("consistency", "invalid consistency")
 	}
-	if options.Timeout.Set && p.Timeout < 0 || options.PageTimeout.Set && p.PageTimeout < 0 {
+	if options.Timeout.Set && options.Timeout.Value < 0 || options.PageTimeout.Set && options.PageTimeout.Value < 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")
 	}
 	if options.PageSize.Set && p.PageSize <= 0 {
