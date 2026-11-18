@@ -195,7 +195,7 @@ func (s *startupCoordinator) options(ctx context.Context, startupCompleted *atom
 	return nil
 }
 
-// startupOptions builds the STARTUP options the driver always sends.
+// InternalStartupOptions builds the STARTUP options the driver always sends.
 //
 // The application's options go in first so the driver-owned keys below can
 // overwrite them, never the other way round. They describe the driver, the

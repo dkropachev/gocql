@@ -74,7 +74,7 @@ const (
 type InternalTabletsRoutingV1Ext struct {
 }
 
-// Factory function to deserialize and create an `tabletsRoutingV1Ext` instance
+// Factory function to deserialize and create an `InternalTabletsRoutingV1Ext` instance
 // from SUPPORTED message payload.
 func newTabletsRoutingV1Ext(supported map[string][]string) *InternalTabletsRoutingV1Ext {
 	if _, found := supported[InternalTabletsRoutingV1]; found {
@@ -102,7 +102,7 @@ type InternalRateLimitExt struct {
 	InternalRateLimitErrorCode int
 }
 
-// Factory function to deserialize and create an `rateLimitExt` instance
+// Factory function to deserialize and create an `InternalRateLimitExt` instance
 // from SUPPORTED message payload.
 func newRateLimitExt(supported map[string][]string, logger *slog.Logger) *InternalRateLimitExt {
 	logger = logging.Or(logger)
@@ -156,7 +156,7 @@ type InternalLwtAddMetadataMarkExt struct {
 	InternalLwtOptMetaBitMask int
 }
 
-// Factory function to deserialize and create an `lwtAddMetadataMarkExt` instance
+// Factory function to deserialize and create an `InternalLwtAddMetadataMarkExt` instance
 // from SUPPORTED message payload.
 func InternalNewLwtAddMetaMarkExt(supported map[string][]string, logger *slog.Logger) *InternalLwtAddMetadataMarkExt {
 	logger = logging.Or(logger)
@@ -204,7 +204,7 @@ func (ext *InternalLwtAddMetadataMarkExt) InternalName() string {
 type InternalScyllaUseMetadataIDExt struct {
 }
 
-// newScyllaUseMetadataIDExt returns the extension only for a protocol v4 connection,
+// InternalNewScyllaUseMetadataIDExt returns the extension only for a protocol v4 connection,
 // which is the whole of what the extension is: a backport of the v5 result metadata
 // id to v4. Version matters because opting in changes the wire format — EXECUTE
 // carries a [short bytes] result metadata id and RESULT/Prepared answers with one
@@ -331,7 +331,7 @@ func InternalParseSupported(supported map[string][]string, logger *slog.Logger) 
 	return si
 }
 
-// parseCQLProtocolExtensions turns the server's SUPPORTED multimap into the
+// InternalParseCQLProtocolExtensions turns the server's SUPPORTED multimap into the
 // extensions this connection will opt into. version is the connection's protocol
 // version: an extension whose wire effect is version-specific is gated on it here,
 // which is the single point that feeds both the STARTUP opt-in (startupCoordinator.startup)
