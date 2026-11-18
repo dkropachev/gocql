@@ -58,6 +58,11 @@ func NewCompiledOptions(session *implCluster.Core, values Options) (CompiledOpti
 	if sessionProfile {
 		base = owner.InternalProfile
 	}
+	if owner != nil {
+		if err := checkDialectOptions(&owner.config, &values); err != nil {
+			return CompiledOptions{}, err
+		}
+	}
 	resolved, err := resolveOptionValues(base, values)
 	if err != nil {
 		return CompiledOptions{}, err
@@ -155,4 +160,22 @@ func (rt *InternalSessionRuntime) InternalSetProfile(profile *settings.Profile) 
 	rt.InternalProfile = profile
 	rt.defaultOptions, _ = resolveOptionValues(profile, Options{})
 	rt.defaultOptions.templates = newOptionTemplates(&rt.defaultOptions.InternalProfile, &rt.defaultOptions.InternalOptions, rt.config.Keyspace)
+}
+
+// checkDialectOptions rejects values that the dialect of a session with
+// config cannot honor, before anything is sent: a shard, which only ScyllaDB
+// has, and now_in_seconds, which only native protocol 5 carries. The error is
+// an UnsupportedSettingError naming the option and the dialect.
+func checkDialectOptions(config *settings.Config, values *Options) error {
+	if values.ShardID.Set {
+		if err := config.ScyllaOnly("shard ID"); err != nil {
+			return err
+		}
+	}
+	if values.NowInSeconds.Set {
+		if err := config.ProtocolV5Only("now in seconds"); err != nil {
+			return err
+		}
+	}
+	return nil
 }

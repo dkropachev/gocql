@@ -8,6 +8,28 @@ the driver absorbs most of the differences. The ones below change what your
 code sees. Code that serves several dialects should handle both;
 `Session.Dialect` reports which one a session speaks.
 
+## Features of one server
+
+Some settings work on one dialect only. Using one on another dialect fails
+with a `*cqlerr.UnsupportedSettingError` that names the setting and both
+dialects, before anything is sent to the cluster:
+
+| Setting | Works with | On another dialect |
+|---|---|---|
+| `config.WithClientRoutes` | `ScyllaV4` | `gocql.Connect` fails |
+| `config.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `gocql.Connect` fails |
+| `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
+| `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
+
+`exec.Options.Keyspace` naming a keyspace other than the session's also needs
+`CassandraV5`, unless the statement names its keyspace itself; on protocol 4
+the execution fails with a `*cql.ValidationError`.
+
+Other ScyllaDB features need no setting and do nothing on Cassandra: shard
+awareness (`WithConnectionsPerShard` and the shard-aware port settings treat a
+Cassandra node as one shard), tablet routing, CDC log table partitioning,
+rate-limit errors and client route events.
+
 ## Lightweight transactions
 
 Decode conditional results with `cql.CASRows(decoder)` into

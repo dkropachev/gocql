@@ -58,11 +58,19 @@ type Options struct {
 	Timestamp cql.Option[int64]
 	// PageSize is the rows per page; cql.Unpaged requests the whole result
 	// in one response.
-	PageSize     cql.Option[int32]
+	PageSize cql.Option[int32]
+	// NowInSeconds sets the server's current time, in seconds since the Unix
+	// epoch, for TTL and expiry. Only native protocol 5 carries it: on
+	// another dialect compiling or executing the options fails with a
+	// cqlerr.UnsupportedSettingError, and nothing is sent.
 	NowInSeconds cql.Option[int32]
-	ShardID      cql.Option[uint32]
-	Consistency  cql.Option[cql.Consistency]
-	HostID       cql.Option[cql.UUID]
+	// ShardID sends the request on a connection of this shard of the node
+	// HostID names; it requires HostID. Only ScyllaDB has shards: on another
+	// dialect compiling or executing the options fails with a
+	// cqlerr.UnsupportedSettingError, and nothing is sent.
+	ShardID     cql.Option[uint32]
+	Consistency cql.Option[cql.Consistency]
+	HostID      cql.Option[cql.UUID]
 	// SerialConsistency overrides the profile's serial consistency of
 	// conditional statements. The zero value, SerialInherit, keeps it.
 	SerialConsistency SerialOverride

@@ -643,6 +643,9 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	}
 	request.options = resolved
 	values := &resolved.InternalOptions
+	if err := checkDialectOptions(&rt.config, values); err != nil {
+		return nil, nil, nil, err
+	}
 	if query := request.query; query != nil {
 		request.responseDest = &query.response
 	}
