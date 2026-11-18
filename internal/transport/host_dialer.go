@@ -61,3 +61,9 @@ type DialedHostStorage struct {
 }
 
 func DialedHostData(v *DialedHost) *DialedHostStorage { return &v.privateStorage }
+
+// InternalLegacyDialer is the net.Dialer-shaped dialer a v1-style
+// configuration supplies.
+type InternalLegacyDialer interface {
+	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
+}

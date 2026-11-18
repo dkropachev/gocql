@@ -70,7 +70,7 @@ const (
 // This extension, if enabled (properly negotiated), allows Scylla server
 // to send a tablet information in `custom_payload`.
 //
-// Implements cqlProtocolExtension interface.
+// Implements InternalCqlProtocolExtension.
 type InternalTabletsRoutingV1Ext struct {
 }
 
@@ -97,7 +97,7 @@ func (ext *InternalTabletsRoutingV1Ext) InternalName() string {
 // This extension, if enabled (properly negotiated), allows Scylla server
 // to send a special kind of error.
 //
-// Implements cqlProtocolExtension interface.
+// Implements InternalCqlProtocolExtension.
 type InternalRateLimitExt struct {
 	InternalRateLimitErrorCode int
 }
@@ -151,7 +151,7 @@ func (ext *InternalRateLimitExt) InternalName() string {
 // order for these queries, which can reduce contention over hot keys and thus
 // increase LWT performance.
 //
-// Implements cqlProtocolExtension interface.
+// Implements InternalCqlProtocolExtension.
 type InternalLwtAddMetadataMarkExt struct {
 	InternalLwtOptMetaBitMask int
 }
@@ -221,12 +221,12 @@ func InternalNewScyllaUseMetadataIDExt(supported map[string][]string, version by
 	return nil
 }
 
-// name implements cqlProtocolExtension.
+// InternalName implements InternalCqlProtocolExtension.
 func (ext *InternalScyllaUseMetadataIDExt) InternalName() string {
 	return InternalScyllaUseMetadataID
 }
 
-// serialize implements cqlProtocolExtension.
+// InternalSerialize implements InternalCqlProtocolExtension.
 func (ext *InternalScyllaUseMetadataIDExt) InternalSerialize() map[string]string {
 	return map[string]string{
 		InternalScyllaUseMetadataID: "",

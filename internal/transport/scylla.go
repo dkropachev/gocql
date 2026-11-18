@@ -165,12 +165,6 @@ func InternalScyllaShardForSourcePort(sourcePort uint16, shardCount int) int {
 	return int(sourcePort) % shardCount
 }
 
-// InternalLegacyDialer is the net.Dialer-shaped dialer a v1-style
-// configuration supplies.
-type InternalLegacyDialer interface {
-	DialContext(ctx context.Context, network, addr string) (net.Conn, error)
-}
-
 // ShardDialer is like HostDialer but is shard-aware.
 // If the driver wants to connect to a specific shard, it will call DialShard,
 // otherwise it will call DialHost.
