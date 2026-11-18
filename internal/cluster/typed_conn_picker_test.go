@@ -75,7 +75,7 @@ func TestTypedConnPicker(t *testing.T) {
 	})
 
 	t.Run("ShardOf", func(t *testing.T) {
-		features := endpoint.InternalParseSupported(validSupported(), logging.Nop())
+		features := transport.InternalParseSupported(validSupported(), logging.Nop())
 		options := settings.DefaultConfig("localhost").Pool
 		p := codecTestMust(implPool.InternalNewTypedConnPicker(&transport.Conn{InternalScyllaSupported: features}, options))
 		if p.InternalShardOf(math.MinInt64) != 0 || p.InternalShardOf(math.MaxInt64) != 11 {
@@ -83,12 +83,12 @@ func TestTypedConnPicker(t *testing.T) {
 		}
 		// The full32-bit LWT mask remains a wire bitset on both native architectures.
 		values := validSupported()
-		values[endpoint.InternalLwtAddMetadataMarkKey] = []string{"LWT_OPTIMIZATION_META_BIT_MASK=2147483648"}
+		values[transport.InternalLwtAddMetadataMarkKey] = []string{"LWT_OPTIMIZATION_META_BIT_MASK=2147483648"}
 		if err := transport.InternalValidateV2Supported(values, options); err != nil {
 			t.Fatal(err)
 		}
-		ext := endpoint.InternalNewLwtAddMetaMarkExt(values, logging.Nop())
-		if ext == nil || ext.InternalSerialize()[endpoint.InternalLwtAddMetadataMarkKey] != "LWT_OPTIMIZATION_META_BIT_MASK="+strconv.FormatUint(1<<31, 10) {
+		ext := transport.InternalNewLwtAddMetaMarkExt(values, logging.Nop())
+		if ext == nil || ext.InternalSerialize()[transport.InternalLwtAddMetadataMarkKey] != "LWT_OPTIMIZATION_META_BIT_MASK="+strconv.FormatUint(1<<31, 10) {
 			t.Fatal("high LWT bit did not roundtrip")
 		}
 	})

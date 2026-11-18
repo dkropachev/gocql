@@ -13,7 +13,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -655,7 +654,7 @@ func shardAwareEnabled(cfg *InternalClusterSettings, typed *connectivity.Config)
 	if cfg.HostDialer == nil {
 		return true
 	}
-	_, ok := cfg.HostDialer.(endpoint.ShardDialer)
+	_, ok := cfg.HostDialer.(transport.ShardDialer)
 	return ok
 }
 

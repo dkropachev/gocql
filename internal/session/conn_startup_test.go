@@ -183,7 +183,7 @@ func TestConnStartup(t *testing.T) {
 		t.Run("ScyllaUseMetadataID", func(t *testing.T) {
 			c := &transport.Conn{
 				InternalVersion:      implProtocol.ProtoVersion4,
-				InternalCqlProtoExts: []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
+				InternalCqlProtoExts: []transport.InternalCqlProtocolExtension{&transport.InternalScyllaUseMetadataIDExt{}},
 			}
 			c.InternalInitFramerCache()
 
@@ -257,7 +257,7 @@ func TestConnStartup(t *testing.T) {
 
 			t.Run("application options are kept", func(t *testing.T) {
 				m := transport.InternalStartupOptions(cqlVersion, driverName, driverVersion,
-					endpoint.NewStaticApplicationInfo("app", "9.9.9", "client-id"), nil, sessionID, false)
+					transport.NewStaticApplicationInfo("app", "9.9.9", "client-id"), nil, sessionID, false)
 
 				require.Equal(t, "app", m["APPLICATION_NAME"])
 				require.Equal(t, "9.9.9", m["APPLICATION_VERSION"])
@@ -485,7 +485,7 @@ func TestConnStartup(t *testing.T) {
 			for _, tt := range []struct {
 				name        string
 				proto       byte
-				exts        []endpoint.InternalCqlProtocolExtension
+				exts        []transport.InternalCqlProtocolExtension
 				wantTracked bool
 				wantExt     bool
 			}{
@@ -493,7 +493,7 @@ func TestConnStartup(t *testing.T) {
 				{
 					name:        "v4 with the extension",
 					proto:       implProtocol.ProtoVersion4,
-					exts:        []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
+					exts:        []transport.InternalCqlProtocolExtension{&transport.InternalScyllaUseMetadataIDExt{}},
 					wantTracked: true,
 					wantExt:     true,
 				},
@@ -508,7 +508,7 @@ func TestConnStartup(t *testing.T) {
 					// v4 only — but initCache must not read the two mechanisms as exclusive.
 					name:        "v5 with the extension",
 					proto:       implProtocol.ProtoVersion5,
-					exts:        []endpoint.InternalCqlProtocolExtension{&endpoint.InternalScyllaUseMetadataIDExt{}},
+					exts:        []transport.InternalCqlProtocolExtension{&transport.InternalScyllaUseMetadataIDExt{}},
 					wantTracked: true,
 					wantExt:     true,
 				},

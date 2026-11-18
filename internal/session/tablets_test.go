@@ -29,7 +29,6 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
@@ -89,18 +88,18 @@ func TestTablets(t *testing.T) {
 
 		t.Run("NegotiationVersionAndFailedExecute", func(t *testing.T) {
 			for _, both := range []bool{false, true} {
-				supported := map[string][]string{endpoint.InternalTabletsRoutingV1: {}}
+				supported := map[string][]string{transport.InternalTabletsRoutingV1: {}}
 				if both {
-					supported[endpoint.InternalTabletsRoutingV2] = []string{}
+					supported[transport.InternalTabletsRoutingV2] = []string{}
 				}
-				exts := endpoint.InternalTypedTabletExtensions(endpoint.InternalParseCQLProtocolExtensions(supported, 4, logging.Nop()), supported)
+				exts := transport.InternalTypedTabletExtensions(transport.InternalParseCQLProtocolExtensions(supported, 4, logging.Nop()), supported)
 				c := &transport.Conn{InternalVersion: 4, InternalCqlProtoExts: exts}
 				c.InternalInitFramerCache()
 				if c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2 != both || c.InternalFramers.InternalDefaults.InternalTabletsRoutingV1 == both {
 					t.Fatal("V2 did not take precedence")
 				}
 				for _, ext := range exts {
-					if _, ok := ext.InternalSerialize()[endpoint.InternalTabletsRoutingV1]; ok && both {
+					if _, ok := ext.InternalSerialize()[transport.InternalTabletsRoutingV1]; ok && both {
 						t.Fatal("both extensions negotiated")
 					}
 				}

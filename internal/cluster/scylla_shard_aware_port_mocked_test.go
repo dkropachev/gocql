@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -100,7 +99,7 @@ func startServerWithShardAwarePort(t testing.TB, useTLS bool) (makeCluster makeC
 		return shardAwareTestCluster{
 			useTLS: useTLS,
 			port:   shardTestContactPort(cluster.Hosts, uint16(cluster.Port)),
-			connect: func(_ context.Context, dialer endpoint.InternalLegacyDialer) (*Core, error) {
+			connect: func(_ context.Context, dialer transport.InternalLegacyDialer) (*Core, error) {
 				cluster.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
 				cluster.Dialer = dialer
 				return cluster.Open()

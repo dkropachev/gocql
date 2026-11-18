@@ -6,6 +6,8 @@ package cluster
 import (
 	"log/slog"
 
+	"github.com/scylladb/gocql/v2/internal/transport"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
@@ -44,13 +46,13 @@ type fakeHostSelectionPolicy struct {
 // *scyllaDialer the driver substitutes when no HostDialer is configured.
 type fakeShardDialer struct{ fakeHostDialer }
 
-func (fakeShardDialer) DialShard(ctx context.Context, host *endpoint.HostInfo, shardID, nrShards int) (*endpoint.DialedHost, error) {
+func (fakeShardDialer) DialShard(ctx context.Context, host *endpoint.HostInfo, shardID, nrShards int) (*transport.DialedHost, error) {
 	return nil, nil
 }
 
 type fakeHostDialer struct{}
 
-func (fakeHostDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (fakeHostDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*transport.DialedHost, error) {
 	return nil, nil
 }
 

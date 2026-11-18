@@ -82,10 +82,10 @@ type retiredHostInfo = implEndpoint.HostInfo
 const retiredNodeUp = implEndpoint.NodeUp
 
 func retiredScyllaGetSourcePort(a0 context.Context) uint16 {
-	return implEndpoint.ScyllaGetSourcePort(a0)
+	return implTransport.ScyllaGetSourcePort(a0)
 }
 
-type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
+type retiredScyllaShardAwareDialer = implTransport.ScyllaShardAwareDialer
 
 type cassVersion = implEndpoint.InternalCassVersion
 
@@ -93,7 +93,7 @@ func defaultProfile() config.Profile {
 	return implSettings.InternalProfileToPublic[config.Profile](implSettings.InternalDefaultProfile())
 }
 
-type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
+type scyllaSourcePortCtx = implTransport.InternalScyllaSourcePortCtx
 
 type retiredSnappyCompressor = wirecompress.SnappyCompressor
 

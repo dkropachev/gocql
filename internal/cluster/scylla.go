@@ -4,13 +4,13 @@
 package cluster
 
 import (
-	"github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalTabletsRoutingV1Ext{}
+var _ transport.InternalCqlProtocolExtension = &transport.InternalTabletsRoutingV1Ext{}
 
-var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalRateLimitExt{}
+var _ transport.InternalCqlProtocolExtension = &transport.InternalRateLimitExt{}
 
-var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalLwtAddMetadataMarkExt{}
+var _ transport.InternalCqlProtocolExtension = &transport.InternalLwtAddMetadataMarkExt{}
 
-var _ endpoint.InternalCqlProtocolExtension = &endpoint.InternalScyllaUseMetadataIDExt{}
+var _ transport.InternalCqlProtocolExtension = &transport.InternalScyllaUseMetadataIDExt{}

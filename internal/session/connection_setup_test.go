@@ -269,7 +269,7 @@ func TestConnectionSetup(t *testing.T) {
 				t.Fatal(err)
 			}
 			result.Conn.Close()
-			if targeted != 2 || ordinary != 1 || implEndpoint.DialedHostData(result).InternalShardTarget.Set {
+			if targeted != 2 || ordinary != 1 || transport.DialedHostData(result).InternalShardTarget.Set {
 				t.Fatal("range exhaustion fallback", targeted, ordinary)
 			}
 			c := &transport.Conn{InternalScyllaSupported: *func() *endpoint.ScyllaConnectionFeatures {
@@ -468,7 +468,7 @@ func TestConnectionSetup(t *testing.T) {
 			if err = <-accepted; err != nil {
 				t.Fatal(err)
 			}
-			if !selected.ShardID.Set || selected.ShardID.Value != 1 || !selected.LocalAddress.IsValid() || selected.LocalAddress.Port()%2 != 1 || selected.LocalAddress.Port() < config.Pool.AdvancedShardAwareness.SourcePortStart || !implEndpoint.DialedHostData(conn).InternalShardTarget.Set {
+			if !selected.ShardID.Set || selected.ShardID.Value != 1 || !selected.LocalAddress.IsValid() || selected.LocalAddress.Port()%2 != 1 || selected.LocalAddress.Port() < config.Pool.AdvancedShardAwareness.SourcePortStart || !transport.DialedHostData(conn).InternalShardTarget.Set {
 				t.Fatal("shard target/source lost", selected)
 			}
 		})

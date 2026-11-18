@@ -25,12 +25,12 @@ func (c *Conn) InternalIsScyllaConn() bool {
 }
 
 type InternalScyllaDialer struct {
-	InternalDialer    implEndpoint.InternalLegacyDialer
+	InternalDialer    InternalLegacyDialer
 	InternalLogger    *slog.Logger
 	InternalTlsConfig *tls.Config
 }
 
-func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
+func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*DialedHost, error) {
 	ip := host.ConnectAddress()
 	port := host.Port()
 
@@ -53,7 +53,7 @@ func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint
 	return WrapTLS(ctx, conn, addr, sd.InternalTlsConfig)
 }
 
-func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shardID, nrShards int) (*implEndpoint.DialedHost, error) {
+func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shardID, nrShards int) (*DialedHost, error) {
 	ip := host.ConnectAddress()
 	port := host.Port()
 
@@ -96,7 +96,7 @@ func (sd *InternalScyllaDialer) dialShardAware(ctx context.Context, addr, shardA
 			return sd.InternalDialer.DialContext(ctx, "tcp", addr)
 		}
 
-		ctxWithPort := context.WithValue(ctx, implEndpoint.InternalScyllaSourcePortCtx{}, port)
+		ctxWithPort := context.WithValue(ctx, InternalScyllaSourcePortCtx{}, port)
 		conn, err := sd.InternalDialer.DialContext(ctxWithPort, "tcp", shardAwareAddr)
 
 		if isLocalAddrInUseErr(err) {
@@ -163,4 +163,61 @@ func (spi *scyllaPortIterator) Next() (uint16, bool) {
 
 func InternalScyllaShardForSourcePort(sourcePort uint16, shardCount int) int {
 	return int(sourcePort) % shardCount
+}
+
+// ShardDialer is like HostDialer but is shard-aware.
+// If the driver wants to connect to a specific shard, it will call DialShard,
+// otherwise it will call DialHost.
+type ShardDialer interface {
+	HostDialer
+
+	// DialShard establishes a connection to the specified shard ID out of nrShards.
+	// The returned connection must be directly usable for CQL protocol,
+	// specifically DialShard is responsible also for setting up the TLS session if needed.
+	DialShard(ctx context.Context, host *implEndpoint.HostInfo, shardID, nrShards int) (*DialedHost, error)
+}
+
+// ScyllaShardAwareDialer wraps a net.Dialer, but uses a source port specified by gocql when connecting.
+//
+// Unlike in the case standard native transport ports, gocql can choose which shard will handle
+// a new connection by connecting from a specific source port. If you are using your own net.Dialer
+// in clusterSettings, you can use ScyllaShardAwareDialer to "upgrade" it so that it connects
+// from the source port chosen by gocql.
+//
+// Please note that ScyllaShardAwareDialer overwrites the LocalAddr field in order to choose
+// the right source port for connection.
+type ScyllaShardAwareDialer struct {
+	net.Dialer
+}
+
+func (d *ScyllaShardAwareDialer) DialContext(ctx context.Context, network, addr string) (conn net.Conn, err error) {
+	sourcePort := ScyllaGetSourcePort(ctx)
+	if sourcePort == 0 {
+		return d.Dialer.DialContext(ctx, network, addr)
+	}
+	dialerWithLocalAddr := d.Dialer
+	dialerWithLocalAddr.LocalAddr, err = net.ResolveTCPAddr(network, fmt.Sprintf(":%d", sourcePort))
+	if err != nil {
+		return nil, err
+	}
+
+	return dialerWithLocalAddr.DialContext(ctx, network, addr)
+}
+
+type InternalScyllaSourcePortCtx struct{}
+
+// ScyllaGetSourcePort returns the source port that should be used when connecting to a node.
+//
+// Unlike in the case standard native transport ports, gocql can choose which shard will handle
+// a new connection at the shard-aware port by connecting from a specific source port. Therefore,
+// if you are using a custom Dialer and your nodes expose shard-aware ports, your dialer should
+// use the source port specified by gocql.
+//
+// If this function returns 0, then your dialer can use any source port.
+//
+// If you aren't using a custom dialer, gocql will use a default one which uses appropriate source port.
+// If you are using net.Dialer, consider wrapping it in a gocql.ScyllaShardAwareDialer.
+func ScyllaGetSourcePort(ctx context.Context) uint16 {
+	sourcePort, _ := ctx.Value(InternalScyllaSourcePortCtx{}).(uint16)
+	return sourcePort
 }

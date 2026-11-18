@@ -162,13 +162,13 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 	return nil
 }
 
-func (d *InternalV2TLSHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*implEndpoint.DialedHost, error) {
+func (d *InternalV2TLSHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*DialedHost, error) {
 	return d.dial(ctx, host, -1, 0)
 }
-func (d *InternalV2TLSHostDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*implEndpoint.DialedHost, error) {
+func (d *InternalV2TLSHostDialer) DialShard(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*DialedHost, error) {
 	return d.dial(ctx, host, shard, shards)
 }
-func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*implEndpoint.DialedHost, error) {
+func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.HostInfo, shard, shards int) (*DialedHost, error) {
 	epoch := implEndpoint.InternalHostInfoTransportEpoch(host)
 	sharderEpoch := implEndpoint.InternalHostInfoSharderEpoch(host)
 	snapshot, err := implEndpoint.SnapshotHost(host)
@@ -188,11 +188,11 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 		if e != nil {
 			return nil, e
 		}
-		return func() *implEndpoint.DialedHost {
-			opaqueStorageValue := new(implEndpoint.DialedHost)
+		return func() *DialedHost {
+			opaqueStorageValue := new(DialedHost)
 			opaqueStorageValue.Conn = c
-			implEndpoint.DialedHostData(opaqueStorageValue).InternalTargetEpoch = epoch
-			implEndpoint.DialedHostData(opaqueStorageValue).InternalSharderEpoch = sharderEpoch
+			DialedHostData(opaqueStorageValue).InternalTargetEpoch = epoch
+			DialedHostData(opaqueStorageValue).InternalSharderEpoch = sharderEpoch
 			return opaqueStorageValue
 		}(), nil
 	}
@@ -269,10 +269,10 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	if err != nil {
 		return nil, err
 	}
-	implEndpoint.DialedHostData(result).InternalShardTarget = selectedShard
-	implEndpoint.DialedHostData(result).InternalTargetEpoch = epoch
-	implEndpoint.DialedHostData(result).InternalSharderEpoch = sharderEpoch
-	implEndpoint.DialedHostData(result).InternalValidateTarget = func(ctx context.Context) error {
+	DialedHostData(result).InternalShardTarget = selectedShard
+	DialedHostData(result).InternalTargetEpoch = epoch
+	DialedHostData(result).InternalSharderEpoch = sharderEpoch
+	DialedHostData(result).InternalValidateTarget = func(ctx context.Context) error {
 		current, err := implEndpoint.SnapshotHost(host)
 		if err != nil {
 			return err

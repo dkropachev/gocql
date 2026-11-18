@@ -23,6 +23,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/internal/transport"
+
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
@@ -36,7 +38,7 @@ type boundedOpeningDialer struct {
 	release            chan struct{}
 }
 
-func (d *boundedOpeningDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (d *boundedOpeningDialer) DialHost(ctx context.Context, host *endpoint.HostInfo) (*transport.DialedHost, error) {
 	active := d.active.Add(1)
 	defer d.active.Add(-1)
 	d.calls.Add(1)

@@ -186,10 +186,10 @@ columns of single statements with other conditions on ScyllaDB.
 
 ScyllaDB marks conditional statements in prepared metadata through the
 `SCYLLA_LWT_ADD_METADATA_MARK` extension, and the driver reads it as the
-statement kind (`internal/endpoint/scylla.go`). Cassandra has no such flag, so
-the kind is whatever `Statement.Kind` declares. The driver never parses CQL
-to infer it (`internal/cqltype/statement_kind.go`). `Exec` and `ExecBatch`
-reject a known conditional request before sending it
+statement kind (`internal/transport/supported.go`). Cassandra has no such
+flag, so the kind is whatever `Statement.Kind` declares. The driver never
+parses CQL to infer it (`internal/cqltype/statement_kind.go`). `Exec` and
+`ExecBatch` reject a known conditional request before sending it
 (`cqlerr.ErrConditionalExec`). On Cassandra with an undeclared kind, the
 request is sent and its result columns are rejected after the response.
 A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read,
@@ -228,7 +228,7 @@ negotiation or metadata does not drop one.
 |---|---|
 | Highest protocol version: Cassandra v5, ScyllaDB v4 plus extensions | The dialect fixes the version (`CassandraV5`, `ScyllaV4`); nothing is negotiated |
 | Result metadata ID: v5 on Cassandra, v4 via `SCYLLA_USE_METADATA_ID` on ScyllaDB | `internal/transport/conn.go`, `internal/protocol/framer.go` |
-| Shard information in SUPPORTED (`SCYLLA_SHARD`, `SCYLLA_NR_SHARDS`, `SCYLLA_SHARD_AWARE_PORT` and others): ScyllaDB only | `internal/endpoint/scylla.go` |
+| Shard information in SUPPORTED (`SCYLLA_SHARD`, `SCYLLA_NR_SHARDS`, `SCYLLA_SHARD_AWARE_PORT` and others): ScyllaDB only | `internal/transport/supported.go` |
 | Tablet routing hint in the custom payload (`tablets-routing-v1`): ScyllaDB only | `internal/tablets/hint_parser.go` |
 | `CLIENT_ROUTES_CHANGE` event: ScyllaDB only | Client routes |
 | Peer table: `system.peers_v2` on Cassandra 4.0+, `system.peers` only on ScyllaDB | `internal/transport/dial.go` |

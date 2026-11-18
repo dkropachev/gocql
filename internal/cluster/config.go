@@ -84,7 +84,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	}
 	legacy.DriverName = config.Identity.DriverName
 	legacy.DriverVersion = config.Identity.DriverVersion
-	legacy.ApplicationInfo = implEndpoint.NewStaticApplicationInfo(config.Identity.ApplicationName, config.Identity.ApplicationVersion, config.Identity.ClientID)
+	legacy.ApplicationInfo = transport.NewStaticApplicationInfo(config.Identity.ApplicationName, config.Identity.ApplicationVersion, config.Identity.ClientID)
 	if config.TLS != nil {
 		legacy.SslOpts = &transport.SslOptions{Config: config.TLS, EnableHostVerification: !config.TLS.InsecureSkipVerify}
 	}

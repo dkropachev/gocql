@@ -5,11 +5,14 @@
 //
 // It contains HostInfo and its state, the node's addresses and how they are
 // resolved and translated (contact points, DNS, address translators), the
-// node's ScyllaDB features, and the token and partitioner types a node's
+// node's ScyllaDB features as values (ScyllaHostFeatures,
+// ScyllaConnectionFeatures), and the token and partitioner types a node's
 // tokens are expressed in.
 //
-// It must not contain anything that dials or talks to a node: sockets, TLS,
-// the shard-aware source port and connection startup belong in
+// It must not contain anything that dials or talks to a node: dialers
+// (HostDialer, DialedHost, the shard-aware dialer and source port), TLS,
+// SUPPORTED parsing, the CQL protocol extensions, STARTUP options
+// (ApplicationInfo) and the rest of connection startup belong in
 // internal/transport. It must not contain pools (internal/pool) or the
 // cluster-wide view of the nodes and their placement (internal/cluster).
 package endpoint

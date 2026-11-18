@@ -155,8 +155,8 @@ func (w *tlsCoalescedRecorder) Write(p []byte) (int, error) {
 
 type fixedHostDialer struct{ conn net.Conn }
 
-func (d fixedHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
-	return &endpoint.DialedHost{Conn: d.conn}, nil
+func (d fixedHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*transport.DialedHost, error) {
+	return &transport.DialedHost{Conn: d.conn}, nil
 }
 
 type wireCounter struct {
