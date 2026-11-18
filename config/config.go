@@ -333,7 +333,8 @@ func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
 }
 
 // WithMaxExcessPerShard caps connections opened beyond the target per shard.
-// It applies to WithConnectionsPerShard pools only. Default 2.
+// It applies to WithConnectionsPerShard pools only. A Cassandra node counts
+// as one shard, so there it caps the excess per node. Default 2.
 func (b *ConfigBuilder) WithMaxExcessPerShard(n int) *ConfigBuilder {
 	b.maxExcessChosen = true
 	b.settings.Pool.MaxExcessPerShard = n
@@ -361,7 +362,7 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 // Calling it turns it on under WithClientRoutes; do that only when every route
 // endpoint forwards to ScyllaDB's Proxy Protocol v2 shard-aware listener and
 // passes the client's source port, since NAT rewrites the port and loses the
-// shard.
+// shard. Cassandra has no shard-aware port, so there it has no effect.
 func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
 	b.shardAwarenessChosen = true
 	b.settings.Pool.AdvancedShardAwareness = implSettings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: first, SourcePortEnd: last}
@@ -376,7 +377,8 @@ func (b *ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder {
 
 // NoAdvancedShardAwareness connects through the regular port only and lets
 // the node assign the shard; the pool keeps dialing until every shard is
-// covered. It replaces WithAdvancedShardAwareness.
+// covered. It replaces WithAdvancedShardAwareness. It has no effect on
+// Cassandra, which has no shards.
 func (b *ConfigBuilder) NoAdvancedShardAwareness() *ConfigBuilder {
 	b.shardAwarenessChosen = true
 	b.settings.Pool.AdvancedShardAwareness.Enabled = false
@@ -420,7 +422,9 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 // WithClientRoutes connects through ScyllaDB client routes built with
 // NewClientRoutes. Each call replaces the complete client routes setting; the
 // zero ClientRoutes removes them. Build rejects them together with
-// WithAddressTranslator. Default none.
+// WithAddressTranslator. Only ScyllaDB has client routes: Connect with a
+// Cassandra dialect fails with a cqlerr.UnsupportedSettingError before it
+// dials. Default none.
 func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
 	b.routes = routes
 	return b
@@ -457,8 +461,10 @@ func (b *ConfigBuilder) WithMetadataKeyspaces(keyspaces ...string) *ConfigBuilde
 
 // WithPartitioner sets the token partitioner for the partitioner class name,
 // next to the built-in Murmur3 and CDC partitioners; a built-in name is
-// replaced. Build rejects an empty name or a nil partitioner. Default the
-// built-in partitioners only.
+// replaced. A table's partitioner class picks the partitioner, so one that no
+// table names, such as the CDC partitioner on Cassandra, is never used.
+// Build rejects an empty name or a nil partitioner. Default the built-in
+// partitioners only.
 func (b *ConfigBuilder) WithPartitioner(name string, partitioner routing.TokenPartitioner) *ConfigBuilder {
 	if b.settings.Partitioners == nil {
 		b.settings.Partitioners = make(map[string]routing.TokenPartitioner)
@@ -482,8 +488,9 @@ func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 
 // WithMetadataServerTimeout asks ScyllaDB to bound metadata queries with USING
 // TIMEOUT, in whole milliseconds; zero sends none. Cassandra has no USING
-// TIMEOUT, so a positive value fails its metadata queries with an
-// UnsupportedSettingError. Default 30s on ScyllaDB, none on Cassandra.
+// TIMEOUT, so Connect with a Cassandra dialect fails on a positive value with
+// a cqlerr.UnsupportedSettingError before it dials. Default 30s on ScyllaDB,
+// none on Cassandra.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.ServerTimeout = cql.Some(d)
 	return b

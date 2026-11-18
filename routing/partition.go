@@ -46,7 +46,9 @@ type TokenPartitioner interface {
 // the default.
 var Murmur3TokenPartitioner TokenPartitioner = murmur3Partitioner{}
 
-// CDCTokenPartitioner is the partitioner of ScyllaDB's CDC log tables.
+// CDCTokenPartitioner is the partitioner of ScyllaDB's CDC log tables. The
+// driver picks it for a table whose partitioner class names it, so on
+// Cassandra, which has no such tables, it is never used.
 var CDCTokenPartitioner TokenPartitioner = cdcPartitioner{}
 
 type murmur3Partitioner struct{}

@@ -8,6 +8,32 @@ the driver absorbs most of the differences. The ones below change what your
 code sees. Code that serves several dialects should handle both;
 `Session.Dialect` reports which one a session speaks.
 
+## Features of one server
+
+Some settings work on one dialect only. Using one on another dialect fails
+with a `*cqlerr.UnsupportedSettingError` that names the setting and both
+dialects, before anything is sent to the cluster:
+
+| Setting | Works with | On another dialect |
+|---|---|---|
+| `config.WithClientRoutes` | `ScyllaV4` | `gocql.Connect` fails |
+| `config.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `gocql.Connect` fails |
+| `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
+| `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
+
+`exec.Options.Keyspace` or `exec.PrepareOptions.Keyspace` naming a keyspace
+other than the session's also needs `CassandraV5`, unless the statement names
+its keyspace itself; on protocol 4 the execution or the preparation fails with
+a `*cql.ValidationError` before it is sent. A custom routing policy that routes
+to a shard other than 0 finds no connection on Cassandra, which has no shards.
+
+Other ScyllaDB features do nothing on Cassandra, where they have nothing to
+act on, and fail nothing: the shard-aware port settings, tablet routing
+(including `routing.Options.LeaderAware`), CDC log table partitioning,
+rate-limit errors and client route events. `WithConnectionsPerShard` and
+`WithMaxExcessPerShard` count a Cassandra node as one shard, so there they
+apply per node.
+
 ## Lightweight transactions
 
 Decode conditional results with `cql.CASRows(decoder)` into

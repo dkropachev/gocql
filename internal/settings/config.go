@@ -153,6 +153,16 @@ func (config Config) Validate() error {
 	if config.Server == ServerScylla && config.Protocol == 5 {
 		return &UnsupportedSettingError{Setting: "protocol", Reason: "ScyllaDB speaks native protocol 4"}
 	}
+	if config.ClientRoutes != nil {
+		if err := ScyllaOnly(&config, "client routes"); err != nil {
+			return err
+		}
+	}
+	if config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value > 0 {
+		if err := ScyllaOnly(&config, "metadata server timeout"); err != nil {
+			return err
+		}
+	}
 	if config.Port == 0 {
 		return cqltype.TypeValidation("port", "must not be zero")
 	}

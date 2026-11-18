@@ -28,7 +28,8 @@ type Options struct {
 	// a fixed order per token.
 	ShuffleReplicas bool
 	// LeaderAware routes requests of strongly consistent tables to the
-	// tablet's leader first.
+	// tablet's leader first. Only ScyllaDB has tablets; on Cassandra it has
+	// no effect.
 	LeaderAware bool
 }
 
