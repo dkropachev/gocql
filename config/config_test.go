@@ -7,6 +7,8 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
+	"net"
 	"net/netip"
 	"reflect"
 	"strings"
@@ -546,6 +548,30 @@ func TestConfigBuilder(t *testing.T) {
 		if strings.Contains(s, "secret-password") || !strings.Contains(s, "auth=true") {
 			t.Fatalf("String() = %q", s)
 		}
+		secrets := []string{"secret-password", "secret-user", "secret-cert-bytes", "secret-key", "secret-server-name", "secret-route-id", "secret-proxy", "secret-dialer-token", "secret-translator"}
+		tlsConfig := &tls.Config{ServerName: "secret-server-name", Certificates: []tls.Certificate{{Certificate: [][]byte{[]byte("secret-cert-bytes")}, PrivateKey: "secret-key"}}}
+		dialer := secretDialer{token: "secret-dialer-token"}
+		for name, b := range map[string]*ConfigBuilder{
+			"TLS":       New("h").WithTLS(tlsConfig),
+			"TLSSource": New("h").WithTLSSource(staticTLS{config: tlsConfig}),
+			"Everything": New("h").WithAuth(auth.Password("secret-user", "secret-password")).WithTLS(tlsConfig).WithDialer(dialer).
+				WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("secret-route-id", "secret-proxy"))).WithApplication("app", "1"),
+			"Translator": New("h").WithDialer(dialer).WithAddressTranslator(secretTranslator("secret-translator")),
+		} {
+			t.Run(name, func(t *testing.T) {
+				c := mustBuildConfig(t, b)
+				for _, out := range []string{c.String(), fmt.Sprint(c), fmt.Sprintf("%v %+v %#v %s", c, c, c, c)} {
+					for _, secret := range secrets {
+						if strings.Contains(out, secret) {
+							t.Errorf("formatted Config leaks %q: %s", secret, out)
+						}
+					}
+				}
+				if s := c.String(); name != "Translator" && !strings.Contains(s, "tls=true") {
+					t.Errorf("String() = %q, want tls=true", s)
+				}
+			})
+		}
 		if (Config{}).String() != "config.Config{}" {
 			t.Fatal("zero Config String")
 		}
@@ -562,6 +588,19 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := NewProfile().WithSerialConsistency(cql.Quorum).Build(); err == nil {
 			t.Fatal("non-serial serial consistency accepted")
 		}
+	})
+}
+
+type secretDialer struct{ token string }
+
+func (secretDialer) DialContext(context.Context, endpoint.DialTarget) (net.Conn, error) {
+	return nil, errors.New("not dialed")
+}
+
+func secretTranslator(secret string) endpoint.Translator {
+	return endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+		_ = secret
+		return addr, nil
 	})
 }
 
