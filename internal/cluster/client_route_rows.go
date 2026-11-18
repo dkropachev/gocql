@@ -322,9 +322,9 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 	var err error
 	switch {
 	case task.InternalPairs != nil:
-		rows, err = getV2RoutesPairs(ctx, p.privateStorage.c, p.privateStorage.cfg.TableName, task.InternalPairs, p.privateStorage.pickTLSPorts)
+		rows, err = getV2RoutesPairs(ctx, p.privateStorage.c, clientRoutesTable, task.InternalPairs, p.privateStorage.pickTLSPorts)
 	case task.InternalConnectionIDs != nil:
-		rows, err = getV2RoutesConnections(ctx, p.privateStorage.c, p.privateStorage.cfg.TableName, task.InternalConnectionIDs, p.privateStorage.pickTLSPorts)
+		rows, err = getV2RoutesConnections(ctx, p.privateStorage.c, clientRoutesTable, task.InternalConnectionIDs, p.privateStorage.pickTLSPorts)
 	default:
 		return fmt.Errorf("updateTask has neither pairs nor connectionIDs")
 	}
@@ -364,7 +364,7 @@ func getV2RoutesConnections(ctx context.Context, c InternalControlConnection, ta
 		return nil, cqltype.TypeValidation("routes", "connection IDs cannot be empty")
 	}
 	if table == "" {
-		table = "system.client_routes"
+		table = clientRoutesTable
 	}
 	if !validV2RouteTable(table) {
 		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")
@@ -377,7 +377,7 @@ func getV2RoutesPairs(ctx context.Context, c InternalControlConnection, table st
 		return nil, cqltype.TypeValidation("routes", "pairs cannot be empty")
 	}
 	if table == "" {
-		table = "system.client_routes"
+		table = clientRoutesTable
 	}
 	if !validV2RouteTable(table) {
 		return nil, cqltype.TypeValidation("routes table", "invalid qualified identifier")

@@ -205,7 +205,6 @@ func TestClientRoutes(t *testing.T) {
 		defer SessionData(s).eventBus.Stop()
 
 		h := NewClientRoutesAddressTranslator(ClientRoutesConfig{
-			TableName: "system.client_routes",
 			Endpoints: ClientRoutesEndpointList{{ConnectionID: "c1"}},
 		}, nil, false, logging.Nop())
 		defer h.Stop()
@@ -288,7 +287,6 @@ func TestClientRoutes(t *testing.T) {
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).InternalRouteCache = newClientRouteCache()
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxx).cfg = ClientRoutesConfig{
-				TableName: "system.client_routes",
 				Endpoints: ClientRoutesEndpointList{{ConnectionID: "c1"}},
 			}
 			return opaqueStorageValuexxxxxxxxx
@@ -616,7 +614,6 @@ func TestClientRoutes(t *testing.T) {
 					),
 				})
 				ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxxxx).cfg = ClientRoutesConfig{
-					TableName: "system.client_routes",
 					Endpoints: ClientRoutesEndpointList{{ConnectionID: "c1"}},
 				}
 				return opaqueStorageValuexxxxxxxxxxxx
@@ -654,7 +651,6 @@ func TestClientRoutes(t *testing.T) {
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).InternalUpdateTasks = make(chan InternalUpdateTask, 1024)
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).InternalRouteCache = newClientRouteCache()
 			ClientRoutesHandlerData(opaqueStorageValuexxxxxxxxxx).cfg = ClientRoutesConfig{
-				TableName: "system.client_routes",
 				Endpoints: ClientRoutesEndpointList{{ConnectionID: "c1"}},
 			}
 			return opaqueStorageValuexxxxxxxxxx
