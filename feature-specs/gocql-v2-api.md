@@ -1751,6 +1751,7 @@ func (m *Snapshot) Generation() uint64
 type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
 
 // package metrics
+// Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
     Requests, Attempts uint64
     Errors, Cancelled uint64

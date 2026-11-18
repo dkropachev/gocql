@@ -47,9 +47,10 @@ func EngineOf(p routing.Policy) RoutingPolicy {
 	return applicationPolicy{p}
 }
 
-// PublicPlan returns the plan a request described by info follows under the
-// application's policy p, given m: Pick's route first, then Fallback's.
-func PublicPlan(p routing.Policy, info routing.Info, m *metadata.Snapshot) routing.Plan {
+// PlanFor returns the plan a request described by info follows under the
+// application's policy p, given m: Pick's route first, then Fallback's. It
+// replaces the public routing.NewPlan for tests that inspect a policy's plan.
+func PlanFor(p routing.Policy, info routing.Info, m *metadata.Snapshot) routing.Plan {
 	return publicPlan{NewPlan(EngineOf(p), info, SnapshotOf(m))}
 }
 

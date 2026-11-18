@@ -228,13 +228,13 @@ type ReceiveCacheStats struct {
 	RetainedBytes, RetainedObjects int
 }
 
+// Stats returns the cache's reuse counters and current retention.
 func (c *ReceiveCache) Stats() ReceiveCacheStats {
 	if c == nil {
 		return ReceiveCacheStats{}
 	}
 	// Stats takes each class lock once, briefly. Counting under the class
-	// locks keeps atomics off Acquire and Release; Stats is read only by
-	// speculation decisions and metrics snapshots.
+	// locks keeps atomics off Acquire and Release; only tests read Stats.
 	st := ReceiveCacheStats{Misses: c.over.Load()}
 	for i := range c.classes {
 		cl := &c.classes[i]

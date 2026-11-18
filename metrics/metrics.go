@@ -5,8 +5,8 @@
 //
 // Session.Metrics returns a Snapshot of them. The counters
 // cover every execution of the session, of every statement and batch: they
-// start at zero when the session is opened and only grow, except InFlight,
-// which reports the present.
+// start at zero when the session is opened and only grow, except InFlight
+// and the latency percentiles, which report the present.
 // Reading them is cheap, but a Snapshot is a copy: read it again to see later
 // executions. Per-request detail goes to an observe.Observer instead.
 package metrics
