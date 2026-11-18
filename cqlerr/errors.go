@@ -340,6 +340,18 @@ const (
 	OpTypeWrite OpType = 1
 )
 
+// String returns the operation name, or OpType(n) for a value it does not define.
+func (o OpType) String() string {
+	switch o {
+	case OpTypeRead:
+		return "read"
+	case OpTypeWrite:
+		return "write"
+	default:
+		return fmt.Sprintf("OpType(%d)", uint8(o))
+	}
+}
+
 // RateLimitReachedError reports that a request exceeded ScyllaDB's
 // per-partition rate limit.
 type RateLimitReachedError struct {

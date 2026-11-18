@@ -224,13 +224,14 @@ func (c Columns) At(index int) (ColumnSpec, bool) {
 	return c.columns[index], true
 }
 
-// Same reports whether c and other are the same specifications, not only
-// equal ones: the same backing, which Columns never modifies.
-func (c Columns) Same(other Columns) bool {
+// same reports whether c and other are the same specifications, not only
+// equal ones: the same backing, which Columns never modifies. The engine has
+// its own copy, internal/protocol.SameColumns, over a mirror of Columns.
+func (c Columns) same(other Columns) bool {
 	return len(c.columns) == len(other.columns) && (len(c.columns) == 0 || &c.columns[0] == &other.columns[0])
 }
 func (c Columns) Equal(other Columns) bool {
-	if c.Same(other) {
+	if c.same(other) {
 		return true
 	}
 	if len(c.columns) != len(other.columns) {
@@ -363,6 +364,22 @@ const (
 	Unset
 	EmptyCell
 )
+
+// String returns the cell state name, or CellState(n) for a value it does not define.
+func (s CellState) String() string {
+	switch s {
+	case Present:
+		return "present"
+	case Null:
+		return "null"
+	case Unset:
+		return "unset"
+	case EmptyCell:
+		return "empty"
+	default:
+		return fmt.Sprintf("CellState(%d)", uint8(s))
+	}
+}
 
 // Nullable represents a value or CQL NULL; its zero value is NULL.
 // It supports result decoding and binding nullable application fields.

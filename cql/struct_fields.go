@@ -227,8 +227,8 @@ func generatedStructOptions[P any](fields structFields[P], config structConfig[P
 		}
 	}
 	for i, field := range fields.StreamColumns {
-		if !field.loc.positional {
-			streams[field.loc.name] = i
+		if field != nil && !field.streamDeclaration().loc.positional {
+			streams[field.streamDeclaration().loc.name] = i
 		}
 	}
 	var builtins []builtinField[P]
@@ -625,5 +625,5 @@ func reflectStreamRow[R any](opts ...StructOption[R]) (StreamRowDecoder[R], erro
 }
 
 func structStreamRow[R any](fields []StreamOutputField[R]) StreamRowDecoder[R] {
-	return streamRowsCodec[R]{reset: func(*R) {}, fields: append([]StreamOutputField[R](nil), fields...), structMapping: true}
+	return streamRowsCodec[R]{reset: func(*R) {}, fields: streamDeclarations(fields), structMapping: true}
 }

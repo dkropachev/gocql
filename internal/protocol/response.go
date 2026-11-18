@@ -98,7 +98,7 @@ func (r *MetadataReuse) lookup(cursor *wire.Cursor, expect cql.Columns, count in
 	if expect.Len() > 0 {
 		for i := range r.entries {
 			e := &r.entries[i]
-			if owned := e.owner.Same(expect); owned || e.columns.Same(expect) {
+			if owned := sameColumns(e.owner, expect); owned || sameColumns(e.columns, expect) {
 				if e.match(cursor, count, global, depth) {
 					if !owned {
 						// The statement adopted these parsed columns.
@@ -143,7 +143,7 @@ func (r *MetadataReuse) store(encoded wire.Chain, columns, expect cql.Columns, g
 	slot := -1
 	if expect.Len() > 0 {
 		for i := range r.entries {
-			if e := &r.entries[i]; e.owner.Same(expect) || e.columns.Same(expect) {
+			if e := &r.entries[i]; sameColumns(e.owner, expect) || sameColumns(e.columns, expect) {
 				slot = i
 				break
 			}

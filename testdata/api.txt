@@ -238,6 +238,7 @@ package cql
 	const cql.All cql.Consistency = 5
 	const cql.Any cql.Consistency = 0
 	type cql.BatchKind byte
+		cql.BatchKind method (T) String() string
 	var cql.BigIntType cql.DataType
 	func cql.BigIntValue(n int64) cql.Value
 	func cql.BindEncoder[T any](base cql.Encoder[T]) cql.Encoder[cql.BindValue[T]]
@@ -273,6 +274,7 @@ package cql
 		cql.CQLTraceRef field Failed bool
 		cql.CQLTraceRef field Speculative bool
 	type cql.CellState uint8
+		cql.CellState method (T) String() string
 	type cql.Codec[T any] interface
 		cql.Codec method CheckType(cql.DataType) error
 		cql.Codec method Clone(T) T
@@ -297,9 +299,9 @@ package cql
 		cql.Columns method (T) At(index int) (cql.ColumnSpec, bool)
 		cql.Columns method (T) Equal(other cql.Columns) bool
 		cql.Columns method (T) Len() int
-		cql.Columns method (T) Same(other cql.Columns) bool
 	func cql.Command(text string) cql.Statement[cql.EmptyParams, cql.EmptyRow]
 	type cql.Compression uint8
+		cql.Compression method (T) String() string
 	const cql.ConditionalStatement cql.StatementKind = 2
 	type cql.Consistency uint16
 		cql.Consistency method (T) IsSerial() bool
@@ -522,6 +524,7 @@ package cql
 		cql.Statement field BindMarkers cql.Columns
 		cql.Statement field Kind cql.StatementKind
 	type cql.StatementKind uint8
+		cql.StatementKind method (T) String() string
 	var cql.StreamASCII cql.StreamDecoder[[]byte]
 	var cql.StreamBlob cql.StreamDecoder[[]byte]
 	var cql.StreamBool cql.StreamDecoder[bool]
@@ -563,7 +566,7 @@ package cql
 	func cql.StreamMap[K, V any](key cql.StreamDecoder[K], value cql.StreamDecoder[V]) cql.StreamDecoder[[]cql.Entry[K, V]]
 	func cql.StreamNullable[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.Nullable[T]]
 	func cql.StreamOneColumn[T any](decoder cql.StreamDecoder[T]) cql.StreamRowDecoder[T]
-	type cql.StreamOutputField[R any] struct
+	type cql.StreamOutputField[R any] interface (sealed)
 	type cql.StreamResetter[T any] interface
 		cql.StreamResetter method Reset(*T)
 	type cql.StreamRowDecoder[R any] interface
@@ -943,6 +946,7 @@ package cqlerr
 		cqlerr.NoHostsError method (*T) Unwrap() []error
 	const cqlerr.NotExecuted cqlerr.ExecutionStatus = 1
 	type cqlerr.OpType uint8
+		cqlerr.OpType method (T) String() string
 	const cqlerr.OpTypeRead cqlerr.OpType = 0
 	const cqlerr.OpTypeWrite cqlerr.OpType = 1
 	type cqlerr.OtherServerError struct
@@ -1103,6 +1107,7 @@ package endpoint
 		endpoint.ConvictionPolicy method Reset(endpoint.ConvictionEvent)
 	const endpoint.ConvictionPool endpoint.ConvictionSource = 0
 	type endpoint.ConvictionSource uint8
+		endpoint.ConvictionSource method (T) String() string
 	type endpoint.DefaultDialer struct
 		endpoint.DefaultDialer field ConnectTimeout time.Duration
 		endpoint.DefaultDialer field SocketKeepalive time.Duration
@@ -1144,8 +1149,8 @@ package endpoint
 		endpoint.TranslatorFunc method (T) Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort) (net/netip.AddrPort, error)
 
 package event
-	const event.ClientRoute event.Kind = 4
-	const event.Control event.Kind = 3
+	const event.ClientRoute event.Kind = 5
+	const event.Control event.Kind = 4
 	type event.Event struct
 		event.Event field Address net/netip.AddrPort
 		event.Event field Change string
@@ -1161,13 +1166,15 @@ package event
 		event.Filter field Kinds []event.Kind
 		event.Filter field Capacity int
 	type event.Kind uint8
-	const event.Overflow event.Kind = 5
-	const event.Schema event.Kind = 2
-	const event.Status event.Kind = 1
+		event.Kind method (T) String() string
+	const event.Overflow event.Kind = 6
+	const event.Schema event.Kind = 3
+	const event.Status event.Kind = 2
 	type event.Subscription struct
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
-	const event.Topology event.Kind = 0
+	const event.Topology event.Kind = 1
+	const event.Unknown event.Kind = 0
 
 package exec
 	type exec.CompiledOptions struct
@@ -1199,6 +1206,7 @@ package exec
 	const exec.SerialLocal exec.SerialOverride = 2
 	const exec.SerialOmit exec.SerialOverride = 3
 	type exec.SerialOverride uint8
+		exec.SerialOverride method (T) String() string
 	const exec.SerialSerial exec.SerialOverride = 1
 	type exec.StreamLimits struct
 		exec.StreamLimits field MaxMetadataBytes int64
@@ -1221,7 +1229,6 @@ package metadata
 		metadata.Aggregate field ArgumentTypes []string
 		metadata.Aggregate field FinalFunc metadata.Function
 		metadata.Aggregate field StateFunc metadata.Function
-	const metadata.AnyShard int32 = -1
 	type metadata.Column struct
 		metadata.Column field Index metadata.ColumnIndex
 		metadata.Column field Keyspace string
@@ -1293,19 +1300,19 @@ package metadata
 		metadata.Keyspace field ConsistencyMode string
 		metadata.Keyspace field Name string
 		metadata.Keyspace field StrategyClass string
-		metadata.Keyspace field CreateStmts string
 		metadata.Keyspace field TabletBased bool
 		metadata.Keyspace field DurableWrites bool
 		metadata.Keyspace method (*T) Clone() *metadata.Keyspace
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
+		metadata.Mode method (T) String() string
 	type metadata.Route struct
-		metadata.Route field Shard int32
 		metadata.Route method (T) HostID() cql.UUID
-		metadata.Route method (T) ShardOf(token int64) int32
+		metadata.Route method (T) Shard() cql.Option[uint32]
+		metadata.Route method (T) ShardOf(token int64) cql.Option[uint32]
 		metadata.Route method (T) Target() metadata.Target
 		metadata.Route method (T) Usable() bool
-		metadata.Route method (T) WithShard(shard int32) metadata.Route
+		metadata.Route method (T) WithShard(shard cql.Option[uint32]) metadata.Route
 	const metadata.SchemaFull metadata.Mode = 2
 	const metadata.SchemaKeyspaces metadata.Mode = 1
 	const metadata.SchemaNone metadata.Mode = 0
@@ -1429,6 +1436,7 @@ package observe
 
 package retry
 	type retry.Action uint8
+		retry.Action method (T) String() string
 	type retry.Attempt struct
 		retry.Attempt field Err error
 		retry.Attempt field Number int
@@ -1514,7 +1522,7 @@ package routing
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
 		routing.Policy method Validate(*metadata.Snapshot) error
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
-	func routing.SingleTarget(target metadata.Target, strictShard bool) routing.Policy
+	func routing.SingleTarget(target metadata.Target) routing.Policy
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
 

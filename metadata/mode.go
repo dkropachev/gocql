@@ -3,6 +3,8 @@
 
 package metadata
 
+import "fmt"
+
 // Mode selects how much schema a session loads. Topology (hosts, tokens and
 // tablets) loads in every mode.
 type Mode uint8
@@ -18,3 +20,17 @@ const (
 	// SchemaFull loads keyspaces with everything in them. It is the default.
 	SchemaFull
 )
+
+// String returns the metadata mode name, or Mode(n) for a value it does not define.
+func (m Mode) String() string {
+	switch m {
+	case SchemaNone:
+		return "none"
+	case SchemaKeyspaces:
+		return "keyspaces"
+	case SchemaFull:
+		return "full"
+	default:
+		return fmt.Sprintf("Mode(%d)", uint8(m))
+	}
+}

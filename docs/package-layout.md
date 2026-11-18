@@ -22,7 +22,7 @@ Packages fall into four layers. A package imports only from its own layer
 
 | Layer | Packages | Holds |
 |---|---|---|
-| 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap`, `internal/cqlproto`, `internal/debounce`, `internal/eventbus`, `internal/streams` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, and the link registry. Knows nothing about CQL types or the public API. |
+| 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap`, `internal/cqlproto`, `internal/debounce`, `internal/eventbus`, `internal/streams`, `internal/cqlperf` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, the link registry, and measurement-build counters. Knows nothing about CQL types or the public API. |
 | 1. Vocabulary (public) | `cql`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
 | 2. Engine (internal) | every other `internal/` package, such as `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata` and `internal/session` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
 | 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
@@ -337,8 +337,9 @@ own module and does not reuse `internal/testkit`.
   Any difference fails the test, so API changes show up as reviewed diffs;
   run `go test -run TestPublicAPI -update-api .` after a deliberate change.
   It fails outright when an internal type appears anywhere in the public
-  API. It describes the default build only: declarations behind build tags
-  are not covered.
+  API. It also builds with each of the library's build tags (`gocql_perf`,
+  `gocql_debug`, `integration`) and fails when a tag changes the public API;
+  `TestPackageLayers` checks the layers under the same tags.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
 ## Where the code stands today

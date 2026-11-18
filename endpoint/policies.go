@@ -5,6 +5,7 @@ package endpoint
 
 import (
 	"crypto/tls"
+	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -44,6 +45,18 @@ const (
 	// ConvictionControl is the control connection's dial to the host.
 	ConvictionControl
 )
+
+// String returns the conviction source name, or ConvictionSource(n) for a value it does not define.
+func (s ConvictionSource) String() string {
+	switch s {
+	case ConvictionPool:
+		return "pool"
+	case ConvictionControl:
+		return "control"
+	default:
+		return fmt.Sprintf("ConvictionSource(%d)", uint8(s))
+	}
+}
 
 // ConvictionEvent describes a connection failure, or a recovery, that a
 // ConvictionPolicy receives.

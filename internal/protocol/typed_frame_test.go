@@ -245,22 +245,22 @@ func TestTypedFrame(t *testing.T) {
 			parsed := parse(body, cql.Columns{})
 			blob := cql.BlobType
 			expect := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: "value", Type: blob})
-			if parsed.Same(expect) || !parsed.Equal(expect) {
+			if sameColumns(parsed, expect) || !parsed.Equal(expect) {
 				t.Fatal("setup: expected columns must be equal, not the same")
 			}
 			// Equal metadata comes back as the expected columns themselves, also
 			// once they are remembered.
 			for i := 0; i < 2; i++ {
-				if got := parse(body, expect); !got.Same(expect) {
+				if got := parse(body, expect); !sameColumns(got, expect) {
 					t.Fatal("equal metadata did not return the expected columns", i)
 				}
 			}
 			// Without expectations, or expecting other columns, the parsed ones return.
-			if got := parse(body, cql.Columns{}); !got.Same(parsed) {
+			if got := parse(body, cql.Columns{}); !sameColumns(got, parsed) {
 				t.Fatal("metadata without expectation returned other columns")
 			}
 			other := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: "other", Type: blob})
-			if got := parse(body, other); !got.Same(parsed) {
+			if got := parse(body, other); !sameColumns(got, parsed) {
 				t.Fatal("unequal expected columns were returned")
 			}
 			// Changed metadata forgets the expected columns it matched before.

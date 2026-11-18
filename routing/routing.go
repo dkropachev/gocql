@@ -58,10 +58,10 @@ func NewPolicy(options Options) (Policy, error) {
 	return &builtinPolicy{options: options}, nil
 }
 
-// SingleTarget routes every request to target. With strictShard, or when
-// target.StrictShard is set, a request goes to target's shard only.
-func SingleTarget(target metadata.Target, strictShard bool) Policy {
-	return &builtinPolicy{single: true, target: target, strict: strictShard}
+// SingleTarget routes every request to target. When target.StrictShard is
+// set, a request goes to target's shard only.
+func SingleTarget(target metadata.Target) Policy {
+	return &builtinPolicy{single: true, target: target}
 }
 
 // NewPlan returns the routes policy would try for a request described by
@@ -107,7 +107,6 @@ type builtinPolicy struct {
 	target  metadata.Target
 	once    sync.Once
 	single  bool
-	strict  bool
 }
 
 func init() {
@@ -123,11 +122,11 @@ func init() {
 // policy returns the session's policy, or nil in a program without a
 // session, whose package internal/routing fills link.BuildPolicy.
 func (b *builtinPolicy) policy() Policy {
-	build, ok := link.Lookup[func(single bool, options Options, target metadata.Target, strict bool) Policy](link.BuildPolicy)
+	build, ok := link.Lookup[func(single bool, options Options, target metadata.Target) Policy](link.BuildPolicy)
 	if !ok {
 		return nil
 	}
-	b.once.Do(func() { b.impl = build(b.single, b.options, b.target, b.strict) })
+	b.once.Do(func() { b.impl = build(b.single, b.options, b.target) })
 	return b.impl
 }
 

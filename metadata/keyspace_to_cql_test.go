@@ -403,11 +403,6 @@ func TestKeyspaceToCQL(t *testing.T) {
 					t.Errorf("%q comes after %q: %s\n--- got ---\n%s", ord.first, ord.then, ord.why, got)
 				}
 			}
-
-			// ToCQL caches its own output in CreateStmts.
-			if ks.CreateStmts != got {
-				t.Error("ToCQL did not cache the generated schema in CreateStmts")
-			}
 		})
 		// Pins that a regenerated dump does not reorder
 		// itself between runs. ToCQL walks six collections, five of them maps, and Go
@@ -462,8 +457,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				return ks
 			}
 
-			// A fresh keyspace each round: ToCQL caches its output in CreateStmts, so
-			// reusing one would short-circuit every call after the first.
+			// A fresh keyspace each round, so every map is built anew.
 			const rounds = 100
 			var first string
 			for i := 0; i < rounds; i++ {
@@ -573,15 +567,14 @@ func TestKeyspaceToCQL(t *testing.T) {
 			}
 		})
 		// Pins the short-circuit itself: a
-		// keyspace that already carries CreateStmts is echoed back untouched, and the
+		// keyspace that carries the server's DESCRIBE output gets it back untouched, and the
 		// generator is not consulted. This is the branch that hides all the others.
 		t.Run("UsesServerStatements", func(t *testing.T) {
 			t.Parallel()
 
 			ks := &Keyspace{
-				Name:        "ks",
-				CreateStmts: "CREATE KEYSPACE server_said_so;",
-				// Deliberately inconsistent with CreateStmts: if the generator ran, the
+				Name: "ks",
+				// Deliberately inconsistent with the server CQL: if the generator ran, the
 				// output would mention this table.
 				Tables: map[string]*Table{"t": {
 					Name:           "t",
@@ -591,15 +584,17 @@ func TestKeyspaceToCQL(t *testing.T) {
 				}},
 			}
 
+			ks.state.ServerCQL = "CREATE KEYSPACE server_said_so;"
+
 			got, err := ks.ToCQL()
 			if err != nil {
 				t.Fatalf("ToCQL: %v", err)
 			}
 			if got != "CREATE KEYSPACE server_said_so;" {
-				t.Errorf("ToCQL returned %q, want the stored CreateStmts verbatim", got)
+				t.Errorf("ToCQL returned %q, want the server CQL verbatim", got)
 			}
 			if strings.Contains(got, "CREATE TABLE") {
-				t.Error("the generator ran even though CreateStmts was populated")
+				t.Error("the generator ran even though the server CQL was present")
 			}
 		})
 	})
