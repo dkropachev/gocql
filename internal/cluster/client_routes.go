@@ -55,8 +55,10 @@ func (l ClientRoutesEndpointList) Validate() error {
 	return nil
 }
 
+// clientRoutesTable is the ScyllaDB table the driver reads client routes from.
+const clientRoutesTable = "system.client_routes"
+
 type ClientRoutesConfig struct {
-	TableName string
 	Endpoints ClientRoutesEndpointList
 }
 

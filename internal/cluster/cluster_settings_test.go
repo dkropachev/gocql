@@ -279,7 +279,6 @@ func TestClusterSettings(t *testing.T) {
 				t.Parallel()
 				cfg := makeValid("10.0.0.1:9142")
 				cfg.ClientRoutesConfig = &ClientRoutesConfig{
-					TableName: "system.client_routes",
 					Endpoints: []ClientRoutesEndpoint{{ConnectionID: "conn-1", ConnectionAddr: "10.0.0.1:9142"}},
 				}
 				if err := cfg.Validate(); err != nil {

@@ -128,7 +128,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		for _, id := range config.ClientRoutes.ConnectionIDs {
 			endpoints = append(endpoints, ClientRoutesEndpoint{ConnectionID: id, ConnectionAddr: config.ClientRoutes.HostnameOverrides[id]})
 		}
-		legacy.ClientRoutesConfig = &ClientRoutesConfig{TableName: "system.client_routes", Endpoints: endpoints}
+		legacy.ClientRoutesConfig = &ClientRoutesConfig{Endpoints: endpoints}
 	}
 	s, err := newSessionCommonWithRuntime(*legacy, &config, initialize)
 	if err != nil {

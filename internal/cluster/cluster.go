@@ -465,9 +465,7 @@ func WithEndpoints(endpoints ...ClientRoutesEndpoint) func(*ClientRoutesConfig) 
 // when this option is applied, non-empty ConnectionAddr values from the endpoints
 // are also used as initial contact points.
 func WithClientRoutes(opts ...ClientRoutesOption) func(*InternalClusterSettings) {
-	pmCfg := ClientRoutesConfig{
-		TableName: "system.client_routes",
-	}
+	var pmCfg ClientRoutesConfig
 	for _, opt := range opts {
 		opt(&pmCfg)
 	}
