@@ -1752,8 +1752,6 @@ type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
 
 // package metrics
 type Snapshot struct {
-    ReceiveCacheHits, ReceiveCacheMisses uint64
-    ReceiveCacheBytes, ReceiveCacheObjects int
     Requests, Attempts uint64
     Errors, Cancelled uint64
     Retries, Speculations uint64

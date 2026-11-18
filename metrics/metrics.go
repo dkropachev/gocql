@@ -5,8 +5,8 @@
 //
 // Session.Metrics returns a Snapshot of them. The counters
 // cover every execution of the session, of every statement and batch: they
-// start at zero when the session is opened and only grow, except InFlight
-// and the receive cache's current retention, which report the present.
+// start at zero when the session is opened and only grow, except InFlight,
+// which reports the present.
 // Reading them is cheap, but a Snapshot is a copy: read it again to see later
 // executions. Per-request detail goes to an observe.Observer instead.
 package metrics
@@ -14,14 +14,13 @@ package metrics
 import "time"
 
 // Snapshot is a copy of a session's counters at one moment.
+//
+// Later releases may add fields to Snapshot, and that is not a breaking
+// change. Read its fields by name: do not build a Snapshot with an unkeyed
+// composite literal, and do not compare whole Snapshots with == or use them
+// as map keys, since a field added later may not be comparable or may make
+// two otherwise equal snapshots differ.
 type Snapshot struct {
-	// ReceiveCacheHits and ReceiveCacheMisses count response buffers taken
-	// from the session's receive cache or allocated because it had none.
-	ReceiveCacheHits, ReceiveCacheMisses uint64
-	// ReceiveCacheBytes and ReceiveCacheObjects are the size and number of
-	// idle buffers the receive cache holds now. Buffers of response pages
-	// still in use are not included.
-	ReceiveCacheBytes, ReceiveCacheObjects int
 	// Requests counts executions started, and Attempts the requests they
 	// sent to nodes, including retries and speculative attempts. While an
 	// admission is being refused, Requests may briefly include it, so a

@@ -1390,10 +1390,6 @@ package metadata
 
 package metrics
 	type metrics.Snapshot struct
-		metrics.Snapshot field ReceiveCacheHits uint64
-		metrics.Snapshot field ReceiveCacheMisses uint64
-		metrics.Snapshot field ReceiveCacheBytes int
-		metrics.Snapshot field ReceiveCacheObjects int
 		metrics.Snapshot field Requests uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
