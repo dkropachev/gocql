@@ -48,9 +48,18 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
 Throwaway pages stay empty: a caller that pages through results is executing
 the statement repeatedly, so it prepares the statement.
 
+`TestExecutionGrid` checks this table against the public API
+(`testdata/api.txt`): every cell method exists with its row's prefix, its
+column's verb and its row's options form, and every other exported method of
+`Session`, `Query` and `Prepared` is either a cell or on the test's list of
+methods outside the grid. `TestExecutionGridBehavior` runs the same statement
+through each row against a fake node and fails if the rows differ in rows,
+errors or the requests they send.
+
 ## Options
 
-- Worker-owned: options are fixed when the query is created.
+- Worker-owned: options are fixed when the query is created, as the
+  `exec.Options` passed to `Prepared.Query`, and its methods take none.
 - Shared: each call ends in `options ...exec.CompiledOptions`, made once by
   `Session.CompileOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
@@ -110,7 +119,8 @@ page state. Explicit paging is the pages column only.
   A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read:
   it is not rejected up front, and `Exec` fails on its result columns like any
   other row-returning statement.
-- Each column uses one verb in every row: `Exec`, `One`, `Each`, `RunPage`.
+- Each column uses the same verbs in every row: `Exec`, `One`, `Each` with
+  `All` and `Run`, `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of that verb.
 - `AddToBatch` appears once per reusable form. `Query.Routing` reports where
   an execution with the given values would go, and lives on `Query`.
