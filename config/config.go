@@ -480,8 +480,10 @@ func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 	return b
 }
 
-// WithMetadataServerTimeout asks the server to bound metadata queries with USING
-// TIMEOUT, in whole milliseconds. Default unset.
+// WithMetadataServerTimeout asks ScyllaDB to bound metadata queries with USING
+// TIMEOUT, in whole milliseconds; zero sends none. Cassandra has no USING
+// TIMEOUT, so a positive value fails its metadata queries with an
+// UnsupportedSettingError. Default 30s on ScyllaDB, none on Cassandra.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.ServerTimeout = cql.Some(d)
 	return b
@@ -608,7 +610,10 @@ func (b *ConfigBuilder) WithLifecycleObserver(observer observe.LifecycleObserver
 }
 
 // WithConfigReport chooses whether the driver configuration is sent to the
-// server. Default true.
+// server, as JSON in the DRIVER_CONFIG STARTUP option of the control
+// connection, following docs/driver-config-schema.json. The report carries no
+// credentials, TLS material, addresses or host names, and its version field
+// changes only on an incompatible change. Default true.
 func (b *ConfigBuilder) WithConfigReport(on bool) *ConfigBuilder {
 	b.settings.ReportConfiguration = on
 	return b

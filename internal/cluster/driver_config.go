@@ -4,6 +4,7 @@
 package cluster
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"math"
 	"reflect"
@@ -17,6 +18,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -78,15 +80,17 @@ type connectionReport struct {
 	// heartBeat()); WriteCoalesceWaitTime coalesces only untyped connections.
 	Read  *readWriteTimeoutReport `json:"read,omitempty"`
 	Write *readWriteTimeoutReport `json:"write,omitempty"`
-	// TLS is omitted when TLS is not configured, or when a HostDialer is set:
-	// HostDialer takes over the entire connection setup and SslOpts is ignored
-	// (see clusterSettings.SslOpts), so the effective TLS state is unknown.
+	// TLS is omitted when TLS is not configured. Without a typed
+	// configuration it is also omitted when a HostDialer is set: HostDialer
+	// takes over the entire connection setup and SslOpts is ignored (see
+	// clusterSettings.SslOpts), so the effective TLS state is unknown. A typed
+	// session's dialer applies its TLS itself; see buildTypedTLSReport.
 	TLS          *tlsReport              `json:"tls,omitempty"`
 	Reconnection reconnectionGroupReport `json:"reconnection"`
 	Connect      connectReport           `json:"connect"`
 	Requests     requestsReport          `json:"requests"`
-	Pool         connectionPoolReport    `json:"pool"`
 	Socket       socketReport            `json:"socket"`
+	Pool         connectionPoolReport    `json:"pool"`
 }
 
 // connectReport carries an optional timeout-ms: the schema does not list it
@@ -102,23 +106,18 @@ type readWriteTimeoutReport struct {
 
 // requestsReport is connection.requests.
 //
-// Its orphaned group is never populated. Orphaned requests do exist here: a
-// request whose caller stopped waiting keeps its stream reserved until the
-// response arrives, precisely so the id is not reused (see StreamObserver's
-// documentation, and the timeout branch of Conn.InternalExec, which stops waiting
-// without releasing the stream). What does not exist is any bound on them --
-// no setting caps how many a connection may accumulate, and nothing closes and
-// replaces a connection because too many did. The group asks for that bound,
-// so there is nothing to report, and 0 would assert the opposite: close the
-// connection on the very first orphan.
-//
-// The schema makes orphaned optional for exactly this case, and gives its
-// absence that meaning, so omitting it produces a document a consumer
-// validating against the schema accepts. See
-// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound, which fails if that
-// ever changes.
+// Orphaned is the bound config.WithMaxOrphanedStreams sets: a connection that
+// accumulates more streams abandoned by cancelled requests is recycled. It is
+// omitted only for a session assembled without a typed configuration, which
+// has no such bound; the schema gives that absence exactly this meaning (see
+// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound).
 type requestsReport struct {
-	InFlight inFlightReport `json:"in-flight"`
+	Orphaned *orphanedReport `json:"orphaned,omitempty"`
+	InFlight inFlightReport  `json:"in-flight"`
+}
+
+type orphanedReport struct {
+	Max int `json:"max"`
 }
 
 type inFlightReport struct {
@@ -134,9 +133,20 @@ type shardAwareReport struct {
 }
 
 type socketReport struct {
-	TCPNoDelay   bool `json:"tcp-no-delay"`
-	KeepAlive    bool `json:"keep-alive"`
-	ReuseAddress bool `json:"reuse-address"`
+	Linger        *lingerReport `json:"linger,omitempty"`
+	ReceiveBuffer *bufferReport `json:"receive-buffer,omitempty"`
+	SendBuffer    *bufferReport `json:"send-buffer,omitempty"`
+	TCPNoDelay    bool          `json:"tcp-no-delay"`
+	KeepAlive     bool          `json:"keep-alive"`
+	ReuseAddress  bool          `json:"reuse-address"`
+}
+
+type lingerReport struct {
+	IntervalS int64 `json:"interval-s"`
+}
+
+type bufferReport struct {
+	SizeBytes int `json:"size-bytes"`
 }
 
 type reconnectionGroupReport struct {
@@ -158,6 +168,14 @@ type reconnectionExponentialReport struct {
 	MaxAttempts int    `json:"max-attempts"`
 }
 
+// reconnectionExponentialUnlimitedReport is the exponential policy without
+// max-attempts, which the schema reads as unlimited attempts.
+type reconnectionExponentialUnlimitedReport struct {
+	Type   string `json:"type"`
+	BaseMs int64  `json:"base-ms"`
+	MaxMs  int64  `json:"max-ms"`
+}
+
 type reconnectionConstantReport struct {
 	Type        string `json:"type"`
 	DelayMs     int64  `json:"delay-ms"`
@@ -169,8 +187,11 @@ type reconnectionCustomReport struct {
 	Name string `json:"name"`
 }
 
+// tlsReport reports whether the node's certificate is checked against its
+// name or address. HostnameVerification is nil, and omitted, when that is
+// unknown: verification is skipped but a custom callback may do its own.
 type tlsReport struct {
-	HostnameVerification bool `json:"hostname-verification"`
+	HostnameVerification *bool `json:"hostname-verification,omitempty"`
 }
 
 // controlPlaneReport is the top-level "control-plane" group in the schema.
@@ -201,17 +222,19 @@ type schemaAgreementReport struct {
 }
 
 // queryReport is the top-level "query" group in the schema.
-//
-// It has no speculative-execution group: gocql has no session/cluster-wide
-// default speculative execution policy, only a per-Query/per-Batch opt-in via
-// SetSpeculativeExecutionPolicy. Every session's default is
-// NonSpeculativeExecution (disabled), and the schema says to omit the group
-// entirely when speculative execution is disabled -- which is always true of
-// the session-wide default this report describes.
 type queryReport struct {
-	Retry         queryRetryReport         `json:"retry"`
-	LoadBalancing queryLoadBalancingReport `json:"load-balancing"`
-	Defaults      queryDefaultsReport      `json:"defaults"`
+	// SpeculativeExecution is the default profile's speculation policy,
+	// omitted when it has none.
+	SpeculativeExecution *speculativeExecutionReport `json:"speculative-execution,omitempty"`
+	Retry                queryRetryReport            `json:"retry"`
+	LoadBalancing        queryLoadBalancingReport    `json:"load-balancing"`
+	Defaults             queryDefaultsReport         `json:"defaults"`
+}
+
+// speculativeExecutionReport is query.speculative-execution. retry has no
+// built-in speculation policy, so the policy is always custom.
+type speculativeExecutionReport struct {
+	Policy loadBalancingCustomReport `json:"policy"`
 }
 
 type queryDefaultsReport struct {
@@ -259,6 +282,10 @@ type queryRetryReport struct {
 type InternalRetryPolicySimpleReport struct {
 	Type       string `json:"type"`
 	MaxRetries int    `json:"max-retries"`
+}
+
+type InternalRetryPolicyFallthroughReport struct {
+	Type string `json:"type"`
 }
 
 type InternalRetryPolicyCustomReport struct {
@@ -379,7 +406,7 @@ func (r *driverConfigReporter) buildReport(isScyllaConn bool) (string, error) {
 	report := InternalDriverConfigReport{
 		Version:      InternalDriverConfigVersion,
 		Connection:   buildConnectionReport(cfg, typed),
-		ControlPlane: buildControlPlaneReport(cfg, isScyllaConn),
+		ControlPlane: buildControlPlaneReport(cfg, typed, isScyllaConn),
 		Query:        r.session.BuildQueryReport(),
 	}
 	data, err := json.Marshal(report)
@@ -402,7 +429,69 @@ func buildConnectionReport(cfg *InternalClusterSettings, typed *connectivity.Con
 	}
 	report.TLS = buildTLSReport(cfg)
 	report.NodePreference = buildConnectionNodePreferenceReport(cfg)
+	if typed != nil {
+		applyTypedConnectionReport(&report, cfg, typed)
+	}
 	return report
+}
+
+// applyTypedConnectionReport replaces the parts of report that a session
+// built from a config.Config sets differently from the legacy settings: its
+// dialer applies the TLS, socket options and orphan bound of typed itself,
+// and its reconnection follows typed.Reconnect.
+func applyTypedConnectionReport(report *connectionReport, cfg *InternalClusterSettings, typed *connectivity.Config) {
+	report.TLS = buildTypedTLSReport(typed.TLS)
+	report.Socket = buildTypedSocketReport(typed)
+	// transport.Conn recycles a connection once its orphans exceed the
+	// configured bound, capped below the stream count.
+	report.Requests.Orphaned = &orphanedReport{Max: max(min(typed.Pool.MaxOrphanedStreams, effectiveInFlightMax(cfg.MaxRequestsPerConn)-1), 0)}
+	report.Reconnection.Policy = buildTypedReconnectionReport(typed.Reconnect)
+}
+
+// buildTypedTLSReport describes the TLS a typed session's dialer applies:
+// config, the configuration Build took from WithTLS or WithTLSSource. Unless
+// it skips verification, each connection verifies the node's server name or
+// IP address. A config that skips verification but installs its own
+// verification callback may still check the name, so that case is unknown.
+func buildTypedTLSReport(config *tls.Config) *tlsReport {
+	if config == nil {
+		return nil
+	}
+	if config.InsecureSkipVerify && (config.VerifyConnection != nil || config.VerifyPeerCertificate != nil) {
+		return &tlsReport{}
+	}
+	verify := !config.InsecureSkipVerify
+	return &tlsReport{HostnameVerification: &verify}
+}
+
+// buildTypedSocketReport describes the socket options a typed session's
+// dialer sets on every TCP connection, whichever endpoint.Dialer opened it.
+func buildTypedSocketReport(typed *connectivity.Config) socketReport {
+	report := socketReport{TCPNoDelay: typed.NoDelay, KeepAlive: typed.SocketKeepalive > 0}
+	if typed.Linger.Set {
+		report.Linger = &lingerReport{IntervalS: int64(typed.Linger.Value / time.Second)}
+	}
+	if typed.ReceiveBuffer.Set && typed.ReceiveBuffer.Value > 0 {
+		report.ReceiveBuffer = &bufferReport{SizeBytes: typed.ReceiveBuffer.Value}
+	}
+	if typed.SendBuffer.Set && typed.SendBuffer.Value > 0 {
+		report.SendBuffer = &bufferReport{SizeBytes: typed.SendBuffer.Value}
+	}
+	return report
+}
+
+// buildTypedReconnectionReport describes config.WithReconnect: nil makes no
+// attempts, the default is an exponential backoff without an attempt limit,
+// and any other policy is custom.
+func buildTypedReconnectionReport(policy settings.ReconnectPolicy) any {
+	switch {
+	case isNilPolicy(policy):
+		return nil
+	case settings.IsDefaultReconnect(policy):
+		return reconnectionExponentialUnlimitedReport{Type: "exponential", BaseMs: settings.DefaultReconnectBase.Milliseconds(), MaxMs: settings.DefaultReconnectMax.Milliseconds()}
+	default:
+		return reconnectionCustomReport{Type: "custom", Name: customPolicyName(policy)}
+	}
 }
 
 // buildConnectionNodePreferenceReport describes the part of the cluster the
@@ -447,13 +536,14 @@ func buildTLSReport(cfg *InternalClusterSettings) *tlsReport {
 	// run -- which is every session, but not a Session assembled by hand in a
 	// test.
 	if actual := clusterSettingsGetActualTLSConfig(cfg); actual != nil {
-		return &tlsReport{HostnameVerification: !actual.InsecureSkipVerify}
+		verify := !actual.InsecureSkipVerify
+		return &tlsReport{HostnameVerification: &verify}
 	}
 	verify := cfg.SslOpts.EnableHostVerification
 	if cfg.SslOpts.Config != nil {
 		verify = !cfg.SslOpts.Config.InsecureSkipVerify || cfg.SslOpts.EnableHostVerification
 	}
-	return &tlsReport{HostnameVerification: verify}
+	return &tlsReport{HostnameVerification: &verify}
 }
 
 // positiveMillis renders d for a schema field declared positiveInteger
@@ -552,7 +642,8 @@ func shardAwareEnabled(cfg *InternalClusterSettings, typed *connectivity.Config)
 }
 
 // buildSocketReport describes what gocql's own built-in dialer does with a
-// TCP socket. A user-supplied Dialer/HostDialer can set one up differently;
+// TCP socket, for a session without a typed configuration; a typed session's
+// dialer sets the options buildTypedSocketReport reports. A user-supplied Dialer/HostDialer can set one up differently;
 // the driver has no way to observe that, so the report always describes the
 // built-in dialer's behavior, per the schema's own framing of these fields as
 // "the effective value ... the OS/platform default".
@@ -622,11 +713,11 @@ func buildReconnectionPolicyReport(rp pool.ReconnectionPolicy) any {
 	}
 }
 
-func buildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn bool) controlPlaneReport {
+func buildControlPlaneReport(cfg *InternalClusterSettings, typed *connectivity.Config, isScyllaConn bool) controlPlaneReport {
 	var timeout systemQueriesTimeoutReport
 	if clientMs := positiveMillis(cfg.MetadataSchemaRequestTimeout); clientMs != nil {
 		timeout.ClientSideMs = clientMs
-		if isScyllaConn {
+		if isScyllaConn && typed == nil {
 			// The USING TIMEOUT clause is ScyllaDB-only, so this key only ever
 			// applies against Scylla -- and it carries whatever
 			// Conn.setSystemRequestTimeout put in the clause, which
@@ -642,6 +733,18 @@ func buildControlPlaneReport(cfg *InternalClusterSettings, isScyllaConn bool) co
 			if serverMs := cfg.MetadataSchemaRequestTimeout.Milliseconds(); serverMs > 0 {
 				timeout.ServerSideMs = &serverMs
 			}
+		}
+	}
+	if typed != nil && isScyllaConn {
+		// Conn.InternalExecuteV2System appends USING TIMEOUT from
+		// config.WithMetadataServerTimeout, 30s when unset, to every system
+		// SELECT on ScyllaDB, whatever the client-side timeout.
+		server := typed.Metadata.ServerTimeout
+		if !server.Set {
+			server = cql.Some(transport.InternalDefaultSystemServerTimeout)
+		}
+		if ms := server.Value.Milliseconds(); server.Value > 0 && ms > 0 {
+			timeout.ServerSideMs = &ms
 		}
 	}
 	return controlPlaneReport{
@@ -670,14 +773,24 @@ func (s *Core) BuildQueryReport() queryReport {
 		}
 		cfg.DefaultIdempotence = false
 		cfg.DefaultTimestamp = runtime.ConfigSnapshot().Timestamps.Mode() != settings.ServerTimestampMode
-		loadBalancing = buildTypedLoadBalancingReport(profile.Routing)
+		report := queryReport{
+			Defaults:      buildQueryDefaultsReport(&cfg),
+			LoadBalancing: buildTypedLoadBalancingReport(profile.Routing),
+			// A nil retry policy in a profile disables retries.
+			Retry: queryRetryReport{Policy: InternalBuildRetryPolicyReport(profile.Retry)},
+		}
+		if !isNilPolicy(profile.Speculation) {
+			report.SpeculativeExecution = &speculativeExecutionReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(profile.Speculation)}}
+		}
+		return report
 	}
 	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}
 }
 func buildTypedLoadBalancingReport(policy routing.RoutingPolicy) queryLoadBalancingReport {
 	builtin, ok := policy.(*routing.InternalRoutingPolicy)
 	if !ok || builtin == nil {
-		return queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(policy)}}
+		// Name the user's routing.Policy, not the adapter the engine holds.
+		return queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(routing.PublicPolicy(policy))}}
 	}
 	options := builtin.InternalOptions
 	result := queryLoadBalancingReport{}
@@ -746,8 +859,16 @@ func buildQueryRetryReport(cfg *InternalClusterSettings) queryRetryReport {
 	}
 	return queryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
 }
+
+// InternalBuildRetryPolicyReport describes policy. No policy and retry.Never
+// both stop at the first failure, which the schema calls fallthrough.
 func InternalBuildRetryPolicyReport(policy retry.Policy) any {
+	if policy == nil {
+		return InternalRetryPolicyFallthroughReport{Type: "fallthrough"}
+	}
 	switch p := policy.(type) {
+	case retry.Never, *retry.Never:
+		return InternalRetryPolicyFallthroughReport{Type: "fallthrough"}
 	case retry.Safe:
 		attempts := p.MaxAttempts
 		if attempts <= 0 {

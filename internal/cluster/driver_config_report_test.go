@@ -111,7 +111,7 @@ func TestDriverConfigReport(t *testing.T) {
 			if report.Write == nil || report.Write.TimeoutMs != 7000 {
 				t.Errorf("expected write.timeout-ms 7000, got %+v", report.Write)
 			}
-			if report.TLS == nil || !report.TLS.HostnameVerification {
+			if report.TLS == nil || report.TLS.HostnameVerification == nil || !*report.TLS.HostnameVerification {
 				t.Errorf("expected tls.hostname-verification true, got %+v", report.TLS)
 			}
 
@@ -241,7 +241,7 @@ func TestDriverConfigReport(t *testing.T) {
 				cfg := *InternalNewClusterSettings("127.0.0.1")
 				cfg.MetadataSchemaRequestTimeout = tt.timeout
 				cfg.MaxWaitSchemaAgreement = tt.agreement
-				got := buildControlPlaneReport(&cfg, tt.isScyllaConn)
+				got := buildControlPlaneReport(&cfg, nil, tt.isScyllaConn)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildControlPlaneReport() mismatch:\n%s", diff)
 				}
@@ -649,7 +649,7 @@ func TestDriverConfigReport(t *testing.T) {
 				if got == nil {
 					t.Fatal("expected a tls group when SslOpts is set")
 				}
-				if got.HostnameVerification != want {
+				if got.HostnameVerification == nil || *got.HostnameVerification != want {
 					t.Errorf("hostname-verification = %v, but the effective tls.Config verifies = %v",
 						got.HostnameVerification, want)
 				}
@@ -659,7 +659,7 @@ func TestDriverConfigReport(t *testing.T) {
 				// test reaches the reporter.
 				pristine := *InternalNewClusterSettings("127.0.0.1")
 				pristine.SslOpts = tt.opts
-				if fallback := buildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification != want {
+				if fallback := buildTLSReport(&pristine); fallback == nil || fallback.HostnameVerification == nil || *fallback.HostnameVerification != want {
 					t.Errorf("without a resolved tls.Config: hostname-verification = %v, want %v", fallback, want)
 				}
 			})

@@ -278,7 +278,21 @@ func (config Config) Snapshot() Config {
 
 type defaultReconnectPolicy struct{}
 
+// Default reconnect delays: the first attempt waits up to
+// DefaultReconnectBase and the delay doubles up to DefaultReconnectMax, each
+// jittered down by up to half.
+const (
+	DefaultReconnectBase = time.Second
+	DefaultReconnectMax  = 32 * time.Second
+)
+
+// IsDefaultReconnect reports whether p is the policy DefaultConfig installs.
+func IsDefaultReconnect(p ReconnectPolicy) bool {
+	_, ok := p.(defaultReconnectPolicy)
+	return ok
+}
+
 func (defaultReconnectPolicy) Delay(attempt int) (time.Duration, bool) {
-	delay := time.Second << min(max(attempt, 0), 5)
+	delay := DefaultReconnectBase << min(max(attempt, 0), 5) // up to DefaultReconnectMax
 	return delay/2 + time.Duration(rand.Int64N(int64(delay/2))), true
 }
