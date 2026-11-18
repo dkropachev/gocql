@@ -154,14 +154,12 @@ func (h InternalTranslatedAddresses) Equal(o *InternalTranslatedAddresses) bool 
 
 type HostInfoBuilder struct {
 	TranslatedAddresses *InternalTranslatedAddresses
-	Workload            string
 	HostId              string
 	SchemaVersion       string
 	Hostname            string
 	ClusterName         string
 	Partitioner         string
 	Rack                string
-	DseVersion          string
 	DataCenter          string
 	ConnectAddress      net.IP
 	BroadcastAddress    net.IP
@@ -186,7 +184,6 @@ func (b HostInfoBuilder) Build() HostInfo {
 	}
 	return *func() *HostInfo {
 		opaqueStorageValue := new(HostInfo)
-		opaqueStorageValue.privateStorage.InternalDseVersion = b.DseVersion
 		opaqueStorageValue.privateStorage.InternalHostId = hostUUID
 		opaqueStorageValue.privateStorage.InternalDataCenter = b.DataCenter
 		opaqueStorageValue.privateStorage.InternalSchemaVersion = b.SchemaVersion
@@ -194,7 +191,6 @@ func (b HostInfoBuilder) Build() HostInfo {
 		opaqueStorageValue.privateStorage.InternalClusterName = b.ClusterName
 		opaqueStorageValue.privateStorage.InternalPartitioner = b.Partitioner
 		opaqueStorageValue.privateStorage.InternalRack = b.Rack
-		opaqueStorageValue.privateStorage.InternalWorkload = b.Workload
 		opaqueStorageValue.privateStorage.InternalTokens = b.Tokens
 		opaqueStorageValue.privateStorage.InternalPreferredIP = b.PreferredIP
 		opaqueStorageValue.privateStorage.InternalBroadcastAddress = b.BroadcastAddress
@@ -374,30 +370,6 @@ func InternalHostInfoHostUUID(h *HostInfo) cql.UUID {
 	return id
 }
 
-// Deprecated: WorkLoad is a DSE-specific field that is no longer queried
-// from system tables. It will always return "" for hosts discovered via
-// the driver. Only populated if set explicitly via HostInfoBuilder.
-func (h *HostInfo) WorkLoad() string {
-	h.privateStorage.InternalMu.RLock()
-	defer h.privateStorage.InternalMu.RUnlock()
-	return h.privateStorage.InternalWorkload
-}
-
-// Deprecated: Graph is a DSE-specific field that is no longer queried
-// from system tables. It always returns false.
-func (h *HostInfo) Graph() bool {
-	return false
-}
-
-// Deprecated: DSEVersion is a DSE-specific field that is no longer queried
-// from system tables. It will always return "" for hosts discovered via
-// the driver. Only populated if set explicitly via HostInfoBuilder.
-func (h *HostInfo) DSEVersion() string {
-	h.privateStorage.InternalMu.RLock()
-	defer h.privateStorage.InternalMu.RUnlock()
-	return h.privateStorage.InternalDseVersion
-}
-
 func (h *HostInfo) Partitioner() string {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
@@ -510,12 +482,6 @@ func InternalHostInfoUpdate(h *HostInfo, from *HostInfo) {
 	}
 	if h.privateStorage.InternalHostId.IsEmpty() {
 		h.privateStorage.InternalHostId = from.privateStorage.InternalHostId
-	}
-	if h.privateStorage.InternalWorkload == "" {
-		h.privateStorage.InternalWorkload = from.privateStorage.InternalWorkload
-	}
-	if h.privateStorage.InternalDseVersion == "" {
-		h.privateStorage.InternalDseVersion = from.privateStorage.InternalDseVersion
 	}
 	if h.privateStorage.InternalPartitioner == "" {
 		h.privateStorage.InternalPartitioner = from.privateStorage.InternalPartitioner

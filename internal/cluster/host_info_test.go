@@ -78,8 +78,6 @@ func TestHostInfo(t *testing.T) {
 					Rack:          "rack1",
 					Tokens:        []string{"token1", "token2"},
 					Port:          9042,
-					Workload:      "Analytics",
-					DseVersion:    "6.8.0",
 					ClusterName:   "test-cluster",
 					Partitioner:   "Murmur3Partitioner",
 					Hostname:      "node1.example.com",
@@ -99,12 +97,6 @@ func TestHostInfo(t *testing.T) {
 				}
 				if host.Port() != builder.Port {
 					t.Errorf("Port() = %d, expected %d", host.Port(), builder.Port)
-				}
-				if host.WorkLoad() != builder.Workload {
-					t.Errorf("WorkLoad() = %q, expected %q", host.WorkLoad(), builder.Workload)
-				}
-				if host.DSEVersion() != builder.DseVersion {
-					t.Errorf("DSEVersion() = %q, expected %q", host.DSEVersion(), builder.DseVersion)
 				}
 				if host.ClusterName() != builder.ClusterName {
 					t.Errorf("ClusterName() = %q, expected %q", host.ClusterName(), builder.ClusterName)
@@ -253,14 +245,12 @@ func TestHostInfo(t *testing.T) {
 
 				builder := endpoint.HostInfoBuilder{
 					TranslatedAddresses: translatedAddrs,
-					Workload:            "Cassandra",
 					HostId:              "b0000000-0000-0000-0000-000000000456",
 					SchemaVersion:       "schema-v2",
 					Hostname:            "cassandra-node.local",
 					ClusterName:         "production-cluster",
 					Partitioner:         "Murmur3Partitioner",
 					Rack:                "rack2",
-					DseVersion:          "6.8.1",
 					DataCenter:          "dc2",
 					ConnectAddress:      net.IPv4(192, 168, 2, 1),
 					BroadcastAddress:    net.IPv4(192, 168, 2, 2),
@@ -276,9 +266,6 @@ func TestHostInfo(t *testing.T) {
 				host := builder.Build()
 
 				// Verify all fields
-				if host.WorkLoad() != builder.Workload {
-					t.Errorf("WorkLoad() = %q, expected %q", host.WorkLoad(), builder.Workload)
-				}
 				if host.HostID() != builder.HostId {
 					t.Errorf("HostID() = %q, expected %q", host.HostID(), builder.HostId)
 				}
@@ -290,9 +277,6 @@ func TestHostInfo(t *testing.T) {
 				}
 				if host.Rack() != builder.Rack {
 					t.Errorf("Rack() = %q, expected %q", host.Rack(), builder.Rack)
-				}
-				if host.DSEVersion() != builder.DseVersion {
-					t.Errorf("DSEVersion() = %q, expected %q", host.DSEVersion(), builder.DseVersion)
 				}
 				if host.DataCenter() != builder.DataCenter {
 					t.Errorf("DataCenter() = %q, expected %q", host.DataCenter(), builder.DataCenter)
@@ -695,8 +679,6 @@ func TestHostInfo(t *testing.T) {
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalTokens = []string{"9"}
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalPartitioner = "p-new"
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalClusterName = "c-new"
-			implEndpoint.HostInfoData(opaqueStorageValue).InternalWorkload = "w-new"
-			implEndpoint.HostInfoData(opaqueStorageValue).InternalDseVersion = "d-new"
 			return opaqueStorageValue
 		}()
 		implEndpoint.HostInfoData(from).InternalVersion.Set("6.0.0")

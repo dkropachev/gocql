@@ -82,7 +82,6 @@ type SessionStorage struct {
 	InternalIsClosing                 bool
 	InternalHasAggregatesAndFunctions bool
 	InternalUseSystemSchema           bool
-	tabletsRoutingV1                  bool
 	isInitialized                     bool
 	InternalIsClosed                  bool
 }

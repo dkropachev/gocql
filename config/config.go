@@ -294,14 +294,6 @@ func (b *ConfigBuilder) WithHeartbeat(interval, timeout time.Duration) *ConfigBu
 	return b
 }
 
-// WithCoalesceWrites is kept for compatibility and has no effect on the
-// driver's connections: each one's writer already sends every request queued
-// while it was busy in one socket write, without delaying any.
-func (b *ConfigBuilder) WithCoalesceWrites(wait time.Duration) *ConfigBuilder {
-	b.settings.CoalesceWait = wait
-	return b
-}
-
 // WithConnectionsPerShard keeps n connections to every shard of each node, so
 // each request goes out on a connection of the shard that owns its data. A
 // node that reports no shards, such as Cassandra, counts as one shard. n must
