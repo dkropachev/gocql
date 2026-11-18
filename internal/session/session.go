@@ -119,6 +119,9 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 		return cqltype.TypeValidation("batch", "nil batch")
 	}
 	core := s.Core()
+	if core == nil {
+		return errZeroSession()
+	}
 	if core.Closed() {
 		return cqlerr.ErrClosed
 	}

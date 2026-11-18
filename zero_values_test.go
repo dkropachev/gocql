@@ -163,6 +163,15 @@ func TestZeroValuesRejected(t *testing.T) {
 	requireValidation(t, "zero Session.UnpreparedExec", err)
 	_, err = session.Prepare(ctx, stmt)
 	requireValidation(t, "zero Session.Prepare", err)
+	requireValidation(t, "zero Session.UnpreparedAddToBatch", session.UnpreparedAddToBatch(new(gocql.Batch), stmt, cql.EmptyParams{}))
+	_, _, err = session.UnpreparedOne(ctx, stmt, cql.EmptyParams{}, new(cql.EmptyRow))
+	requireValidation(t, "zero Session.UnpreparedOne", err)
+	_, err = session.UnpreparedEach(ctx, stmt, cql.EmptyParams{}, new(cql.EmptyRow), func(*cql.EmptyRow) error { return nil })
+	requireValidation(t, "zero Session.UnpreparedEach", err)
+	for _, err = range session.UnpreparedAll(ctx, stmt, cql.EmptyParams{}, new(cql.EmptyRow)) {
+		break
+	}
+	requireValidation(t, "zero Session.UnpreparedAll", err)
 
 	var prepared gocql.Prepared[cql.EmptyParams, cql.EmptyRow]
 	_, err = prepared.Exec(ctx, cql.EmptyParams{})

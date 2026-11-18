@@ -314,8 +314,9 @@ func compareStringMaps(a, b map[string]string) bool {
 }
 
 // IndexKind is the kind of a secondary index, as system_schema.indexes
-// stores it; a kind the driver does not name keeps the server's text. Later
-// releases may add values, so a switch over them needs a default case.
+// stores it; a kind the driver does not name keeps the server's text. The
+// zero IndexKind is empty and names no kind. Later releases may add values,
+// so a switch over them needs a default case.
 type IndexKind string
 
 // The kinds of secondary indexes.
