@@ -18,7 +18,6 @@ package cluster
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"net"
 	"net/netip"
@@ -137,60 +136,6 @@ func writeErrorResult(resp *protocol.Framer, stream int, code cqlerr.ErrorCode, 
 	resp.WriteString(msg)
 }
 
-type testPreparedCol struct {
-	keyspace, table, name string
-	typ                   cql.Type
-}
-
-// testPrepared describes a RESULT/Prepared reply. keyspace/table set means a
-// global table spec; otherwise each column carries its own.
-type testPrepared struct {
-	id              uint64
-	flags           int
-	keyspace, table string
-	cols            []testPreparedCol
-	pkIndexes       []uint16
-}
-
-func (p testPrepared) write(resp *protocol.Framer, stream int, writeResultMetadataID func(uint64)) {
-	resp.WriteHeader(0, frm.OpResult, stream)
-	resp.WriteInt(frm.ResultKindPrepared)
-	resp.WriteShortBytes(binary.BigEndian.AppendUint64(nil, p.id))
-	writeResultMetadataID(p.id)
-
-	global := p.keyspace != ""
-	flags := p.flags
-	if global {
-		flags |= frm.FlagGlobalTableSpec
-	}
-	resp.WriteInt(int32(flags))
-	resp.WriteInt(int32(len(p.cols)))
-	if resp.Proto >= protocol.ProtoVersion4 {
-		resp.WriteInt(int32(len(p.pkIndexes)))
-		for _, idx := range p.pkIndexes {
-			resp.WriteShort(idx)
-		}
-	}
-	if global {
-		resp.WriteString(p.keyspace)
-		resp.WriteString(p.table)
-	}
-	for _, c := range p.cols {
-		if !global {
-			resp.WriteString(c.keyspace)
-			resp.WriteString(c.table)
-		}
-		resp.WriteString(c.name)
-		resp.WriteShort(uint16(c.typ))
-	}
-
-	// <result_metadata>
-	resp.WriteInt(int32(frm.FlagNoMetaData))
-	resp.WriteInt(0)
-}
-
 // routingTestServer is a TestServer answering PREPARE from a fixed table of
 // statements and counting how many PREPAREs each one received. Statements not
 // in the table get a server error.
-
-func int32Bytes(v int32) []byte { return binary.BigEndian.AppendUint32(nil, uint32(v)) }

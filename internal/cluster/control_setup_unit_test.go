@@ -134,12 +134,6 @@ func newControlTestServer(t *testing.T, configure func(srv *controlTestServer)) 
 	return srv
 }
 
-func (srv *controlTestServer) registered() [][]string {
-	srv.mu.Lock()
-	defer srv.mu.Unlock()
-	return append([][]string(nil), srv.registers...)
-}
-
 func (srv *controlTestServer) cluster() *InternalClusterSettings {
 	cfg := InternalNewClusterSettings(srv.Address)
 	cfg.ProtoVersion = protocol.ProtoVersion4

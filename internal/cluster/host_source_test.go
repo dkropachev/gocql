@@ -43,12 +43,9 @@ type systemSchemaTestControl struct {
 	iter *nativeResultFixture
 }
 
-func (*systemSchemaTestControl) InternalGetConn() *InternalConnHost               { return nil }
-func (*systemSchemaTestControl) InternalAwaitSchemaAgreement() error              { return nil }
-func (*systemSchemaTestControl) query(string, ...any) (iter *nativeResultFixture) { return nil }
-func (c *systemSchemaTestControl) querySystem(string, ...any) (iter *nativeResultFixture) {
-	return c.iter
-}
+func (*systemSchemaTestControl) InternalGetConn() *InternalConnHost  { return nil }
+func (*systemSchemaTestControl) InternalAwaitSchemaAgreement() error { return nil }
+
 func (*systemSchemaTestControl) InternalConnect([]*endpoint.HostInfo) error { return nil }
 func (*systemSchemaTestControl) InternalClose()                             {}
 func (*systemSchemaTestControl) InternalGetSession() *Core                  { return nil }

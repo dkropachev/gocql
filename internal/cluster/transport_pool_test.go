@@ -187,13 +187,7 @@ func (c *wireCounter) Write(p []byte) (int, error) {
 	}
 	return n, err
 }
-func (c *wireCounter) reset() {
-	c.reads.Store(0)
-	c.writes.Store(0)
-	c.readBytes.Store(0)
-	c.writeBytes.Store(0)
-	c.records.Store(0)
-}
+
 func benchTLS(b testing.TB) (*tls.Conn, *tls.Conn, *wireCounter, func()) {
 	b.Helper()
 	rawClient, rawServer := net.Pipe()

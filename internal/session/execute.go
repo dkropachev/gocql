@@ -1299,6 +1299,23 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	}()
 	var lastErr error
 	var log attemptLog
+	// contextEnded ends the execution with the context's error.
+	contextEnded := func() (*transport.InternalResponsePage, error) {
+		aggregate.Attempts = startedCount
+		failure := ctx.Err()
+		if active > 0 {
+			// An abandoned in-flight attempt may have been applied.
+			log.raise(cqlerr.MaybeExecuted)
+		}
+		if request.InternalLogical != nil {
+			if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
+				aggregate.HostID = *coordinator
+				failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
+				log.raise(cqlerr.PartiallyExecuted)
+			}
+		}
+		return nil, log.error(failure, aggregate)
+	}
 	for {
 		var outcome typedAttemptOutcome
 		if firstOutcome != nil {
@@ -1307,20 +1324,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			received := false
 			select {
 			case <-ctx.Done():
-				aggregate.Attempts = startedCount
-				failure := ctx.Err()
-				if active > 0 {
-					// An abandoned in-flight attempt may have been applied.
-					log.raise(cqlerr.MaybeExecuted)
-				}
-				if request.InternalLogical != nil {
-					if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
-						aggregate.HostID = *coordinator
-						failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
-						log.raise(cqlerr.PartiallyExecuted)
-					}
-				}
-				return nil, log.error(failure, aggregate)
+				return contextEnded()
 			case <-closing:
 				// A closing session ends the delayed retries instead of
 				// launching them.
@@ -1402,6 +1406,13 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
 			if response != nil {
 				response.Owner.Release()
+			}
+			if ctx.Err() != nil {
+				// The context ended before this failure reached the loop. A
+				// cancellation, such as Session.Close's, and the failure it
+				// causes (the closed connection) can arrive in either order;
+				// the cancellation is the cause.
+				return contextEnded()
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {

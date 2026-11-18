@@ -45,16 +45,6 @@ const (
 	// refresher runs with. Production uses debounce.RingRefreshDebounceTime
 	// (1s); a test only needs it short enough not to dominate the run.
 	nodeEventRefreshInterval = 2 * time.Millisecond
-
-	// nodeEventRefreshTimeout bounds a positive "a refresh should happen"
-	// assertion. Generous on purpose: exceeding it means a refresh never came,
-	// not that the machine was briefly busy.
-	nodeEventRefreshTimeout = 2 * time.Second
-
-	// nodeEventQuietWindow bounds a negative "no refresh should happen"
-	// assertion. It is ~75x nodeEventRefreshInterval, so a refresh that was
-	// wrongly scheduled has ample time to land and fail the test.
-	nodeEventQuietWindow = 150 * time.Millisecond
 )
 
 // nodeEventPolicy records the HostStateNotifier half of HostSelectionPolicy.
@@ -87,28 +77,10 @@ func (p *nodeEventPolicy) snapshot(src []string) []string {
 	return dst
 }
 
-func (p *nodeEventPolicy) addHostCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.addHost)
-}
-
-func (p *nodeEventPolicy) removeHostCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.removeHost)
-}
-
 func (p *nodeEventPolicy) hostUpCalls() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.snapshot(p.hostUp)
-}
-
-func (p *nodeEventPolicy) hostDownCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.hostDown)
 }
 
 // nodeEventFixture is a Session cut down to exactly what the node-event path
@@ -208,21 +180,3 @@ type satedConnPicker struct {
 }
 
 func (satedConnPicker) Size() (int, int) { return 1, 0 }
-
-func (f *nodeEventFixture) awaitRefresh(t *testing.T) {
-	t.Helper()
-	select {
-	case <-f.refreshes:
-	case <-time.After(nodeEventRefreshTimeout):
-		t.Fatal("timed out waiting for a ring refresh")
-	}
-}
-
-func (f *nodeEventFixture) assertNoRefresh(t *testing.T) {
-	t.Helper()
-	select {
-	case <-f.refreshes:
-		t.Fatal("ring refresh happened but should have been suppressed")
-	case <-time.After(nodeEventQuietWindow):
-	}
-}

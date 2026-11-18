@@ -29,17 +29,11 @@
 package cluster
 
 import (
-	"errors"
-	"fmt"
 	"net"
-	"sort"
-	"strings"
-	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
 // tUUID returns a deterministic UUID for testing. Byte 0 is always set to
@@ -51,38 +45,6 @@ func tUUID(n int) cql.UUID {
 	u[14] = byte(n >> 8)
 	u[15] = byte(n)
 	return u
-}
-
-// tID returns the string representation of tUUID(n), suitable for passing to
-// expectHosts and other string-based comparisons.
-func tID(n int) string {
-	return tUUID(n).String()
-}
-
-func createPolicy(keyspace string, shuffle bool) HostSelectionPolicy {
-	policy := TokenAwareHostPolicy(RoundRobinHostPolicy())
-	policyInternal := policy.(*tokenAwareHostPolicy)
-	tokenAwareHostPolicyData(policyInternal).getKeyspaceName = func() string { return keyspace }
-	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(ks string) (*metadata2.Keyspace, error) {
-		return nil, errors.New("not initalized")
-	}
-	policy.SetPartitioner("OrderedPartitioner")
-	tokenAwareHostPolicyData(policyInternal).getKeyspaceMetadata = func(keyspaceName string) (*metadata2.Keyspace, error) {
-		if keyspaceName != keyspace {
-			return nil, fmt.Errorf("unknown keyspace: %s", keyspaceName)
-		}
-		return &metadata2.Keyspace{
-			Name:          keyspace,
-			StrategyClass: "SimpleStrategy",
-			StrategyOptions: map[string]string{
-				"class":              "SimpleStrategy",
-				"replication_factor": "2",
-			},
-		}, nil
-	}
-	tokenAwareHostPolicyData(policyInternal).shuffleReplicas = shuffle
-	policy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: keyspace})
-	return policy
 }
 
 func makeHostInfoListTestHosts(n int) []*endpoint.HostInfo {
@@ -101,57 +63,4 @@ func makeHostInfoListTestHosts(n int) []*endpoint.HostInfo {
 
 	}
 	return hosts
-}
-
-func expectHosts(t *testing.T, msg string, iter NextHost, hostIDs ...string) {
-	t.Helper()
-
-	expectedHostIDs := make(map[string]struct{}, len(hostIDs))
-	for i := range hostIDs {
-		expectedHostIDs[hostIDs[i]] = struct{}{}
-	}
-
-	expectedStr := func() string {
-		keys := make([]string, 0, len(expectedHostIDs))
-		for k := range expectedHostIDs {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		return strings.Join(keys, ", ")
-	}
-
-	for len(expectedHostIDs) > 0 {
-		host := iter()
-		if host == nil || host.Info() == nil {
-			t.Fatalf("%s: expected hostID one of {%s}, but got nil", msg, expectedStr())
-		}
-		hostID := host.Info().HostID()
-		if _, ok := expectedHostIDs[hostID]; !ok {
-			t.Fatalf("%s: expected host ID one of {%s}, but got %s", msg, expectedStr(), hostID)
-		}
-		delete(expectedHostIDs, hostID)
-	}
-}
-
-func expectNoMoreHosts(t *testing.T, iter NextHost) {
-	t.Helper()
-	host := iter()
-	if host == nil {
-		// success
-		return
-	}
-	info := host.Info()
-	if info == nil {
-		t.Fatalf("expected no more hosts, but got host with nil Info()")
-		return
-	}
-	t.Fatalf("expected no more hosts, but got %s", info.HostID())
-}
-
-type fixedInt64Partitioner int64
-
-func (f fixedInt64Partitioner) Name() string               { return "FixedInt64Partitioner" }
-func (f fixedInt64Partitioner) Hash([]byte) endpoint.Token { return endpoint.InternalInt64Token(f) }
-func (f fixedInt64Partitioner) ParseString(s string) endpoint.Token {
-	return endpoint.InternalParseInt64Token(s)
 }

@@ -158,6 +158,13 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			log = new(attemptLog)
 		}
 		attemptStatus := log.fail(err, conn, attempt, consistency, trace)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			// The context ended before the attempt failed. A cancellation, such
+			// as Session.Close's, and the failure it causes (the closed
+			// connection) can reach the attempt in either order; the
+			// cancellation is the cause.
+			return failure(ctxErr)
+		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
 			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})

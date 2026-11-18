@@ -244,8 +244,8 @@ type requestDefaultReport struct {
 }
 
 type queryRetryReport struct {
-	// Policy is one of retryPolicySimpleReport, retryPolicyDowngradingReport, or
-	// retryPolicyCustomReport.
+	// Policy is InternalRetryPolicySimpleReport or
+	// InternalRetryPolicyCustomReport.
 	Policy any `json:"policy"`
 	// Backoff is decoupled from Policy's discriminant on purpose: the schema
 	// places it as a sibling of policy, not nested under a policy variant, so
@@ -261,15 +261,6 @@ type InternalRetryPolicySimpleReport struct {
 	MaxRetries int    `json:"max-retries"`
 }
 
-type retryPolicyDowngradingReport struct {
-	Type string `json:"type"`
-	// MaxRetries is DowngradingConsistencyRetryPolicy's own retry limit: its
-	// Attempt method stops retrying once it has stepped through every entry of
-	// ConsistencyLevelsToTry, so the slice's length is a concrete, always-known
-	// retry limit -- not something to guess at or leave unset.
-	MaxRetries int `json:"max-retries"`
-}
-
 type InternalRetryPolicyCustomReport struct {
 	// MaxRetries is populated only for a custom policy whose retry limit the
 	// driver can read. That is just the built-in
@@ -279,12 +270,6 @@ type InternalRetryPolicyCustomReport struct {
 	MaxRetries *int   `json:"max-retries,omitempty"`
 	Type       string `json:"type"`
 	Name       string `json:"name"`
-}
-
-type retryBackoffExponentialReport struct {
-	Type   string `json:"type"`
-	BaseMs int64  `json:"base-ms"`
-	MaxMs  int64  `json:"max-ms"`
 }
 
 type queryLoadBalancingReport struct {

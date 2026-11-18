@@ -303,6 +303,23 @@ documented methods.
 - **Contains:** reading CQL trace sessions through a `Session`.
 - **Must not contain:** tracing of the client itself, which is `observe`.
 
+### Engine packages that share the node and connection work
+
+Each package's `doc.go` says in full what it contains and must not contain.
+In short:
+
+- **`internal/endpoint`:** one node: `HostInfo` and its state, addresses and
+  their resolution and translation, ScyllaDB node features, tokens and
+  partitioners. Nothing that dials.
+- **`internal/transport`:** one connection: dialing, TLS, the shard-aware
+  source port, connection startup, and the request/response transport.
+  Nothing that spans connections.
+- **`internal/pool`:** the connections kept open to each node: host pools,
+  connection pickers, a pool's own dial retries. Not which hosts exist.
+- **`internal/cluster`:** the cluster view and the session core: control
+  connection, system-table discovery, events, metadata, replica placement,
+  downed-host reconnection, and the wiring of pools to the session.
+
 ### `cmd/cqlgen`
 
 - **Contains:** the code generator for struct mappings used by `cql.ParamsOf`
@@ -351,7 +368,8 @@ need work, tracked in the release review:
 
 - The v1 package split left files with the same names (`connectionpool.go`,
   `policies.go`, `host_source.go`, `pool_services.go`) in
-  `internal/cluster`, `internal/pool` and `internal/endpoint`. Merge each
-  responsibility into one owner.
+  `internal/cluster`, `internal/pool` and `internal/endpoint`, and some
+  code still sits outside the package its `doc.go` says owns it. The moves
+  are tracked in section 11 of the v2 release review (#1188).
 - Several public types still lack doc comments of their own; the API
   golden file lists every exported name to review.

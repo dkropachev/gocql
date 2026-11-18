@@ -450,37 +450,6 @@ func (cfg *InternalClusterSettings) WithOptions(opts ...ClusterOption) *Internal
 	return cfg
 }
 
-type ClientRoutesOption func(*ClientRoutesConfig)
-
-func WithEndpoints(endpoints ...ClientRoutesEndpoint) func(*ClientRoutesConfig) {
-	return func(cfg *ClientRoutesConfig) {
-		cfg.Endpoints = endpoints
-	}
-}
-
-// WithClientRoutes returns a cluster option that enables routing through
-// ScyllaDB Cloud private endpoints using the system.client_routes table.
-//
-// Configure at least one connection ID with WithEndpoints. If cfg.Hosts is empty
-// when this option is applied, non-empty ConnectionAddr values from the endpoints
-// are also used as initial contact points.
-func WithClientRoutes(opts ...ClientRoutesOption) func(*InternalClusterSettings) {
-	var pmCfg ClientRoutesConfig
-	for _, opt := range opts {
-		opt(&pmCfg)
-	}
-	return func(cfg *InternalClusterSettings) {
-		cfg.ClientRoutesConfig = &pmCfg
-		if len(cfg.Hosts) == 0 {
-			for _, ep := range pmCfg.Endpoints {
-				if ep.ConnectionAddr != "" {
-					cfg.Hosts = append(cfg.Hosts, ep.ConnectionAddr)
-				}
-			}
-		}
-	}
-}
-
 func (cfg *InternalClusterSettings) Validate() error {
 	if len(cfg.Hosts) == 0 {
 		return ErrNoHosts

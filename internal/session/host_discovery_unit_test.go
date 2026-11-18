@@ -84,12 +84,6 @@ func (rs *ringTestServer) setPeers(peers ...testPeer) {
 	rs.peers = peers
 }
 
-func (rs *ringTestServer) failPeers(msg string) {
-	rs.mu.Lock()
-	defer rs.mu.Unlock()
-	rs.peersErr = msg
-}
-
 func (rs *ringTestServer) session(t *testing.T, configure func(cfg *implCluster.InternalClusterSettings)) *implCluster.Core {
 	t.Helper()
 	cfg := rs.cluster()

@@ -151,16 +151,22 @@ func (e *InternalEventDebouncer) debounceOwnedContext(ctx context.Context, frame
 	}
 	e.InternalTimer.Reset(eventDebounceTime)
 
-	// TODO: probably need a warning to track if this threshold is too low
 	if len(e.InternalEvents) < InternalEventBufferSize {
 		e.InternalEvents = append(e.InternalEvents, frame)
 		e.releases = append(e.releases, release)
 		e.InternalMu.Unlock()
 		return true
-	} else {
-		e.InternalOverflow = true
 	}
+	// The flush that follows resynchronizes in place of the dropped events.
+	// Warn once per flush window, so that a buffer too small for the event
+	// rate shows in the log.
+	first := !e.InternalOverflow
+	e.InternalOverflow = true
 	e.InternalMu.Unlock()
+	if first {
+		e.InternalLogger.Warn("gocql: event buffer full, dropping events until the next resync",
+			"debouncer", e.name, "buffer_size", InternalEventBufferSize)
+	}
 	return false
 }
 
@@ -235,7 +241,6 @@ func sessionHandleSchemaEvent(s *Core, frames []protocol.Frame) {
 	s.PublishV2Metadata()
 	defer s.PublishV2Metadata()
 	defer s.scheduleV2SchemaRetry()
-	// TODO: debounce events
 	for _, frame := range frames {
 		switch f := frame.(type) {
 		case *frm.SchemaChangeKeyspace:

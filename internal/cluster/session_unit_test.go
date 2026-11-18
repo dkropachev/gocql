@@ -27,10 +27,7 @@ package cluster
 import (
 	"sync/atomic"
 
-	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
-	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func newTestSessionForTableMetadata(ctrl *schemaDataMock) *Core {
@@ -38,58 +35,6 @@ func newTestSessionForTableMetadata(ctrl *schemaDataMock) *Core {
 	SessionData(s).isInitialized = true
 	return s
 }
-
-// testWarningFramer is a mock framerInterface that returns configurable warnings.
-type testWarningFramer struct {
-	warnings      []string
-	customPayload map[string][]byte
-	released      bool
-}
-
-func (f *testWarningFramer) ReadBytesInternal() ([]byte, error) { return nil, nil }
-func (f *testWarningFramer) GetCustomPayload() map[string][]byte {
-	return f.customPayload
-}
-func (f *testWarningFramer) GetHeaderWarnings() []string { return f.warnings }
-func (f *testWarningFramer) Release()                    { f.released = true }
-
-type staticConnPicker struct {
-	conn *transport.Conn
-}
-
-func (p staticConnPicker) Put(*transport.Conn) error { return nil }
-func (p staticConnPicker) Remove(*transport.Conn)    {}
-func (p staticConnPicker) InFlight() int             { return 0 }
-func (p staticConnPicker) Size() (int, int)          { return 1, 0 }
-func (p staticConnPicker) Close()                    {}
-func (p staticConnPicker) NextShard() (shardID, nrShards int) {
-	return 0, 0
-}
-func (p staticConnPicker) GetConnectionCount() int       { return 1 }
-func (p staticConnPicker) GetExcessConnectionCount() int { return 0 }
-func (p staticConnPicker) GetShardCount() int            { return 0 }
-
-type staticSelectedHost struct {
-	host *endpoint.HostInfo
-}
-
-func (h staticSelectedHost) Info() *endpoint.HostInfo { return h.host }
-func (h staticSelectedHost) Token() endpoint.Token    { return nil }
-func (h staticSelectedHost) Mark(error)               {}
-
-type consistencyRetryPolicy struct {
-	consistency cql.Consistency
-}
-
-type synchronizedRetryPolicy struct {
-	maxRetries int
-	entered    atomic.Int32
-	allEntered chan struct{}
-}
-
-type keyspaceCapturingQueryObserver struct{ keyspace string }
-
-type keyspaceCapturingBatchObserver struct{ keyspace string }
 
 // shrinkingRetryPolicy allows one attempt for its first `allowed`
 // GetMaxRetries calls, then none.

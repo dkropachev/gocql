@@ -216,25 +216,6 @@ func (m *schemaDataMock) InternalAwaitSchemaAgreement() error {
 	return nil
 }
 
-func (m *schemaDataMock) query(statement string, values ...any) *nativeResultFixture {
-	m.mu.Lock()
-	m.queries = append(m.queries, queryRecord{method: "query", stmt: statement})
-	delay := m.queryDelay
-	iterFor := m.iterFor
-	m.mu.Unlock()
-
-	if delay > 0 {
-		time.Sleep(delay)
-	}
-	if iterFor != nil {
-		if iter := iterFor(statement); iter != nil {
-			return iter
-		}
-	}
-
-	return &nativeResultFixture{}
-}
-
 func (m *schemaDataMock) querySystem(statement string, values ...any) *nativeResultFixture {
 	m.mu.Lock()
 	m.queries = append(m.queries, queryRecord{method: "querySystem", stmt: statement})

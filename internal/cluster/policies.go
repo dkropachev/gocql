@@ -305,8 +305,7 @@ func RoundRobinHostPolicy() HostSelectionPolicy {
 }
 
 type InternalRoundRobinHostPolicy struct {
-	hosts           cowHostList
-	lastUsedHostIdx uint64
+	hosts cowHostList
 }
 
 func (r *InternalRoundRobinHostPolicy) IsLocal(*implEndpoint.HostInfo) bool { return true }
@@ -682,7 +681,6 @@ type dcAwareRR struct {
 	local             string
 	localHosts        cowHostList
 	remoteHosts       cowHostList
-	lastUsedHostIdx   uint64
 	disableDCFailover bool
 }
 
@@ -775,14 +773,9 @@ func (d *dcAwareRR) HostDown(host *implEndpoint.HostInfo) { d.RemoveHost(host) }
 // a different rack, before hosts in all other datacenters
 
 type rackAwareRR struct {
-	localDC   string
-	localRack string
-	hosts     []cowHostList
-	// lastUsedHostIdx keeps the index of the last used host.
-	// It is accessed atomically and needs to be aligned to 64 bits, so we
-	// keep it first in the struct. Do not move it or add new struct members
-	// before it.
-	lastUsedHostIdx   uint64
+	localDC           string
+	localRack         string
+	hosts             []cowHostList
 	disableDCFailover bool
 }
 

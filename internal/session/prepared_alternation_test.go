@@ -135,6 +135,9 @@ func newAlternationFixture(tb testing.TB, cols int) *alternationFixture {
 // more per execution than one statement alone: the connection keeps both
 // statements' metadata.
 func TestPreparedAlternationAllocs(t *testing.T) {
+	if raceEnabled {
+		t.Skip("allocation counts are not stable under -race")
+	}
 	for _, cols := range []int{1, 4, 16} {
 		t.Run(fmt.Sprintf("%dcols", cols), func(t *testing.T) {
 			f := newAlternationFixture(t, cols)

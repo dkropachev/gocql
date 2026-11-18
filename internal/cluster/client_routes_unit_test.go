@@ -40,17 +40,7 @@ type fakeControlConn struct {
 
 func (f *fakeControlConn) InternalGetConn() *InternalConnHost  { return nil }
 func (f *fakeControlConn) InternalAwaitSchemaAgreement() error { return nil }
-func (f *fakeControlConn) query(statement string, values ...any) *nativeResultFixture {
-	f.statement = statement
-	f.values = values
-	if f.iter != nil {
-		return f.iter
-	}
-	return &nativeResultFixture{}
-}
-func (f *fakeControlConn) querySystem(statement string, values ...any) *nativeResultFixture {
-	return &nativeResultFixture{}
-}
+
 func (f *fakeControlConn) InternalConnect(hosts []*endpoint.HostInfo) error { return nil }
 func (f *fakeControlConn) InternalClose()                                   {}
 func (f *fakeControlConn) InternalGetSession() *Core                        { return nil }

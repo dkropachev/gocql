@@ -429,7 +429,6 @@ func (f *Framer) Finish() error {
 			panic("compress flag set with no compressor")
 		}
 
-		// TODO: only compress frames which are big enough
 		compressed, err := f.Compressor.Encode(f.Buf[HeadSize:])
 		if err != nil {
 			return err
@@ -498,8 +497,6 @@ func (f *Framer) parseReadyFrame() Frame {
 	}
 }
 
-// TODO: if we move the body buffer onto the frameHeader then we only need a single
-// framer, and can move the methods onto the header.
 func (f *Framer) parseSupportedFrame() Frame {
 	return &frm.SupportedFrame{
 		FrameHeader: *f.Header,
@@ -524,8 +521,6 @@ func (w *WriteStartupFrame) BuildFrame(f *Framer, streamID int) error {
 }
 
 func (f *Framer) ReadTypeInfo() TypeInfo {
-	// TODO: factor this out so the same code paths can be used to parse custom
-	// types and other types, as much of the logic will be duplicated.
 	id := f.ReadShort()
 
 	simple := cqltype.NewCustomType(f.Proto,
@@ -654,7 +649,6 @@ func (r PreparedMetadata) String() string {
 }
 
 func (f *Framer) ParsePreparedMetadata() PreparedMetadata {
-	// TODO: deduplicate this from parseMetadata
 	meta := PreparedMetadata{}
 
 	meta.Flags = f.ReadInt()
@@ -981,7 +975,6 @@ func (f *Framer) parseResultSchemaChange() Frame {
 	change := f.ReadString()
 	target := f.ReadString()
 
-	// TODO: could just use a separate type for each target
 	switch target {
 	case "KEYSPACE":
 		return &frm.SchemaChangeKeyspace{
@@ -1466,9 +1459,8 @@ func (f *Framer) WriteUnset() {
 }
 
 func (f *Framer) WriteBytes(p []byte) {
-	// TODO: handle null case correctly,
-	//     [bytes]        A [int] n, followed by n bytes if n >= 0. If n < 0,
-	//					  no byte should follow and the value represented is `null`.
+	// [bytes] is an [int] n followed by n bytes; n < 0 means null, written
+	// for a nil slice.
 	if p == nil {
 		f.writeIntNeg1()
 	} else {
