@@ -56,11 +56,9 @@ type HostInfoStorage struct {
 	InternalSharderGeneration    uint64
 	InternalTransportGeneration  uint64
 	InternalPort                 int
-	// TODO(zariel): reduce locking maybe, not all values will change, but to ensure
-	// that we are thread safe use a mutex to access all fields.
-	InternalMu     sync.RWMutex
-	InternalState  NodeStateCell // read without InternalMu; written under it
-	InternalHostId cql.UUID
+	InternalMu                   sync.RWMutex
+	InternalState                NodeStateCell // read without InternalMu; written under it
+	InternalHostId               cql.UUID
 }
 
 func HostInfoData(v *HostInfo) *HostInfoStorage { return &v.privateStorage }

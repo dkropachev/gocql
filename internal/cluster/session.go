@@ -119,7 +119,6 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	//Check the TLS Config before trying to connect to anything external
 	connCfg, err := connConfig(&s.privateStorage.InternalCfg)
 	if err != nil {
-		//TODO: Return a typed error
 		return nil, fmt.Errorf("gocql: unable to create session: %w", err)
 	}
 	s.privateStorage.InternalConnCfg = connCfg
@@ -406,13 +405,12 @@ func (s *Core) init() error {
 		}
 	}
 
-	// TODO(zariel): we probably dont need this any more as we verify that we
-	// can connect to one of the endpoints supplied by using the control conn.
-	// See if there are any connections in the pool
 	if s.privateStorage.InternalCfg.ReconnectInterval > 0 {
 		go s.reconnectDownedHosts(s.privateStorage.InternalCfg.ReconnectInterval)
 	}
 
+	// The control connection reached a node, but the session still needs a
+	// pooled connection to run requests on.
 	if s.privateStorage.InternalPool.Size() == 0 {
 		return ErrNoConnectionsStarted
 	}

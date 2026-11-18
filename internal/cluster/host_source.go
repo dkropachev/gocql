@@ -173,8 +173,6 @@ func hostInfoFromMap(row map[string]any, defaultPort int) (*implEndpoint.HostInf
 			}
 			implEndpoint.HostInfoData(&host).InternalSchemaVersion = schemaVersion.String()
 		}
-		// TODO(thrawn01): Add 'port'? once CASSANDRA-7544 is complete
-		// Not sure what the port field will be called until the JIRA issue is complete
 	}
 
 	if implEndpoint.HostInfoData(&host).InternalPort == 0 {

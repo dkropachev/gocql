@@ -689,9 +689,8 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		defer typed.InternalDialFinished(shardID, nrShards)
 	}
 
-	// TODO: provide a more robust connection retry mechanism, we should also
-	// be able to detect hosts that come up by trying to connect to downed ones.
-	// try to connect
+	// Past these attempts, the session's reconnectDownedHosts loop retries the
+	// host when ReconnectInterval is set.
 	var conn *transport.Conn
 	reconnectionPolicy := pool.InternalServices.Reconnection
 	for i := 0; i < reconnectionPolicy.GetMaxRetries(); i++ {

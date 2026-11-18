@@ -208,10 +208,6 @@ func (b HostInfoBuilder) Build() HostInfo {
 
 type HostInfo struct {
 	privateStorage HostInfoStorage
-
-	// TODO(zariel): reduce locking maybe, not all values will change, but to ensure
-	// that we are thread safe use a mutex to access all fields.
-
 }
 
 func (h *HostInfo) Equal(host *HostInfo) bool {
