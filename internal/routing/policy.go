@@ -425,12 +425,12 @@ func replicaRoute(host *pool.HostRoute, t Target, h *HostSnapshot, shard cql.Opt
 		shard = t.ShardID
 	}
 	if shard.Set {
-		return Route{host: host, Shard: int32(min(shard.Value, math.MaxInt32))}
+		return Route{host: host, shard: int32(min(shard.Value, math.MaxInt32))}
 	}
 	if h.Shards > 0 {
-		return Route{host: host, Shard: shardOf(token, h.Shards, h.ShardingIgnoreMSB)}
+		return Route{host: host, shard: shardOf(token, h.Shards, h.ShardingIgnoreMSB)}
 	}
-	return Route{host: host, Shard: AnyShard}
+	return Route{host: host, shard: AnyShard}
 }
 
 // Fallback returns the full plan: the leader, the replicas by tier in
@@ -680,7 +680,7 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 // shard, or to any shard of its host, or, for r to any shard, to its host.
 func (p *InternalLazyRoutingPlan) duplicate(r Route) bool {
 	for _, e := range p.emitted {
-		if e.host == r.host && (e.Shard == r.Shard || e.Shard == AnyShard || r.Shard == AnyShard) {
+		if e.host == r.host && (e.shard == r.shard || e.shard == AnyShard || r.shard == AnyShard) {
 			return true
 		}
 	}
@@ -698,21 +698,21 @@ func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, repli
 		return Route{}, false
 	}
 	host := p.index.routes[i]
-	r := Route{host: host, Shard: AnyShard}
+	r := Route{host: host, shard: AnyShard}
 	switch {
 	case replica && p.tokenSet:
 		r = replicaRoute(host, t, h, p.shard, p.token)
 	case p.shard.Set:
-		r.Shard = int32(min(p.shard.Value, math.MaxInt32))
+		r.shard = int32(min(p.shard.Value, math.MaxInt32))
 	case t.ShardID.Set:
-		r.Shard = int32(min(t.ShardID.Value, math.MaxInt32))
+		r.shard = int32(min(t.ShardID.Value, math.MaxInt32))
 	}
 	if p.duplicate(r) {
 		return Route{}, false
 	}
 	p.emitted = append(p.emitted, r)
-	if r.Shard != AnyShard && !p.strict && !t.StrictShard {
-		p.fallback = Route{host: host, Shard: AnyShard}
+	if r.shard != AnyShard && !p.strict && !t.StrictShard {
+		p.fallback = Route{host: host, shard: AnyShard}
 	}
 	return r, true
 }
@@ -723,7 +723,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 		p.fallback = Route{}
 		repeated := false
 		for _, e := range p.emitted {
-			repeated = repeated || e.host == r.host && e.Shard == AnyShard
+			repeated = repeated || e.host == r.host && e.shard == AnyShard
 		}
 		if !repeated {
 			p.emitted = append(p.emitted, r)
@@ -935,21 +935,20 @@ func (p *InternalRoutingPolicy) claimLatencyUpdate(clock time.Time) bool {
 
 type singleTargetRouting struct {
 	target Target
-	strict bool
 }
 
-func SingleTargetRouting(t Target, strictShard bool) RoutingPolicy {
-	return &singleTargetRouting{target: t, strict: strictShard}
+func SingleTargetRouting(t Target) RoutingPolicy {
+	return &singleTargetRouting{target: t}
 }
 func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
-	if (p.strict || p.target.StrictShard) && !p.target.ShardID.Set {
+	if p.target.StrictShard && !p.target.ShardID.Set {
 		return cqltype.TypeValidation("routing shard", "strict target requires a shard ID")
 	}
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
-				if (p.strict || p.target.StrictShard) && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
+				if p.target.StrictShard && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
 					return cqltype.TypeValidation("routing shard", "unavailable shard")
 				}
 				return nil
@@ -970,7 +969,6 @@ func (p *singleTargetRouting) Fallback(_ routing2.Info, m *MetadataSnapshot) Que
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
 				t := p.target
-				t.StrictShard = p.strict || t.StrictShard
 				if t.ShardID.Set && (h.Shards == 0 || t.ShardID.Value >= h.Shards) {
 					if t.StrictShard {
 						return &InternalTargetPlan{}

@@ -74,7 +74,6 @@ func (t DataType) Dimension() (uint16, bool)
 func (c Columns) Len() int
 func (c Columns) At(index int) (ColumnSpec, bool)
 func (c Columns) Equal(other Columns) bool
-func (c Columns) Same(other Columns) bool
 
 type Encoder[T any] interface {
     CheckType(DataType) error
@@ -1417,7 +1416,7 @@ set by the routing policy. StrictShard requires a present shard ID; absent,
 out-of-range or unavailable strict shards return a typed target error without
 same-host shard fallback. HostID pinning never falls back to a different host.
 Target strictness survives plan, attempt and pool seams; routing.SingleTarget
-propagates its strictShard argument unchanged. Unsupported version options fail
+honors its target's StrictShard unchanged. Unsupported version options fail
 before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
 
@@ -1455,12 +1454,13 @@ type Info struct {
     ShardID cql.Option[uint32]
 }
 type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; StrictShard bool }
-type Route struct { Shard int32; /* unexported host route */ }
+type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
 func (r Route) Usable() bool
-func (r Route) ShardOf(token int64) int32
-func (r Route) WithShard(shard int32) Route
+func (r Route) Shard() cql.Option[uint32]           // unset: any connection of the host
+func (r Route) ShardOf(token int64) cql.Option[uint32]
+func (r Route) WithShard(shard cql.Option[uint32]) Route
 type Plan interface { Next() (Route, bool) }
 type Policy interface {
     Validate(*metadata.Snapshot) error
@@ -1581,8 +1581,7 @@ type LatencyOptions struct {
     Scale, RetryPeriod, UpdateInterval time.Duration
 }
 func NewPolicy(Options) (Policy, error)
-func SingleTarget(Target, strictShard bool) Policy
-const AnyShard
+func SingleTarget(Target) Policy
 type PartitionKey struct { /* logical canonical encoded component stream */ }
 func (k PartitionKey) Len() int64
 func (k PartitionKey) ForEach(func(cql.Bytes) error) error
@@ -1716,7 +1715,7 @@ func (s *Session[D]) Closed() bool
 
 // package event
 type Kind uint8
-const (Topology Kind = iota; Status; Schema; Control; ClientRoute; Overflow)
+const (Unknown Kind = iota; Topology; Status; Schema; Control; ClientRoute; Overflow)
 type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
     Kind Kind

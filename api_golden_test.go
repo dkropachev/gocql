@@ -36,9 +36,10 @@ const apiGoldenPath = "testdata/api.txt"
 // anywhere in the public API: in a signature, a field, or as the target of an
 // alias. docs/package-layout.md forbids both.
 //
-// It covers the default build; files behind build tags are not described.
+// Build tags must not change the public API: the build under each of
+// tagSets describes exactly the default API.
 func TestPublicAPI(t *testing.T) {
-	api := describePublicAPI(t)
+	api := describePublicAPI(t, "")
 	for _, line := range strings.Split(api, "\n") {
 		if strings.Contains(line, "internal/") {
 			t.Errorf("internal type in the public API: %s", strings.TrimSpace(line))
@@ -58,7 +59,18 @@ func TestPublicAPI(t *testing.T) {
 		t.Fatalf("%s is out of date; review the change and run go test -run TestPublicAPI -update-api .\n%s",
 			apiGoldenPath, lineDiff(string(want), api))
 	}
+	for _, tags := range tagSets {
+		t.Run(tags, func(t *testing.T) {
+			if tagged := describePublicAPI(t, tags); tagged != api {
+				t.Errorf("-tags %s changes the public API:\n%s", tags, lineDiff(api, tagged))
+			}
+		})
+	}
 }
+
+// tagSets are the build tags the library's own files use; each must leave the
+// public API and the package layers unchanged.
+var tagSets = []string{"gocql_perf", "gocql_debug", "integration"}
 
 // lineDiff lists the lines only in want (-) and only in got (+). Every line of
 // the golden file is unique, as each member line names its type.
@@ -89,11 +101,11 @@ type listedPackage struct {
 	Export     string
 }
 
-func describePublicAPI(t *testing.T) string {
+func describePublicAPI(t *testing.T, tags string) string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "go", "list", "-export", "-deps", "-json", "./...").Output()
+	out, err := exec.CommandContext(ctx, "go", "list", "-tags="+tags, "-export", "-deps", "-json", "./...").Output()
 	if err != nil {
 		t.Fatalf("go list: %v", err)
 	}

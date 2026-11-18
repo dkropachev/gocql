@@ -20,15 +20,33 @@ import (
 	"fmt"
 )
 
-// StreamOutputField is one column of a streamed row mapping, built with
-// StreamColumn or StreamColumnAt. It is immutable, never boxes a field value
-// and never retains the application destination supplied later.
-type StreamOutputField[R any] struct {
+// StreamOutputField is one column of a streamed row mapping. Only
+// StreamColumn and StreamColumnAt build one: its method is unexported. It is immutable, never boxes a field value and never retains the
+// application destination supplied later.
+type StreamOutputField[R any] interface {
+	streamDeclaration() *streamOutputField[R]
+}
+
+type streamOutputField[R any] struct {
 	compile         func(DataType) (streamFieldPlan[R], error)
 	resetMissing    func(*R)
 	canResetMissing func() bool
 	loc             fieldLocation
 }
+
+func (f *streamOutputField[R]) streamDeclaration() *streamOutputField[R] { return f }
+
+// streamDeclarations unwraps fields; a nil field stays nil and fails Compile.
+func streamDeclarations[R any](fields []StreamOutputField[R]) []*streamOutputField[R] {
+	out := make([]*streamOutputField[R], len(fields))
+	for i, f := range fields {
+		if f != nil {
+			out[i] = f.streamDeclaration()
+		}
+	}
+	return out
+}
+
 type streamFieldPlan[R any] struct {
 	reset  func(*R)
 	decode func(*StreamRowReader, *R) error
@@ -45,7 +63,7 @@ func StreamColumnAt[R, V any](index int, decoder StreamDecoder[V], field func(*R
 	return makeStreamColumn(fieldLocation{index: index, positional: true}, decoder, field)
 }
 func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], field func(*R) *V) StreamOutputField[R] {
-	return StreamOutputField[R]{loc: loc, canResetMissing: func() bool { return field != nil && streamDeclarationCanReset(decoder) }, resetMissing: func(dst *R) {
+	return &streamOutputField[R]{loc: loc, canResetMissing: func() bool { return field != nil && streamDeclarationCanReset(decoder) }, resetMissing: func(dst *R) {
 		if ptr := field(dst); ptr != nil {
 			resetStreamDeclaration(decoder, ptr)
 		}
@@ -73,7 +91,7 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 
 type streamRowsCodec[R any] struct {
 	reset  func(*R)
-	fields []StreamOutputField[R]
+	fields []*streamOutputField[R]
 	// structMapping maps like buffered struct rows: every column needs a
 	// field, and fields without a column are allowed.
 	structMapping bool
@@ -88,7 +106,7 @@ type streamRowsPlan[R any] struct {
 // StreamRowInto maps result columns into caller storage. reset clears application state before
 // each row and must preserve mapped buffer capacity. Only a successful NextInto publishes a row.
 func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] {
-	return streamRowsCodec[R]{reset: reset, fields: append([]StreamOutputField[R](nil), fields...)}
+	return streamRowsCodec[R]{reset: reset, fields: streamDeclarations(fields)}
 }
 func (c streamRowsCodec[R]) Compile(columns Columns) (StreamRowPlan[R], error) {
 	return c.compile(columns, false, UDTOptions{})
@@ -102,7 +120,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 	}
 	locations := make([]fieldLocation, len(c.fields))
 	for i, f := range c.fields {
-		if f.compile == nil || f.resetMissing == nil || f.canResetMissing == nil {
+		if f == nil || f.compile == nil || f.resetMissing == nil || f.canResetMissing == nil {
 			return nil, typeValidation("stream field", "uninitialized declaration")
 		}
 		locations[i] = f.loc
@@ -252,7 +270,7 @@ func (c streamRecordCodec[R]) Compile(t DataType) (StreamValuePlan[R], error) {
 	if builtin, ok := c.decoder.(streamRowsCodec[R]); ok {
 		plan, err = builtin.compile(columns, true, c.options)
 	} else if single, ok := c.decoder.(streamOneColumn[R]); ok {
-		composed := streamRowsCodec[R]{reset: func(*R) {}, fields: []StreamOutputField[R]{StreamColumnAt(0, single.decoder, func(value *R) *R { return value })}}
+		composed := streamRowsCodec[R]{reset: func(*R) {}, fields: []*streamOutputField[R]{StreamColumnAt(0, single.decoder, func(value *R) *R { return value }).streamDeclaration()}}
 		plan, err = composed.compile(columns, true, c.options)
 	} else {
 		plan, err = compileStreamRowPlan(c.decoder, columns)
@@ -310,7 +328,9 @@ func (c streamRowsCodec[R]) Reset(dst *R) {
 	}
 	c.reset(dst)
 	for _, field := range c.fields {
-		field.resetMissing(dst)
+		if field != nil {
+			field.resetMissing(dst)
+		}
 	}
 }
 func (c streamRowsCodec[R]) streamCanReset() bool {
@@ -318,7 +338,7 @@ func (c streamRowsCodec[R]) streamCanReset() bool {
 		return false
 	}
 	for _, field := range c.fields {
-		if field.canResetMissing == nil || !field.canResetMissing() {
+		if field == nil || field.canResetMissing == nil || !field.canResetMissing() {
 			return false
 		}
 	}

@@ -61,7 +61,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	base := testing.AllocsPerRun(100, func() { parse(bodies[0], expect[0]) })
 	i := 0
 	allocs := testing.AllocsPerRun(1000, func() {
-		if got := parse(bodies[i&3], expect[i&3]); !got.Same(expect[i&3]) {
+		if got := parse(bodies[i&3], expect[i&3]); !sameColumns(got, expect[i&3]) {
 			t.Fatal("interleaved hit did not return the expected columns", i&3)
 		}
 		i++
@@ -70,7 +70,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 		t.Fatalf("four interleaved statements allocate %.0f/op, one statement %.0f/op", allocs, base)
 	}
 	// A fifth statement evicts one entry and is still parsed correctly.
-	if got := parse(bodies[4], expect[4]); !got.Same(expect[4]) {
+	if got := parse(bodies[4], expect[4]); !sameColumns(got, expect[4]) {
 		t.Fatal("fifth statement did not return its expected columns")
 	}
 	for i := range bodies {
@@ -87,7 +87,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	}
 	owns := func(e cql.Columns) *metadataReuseEntry {
 		for j := range settings.MetadataReuse.entries {
-			if entry := &settings.MetadataReuse.entries[j]; entry.owner.Same(e) {
+			if entry := &settings.MetadataReuse.entries[j]; sameColumns(entry.owner, e) {
 				return entry
 			}
 		}

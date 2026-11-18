@@ -15,17 +15,17 @@ import (
 const AnyShard = pool.AnyShard
 
 // Route is a destination a routing plan resolved fully: a host and a shard.
-// A request takes a connection for Shard of the route's host and does not
+// A request takes a connection for the shard of the route's host and does not
 // move to another shard or host on its own; moving on is the plan's next
 // Route. Policies take routes from a MetadataSnapshot (HostRoutes, ReplicaRoutes).
 type Route struct {
 	host  *pool.HostRoute
-	Shard int32
+	shard int32
 }
 
 // InternalNewRoute returns a route to shard of host.
 func InternalNewRoute(host *pool.HostRoute, shard int32) Route {
-	return Route{host: host, Shard: shard}
+	return Route{host: host, shard: shard}
 }
 
 // InternalRouteOf returns a route to t's host and shard that belongs to no
@@ -35,8 +35,11 @@ func InternalRouteOf(t Target) Route {
 	if t.ShardID.Set && t.ShardID.Value <= math.MaxInt32 {
 		shard = int32(t.ShardID.Value)
 	}
-	return Route{host: pool.NewHostRoute(t.HostID), Shard: shard}
+	return Route{host: pool.NewHostRoute(t.HostID), shard: shard}
 }
+
+// InternalShard returns the route's shard, or AnyShard.
+func (r Route) InternalShard() int32 { return r.shard }
 
 // InternalHost returns the route's host handle.
 func (r Route) InternalHost() *pool.HostRoute { return r.host }
@@ -52,14 +55,14 @@ func (r Route) HostID() cql.UUID {
 // Target describes the route.
 func (r Route) Target() Target {
 	t := Target{HostID: r.HostID()}
-	if r.Shard >= 0 {
-		t.ShardID = cql.Option[uint32]{Value: uint32(r.Shard), Set: true}
+	if r.shard >= 0 {
+		t.ShardID = cql.Option[uint32]{Value: uint32(r.shard), Set: true}
 	}
 	return t
 }
 
 // WithShard returns the route to shard of the same host.
-func (r Route) WithShard(shard int32) Route { return Route{host: r.host, Shard: shard} }
+func (r Route) WithShard(shard int32) Route { return Route{host: r.host, shard: shard} }
 
 // ShardOf returns the shard owning token on the route's host, or AnyShard
 // when its sharding is not known.
@@ -89,7 +92,7 @@ func (m *MetadataSnapshot) HostRoutes() []Route {
 	x := m.routingIndex()
 	out := make([]Route, len(x.routes))
 	for i, h := range x.routes {
-		out[i] = Route{host: h, Shard: AnyShard}
+		out[i] = Route{host: h, shard: AnyShard}
 	}
 	return out
 }
@@ -109,9 +112,9 @@ func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 		if !ok {
 			continue
 		}
-		r := Route{host: x.routes[i], Shard: AnyShard}
+		r := Route{host: x.routes[i], shard: AnyShard}
 		if t.ShardID.Set && t.ShardID.Value <= math.MaxInt32 {
-			r.Shard = int32(t.ShardID.Value)
+			r.shard = int32(t.ShardID.Value)
 		}
 		out = append(out, r)
 	}

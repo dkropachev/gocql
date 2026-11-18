@@ -20,8 +20,17 @@ func TestMirrorLayouts(t *testing.T) {
 	if err := link.CheckLayout[routing.PartitionKey, partitionKeyRep](); err != nil {
 		t.Error(err)
 	}
-	if metadata.AnyShard != AnyShard {
-		t.Errorf("AnyShard differs: metadata %d, engine %d", metadata.AnyShard, AnyShard)
+	// A public route without a shard is the engine's AnyShard route, and a
+	// shard the engine cannot hold degrades to it too.
+	for _, shard := range []cql.Option[uint32]{{}, {Value: 1 << 31, Set: true}} {
+		r := metadata.Route{}.WithShard(shard)
+		if got := link.Mirror[Route](&r).shard; got != AnyShard {
+			t.Errorf("WithShard(%v) holds shard %d, want AnyShard %d", shard, got, AnyShard)
+		}
+	}
+	r := metadata.Route{}.WithShard(cql.Option[uint32]{Value: 7, Set: true})
+	if got := link.Mirror[Route](&r).shard; got != 7 {
+		t.Errorf("WithShard(7) holds shard %d", got)
 	}
 }
 
@@ -75,4 +84,27 @@ func TestMurmur3FastPath(t *testing.T) {
 			t.Fatalf("token %v, %v; want 42", got, err)
 		}
 	})
+}
+
+// TestPublicRouteShard checks the public shard accessors on a route with a host.
+func TestPublicRouteShard(t *testing.T) {
+	routes := routing.HostRoutes(v2TestMetadata().Public())
+	if len(routes) == 0 {
+		t.Fatal("no host routes")
+	}
+	r := routes[0]
+	if r.Shard().Set || r.Target().ShardID.Set {
+		t.Fatalf("a host route has shard %v", r.Shard())
+	}
+	three := cql.Option[uint32]{Value: 3, Set: true}
+	r3 := r.WithShard(three)
+	if r3.Shard() != three || r3.Target().ShardID != three || r3.HostID() != r.HostID() {
+		t.Fatalf("WithShard(3): shard %v, target %+v", r3.Shard(), r3.Target())
+	}
+	if back := r3.WithShard(cql.Option[uint32]{}); back.Shard().Set {
+		t.Fatalf("WithShard(unset) kept shard %v", back.Shard())
+	}
+	if owner := r.ShardOf(42); r.WithShard(owner).Shard() != owner {
+		t.Fatalf("WithShard(ShardOf(42)) = %v, want %v", r.WithShard(owner).Shard(), owner)
+	}
 }

@@ -53,7 +53,7 @@ func (p *pickPlan) Next() (Route, bool) {
 		if !ok {
 			return Route{}, false
 		}
-		if p.hasPick && r.Shard == p.picked.Shard && r.HostID() == p.picked.HostID() {
+		if p.hasPick && r.shard == p.picked.shard && r.HostID() == p.picked.HostID() {
 			continue
 		}
 		return r, true

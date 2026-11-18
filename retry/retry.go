@@ -5,6 +5,7 @@
 package retry
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -24,6 +25,23 @@ const (
 	// IgnoreWrite treats the failed write as successful.
 	IgnoreWrite
 )
+
+// String returns the retry action name, or Action(n) for a value it does not
+// define.
+func (a Action) String() string {
+	switch a {
+	case Stop:
+		return "stop"
+	case Same:
+		return "same"
+	case Next:
+		return "next"
+	case IgnoreWrite:
+		return "ignore write"
+	default:
+		return fmt.Sprintf("Action(%d)", uint8(a))
+	}
+}
 
 // Attempt describes a failed attempt. The driver fills it; policies only
 // read it.

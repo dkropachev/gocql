@@ -34,10 +34,10 @@ func sortedByName[T any](m map[string]T) []T {
 // user defined types, tables, indexes, functions, aggregates and views associated
 // with this keyspace.
 func (ks *Keyspace) ToCQL() (string, error) {
-	// Be aware that `CreateStmts` is not only a cache for ToCQL,
-	// but it also can be populated from response to `DESCRIBE KEYSPACE %s WITH INTERNALS`
-	if len(ks.CreateStmts) != 0 {
-		return ks.CreateStmts, nil
+	// The server's own DESCRIBE KEYSPACE ... WITH INTERNALS output, when the
+	// loader fetched it, is the authoritative schema.
+	if ks.state.ServerCQL != "" {
+		return ks.state.ServerCQL, nil
 	}
 
 	var sb strings.Builder
@@ -83,8 +83,7 @@ func (ks *Keyspace) ToCQL() (string, error) {
 		}
 	}
 
-	ks.CreateStmts = sb.String()
-	return ks.CreateStmts, nil
+	return sb.String(), nil
 }
 
 // cqlTypeRef is one type name appearing in a rendered CQL type, with the three
@@ -498,7 +497,7 @@ var keyspaceCQLTemplate = template.Must(template.New("keyspace").
 	}).
 	// Single-line, always-explicit durable_writes to match what DESCRIBE KEYSPACE
 	// returns from Cassandra/Scylla, so this fallback stays consistent with the
-	// server-echoed CreateStmts path in ToCQL.
+	// server-echoed DESCRIBE output in ToCQL.
 	Parse(`CREATE KEYSPACE {{ ident .Name }} WITH replication = {'class': {{ escape ( fixStrategy .StrategyClass) }}{{ range $key, $value := .StrategyOptions }}, {{ escape $key }}: {{ escape $value }}{{ end }}} AND durable_writes = {{ .DurableWrites }};
 `))
 

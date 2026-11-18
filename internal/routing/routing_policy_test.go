@@ -55,14 +55,14 @@ func TestRoutingPolicy(t *testing.T) {
 			if got, err := m.Replicas("ks", "table", 30); err != nil || len(got) != 0 {
 				t.Fatal("tablet miss fell back to vnode", got, err)
 			}
-			single := SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}}, true)
+			single := SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}, StrictShard: true})
 			if err := single.Validate(m); err == nil {
 				t.Fatal("invalid strict shard accepted")
 			}
 			if _, ok := nextTarget(NewPlan(single, routing.Info{}, m)); ok {
 				t.Fatal("strict shard fell back")
 			}
-			single = SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}}, false)
+			single = SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}})
 			target, ok := nextTarget(NewPlan(single, routing.Info{}, m))
 			if !ok || target.ShardID.Set {
 				t.Fatal("hint fallback failed", target, ok)
@@ -186,7 +186,7 @@ func TestRoutingPolicy(t *testing.T) {
 				plan := NewPlan(p, routing.Info{}, m)
 				plan.Next()
 				if r, ok := plan.Next(); !ok || r != hosts[0] {
-					t.Fatalf("second route %v shard %d, want any shard of the picked host", r.HostID(), r.Shard)
+					t.Fatalf("second route %v shard %d, want any shard of the picked host", r.HostID(), r.shard)
 				}
 			})
 		})

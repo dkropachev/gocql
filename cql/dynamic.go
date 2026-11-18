@@ -233,7 +233,7 @@ func (v Value) require(kinds ...Type) error {
 		return err
 	}
 	if v.state != Present {
-		return typeValidation("value", "%s has state %d", v.typ, v.state)
+		return typeValidation("value", "%s has state %v", v.typ, v.state)
 	}
 	for _, kind := range kinds {
 		if v.typ.Kind() == kind {
@@ -435,7 +435,7 @@ func checkDynamicValue(t DataType, v Value, nested bool) error {
 			return typeValidation("value", "%s does not support Empty", t)
 		}
 	default:
-		return typeValidation("value", "invalid state %d", v.state)
+		return typeValidation("value", "invalid state %v", v.state)
 	}
 	return nil
 }
@@ -672,7 +672,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return Value{typ: r.Type(), state: EmptyCell}, nil
 	case Present:
 	default:
-		return Value{}, typeValidation("state", "invalid state %d", r.State())
+		return Value{}, typeValidation("state", "invalid state %v", r.State())
 	}
 	if r.Bytes().Len() == 0 && emptySupported(r.Type()) {
 		return Value{typ: r.Type(), state: EmptyCell}, nil

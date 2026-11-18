@@ -56,9 +56,9 @@ func InternalBuiltin(p routing.Policy) (*InternalRoutingPolicy, bool) {
 var builtinPolicy = link.Get[func(routing.Policy) (routing.Policy, bool)](link.BuiltinPolicy)
 
 func init() {
-	link.Set(link.BuildPolicy, func(single bool, options routing.Options, target metadata.Target, strict bool) routing.Policy {
+	link.Set(link.BuildPolicy, func(single bool, options routing.Options, target metadata.Target) routing.Policy {
 		if single {
-			return publicPolicy{SingleTargetRouting(target, strict)}
+			return publicPolicy{SingleTargetRouting(target)}
 		}
 		p, err := NewRoutingPolicy(options)
 		if err != nil {

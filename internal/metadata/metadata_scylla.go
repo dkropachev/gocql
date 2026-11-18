@@ -235,7 +235,7 @@ func compileMetadata(
 		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = compileColumns(ix.Columns, ix.OrderedColumns)
 	}
 
-	keyspace.CreateStmts = string(createStmts)
+	KeyspaceData(keyspace).ServerCQL = string(createStmts)
 }
 
 func InternalCompileTableMetadata(

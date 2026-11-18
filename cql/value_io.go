@@ -213,7 +213,7 @@ func finishValueWriter(w *ValueWriter) error {
 	case Unset:
 		prefix = math.MaxUint32 - 1
 	default:
-		w.fail(typeValidation("value", "invalid cell state %d", w.state))
+		w.fail(typeValidation("value", "invalid cell state %v", w.state))
 	}
 	if w.state != Present && length != 0 {
 		w.fail(typeValidation("value", "null or unset cell contains a payload"))
@@ -248,7 +248,7 @@ func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.R
 	r := ValueReader{typ: typ, state: state, body: body, lease: lease}
 	r.err = validateDataType(typ)
 	if state > EmptyCell || (state != Present && body.Len() != 0) {
-		r.err = &ProtocolError{Stage: "cell", Err: fmt.Errorf("invalid state %d for %d bytes", state, body.Len())}
+		r.err = &ProtocolError{Stage: "cell", Err: fmt.Errorf("invalid state %v for %d bytes", state, body.Len())}
 	}
 	return r
 }

@@ -46,7 +46,7 @@ func TestNewPolicyValidates(t *testing.T) {
 		t.Error("NewPolicy accepted an exclusion threshold below 1")
 	}
 	var zero metadata.Route
-	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1) != metadata.AnyShard {
+	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1).Set || zero.Shard().Set {
 		t.Error("the zero Route has a host")
 	}
 }

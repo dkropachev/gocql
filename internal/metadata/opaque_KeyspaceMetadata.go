@@ -13,6 +13,9 @@ type KeyspaceState struct {
 	// InternalTablesInvalidated names the tables whose schema changed and must
 	// be reloaded.
 	InternalTablesInvalidated map[string]struct{}
+	// ServerCQL is the keyspace's DESCRIBE KEYSPACE ... WITH INTERNALS output,
+	// which ToCQL returns as is when the server supplied it.
+	ServerCQL string
 }
 
 // keyspaceRep mirrors metadata.Keyspace.
@@ -28,7 +31,6 @@ type keyspaceRep struct {
 	ConsistencyMode string
 	Name            string
 	StrategyClass   string
-	CreateStmts     string
 	TabletBased     bool
 	DurableWrites   bool
 }

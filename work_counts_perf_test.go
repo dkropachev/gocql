@@ -21,6 +21,7 @@ import (
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqlperf"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/paging"
@@ -222,14 +223,14 @@ func TestWorkCountsPerf(t *testing.T) {
 			if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 				t.Fatal(e)
 			}
-			cql.ResetPerfCounters()
+			cqlperf.Reset()
 			for i := 0; i < 10000; i++ {
 				if _, e := cache.InternalSelectPlan(response, decoder); e != nil {
 					t.Fatal(e)
 				}
 			}
-			comp, maps := cql.ReadPerfCounters()
-			if comp != 0 || maps != 0 || calls.Load() != 1 || cql.ReadPerfTypeChecks() != 0 {
+			comp, maps := cqlperf.Counters()
+			if comp != 0 || maps != 0 || calls.Load() != 1 || cqlperf.TypeChecks() != 0 {
 				t.Fatal(comp, maps, calls.Load())
 			}
 			changed := cql.NewColumns(cql.ColumnSpec{Name: "changed", Type: cql.BlobType})
@@ -242,7 +243,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					t.Fatal(e)
 				}
 			}
-			if calls.Load() != 2 || cql.ReadPerfTypeChecks() != 1 {
+			if calls.Load() != 2 || cqlperf.TypeChecks() != 1 {
 				t.Fatal("changed entry compiled repeatedly", calls.Load())
 			}
 			t.Logf("warm pages=10000 compiles=0 name_maps=0 changed_candidate_compiles=%d", calls.Load()-1)

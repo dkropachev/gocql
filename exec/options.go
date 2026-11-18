@@ -6,6 +6,7 @@
 package exec
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/config"
@@ -70,6 +71,23 @@ const (
 	// default (SERIAL).
 	SerialOmit = SerialOverride(implSession.SerialOmit)
 )
+
+// String returns the serial override name, or SerialOverride(n) for a value
+// it does not define.
+func (s SerialOverride) String() string {
+	switch s {
+	case SerialInherit:
+		return "inherit"
+	case SerialSerial:
+		return "serial"
+	case SerialLocal:
+		return "local serial"
+	case SerialOmit:
+		return "omit"
+	default:
+		return fmt.Sprintf("SerialOverride(%d)", uint8(s))
+	}
+}
 
 // CompiledOptions is an immutable snapshot made by gocql.Session.CompileOptions. Reuse it
 // for recurring one-shot execution settings; the zero value uses session

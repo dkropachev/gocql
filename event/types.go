@@ -4,6 +4,7 @@
 package event
 
 import (
+	"fmt"
 	"net/netip"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -13,8 +14,11 @@ import (
 type Kind uint8
 
 const (
+	// Unknown is the zero Kind. No delivered event has it, and a
+	// subscription filter or config.WithIgnoreEvents rejects it.
+	Unknown Kind = iota
 	// Topology reports a node joining or leaving the cluster.
-	Topology Kind = iota
+	Topology
 	// Status reports a node going up or down.
 	Status
 	// Schema reports a keyspace, table, type, function or aggregate change.
@@ -27,6 +31,29 @@ const (
 	// overflows or when the session fails to publish a metadata change.
 	Overflow
 )
+
+// String returns the event kind name, or Kind(n) for a value it does not
+// define.
+func (k Kind) String() string {
+	switch k {
+	case Unknown:
+		return "unknown"
+	case Topology:
+		return "topology"
+	case Status:
+		return "status"
+	case Schema:
+		return "schema"
+	case Control:
+		return "control"
+	case ClientRoute:
+		return "client route"
+	case Overflow:
+		return "overflow"
+	default:
+		return fmt.Sprintf("Kind(%d)", uint8(k))
+	}
+}
 
 // Event is one cluster change delivered to a Subscription.
 type Event struct {

@@ -117,7 +117,7 @@ func TestFixedWidthSplitBodies(t *testing.T) {
 // path, with requirePresent's error.
 func TestFixedWidthNullCell(t *testing.T) {
 	_, err := Int32Codec.Decode(ScalarReader(t, TypeInt, Null))
-	if err == nil || err.Error() != "gocql: nonnullable int cannot decode cell state 1" {
+	if err == nil || err.Error() != "gocql: nonnullable int cannot decode cell state null" {
 		t.Fatalf("Decode null: %v", err)
 	}
 }

@@ -128,7 +128,7 @@ func (s *Core) Subscribe(filter event.Filter) (*Subscription, error) {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
-		if kind > event.Overflow {
+		if kind == event.Unknown || kind > event.Overflow {
 			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
 		}
 	}

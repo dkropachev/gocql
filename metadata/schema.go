@@ -25,7 +25,6 @@ type Keyspace struct {
 	ConsistencyMode string
 	Name            string
 	StrategyClass   string
-	CreateStmts     string
 	TabletBased     bool
 	DurableWrites   bool
 }
@@ -46,8 +45,8 @@ func (ks *Keyspace) Clone() *Keyspace {
 		Types:           maps.Clone(ks.Types),
 		Indexes:         maps.Clone(ks.Indexes),
 		Views:           maps.Clone(ks.Views),
-		CreateStmts:     ks.CreateStmts,
 	}
+	cloned.state.ServerCQL = ks.state.ServerCQL
 	if ks.state.InternalTablesInvalidated != nil {
 		cloned.state.InternalTablesInvalidated = maps.Clone(ks.state.InternalTablesInvalidated)
 	}
@@ -379,4 +378,5 @@ func (c ColumnKind) String() string {
 
 type keyspaceState struct {
 	InternalTablesInvalidated map[string]struct{}
+	ServerCQL                 string
 }

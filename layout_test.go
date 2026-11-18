@@ -40,6 +40,7 @@ var surfacePackages = map[string]bool{
 // primitivePackages are the internal layer-0 packages; every other internal
 // package is layer 2.
 var primitivePackages = map[string]bool{
+	"internal/cqlperf":      true,
 	"internal/crc":          true,
 	"internal/cqlproto":     true,
 	"internal/debounce":     true,
@@ -95,15 +96,31 @@ func allowedImport(fromLayer, toLayer int) bool {
 
 // TestPackageLayers checks the imports of every package of the module
 // against the layers. A package's non-test imports must follow them; its
-// tests may also use test helpers.
+// tests may also use test helpers. It checks the default build and the build
+// under each of tagSets.
 func TestPackageLayers(t *testing.T) {
+	found := map[string]bool{}
+	for _, tags := range append([]string{""}, tagSets...) {
+		checkPackageLayers(t, tags, found)
+	}
+	violations := make([]string, 0, len(found))
+	for v := range found {
+		violations = append(violations, v)
+	}
+	sort.Strings(violations)
+	for _, v := range violations {
+		t.Errorf("layer violation: %s (see docs/package-layout.md)", v)
+	}
+}
+
+func checkPackageLayers(t *testing.T, tags string, found map[string]bool) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, "go", "list", "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./...").Output()
+	out, err := exec.CommandContext(ctx, "go", "list", "-tags="+tags, "-f", "{{.ImportPath}} {{join .Imports \" \"}}", "./...").Output()
 	if err != nil {
-		t.Fatalf("go list: %v", err)
+		t.Fatalf("go list -tags=%s: %v", tags, err)
 	}
-	found := map[string]bool{}
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
 		fields := strings.Fields(line)
 		from, ok := strings.CutPrefix(fields[0], modulePath)
@@ -122,14 +139,6 @@ func TestPackageLayers(t *testing.T) {
 				found[displayPackage(from)+" -> "+displayPackage(to)] = true
 			}
 		}
-	}
-	violations := make([]string, 0, len(found))
-	for v := range found {
-		violations = append(violations, v)
-	}
-	sort.Strings(violations)
-	for _, v := range violations {
-		t.Errorf("layer violation: %s (see docs/package-layout.md)", v)
 	}
 }
 

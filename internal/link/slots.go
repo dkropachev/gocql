@@ -105,7 +105,7 @@ var (
 // once a session exists.
 var (
 	// BuildPolicy holds func(single bool, options routing.Options, target
-	// metadata.Target, strict bool) routing.Policy: the session's
+	// metadata.Target) routing.Policy: the session's
 	// implementation of a policy NewPolicy (or, with single, SingleTarget)
 	// describes.
 	BuildPolicy = NewSlot("routing.buildPolicy")

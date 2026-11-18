@@ -149,7 +149,7 @@ func TestHostRoute(t *testing.T) {
 			}()
 			for i := 0; i < 20000; i++ {
 				r := routing.InternalNewRoute(host, int32(i%hostRoutingShards))
-				if r.Shard%2 == 0 {
+				if r.InternalShard()%2 == 0 {
 					r = r.WithShard(implRouting.AnyShard)
 				}
 				_ = sessionPickRoute(s, r, routing2.Info{})
@@ -169,11 +169,11 @@ func TestHostRoute(t *testing.T) {
 		var storage routing.InternalLazyRoutingPlan
 		plan := p.InternalPlanWith(info, m, &storage, nil)
 		first, ok := plan.Next()
-		if !ok || first.Shard == implRouting.AnyShard || first.Shard != first.ShardOf(42) {
+		if !ok || first.InternalShard() == implRouting.AnyShard || first.InternalShard() != first.ShardOf(42) {
 			t.Fatal("first route is not to the token's shard", first, ok)
 		}
 		second, ok := plan.Next()
-		if !ok || second.HostID() != first.HostID() || second.Shard != implRouting.AnyShard {
+		if !ok || second.HostID() != first.HostID() || second.InternalShard() != implRouting.AnyShard {
 			t.Fatal("no fallback to any shard of the host", first.Target(), second.Target(), ok)
 		}
 		if third, ok := plan.Next(); !ok || third.HostID() == first.HostID() {

@@ -112,7 +112,7 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		case event.ClientRoute:
 			settings.Metadata.ClientRouteEvents = false
 		default:
-			return Config{}, &cql.ValidationError{Field: "ignored events", Err: fmt.Errorf("%d is not a server event", kind)}
+			return Config{}, &cql.ValidationError{Field: "ignored events", Err: fmt.Errorf("%v is not a server event", kind)}
 		}
 	}
 	if err := settings.Validate(); err != nil {
@@ -602,7 +602,7 @@ func (c Config) String() string {
 	fmt.Fprintf(&w, "contact points=%v port=%d keyspace=%q compression=%v", s.ContactPoints, s.Port, s.Keyspace, s.Compression)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
-	fmt.Fprintf(&w, " discovery=%t metadata=%d prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)
+	fmt.Fprintf(&w, " discovery=%t metadata=%v prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)
 	if p := s.DefaultProfile; p != nil {
 		fmt.Fprintf(&w, " consistency=%v timeout=%v page size=%d", p.Consistency, p.Timeout, p.PageSize)
 	}
