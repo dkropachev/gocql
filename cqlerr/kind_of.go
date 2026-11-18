@@ -54,8 +54,9 @@ func rankOf(k Kind) rank {
 	}
 }
 
-// serverKind classifies a server error. The driver's own have a Kind method;
-// another implementation is classified by its code.
+// serverKind classifies a server error. ServerError is sealed and each of
+// the driver's error types has a Kind method; a type that lacked one would
+// be classified by its code.
 func serverKind(err ServerError) Kind {
 	if k, ok := err.(kinded); ok {
 		return k.Kind()

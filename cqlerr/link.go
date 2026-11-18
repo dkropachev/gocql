@@ -12,7 +12,7 @@ func init() {
 		return decodeServerError(body.(errorBody), warnings, failureReasonMap, rateLimitCode)
 	})
 	link.Set(link.ServerErrorMessage, func(err ServerError, message string, warnings []string) {
-		err.(interface{ setBase(string, []string) }).setBase(message, warnings)
+		err.setBase(message, warnings)
 	})
 }
 

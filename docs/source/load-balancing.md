@@ -15,6 +15,8 @@ path, where the first route serves the request:
 - `Fallback` returns a `routing.Plan` of every route the request may take, in
   order. The driver calls it only when the picked route fails or `Pick`
   returned false, and skips the picked route if the plan returns it again.
+  A plan returns its routes lazily; `routing.PlanOf(routes...)` makes one
+  from routes already in a slice.
 - `Observe` receives every attempt's outcome.
 
 `routing.NewPlan(policy, info, snapshot)` combines Pick and Fallback into the plan
@@ -63,7 +65,7 @@ Each stage of a request has its own answer:
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
   including speculative and cancelled ones, implement
-  `observe.Observer.StartAttempt` (see [Tracing](tracing.md)).
+  `observe.AttemptObserver.StartAttempt` (see [Tracing](tracing.md)).
 
 ## Writing your own policy
 

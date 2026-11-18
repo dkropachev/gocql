@@ -62,7 +62,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 	failure := func(err error) (*transport.InternalResponsePage, error) { return nil, log.error(err, aggregate) }
 	var conn *transport.Conn
 	pinned := false // the first attempt went to request.pinned
-	observe := request.InternalLogical.observer != nil || routingObservesLatency(request.options.InternalProfile.Routing)
+	observe := request.InternalLogical.observesAttempts() || routingObservesLatency(request.options.InternalProfile.Routing)
 	for attempt := 1; ; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return failure(err)

@@ -142,7 +142,8 @@ func (c ErrorCode) name() string {
 	return ""
 }
 
-// ServerError is implemented by every error a server returns. Find one with
+// ServerError is implemented by every error a server returns, and only by
+// them: it cannot be implemented outside this package. Find one with
 // errors.As, or a specific kind with its concrete type:
 //
 //	var timeout *cqlerr.WriteTimeoutError
@@ -155,6 +156,7 @@ type ServerError interface {
 	Message() string
 	// Warnings are the warnings the server sent with the error.
 	Warnings() []string
+	setBase(message string, warnings []string)
 }
 
 // serverError holds what every server error carries besides its code.

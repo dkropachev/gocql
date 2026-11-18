@@ -138,6 +138,9 @@ func (c ClientTimestamps) Mode() TimestampMode { return c.mode }
 func (c ClientTimestamps) Generator() func() int64 { return c.next }
 
 func (config Config) Validate() error {
+	if _, err := NewObserverHooks(config.Observer); err != nil {
+		return err
+	}
 	if _, err := config.UnixContact(); err != nil {
 		return err
 	}
