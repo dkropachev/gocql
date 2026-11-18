@@ -90,7 +90,6 @@ type HostInformation interface {
 	DataCenter() string
 	Rack() string
 	HostID() string
-	WorkLoad() string
 	Partitioner() string
 	ClusterName() string
 	Tokens() []string

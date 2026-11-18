@@ -47,7 +47,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	metadata2 "github.com/scylladb/gocql/v2/metadata"
@@ -76,8 +75,10 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		return nil, fmt.Errorf("gocql: unable to create session: cluster config validation failed: %w", err)
 	}
 
-	// TODO: we should take a context in here at some point
-	ctx, cancel := context.WithCancel(context.TODO())
+	// The session context lives until Close, so it cannot derive from the
+	// caller's connect context; Connect cancels it through context.AfterFunc
+	// if that context ends during startup.
+	ctx, cancel := context.WithCancel(context.Background())
 
 	s := func() *Core {
 		opaqueStorageValue := new(Core)
@@ -296,9 +297,6 @@ func (s *Core) init() error {
 		if err := checkServer(s.privateStorage.InternalCfg.Server, conn); err != nil {
 			return err
 		}
-		conn.InternalMu.Lock()
-		s.privateStorage.tabletsRoutingV1 = conn.InternalIsTabletSupported()
-		conn.InternalMu.Unlock()
 		s.privateStorage.InternalHostSource.setControlConn(s.privateStorage.InternalControl)
 
 		if s.privateStorage.InternalClientRoutesHandler != nil {
@@ -610,44 +608,6 @@ func sessionTableMetadata(s *Core, keyspace, table string) (*metadata2.Table, er
 	}
 
 	return s.privateStorage.InternalMetadataDescriber.GetTable(keyspace, table)
-}
-
-// TableTabletsMetadata returns the tablet metadata for the specified keyspace and table.
-// Returns (nil, nil) when no tablets exist for the given keyspace/table.
-func sessionTableTabletsMetadata(s *Core, keyspace, table string) (tablets.TabletEntryList, error) {
-	// fail fast
-	if s.Closed() {
-		return nil, cqlerr.ErrSessionClosed
-	} else if err := sessionReady(s); err != nil {
-		return nil, err
-	} else if !s.privateStorage.tabletsRoutingV1 {
-		return nil, cqlerr.ErrTabletsNotUsed
-	} else if keyspace == "" {
-		return nil, cqlerr.ErrNoKeyspace
-	} else if table == "" {
-		return nil, cqlerr.ErrNoTable
-	}
-
-	return s.privateStorage.InternalMetadataDescriber.getTableTablets(keyspace, table), nil
-}
-
-// ForEachTablet iterates over all keyspace/table pairs and their tablet entries,
-// calling fn for each one. If fn returns false, iteration stops early.
-// The entries slice is a shallow copy; do not mutate individual entries.
-func sessionForEachTablet(s *Core, fn func(keyspace, table string, entries tablets.TabletEntryList) bool) error {
-	// fail fast
-	if s.Closed() {
-		return cqlerr.ErrSessionClosed
-	} else if err := sessionReady(s); err != nil {
-		return err
-	} else if !s.privateStorage.tabletsRoutingV1 {
-		return cqlerr.ErrTabletsNotUsed
-	}
-	if fn == nil {
-		return nil
-	}
-	s.privateStorage.InternalMetadataDescriber.forEachTablet(fn)
-	return nil
 }
 
 func (s *Core) GetConn() *transport.Conn {

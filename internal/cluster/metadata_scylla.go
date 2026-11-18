@@ -146,14 +146,6 @@ func (s *InternalMetadataDescriber) getTablets() tablets.TabletInfoList {
 	return s.InternalMetadata.privateStorage.InternalTabletsMetadata.Get()
 }
 
-func (s *InternalMetadataDescriber) getTableTablets(keyspace, table string) tablets.TabletEntryList {
-	return s.InternalMetadata.privateStorage.InternalTabletsMetadata.GetTableTablets(keyspace, table)
-}
-
-func (s *InternalMetadataDescriber) forEachTablet(fn func(keyspace, table string, entries tablets.TabletEntryList) bool) {
-	s.InternalMetadata.privateStorage.InternalTabletsMetadata.ForEach(fn)
-}
-
 func (s *InternalMetadataDescriber) AddTablet(tablet tablets.TabletInfo) {
 	s.InternalMetadata.privateStorage.InternalTabletsMetadata.AddTablet(tablet)
 }

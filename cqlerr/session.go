@@ -36,6 +36,5 @@ var (
 	ErrNoKeyspace           = errors.New("gocql: no keyspace provided")
 	ErrNoTable              = errors.New("gocql: no table name provided")
 	ErrKeyspaceDoesNotExist = errors.New("gocql: keyspace does not exist")
-	ErrTabletsNotUsed       = errors.New("gocql: tablets not used")
 	ErrSessionNotReady      = errors.New("gocql: session is not ready yet")
 )

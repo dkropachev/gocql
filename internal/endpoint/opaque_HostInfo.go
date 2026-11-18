@@ -37,8 +37,6 @@ type HostInfoStorage struct {
 	InternalInitialSetupDeadline time.Time
 	InternalTranslatedAddresses  *InternalTranslatedAddresses
 	hostID                       atomic.Pointer[cql.UUID] // InternalHostId once known; it never changes after
-	InternalWorkload             string
-	InternalDseVersion           string
 	InternalDataCenter           string
 	InternalSchemaVersion        string
 	InternalHostname             string

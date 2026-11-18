@@ -141,7 +141,6 @@ package config
 		config.ConfigBuilder method (*T) WithCQLVersion(version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientID(id string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientRoutes(routes config.ClientRoutes) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithCoalesceWrites(wait time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCompression(compression cql.Compression) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConfigReport(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConnectTimeout(d time.Duration) *config.ConfigBuilder
@@ -889,7 +888,6 @@ package cqlerr
 	var cqlerr.ErrSessionClosed error
 	var cqlerr.ErrSessionNotReady error
 	var cqlerr.ErrStaleRows error
-	var cqlerr.ErrTabletsNotUsed error
 	var cqlerr.ErrTimeoutNoResponse error
 	var cqlerr.ErrUseStmt error
 	type cqlerr.ErrorCode uint16

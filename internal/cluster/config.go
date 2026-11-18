@@ -45,7 +45,9 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	legacy.WriteTimeout = config.WriteTimeout
 	legacy.ReadTimeout = config.ReadTimeout
 	legacy.SocketKeepalive = config.SocketKeepalive
-	legacy.WriteCoalesceWaitTime = config.CoalesceWait
+	// Typed connections batch queued requests in their own writer and never
+	// use the timed write coalescer.
+	legacy.WriteCoalesceWaitTime = 0
 	legacy.Timeout = profile.Timeout
 	legacy.Consistency = profile.Consistency
 	legacy.PageSize = int(profile.PageSize)

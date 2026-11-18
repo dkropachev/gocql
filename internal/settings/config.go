@@ -65,7 +65,6 @@ type Config struct {
 	ConnectTimeout, DNSTimeout                        time.Duration
 	WriteTimeout, KeepaliveInterval, KeepaliveTimeout time.Duration
 	SocketKeepalive                                   time.Duration
-	CoalesceWait                                      time.Duration
 	PreparedCacheSize                                 int
 	Port                                              uint16
 	NoDelay                                           bool
@@ -157,7 +156,7 @@ func (config Config) Validate() error {
 	if config.CQLVersion == "" {
 		return cqltype.TypeValidation("CQL version", "must not be empty")
 	}
-	if config.ReadTimeout < 0 || config.ConnectTimeout < 0 || config.DNSTimeout < 0 || config.WriteTimeout < 0 || config.KeepaliveInterval < 0 || config.KeepaliveTimeout < 0 || config.SocketKeepalive < 0 || config.CoalesceWait < 0 {
+	if config.ReadTimeout < 0 || config.ConnectTimeout < 0 || config.DNSTimeout < 0 || config.WriteTimeout < 0 || config.KeepaliveInterval < 0 || config.KeepaliveTimeout < 0 || config.SocketKeepalive < 0 {
 		return cqltype.TypeValidation("timeouts", "must not be negative")
 	}
 	if config.KeepaliveInterval > 0 && config.KeepaliveTimeout == 0 {

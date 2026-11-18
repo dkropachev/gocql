@@ -480,7 +480,6 @@ func WithClientRoutes(opts ...ClientRoutesOption) func(*InternalClusterSettings)
 				}
 			}
 		}
-		// TODO: cfg.ControlConnectionOnlyToInitialNodes
 	}
 }
 

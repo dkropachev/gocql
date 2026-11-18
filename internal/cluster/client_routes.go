@@ -12,7 +12,6 @@ import (
 	"net/netip"
 	"slices"
 	"sync"
-	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
@@ -59,17 +58,6 @@ func (l ClientRoutesEndpointList) Validate() error {
 type ClientRoutesConfig struct {
 	TableName string
 	Endpoints ClientRoutesEndpointList
-	// Deprecated:
-	ResolveHealthyEndpointPeriod time.Duration
-	// Deprecated:
-	ResolverCacheDuration time.Duration
-	// Deprecated:
-	MaxResolverConcurrency int
-
-	// Deprecated: BlockUnknownEndpoints no longer has any effect. Unknown
-	// endpoints are always blocked. This field will be removed in a future
-	// release.
-	BlockUnknownEndpoints bool
 }
 
 func (cfg *ClientRoutesConfig) Validate() error {

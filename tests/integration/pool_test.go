@@ -291,9 +291,6 @@ func TestPool(t *testing.T) {
 			t.Run(mode, func(t *testing.T) {
 				cfg := createV2ClusterWithout(fixtureTLS)
 				cfg.WithHeartbeat(0, 0)
-				if *flagRunSslTest {
-					cfg.WithCoalesceWrites(100 * time.Microsecond)
-				}
 				if mode == "host" {
 					cfg.WithConnectionsPerHost(2)
 				} else {
