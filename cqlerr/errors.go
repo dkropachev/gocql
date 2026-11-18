@@ -187,6 +187,8 @@ func (e *serverError) text(code ErrorCode) string {
 
 // UnavailableError reports that too few replicas were alive to try the
 // request. Nothing was applied.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type UnavailableError struct {
 	serverError
 	Consistency cql.Consistency
@@ -206,6 +208,8 @@ type ErrorMap map[string]uint16
 
 // WriteTimeoutError reports that replicas did not acknowledge a write in
 // time.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type WriteTimeoutError struct {
 	WriteType string
 	serverError
@@ -221,6 +225,8 @@ func (e *WriteTimeoutError) Is(target error) bool { return target == CodeWriteTi
 func (e *WriteTimeoutError) Kind() Kind           { return KindTimeout }
 
 // WriteFailureError reports that replicas failed a write.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type WriteFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
 	ErrorMap  ErrorMap
@@ -239,6 +245,8 @@ func (e *WriteFailureError) Is(target error) bool { return target == CodeWriteFa
 func (e *WriteFailureError) Kind() Kind           { return KindServer }
 
 // CDCWriteFailureError reports that a write to a CDC-enabled table failed.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type CDCWriteFailureError struct {
 	serverError
 }
@@ -250,6 +258,8 @@ func (e *CDCWriteFailureError) Is(target error) bool { return target == CodeCDCW
 func (e *CDCWriteFailureError) Kind() Kind           { return KindServer }
 
 // ReadTimeoutError reports that replicas did not answer a read in time.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ReadTimeoutError struct {
 	serverError
 	Received    int
@@ -267,6 +277,8 @@ func (e *ReadTimeoutError) Kind() Kind           { return KindTimeout }
 
 // AlreadyExistsError reports that a keyspace or table to create already
 // exists. Table is empty for a keyspace.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type AlreadyExistsError struct {
 	Keyspace string
 	Table    string
@@ -281,6 +293,8 @@ func (e *AlreadyExistsError) Kind() Kind           { return KindInvalid }
 
 // UnpreparedError reports that the server does not know a prepared
 // statement. The driver prepares it again and retries on its own.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type UnpreparedError struct {
 	serverError
 	StatementID []byte
@@ -293,6 +307,8 @@ func (e *UnpreparedError) Is(target error) bool { return target == CodeUnprepare
 func (e *UnpreparedError) Kind() Kind           { return KindInvalid }
 
 // ReadFailureError reports that replicas failed a read.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ReadFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
 	ErrorMap ErrorMap
@@ -311,6 +327,8 @@ func (e *ReadFailureError) Is(target error) bool { return target == CodeReadFail
 func (e *ReadFailureError) Kind() Kind           { return KindServer }
 
 // FunctionFailureError reports that a user-defined function failed.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type FunctionFailureError struct {
 	serverError
 	Keyspace string
@@ -327,6 +345,8 @@ func (e *FunctionFailureError) Kind() Kind           { return KindInvalid }
 // CASWriteUnknownError reports that a conditional write timed out with an
 // unknown outcome. Cassandra sends it on protocol 5; see IsCASWriteUnknown
 // for the check that also covers protocol 4 and ScyllaDB.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type CASWriteUnknownError struct {
 	serverError
 	Consistency cql.Consistency
@@ -365,6 +385,8 @@ func (o OpType) String() string {
 
 // RateLimitReachedError reports that a request exceeded ScyllaDB's
 // per-partition rate limit.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type RateLimitReachedError struct {
 	serverError
 	OpType OpType
@@ -383,6 +405,8 @@ func (e *RateLimitReachedError) Kind() Kind           { return KindRateLimited }
 // own: Server, Protocol, BadCredentials, Overloaded, Bootstrapping, Truncate,
 // Syntax, Unauthorized, Invalid and Config, and any code the driver does not
 // know.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type OtherServerError struct {
 	serverError
 	code ErrorCode

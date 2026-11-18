@@ -31,7 +31,8 @@ func (l *PageLease) Close() {
 }
 
 // Page holds exactly one response page. It is not safe for concurrent use;
-// within Rows it is used only under the rows' own lock.
+// within Rows it is used only under the rows' own lock. A nil or zero Page
+// holds no rows, and its state is complete.
 type Page[R any] struct {
 	privateStorage pageStorage[R]
 }
@@ -92,7 +93,7 @@ func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cq
 
 // NextInto decodes the next row into dst, reporting whether there was one.
 func (p *Page[R]) NextInto(dst *R) bool {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		clearDestination(dst)
 		return false
 	}
@@ -172,7 +173,7 @@ func (p *Page[R]) Err() error {
 	return p.privateStorage.err
 }
 func (p *Page[R]) Close() error {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		return nil
 	}
 	if !p.privateStorage.cursor.current() {
@@ -200,7 +201,7 @@ func (p *Page[R]) closeLocked() {
 	}
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		return nil, cqlerr.ErrNoRows
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
@@ -216,7 +217,7 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 	}(), nil
 }
 func (p *Page[R]) Clone() (R, error) {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		var zero R
 		return zero, cqlerr.ErrNoRows
 	}
@@ -227,13 +228,13 @@ func (p *Page[R]) Clone() (R, error) {
 	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
 }
 func (p *Page[R]) State() cql.PageState {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		return cqltype.CompletePageState()
 	}
 	return p.privateStorage.response.State
 }
 func (p *Page[R]) Info() cql.Result {
-	if p == nil {
+	if p == nil || p.privateStorage.response == nil {
 		return cql.Result{}
 	}
 	return codec.CloneResult(p.privateStorage.response.Result)

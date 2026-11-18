@@ -22,6 +22,8 @@ import (
 // constructors and gocql.Session.CompileOptions reject it with a validation error.
 // A built Profile may be copied and its fields changed: the copy stays built.
 // Config and query construction snapshot its fields; policy objects stay shared.
+//
+// The zero Profile is such a literal, and is rejected the same way.
 type Profile struct {
 	Retry                retry.Policy
 	Routing              routing.Policy

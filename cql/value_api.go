@@ -10,8 +10,9 @@ import (
 )
 
 // EncodedValue contains one checked value body, its complete type, and cell
-// state. Borrowed payloads remain subject to their source lifetime.
-
+// state. Borrowed payloads remain subject to their source lifetime. The zero
+// EncodedValue has the invalid zero DataType, which DecodeValue rejects with a
+// ValidationError; NewEncodedValue and EncodeValue make valid ones.
 type EncodedValue struct {
 	typ   DataType
 	body  Bytes

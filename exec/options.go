@@ -129,6 +129,8 @@ type StreamOptions struct {
 }
 
 // StreamLimits bounds the receive scratch of an incremental stream.
+//
+// Zero fields take defaults, so the zero StreamLimits is ready to use.
 type StreamLimits struct {
 	// MaxMetadataBytes caps a page's result metadata. Default 1 MiB.
 	MaxMetadataBytes int64

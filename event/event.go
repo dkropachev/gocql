@@ -9,7 +9,8 @@ import "github.com/scylladb/gocql/v2/internal/link"
 
 // Subscription owns a bounded queue of events. Overflow discards queued
 // deltas and emits Overflow, then closes. Subscribe again before reading
-// Session.Metadata.
+// Session.Metadata. gocql.Session.Subscribe makes one; a nil or zero
+// Subscription is closed: its Events queue is closed and empty.
 type Subscription struct {
 	events <-chan Event
 	close  func()
@@ -25,11 +26,18 @@ func init() {
 // Events returns the subscription's queue. It is closed when the
 // subscription closes.
 func (s *Subscription) Events() <-chan Event {
-	if s == nil {
-		return nil
+	if s == nil || s.events == nil {
+		return closedEvents
 	}
 	return s.events
 }
+
+// closedEvents is the queue of a nil or zero Subscription.
+var closedEvents = func() <-chan Event {
+	c := make(chan Event)
+	close(c)
+	return c
+}()
 
 // Close stops the subscription and closes its queue. It is idempotent.
 func (s *Subscription) Close() {

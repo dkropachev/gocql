@@ -12,6 +12,9 @@ import (
 
 // ValueWriter writes one length-framed cell. The enclosing plan owns completion;
 // an encoder writes only its body or one explicit null/unset marker.
+//
+// The driver passes one to an encoder; a zero ValueWriter rejects writes with a
+// ValidationError.
 type ValueWriter struct {
 	err                         error
 	builder                     *wire.Builder
@@ -230,6 +233,10 @@ func finishValueWriter(w *ValueWriter) error {
 }
 
 // ValueReader is an immutable snapshot. Each Cursor starts at the beginning.
+//
+// The driver passes one to a decoder. The zero ValueReader is an empty
+// present cell of the invalid zero DataType: its Cursor holds no bytes, so a
+// read fails with a ProtocolError.
 type ValueReader struct {
 	err   error
 	typ   DataType
@@ -274,6 +281,8 @@ func cursorFor(r *ValueReader) ValueCursor {
 
 // ValueCursor reads checked network scalars and nested cells across spans. A
 // failure is sticky; malformed data cannot be followed by a successful read.
+//
+// A zero ValueCursor rejects reads with a ValidationError.
 type ValueCursor struct {
 	err         error
 	lease       wire.Ref

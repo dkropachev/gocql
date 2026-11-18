@@ -18,7 +18,8 @@ import (
 // Inet, Duration, Varint and Decimal return the payload of a present scalar
 // of a matching type and an error otherwise; Elements, Entries and Fields
 // iterate a collection, map, tuple or UDT. Clone detaches a decoded value
-// from its page. The zero Value has no type and binds nowhere.
+// from its page. The zero Value has no type: binding it, or reading it with
+// an accessor, fails with a ValidationError.
 type Value struct {
 	inet        netip.Addr
 	typ         DataType
@@ -39,12 +40,16 @@ type Value struct {
 
 // ValueField is one named field of a UDT Value, or one named parameter of
 // NamedDynamicParams.
+//
+// Its zero value has an empty name and the zero Value.
 type ValueField struct {
 	Name  string
 	Value Value
 }
 
 // ValueEntry is one key and value of a map Value.
+//
+// Its zero value holds two zero Values.
 type ValueEntry struct{ Key, Value Value }
 
 func (v Value) Type() DataType   { return v.typ }
@@ -1134,6 +1139,8 @@ type dynamicRowsPlan struct {
 // metadata, At and Get return a column's Value by position and name, and
 // Clone detaches the row. Rows, Page and Each values may borrow the response;
 // One detaches the row before returning.
+//
+// The zero DynamicRow has no columns.
 type DynamicRow struct {
 	physical     *dynamicRowIndex
 	lookup       map[string]int

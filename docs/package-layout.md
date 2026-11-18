@@ -118,9 +118,19 @@ documented methods.
   `cqlerr` holds every server, connection and execution error. `cqlerr`
   classifies all of them (`KindOf`, `ExecutionStatusOf`) through small
   interfaces the error types implement, never through internal imports.
-- **Enum-like types** have a zero value that means "unset" or a documented
-  default, a `String` method, and room for new values. Users must not rely on
-  exhaustive switches.
+- **Enum-like types** keep the protocol's values when the protocol numbers
+  them (the zero `cql.Consistency` is ANY, the zero `cql.BatchKind` is
+  LOGGED); the others start at a safe zero (`retry.Stop`,
+  `cqlerr.MaybeExecuted`, `event.Unknown`, an invalid `gocql.Dialect`). A
+  setting that may be left unset is a `cql.Option`, never a zero enum. Each
+  has a `String` method that prints `Type(n)` for a value it does not define,
+  and each documents that later releases may add values, so users must not
+  rely on exhaustive switches. Only `cql.Consistency` has a parser.
+- **Zero values.** Every exported struct documents its zero value: usable,
+  and what it means (`gocql.Batch`, `exec.Options`, `cql.PageState`), or
+  rejected with a `cql.ValidationError` (`config.Config`, `gocql.Dialect`,
+  `cql.DataType`). `TestStructZeroValueDocs` checks that the sentence is
+  there.
 - **Third-party dependencies.** The main module depends only on compression
   libraries and `golang.org/x/sync`. An integration that needs another
   module (OpenTelemetry, Prometheus, YAML, cloud SDKs) is a separate Go

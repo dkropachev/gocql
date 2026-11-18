@@ -20,12 +20,19 @@ import (
 // CassandraV5. Session.Dialect reports which; one Session type serves every
 // dialect. Sessions and their prepared statements are safe for concurrent
 // use. Close the session when the application stops using it.
+//
+// A zero Session was never open: Closed reports true, Dialect returns the zero
+// Dialect, Metadata returns nil, and its methods that do work return a
+// cql.ValidationError.
 type Session implSession.Session
 
 func (s *Session) internal() *implSession.Session { return (*implSession.Session)(s) }
 
 // Dialect returns the dialect s was opened with.
 func (s *Session) Dialect() Dialect {
+	if s.internal().Core() == nil {
+		return 0
+	}
 	cfg := &s.internal().Data().InternalCfg
 	return dialectOf(cfg.ProtoVersion, cfg.Server)
 }

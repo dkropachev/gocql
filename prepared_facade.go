@@ -24,6 +24,9 @@ import (
 // because these calls are the hot path: Session.CompileOptions validates,
 // copies and resolves the settings once at setup, and each call only passes
 // the frozen result.
+//
+// Session.Prepare makes a Prepared. A zero Prepared has no columns, and its
+// methods that execute, batch or make a Query return a cql.ValidationError.
 type Prepared[P, R any] implSession.Prepared[P, R]
 
 func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {

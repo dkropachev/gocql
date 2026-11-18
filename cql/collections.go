@@ -11,8 +11,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// Entry preserves the order and duplicates in a map's encoded representation.
-
+// Entry is one key and value of a map, for decoding a map into a slice that
+// preserves the order and duplicates of its encoded representation. Its zero
+// value holds the zero K and V.
 type Entry[K, V any] struct {
 	Key   K
 	Value V
@@ -22,6 +23,8 @@ type Entry[K, V any] struct {
 // reports whether a member is available, Value returns it, and Err reports
 // the failure that stopped iteration. Collect reads the remaining members
 // into a slice, detached from the page.
+//
+// The zero ValueIterator is exhausted: Next reports false, and Err nil.
 type ValueIterator[T any] struct {
 	value        T
 	err          error

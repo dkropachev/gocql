@@ -16,6 +16,8 @@ import (
 
 // DialTarget is a resolved raw connection target. Hooks must honor the selected
 // endpoint and source, or return an error. TLS and protocol setup follow dialing.
+//
+// The driver fills it; its zero value names no address.
 type DialTarget struct {
 	LocalAddress     netip.AddrPort
 	Network, Address string
@@ -37,6 +39,9 @@ func (f DialerFunc) DialContext(ctx context.Context, target DialTarget) (net.Con
 
 // DefaultDialer opens the selected target with Go's network dialer. It also
 // supports Unix targets; TCP source selection is never applied to Unix sockets.
+//
+// The zero DefaultDialer is ready to use: the dial is bounded only by its
+// context, and TCP keepalive is off.
 type DefaultDialer struct{ ConnectTimeout, SocketKeepalive time.Duration }
 
 func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {

@@ -19,6 +19,8 @@ var (
 
 // SchemaChangedError reports that a prepared statement's bound parameters
 // changed between executions.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type SchemaChangedError struct {
 	Statement         string
 	Previous, Current cql.Columns

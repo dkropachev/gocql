@@ -11,7 +11,7 @@ import (
 )
 
 // DataType is an immutable, complete CQL type descriptor. Its zero value is
-// invalid.
+// invalid: functions that take a DataType reject it with a ValidationError.
 type DataType struct{ descriptor *dataTypeDescriptor }
 type dataTypeDescriptor struct {
 	Element, Key   DataType
@@ -24,12 +24,16 @@ type dataTypeDescriptor struct {
 }
 
 // ColumnSpec identifies one physical column and its complete type.
+//
+// The zero ColumnSpec names no column and has the invalid zero DataType.
 type ColumnSpec struct {
 	Type                  DataType
 	Keyspace, Table, Name string
 }
 
 // Columns is an immutable, ordered set of column specifications.
+//
+// The zero Columns is empty.
 type Columns struct{ columns []ColumnSpec }
 
 // scalarTypes holds one shared descriptor per scalar kind, indexed by Type.

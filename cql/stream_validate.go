@@ -224,6 +224,9 @@ func (r *StreamValueReader) failIf(err error) error {
 
 // StreamCell is a validated cell of any type decoded into caller storage:
 // its type, state and body bytes.
+//
+// The driver fills it; its zero value is a present cell with no bytes and the
+// invalid zero DataType.
 type StreamCell struct {
 	Type  DataType
 	Bytes []byte

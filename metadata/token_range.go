@@ -5,6 +5,8 @@ package metadata
 
 // TokenRange is a range of the token ring, (Start, End], with its replicas
 // in placement order.
+//
+// The driver fills it; its zero value is empty.
 type TokenRange struct {
 	Replicas   []Target
 	Start, End int64

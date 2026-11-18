@@ -79,6 +79,8 @@ func ExecutionStatusOf(err error) ExecutionStatus {
 
 // AttemptFailure records one failed attempt of a request; see
 // ExecutionError.Attempts.
+//
+// The driver fills it; its zero value is empty.
 type AttemptFailure struct {
 	Err error
 	// Address is the host:port the attempt was sent to.
@@ -111,6 +113,8 @@ func (a AttemptFailure) String() string {
 const maxRenderedAttempts = 3
 
 // ExecutionError is returned when a request fails after all its attempts.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type ExecutionError struct {
 	// Err is the reason the request stopped: the last attempt's error, the
 	// caller's cancellation, or a failure before any attempt.
@@ -130,7 +134,11 @@ func newExecutionError(err error, result cql.Result, status ExecutionStatus, att
 func (e *ExecutionError) Error() string {
 	var b strings.Builder
 	b.WriteString("gocql: request: ")
-	b.WriteString(e.Err.Error())
+	if e.Err != nil {
+		b.WriteString(e.Err.Error())
+	} else {
+		b.WriteString("unknown failure") // a zero ExecutionError
+	}
 	// A single attempt's error already names its own status.
 	if ExecutionStatusOf(e.Err) != e.status {
 		b.WriteString(executionSuffix(e.status))

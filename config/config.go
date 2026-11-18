@@ -25,7 +25,8 @@ import (
 )
 
 // Config is a validated, immutable session configuration. Build one with
-// New and ConfigBuilder.Build; the zero Config is rejected by gocql.Connect.
+// New and ConfigBuilder.Build; gocql.Connect rejects the zero Config with a
+// cql.ValidationError.
 // Build snapshots configuration values. Callbacks and provider objects remain
 // shared and must support concurrent use. A Config can be reused for many sessions.
 type Config struct {
@@ -37,6 +38,8 @@ type Config struct {
 // Setters only store values; Build validates the final configuration.
 // Zero durations disable optional timeouts and background work. Nil optional
 // providers remove the override. A ConfigBuilder is not safe for concurrent use.
+// Start one with New: Build rejects a zero ConfigBuilder with a
+// cql.ValidationError.
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
 	ignoredEvents        []event.Kind
@@ -47,6 +50,8 @@ type ConfigBuilder struct {
 	shardAwarenessChosen bool
 	maxExcessChosen      bool
 	perHost              bool
+	// started reports that New made the builder.
+	started bool
 }
 
 // New starts a configuration that connects to contactPoints. A contact
@@ -54,13 +59,16 @@ type ConfigBuilder struct {
 // prefixed with "unix:"); for a socket, no host discovery is filled in unless
 // chosen.
 func New(contactPoints ...string) *ConfigBuilder {
-	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile()}
+	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), started: true}
 }
 
 // Build validates the final settings and returns the Config or the first
 // validation error. Later calls on the builder do not affect the returned
 // Config.
 func (b *ConfigBuilder) Build() (Config, error) {
+	if !b.started {
+		return Config{}, &cql.ValidationError{Field: "config", Err: errors.New("zero ConfigBuilder; start one with config.New")}
+	}
 	settings := b.settings
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
@@ -444,6 +452,9 @@ func (b *ConfigBuilder) WithMetadataKeyspaces(keyspaces ...string) *ConfigBuilde
 // WithPartitioner sets the token partitioner for the partitioner class name,
 // next to the built-in Murmur3 and CDC partitioners.
 func (b *ConfigBuilder) WithPartitioner(name string, partitioner routing.TokenPartitioner) *ConfigBuilder {
+	if b.settings.Partitioners == nil {
+		b.settings.Partitioners = make(map[string]routing.TokenPartitioner)
+	}
 	b.settings.Partitioners[name] = partitioner
 	return b
 }
@@ -504,7 +515,7 @@ func (b *ConfigBuilder) WithRefreshAfterAgreement(on bool) *ConfigBuilder {
 // Build validates the final settings and rejects a profile that
 // ProfileBuilder.Build did not make; start one with NewProfile.
 func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
-	b.profile = &ProfileBuilder{profile: internalProfile(profile)}
+	b.profile = &ProfileBuilder{profile: internalProfile(profile), started: true}
 	return b
 }
 
@@ -513,9 +524,12 @@ func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
 // add to the same profile, and edits apply on top of the profile an earlier
 // WithDefaultProfile set. A nil choose resets the entire default profile.
 func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
-	if choose == nil {
+	switch {
+	case choose == nil:
 		b.profile = NewProfile()
-	} else {
+	case b.profile == nil: // a zero ConfigBuilder, which Build rejects
+		choose(new(ProfileBuilder))
+	default:
 		choose(b.profile)
 	}
 	return b
@@ -621,18 +635,24 @@ func (c Config) resolved() (implSettings.Config, error) {
 // ProfileBuilder assembles a Profile. Settings that are not chosen keep the
 // driver's defaults: LOCAL_QUORUM, LOCAL_SERIAL, 30s timeout, 5000-row pages,
 // one page prefetched, token-aware routing and safe retries. The last call
-// for a setting wins.
+// for a setting wins. Start one with NewProfile: a zero ProfileBuilder has
+// none of those defaults, and Build rejects it with a cql.ValidationError.
 type ProfileBuilder struct {
 	profile implSettings.Profile
+	// started reports that NewProfile or ConfigBuilder made the builder.
+	started bool
 }
 
 // NewProfile starts a profile.
 func NewProfile() *ProfileBuilder {
-	return &ProfileBuilder{profile: *implSettings.DefaultConfig().DefaultProfile}
+	return &ProfileBuilder{profile: *implSettings.DefaultConfig().DefaultProfile, started: true}
 }
 
 // Build validates the profile, for use as Options.Profile.
 func (p *ProfileBuilder) Build() (Profile, error) {
+	if !p.started {
+		return Profile{}, &cql.ValidationError{Field: "profile", Err: errors.New("zero ProfileBuilder; start one with config.NewProfile")}
+	}
 	if err := p.profile.ValidateProfile(); err != nil {
 		return Profile{}, err
 	}

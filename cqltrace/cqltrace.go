@@ -28,6 +28,8 @@ import (
 
 // Info is one CQL trace session: a row of system_traces.sessions and its
 // events.
+//
+// The driver fills it; its zero value is empty.
 type Info struct {
 	// Started is when the coordinator began the request.
 	Started     time.Time
@@ -56,6 +58,8 @@ type Info struct {
 }
 
 // Event is one activity a node recorded in a trace session.
+//
+// The driver fills it; its zero value is empty.
 type Event struct {
 	Source   netip.Addr
 	Activity string

@@ -51,6 +51,8 @@ type AttemptObserver interface {
 }
 
 // RequestStart describes a request as it is admitted, before its first attempt.
+//
+// The driver fills it; its zero value is empty.
 type RequestStart struct {
 	Started         time.Time
 	Statement       string
@@ -64,6 +66,8 @@ type RequestStart struct {
 }
 
 // RequestEvent describes how a request ended.
+//
+// The driver fills it; its zero value is empty.
 type RequestEvent struct {
 	Err             error
 	Statement       string

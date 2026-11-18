@@ -6,6 +6,9 @@ package cql
 // StreamStatement pairs CQL and typed parameters with a decoder that writes rows
 // into caller-owned storage. Session.PrepareStream prepares it; streaming is
 // always prepared. No buffered row decoder is required.
+//
+// The zero StreamStatement has no CQL or decoder, which preparation rejects
+// with a ValidationError.
 type StreamStatement[P, R any] struct {
 	// Params encodes P. It may be nil when P is cql.EmptyParams.
 	Params ParamEncoder[P]

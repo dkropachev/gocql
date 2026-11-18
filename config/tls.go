@@ -21,6 +21,9 @@ type staticTLS struct{ config *tls.Config }
 func (s staticTLS) TLSConfig() *tls.Config { return s.config }
 
 // TLSFiles names the PEM files of a TLSFileSource.
+//
+// The zero TLSFiles names no files, and NewTLSFiles rejects it with a
+// cql.ValidationError.
 type TLSFiles struct {
 	// CertFile and KeyFile hold the client certificate chain and its private
 	// key. Set both or neither.
@@ -38,6 +41,10 @@ type TLSFiles struct {
 // goroutine: a dial checks the files when Interval has passed since the last
 // check, so a change reaches the first connection dialed after it. A check
 // that fails keeps the current files. It is safe for concurrent use.
+//
+// Start one with NewTLSFiles. A zero TLSFileSource names no files: its
+// TLSConfig returns nil, so ConfigBuilder.Build rejects it with a
+// cql.ValidationError, and Reload returns one.
 type TLSFileSource struct {
 	current atomic.Pointer[tls.Config]
 
@@ -113,6 +120,10 @@ func (s *TLSFileSource) Err() error {
 }
 
 func (s *TLSFileSource) reloadLocked(first bool) error {
+	if s.files == (TLSFiles{}) { // a zero source, which names no files
+		s.err = &cql.ValidationError{Field: "TLSFileSource", Err: errors.New("zero source; start one with config.NewTLSFiles")}
+		return s.err
+	}
 	s.next.Store(time.Now().Add(s.files.Interval).UnixNano())
 	s.err = s.loadLocked(first)
 	return s.err

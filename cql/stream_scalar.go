@@ -249,6 +249,8 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 
 // DecimalParts is a decimal decoded into caller storage: the unscaled
 // two's-complement big-endian integer and the scale.
+//
+// The driver fills it; its zero value is empty.
 type DecimalParts struct {
 	Unscaled []byte
 	Scale    int32

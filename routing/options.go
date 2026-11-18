@@ -12,6 +12,8 @@ import (
 )
 
 // Options configures NewPolicy.
+//
+// The zero Options leaves every option off.
 type Options struct {
 	// Datacenter and Rack name the local datacenter and rack. Replicas there
 	// are tried first. A rack requires a datacenter.

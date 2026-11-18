@@ -62,6 +62,8 @@ func (s ConvictionSource) String() string {
 
 // ConvictionEvent describes a connection failure, or a recovery, that a
 // ConvictionPolicy receives.
+//
+// The driver fills it; its zero value is empty.
 type ConvictionEvent struct {
 	// Err is the connection error; nil in Reset.
 	Err error

@@ -10,6 +10,8 @@ import (
 )
 
 // PartialRefreshError reports keyspaces whose previous valid schema was kept.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type PartialRefreshError struct {
 	Topology     error
 	ClientRoutes error
@@ -56,6 +58,8 @@ func (e *PartialRefreshError) Unwrap() []error {
 }
 
 // NoHostsError distinguishes an empty eligible peer scope from agreement.
+//
+// The driver returns it filled in; its zero value is an error without detail.
 type NoHostsError struct {
 	Operation string
 	Causes    []error

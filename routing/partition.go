@@ -16,6 +16,8 @@ import (
 // PartitionKey is a request's encoded partition key: the bytes a
 // TokenPartitioner hashes. For a composite key it is the components, each
 // with its length and a terminator, as the server encodes it.
+//
+// The zero PartitionKey has no components.
 type PartitionKey struct{ state partitionKeyState }
 
 // partitionKeyState is the key's bytes. The engine builds it through the
