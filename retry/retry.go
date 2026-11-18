@@ -26,7 +26,8 @@ const (
 	IgnoreWrite
 )
 
-// String returns the retry action name, or Action(n) for a value it does not define.
+// String returns the retry action name, or Action(n) for a value it does not
+// define.
 func (a Action) String() string {
 	switch a {
 	case Stop:

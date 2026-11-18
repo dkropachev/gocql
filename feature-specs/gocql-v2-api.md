@@ -74,7 +74,6 @@ func (t DataType) Dimension() (uint16, bool)
 func (c Columns) Len() int
 func (c Columns) At(index int) (ColumnSpec, bool)
 func (c Columns) Equal(other Columns) bool
-func (c Columns) Same(other Columns) bool
 
 type Encoder[T any] interface {
     CheckType(DataType) error
@@ -1716,7 +1715,7 @@ func (s *Session[D]) Closed() bool
 
 // package event
 type Kind uint8
-const (Topology Kind = iota; Status; Schema; Control; ClientRoute; Overflow)
+const (Unknown Kind = iota; Topology; Status; Schema; Control; ClientRoute; Overflow)
 type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
     Kind Kind

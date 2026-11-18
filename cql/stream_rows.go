@@ -20,9 +20,8 @@ import (
 	"fmt"
 )
 
-// StreamOutputField is one column of a streamed row mapping, built with
-// StreamColumn or StreamColumnAt; it cannot be implemented outside this
-// package. It is immutable, never boxes a field value and never retains the
+// StreamOutputField is one column of a streamed row mapping. Only
+// StreamColumn and StreamColumnAt build one: its method is unexported. It is immutable, never boxes a field value and never retains the
 // application destination supplied later.
 type StreamOutputField[R any] interface {
 	streamDeclaration() *streamOutputField[R]

@@ -37,6 +37,15 @@ func TestSessionAPI(t *testing.T) {
 			wg.Wait()
 		})
 
+		t.Run("RejectsUnknownKind", func(t *testing.T) {
+			s := new(implCluster.Core)
+			for _, kind := range []event.Kind{event.Unknown, event.Overflow + 1} {
+				if _, err := s.Subscribe(event.Filter{Kinds: []event.Kind{kind}}); err == nil {
+					t.Errorf("Subscribe accepted event kind %v", kind)
+				}
+			}
+		})
+
 		t.Run("FilterOverflowAndClose", func(t *testing.T) {
 			s := func() *implCluster.Core {
 				opaqueStorageValue := new(implCluster.Core)

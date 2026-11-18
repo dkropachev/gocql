@@ -21,7 +21,8 @@ const (
 	SchemaFull
 )
 
-// String returns the metadata mode name, or Mode(n) for a value it does not define.
+// String returns the metadata mode name, or Mode(n) for a value it does not
+// define.
 func (m Mode) String() string {
 	switch m {
 	case SchemaNone:

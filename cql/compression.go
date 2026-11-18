@@ -13,7 +13,8 @@ const (
 	SnappyCompression
 )
 
-// String returns the compression name, or Compression(n) for a value it does not define.
+// String returns the compression name, or Compression(n) for a value it does
+// not define.
 func (c Compression) String() string {
 	switch c {
 	case NoCompression:

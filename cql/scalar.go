@@ -83,7 +83,7 @@ func requirePresent(r ValueReader) error {
 
 //go:noinline
 func cellStateError(r ValueReader) error {
-	return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %d", r.typ.Kind(), r.state)
+	return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %v", r.typ.Kind(), r.state)
 }
 
 // fixedValue loads a contiguous fixed-width body without building a cursor.

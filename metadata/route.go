@@ -20,9 +20,10 @@ const anyShard int32 = -1
 // route's shard of its host, or any connection of the host when the route
 // has no shard, and does not move to another shard or host on its own;
 // moving on is the plan's next Route. Policies take routes from a Snapshot
-// through routing.HostRoutes and routing.ReplicaRoutes, which have no
-// shard, and narrow them with WithShard and ShardOf. The zero Route has no
-// host.
+// through routing.HostRoutes, whose routes have no shard, and
+// routing.ReplicaRoutes, whose routes have a shard when tablet placement
+// names one, and narrow them with WithShard and ShardOf. The zero Route has
+// no host.
 type Route struct {
 	// host is the session's handle of the host. The engine reads it
 	// through the mirror in internal/routing.
@@ -66,8 +67,9 @@ func (r Route) ShardOf(token int64) cql.Option[uint32] {
 	return shardOption(link.Get[func(unsafe.Pointer, int64) int32](link.RouteShardOf)(r.host, token))
 }
 
-// WithShard returns the route to shard of the same host; an unset shard
-// routes to any connection of the host. ShardOf's result is a valid argument.
+// WithShard returns the route to shard of the same host. An unset shard, or
+// one above math.MaxInt32, which no server has, routes to any connection of
+// the host. ShardOf's result is a valid argument.
 func (r Route) WithShard(shard cql.Option[uint32]) Route {
 	s := anyShard
 	if shard.Set && shard.Value <= math.MaxInt32 {

@@ -31,10 +31,10 @@ func NewEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, e
 		return EncodedValue{}, typeValidation("value", "cell body exceeds signed 32-bit length")
 	}
 	if state > EmptyCell {
-		return EncodedValue{}, typeValidation("state", "unknown cell state %d", state)
+		return EncodedValue{}, typeValidation("state", "unknown cell state %v", state)
 	}
 	if state != Present && body.Len() != 0 {
-		return EncodedValue{}, typeValidation("value", "state %d cannot contain payload bytes", state)
+		return EncodedValue{}, typeValidation("value", "state %v cannot contain payload bytes", state)
 	}
 	if state == EmptyCell && !emptySupported(typ) {
 		return EncodedValue{}, typeValidation("type", "%s does not support empty values", typ)

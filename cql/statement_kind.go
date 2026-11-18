@@ -14,7 +14,8 @@ const (
 	ConditionalStatement
 )
 
-// String returns the statement kind name, or StatementKind(n) for a value it does not define.
+// String returns the statement kind name, or StatementKind(n) for a value it
+// does not define.
 func (k StatementKind) String() string {
 	switch k {
 	case UnknownStatement:

@@ -72,7 +72,8 @@ const (
 	SerialOmit = SerialOverride(implSession.SerialOmit)
 )
 
-// String returns the serial override name, or SerialOverride(n) for a value it does not define.
+// String returns the serial override name, or SerialOverride(n) for a value
+// it does not define.
 func (s SerialOverride) String() string {
 	switch s {
 	case SerialInherit:

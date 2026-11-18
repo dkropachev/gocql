@@ -14,7 +14,8 @@ const (
 	CounterBatch  BatchKind = 2
 )
 
-// String returns the batch kind name, or BatchKind(n) for a value it does not define.
+// String returns the batch kind name, or BatchKind(n) for a value it does
+// not define.
 func (k BatchKind) String() string {
 	switch k {
 	case LoggedBatch:

@@ -225,8 +225,8 @@ func (c Columns) At(index int) (ColumnSpec, bool) {
 }
 
 // same reports whether c and other are the same specifications, not only
-// equal ones: the same backing, which Columns never modifies. The engine has
-// its own copy, internal/protocol.SameColumns, over a mirror of Columns.
+// equal ones: the same backing, which Columns never modifies. The engine
+// compares the same way in internal/protocol.sameColumns.
 func (c Columns) same(other Columns) bool {
 	return len(c.columns) == len(other.columns) && (len(c.columns) == 0 || &c.columns[0] == &other.columns[0])
 }
@@ -365,7 +365,8 @@ const (
 	EmptyCell
 )
 
-// String returns the cell state name, or CellState(n) for a value it does not define.
+// String returns the cell state name, or CellState(n) for a value it does
+// not define.
 func (s CellState) String() string {
 	switch s {
 	case Present:

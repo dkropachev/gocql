@@ -46,7 +46,7 @@ type StreamCapabilityError struct {
 }
 
 func (e *StreamCapabilityError) Error() string {
-	return fmt.Sprintf("gocql: streaming protocol %d/compression %d: %s", e.Protocol, e.Compression, e.Reason)
+	return fmt.Sprintf("gocql: streaming protocol %d/compression %v: %s", e.Protocol, e.Compression, e.Reason)
 }
 
 // StreamResetter resets a field absent from metadata while preserving buffer capacity.
@@ -237,7 +237,7 @@ func (r *StreamValueReader) present() error {
 		return err
 	}
 	if r.state != Present {
-		return r.fail(typeValidation("stream value", "nonnullable %s has state %d", r.typ, r.state))
+		return r.fail(typeValidation("stream value", "nonnullable %s has state %v", r.typ, r.state))
 	}
 	return nil
 }

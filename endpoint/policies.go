@@ -46,7 +46,8 @@ const (
 	ConvictionControl
 )
 
-// String returns the conviction source name, or ConvictionSource(n) for a value it does not define.
+// String returns the conviction source name, or ConvictionSource(n) for a
+// value it does not define.
 func (s ConvictionSource) String() string {
 	switch s {
 	case ConvictionPool:

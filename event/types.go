@@ -32,7 +32,8 @@ const (
 	Overflow
 )
 
-// String returns the event kind name, or Kind(n) for a value it does not define.
+// String returns the event kind name, or Kind(n) for a value it does not
+// define.
 func (k Kind) String() string {
 	switch k {
 	case Unknown:
