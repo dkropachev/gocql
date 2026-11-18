@@ -27,10 +27,11 @@ its keyspace itself; on protocol 4 the execution or the preparation fails with
 a `*cql.ValidationError` before it is sent. A custom routing policy that routes
 to a shard other than 0 finds no connection on Cassandra, which has no shards.
 
-Other ScyllaDB features need no setting and do nothing on Cassandra: shard
-awareness (`WithConnectionsPerShard` and the shard-aware port settings treat a
-Cassandra node as one shard), tablet routing, CDC log table partitioning,
-rate-limit errors and client route events.
+Other ScyllaDB features need no setting and do nothing on Cassandra: the
+shard-aware port settings, tablet routing, CDC log table partitioning,
+rate-limit errors and client route events. `WithConnectionsPerShard` and
+`WithMaxExcessPerShard` count a Cassandra node as one shard, so there they
+apply per node.
 
 ## Lightweight transactions
 

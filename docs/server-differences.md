@@ -67,13 +67,14 @@ when the server reports it, is a documented no-op on the other dialect.
 | `exec.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
 | `exec.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
 | `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
-| Shard awareness: `WithConnectionsPerShard`, `WithMaxExcessPerShard`, `WithAdvancedShardAwareness`, `NoAdvancedShardAwareness` | ScyllaV4 | No-op: a Cassandra node is one shard with no shard-aware port | Pool |
+| Shard awareness: `WithConnectionsPerShard`, `WithMaxExcessPerShard` | ScyllaV4 | Apply per node: a Cassandra node counts as one shard | Pool |
+| Shard-aware port: `WithAdvancedShardAwareness`, `WithDefaultAdvancedShardAwareness`, `NoAdvancedShardAwareness` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
 | Tablet routing, `routing.Options.LeaderAware`, `metadata.Keyspace.TabletBased` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
 | LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
 | `routing.CDCTokenPartitioner`, `config.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
 | `event.ClientRoute` events | ScyllaV4 | Never delivered | Events |
-| Shard fields (`endpoint.DialTarget.ShardID`, `metadata.HostSnapshot.Shards`, `metadata.Route.Shard`) | ScyllaV4 | Unset or zero | Pool and metadata |
+| Shard and shard-aware port outputs (`endpoint.DialTarget.ShardID`, `endpoint.Peer.ShardAwarePort`, `endpoint.ConvictionEvent.Shard`, `metadata.HostSnapshot.Shards` and `ShardingIgnoreMSB`, `metadata.Route.Shard` and `ShardOf`, `routing.Info.ShardID` when no option sets it, `cqlerr.AttemptFailure.Shard`, `cqlerr.ErrScyllaSourcePortAlreadyInUse`) | ScyllaV4 | Unset, zero or never returned | Pool and metadata |
 | A custom `routing.Policy` route or target with a shard (`metadata.Route.WithShard`, `metadata.Target.ShardID`) | ScyllaV4 | A shard the node lacks, any but 0 on Cassandra, finds no connection: the plan moves to its next route, and with none left the execution fails with `cqlerr.ErrNoConnections`, as for a ScyllaDB node with fewer shards | `internal/pool/pool.go`, `internal/cluster/execute.go` |
 
 ## Conditional statements (LWT)
