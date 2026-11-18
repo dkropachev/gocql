@@ -66,7 +66,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 		}
 		i++
 	})
-	if allocs != base {
+	if !raceEnabled && allocs != base {
 		t.Fatalf("four interleaved statements allocate %.0f/op, one statement %.0f/op", allocs, base)
 	}
 	// A fifth statement evicts one entry and is still parsed correctly.
