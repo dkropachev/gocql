@@ -250,8 +250,8 @@ func TestHostConnPool(t *testing.T) {
 		t.Parallel()
 
 		conn := mockConn(0)
-		conn.InternalScyllaSupported = endpoint.InternalParseSupported(map[string][]string{
-			endpoint.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=8"},
+		conn.InternalScyllaSupported = transport.InternalParseSupported(map[string][]string{
+			transport.InternalLwtAddMetadataMarkKey: {"LWT_OPTIMIZATION_META_BIT_MASK=8"},
 		}, logging.Nop())
 		require.True(t, conn.InternalIsScyllaConn())
 		require.Zero(t, implEndpoint.ScyllaHostFeaturesValueData(conn.InternalGetScyllaSupported().ScyllaHostFeatures).InternalNrShards)

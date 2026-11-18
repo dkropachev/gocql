@@ -73,9 +73,9 @@ type InternalClusterSettings struct {
 	// Dialer will be used to establish all connections created for this Cluster.
 	// If not provided, a default dialer configured with ConnectTimeout will be used.
 	// Dialer is ignored if HostDialer is provided.
-	Dialer endpoint.InternalLegacyDialer
+	Dialer transport.InternalLegacyDialer
 	// ApplicationInfo reports application information to the server by inserting it into options of the STARTUP frame
-	ApplicationInfo endpoint.ApplicationInfo
+	ApplicationInfo transport.ApplicationInfo
 	// DNSResolver Resolves DNS names to IP addresses
 	DNSResolver endpoint2.Resolver
 	// Logger for this clusterSettings.
@@ -85,7 +85,7 @@ type InternalClusterSettings struct {
 	// Unlike Dialer, HostDialer is responsible for setting up the entire connection, including the TLS session.
 	// To support shard-aware port, HostDialer should implement ShardDialer.
 	// If not provided, Dialer will be used instead.
-	HostDialer endpoint.HostDialer
+	HostDialer transport.HostDialer
 	// StreamObserver will be notified of stream state changes.
 	// This can be used to track in-flight protocol requests and responses.
 	StreamObserver transport.StreamObserver

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -18,7 +17,7 @@ import (
 )
 
 type shardAwareTestCluster struct {
-	connect func(context.Context, endpoint.InternalLegacyDialer) (*Core, error)
+	connect func(context.Context, transport.InternalLegacyDialer) (*Core, error)
 	useTLS  bool
 	port    uint16
 }
@@ -268,7 +267,7 @@ func shardTestContactPort(contactPoints []string, defaultPort uint16) uint16 {
 }
 
 type sourcePortOffByOneTestDialer struct {
-	endpoint.ScyllaShardAwareDialer
+	transport.ScyllaShardAwareDialer
 }
 
 func (spobo *sourcePortOffByOneTestDialer) DialContext(ctx context.Context, network, addr string) (net.Conn, error) {
@@ -276,11 +275,11 @@ func (spobo *sourcePortOffByOneTestDialer) DialContext(ctx context.Context, netw
 	// This should always result in wrong shard being assigned if host
 	// has more than one shard.
 
-	sourcePort := endpoint.ScyllaGetSourcePort(ctx)
+	sourcePort := transport.ScyllaGetSourcePort(ctx)
 	if sourcePort > 0 {
 		sourcePort++
 	}
-	newCtx := context.WithValue(ctx, endpoint.InternalScyllaSourcePortCtx{}, sourcePort)
+	newCtx := context.WithValue(ctx, transport.InternalScyllaSourcePortCtx{}, sourcePort)
 	return spobo.ScyllaShardAwareDialer.DialContext(newCtx, network, addr)
 }
 
@@ -303,7 +302,7 @@ func (aonsa *allowOnlyNonShardAwarePortDialer) DialContext(ctx context.Context, 
 }
 
 type loggingTestDialer struct {
-	endpoint.ScyllaShardAwareDialer
+	transport.ScyllaShardAwareDialer
 
 	events map[string][]testConnectionEvent
 	mu     sync.Mutex

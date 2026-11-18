@@ -23,7 +23,6 @@ import (
 
 	"log/slog"
 
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
 
@@ -88,35 +87,35 @@ func (cf *connFramers) initCache(c *Conn) {
 		InternalProto: c.InternalVersion & protocol.ProtoVersionMask,
 		InternalFlags: protocol.DefaultFramerFlags(c.InternalCompressor, c.InternalVersion),
 	}
-	if lwtExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalLwtAddMetadataMarkKey); lwtExt != nil {
-		if castedExt, ok := lwtExt.(*endpoint.InternalLwtAddMetadataMarkExt); ok {
+	if lwtExt := InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, InternalLwtAddMetadataMarkKey); lwtExt != nil {
+		if castedExt, ok := lwtExt.(*InternalLwtAddMetadataMarkExt); ok {
 			cfg.InternalFlagLWT = castedExt.InternalLwtOptMetaBitMask
 		} else {
-			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalLwtAddMetadataMarkKey, "want", fmt.Sprintf("%T", endpoint.InternalLwtAddMetadataMarkExt{}))
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", InternalLwtAddMetadataMarkKey, "want", fmt.Sprintf("%T", InternalLwtAddMetadataMarkExt{}))
 		}
 	}
-	if rateLimitErrorExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalRateLimitError); rateLimitErrorExt != nil {
-		if castedExt, ok := rateLimitErrorExt.(*endpoint.InternalRateLimitExt); ok {
+	if rateLimitErrorExt := InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, InternalRateLimitError); rateLimitErrorExt != nil {
+		if castedExt, ok := rateLimitErrorExt.(*InternalRateLimitExt); ok {
 			cfg.rateLimitingErrorCode = castedExt.InternalRateLimitErrorCode
 		} else {
-			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalRateLimitError, "want", fmt.Sprintf("%T", endpoint.InternalRateLimitExt{}))
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", InternalRateLimitError, "want", fmt.Sprintf("%T", InternalRateLimitExt{}))
 		}
 	}
-	if tabletsExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV1); tabletsExt != nil {
-		if _, ok := tabletsExt.(*endpoint.InternalTabletsRoutingV1Ext); ok {
+	if tabletsExt := InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, InternalTabletsRoutingV1); tabletsExt != nil {
+		if _, ok := tabletsExt.(*InternalTabletsRoutingV1Ext); ok {
 			cfg.InternalTabletsRoutingV1 = true
 		} else {
-			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalTabletsRoutingV1, "want", fmt.Sprintf("%T", endpoint.InternalTabletsRoutingV1Ext{}))
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", InternalTabletsRoutingV1, "want", fmt.Sprintf("%T", InternalTabletsRoutingV1Ext{}))
 		}
 	}
-	if metadataIDExt := endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalScyllaUseMetadataID); metadataIDExt != nil {
-		if _, ok := metadataIDExt.(*endpoint.InternalScyllaUseMetadataIDExt); ok {
+	if metadataIDExt := InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, InternalScyllaUseMetadataID); metadataIDExt != nil {
+		if _, ok := metadataIDExt.(*InternalScyllaUseMetadataIDExt); ok {
 			cfg.InternalScyllaUseMetadataID = true
 		} else {
-			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", endpoint.InternalScyllaUseMetadataID, "want", fmt.Sprintf("%T", endpoint.InternalScyllaUseMetadataIDExt{}))
+			c.logger().Error("CQL protocol extension has unexpected type; please report this driver bug", "extension", InternalScyllaUseMetadataID, "want", fmt.Sprintf("%T", InternalScyllaUseMetadataIDExt{}))
 		}
 	}
-	cfg.InternalTabletsRoutingV2 = endpoint.InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, endpoint.InternalTabletsRoutingV2) != nil
+	cfg.InternalTabletsRoutingV2 = InternalFindCQLProtoExtByName(c.InternalCqlProtoExts, InternalTabletsRoutingV2) != nil
 	cf.InternalDefaults = cfg
 	c.typedSettings.Store(c.buildNativeProtocol(c.metadataReuse()))
 	c.setTabletSupported(cfg.InternalTabletsRoutingV1 || cfg.InternalTabletsRoutingV2)

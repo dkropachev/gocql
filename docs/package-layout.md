@@ -326,8 +326,9 @@ In short:
   their resolution and translation, ScyllaDB node features, tokens and
   partitioners. Nothing that dials.
 - **`internal/transport`:** one connection: dialing, TLS, the shard-aware
-  source port, connection startup, and the request/response transport.
-  Nothing that spans connections.
+  source port, connection startup (SUPPORTED parsing, protocol extensions,
+  STARTUP options), and the request/response transport. Nothing that spans
+  connections.
 - **`internal/pool`:** the connections kept open to each node: host pools,
   connection pickers, a pool's own dial retries. Not which hosts exist.
 - **`internal/cluster`:** the cluster view and the session core: control

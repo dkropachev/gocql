@@ -48,6 +48,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/scylladb/gocql/v2/internal/transport"
+
 	inf "gopkg.in/inf.v0"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -334,14 +336,14 @@ const protoVersion4 = protocol.ProtoVersion4
 func validateShortBytes(a0 string, a1 []byte) error { return protocol.ValidateShortBytes(a0, a1) }
 
 func retiredScyllaGetSourcePort(a0 context.Context) uint16 {
-	return implEndpoint.ScyllaGetSourcePort(a0)
+	return transport.ScyllaGetSourcePort(a0)
 }
 
-type retiredScyllaShardAwareDialer = implEndpoint.ScyllaShardAwareDialer
+type retiredScyllaShardAwareDialer = transport.ScyllaShardAwareDialer
 
 type cassVersion = implEndpoint.InternalCassVersion
 
-type scyllaSourcePortCtx = implEndpoint.InternalScyllaSourcePortCtx
+type scyllaSourcePortCtx = transport.InternalScyllaSourcePortCtx
 
 func fixtureKeyspace(suffix string) string {
 	prefix := os.Getenv("GOCQL_TEST_RUN")

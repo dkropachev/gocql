@@ -31,6 +31,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/internal/transport"
+
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -103,7 +105,7 @@ func (p *longRepairPolicy) Delay(int) (time.Duration, bool) {
 
 type countingHostDialer struct{ calls *atomic.Int32 }
 
-func (d countingHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*endpoint.DialedHost, error) {
+func (d countingHostDialer) DialHost(context.Context, *endpoint.HostInfo) (*transport.DialedHost, error) {
 	d.calls.Add(1)
 	return nil, io.EOF
 }

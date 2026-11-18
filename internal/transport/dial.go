@@ -75,9 +75,9 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		return nil, fmt.Errorf("invalid protocol version %d: must be between 0 and 127", cfg.ProtoVersion)
 	}
 
-	shardDialer, ok := cfg.HostDialer.(implEndpoint.ShardDialer)
+	shardDialer, ok := cfg.HostDialer.(ShardDialer)
 	var (
-		dialedHost *implEndpoint.DialedHost
+		dialedHost *DialedHost
 		err        error
 	)
 
@@ -94,7 +94,7 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 	}
 
 	if cfg.TypedConfig != nil {
-		isShardAware = implEndpoint.DialedHostData(dialedHost).InternalShardTarget.Set
+		isShardAware = DialedHostData(dialedHost).InternalShardTarget.Set
 	}
 	openingDeadline, _ := ctx.Deadline()
 	connectionCtx, cancel := context.WithCancel(lifetimeCtx)
@@ -108,11 +108,11 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		InternalCalls:               InternalNewCallTable(),
 		InternalVersion:             uint8(cfg.ProtoVersion),
 		InternalIsShardAware:        isShardAware,
-		InternalRequestedShard:      implEndpoint.DialedHostData(dialedHost).InternalShardTarget,
-		InternalTargetEpoch:         implEndpoint.DialedHostData(dialedHost).InternalTargetEpoch,
-		InternalOpeningSharderEpoch: implEndpoint.DialedHostData(dialedHost).InternalSharderEpoch,
+		InternalRequestedShard:      DialedHostData(dialedHost).InternalShardTarget,
+		InternalTargetEpoch:         DialedHostData(dialedHost).InternalTargetEpoch,
+		InternalOpeningSharderEpoch: DialedHostData(dialedHost).InternalSharderEpoch,
 		InternalOpeningDeadline:     openingDeadline,
-		InternalValidateTarget:      implEndpoint.DialedHostData(dialedHost).InternalValidateTarget,
+		InternalValidateTarget:      DialedHostData(dialedHost).InternalValidateTarget,
 		InternalAddr:                dialedHost.Conn.RemoteAddr().String(),
 		InternalErrorHandler:        errorHandler,
 		InternalCompressor:          cfg.Compressor,
@@ -165,7 +165,7 @@ func InternalTlsConfigForAddr(tlsConfig *tls.Config, addr string) *tls.Config {
 	return tlsConfig
 }
 
-func WrapTLS(ctx context.Context, conn net.Conn, addr string, tlsConfig *tls.Config) (*implEndpoint.DialedHost, error) {
+func WrapTLS(ctx context.Context, conn net.Conn, addr string, tlsConfig *tls.Config) (*DialedHost, error) {
 	if tlsConfig != nil {
 		tlsConfig := InternalTlsConfigForAddr(tlsConfig, addr)
 		tconn := tls.Client(conn, tlsConfig)
@@ -176,7 +176,7 @@ func WrapTLS(ctx context.Context, conn net.Conn, addr string, tlsConfig *tls.Con
 		conn = tconn
 	}
 
-	return &implEndpoint.DialedHost{
+	return &DialedHost{
 		Conn:            conn,
 		DisableCoalesce: tlsConfig != nil,
 	}, nil

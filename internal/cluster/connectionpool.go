@@ -28,7 +28,6 @@ import (
 	"net"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -45,7 +44,7 @@ func connConfig(cfg *InternalClusterSettings) (*transport.ConnConfig, error) {
 			if cfg.SocketKeepalive > 0 {
 				d.KeepAlive = cfg.SocketKeepalive
 			}
-			dialer = &endpoint.ScyllaShardAwareDialer{Dialer: d}
+			dialer = &transport.ScyllaShardAwareDialer{Dialer: d}
 		}
 
 		hostDialer = &transport.InternalScyllaDialer{

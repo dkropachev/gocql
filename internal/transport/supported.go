@@ -1,17 +1,17 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-package endpoint
+package transport
 
 import (
 	"context"
 	"fmt"
-	"net"
 	"strconv"
 	"strings"
 
 	"log/slog"
 
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/protocol"
 )
@@ -36,86 +36,6 @@ func InternalTypedTabletExtensions(exts []InternalCqlProtocolExtension, supporte
 		}
 	}
 	return append(filtered, tabletsRoutingV2Ext{})
-}
-
-type ScyllaConnectionFeatures struct {
-	ScyllaHostFeatures
-	privateStorage ScyllaConnectionFeaturesStorage
-	// Comes from SCYLLA_SHARD
-
-}
-
-func (f ScyllaConnectionFeatures) Shard() int {
-	return f.privateStorage.InternalShard
-}
-
-type ScyllaHostFeatures struct {
-	privateStorage ScyllaHostFeaturesStorage
-	// Comes from SCYLLA_PARTITIONER
-
-	// Comes from SCYLLA_SHARDING_ALGORITHM
-
-	// Comes from SCYLLA_NR_SHARDS
-
-	// Comes from SCYLLA_SHARDING_IGNORE_MSB
-
-	// Comes from SCYLLA_LWT_ADD_METADATA_MARK.LWT_OPTIMIZATION_META_BIT_MASK
-
-	// Comes from SCYLLA_RATE_LIMIT_ERROR.ERROR_CODE
-
-	// Comes from SCYLLA_SHARD_AWARE_PORT
-
-	// Comes from SCYLLA_SHARD_AWARE_PORT_SSL
-
-	// Comes from SCYLLA_USE_METADATA_ID
-	// Signals that host supports proper prepared statement metadata invalidation read more at:
-	// https://github.com/scylladb/scylladb/issues/20860
-	// https://github.com/scylladb/scylladb/pull/23292
-
-	// True when the node is identified as ScyllaDB; stays true even when
-	// shard awareness is disabled on the server.
-
-}
-
-// IsPresent reports whether the host is a ScyllaDB node.
-func (f ScyllaHostFeatures) IsPresent() bool {
-	return f.privateStorage.InternalIsScylla
-}
-
-func (f ScyllaHostFeatures) Partitioner() string {
-	return f.privateStorage.InternalPartitioner
-}
-
-func (f ScyllaHostFeatures) ShardingAlgorithm() string {
-	return f.privateStorage.InternalShardingAlgorithm
-}
-
-func (f ScyllaHostFeatures) ShardsCount() int {
-	return f.privateStorage.InternalNrShards
-}
-
-func (f ScyllaHostFeatures) MSBIgnore() uint64 {
-	return f.privateStorage.InternalMsbIgnore
-}
-
-func (f ScyllaHostFeatures) LWTFlagMask() int {
-	return f.privateStorage.InternalLwtFlagMask
-}
-
-func (f ScyllaHostFeatures) ShardAwarePort() uint16 {
-	return f.privateStorage.InternalShardAwarePort
-}
-
-func (f ScyllaHostFeatures) ShardAwarePortTLS() uint16 {
-	return f.privateStorage.InternalShardAwarePortTLS
-}
-
-func (f ScyllaHostFeatures) RateLimitErrorCode() int {
-	return f.privateStorage.InternalRateLimitErrorCode
-}
-
-func (f ScyllaHostFeatures) IsMetadataIDSupported() bool {
-	return f.privateStorage.InternalIsMetadataIDSupported
 }
 
 // CQL Protocol extension interface for Scylla.
@@ -313,7 +233,7 @@ func (ext *InternalScyllaUseMetadataIDExt) InternalSerialize() map[string]string
 	}
 }
 
-func InternalParseSupported(supported map[string][]string, logger *slog.Logger) ScyllaConnectionFeatures {
+func InternalParseSupported(supported map[string][]string, logger *slog.Logger) implEndpoint.ScyllaConnectionFeatures {
 	logger = logging.Or(logger)
 	const (
 		scyllaShard             = "SCYLLA_SHARD"
@@ -326,62 +246,64 @@ func InternalParseSupported(supported map[string][]string, logger *slog.Logger) 
 	)
 
 	var (
-		si  ScyllaConnectionFeatures
+		si  implEndpoint.ScyllaConnectionFeatures
 		err error
 	)
+	conn := implEndpoint.ScyllaConnectionFeaturesData(&si)
+	host := implEndpoint.ScyllaHostFeaturesData(&si.ScyllaHostFeatures)
 
 	if s, ok := supported[scyllaShard]; ok && len(s) > 0 {
-		if si.privateStorage.InternalShard, err = strconv.Atoi(s[0]); err != nil {
+		if conn.InternalShard, err = strconv.Atoi(s[0]); err != nil {
 			logger.Warn("unparsable SUPPORTED option", "option", scyllaShard, "value", s, logging.Err(err))
 		}
 	}
 	if s, ok := supported[scyllaNrShards]; ok && len(s) > 0 {
-		if si.ScyllaHostFeatures.privateStorage.InternalNrShards, err = strconv.Atoi(s[0]); err != nil {
+		if host.InternalNrShards, err = strconv.Atoi(s[0]); err != nil {
 			logger.Warn("unparsable SUPPORTED option", "option", scyllaNrShards, "value", s, logging.Err(err))
 		}
 	}
 	if s, ok := supported[scyllaShardingIgnoreMSB]; ok && len(s) > 0 {
-		if si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore, err = strconv.ParseUint(s[0], 10, 64); err != nil {
+		if host.InternalMsbIgnore, err = strconv.ParseUint(s[0], 10, 64); err != nil {
 			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardingIgnoreMSB, "value", s, logging.Err(err))
 		}
 	}
 
 	if s, ok := supported[scyllaPartitioner]; ok && len(s) > 0 {
-		si.ScyllaHostFeatures.privateStorage.InternalPartitioner = s[0]
+		host.InternalPartitioner = s[0]
 	}
 	if s, ok := supported[scyllaShardingAlgorithm]; ok && len(s) > 0 {
-		si.ScyllaHostFeatures.privateStorage.InternalShardingAlgorithm = s[0]
+		host.InternalShardingAlgorithm = s[0]
 	}
 	if s, ok := supported[scyllaShardAwarePort]; ok && len(s) > 0 {
 		if shardAwarePort, err := strconv.ParseUint(s[0], 10, 16); err != nil {
 			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardAwarePort, "value", s, logging.Err(err))
 		} else {
-			si.ScyllaHostFeatures.privateStorage.InternalShardAwarePort = uint16(shardAwarePort)
+			host.InternalShardAwarePort = uint16(shardAwarePort)
 		}
 	}
 	if s, ok := supported[scyllaShardAwarePortSSL]; ok && len(s) > 0 {
 		if shardAwarePortTLS, err := strconv.ParseUint(s[0], 10, 16); err != nil {
 			logger.Warn("unparsable SUPPORTED option", "option", scyllaShardAwarePortSSL, "value", s, logging.Err(err))
 		} else {
-			si.ScyllaHostFeatures.privateStorage.InternalShardAwarePortTLS = uint16(shardAwarePortTLS)
+			host.InternalShardAwarePortTLS = uint16(shardAwarePortTLS)
 		}
 	}
 
 	if lwtInfo := InternalNewLwtAddMetaMarkExt(supported, logger); lwtInfo != nil {
-		si.ScyllaHostFeatures.privateStorage.InternalLwtFlagMask = lwtInfo.InternalLwtOptMetaBitMask
+		host.InternalLwtFlagMask = lwtInfo.InternalLwtOptMetaBitMask
 	}
 
 	if rateLimitInfo := newRateLimitExt(supported, logger); rateLimitInfo != nil {
-		si.ScyllaHostFeatures.privateStorage.InternalRateLimitErrorCode = rateLimitInfo.InternalRateLimitErrorCode
+		host.InternalRateLimitErrorCode = rateLimitInfo.InternalRateLimitErrorCode
 	}
 
 	if _, ok := supported[InternalScyllaUseMetadataID]; ok {
-		si.ScyllaHostFeatures.privateStorage.InternalIsMetadataIDSupported = true
+		host.InternalIsMetadataIDSupported = true
 	}
 
 	_, hasLWT := supported[InternalLwtAddMetadataMarkKey]
 	_, hasRateLimit := supported[InternalRateLimitError]
-	si.ScyllaHostFeatures.privateStorage.InternalIsScylla = hasLWT || hasRateLimit || si.ScyllaHostFeatures.privateStorage.InternalIsMetadataIDSupported || si.ScyllaHostFeatures.privateStorage.InternalNrShards != 0
+	host.InternalIsScylla = hasLWT || hasRateLimit || host.InternalIsMetadataIDSupported || host.InternalNrShards != 0
 
 	complete := true
 	for _, key := range []string{scyllaShard, scyllaNrShards, scyllaPartitioner, scyllaShardingAlgorithm, scyllaShardingIgnoreMSB} {
@@ -390,20 +312,20 @@ func InternalParseSupported(supported map[string][]string, logger *slog.Logger) 
 			complete = false
 		}
 	}
-	if !complete || si.privateStorage.InternalShard < 0 || si.privateStorage.InternalShard >= si.ScyllaHostFeatures.privateStorage.InternalNrShards || si.ScyllaHostFeatures.privateStorage.InternalNrShards > 65535 || si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore > 63 || si.ScyllaHostFeatures.privateStorage.InternalPartitioner != "org.apache.cassandra.dht.Murmur3Partitioner" || si.ScyllaHostFeatures.privateStorage.InternalShardingAlgorithm != "biased-token-round-robin" || si.ScyllaHostFeatures.privateStorage.InternalNrShards <= 0 {
+	if !complete || conn.InternalShard < 0 || conn.InternalShard >= host.InternalNrShards || host.InternalNrShards > 65535 || host.InternalMsbIgnore > 63 || host.InternalPartitioner != "org.apache.cassandra.dht.Murmur3Partitioner" || host.InternalShardingAlgorithm != "biased-token-round-robin" || host.InternalNrShards <= 0 {
 		level := slog.LevelWarn
 		if !complete {
 			// Not a sharded Scylla node (e.g. Cassandra): nothing is wrong.
 			level = slog.LevelDebug
 		}
-		features := &si.ScyllaHostFeatures.privateStorage
+		features := host
 		logger.Log(context.Background(), level, "shard awareness disabled: unsupported sharding configuration",
 			"partitioner", features.InternalPartitioner, "algorithm", features.InternalShardingAlgorithm,
-			"nr_shards", features.InternalNrShards, "msb_ignore", features.InternalMsbIgnore, logging.KeyShard, si.privateStorage.InternalShard)
-		si.privateStorage.InternalShard = 0
-		si.ScyllaHostFeatures.privateStorage.InternalNrShards = 0
-		si.ScyllaHostFeatures.privateStorage.InternalMsbIgnore = 0
-		si.ScyllaHostFeatures.privateStorage.InternalShardingAlgorithm = ""
+			"nr_shards", features.InternalNrShards, "msb_ignore", features.InternalMsbIgnore, logging.KeyShard, conn.InternalShard)
+		conn.InternalShard = 0
+		host.InternalNrShards = 0
+		host.InternalMsbIgnore = 0
+		host.InternalShardingAlgorithm = ""
 	}
 
 	return si
@@ -439,61 +361,4 @@ func InternalParseCQLProtocolExtensions(supported map[string][]string, version b
 	}
 
 	return exts
-}
-
-// ShardDialer is like HostDialer but is shard-aware.
-// If the driver wants to connect to a specific shard, it will call DialShard,
-// otherwise it will call DialHost.
-type ShardDialer interface {
-	HostDialer
-
-	// DialShard establishes a connection to the specified shard ID out of nrShards.
-	// The returned connection must be directly usable for CQL protocol,
-	// specifically DialShard is responsible also for setting up the TLS session if needed.
-	DialShard(ctx context.Context, host *HostInfo, shardID, nrShards int) (*DialedHost, error)
-}
-
-// ScyllaShardAwareDialer wraps a net.Dialer, but uses a source port specified by gocql when connecting.
-//
-// Unlike in the case standard native transport ports, gocql can choose which shard will handle
-// a new connection by connecting from a specific source port. If you are using your own net.Dialer
-// in clusterSettings, you can use ScyllaShardAwareDialer to "upgrade" it so that it connects
-// from the source port chosen by gocql.
-//
-// Please note that ScyllaShardAwareDialer overwrites the LocalAddr field in order to choose
-// the right source port for connection.
-type ScyllaShardAwareDialer struct {
-	net.Dialer
-}
-
-func (d *ScyllaShardAwareDialer) DialContext(ctx context.Context, network, addr string) (conn net.Conn, err error) {
-	sourcePort := ScyllaGetSourcePort(ctx)
-	if sourcePort == 0 {
-		return d.Dialer.DialContext(ctx, network, addr)
-	}
-	dialerWithLocalAddr := d.Dialer
-	dialerWithLocalAddr.LocalAddr, err = net.ResolveTCPAddr(network, fmt.Sprintf(":%d", sourcePort))
-	if err != nil {
-		return nil, err
-	}
-
-	return dialerWithLocalAddr.DialContext(ctx, network, addr)
-}
-
-type InternalScyllaSourcePortCtx struct{}
-
-// ScyllaGetSourcePort returns the source port that should be used when connecting to a node.
-//
-// Unlike in the case standard native transport ports, gocql can choose which shard will handle
-// a new connection at the shard-aware port by connecting from a specific source port. Therefore,
-// if you are using a custom Dialer and your nodes expose shard-aware ports, your dialer should
-// use the source port specified by gocql.
-//
-// If this function returns 0, then your dialer can use any source port.
-//
-// If you aren't using a custom dialer, gocql will use a default one which uses appropriate source port.
-// If you are using net.Dialer, consider wrapping it in a gocql.ScyllaShardAwareDialer.
-func ScyllaGetSourcePort(ctx context.Context) uint16 {
-	sourcePort, _ := ctx.Value(InternalScyllaSourcePortCtx{}).(uint16)
-	return sourcePort
 }

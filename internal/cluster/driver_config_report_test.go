@@ -131,7 +131,7 @@ func TestDriverConfigReport(t *testing.T) {
 			tests := []struct {
 				name       string
 				disable    bool
-				hostDialer endpoint.HostDialer
+				hostDialer transport.HostDialer
 				want       bool
 			}{
 				{name: "default: the substituted scyllaDialer is shard-aware", want: true},
@@ -964,11 +964,11 @@ func TestDriverConfigReport(t *testing.T) {
 	// describes: dialWithoutObserver only takes the shard-aware path when the
 	// HostDialer satisfies ShardDialer, so the two must agree on every dialer.
 	t.Run("ShardAwareEnabled", func(t *testing.T) {
-		for _, hostDialer := range []endpoint.HostDialer{fakeHostDialer{}, fakeShardDialer{}} {
+		for _, hostDialer := range []transport.HostDialer{fakeHostDialer{}, fakeShardDialer{}} {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
 			cfg.HostDialer = hostDialer
 
-			_, canDialShard := hostDialer.(endpoint.ShardDialer)
+			_, canDialShard := hostDialer.(transport.ShardDialer)
 			if got := shardAwareEnabled(&cfg, nil); got != canDialShard {
 				t.Errorf("%T: reported %v, but dialWithoutObserver would take the shard-aware path = %v",
 					hostDialer, got, canDialShard)

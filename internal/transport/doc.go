@@ -3,10 +3,14 @@
 
 // Package transport owns a single connection to a node.
 //
-// It contains dialing, TLS and the shard-aware source port; connection
-// startup (OPTIONS/SUPPORTED, STARTUP, authentication); and the
-// request/response transport over an open connection: stream IDs, framing
-// and segments, writers, response reading, timeouts and orphaned streams.
+// It contains dialing: HostDialer, ShardDialer and DialedHost, TLS, and the
+// shard-aware source port (ScyllaShardAwareDialer, ScyllaGetSourcePort).
+// It contains connection startup (startup.go): OPTIONS, parsing SUPPORTED
+// into the node's ScyllaDB features and the CQL protocol extensions the
+// connection opts into (supported.go), the STARTUP options including
+// ApplicationInfo, and authentication. And it contains the request/response
+// transport over an open connection: stream IDs, framing and segments,
+// writers, response reading, timeouts and orphaned streams.
 //
 // It must not contain anything that spans connections: pools
 // (internal/pool), the cluster view (internal/cluster), or retries and

@@ -22,13 +22,36 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package endpoint
+package transport
 
 import (
 	"context"
+	"net"
 
 	"github.com/scylladb/gocql/v2/cql"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
+
+// HostDialer allows customizing connection to cluster nodes.
+type HostDialer interface {
+	// DialHost establishes a connection to the host.
+	// The returned connection must be directly usable for CQL protocol,
+	// specifically DialHost is responsible also for setting up the TLS session if needed.
+	// DialHost should disable write coalescing if the returned net.Conn does not support writev.
+	// As of Go 1.18, only plain TCP connections support writev, TLS sessions should disable coalescing.
+	// You can use WrapTLS helper function if you don't need to override the TLS setup.
+	DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*DialedHost, error)
+}
+
+// DialedHost contains information about established connection to a host.
+type DialedHost struct {
+	// Conn used to communicate with the server.
+	Conn           net.Conn
+	privateStorage DialedHostStorage
+	// DisableCoalesce disables write coalescing for the Conn.
+	// If true, the effect is the same as if WriteCoalesceWaitTime was configured to 0.
+	DisableCoalesce bool
+}
 
 type DialedHostStorage struct {
 	InternalValidateTarget func(context.Context) error

@@ -31,7 +31,7 @@ func hammerConnPicker(t *testing.T, wg *sync.WaitGroup, s *implPool.InternalScyl
 // exts, i.e. through the same connFramers.initCache path production uses. There is
 // no standalone framer-with-extensions constructor to test against: the per-driverConn
 // pool is the only place the negotiated extension list is turned into framer state.
-func framerForExts(exts []endpoint.InternalCqlProtocolExtension) *protocol.Framer {
+func framerForExts(exts []transport.InternalCqlProtocolExtension) *protocol.Framer {
 	conn := mockConn(0)
 	conn.InternalVersion = protocol.ProtoVersion4
 	conn.InternalLogger = logging.Nop()

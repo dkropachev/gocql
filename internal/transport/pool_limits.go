@@ -110,7 +110,7 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 			}
 		}
 	}
-	for key, param := range map[string]string{implEndpoint.InternalRateLimitError: "ERROR_CODE", implEndpoint.InternalLwtAddMetadataMarkKey: "LWT_OPTIMIZATION_META_BIT_MASK"} {
+	for key, param := range map[string]string{InternalRateLimitError: "ERROR_CODE", InternalLwtAddMetadataMarkKey: "LWT_OPTIMIZATION_META_BIT_MASK"} {
 		for _, entry := range values[key] {
 			name, value, ok := strings.Cut(entry, "=")
 			if name != param {
@@ -119,7 +119,7 @@ func InternalValidateV2Supported(values map[string][]string, options connectivit
 			if !ok || value == "" {
 				return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: fmt.Errorf("invalid %s", param)}
 			}
-			if key == implEndpoint.InternalLwtAddMetadataMarkKey {
+			if key == InternalLwtAddMetadataMarkKey {
 				if _, err := strconv.ParseUint(value, 10, 32); err != nil {
 					return &cql.ProtocolError{Stage: "SUPPORTED extension", Err: err}
 				}

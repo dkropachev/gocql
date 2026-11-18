@@ -52,7 +52,6 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
-	"github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
@@ -639,7 +638,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 	// RESULT/Prepared and EXECUTE. The driver opts in whenever the server advertised
 	// the key, so the advertised map is the same signal it used, and the canned
 	// frames below have to match the layout it will then read and write.
-	_, useMetadataID := exts[endpoint.InternalScyllaUseMetadataID]
+	_, useMetadataID := exts[transport.InternalScyllaUseMetadataID]
 
 	// writeResultMetadataID emits that field for a prepared statement. It is a no-op
 	// unless the extension was advertised, so servers that do not advertise it keep
