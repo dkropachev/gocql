@@ -109,6 +109,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 	const password = "report-secret-password"
 	const dialerToken = "report-secret-dialer-token"
 	seen := map[string]bool{}
+	cases, completed := 0, 0
 	for _, tc := range []struct {
 		name string
 		edit func(*settings.Config)
@@ -241,6 +242,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			},
 		},
 	} {
+		cases++
 		t.Run(tc.name, func(t *testing.T) {
 			raw := connectReport(t, tc.edit)
 			var doc any
@@ -274,7 +276,15 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 				}
 			}
 			collectJSONPaths(doc, "", seen)
+			if !t.Failed() {
+				completed++
+			}
 		})
+	}
+	// The key coverage below needs the reports of every case; with a case
+	// filtered out by -run or failed, it would only add noise.
+	if completed != cases {
+		return
 	}
 
 	// Keys the driver never reports, and why. A key the schema adds fails
