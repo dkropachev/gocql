@@ -62,6 +62,9 @@ func NewCompiledOptions(session *implCluster.Core, values Options) (CompiledOpti
 	if err != nil {
 		return CompiledOptions{}, err
 	}
+	if resolved.observerHooks, err = settings.NewObserverHooks(values.Observer); err != nil {
+		return CompiledOptions{}, err
+	}
 	keyspace := values.Keyspace
 	if keyspace == "" && owner != nil {
 		keyspace = owner.config.Keyspace
@@ -107,6 +110,7 @@ func (o CompiledOptions) resolve(rt *InternalSessionRuntime, scratch *InternalRe
 	// NewCompiledOptions validated the values, and the session profile was
 	// validated at Connect, so resolution cannot fail here.
 	*scratch, _ = resolveOptionValues(rt.InternalProfile, o.p.resolved.InternalOptions)
+	scratch.observerHooks = o.p.resolved.observerHooks
 	return scratch
 }
 

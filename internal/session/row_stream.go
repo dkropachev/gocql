@@ -607,7 +607,10 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			target.ShardID = cql.Option[uint32]{Set: true, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}
 		}
 		started := time.Now()
-		end := request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+		var end func(routing.AttemptEvent)
+		if request.InternalLogical.observesAttempts() {
+			end = request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
 		var traces []cql.CQLTraceRef

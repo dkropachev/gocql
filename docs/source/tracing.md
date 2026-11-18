@@ -60,8 +60,9 @@ value that implements one or more hook interfaces:
 
 Each start returns the function the driver calls when that request or
 attempt finishes. The driver looks the hooks up once, when the observer is
-installed, and skips the work of a hook the observer does not implement, so
-an observer that only needs attempts costs nothing per request. An observer
+installed, and skips the call and its event for a hook the observer does
+not implement, so an observer that only needs attempts builds no request
+events. An observer
 that implements no hook is rejected. Later releases add hooks as new
 interfaces, so an existing observer keeps compiling. Set the observer for the
 session with `config.ConfigBuilder.WithObserver`, or per execution with

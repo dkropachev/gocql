@@ -14,10 +14,10 @@ import (
 // Observer instruments requests and their attempts from the client side; it
 // is the hook for client-side tracing such as OpenTelemetry. An Observer is
 // any value that implements one or more of the hook interfaces,
-// RequestObserver and AttemptObserver; one that implements none is rejected
-// when it is installed. The driver finds the hooks once, when the observer
-// is installed, and skips building the events of a hook the observer does
-// not implement. A later release adds hooks as new interfaces, so existing
+// RequestObserver and AttemptObserver. config.Build and
+// gocql.Session.CompileOptions reject one that implements none. The driver
+// finds the hooks once, when the observer is installed, and skips the call
+// and the event of a hook the observer does not implement. A later release adds hooks as new interfaces, so existing
 // observers keep compiling.
 //
 // Implementations are shared between executions and must be safe for

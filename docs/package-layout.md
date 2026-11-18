@@ -259,15 +259,16 @@ documented methods.
 
 ### `observe` (layer 1)
 
-- **Contains:** the observer interfaces (`Observer`, `LifecycleObserver`) and
-  their event payloads (`RequestStart`, `RequestEvent`, `LifecycleEvent`).
-  `Observer.StartAttempt` uses
+- **Contains:** `Observer`, any value implementing one or more of the hook
+  interfaces `RequestObserver` and `AttemptObserver`; `LifecycleObserver`;
+  and their event payloads (`RequestStart`, `RequestEvent`,
+  `LifecycleEvent`). `AttemptObserver.StartAttempt` uses
   `routing.AttemptStart` and `routing.AttemptEvent`, and
   `endpoint.ConvictionEvent` stays with the conviction policy.
 - **Must not contain:** exporters. OpenTelemetry and Prometheus integrations
   are `contrib/` modules that implement these interfaces.
-- **Future:** new hooks as new optional interfaces, never as methods added to
-  `Observer`.
+- **Future:** new hooks as new hook interfaces, never as methods added to an
+  existing one.
 
 ### `event` (layer 1)
 

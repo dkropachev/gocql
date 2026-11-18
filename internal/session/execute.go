@@ -572,7 +572,7 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 
 // observesAttempts reports whether the observer has an attempt hook.
 func (l *logicalExecution) observesAttempts() bool {
-	return l.hooks != nil && l.hooks.Attempt != nil
+	return l != nil && l.hooks != nil && l.hooks.Attempt != nil
 }
 
 // startAttempt calls the observer's StartAttempt, returning the function to
@@ -691,11 +691,16 @@ func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R],
 	request.routing.Conditional = request.routing.Kind != cql.OrdinaryStatement
 	hooks := rt.observerHooks
 	if values.Observer != nil {
-		h, err := settings.NewObserverHooks(values.Observer)
-		if err != nil {
-			return nil, nil, nil, err
+		// NewCompiledOptions found the hooks; options resolved elsewhere
+		// find them here.
+		hooks = resolved.observerHooks
+		if hooks == nil {
+			h, err := settings.NewObserverHooks(values.Observer)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			hooks = h
 		}
-		hooks = h
 	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
 		return nil, nil, nil, err
@@ -976,6 +981,9 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 		requestID = request.InternalLogical.id
 	}
 	started := time.Now()
+	if !request.InternalLogical.observesAttempts() {
+		return target, started, nil
+	}
 	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }

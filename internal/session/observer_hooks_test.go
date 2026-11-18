@@ -36,8 +36,9 @@ func (o *requestHookOnly) StartRequest(ctx context.Context, _ observe.RequestSta
 }
 
 // TestObserverHooks checks that an observer gets only the hooks it
-// implements, and that an attempt hook without a request hook receives the
-// caller's context.
+// implements, on the direct and the general path, that an attempt hook
+// without a request hook receives the caller's context, and that compiling
+// options rejects an observer without hooks.
 func TestObserverHooks(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
 	void := binary.BigEndian.AppendUint32(nil, 1)
@@ -62,7 +63,16 @@ func TestObserverHooks(t *testing.T) {
 		t.Fatalf("request hook: %d starts, %d ends", requests.requests.Load(), requests.ended.Load())
 	}
 
-	if _, err := Exec(ctx, s, b, testOptions(Options{Observer: struct{}{}})); err == nil {
-		t.Fatal("Exec accepted an observer without hooks")
+	// The general path, where attempts run on goroutines of their own.
+	general := new(attemptHookOnly)
+	if _, err := Exec(ctx, s, b, testOptions(Options{Observer: general, Profile: generalPathProfile()})); err != nil {
+		t.Fatal(err)
+	}
+	if general.attempts.Load() != 1 || !general.sawCtx.Load() {
+		t.Fatalf("general path attempt hook: %d calls, caller's context %t", general.attempts.Load(), general.sawCtx.Load())
+	}
+
+	if _, err := NewCompiledOptions(s, Options{Observer: struct{}{}}); err == nil {
+		t.Fatal("NewCompiledOptions accepted an observer without hooks")
 	}
 }
