@@ -10,7 +10,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// Kind classifies an Event.
+// Kind classifies an Event. The zero Kind is Unknown. Later releases may add
+// values, so a switch over them needs a default case.
 type Kind uint8
 
 const (

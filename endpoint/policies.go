@@ -34,7 +34,8 @@ type TLSSource interface {
 }
 
 // ConvictionSource names what failed to connect: a pool connection or the
-// control connection.
+// control connection. The zero ConvictionSource is ConvictionPool. Later
+// releases may add values, so a switch over them needs a default case.
 type ConvictionSource uint8
 
 const (

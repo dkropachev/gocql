@@ -34,6 +34,10 @@ import (
 // name, and every ServerError matches its own code through errors.Is:
 //
 //	if errors.Is(err, cqlerr.CodeOverloaded) { ... }
+//
+// Its values are the native protocol's, so the zero ErrorCode is CodeServer.
+// Servers and later releases may add codes, so a switch over them needs a
+// default case; Error prints a code it does not know in hexadecimal.
 type ErrorCode uint16
 
 // Server error codes, with their native protocol values. See CQL Binary
@@ -86,7 +90,8 @@ const (
 	CodeRateLimitReached ErrorCode = 0xF000
 )
 
-// Error returns the code's name.
+// Error returns the code's name, or "server error 0x" and the code in
+// hexadecimal for a code it does not define.
 func (c ErrorCode) Error() string {
 	if name := c.name(); name != "" {
 		return name
@@ -335,7 +340,9 @@ func (e *CASWriteUnknownError) Error() string        { return e.text(CodeCASWrit
 func (e *CASWriteUnknownError) Is(target error) bool { return target == CodeCASWriteUnknown }
 func (e *CASWriteUnknownError) Kind() Kind           { return KindServer }
 
-// OpType is the kind of operation a rate limit rejected.
+// OpType is the kind of operation a rate limit rejected. Its values are
+// ScyllaDB's, so the zero OpType is OpTypeRead. Later releases may add values,
+// so a switch over them needs a default case.
 type OpType uint8
 
 const (

@@ -727,7 +727,7 @@ func buildQueryDefaultsReport(cfg *InternalClusterSettings) queryDefaultsReport 
 //
 // The enum covers every level Consistency defines, serial ones included, so
 // only an unrecognized numeric value is unreportable -- Consistency.String()
-// renders those as "UNKNOWN_CONS_0x..", which no consumer can interpret.
+// renders those as "Consistency(n)", which no consumer can interpret.
 // Nothing rejects such a value today; the fix belongs in clusterSettings.Validate
 // and is left to a follow-up.
 func consistencyName(c cql.Consistency) string {

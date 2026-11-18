@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -18,7 +19,8 @@ import (
 )
 
 // TestEnumStrings pins the names the enum-like types print, and the
-// fallback for a value a type does not define.
+// Type(n) fallback for a value a type does not define. cqlerr.ErrorCode is
+// an error rather than a Stringer and prints an unknown code in hexadecimal.
 func TestEnumStrings(t *testing.T) {
 	for _, tc := range []struct {
 		value fmt.Stringer
@@ -46,6 +48,21 @@ func TestEnumStrings(t *testing.T) {
 		{endpoint.ConvictionSource(9), "ConvictionSource(9)"},
 		{cqlerr.OpTypeWrite, "write"},
 		{cqlerr.OpType(9), "OpType(9)"},
+		{gocql.ScyllaV4, "ScyllaV4"},
+		{gocql.Dialect(0), "Dialect(0)"},
+		{cql.LocalQuorum, "LOCAL_QUORUM"},
+		{cql.Consistency(66), "Consistency(66)"},
+		{cql.TypeUDT, "udt"},
+		{cql.TypeBigInt, "bigint"},
+		{cql.Type(255), "Type(255)"},
+		{cqlerr.MaybeExecuted, "maybe executed"},
+		{cqlerr.ExecutionStatus(9), "ExecutionStatus(9)"},
+		{cqlerr.KindUnknown, "unknown"},
+		{cqlerr.KindServer, "server"},
+		{cqlerr.Kind(99), "Kind(99)"},
+		{metadata.ColumnKindUnknown, "unknown"},
+		{metadata.ColumnStatic, "static"},
+		{metadata.ColumnKind(99), "ColumnKind(99)"},
 	} {
 		if got := tc.value.String(); got != tc.want {
 			t.Errorf("%T(%d).String() = %q, want %q", tc.value, tc.value, got, tc.want)
@@ -58,5 +75,13 @@ func TestEnumStrings(t *testing.T) {
 func TestEventKindZeroRejected(t *testing.T) {
 	if _, err := config.New("127.0.0.1").WithIgnoreEvents(event.Kind(0)).Build(); err == nil {
 		t.Fatal("WithIgnoreEvents accepted the zero event.Kind")
+	}
+}
+
+// TestErrorCodeUnknown checks how an ErrorCode the driver does not define
+// prints.
+func TestErrorCodeUnknown(t *testing.T) {
+	if got := cqlerr.ErrorCode(0x1234).Error(); got != "server error 0x1234" {
+		t.Fatalf("ErrorCode(0x1234).Error() = %q", got)
 	}
 }

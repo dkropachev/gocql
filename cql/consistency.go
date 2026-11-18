@@ -28,6 +28,11 @@ import (
 	"fmt"
 )
 
+// Consistency is a consistency level. Its values are the native protocol's, so
+// the zero Consistency is Any; a setting that may be left unset is a
+// cql.Option[Consistency], never the zero level. ParseConsistency reads a
+// level's name. Later releases may add values, so a switch over them needs a
+// default case.
 type Consistency uint16
 
 const (
@@ -44,6 +49,8 @@ const (
 	LocalOne    Consistency = 0x0A
 )
 
+// String returns the level's protocol name, such as "LOCAL_QUORUM", or
+// Consistency(n) for a value it does not define.
 func (c Consistency) String() string {
 	switch c {
 	case Any:
@@ -69,7 +76,7 @@ func (c Consistency) String() string {
 	case LocalOne:
 		return "LOCAL_ONE"
 	default:
-		return fmt.Sprintf("UNKNOWN_CONS_0x%x", uint16(c))
+		return fmt.Sprintf("Consistency(%d)", uint16(c))
 	}
 }
 

@@ -80,8 +80,8 @@ func TestConsistency(t *testing.T) {
 		t.Run("Unknown", func(t *testing.T) {
 			t.Parallel()
 
-			if got := cql.Consistency(0x42).String(); got != "UNKNOWN_CONS_0x42" {
-				t.Fatalf("String() = %q, want UNKNOWN_CONS_0x42", got)
+			if got := cql.Consistency(0x42).String(); got != "Consistency(66)" {
+				t.Fatalf("String() = %q, want Consistency(66)", got)
 			}
 		})
 	})
@@ -92,7 +92,7 @@ func TestConsistency(t *testing.T) {
 		t.Run("Rejects", func(t *testing.T) {
 			t.Parallel()
 
-			for _, in := range []string{"", "quorum", " QUORUM", "UNKNOWN_CONS_0x42", "LOCALQUORUM"} {
+			for _, in := range []string{"", "quorum", " QUORUM", "Consistency(66)", "LOCALQUORUM"} {
 				got := cql.LocalOne
 				err := got.UnmarshalText([]byte(in))
 				if err == nil || !strings.Contains(err.Error(), "invalid consistency") {

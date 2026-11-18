@@ -758,8 +758,8 @@ func TestResponse(t *testing.T) {
 	t.Run("TypeString", func(t *testing.T) {
 		t.Parallel()
 
-		if got := cql.Type(0x00ff).String(); got != "unknown_type_255" {
-			t.Fatalf("String() = %q, want unknown_type_255", got)
+		if got := cql.Type(0x00ff).String(); got != "Type(255)" {
+			t.Fatalf("String() = %q, want Type(255)", got)
 		}
 	})
 }

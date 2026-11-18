@@ -12,7 +12,9 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
-// Action is what the driver does after a failed attempt.
+// Action is what the driver does after a failed attempt. The zero Action is
+// Stop. Later releases may add values, so a switch over them needs a default
+// case.
 type Action uint8
 
 const (

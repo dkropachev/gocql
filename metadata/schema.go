@@ -296,7 +296,8 @@ func compareStringMaps(a, b map[string]string) bool {
 }
 
 // IndexKind is the kind of a secondary index, as system_schema.indexes
-// stores it.
+// stores it; a kind the driver does not name keeps the server's text. Later
+// releases may add values, so a switch over them needs a default case.
 type IndexKind string
 
 // The kinds of secondary indexes.
@@ -346,7 +347,9 @@ func (c *ColumnIndex) Equals(other *ColumnIndex) bool {
 	return true
 }
 
-// ColumnKind is the role of a column in its table.
+// ColumnKind is the role of a column in its table. The zero ColumnKind is
+// ColumnKindUnknown. Later releases may add values, so a switch over them needs
+// a default case.
 type ColumnKind int
 
 // The kinds of columns.
@@ -359,8 +362,12 @@ const (
 	ColumnStatic
 )
 
+// String returns the kind name, or ColumnKind(n) for a value it does not
+// define.
 func (c ColumnKind) String() string {
 	switch c {
+	case ColumnKindUnknown:
+		return "unknown"
 	case ColumnPartitionKey:
 		return "partition_key"
 	case ColumnClusteringKey:
@@ -372,7 +379,7 @@ func (c ColumnKind) String() string {
 	case ColumnStatic:
 		return "static"
 	default:
-		return fmt.Sprintf("unknown_column_%d", c)
+		return fmt.Sprintf("ColumnKind(%d)", int(c))
 	}
 }
 

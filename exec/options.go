@@ -19,8 +19,8 @@ import (
 
 // Options overrides execution settings. Its zero value uses session defaults.
 // Query constructors validate and snapshot Options once. Compile recurring
-// overrides with gocql.Session.CompileOptions for concurrent one-shot calls. Use context
-// deadlines for request time limits without rebuilding options.
+// overrides with gocql.Session.CompileOptions for concurrent one-shot calls.
+// Use context deadlines for request time limits without rebuilding options.
 type Options struct {
 	Retry    retry.Policy
 	Observer observe.Observer
@@ -56,8 +56,10 @@ type Options struct {
 	CQLTrace bool
 }
 
-// SerialOverride chooses the serial consistency an execution sends, relative
-// to its profile's config.Profile.SerialConsistency. The zero value inherits it.
+// SerialOverride chooses the serial consistency an execution sends, relative to
+// its profile's config.Profile.SerialConsistency. The zero value,
+// SerialInherit, inherits it. Later releases may add values, so a switch over
+// them needs a default case.
 type SerialOverride uint8
 
 const (
@@ -89,12 +91,13 @@ func (s SerialOverride) String() string {
 	}
 }
 
-// CompiledOptions is an immutable snapshot made by gocql.Session.CompileOptions. Reuse it
-// for recurring one-shot execution settings; the zero value uses session
-// defaults. Compiling validates overrides, copies payloads and precomputes request
-// settings. Reuse on another session resolves the original overrides against
-// that session's defaults instead.
-// CompiledOptions controls execution; PrepareOptions controls statement preparation.
+// CompiledOptions is an immutable snapshot made by
+// gocql.Session.CompileOptions. Reuse it for recurring one-shot execution
+// settings; the zero value uses session defaults. Compiling validates
+// overrides, copies payloads and precomputes request settings. Reuse on another
+// session resolves the original overrides against that session's defaults
+// instead. CompiledOptions controls execution; PrepareOptions controls
+// statement preparation.
 type CompiledOptions implSession.CompiledOptions
 
 // Values returns an independent copy of the original overrides for deriving
