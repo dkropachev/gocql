@@ -601,7 +601,7 @@ func TestRouting(t *testing.T) {
 			defer cancel()
 			cfg := createV2Cluster()
 			v2ConfigureRouting(t, cfg, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
+			s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -690,7 +690,7 @@ func TestRouting(t *testing.T) {
 			defer cancel()
 			cfg := createV2Cluster()
 			v2ConfigureRouting(t, cfg, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
-			s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
+			s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
 			if err != nil {
 				t.Fatal(err)
 			}

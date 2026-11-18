@@ -25,11 +25,11 @@ Unix socket: no host discovery is then filled in unless chosen.
 
 ## Dialects
 
-`Connect` takes the dialect as a type parameter: the database and the native
-protocol version you connect to.
+`Connect` takes the dialect: the database and the native protocol version you
+connect to.
 
 ```go
-session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 ```
 
 | Dialect | Database | Protocol |
@@ -46,13 +46,10 @@ and ScyllaDB ([differences](../server-differences.md)), at no cost per request.
 Protocol 5 has no frame compression, so `CassandraV5` with Snappy fails at
 `Connect`; use LZ4 or none.
 
-The dialect is part of the session's type, `*gocql.Session[gocql.ScyllaV4]`.
-Prepared statements, queries and batches do not carry it. Code that serves
-several dialects is generic over it:
-
-```go
-func load[D gocql.Dialect](ctx context.Context, s *gocql.Session[D]) error { ... }
-```
+Every session has the same type, `*gocql.Session`, whatever its dialect, so
+code that serves several dialects takes a plain `*gocql.Session`.
+`Session.Dialect` reports the dialect when code needs to branch on it. The zero
+`Dialect` names none, and `Connect` rejects it.
 
 Zero turns a feature off where zero has no other meaning:
 `WithHeartbeat(0, 0)` sends no heartbeats, `WithMetadataRefresh(0)` stops

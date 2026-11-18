@@ -73,7 +73,7 @@ func TestQuery(t *testing.T) {
 			}
 
 			// Adding to a batch validates the statement without a connection.
-			session := (*gocql.Session[testDialect])(implSession.InternalWrapSession(new(implCluster.Core)))
+			session := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
 			(*implSession.Session)(session).Data().InternalLogger = logging.Nop()
 			defer session.Close()
 			for _, tc := range testCases {
@@ -359,7 +359,7 @@ func TestQuery(t *testing.T) {
 
 			requireCassandraFixtures(t)
 			cluster := createV2Cluster()
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 			if err != nil {
 				t.Fatal("create session:", err)
 			}
@@ -647,7 +647,7 @@ func TestQuery(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		config := createV2Cluster()
-		session, err := gocql.Connect[testDialect](ctx, mustBuild(t, config))
+		session, err := gocql.Connect(ctx, mustBuild(t, config), testDialect)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -866,8 +866,8 @@ func TestQuery(t *testing.T) {
 			// Preparation is explicit in v2. Preserve every old classification input:
 			// non-USE statements are accepted unprepared without keyword guessing, and explicit Prepare
 			// reaches connection selection even for formerly unprepared DDL.
-			session := func() *gocql.Session[testDialect] {
-				opaqueStorageValuex := (*gocql.Session[testDialect])(implSession.InternalWrapSession(new(implCluster.Core)))
+			session := func() *gocql.Session {
+				opaqueStorageValuex := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
 				(*implSession.Session)(opaqueStorageValuex).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValuex
 			}()
@@ -919,8 +919,8 @@ func TestQuery(t *testing.T) {
 			// Automatic keyword-based preparation was removed: every original CQL
 			// case can now be bound explicitly as QUERY, and Prepare explicitly asks
 			// the server for metadata, including DDL previously classified false.
-			session := func() *gocql.Session[testDialect] {
-				opaqueStorageValue := (*gocql.Session[testDialect])(implSession.InternalWrapSession(new(implCluster.Core)))
+			session := func() *gocql.Session {
+				opaqueStorageValue := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
 				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()

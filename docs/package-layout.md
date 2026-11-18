@@ -152,15 +152,14 @@ documented methods.
 
 ### `gocql` (root, layer 3)
 
-- **Contains:** `Connect`, `Session[D]`, the dialect types, and the execution
+- **Contains:** `Connect`, `Session`, the `Dialect` values, and the execution
   handles (`Prepared`, `Query`, `PreparedStream`, `StreamQuery`, `Batch`,
   `Rows`, `Page`, `RowStream`, `PageLease`), plus `PreparedInfo` and
   `StreamInfo` as plain data. `Result` lives in `cql`, because `cqlerr`
   needs it and the root package imports `cqlerr`.
 - **Must not contain:** codecs, policies, configuration builders, error types,
   or anything only one dialect supports.
-- **Future:** `AnySession` (see `docs/post-release-improvements.md`), new
-  dialect types (`ScyllaV5`, a later Cassandra protocol).
+- **Future:** new dialect values (`ScyllaV5`, a later Cassandra protocol).
 
 ### `config` (layer 3)
 
@@ -294,8 +293,9 @@ documented methods.
 ### Dialect packages (layer 3)
 
 - **Contains:** functions that only one database supports, taking a
-  `*gocql.Session` of that dialect, in a package named after the database
-  (`scylla`, `cassandra`). None exists today.
+  `*gocql.Session` and returning an error when `Session.Dialect` is another
+  database, in a package named after the database (`scylla`, `cassandra`).
+  None exists today.
 - **Must not contain:** types or settings that every dialect shares.
 - **Future:** tablet introspection, ScyllaDB-only protocol extensions.
 

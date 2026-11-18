@@ -14,8 +14,8 @@ checked.
 
 ## Dialects
 
-A session is opened for one dialect, chosen by the caller as the type
-parameter of `Connect` (`dialect.go`): `ScyllaV4`, `CassandraV4` or
+A session is opened for one dialect, a value the caller passes to `Connect`
+(`dialect.go`): `ScyllaV4`, `CassandraV4` or
 `CassandraV5`. A dialect sets two things in the session's settings, at
 `Connect` and never again:
 
@@ -31,15 +31,16 @@ parameter of `Connect` (`dialect.go`): `ScyllaV4`, `CassandraV4` or
 
 Behaviour that depends on the server is decided from these values when a
 statement is prepared or a decoder compiled, never per request or per row.
-Only `Session` carries the dialect type. `Prepared`, `Query`, `Batch` and
-`Rows` do not, so that a dialect does not spread through every signature. API
-that only one dialect supports takes a `*Session` of that dialect, which makes
-using it with another a compile error.
+The dialect is not a type parameter: no signature names it, so one
+`*Session` type serves every dialect and `Session.Dialect` reports which one a
+session speaks (derived from the two settings above). API that only one
+dialect supports checks the session's settings and returns an error on
+another dialect, before anything is sent.
 
 A method called on a type parameter goes through Go's instantiation
 dictionary, which measured 2.5 times slower than the version branch it would
-replace. So the dialect type is only read at `Connect`, and hot paths read the
-plain values it set.
+replace. The dialect is only read at `Connect`, and hot paths read the plain
+values it set.
 
 ## Conditional statements (LWT)
 

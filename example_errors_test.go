@@ -21,7 +21,7 @@ func Example_errors() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func Example_connectErrors() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, err = gocql.Connect[gocql.ScyllaV4](context.Background(), cfg)
+	_, err = gocql.Connect(context.Background(), cfg, gocql.ScyllaV4)
 	if errors.Is(err, cqlerr.ErrNoConnectionsStarted) {
 		if connect, ok := errors.AsType[*cqlerr.ConnectError](err); ok {
 			for _, host := range connect.Hosts {

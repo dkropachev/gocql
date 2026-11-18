@@ -3,7 +3,7 @@
 
 package settings
 
-// Server is the database a session is opened for. The public dialect types
+// Server is the database a session is opened for. The public dialects
 // (gocql.ScyllaV4, gocql.CassandraV4, gocql.CassandraV5) set it together with
 // the protocol version. Opening a session checks the server it reaches
 // against it. The zero Server checks nothing; only the driver's own tests use

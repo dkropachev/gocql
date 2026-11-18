@@ -27,7 +27,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, err := gocql.Connect[testDialect](ctx, cfg)
+	s, err := gocql.Connect(ctx, cfg, testDialect)
 	if err != nil {
 		t.Fatal(err)
 	}

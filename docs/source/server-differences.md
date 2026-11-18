@@ -1,11 +1,12 @@
 # Cassandra and ScyllaDB differences
 
 The driver works with both Apache Cassandra and ScyllaDB. You name the one you
-connect to with the session's dialect: `gocql.Connect[gocql.ScyllaV4]`,
-`[gocql.CassandraV4]` or `[gocql.CassandraV5]` (see
+connect to with the session's dialect: `gocql.ScyllaV4`, `gocql.CassandraV4`
+or `gocql.CassandraV5`, passed to `gocql.Connect` (see
 [connecting](connecting/index.md)). Most responses are the same on both, and
 the driver absorbs most of the differences. The ones below change what your
-code sees. Code that is generic over the dialect should handle both.
+code sees. Code that serves several dialects should handle both;
+`Session.Dialect` reports which one a session speaks.
 
 ## Lightweight transactions
 

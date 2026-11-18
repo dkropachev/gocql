@@ -122,7 +122,7 @@ type Fetcher struct {
 var ErrNotReady = errors.New("gocql: CQL trace session not ready")
 
 // Fetch reads the trace session id with a zero Fetcher.
-func Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID) (Info, error) {
+func Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
 	return Fetcher{}.Fetch(ctx, s, id)
 }
 
@@ -134,7 +134,7 @@ func Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUI
 // then waits for them to settle; Info.Settled reports whether they did. Only
 // ctx bounds the wait; each read also uses the
 // session's default profile timeout.
-func (f Fetcher) Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID) (Info, error) {
+func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
 	info := Info{ID: id}
 	if s == nil {
 		return info, errors.New("gocql: nil session")
@@ -148,7 +148,7 @@ func (f Fetcher) Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D]
 		consistency = cql.One
 	}
 	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: true}
-	_, scylla := any(*new(D)).(gocql.ScyllaV4)
+	scylla := s.Dialect() == gocql.ScyllaV4
 	sessionStatement := sessionStatement(scylla)
 	for {
 		var row sessionRow
@@ -308,7 +308,7 @@ var eventStatement = cql.Statement[cql.UUID, eventRow]{
 	BindMarkers: sessionIDMarker,
 }
 
-func readEvents[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID, options exec.Options) ([]Event, error) {
+func readEvents(ctx context.Context, s *gocql.Session, id cql.UUID, options exec.Options) ([]Event, error) {
 	var events []Event
 	var row eventRow
 	_, err := s.UnpreparedEach(ctx, eventStatement, id, &row, func(r *eventRow) error {

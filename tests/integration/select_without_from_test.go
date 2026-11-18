@@ -433,7 +433,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		}
 		for _, tc := range cases {
 			t.Run(tc.name, func(t *testing.T) {
-				var session *gocql.Session[testDialect]
+				var session *gocql.Session
 				if tc.keyspace {
 					session = createV2Session(t)
 				} else {
@@ -482,7 +482,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		skipUnlessSelectWithoutFrom(t)
 		config := createV2Cluster()
 		v2ConfigureRouting(t, config, routing.Options{TokenAware: true, ShuffleReplicas: true})
-		session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, config))
+		session, err := gocql.Connect(context.Background(), mustBuild(t, config), testDialect)
 		if err != nil {
 			t.Fatal(err)
 		}

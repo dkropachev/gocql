@@ -21,4 +21,4 @@ func bindOptions(session *testSession, v exec.Options) exec.CompiledOptions {
 
 // testSession is the session type of the package's unit tests, which build
 // sessions directly instead of connecting.
-type testSession = Session[ScyllaV4]
+type testSession = Session

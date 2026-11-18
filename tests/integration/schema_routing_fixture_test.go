@@ -30,7 +30,7 @@ func v2ConfigureRouting(t testing.TB, cfg *config.ConfigBuilder, options routing
 	return policy
 }
 
-func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session[testDialect], keyspace string, replicas int) {
+func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session, keyspace string, replicas int) {
 	t.Helper()
 	ctx := context.Background()
 	stmt := fmt.Sprintf("CREATE KEYSPACE %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '%d'}", keyspace, replicas)
@@ -46,7 +46,7 @@ func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session[testDialect], 
 	}
 }
 
-func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session[testDialect], stmt string, options exec.Options, values ...cql.Value) (cql.Result, error) {
+func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session, stmt string, options exec.Options, values ...cql.Value) (cql.Result, error) {
 	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
 	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
 	if err != nil {

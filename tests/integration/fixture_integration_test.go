@@ -40,7 +40,7 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	})
-	s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
+	s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 
 }
 
-func checkAggregate(t *testing.T, s *gocql.Session[testDialect], keyspace string) {
+func checkAggregate(t *testing.T, s *gocql.Session, keyspace string) {
 	t.Helper()
 	table := keyspace + ".fixture_values"
 	if err := v2CreateTable(context.Background(), s, "CREATE TABLE "+table+" (id int PRIMARY KEY, value double)"); err != nil {

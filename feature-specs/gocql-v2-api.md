@@ -9,7 +9,7 @@ Module: `github.com/scylladb/gocql/v2`. The public packages are:
 
 | Package | Contents |
 |---|---|
-| `gocql` (module root) | dialects, `Connect`, `Session[D]`, `Prepared`, `Query`, `Batch`, cursors, results |
+| `gocql` (module root) | dialects, `Connect`, `Session`, `Prepared`, `Query`, `Batch`, cursors, results |
 | `config` | cluster configuration and profile builders, observers |
 | `exec` | per-execution options: `Options`, `CompiledOptions`, `PrepareOptions`, `StreamOptions`, `StreamLimits`, `SerialOverride` |
 | `event` | cluster events delivered by `Session.Subscribe` |
@@ -648,8 +648,8 @@ hostname)...Build()` and passed to `WithClientRoutes`, so a hostname override
 belongs to its route and one call replaces the whole setting. Routed
 connections dial the route's `tls_port` exactly when TLS is configured.
 
-The root package has one function, `Connect[D Dialect](context.Context,
-config.Config) (*Session[D], error)`, which opens a session of dialect D. It
+The root package has one function, `Connect(context.Context, config.Config,
+Dialect) (*Session, error)`, which opens a session of that dialect. It
 cannot be a method of `config.Config`: package `config` cannot import the
 `Session` it would return. Every other constructor lives in the package that
 owns its type:
@@ -667,22 +667,26 @@ the root package exports `var StopIteration` (see below).
 
 ## Statements, preparation, queries and execution
 
-A session is generic over its dialect, the database and native protocol
-version it speaks. The caller chooses it; the driver negotiates no protocol
+A session speaks one dialect, the database and native protocol version passed
+to Connect as a value; it is not a type parameter, so every session has the
+type `*Session`. The caller chooses it; the driver negotiates no protocol
 version. Connect fails with `cqlerr.ServerMismatchError` when the cluster does
-not speak that version or is not that database. API only one dialect supports
-takes a session of that dialect (package `scylla` takes
-`*Session[ScyllaV4]`). Prepared statements, queries and batches do not carry
-the dialect. See docs/source/server-differences.md.
+not speak that version or is not that database, and rejects the zero Dialect.
+API only one dialect supports returns an error on a session of another
+dialect, before anything is sent. See docs/source/server-differences.md.
 
 ```go
-type Dialect interface { /* sealed */ }
-type ScyllaV4 struct{}    // ScyllaDB, native protocol 4
-type CassandraV4 struct{} // Apache Cassandra, native protocol 4
-type CassandraV5 struct{} // Apache Cassandra 4.0+, native protocol 5
-type Session[D Dialect] struct { /* opaque */ }
-func Connect[D Dialect](context.Context, config.Config) (*Session[D], error)
-func (s *Session[D]) ID() string
+type Dialect uint8
+const (
+    ScyllaV4    Dialect = iota + 1 // ScyllaDB, native protocol 4
+    CassandraV4                    // Apache Cassandra, native protocol 4
+    CassandraV5                    // Apache Cassandra 4.0+, native protocol 5
+)
+func (Dialect) String() string
+type Session struct { /* opaque */ }
+func Connect(context.Context, config.Config, Dialect) (*Session, error)
+func (s *Session) Dialect() Dialect
+func (s *Session) ID() string
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each
@@ -698,7 +702,7 @@ type PrepareOptions struct {
 }
 
 // package gocql
-func (s *Session[D]) Prepare[P, R any](context.Context, cql.Statement[P, R], ...exec.PrepareOptions) (*Prepared[P, R], error) // at most one
+func (s *Session) Prepare[P, R any](context.Context, cql.Statement[P, R], ...exec.PrepareOptions) (*Prepared[P, R], error) // at most one
 func (p *Prepared[P, R]) Parameters() cql.Columns
 func (p *Prepared[P, R]) Columns() cql.Columns
 func (p *Prepared[P, R]) Info() PreparedInfo
@@ -721,11 +725,11 @@ func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
 func (p *Prepared[P, R]) Query(exec.Options) (*Query[P, R], error)
-func (s *Session[D]) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
-func (s *Session[D]) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
-func (s *Session[D]) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
-func (s *Session[D]) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) iter.Seq2[*R, error]
-func (s *Session[D]) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
+func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
+func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
+func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
+func (s *Session) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) iter.Seq2[*R, error]
+func (s *Session) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
 func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
 func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
@@ -737,8 +741,8 @@ func (q *Query[P, R]) AddToBatch(*Batch, P) error
 func (q *Query[P, R]) Close()                       // stop at once
 func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
-func (s *Session[D]) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
-func (s *Session[D]) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...exec.CompiledOptions) (Rows[R], error)
+func (s *Session) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
+func (s *Session) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...exec.CompiledOptions) (Rows[R], error)
 ```
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
@@ -1002,7 +1006,7 @@ The user-facing description is docs/source/statements/streaming.md.
 
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
-func (s *Session[D]) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
+func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
 func (p *PreparedStream[P, R]) Parameters() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
@@ -1297,7 +1301,7 @@ also interrupts active streams; already written caller output remains valid.
 // Session.CompileOptions for one session's default profile and keyspace. On
 // another session, exec.CompiledOptions are resolved again for that session on each
 // execution. The zero exec.CompiledOptions uses the executing session's default profile.
-func (s *Session[D]) CompileOptions(exec.Options) (exec.CompiledOptions, error)
+func (s *Session) CompileOptions(exec.Options) (exec.CompiledOptions, error)
 
 // package exec
 type CompiledOptions struct { /* frozen, resolved options */ }
@@ -1703,19 +1707,19 @@ type Fetcher struct {
     Settle time.Duration        // 0: 200ms; <0: return once ready
     Consistency cql.Consistency // 0 (Any): One
 }
-func (f Fetcher) Fetch[D gocql.Dialect](context.Context, *gocql.Session[D], cql.UUID) (Info, error)
-func Fetch[D gocql.Dialect](context.Context, *gocql.Session[D], cql.UUID) (Info, error)
+func (f Fetcher) Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
+func Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
 var ErrNotReady error // ctx ended before the session was ready
 ```
 
 ```go
-func (s *Session[D]) Metadata() *metadata.Snapshot
-func (s *Session[D]) RefreshMetadata(context.Context) error
-func (s *Session[D]) AwaitSchemaAgreement(context.Context) error
-func (s *Session[D]) Subscribe(event.Filter) (*event.Subscription, error)
-func (s *Session[D]) Metrics() metrics.Snapshot // session-wide counters
-func (s *Session[D]) Close() error
-func (s *Session[D]) Closed() bool
+func (s *Session) Metadata() *metadata.Snapshot
+func (s *Session) RefreshMetadata(context.Context) error
+func (s *Session) AwaitSchemaAgreement(context.Context) error
+func (s *Session) Subscribe(event.Filter) (*event.Subscription, error)
+func (s *Session) Metrics() metrics.Snapshot // session-wide counters
+func (s *Session) Close() error
+func (s *Session) Closed() bool
 
 // package event
 type Kind uint8
@@ -1878,7 +1882,7 @@ func (*ClientRoutesBuilder) Build() (ClientRoutes, error)
 func (ClientRoutes) Routes() []ClientRoute // copy; ClientRoute{ConnectionID, Hostname}
 
 // package gocql
-func Connect[D Dialect](context.Context, config.Config) (*Session[D], error)
+func Connect(context.Context, config.Config, Dialect) (*Session, error)
 ```
 
 `Connect` rejects the zero `Config`. `WithOnlyHost` connects only to the node
@@ -1958,7 +1962,7 @@ For example:
 
 ```go
 cfg, err := config.New("unix:/run/scylla/cql.m").Build()
-session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 ```
 
 ```go

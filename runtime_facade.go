@@ -49,17 +49,18 @@ func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 // AddToBatch rejects the statement after it.
 const MaxBatchStatements = implCluster.MaxBatchStatements
 
-// Connect opens a session of dialect D with cfg, which must come from
-// config.ConfigBuilder.Build. D fixes the protocol version and the database:
-// Connect fails when the cluster does not speak that version, or is not that
-// database (cqlerr.ServerMismatchError).
-func Connect[D Dialect](ctx context.Context, cfg config.Config) (*Session[D], error) {
-	settings, err := dialectSettings[D](cfg)
+// Connect opens a session of dialect with cfg, which must come from
+// config.ConfigBuilder.Build. The dialect fixes the protocol version and the
+// database: Connect fails when the cluster does not speak that version, or is
+// not that database (cqlerr.ServerMismatchError). The zero Dialect is
+// rejected with a *cql.ValidationError.
+func Connect(ctx context.Context, cfg config.Config, dialect Dialect) (*Session, error) {
+	settings, err := dialectSettings(cfg, dialect)
 	if err != nil {
 		return nil, err
 	}
 	session, err := implSession.Connect(ctx, settings)
-	return (*Session[D])(session), err
+	return (*Session)(session), err
 }
 
 // PreparedInfo describes a prepared statement.

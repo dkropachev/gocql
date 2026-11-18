@@ -42,7 +42,7 @@ func Example_paging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	s, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+	s, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 	if err != nil {
 		log.Fatal(err)
 	}
