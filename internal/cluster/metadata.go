@@ -350,10 +350,10 @@ func (s *Core) tryPublishV2Metadata() bool {
 		if config.Partitioners[routing.SnapshotData(m).InternalPartitioner] != nil {
 			partitioner = "Murmur3Partitioner"
 		}
-		ring, err := implEndpoint.InternalNewTokenRing(partitioner, replicaHosts)
+		ring, err := InternalNewTokenRing(partitioner, replicaHosts)
 		if err != nil {
 			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, err)
-		} else if _, ok := ring.InternalPartitioner.(implEndpoint.InternalMurmur3Partitioner); ok {
+		} else if _, ok := ring.InternalPartitioner.(InternalMurmur3Partitioner); ok {
 			for ks, meta := range routing.SnapshotData(m).InternalKeyspaces {
 				ranges, err := InternalBuildV2VnodeRanges(ring, meta)
 				if err != nil {

@@ -29,12 +29,78 @@
 package cluster
 
 import (
+	"fmt"
+	"math/big"
+	"net"
 	"strconv"
+	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/endpoint"
+	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 type intToken int
 
 func (i intToken) String() string                 { return strconv.Itoa(int(i)) }
 func (i intToken) Less(token endpoint.Token) bool { return i < token.(intToken) }
+
+func hostsForTests(n int) []*endpoint.HostInfo {
+	hosts := make([]*endpoint.HostInfo, n)
+	for i := 0; i < n; i++ {
+		host := func() *endpoint.HostInfo {
+			opaqueStorageValuexxxx := new(endpoint.HostInfo)
+			implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalConnectAddress = net.IPv4(1, 1, 1, byte(n))
+			implEndpoint.HostInfoData(opaqueStorageValuexxxx).InternalTokens = []string{fmt.Sprintf("%d", n)}
+			return opaqueStorageValuexxxx
+		}()
+
+		hosts[i] = host
+	}
+	return hosts
+}
+
+func TestToken(t *testing.T) {
+	t.Parallel()
+	// Tests of the int64Token
+	t.Run("Int64", func(t *testing.T) {
+		t.Parallel()
+
+		if endpoint.InternalInt64Token(42).Less(endpoint.InternalInt64Token(42)) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+		if !endpoint.InternalInt64Token(-42).Less(endpoint.InternalInt64Token(42)) {
+			t.Errorf("Expected Less to return true, but was false")
+		}
+		if endpoint.InternalInt64Token(42).Less(endpoint.InternalInt64Token(-42)) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+	})
+	// Tests of the orderedToken
+	t.Run("Ordered", func(t *testing.T) {
+		t.Parallel()
+
+		if InternalOrderedToken([]byte{0, 0, 4, 2}).Less(InternalOrderedToken([]byte{0, 0, 4, 2})) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+		if !InternalOrderedToken([]byte{0, 0, 3}).Less(InternalOrderedToken([]byte{0, 0, 4, 2})) {
+			t.Errorf("Expected Less to return true, but was false")
+		}
+		if InternalOrderedToken([]byte{0, 0, 4, 2}).Less(InternalOrderedToken([]byte{0, 0, 3})) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+	})
+	// Tests of the randomToken
+	t.Run("Random", func(t *testing.T) {
+		t.Parallel()
+
+		if ((*InternalRandomToken)(big.NewInt(42))).Less((*InternalRandomToken)(big.NewInt(42))) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+		if !((*InternalRandomToken)(big.NewInt(41))).Less((*InternalRandomToken)(big.NewInt(42))) {
+			t.Errorf("Expected Less to return true, but was false")
+		}
+		if ((*InternalRandomToken)(big.NewInt(42))).Less((*InternalRandomToken)(big.NewInt(41))) {
+			t.Errorf("Expected Less to return false, but was true")
+		}
+	})
+}

@@ -93,12 +93,12 @@ func TestTokenRing(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					var (
 						hosts  []*endpoint.HostInfo
-						tokens []endpoint.InternalHostToken
+						tokens []InternalHostToken
 					)
-					dcRing := make(map[string][]endpoint.InternalHostToken, totalDCs)
+					dcRing := make(map[string][]InternalHostToken, totalDCs)
 					hostIdx := 0
 					for i := 0; i < totalDCs; i++ {
-						var dcTokens []endpoint.InternalHostToken
+						var dcTokens []InternalHostToken
 						dc := fmt.Sprintf("dc%d", i+1)
 
 						for j := 0; j < hostsPerDC; j++ {
@@ -114,8 +114,8 @@ func TestTokenRing(t *testing.T) {
 							}()
 							hostIdx++
 
-							token := endpoint.InternalHostToken{
-								InternalToken: endpoint.InternalOrderedToken(tokenStr),
+							token := InternalHostToken{
+								InternalToken: InternalOrderedToken(tokenStr),
 								InternalHost:  h,
 							}
 
@@ -125,21 +125,21 @@ func TestTokenRing(t *testing.T) {
 							hosts = append(hosts, h)
 						}
 
-						sort.Sort(&endpoint.InternalTokenRing{InternalTokens: dcTokens})
+						sort.Sort(&InternalTokenRing{InternalTokens: dcTokens})
 						dcRing[dc] = dcTokens
 					}
 
 					if len(tokens) != hostsPerDC*totalDCs {
 						t.Fatalf("expected %d tokens in the ring got %d", hostsPerDC*totalDCs, len(tokens))
 					}
-					sort.Sort(&endpoint.InternalTokenRing{InternalTokens: tokens})
+					sort.Sort(&InternalTokenRing{InternalTokens: tokens})
 
 					var expReplicas int
 					for _, rf := range test.strat.dcs {
 						expReplicas += rf
 					}
 
-					tokenReplicas := test.strat.InternalReplicaMap(&endpoint.InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
+					tokenReplicas := test.strat.InternalReplicaMap(&InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
 					if len(tokenReplicas) != test.expectedReplicaMapSize {
 						t.Fatalf("expected replica map to have %d items but has %d", test.expectedReplicaMapSize,
 							len(tokenReplicas))
@@ -231,7 +231,7 @@ func TestTokenRing(t *testing.T) {
 				return opaqueStorageValuexxx
 			}()
 
-			tokens := []endpoint.InternalHostToken{
+			tokens := []InternalHostToken{
 				{InternalToken: intToken(0), InternalHost: host0},
 				{InternalToken: intToken(25), InternalHost: host25},
 				{InternalToken: intToken(50), InternalHost: host50},
@@ -241,7 +241,7 @@ func TestTokenRing(t *testing.T) {
 			hosts := []*endpoint.HostInfo{host0, host25, host50, host75}
 
 			strat := &simpleStrategy{rf: 2}
-			tokenReplicas := strat.InternalReplicaMap(&endpoint.InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
+			tokenReplicas := strat.InternalReplicaMap(&InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
 			if len(tokenReplicas) != len(tokens) {
 				t.Fatalf("expected replica map to have %d items but has %d", len(tokens), len(tokenReplicas))
 			}
@@ -359,7 +359,7 @@ func TestNetworkTopologyReplicasAreDistinct(t *testing.T) {
 
 	var (
 		hosts  []*endpoint.HostInfo
-		tokens []endpoint.InternalHostToken
+		tokens []InternalHostToken
 	)
 	for i := 0; i < 2; i++ {
 		h := new(endpoint.HostInfo)
@@ -368,16 +368,16 @@ func TestNetworkTopologyReplicasAreDistinct(t *testing.T) {
 		implEndpoint.HostInfoData(h).InternalRack = "rack1"
 		hosts = append(hosts, h)
 		for v := 0; v < 2; v++ {
-			tokens = append(tokens, endpoint.InternalHostToken{
-				InternalToken: endpoint.InternalOrderedToken(fmt.Sprintf("%d:%d", v, i)),
+			tokens = append(tokens, InternalHostToken{
+				InternalToken: InternalOrderedToken(fmt.Sprintf("%d:%d", v, i)),
 				InternalHost:  h,
 			})
 		}
 	}
-	sort.Sort(&endpoint.InternalTokenRing{InternalTokens: tokens})
+	sort.Sort(&InternalTokenRing{InternalTokens: tokens})
 
 	strat := &networkTopology{dcs: map[string]int{"dc1": 3}}
-	ring := strat.InternalReplicaMap(&endpoint.InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
+	ring := strat.InternalReplicaMap(&InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens})
 	for _, ht := range ring {
 		seen := make(map[*endpoint.HostInfo]bool, len(ht.hosts))
 		for _, h := range ht.hosts {

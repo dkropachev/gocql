@@ -24,6 +24,11 @@
 
 package endpoint
 
+import (
+	"fmt"
+	"strconv"
+)
+
 // SelectedHost is an interface returned when picking a host from a host
 // selection policy.
 type SelectedHost interface {
@@ -37,4 +42,21 @@ type SelectedHost interface {
 // conn picker can consume it without boxing it into the Token interface.
 type InternalInt64TokenSelectedHost interface {
 	TokenInt64() (InternalInt64Token, bool)
+}
+
+// a Token
+type Token interface {
+	fmt.Stringer
+	Less(Token) bool
+}
+
+// int64 token
+type InternalInt64Token int64
+
+func (m InternalInt64Token) String() string {
+	return strconv.FormatInt(int64(m), 10)
+}
+
+func (m InternalInt64Token) Less(token Token) bool {
+	return m < token.(InternalInt64Token)
 }

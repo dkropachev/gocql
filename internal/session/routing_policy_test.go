@@ -229,7 +229,7 @@ func TestRoutingPolicy(t *testing.T) {
 				return opaqueStorageValuexxxxxxx
 			}(),
 			}
-			ring := codecTestMust(endpoint.InternalNewTokenRing("Murmur3Partitioner", hosts))
+			ring := codecTestMust(cluster.InternalNewTokenRing("Murmur3Partitioner", hosts))
 			for _, test := range []struct {
 				strategy string
 				options  map[string]string

@@ -384,7 +384,7 @@ func TokenAwareHostPolicy(fallback HostSelectionPolicy, opts ...func(*tokenAware
 type clusterMeta struct {
 	// replicas is map[keyspace]map[token]hosts
 	replicas  map[string]tokenRingReplicas
-	tokenRing *implEndpoint.InternalTokenRing
+	tokenRing *InternalTokenRing
 }
 
 var MAX_IN_FLIGHT_THRESHOLD int = 10
@@ -563,7 +563,7 @@ func (m *clusterMeta) resetTokenRing(partitioner string, hosts []*implEndpoint.H
 	}
 
 	// create a new token ring
-	tokenRing, err := implEndpoint.InternalNewTokenRing(partitioner, hosts)
+	tokenRing, err := InternalNewTokenRing(partitioner, hosts)
 	if err != nil {
 		logger.Warn("unable to update token ring", "partitioner", partitioner, logging.Err(err))
 		return

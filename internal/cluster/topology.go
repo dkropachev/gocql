@@ -98,7 +98,7 @@ func (h tokenRingReplicas) replicasForInt64(t endpoint.InternalInt64Token) *host
 }
 
 type placementStrategy interface {
-	InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas
+	InternalReplicaMap(tokenRing *InternalTokenRing) tokenRingReplicas
 	InternalReplicationFactor(dc string) int
 }
 
@@ -156,7 +156,7 @@ func (s *simpleStrategy) InternalReplicationFactor(dc string) int {
 	return s.rf
 }
 
-func (s *simpleStrategy) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas {
+func (s *simpleStrategy) InternalReplicaMap(tokenRing *InternalTokenRing) tokenRingReplicas {
 	tokens := tokenRing.InternalTokens
 	ring := make(tokenRingReplicas, len(tokens))
 
@@ -202,7 +202,7 @@ func (n *networkTopology) haveRF(replicaCounts map[string]int) bool {
 	return true
 }
 
-func (n *networkTopology) InternalReplicaMap(tokenRing *endpoint.InternalTokenRing) tokenRingReplicas {
+func (n *networkTopology) InternalReplicaMap(tokenRing *InternalTokenRing) tokenRingReplicas {
 	dcRacks := make(map[string]map[string]struct{}, len(n.dcs))
 	// skipped hosts in a dc
 	skipped := make(map[string][]*endpoint.HostInfo, len(n.dcs))
