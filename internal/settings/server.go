@@ -46,7 +46,7 @@ func DialectName(server Server, protocol int) string {
 // on a session of c's Cassandra dialect, as an UnsupportedSettingError naming
 // the setting and the dialect. It returns nil for a ScyllaDB session, and for
 // one of ServerAny, which only the driver's own tests open.
-func (c *Config) ScyllaOnly(setting string) error {
+func ScyllaOnly(c *Config, setting string) error {
 	if c.Server != ServerCassandra {
 		return nil
 	}
@@ -54,9 +54,10 @@ func (c *Config) ScyllaOnly(setting string) error {
 }
 
 // ProtocolV5Only reports a setting that only native protocol 5 (the
-// CassandraV5 dialect) supports, used on a session of protocol 4, as
-// ScyllaOnly does. It returns nil for a session whose protocol is not 4.
-func (c *Config) ProtocolV5Only(setting string) error {
+// CassandraV5 dialect) supports, used on a session of protocol 4 of any
+// server, as ScyllaOnly does. It returns nil for a session whose protocol is
+// not 4.
+func ProtocolV5Only(c *Config, setting string) error {
 	if c.Protocol != 4 {
 		return nil
 	}

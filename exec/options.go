@@ -60,14 +60,14 @@ type Options struct {
 	// in one response.
 	PageSize cql.Option[int32]
 	// NowInSeconds sets the server's current time, in seconds since the Unix
-	// epoch, for TTL and expiry. Only native protocol 5 carries it: on
-	// another dialect compiling or executing the options fails with a
-	// cqlerr.UnsupportedSettingError, and nothing is sent.
+	// epoch, for TTL and expiry. Only native protocol 5 carries it: on a
+	// session of another dialect, Session.CompileOptions and every execution
+	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
 	NowInSeconds cql.Option[int32]
 	// ShardID sends the request on a connection of this shard of the node
-	// HostID names; it requires HostID. Only ScyllaDB has shards: on another
-	// dialect compiling or executing the options fails with a
-	// cqlerr.UnsupportedSettingError, and nothing is sent.
+	// HostID names; it requires HostID. Only ScyllaDB has shards: on a
+	// session of another dialect, Session.CompileOptions and every execution
+	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
 	ShardID     cql.Option[uint32]
 	Consistency cql.Option[cql.Consistency]
 	HostID      cql.Option[cql.UUID]

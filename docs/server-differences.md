@@ -48,22 +48,25 @@ No package holds dialect-only functions: `scylla.BatchStatement`, the last
 one, was replaced by `Session.RunConditionalBatch`, and the `scylla` package
 went with it (`docs/package-layout.md`, Dialect packages). Every
 dialect-only feature is a setting or a server behaviour, so none can be gated
-at compile time. A feature the caller asks for fails on another dialect with
-`cqlerr.UnsupportedSettingError` (kind `KindInvalid`), whose `Setting` names
-the feature and whose message names the dialect that supports it and the
-session's dialect, before anything is sent. `settings.Config.ScyllaOnly` and
-`ProtocolV5Only` (`internal/settings/server.go`) build it; a session of
-`ServerAny`, which only the driver's tests open, passes. A feature the server
-drives, or that only applies when the server reports it, is a documented
-no-op on the other dialect.
+at compile time. A setting the caller asks for fails on another dialect
+before anything is sent. Settings that the session's dialect alone decides
+fail with `cqlerr.UnsupportedSettingError` (kind `KindInvalid`), whose
+`Setting` names the feature and whose message names the dialect that supports
+it and the session's dialect. `settings.ScyllaOnly` and
+`settings.ProtocolV5Only` (`internal/settings/server.go`) build it.
+`ScyllaOnly` passes a session of `ServerAny`, which only the driver's tests
+open; `ProtocolV5Only` checks the protocol alone. A keyspace override also
+depends on the statement, so it is checked when the request is built and fails
+with `cql.ValidationError`. A feature the server drives, or that only applies
+when the server reports it, is a documented no-op on the other dialect.
 
 | Feature | Supported by | On another dialect | Where |
 |---|---|---|---|
 | `config.WithClientRoutes` | ScyllaV4 | `Connect` fails before dialing | `settings.Config.Validate` |
-| `config.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `Connect` fails before dialing; zero is accepted | `settings.Config.Validate` |
+| `config.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `Connect` fails before dialing; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
 | `exec.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
 | `exec.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
-| `exec.Options.Keyspace` other than the session's | CassandraV5 | Fails each attempt before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` (`internal/session/execute.go`) |
+| `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
 | Shard awareness: `WithConnectionsPerShard`, `WithMaxExcessPerShard`, `WithAdvancedShardAwareness`, `NoAdvancedShardAwareness` | ScyllaV4 | No-op: a Cassandra node is one shard with no shard-aware port | Pool |
 | Tablet routing, `routing.Options.LeaderAware`, `metadata.Keyspace.TabletBased` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
 | LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
@@ -71,6 +74,7 @@ no-op on the other dialect.
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
 | `event.ClientRoute` events | ScyllaV4 | Never delivered | Events |
 | Shard fields (`endpoint.DialTarget.ShardID`, `metadata.HostSnapshot.Shards`, `metadata.Route.Shard`) | ScyllaV4 | Unset or zero | Pool and metadata |
+| A custom `routing.Policy` route or target with a shard (`metadata.Route.WithShard`, `metadata.Target.ShardID`) | ScyllaV4 | A shard the node lacks, any but 0 on Cassandra, finds no connection: the plan moves to its next route, and with none left the execution fails with `cqlerr.ErrNoConnections`, as for a ScyllaDB node with fewer shards | `internal/pool/pool.go`, `internal/cluster/execute.go` |
 
 ## Conditional statements (LWT)
 

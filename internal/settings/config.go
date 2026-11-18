@@ -154,12 +154,12 @@ func (config Config) Validate() error {
 		return &UnsupportedSettingError{Setting: "protocol", Reason: "ScyllaDB speaks native protocol 4"}
 	}
 	if config.ClientRoutes != nil {
-		if err := config.ScyllaOnly("client routes"); err != nil {
+		if err := ScyllaOnly(&config, "client routes"); err != nil {
 			return err
 		}
 	}
 	if config.Metadata.ServerTimeout.Set && config.Metadata.ServerTimeout.Value > 0 {
-		if err := config.ScyllaOnly("metadata server timeout"); err != nil {
+		if err := ScyllaOnly(&config, "metadata server timeout"); err != nil {
 			return err
 		}
 	}

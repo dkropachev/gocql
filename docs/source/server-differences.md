@@ -21,9 +21,11 @@ dialects, before anything is sent to the cluster:
 | `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
 | `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
 
-`exec.Options.Keyspace` naming a keyspace other than the session's also needs
-`CassandraV5`, unless the statement names its keyspace itself; on protocol 4
-the execution fails with a `*cql.ValidationError`.
+`exec.Options.Keyspace` or `exec.PrepareOptions.Keyspace` naming a keyspace
+other than the session's also needs `CassandraV5`, unless the statement names
+its keyspace itself; on protocol 4 the execution or the preparation fails with
+a `*cql.ValidationError` before it is sent. A custom routing policy that routes
+to a shard other than 0 finds no connection on Cassandra, which has no shards.
 
 Other ScyllaDB features need no setting and do nothing on Cassandra: shard
 awareness (`WithConnectionsPerShard` and the shard-aware port settings treat a
