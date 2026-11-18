@@ -14,9 +14,9 @@ import (
 
 // Query owns reusable parameters and execution state for one worker. It permits
 // one active execution and must not be copied. Options are fixed at creation.
-// Close the query when done, including when execution fails. Prepared.Exec, One
-// and Each manage their own state and are convenient for concurrent request
-// handlers.
+// Close the query when done, including when execution fails. Prepared.Exec,
+// One, Each and All manage their own state and are convenient for concurrent
+// request handlers.
 //
 // Prepared.Query makes a Query. A zero Query's executions return a
 // cql.ValidationError, and its Close does nothing.
