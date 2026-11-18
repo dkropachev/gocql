@@ -12,7 +12,7 @@
 //		WithKeyspace("app").
 //		WithConnectionsPerShard(2).
 //		Build()
-//	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+//	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 //
 // NewProfile starts a ProfileBuilder for execution defaults: the session's
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one

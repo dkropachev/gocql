@@ -12,10 +12,11 @@ package gocql
 		gocql.CASBatchRows method (T) Info() cql.Result
 		gocql.CASBatchRows method (T) NextInto(dst *cql.CASResult[X]) bool
 		gocql.CASBatchRows method (T) Retain() (*gocql.PageLease, error)
-	type gocql.CassandraV4 struct
-	type gocql.CassandraV5 struct
-	func gocql.Connect[D gocql.Dialect](ctx context.Context, cfg config.Config) (*gocql.Session[D], error)
-	type gocql.Dialect interface (sealed)
+	const gocql.CassandraV4 gocql.Dialect = 2
+	const gocql.CassandraV5 gocql.Dialect = 3
+	func gocql.Connect(ctx context.Context, cfg config.Config, dialect gocql.Dialect) (*gocql.Session, error)
+	type gocql.Dialect uint8
+		gocql.Dialect method (T) String() string
 	const gocql.MaxBatchStatements untyped int = 65535
 	type gocql.Page[R any] struct
 		gocql.Page method (*T) Clone() (R, error)
@@ -77,12 +78,13 @@ package gocql
 		gocql.Rows method (T) Info() cql.Result
 		gocql.Rows method (T) NextInto(dst *R) bool
 		gocql.Rows method (T) Retain() (*gocql.PageLease, error)
-	type gocql.ScyllaV4 struct
-	type gocql.Session[D gocql.Dialect] struct
+	const gocql.ScyllaV4 gocql.Dialect = 1
+	type gocql.Session struct
 		gocql.Session method (*T) AwaitSchemaAgreement(ctx context.Context) error
 		gocql.Session method (*T) Close() error
 		gocql.Session method (*T) Closed() bool
 		gocql.Session method (*T) CompileOptions(options exec.Options) (exec.CompiledOptions, error)
+		gocql.Session method (*T) Dialect() gocql.Dialect
 		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Session method (*T) ID() string
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
@@ -1073,12 +1075,12 @@ package cqltrace
 		cqltrace.Event field Thread string
 		cqltrace.Event field Elapsed time.Duration
 		cqltrace.Event field ID cql.TimeUUID
-	func cqltrace.Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID) (cqltrace.Info, error)
+	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
 	type cqltrace.Fetcher struct
 		cqltrace.Fetcher field Poll time.Duration
 		cqltrace.Fetcher field Settle time.Duration
 		cqltrace.Fetcher field Consistency cql.Consistency
-		cqltrace.Fetcher method (T) Fetch[D gocql.Dialect](ctx context.Context, s *gocql.Session[D], id cql.UUID) (cqltrace.Info, error)
+		cqltrace.Fetcher method (T) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
 	type cqltrace.Info struct
 		cqltrace.Info field Started time.Time
 		cqltrace.Info field Coordinator net/netip.Addr

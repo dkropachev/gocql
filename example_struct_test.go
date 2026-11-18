@@ -39,7 +39,7 @@ func ExampleParamsOf() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func ExamplePrepared_Query() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect[gocql.ScyllaV4](ctx, cfg)
+	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
 	if err != nil {
 		log.Fatal(err)
 	}

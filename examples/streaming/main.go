@@ -129,26 +129,28 @@ func run() (resultErr error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	// The dialect is a type: the program picks it once and runs the rest
-	// generically.
+	var d gocql.Dialect
 	switch *dialect {
 	case "scylla-v4":
-		return streamTable[gocql.ScyllaV4](ctx, cfg, *incremental, false, frameCompression)
+		d = gocql.ScyllaV4
 	case "cassandra-v4":
-		return streamTable[gocql.CassandraV4](ctx, cfg, *incremental, false, frameCompression)
+		d = gocql.CassandraV4
 	case "cassandra-v5":
-		return streamTable[gocql.CassandraV5](ctx, cfg, *incremental, true, frameCompression)
+		d = gocql.CassandraV5
+	default:
+		return fmt.Errorf("unknown dialect %q", *dialect)
 	}
-	return fmt.Errorf("unknown dialect %q", *dialect)
+	// Protocol 5 compresses transport segments rather than frames.
+	return streamTable(ctx, cfg, d, *incremental, d == gocql.CassandraV5, frameCompression)
 }
 
-// streamTable connects with dialect D and streams the example table. segments
+// streamTable connects with dialect d and streams the example table. segments
 // reports that the dialect's protocol compresses transport segments rather
 // than frames.
-func streamTable[D gocql.Dialect](ctx context.Context, cfg config.Config, incremental, segments bool, frameCompression cql.Compression) (resultErr error) {
+func streamTable(ctx context.Context, cfg config.Config, d gocql.Dialect, incremental, segments bool, frameCompression cql.Compression) (resultErr error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	s, err := gocql.Connect[D](ctx, cfg)
+	s, err := gocql.Connect(ctx, cfg, d)
 	if err != nil {
 		return err
 	}

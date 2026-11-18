@@ -4,20 +4,6 @@ Ideas that were considered and deliberately left out of the first release.
 Each says why it was deferred and what would bring it back. None is a
 commitment; reconsider each one after the release, with user feedback.
 
-## A non-generic session interface (`gocql.AnySession`)
-
-`Session` is generic over its dialect (`docs/server-differences.md`,
-"Dialects"), so a library that accepts sessions of several dialects has to be
-generic over the dialect too: `func Load[D gocql.Dialect](s *gocql.Session[D])`.
-A non-generic interface that every `*Session[D]` satisfies would let such code
-take a plain parameter instead.
-
-Deferred because the generic form works today, and an interface over the
-session's generic methods cannot be written in Go: an interface cannot declare
-a method with type parameters such as `Prepare[P, R]`. It would cover only the
-non-generic methods (`Close`, `Metadata`, `ExecBatch`, ...) or need wrapper
-functions. Reconsider if users ask for it.
-
 ## Register held pooled queries once
 
 `Prepared.Run` and `Session.RunBatch` register the pooled query their rows

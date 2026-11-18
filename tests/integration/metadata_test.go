@@ -56,7 +56,7 @@ func TestMetadata(t *testing.T) {
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
 			c.WithDiscovery(false).WithConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
-		s, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
+		s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -162,7 +162,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster().WithIgnoreEvents(event.Topology, event.Status)
 
-			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -194,7 +194,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("SchemaChange", func(t *testing.T) {
 			cluster := createV2Cluster()
 
-			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -273,7 +273,7 @@ func TestMetadata(t *testing.T) {
 			cfg := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *config.ConfigBuilder) {
 				c.WithCompression(cql.NoCompression).WithDialer(fixture)
 			})
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cfg), testDialect)
 			require.NoError(t, err)
 			defer session.Close()
 			require.Positive(t, fixture.injected.Load(), "discovery must consume injected incomplete peer")
@@ -930,7 +930,7 @@ func TestMetadata(t *testing.T) {
 // metadataExecOnConn prepares stmt and runs it with options. Statements are
 // prepared because only prepared execution accepts the fixture's internal
 // connection seam.
-func metadataExecOnConn(ctx context.Context, s *gocql.Session[testDialect], stmt string, options implSession.Options) (cql.Result, error) {
+func metadataExecOnConn(ctx context.Context, s *gocql.Session, stmt string, options implSession.Options) (cql.Result, error) {
 	prepared, err := s.Prepare(ctx, cql.Command(stmt), exec.PrepareOptions{})
 	if err != nil {
 		return cql.Result{}, err

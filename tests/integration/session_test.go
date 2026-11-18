@@ -231,7 +231,7 @@ func TestSession(t *testing.T) {
 			}))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
-			s, e := gocql.Connect[testDialect](ctx, cfg)
+			s, e := gocql.Connect(ctx, cfg, testDialect)
 			if e != nil {
 				t.Fatal(e)
 			}
@@ -252,7 +252,7 @@ func TestSession(t *testing.T) {
 				}
 				cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 				defer stop()
-				cleanupSession, e := gocql.Connect[testDialect](cleanup, cfg)
+				cleanupSession, e := gocql.Connect(cleanup, cfg, testDialect)
 				if e != nil {
 					t.Error(e)
 					return
@@ -351,8 +351,8 @@ func TestSession(t *testing.T) {
 			require.NoError(t, err)
 			// Session setters are replaced by atomic profile snapshots. Fractional
 			// prefetch became a bounded count of zero or one physical page.
-			session := func() *gocql.Session[testDialect] {
-				opaqueStorageValue := (*gocql.Session[testDialect])(implSession.InternalWrapSession(new(implCluster.Core)))
+			session := func() *gocql.Session {
+				opaqueStorageValue := (*gocql.Session)(implSession.InternalWrapSession(new(implCluster.Core)))
 				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
@@ -403,7 +403,7 @@ func TestSession(t *testing.T) {
 			}
 
 			cluster := createV2ClusterWithout(fixtureAuth).WithAuth(auth.Password("cassandra", "cassandra"))
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 
 			if err != nil {
 				t.Fatalf("Authentication error: %s", err)
@@ -411,7 +411,7 @@ func TestSession(t *testing.T) {
 
 			session.Close()
 			invalid := createV2ClusterWithout(fixtureAuth).WithAuth(auth.Password("cassandra", "invalid-password"))
-			rejected, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, invalid))
+			rejected, err := gocql.Connect(context.Background(), mustBuild(t, invalid), testDialect)
 			if err == nil {
 				rejected.Close()
 				t.Fatal("server accepted rejected credentials")
@@ -424,7 +424,7 @@ func TestSession(t *testing.T) {
 			t.Parallel()
 
 			checkIfSessionWorking := func(t *testing.T, cluster config.Config, hosts []string) {
-				s, err := gocql.Connect[testDialect](context.Background(), cluster)
+				s, err := gocql.Connect(context.Background(), cluster, testDialect)
 				if err != nil {
 					t.Fatalf("failed to create session: %v", err)
 				}
@@ -566,7 +566,7 @@ func TestSession(t *testing.T) {
 		t.Run("DialectProtocol", func(t *testing.T) {
 			t.Parallel()
 			cfg := createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression)
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cfg), testDialect)
 			require.NoError(t, err)
 			defer session.Close()
 			require.Equal(t, testDialectProtocol, (*implSession.Session)(session).Data().InternalCfg.ProtoVersion)
@@ -577,13 +577,13 @@ func TestSession(t *testing.T) {
 			cfg := mustBuild(t, createV2ClusterWithout(fixtureCompression).WithCompression(cql.NoCompression))
 			var err error
 			if testDialectDistribution == "scylla" {
-				var s *gocql.Session[gocql.CassandraV4]
-				if s, err = gocql.Connect[gocql.CassandraV4](context.Background(), cfg); err == nil {
+				var s *gocql.Session
+				if s, err = gocql.Connect(context.Background(), cfg, gocql.CassandraV4); err == nil {
 					s.Close()
 				}
 			} else {
-				var s *gocql.Session[gocql.ScyllaV4]
-				if s, err = gocql.Connect[gocql.ScyllaV4](context.Background(), cfg); err == nil {
+				var s *gocql.Session
+				if s, err = gocql.Connect(context.Background(), cfg, gocql.ScyllaV4); err == nil {
 					s.Close()
 				}
 			}
@@ -601,7 +601,7 @@ func TestSession(t *testing.T) {
 		t.Run("InvalidKeyspace", func(t *testing.T) {
 			t.Parallel()
 			cfg := createV2Cluster().WithKeyspace("invalidKeyspace")
-			session, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cfg))
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cfg), testDialect)
 			if err == nil {
 				session.Close()
 				t.Fatal("expected invalid keyspace to fail")
@@ -727,12 +727,12 @@ func TestSession(t *testing.T) {
 					} {
 						t.Run(tcase.name, func(t *testing.T) {
 							var (
-								s   *gocql.Session[testDialect]
+								s   *gocql.Session
 								err error
 							)
 
 							t.Run("Connect", func(t *testing.T) {
-								s, err = gocql.Connect[testDialect](context.Background(), tcase.getCluster())
+								s, err = gocql.Connect(context.Background(), tcase.getCluster(), testDialect)
 								match(t, tcase.connect, err)
 								if err != nil {
 									t.Fatal("failed to create session", err.Error())
@@ -764,7 +764,7 @@ func TestSession(t *testing.T) {
 
 							if tcase.controlQueryAfterReconnect != DontRun {
 								t.Run("Query from control connection after reconnect", func(t *testing.T) {
-									s, err = gocql.Connect[testDialect](context.Background(), tcase.getCluster())
+									s, err = gocql.Connect(context.Background(), tcase.getCluster(), testDialect)
 									if err != nil {
 										t.Fatal("failed to create session", err.Error())
 									}
@@ -850,7 +850,7 @@ func TestSession(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			start := time.Now()
-			session, err := gocql.Connect[testDialect](ctx, cfg)
+			session, err := gocql.Connect(ctx, cfg, testDialect)
 			if err == nil {
 				session.Close()
 				t.Fatal("expected startup failure")
@@ -887,7 +887,7 @@ func TestSession(t *testing.T) {
 				c.WithAuth(auth.Password("cassandra", "cassandra"))
 			}
 
-			sess, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, c))
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, c), testDialect)
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -919,13 +919,13 @@ func TestSession(t *testing.T) {
 		cfg := mustBuild(t, builder)
 		// The standalone executor is replaced by a typed session restricted to a
 		// discovered host identity, rather than a second query execution engine.
-		discovery, err := gocql.Connect[testDialect](ctx, cfg)
+		discovery, err := gocql.Connect(ctx, cfg, testDialect)
 		require.NoError(t, err)
 		hosts := discovery.Metadata().Hosts()
 		require.NotEmpty(t, hosts)
 		hostID := hosts[0].ID
 		require.NoError(t, discovery.Close())
-		session, err := gocql.Connect[testDialect](ctx, mustBuild(t, builder.WithOnlyHost(hostID)))
+		session, err := gocql.Connect(ctx, mustBuild(t, builder.WithOnlyHost(hostID)), testDialect)
 		require.NoError(t, err)
 		defer session.Close()
 		var now cql.TimeUUID
@@ -1015,7 +1015,7 @@ func TestSession(t *testing.T) {
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-		session, err := gocql.Connect[testDialect](ctx, mustBuild(t, cfg))
+		session, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1128,7 +1128,7 @@ func TestSession(t *testing.T) {
 			t.Parallel()
 
 			cluster := mustBuild(t, createV2Cluster())
-			s, err := gocql.Connect[testDialect](context.Background(), cluster)
+			s, err := gocql.Connect(context.Background(), cluster, testDialect)
 			if err != nil {
 				t.Fatalf("ApplicationInformation error: %s", err)
 			}
@@ -1191,7 +1191,7 @@ func TestSession(t *testing.T) {
 						}
 						return
 					}
-					s, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+					s, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 					if err != nil {
 						t.Fatalf("failed to connect to the cluster: %s", err)
 					}
@@ -1252,7 +1252,7 @@ func TestSession(t *testing.T) {
 
 			const agreementTimeout = 2 * time.Minute
 			cluster := createV2ClusterWithout(fixtureAgreement).WithSchemaAgreement(agreementTimeout, 200*time.Millisecond)
-			s, err := gocql.Connect[testDialect](context.Background(), mustBuild(t, cluster))
+			s, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
 			if err != nil {
 				t.Fatalf("failed to connect to the cluster: %s", err)
 			}

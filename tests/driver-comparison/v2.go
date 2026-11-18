@@ -24,7 +24,7 @@ type borrowedRow struct {
 	P    cql.Bytes
 }
 type v2Adapter struct {
-	s             *g.Session[g.ScyllaV4]
+	s             *g.Session
 	mu            sync.Mutex
 	reads         [2]*g.Prepared[int32, row]
 	writes        [2]*g.Prepared[row, cql.EmptyRow]
@@ -72,7 +72,7 @@ func connect(hosts []string) (adapter, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, e := g.Connect[g.ScyllaV4](ctx, c)
+	s, e := g.Connect(ctx, c, g.ScyllaV4)
 	if e != nil {
 		return nil, e
 	}

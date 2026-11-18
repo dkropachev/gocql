@@ -7,15 +7,12 @@ executes a statement or reads its results.
 
 ## Dialect
 
-`Session` is generic over its `Dialect` (`ScyllaV4`, `CassandraV4`,
-`CassandraV5`), chosen at `Connect`. The grid below is the same for every
-dialect. No other execution type carries the dialect: `Prepared`, `Query`,
-`Batch`, `Rows` and `Page` stay dialect-free, so a dialect never adds a type
-parameter to them. A method that only one dialect supports is a function that
-takes a `*Session` of that dialect, not a method that fails at run time on the
-others. Dialect-only functions live in a package named after the database;
-none exist today. See
-`docs/server-differences.md`.
+A `Session` speaks one `Dialect` (`ScyllaV4`, `CassandraV4`, `CassandraV5`),
+a value passed to `Connect` and reported by `Session.Dialect`. It is not a
+type parameter: one `*Session` type serves every dialect, so code that takes a
+session names no dialect. The grid below is the same for every dialect. A
+feature that only one dialect supports returns an error on a session of
+another dialect, before anything is sent. See `docs/server-differences.md`.
 
 ## Statement kinds
 

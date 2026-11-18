@@ -96,7 +96,7 @@ func TestPrepared(t *testing.T) {
 			other := cassandraOtherSession(t, session, ks)
 			defer other.Close()
 			defer cassandraDDL(t, session, "DROP KEYSPACE "+ks)
-			for _, s := range []*gocql.Session[testDialect]{session, other} {
+			for _, s := range []*gocql.Session{session, other} {
 				cassandraDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id varchar PRIMARY KEY,field varchar)", table))
 			}
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(cql.TextValue("key")), codecTestMust(cql.TextValue("one")))
@@ -143,7 +143,7 @@ func TestPrepared(t *testing.T) {
 			ctx := context.Background()
 			cluster := createV2Cluster()
 			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
-			session, err := gocql.Connect[testDialect](ctx, mustBuild(t, cluster))
+			session, err := gocql.Connect(ctx, mustBuild(t, cluster), testDialect)
 			if err != nil {
 				t.Fatal("connect:", err)
 			}
