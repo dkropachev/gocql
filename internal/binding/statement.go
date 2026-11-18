@@ -21,7 +21,7 @@ import (
 // a statement free of a writer allocation.
 var paramWriters = syncx.NewPool(func() *cql.ParamWriter { return new(cql.ParamWriter) })
 
-func InternalEncodeParameters[P any](plan cql.ParamPlan[P], columns cql.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
+func InternalEncodeParameters[P any](plan cql.CompiledParams[P], columns cql.Columns, value P, owned, allowUnset bool) (model.EncodedValues, error) {
 	if columns.Len() > 65535 {
 		return model.EncodedValues{}, cqltype.TypeValidation("parameters", "maximum count is 65535")
 	}

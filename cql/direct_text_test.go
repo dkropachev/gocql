@@ -52,7 +52,7 @@ func TestDirectTextMatchesCodec(t *testing.T) {
 		columns := textColumns(t, other)
 		plan := CodecTestMust(textRows.Compile(columns))
 		want := []directKind{directInt, directText, directText, directText}
-		for i, op := range plan.(rowPlan[textRow]).ops {
+		for i, op := range plan.(compiledRow[textRow]).ops {
 			if op.kind != want[i] {
 				t.Fatalf("column %d: op kind %d, want %d", i, op.kind, want[i])
 			}
@@ -100,7 +100,7 @@ func TestDirectTextMatchesCodec(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					run := func(p RowPlan[textRow]) (string, string, int) {
+					run := func(p CompiledRow[textRow]) (string, string, int) {
 						lease := wire.NewLease(chain, nil)
 						if expired {
 							lease.Release()
@@ -136,7 +136,7 @@ func TestDirectTextForeignColumn(t *testing.T) {
 	foreign := textColumns(t, TypeInt)
 	body := cell(cell(cell(cell(nil, []byte{0, 0, 0, 1}, false), []byte("a"), false), []byte("b"), false), []byte{0, 0, 0, 2}, false)
 	chain, _ := wire.NewChain(wire.Borrow(body))
-	run := func(p RowPlan[textRow]) (string, int) {
+	run := func(p CompiledRow[textRow]) (string, int) {
 		reader := newRowReader(foreign, chain, nil)
 		var dst textRow
 		err := p.DecodeInto(reader, &dst)

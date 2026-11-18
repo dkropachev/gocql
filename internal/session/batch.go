@@ -181,7 +181,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 // appends the statement. template is the statement's routing; the token is
 // computed from the encoded values. b.params keeps viewing the entry's bytes
 // until the next add; nothing reads them through it.
-func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *routing.Info, plan cql.ParamPlan[P], columns cql.Columns, value P, allowUnset bool) error {
+func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *routing.Info, plan cql.CompiledParams[P], columns cql.Columns, value P, allowUnset bool) error {
 	if err := b.admit(s, template); err != nil {
 		return err
 	}

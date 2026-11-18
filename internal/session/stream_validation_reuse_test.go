@@ -10,10 +10,10 @@ import (
 type pageValidationDecoder struct{ compiles, resets, decodes int }
 type pageValidationPlan struct {
 	decoder *pageValidationDecoder
-	plan    cql.StreamRowPlan[[]byte]
+	plan    cql.CompiledStreamRow[[]byte]
 }
 
-func (d *pageValidationDecoder) Compile(columns cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (d *pageValidationDecoder) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	d.compiles++
 	plan, err := cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
 	return pageValidationPlan{decoder: d, plan: plan}, err

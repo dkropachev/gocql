@@ -14,7 +14,7 @@ import (
 
 func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 	null := []byte{255, 255, 255, 255}
-	empty := StreamCell([]byte{0, 0, 0, 0})
+	empty := streamCellBytes([]byte{0, 0, 0, 0})
 	for _, tc := range []struct {
 		name    string
 		typ     DataType
@@ -54,8 +54,8 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 			}
 			for _, invalid := range [][]byte{
 				{255, 255, 255, 254}, // UNSET is never a result.
-				StreamCell([]byte{0, 0, 0, 1, 255, 255, 255, 255}), // NULL collection element.
-				StreamCell(nil), // Missing element count.
+				streamCellBytes([]byte{0, 0, 0, 1, 255, 255, 255, 255}), // NULL collection element.
+				streamCellBytes(nil), // Missing element count.
 			} {
 				if err := StreamDecodeFixture(t, tc.typ, tc.decoder, invalid, &dst, 1); err == nil {
 					t.Fatalf("invalid collection accepted: %x", invalid)
@@ -90,8 +90,8 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 		}
 		for _, invalid := range [][]byte{
 			{255, 255, 255, 254},
-			StreamCell([]byte{0, 0, 0, 1, 255, 255, 255, 255, 0, 0, 0, 0}),
-			StreamCell(nil),
+			streamCellBytes([]byte{0, 0, 0, 1, 255, 255, 255, 255, 0, 0, 0, 0}),
+			streamCellBytes(nil),
 		} {
 			if err := StreamDecodeFixture(t, typ, decoder, invalid, &dst, 1); err == nil {
 				t.Fatalf("invalid map accepted: %x", invalid)

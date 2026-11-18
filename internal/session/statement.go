@@ -87,7 +87,7 @@ type Bound[R any] struct {
 // by buffered and streaming preparation. Result decoding is selected separately.
 type preparedStatement[P any] struct {
 	state   *InternalPreparedState
-	params  cql.ParamPlan[P]
+	params  cql.CompiledParams[P]
 	columns cql.Columns
 	kind    cql.StatementKind
 }
@@ -124,7 +124,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	parameters, columns := state.InternalParameters, state.InternalColumns
 	confirmedKind := state.InternalInfo.Kind
 	state.InternalMu.RUnlock()
-	plan, err := codec.CompileParamPlan(statement.Params, parameters)
+	plan, err := codec.CompileParams(statement.Params, parameters)
 	if err != nil {
 		return empty, err
 	}
@@ -141,7 +141,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 		return nil, err
 	}
 	state, plan, columns, kind := prepared.state, prepared.params, prepared.columns, prepared.kind
-	var rows cql.RowPlan[R]
+	var rows cql.CompiledRow[R]
 	// Cassandra omits conditional result metadata from PREPARE. Unknown and
 	// conditional statements therefore defer absent result shapes until EXECUTE;
 	// actual metadata still selects and validates the plan before any row output.
@@ -151,7 +151,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	// as on Cassandra, so Exec rejects it with ErrConditionalExec instead of
 	// Prepare failing on the [applied] column.
 	if columns.Len() != 0 || kind == cql.OrdinaryStatement {
-		rows, err = codec.CompileRowPlan(statement.Rows, columns)
+		rows, err = codec.CompileRow(statement.Rows, columns)
 		if err != nil && kind != cql.ConditionalStatement {
 			return nil, err
 		}
@@ -237,7 +237,7 @@ func bindUnprepared[P, R any](s binding.Statement[P, R], columns cql.Columns, va
 	if err := binding.ValidateStatement(&s); err != nil {
 		return nil, err
 	}
-	plan, err := codec.CompileParamPlan(s.Params, columns)
+	plan, err := codec.CompileParams(s.Params, columns)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ type PrepareOptionsStorage struct {
 }
 
 type PreparedStorage[P, R any] struct {
-	params        cql.ParamPlan[P]
+	params        cql.CompiledParams[P]
 	rows          cql.RowDecoder[R]
 	poolErr       error
 	InternalState *InternalPreparedState

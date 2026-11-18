@@ -24,21 +24,21 @@ type directTestRowDecoder struct {
 	address       *int32
 	decodes, into *int
 }
-type directTestRowPlan struct{ directTestRowDecoder }
+type directTestCompiledRow struct{ directTestRowDecoder }
 
-func (d directTestRowDecoder) Compile(Columns) (RowPlan[int32], error) {
-	return directTestRowPlan{d}, nil
+func (d directTestRowDecoder) Compile(Columns) (CompiledRow[int32], error) {
+	return directTestCompiledRow{d}, nil
 }
 func (d directTestRowDecoder) Clone(v int32) int32 { return v }
-func (p directTestRowPlan) Decode(r *RowReader) (int32, error) {
+func (p directTestCompiledRow) Decode(r *RowReader) (int32, error) {
 	*p.decodes++
 	return r.ReadColumn(Int32Codec)
 }
-func (p directTestRowPlan) DecodeInto(r *RowReader, dst *int32) error {
+func (p directTestCompiledRow) DecodeInto(r *RowReader, dst *int32) error {
 	*p.into++
 	if dst != p.address {
 		return errors.New("destination address changed")
 	}
 	return readColumnInto(r, Int32Codec, dst)
 }
-func (p directTestRowPlan) Clone(v int32) int32 { return v }
+func (p directTestCompiledRow) Clone(v int32) int32 { return v }

@@ -250,7 +250,7 @@ func TestRowsCodec(t *testing.T) {
 		t.Run("ParamsCopyOwnedInput", func(t *testing.T) {
 			columns := directColumns(t)
 			plan := CodecTestMust(directParams.Compile(columns))
-			for _, p := range []ParamPlan[directRow]{plan, interfaceOnlyParams(plan)} {
+			for _, p := range []CompiledParams[directRow]{plan, interfaceOnlyParams(plan)} {
 				row := directRow{View: BorrowBytes([]byte("view")), Owned: []byte("owned"), Blob: []byte("blob")}
 				builder := wire.NewBuilder(16)
 				w := newParamWriter(builder, columns, true)
@@ -279,7 +279,7 @@ func TestRowsCodec(t *testing.T) {
 			columns := directColumns(t)
 			plan := CodecTestMust(directParams.Compile(columns))
 			want := []directKind{directInt, directInt, directInt, directInt, directInt, directNone, directBytes, directString, directString, directBytes, directNone}
-			for i, op := range plan.(paramsPlan[directRow]).ops {
+			for i, op := range plan.(compiledParams[directRow]).ops {
 				if op.kind != want[i] {
 					t.Fatalf("parameter %d: op kind %d, want %d", i, op.kind, want[i])
 				}
@@ -313,7 +313,7 @@ func TestRowsCodec(t *testing.T) {
 			columns := directColumns(t)
 			plan := CodecTestMust(directRows.Compile(columns))
 			want := []directKind{directInt, directInt, directInt, directInt, directInt, directBlob, directOwnedBlob, directNone, directNone, directNone, directNone}
-			for i, op := range plan.(rowPlan[directRow]).ops {
+			for i, op := range plan.(compiledRow[directRow]).ops {
 				if op.kind != want[i] {
 					t.Fatalf("column %d: op kind %d, want %d", i, op.kind, want[i])
 				}
@@ -343,7 +343,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 			for name, body := range cases {
 				chain, _ := wire.NewChain(wire.Borrow(body))
-				run := func(p RowPlan[directRow]) (directRow, string, int) {
+				run := func(p CompiledRow[directRow]) (directRow, string, int) {
 					dst := directRow{Owned: make([]byte, 0, 64)}
 					reader := newRowReader(columns, chain, nil)
 					err := p.DecodeInto(reader, &dst)

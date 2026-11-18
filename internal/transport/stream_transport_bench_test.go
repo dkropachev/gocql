@@ -249,7 +249,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 					defer r.InternalClose(true)
 					dst := make([]byte, 0, size)
 					request := &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One}
-					var plan cql.StreamRowPlan[[]byte]
+					var plan cql.CompiledStreamRow[[]byte]
 					run := func() {
 						source.source.Reset(encoded)
 						source.closed = false
@@ -315,7 +315,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 				defer r.InternalClose(true)
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				var plan cql.StreamRowPlan[[]byte]
+				var plan cql.CompiledStreamRow[[]byte]
 				dst := make([]byte, 0, 1)
 				run := func() {
 					source.source.Reset(encoded)
@@ -401,7 +401,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 				dst := make([]byte, 0, size)
 				plain.start = uintptr(unsafe.Pointer(&dst[:cap(dst)][0]))
 				plain.end = plain.start + uintptr(size)
-				var plan cql.StreamRowPlan[[]byte]
+				var plan cql.CompiledStreamRow[[]byte]
 				run := func() {
 					response, err := r.InternalExchange(ctx, &model.AttemptRequest{Statement: "SELECT value", Consistency: cql.One})
 					if err != nil {

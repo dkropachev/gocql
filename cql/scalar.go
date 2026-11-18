@@ -765,7 +765,7 @@ func (c bindEncoder[T]) Encode(w *ValueWriter, v BindValue[T]) error {
 }
 
 // EmptyCodec adds the explicit empty-cell state to base; it does not add NULL support.
-func EmptyCodec[T any](base Codec[T]) Codec[EmptyValueOf[T]] {
+func EmptyCodec[T any](base Codec[T]) Codec[MaybeEmpty[T]] {
 	return emptyCodec[T]{base: base}
 }
 
@@ -803,7 +803,7 @@ func (c emptyCodec[T]) CheckType(t DataType) error {
 	}
 	return nil
 }
-func (c emptyCodec[T]) Encode(w *ValueWriter, v EmptyValueOf[T]) error {
+func (c emptyCodec[T]) Encode(w *ValueWriter, v MaybeEmpty[T]) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
@@ -815,21 +815,21 @@ func (c emptyCodec[T]) Encode(w *ValueWriter, v EmptyValueOf[T]) error {
 	}
 	return c.base.Encode(w, v.Value)
 }
-func (c emptyCodec[T]) Decode(r ValueReader) (EmptyValueOf[T], error) {
+func (c emptyCodec[T]) Decode(r ValueReader) (MaybeEmpty[T], error) {
 	if e := c.typeGuard(r.Type()); e != nil {
-		return EmptyValueOf[T]{}, e
+		return MaybeEmpty[T]{}, e
 	}
 	if r.err != nil {
-		return EmptyValueOf[T]{}, r.err
+		return MaybeEmpty[T]{}, r.err
 	}
 	if r.State() == EmptyCell || (r.State() == Present && r.Bytes().Len() == 0) {
 		if e := checkBytesAlive(r.Bytes()); e != nil {
-			return EmptyValueOf[T]{}, e
+			return MaybeEmpty[T]{}, e
 		}
 		if r.Bytes().Len() != 0 {
-			return EmptyValueOf[T]{}, errors.New("gocql: Empty has a payload")
+			return MaybeEmpty[T]{}, errors.New("gocql: Empty has a payload")
 		}
-		return EmptyValueOf[T]{Empty: true}, nil
+		return MaybeEmpty[T]{Empty: true}, nil
 	}
 	decoder := c.decoder
 	if decoder == nil {
@@ -837,16 +837,16 @@ func (c emptyCodec[T]) Decode(r ValueReader) (EmptyValueOf[T], error) {
 	}
 	v, e := decoder.Decode(r)
 	if e != nil {
-		return EmptyValueOf[T]{}, e
+		return MaybeEmpty[T]{}, e
 	}
-	return EmptyValueOf[T]{Value: v}, nil
+	return MaybeEmpty[T]{Value: v}, nil
 }
-func (c emptyCodec[T]) Clone(v EmptyValueOf[T]) EmptyValueOf[T] {
+func (c emptyCodec[T]) Clone(v MaybeEmpty[T]) MaybeEmpty[T] {
 	if !v.Empty {
 		v.Value = c.base.Clone(v.Value)
 		return v
 	}
-	return EmptyValueOf[T]{Empty: true}
+	return MaybeEmpty[T]{Empty: true}
 }
 
 func (c nullableEncoder[T]) compileValueEncoder(t DataType) (Encoder[Nullable[T]], error) {
@@ -893,7 +893,7 @@ func (c bindEncoder[T]) compileValueEncoder(t DataType) (Encoder[BindValue[T]], 
 	c.base, c.typ = base, t
 	return c, nil
 }
-func (c emptyCodec[T]) compileValueEncoder(t DataType) (Encoder[EmptyValueOf[T]], error) {
+func (c emptyCodec[T]) compileValueEncoder(t DataType) (Encoder[MaybeEmpty[T]], error) {
 	if err := c.CheckType(t); err != nil {
 		return nil, err
 	}
@@ -904,7 +904,7 @@ func (c emptyCodec[T]) compileValueEncoder(t DataType) (Encoder[EmptyValueOf[T]]
 	c.encoder, c.typ = base, t
 	return c, nil
 }
-func (c emptyCodec[T]) compileValueDecoder(t DataType) (Decoder[EmptyValueOf[T]], error) {
+func (c emptyCodec[T]) compileValueDecoder(t DataType) (Decoder[MaybeEmpty[T]], error) {
 	if err := c.CheckType(t); err != nil {
 		return nil, err
 	}
@@ -915,11 +915,11 @@ func (c emptyCodec[T]) compileValueDecoder(t DataType) (Decoder[EmptyValueOf[T]]
 	c.decoder, c.typ = base, t
 	return c, nil
 }
-func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *EmptyValueOf[T]) error {
+func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *MaybeEmpty[T]) error {
 	if dst == nil {
 		return typeValidation("destination", "nil empty destination")
 	}
-	*dst = EmptyValueOf[T]{}
+	*dst = MaybeEmpty[T]{}
 	if err := c.typeGuard(r.Type()); err != nil {
 		return err
 	}

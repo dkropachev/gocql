@@ -74,16 +74,16 @@ var directRows = RowInto(func(r *directRow) { r.Owned = r.Owned[:0] },
 
 // interfaceOnly returns plan with every field on its interface path, the
 // behaviour a direct op must reproduce.
-func interfaceOnlyParams[P any](plan ParamPlan[P]) ParamPlan[P] {
-	p := plan.(paramsPlan[P])
+func interfaceOnlyParams[P any](plan CompiledParams[P]) CompiledParams[P] {
+	p := plan.(compiledParams[P])
 	p.ops = make([]paramOp[P], len(p.ordered))
 	for i, field := range p.ordered {
 		p.ops[i] = paramOp[P]{field: field}
 	}
 	return p
 }
-func interfaceOnlyRows[R any](plan RowPlan[R]) RowPlan[R] {
-	p := plan.(rowPlan[R])
+func interfaceOnlyRows[R any](plan CompiledRow[R]) CompiledRow[R] {
+	p := plan.(compiledRow[R])
 	p.ops = make([]rowOp[R], len(p.ordered))
 	for i, field := range p.ordered {
 		p.ops[i] = rowOp[R]{field: field}
@@ -98,7 +98,7 @@ type encoded struct {
 	index int
 }
 
-func encodeWith[P any](t *testing.T, plan ParamPlan[P], columns Columns, value P, owned bool) encoded {
+func encodeWith[P any](t *testing.T, plan CompiledParams[P], columns Columns, value P, owned bool) encoded {
 	t.Helper()
 	builder := wire.NewBuilder(16)
 	if owned {

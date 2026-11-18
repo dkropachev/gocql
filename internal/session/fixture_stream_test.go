@@ -90,7 +90,7 @@ type finalAccess struct {
 	writes         atomic.Int32
 }
 
-func (d *finalAccess) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (d *finalAccess) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	return d, nil
 }
 func (d *finalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }

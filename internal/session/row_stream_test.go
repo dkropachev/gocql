@@ -90,7 +90,7 @@ type gatedDecoder struct {
 	resets  atomic.Int32
 }
 
-func (d *gatedDecoder) Compile(cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (d *gatedDecoder) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	return d, nil
 }
 func (d *gatedDecoder) Reset(dst *[]byte) {
@@ -123,7 +123,7 @@ func (c *testReadTargets) Read(p []byte) (int, error) {
 
 type countStreamDecoder struct{ compiles atomic.Int32 }
 
-func (d *countStreamDecoder) Compile(columns cql.Columns) (cql.StreamRowPlan[[]byte], error) {
+func (d *countStreamDecoder) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	d.compiles.Add(1)
 	return cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
 }

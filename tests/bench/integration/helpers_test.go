@@ -857,7 +857,7 @@ type liveDecoder struct {
 	base  cql.RowDecoder[liveDestination]
 }
 
-func (d liveDecoder) Compile(c cql.Columns) (cql.RowPlan[liveDestination], error) {
+func (d liveDecoder) Compile(c cql.Columns) (cql.CompiledRow[liveDestination], error) {
 	d.calls.Add(1)
 	return d.base.Compile(c)
 }
@@ -870,7 +870,7 @@ type countingDecoder struct {
 	hook  func()
 }
 
-func (d countingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Bytes], error) {
+func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], error) {
 	d.calls.Add(1)
 	if d.hook != nil {
 		d.hook()

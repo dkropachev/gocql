@@ -47,7 +47,7 @@ func NewTimeUUID() TimeUUID { return TimeUUID(newTimeUUID()) }
 
 // ParamEncoder compiles a reusable parameter plan against bind-marker metadata.
 type ParamEncoder[P any] interface {
-	Compile(Columns) (ParamPlan[P], error)
+	Compile(Columns) (CompiledParams[P], error)
 }
 
 // RandomUUID generates a random UUID (version 4) as described in RFC 4122,
@@ -57,7 +57,7 @@ func RandomUUID() UUID { return mustRandomUUID() }
 // RowDecoder compiles a reusable row plan against actual result metadata. Clone must
 // recursively detach response storage, including nested fields; One relies on this contract.
 type RowDecoder[R any] interface {
-	Compile(Columns) (RowPlan[R], error)
+	Compile(Columns) (CompiledRow[R], error)
 	Clone(R) R
 }
 

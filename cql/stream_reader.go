@@ -54,25 +54,25 @@ type StreamResetter[T any] interface{ Reset(*T) }
 
 // StreamDecoder compiles a value decoder that writes into seeded caller storage.
 type StreamDecoder[T any] interface {
-	Compile(DataType) (StreamValuePlan[T], error)
+	Compile(DataType) (CompiledStreamValue[T], error)
 }
 
-// StreamValuePlan decodes one value of a compiled column type into caller storage.
+// CompiledStreamValue decodes one value of a compiled column type into caller storage.
 // Reset clears the logical value while keeping buffer capacity, and
 // DecodeInto reads the value from a StreamValueReader into the destination.
-type StreamValuePlan[T any] interface {
+type CompiledStreamValue[T any] interface {
 	Reset(*T)
 	DecodeInto(*StreamValueReader, *T) error
 }
 
 // StreamRowDecoder compiles row mappings that decode into seeded caller storage.
 type StreamRowDecoder[R any] interface {
-	Compile(Columns) (StreamRowPlan[R], error)
+	Compile(Columns) (CompiledStreamRow[R], error)
 }
 
-// StreamRowPlan decodes rows of compiled metadata into caller storage through a
+// CompiledStreamRow decodes rows of compiled metadata into caller storage through a
 // StreamRowReader.
-type StreamRowPlan[R any] interface {
+type CompiledStreamRow[R any] interface {
 	Reset(*R)
 	DecodeInto(*StreamRowReader, *R) error
 }
@@ -505,7 +505,7 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 }
 
 // ReadColumn decodes the next column into dst with plan.
-func (r *StreamRowReader) ReadColumn[T any](plan StreamValuePlan[T], dst *T) error {
+func (r *StreamRowReader) ReadColumn[T any](plan CompiledStreamValue[T], dst *T) error {
 	if plan == nil || dst == nil {
 		return typeValidation("stream column", "nil plan or destination")
 	}
@@ -610,7 +610,7 @@ func (r *StreamValueReader) childValidation(t DataType) (*streamValidationPlan, 
 	return nil, typeValidation("stream child", "requested type is absent from actual parent metadata")
 }
 
-func compileStreamValuePlan[T any](decoder StreamDecoder[T], typ DataType) (StreamValuePlan[T], error) {
+func compileStreamValue[T any](decoder StreamDecoder[T], typ DataType) (CompiledStreamValue[T], error) {
 	if decoder == nil {
 		return nil, typeValidation("stream codec", "nil value decoder")
 	}
@@ -620,7 +620,7 @@ func compileStreamValuePlan[T any](decoder StreamDecoder[T], typ DataType) (Stre
 	}
 	return plan, err
 }
-func compileStreamRowPlan[R any](decoder StreamRowDecoder[R], columns Columns) (StreamRowPlan[R], error) {
+func compileStreamRow[R any](decoder StreamRowDecoder[R], columns Columns) (CompiledStreamRow[R], error) {
 	if decoder == nil {
 		return nil, typeValidation("stream codec", "nil row decoder")
 	}

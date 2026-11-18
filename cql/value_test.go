@@ -242,7 +242,7 @@ func TestValue(t *testing.T) {
 					t.Fatalf("invalid state/body accepted: %+v", test)
 				}
 			}
-			empty, err := EncodeValueBorrowed(integer, EmptyCodec(Int32Codec), EmptyValueOf[int32]{Empty: true})
+			empty, err := EncodeValueBorrowed(integer, EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil {
 				t.Fatal(err)
 			}

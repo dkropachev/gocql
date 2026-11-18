@@ -21,32 +21,32 @@ type Codec[T any] interface {
 }
 
 type ParamEncoder[P any] interface {
-    Compile(Columns) (ParamPlan[P], error)
+    Compile(Columns) (CompiledParams[P], error)
 }
-type ParamPlan[P any] interface {
+type CompiledParams[P any] interface {
     Encode(*ParamWriter, P) error
 }
 type RowDecoder[R any] interface {
-    Compile(Columns) (RowPlan[R], error)
+    Compile(Columns) (CompiledRow[R], error)
     Clone(R) R
 }
-type RowPlan[R any] interface {
+type CompiledRow[R any] interface {
     Decode(*RowReader) (R, error)
     DecodeInto(*RowReader, *R) error
     Clone(R) R
 }
 
 type StreamDecoder[T any] interface {
-    Compile(DataType) (StreamValuePlan[T], error)
+    Compile(DataType) (CompiledStreamValue[T], error)
 }
-type StreamValuePlan[T any] interface {
+type CompiledStreamValue[T any] interface {
     Reset(*T)
     DecodeInto(*StreamValueReader, *T) error
 }
 type StreamRowDecoder[R any] interface {
-    Compile(Columns) (StreamRowPlan[R], error)
+    Compile(Columns) (CompiledStreamRow[R], error)
 }
-type StreamRowPlan[R any] interface {
+type CompiledStreamRow[R any] interface {
     Reset(*R)
     DecodeInto(*StreamRowReader, *R) error
 }
@@ -70,13 +70,13 @@ owns length framing and rolls back failed encodes. `ValueReader` is a value
 snapshot; its cursors are independent. Width, state and payload validation
 still runs for each value after metadata compilation.
 
-`RowPlan.DecodeInto` replaces a non-nil destination, including clearing
+`CompiledRow.DecodeInto` replaces a non-nil destination, including clearing
 unmapped application fields. Return a validation error for a nil destination.
 It may partially update a destination on error. `Decode` provides the same
 logical decoding as a returned value. Avoid retaining the destination or
 building field mappings repeatedly inside the row loop.
 
-`Decoder.Clone`, `RowDecoder.Clone`, and `RowPlan.Clone` recursively detach
+`Decoder.Clone`, `RowDecoder.Clone`, and `CompiledRow.Clone` recursively detach
 borrowed storage, including nested collection elements. `RowDecoder.Clone`
 must work before any successful `Compile`; do not implement it by remembering
 the last compiled plan. `One` detaches borrowed fields before returning.

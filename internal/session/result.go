@@ -47,10 +47,10 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 		response.Owner.Release()
 		return nil, cqltype.TypeValidation("rows", "nil row decoder")
 	}
-	var plan cql.RowPlan[R]
+	var plan cql.CompiledRow[R]
 	var err error
 	if plans == nil {
-		plan, err = codec.CompileRowPlan(decoder, response.Columns)
+		plan, err = codec.CompileRow(decoder, response.Columns)
 	} else {
 		plan, err = plans.InternalSelectPlan(response, decoder)
 	}
@@ -82,7 +82,7 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 	return nil
 }
 
-func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cql.RowPlan[R], release func()) {
+func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cql.CompiledRow[R], release func()) {
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
 	p.privateStorage.rowDest = rowDestinationOf(plan)
@@ -445,7 +445,7 @@ func (r *rowsImpl[R]) Info() cql.Result {
 }
 
 type InternalResultPlanCache[R any] struct {
-	plan  cql.RowPlan[R]
+	plan  cql.CompiledRow[R]
 	entry *model.ResultSchemaIdentity
 	// current mirrors entry and plan for lock-free hits on identified
 	// responses. It is replaced under InternalMu whenever entry changes.
@@ -457,10 +457,10 @@ type InternalResultPlanCache[R any] struct {
 
 type resultPlanSnapshot[R any] struct {
 	entry *model.ResultSchemaIdentity
-	plan  cql.RowPlan[R]
+	plan  cql.CompiledRow[R]
 }
 
-func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.RowPlan[R], error) {
+func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.CompiledRow[R], error) {
 	entry := response.InternalMetadata
 	if entry == nil {
 		return c.selectUnidentified(response, decoder)
@@ -478,12 +478,12 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 	c.revision++
 	revision := c.revision
 	c.mu.Unlock()
-	var plan cql.RowPlan[R]
+	var plan cql.CompiledRow[R]
 	var err error
 	if previous != nil && columns.Equal(response.Columns) {
 		plan = previous
 	} else {
-		plan, err = codec.CompileRowPlan(decoder, response.Columns)
+		plan, err = codec.CompileRow(decoder, response.Columns)
 	}
 	if err != nil {
 		return nil, err
@@ -506,7 +506,7 @@ func (c *InternalResultPlanCache[R]) InternalSelectPlan(response *transport.Inte
 // selectUnidentified serves responses without a schema identity, such as
 // unprepared queries. Their columns are compared directly instead of minting
 // a throwaway identity for every response.
-func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.RowPlan[R], error) {
+func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.InternalResponsePage, decoder cql.RowDecoder[R]) (cql.CompiledRow[R], error) {
 	c.mu.Lock()
 	if c.plan != nil && c.columns.Equal(response.Columns) {
 		plan := c.plan
@@ -516,7 +516,7 @@ func (c *InternalResultPlanCache[R]) selectUnidentified(response *transport.Inte
 	c.revision++
 	revision := c.revision
 	c.mu.Unlock()
-	plan, err := codec.CompileRowPlan(decoder, response.Columns)
+	plan, err := codec.CompileRow(decoder, response.Columns)
 	if err != nil {
 		return nil, err
 	}
@@ -638,7 +638,7 @@ type execRowsPlan struct {
 	count int
 }
 
-func (execRowsDecoder) Compile(columns cql.Columns) (cql.RowPlan[cql.EmptyRow], error) {
+func (execRowsDecoder) Compile(columns cql.Columns) (cql.CompiledRow[cql.EmptyRow], error) {
 	return execRowsPlan{count: columns.Len()}, nil
 }
 func (execRowsDecoder) Clone(value cql.EmptyRow) cql.EmptyRow { return value }
@@ -709,7 +709,7 @@ type pageLeaseStorage struct {
 
 type pageStorage[R any] struct {
 	ctx            context.Context
-	plan           cql.RowPlan[R]
+	plan           cql.CompiledRow[R]
 	err            error
 	pendingRelease func()
 	destination    *R
@@ -742,7 +742,7 @@ const (
 	preservedRowDestination
 )
 
-func rowDestinationOf[R any](plan cql.RowPlan[R]) rowDestination {
+func rowDestinationOf[R any](plan cql.CompiledRow[R]) rowDestination {
 	switch {
 	case codec.PreservesRowDestination(plan):
 		return preservedRowDestination

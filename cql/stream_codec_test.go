@@ -48,7 +48,7 @@ func (s *streamChunkSource) Read(p []byte) (int, error) {
 	s.reads++
 	return n, nil
 }
-func StreamCell(body []byte) []byte {
+func streamCellBytes(body []byte) []byte {
 	b := make([]byte, 4+len(body))
 	binary.BigEndian.PutUint32(b, uint32(len(body)))
 	copy(b[4:], body)
@@ -63,7 +63,7 @@ func streamEncodedFixture[T any](t testing.TB, typ DataType, encoder Encoder[T],
 	if v.state == Null {
 		return []byte{255, 255, 255, 255}
 	}
-	return StreamCell(v.Bytes().OwnedBytes())
+	return streamCellBytes(v.Bytes().OwnedBytes())
 }
 func streamReaderFixture(t testing.TB, columns Columns, source io.Reader, size int) (*StreamRowReader, *wire.Stream) {
 	t.Helper()

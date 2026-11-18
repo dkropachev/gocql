@@ -122,7 +122,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return err
 	}
-	plan, err := codec.CompileParamPlan(statement.Params, statement.BindMarkers)
+	plan, err := codec.CompileParams(statement.Params, statement.BindMarkers)
 	if err != nil {
 		return err
 	}

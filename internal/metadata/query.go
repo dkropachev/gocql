@@ -104,7 +104,7 @@ func ReadRows[P, R any](ctx context.Context, version byte, timeout time.Duration
 	}
 }
 func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, decoder cql.RowDecoder[R], rows []R) ([]R, error) {
-	plan, err := codec.CompileRowPlan(decoder, response.Columns)
+	plan, err := codec.CompileRow(decoder, response.Columns)
 	if err != nil {
 		return rows, err
 	}

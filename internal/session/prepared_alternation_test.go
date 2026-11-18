@@ -203,7 +203,7 @@ func typedRowsBody(token []byte, typ cql.Type, values ...[]byte) []byte {
 // the single column whatever its type.
 type recordingDecoder struct{ compiled *[]cql.Columns }
 
-func (d recordingDecoder) Compile(c cql.Columns) (cql.RowPlan[cql.Value], error) {
+func (d recordingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Value], error) {
 	*d.compiled = append(*d.compiled, c)
 	return cql.OneColumn(cql.DynamicCodec).Compile(c)
 }

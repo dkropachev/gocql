@@ -87,14 +87,14 @@ type Decoder[T any] interface {
 type Codec[T any] interface { Encoder[T]; Decoder[T] }
 
 type ParamEncoder[P any] interface {
-    Compile(Columns) (ParamPlan[P], error)
+    Compile(Columns) (CompiledParams[P], error)
 }
-type ParamPlan[P any] interface { Encode(*ParamWriter, P) error }
+type CompiledParams[P any] interface { Encode(*ParamWriter, P) error }
 type RowDecoder[R any] interface {
-    Compile(Columns) (RowPlan[R], error)
+    Compile(Columns) (CompiledRow[R], error)
     Clone(R) R
 }
-type RowPlan[R any] interface {
+type CompiledRow[R any] interface {
     Decode(*RowReader) (R, error)
     DecodeInto(*RowReader, *R) error
     Clone(R) R
@@ -117,7 +117,7 @@ state, text and framing validation still runs on every value. Standalone public
 encode/decode calls validate their supplied descriptor on each call; arbitrary
 custom codec work is accounted for separately.
 
-RowPlan.DecodeInto is required for built-in and custom row plans. It fills a
+CompiledRow.DecodeInto is required for built-in and custom row plans. It fills a
 non-nil caller-supplied destination using the checked metadata without retaining
 the destination in the shared plan. It replaces the previous value, including
 zeroing unmapped Go fields; custom plans must honor the same rule. Decode is
@@ -135,7 +135,7 @@ RowDecoder.Clone is required independently of Compile: it recursively detaches
 the logical Go value using its declared field codecs, without needing actual
 server metadata, a prior successful plan, or retained decode state. This makes
 TupleDecoder/UDTDecoder.Clone correct after standalone DecodeValue as well as
-normal row execution. RowPlan.Clone remains available for an already compiled
+normal row execution. CompiledRow.Clone remains available for an already compiled
 plan and must provide the same ownership guarantee. Row, OneColumn, PairRows,
 ConvertRows, CASRows, dynamic.Rows and every custom RowDecoder implement the
 schema-independent method; custom decoders must supply explicit clone logic.
@@ -329,8 +329,8 @@ func NullableCodec[T any](Codec[T]) Codec[Nullable[T]]
 func NullableEncoder[T any](Encoder[T]) Encoder[Nullable[T]]
 func NullableDecoder[T any](Decoder[T]) Decoder[Nullable[T]]
 func BindEncoder[T any](Encoder[T]) Encoder[BindValue[T]]
-type EmptyValueOf[T any] struct { Value T; Empty bool }
-func EmptyCodec[T any](Codec[T]) Codec[EmptyValueOf[T]]
+type MaybeEmpty[T any] struct { Value T; Empty bool }
+func EmptyCodec[T any](Codec[T]) Codec[MaybeEmpty[T]]
 
 type UUID [16]byte
 type Duration struct { Months, Days int32; Nanoseconds int64 }
@@ -426,7 +426,7 @@ EncodeValueBorrowed preserves borrowed inputs.
 
 The wrapper roles are separate: Option is for inherited settings; Nullable is
 for nullable application data and decoded results; BindValue controls binding
-with Present, Null or Unset; EmptyValueOf represents supported empty CQL values.
+with Present, Null or Unset; MaybeEmpty represents supported empty CQL values.
 Their zero values mean inherited, NULL, present zero value and ordinary zero
 value, respectively. NullableEncoder remains useful for nullable struct fields;
 BindEncoder is preferred when a parameter also needs UNSET. BindValue does not
@@ -814,7 +814,7 @@ parameter types/order/identity. A change to any of these requires a new explicit
 prepare/query and fails the old query execution with SchemaChangedError before resend.
 Compatible metadata may update per-host prepared IDs without re-encoding or
 mutating the query's canonical routing inputs. Actual result metadata always
-selects a compatible RowPlan before rows are exposed, including empty pages.
+selects a compatible CompiledRow before rows are exposed, including empty pages.
 Reuse the immutable plan when the exact validated result entry is unchanged;
 compile only on first use or a changed result shape. A new entry with the same
 shape may reuse a plan after structural equality is established once. Plan reuse
@@ -887,7 +887,7 @@ remain valid until the **next** NextInto call or Close, whichever comes first. R
 current physical page before advancing; its owner has stable identity independent
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
-the row the last NextInto decoded, using RowPlan.Clone. Copying a Go row struct does not detach it.
+the row the last NextInto decoded, using CompiledRow.Clone. Copying a Go row struct does not detach it.
 Access through a released view reports cqlerr.ErrReleased where a method returns error;
 methods without error results panic with cqlerr.ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
@@ -920,7 +920,7 @@ if err := rows.Err(); err != nil {
 
 NextInto advances exactly one logical row, applying framing, plan selection,
 metadata validation and automatic (Rows) or explicit (Page) paging rules.
-The compiled RowPlan.DecodeInto fills dst directly. The driver does not first
+CompiledRow.DecodeInto fills dst directly. The driver does not first
 decode a complete temporary row, copy payloads, flatten split cells, or discover
 fields through reflection. Text, Bytes and borrowed collection elements preserve
 the original immutable receive/decompression backing and its page lease identity.
@@ -938,7 +938,7 @@ a row or performing paging I/O. A terminal iterator stays terminal and preserves
 its existing error. A failed call does not promise rollback of cursor progress.
 
 Every NextInto call advances. After successful NextInto, Clone detaches the
-current contents of *dst with the selected RowPlan.
+current contents of *dst with the selected CompiledRow.
 The iterator may retain that destination pointer only until the next advance or
 Close; no shared plan, prefetch worker or other background task may retain or
 write it. Caller changes to the current destination are reflected by Clone.
@@ -1050,18 +1050,18 @@ type Statement[P, R any] struct {
     Kind cql.StatementKind
 }
 type RowDecoder[R any] interface {
-    Compile(Columns) (RowPlan[R], error)
+    Compile(Columns) (CompiledStreamRow[R], error)
 }
-type RowPlan[R any] interface {
+type CompiledStreamRow[R any] interface {
     Reset(*R)
     DecodeInto(*RowReader, *R) error
 }
 type Decoder[T any] interface {
-    Compile(DataType) (ValuePlan[T], error)
+    Compile(DataType) (CompiledStreamValue[T], error)
 }
 // Optional declaration capability; no server DataType is needed.
 type Resetter[T any] interface { Reset(*T) }
-type ValuePlan[T any] interface {
+type CompiledStreamValue[T any] interface {
     Reset(*T)
     DecodeInto(*ValueReader, *T) error
 }
@@ -1076,7 +1076,7 @@ func WithCodec[P, V any](Decoder[V]) cql.StructOption[P]
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type RowReader struct { /* checked count and column cursor */ }
-func (r *RowReader) ReadColumn[T any](ValuePlan[T], *T) error
+func (r *RowReader) ReadColumn[T any](CompiledStreamValue[T], *T) error
 func (r *RowReader) Context() context.Context
 func (r *RowReader) SkipColumn() error
 func (r *RowReader) RequireEnd() error
@@ -1115,10 +1115,10 @@ var ASCII Decoder[[]byte]
 var Blob Decoder[[]byte]
 var Varint Decoder[[]byte] // exact signed two's-complement bytes
 // Decimal's unscaled bytes have the same caller-capacity rule.
-type DecimalValue struct { Scale int32; Unscaled []byte }
-var Decimal Decoder[DecimalValue]
+type DecimalParts struct { Scale int32; Unscaled []byte }
+var Decimal Decoder[DecimalParts]
 func Nullable[T any](Decoder[T]) Decoder[Nullable[T]]
-func Empty[T any](Decoder[T]) Decoder[EmptyValueOf[T]]
+func Empty[T any](Decoder[T]) Decoder[MaybeEmpty[T]]
 func List[T any](Decoder[T]) Decoder[[]T]
 func Set[T any](Decoder[T]) Decoder[[]T]
 func Map[K, V any](Decoder[K], Decoder[V]) Decoder[[]Entry[K, V]]
@@ -1126,8 +1126,8 @@ func Vector[T any](Decoder[T]) Decoder[[]T]
 func Tuple[R any](RowDecoder[R]) Decoder[R]
 func UDT[R any](RowDecoder[R], UDTOptions) Decoder[R]
 // Explicit final encoded storage for dynamic/custom representations.
-type EncodedValue struct { Type DataType; State CellState; Bytes []byte }
-var Encoded Decoder[EncodedValue]
+type StreamCell struct { Type DataType; State CellState; Bytes []byte }
+var Encoded Decoder[StreamCell]
 
 // package cqlerr
 type StreamCapabilityError struct { Protocol int; Compression config.Compression; Reason string }
@@ -1151,7 +1151,7 @@ runs incrementally and does not allocate a complete cell in driver storage.
 
 A streaming execution uses the same parameter encoding, routing, per-host
 prepared IDs, metadata revisions and Close/Wait admission as a buffered query.
-Actual streaming response metadata selects this query's stream.RowPlan; cache
+Actual streaming response metadata selects this query's stream.CompiledStreamRow; cache
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
@@ -1202,7 +1202,7 @@ stream.Resetter allows that custom field to participate. The declaration Reset
 clears its logical value while preserving seeded storage, just like built-in
 reset. This also applies recursively to missing fields inside compositions.
 Mapped custom fields continue to use their successfully compiled
-stream.ValuePlan.Reset and need not implement declaration stream.Resetter.
+stream.CompiledStreamValue.Reset and need not implement declaration stream.Resetter.
 Custom row declarations used as tuple/UDT compositions follow the same rule
 when metadata-independent reset is required. No synthetic DataType, reflection,
 whole-row temporary or zero-assignment of arbitrary V supplies a substitute.

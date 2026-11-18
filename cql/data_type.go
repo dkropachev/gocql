@@ -393,15 +393,15 @@ type Nullable[T any] struct {
 // BindValue controls parameters using Present, Null, or Unset.
 // Its zero value binds the ordinary zero value of T. Binding fails for any
 // other State, EmptyCell included; to bind an empty value, wrap the base
-// codec with EmptyCodec and bind an EmptyValueOf.
+// codec with EmptyCodec and bind a MaybeEmpty.
 type BindValue[T any] struct {
 	Value T
 	State CellState
 }
 
-// EmptyValueOf distinguishes an empty CQL value from an ordinary value.
+// MaybeEmpty distinguishes an empty CQL value from an ordinary value.
 // Its zero value encodes the ordinary zero value of T; Empty=true selects empty.
-type EmptyValueOf[T any] struct {
+type MaybeEmpty[T any] struct {
 	Value T
 	Empty bool
 }

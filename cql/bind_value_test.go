@@ -16,7 +16,7 @@ func TestBindValueRejectsEmptyCell(t *testing.T) {
 	if _, err := cql.EncodeValue(cql.IntType, encoder, cql.BindValue[int32]{State: cql.EmptyCell}); err == nil {
 		t.Fatal("EmptyCell bound")
 	}
-	empty, err := cql.EncodeValue(cql.IntType, cql.EmptyCodec(cql.Int32Codec), cql.EmptyValueOf[int32]{Empty: true})
+	empty, err := cql.EncodeValue(cql.IntType, cql.EmptyCodec(cql.Int32Codec), cql.MaybeEmpty[int32]{Empty: true})
 	if err != nil || empty.State() != cql.EmptyCell {
 		t.Fatalf("EmptyCodec: %v, %v", empty.State(), err)
 	}
