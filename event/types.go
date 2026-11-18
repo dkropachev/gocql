@@ -70,9 +70,6 @@ type Event struct {
 
 // Filter selects the kinds of events a Subscription receives and its queue
 // capacity.
-
-// Filter selects the kinds of events a Subscription receives and its queue
-// capacity.
 //
 // The zero Filter receives every kind of event, of every keyspace, through a
 // queue of 64 events.
