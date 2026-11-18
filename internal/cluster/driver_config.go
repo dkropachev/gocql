@@ -106,11 +106,10 @@ type readWriteTimeoutReport struct {
 
 // requestsReport is connection.requests.
 //
-// Orphaned is the bound config.WithMaxOrphanedStreams sets: a connection that
-// accumulates more streams abandoned by cancelled requests is recycled. It is
-// omitted only for a session assembled without a typed configuration, which
-// has no such bound; the schema gives that absence exactly this meaning (see
-// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound).
+// Orphaned is the bound transport.Conn enforces: a connection that accumulates
+// more streams abandoned by cancelled requests is recycled. It is
+// config.WithMaxOrphanedStreams, or transport.InternalDefaultOrphanBudget
+// without a typed configuration, capped below the stream count.
 type requestsReport struct {
 	Orphaned *orphanedReport `json:"orphaned,omitempty"`
 	InFlight inFlightReport  `json:"in-flight"`
@@ -234,7 +233,12 @@ type queryReport struct {
 // speculativeExecutionReport is query.speculative-execution. retry has no
 // built-in speculation policy, so the policy is always custom.
 type speculativeExecutionReport struct {
-	Policy loadBalancingCustomReport `json:"policy"`
+	Policy speculationCustomReport `json:"policy"`
+}
+
+type speculationCustomReport struct {
+	Type string `json:"type"`
+	Name string `json:"name"`
 }
 
 type queryDefaultsReport struct {
@@ -442,9 +446,7 @@ func buildConnectionReport(cfg *InternalClusterSettings, typed *connectivity.Con
 func applyTypedConnectionReport(report *connectionReport, cfg *InternalClusterSettings, typed *connectivity.Config) {
 	report.TLS = buildTypedTLSReport(typed.TLS)
 	report.Socket = buildTypedSocketReport(typed)
-	// transport.Conn recycles a connection once its orphans exceed the
-	// configured bound, capped below the stream count.
-	report.Requests.Orphaned = &orphanedReport{Max: max(min(typed.Pool.MaxOrphanedStreams, effectiveInFlightMax(cfg.MaxRequestsPerConn)-1), 0)}
+	report.Requests.Orphaned = orphanBound(typed.Pool.MaxOrphanedStreams, cfg)
 	report.Reconnection.Policy = buildTypedReconnectionReport(typed.Reconnect)
 }
 
@@ -465,8 +467,13 @@ func buildTypedTLSReport(config *tls.Config) *tlsReport {
 }
 
 // buildTypedSocketReport describes the socket options a typed session's
-// dialer sets on every TCP connection, whichever endpoint.Dialer opened it.
+// dialer sets on every TCP connection, whichever endpoint.Dialer opened it. A
+// Unix socket gets none of them. A buffer size of zero is left to the kernel's
+// minimum, which the schema's positive size cannot express, so it is omitted.
 func buildTypedSocketReport(typed *connectivity.Config) socketReport {
+	if path, _ := connectivity.UnixSocketPath(typed.ContactPoints); path != "" {
+		return socketReport{}
+	}
 	report := socketReport{TCPNoDelay: typed.NoDelay, KeepAlive: typed.SocketKeepalive > 0}
 	if typed.Linger.Set {
 		report.Linger = &lingerReport{IntervalS: int64(typed.Linger.Value / time.Second)}
@@ -596,7 +603,16 @@ func nonNegativeMillis(d time.Duration) int64 {
 }
 
 func buildRequestsReport(cfg *InternalClusterSettings) requestsReport {
-	return requestsReport{InFlight: inFlightReport{Max: effectiveInFlightMax(cfg.MaxRequestsPerConn)}}
+	return requestsReport{
+		InFlight: inFlightReport{Max: effectiveInFlightMax(cfg.MaxRequestsPerConn)},
+		Orphaned: orphanBound(transport.InternalDefaultOrphanBudget, cfg),
+	}
+}
+
+// orphanBound mirrors transport.Conn's recycling bound: budget, capped below
+// the connection's stream count.
+func orphanBound(budget int, cfg *InternalClusterSettings) *orphanedReport {
+	return &orphanedReport{Max: max(min(budget, effectiveInFlightMax(cfg.MaxRequestsPerConn)-1), 0)}
 }
 
 // defaultMaxStreams mirrors streams.New(), the generator Session.streamIDGenerator
@@ -643,9 +659,10 @@ func shardAwareEnabled(cfg *InternalClusterSettings, typed *connectivity.Config)
 
 // buildSocketReport describes what gocql's own built-in dialer does with a
 // TCP socket, for a session without a typed configuration; a typed session's
-// dialer sets the options buildTypedSocketReport reports. A user-supplied Dialer/HostDialer can set one up differently;
-// the driver has no way to observe that, so the report always describes the
-// built-in dialer's behavior, per the schema's own framing of these fields as
+// dialer sets the options buildTypedSocketReport reports. A user-supplied
+// Dialer/HostDialer can set one up differently; the driver has no way to
+// observe that, so the report always describes the built-in dialer's
+// behavior, per the schema's own framing of these fields as
 // "the effective value ... the OS/platform default".
 func buildSocketReport() socketReport {
 	return socketReport{
@@ -780,7 +797,7 @@ func (s *Core) BuildQueryReport() queryReport {
 			Retry: queryRetryReport{Policy: InternalBuildRetryPolicyReport(profile.Retry)},
 		}
 		if !isNilPolicy(profile.Speculation) {
-			report.SpeculativeExecution = &speculativeExecutionReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(profile.Speculation)}}
+			report.SpeculativeExecution = &speculativeExecutionReport{Policy: speculationCustomReport{Type: "custom", Name: customPolicyName(profile.Speculation)}}
 		}
 		return report
 	}

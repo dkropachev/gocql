@@ -37,9 +37,9 @@ type Config struct {
 // driver's behavior; when a setting is chosen again, the last call wins.
 // Setters only store values; Build validates the final configuration.
 // Zero durations disable optional timeouts and background work. A nil
-// provider restores the driver's behavior unless its setter says otherwise. A ConfigBuilder is not safe for concurrent use.
-// Start one with New: Build rejects a zero ConfigBuilder with a
-// cql.ValidationError.
+// provider restores the driver's behavior unless its setter says otherwise.
+// A ConfigBuilder is not safe for concurrent use. Start one with New: Build
+// rejects a zero ConfigBuilder with a cql.ValidationError.
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
 	ignoredEvents        []event.Kind

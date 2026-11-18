@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"math"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -903,46 +902,6 @@ func TestDriverConfigReport(t *testing.T) {
 						t.Errorf("report does not conform to %s:\n%v\n\nreport: %s", driverConfigSchemaPath, err, encoded)
 					}
 				})
-			}
-		})
-
-		// TestDriverConfigReport/Schema/PermitsAbsentOrphanBound guards the schema property the report
-		// depends on. Nothing in this driver bounds orphaned requests, so it has no
-		// value for connection.requests.orphaned; if that key were required again,
-		// every report this driver produces would fail validation, and the conformance
-		// test below would be the only thing standing between that and a release.
-		t.Run("PermitsAbsentOrphanBound", func(t *testing.T) {
-			f, err := os.Open(driverConfigSchemaPath)
-			if err != nil {
-				t.Fatalf("unable to open %s: %v", driverConfigSchemaPath, err)
-			}
-			defer f.Close()
-
-			doc, err := jsonschema.UnmarshalJSON(f)
-			if err != nil {
-				t.Fatalf("unable to parse %s: %v", driverConfigSchemaPath, err)
-			}
-			root, ok := doc.(map[string]any)
-			if !ok {
-				t.Fatalf("expected the schema root to be an object, got %T", doc)
-			}
-			defs, ok := root["$defs"].(map[string]any)
-			if !ok {
-				t.Fatal("expected the schema to have $defs")
-			}
-			requests, ok := defs["requests"].(map[string]any)
-			if !ok {
-				t.Fatal("expected the schema to have $defs.requests")
-			}
-			required, ok := requests["required"].([]any)
-			if !ok {
-				t.Fatal("expected $defs.requests.required to be an array")
-			}
-			for _, key := range required {
-				if key == "orphaned" {
-					t.Error("$defs.requests.required lists \"orphaned\", which this driver cannot report: " +
-						"nothing bounds orphaned requests, so every report would fail validation")
-				}
 			}
 		})
 

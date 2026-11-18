@@ -84,6 +84,29 @@ func TestDriverConfigTypedReport(t *testing.T) {
 		}
 	})
 
+	t.Run("UnixSocketHasNoTCPOptions", func(t *testing.T) {
+		typed := settings.DefaultConfig("/var/lib/scylla/cql.m")
+		typed.SocketKeepalive, typed.Linger, typed.ReceiveBuffer = time.Minute, cql.Some(time.Second), cql.Some(4096)
+		conn := typed.Connectivity()
+		if got := buildConnectionReport(InternalNewClusterSettings("127.0.0.1"), &conn).Socket; got != (socketReport{}) {
+			t.Fatalf("socket = %+v, want no TCP options", got)
+		}
+	})
+
+	t.Run("OrphanBound", func(t *testing.T) {
+		cfg := InternalNewClusterSettings("127.0.0.1")
+		if got := buildConnectionReport(cfg, nil).Requests.Orphaned; got == nil || got.Max != transport.InternalDefaultOrphanBudget {
+			t.Errorf("legacy orphaned = %+v, want %d", got, transport.InternalDefaultOrphanBudget)
+		}
+		cfg.MaxRequestsPerConn = 100
+		typed := settings.DefaultConfig("127.0.0.1")
+		typed.Pool.MaxOrphanedStreams = 1000
+		conn := typed.Connectivity()
+		if got := buildConnectionReport(cfg, &conn).Requests.Orphaned; got == nil || got.Max != 99 {
+			t.Errorf("orphaned = %+v, want 99, capped below the stream count", got)
+		}
+	})
+
 	t.Run("NoSecrets", func(t *testing.T) {
 		secrets := []string{"secret-cert-bytes", "secret-key", "secret-server-name", "secret-route-id", "secret-proxy.example", "secret-contact"}
 		typed := settings.DefaultConfig("secret-contact")

@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"net"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -18,11 +17,12 @@ import (
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/scylladb/gocql/v2/auth"
-	"github.com/scylladb/gocql/v2/config"
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/logging"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
@@ -56,9 +56,10 @@ type reportReconnect struct{}
 
 func (reportReconnect) Delay(int) (time.Duration, bool) { return time.Second, true }
 
-// connectReport connects a session built from build to a fake server and
-// returns the DRIVER_CONFIG its control connection sent.
-func connectReport(t *testing.T, build func(address string) *config.ConfigBuilder) string {
+// connectReport connects a session with the default settings, changed by
+// edit, to a fake server and returns the DRIVER_CONFIG its control connection
+// sent.
+func connectReport(t *testing.T, edit func(*settings.Config)) string {
 	t.Helper()
 	var mu sync.Mutex
 	var report string
@@ -75,14 +76,11 @@ func connectReport(t *testing.T, build func(address string) *config.ConfigBuilde
 			}
 		}
 	})
-	cfg, err := build(srv.Address).WithMetadataMode(metadata.SchemaNone).WithDiscovery(false).WithLogger(logging.Nop()).Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-	resolved, err := settings.InternalResolvePublic(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
+	resolved := settings.DefaultConfig(srv.Address)
+	edit(&resolved)
+	resolved.Metadata.Mode = metadata.SchemaNone
+	resolved.Metadata.InitialDiscovery = false
+	resolved.Logger = logging.Nop()
 	resolved.Protocol = 4
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -99,24 +97,25 @@ func connectReport(t *testing.T, build func(address string) *config.ConfigBuilde
 	return report
 }
 
-// TestDriverConfigReportFromBuilder connects sessions built with
-// config.ConfigBuilder and checks that the DRIVER_CONFIG they send conforms to
-// docs/driver-config-schema.json, reports what the builder chose, carries no
-// secret, and that every key the schema defines is either reported by some
+// TestDriverConfigReportFromSettings connects sessions with the settings
+// config.ConfigBuilder produces (config's tests pin which setter sets which
+// field; this package may not import config) and checks that the DRIVER_CONFIG
+// they send conforms to docs/driver-config-schema.json, reports what was chosen,
+// carries no secret, and that every key the schema defines is either reported by some
 // configuration here or listed as one the driver cannot report.
-func TestDriverConfigReportFromBuilder(t *testing.T) {
+func TestDriverConfigReportFromSettings(t *testing.T) {
 	schema := compileDriverConfigSchema(t)
 	const password = "report-secret-password"
 	const dialerToken = "report-secret-dialer-token"
 	seen := map[string]bool{}
 	for _, tc := range []struct {
-		name  string
-		build func(*config.ConfigBuilder) *config.ConfigBuilder
-		want  map[string]any
+		name string
+		edit func(*settings.Config)
+		want map[string]any
 	}{
 		{
-			name:  "Defaults",
-			build: func(b *config.ConfigBuilder) *config.ConfigBuilder { return b },
+			name: "Defaults",
+			edit: func(*settings.Config) {},
 			want: map[string]any{
 				"version":                                             float64(1),
 				"connection.connect.timeout-ms":                       float64(5000),
@@ -148,18 +147,27 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 		},
 		{
 			name: "Tuned",
-			build: func(b *config.ConfigBuilder) *config.ConfigBuilder {
-				return b.WithAuth(auth.Password("report-user", password)).
-					WithDialer(secretDialer{token: dialerToken}).
-					WithConnectTimeout(2*time.Second).WithReadTimeout(3*time.Second).WithWriteTimeout(4*time.Second).
-					WithNagle(true).WithTCPKeepalive(time.Minute).WithSocketBuffers(65536, 32768).WithLinger(2*time.Second).
-					WithConnectionsPerHost(2).WithMaxRequestsPerConnection(100).WithMaxOrphanedStreams(5).
-					WithReconnect(nil).WithMetadataTimeout(7*time.Second).WithSchemaAgreement(9*time.Second, time.Second).
-					WithServerTimestamps().
-					ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-						p.WithConsistency(1).NoSerialConsistency().WithPageSize(10).NoTimeout().
-							WithRetry(nil).WithSpeculation(reportSpeculation{})
-					})
+			// As config.New(...).WithAuth(...).WithDialer(...).WithNagle(true)
+			// .WithTCPKeepalive(time.Minute).WithSocketBuffers(65536, 32768)
+			// .WithLinger(2s).WithConnectionsPerHost(2).WithReconnect(nil)
+			// .WithServerTimestamps() and a profile with no retry policy and a
+			// speculation policy would set them.
+			edit: func(c *settings.Config) {
+				c.Auth = auth.Password("report-user", password)
+				c.Dialer = secretDialer{token: dialerToken}
+				c.ConnectTimeout, c.ReadTimeout, c.WriteTimeout = 2*time.Second, 3*time.Second, 4*time.Second
+				c.NoDelay, c.SocketKeepalive = false, time.Minute
+				c.ReceiveBuffer, c.SendBuffer, c.Linger = cql.Some(65536), cql.Some(32768), cql.Some(2*time.Second)
+				c.Pool.ConnectionsPerHost, c.Pool.ConnectionsPerShard, c.Pool.AdvancedShardAwareness.Enabled = 2, 0, false
+				c.Pool.MaxRequestsPerConnection, c.Pool.MaxOrphanedStreams = 100, 5
+				c.Reconnect = nil
+				c.Metadata.RequestTimeout = 7 * time.Second
+				c.Metadata.AgreementTimeout, c.Metadata.AgreementPoll = 9*time.Second, time.Second
+				c.Timestamps = settings.ClientTimestamps{}
+				p := *c.DefaultProfile
+				p.Consistency, p.SerialConsistency, p.PageSize, p.Timeout = cql.One, cql.Option[cql.Consistency]{}, 10, 0
+				p.Retry, p.Speculation = nil, reportSpeculation{}
+				c.DefaultProfile = &p
 			},
 			want: map[string]any{
 				"connection.connect.timeout-ms":                       float64(2000),
@@ -187,9 +195,25 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 			},
 		},
 		{
+			name: "Locality",
+			edit: func(c *settings.Config) {
+				p := *c.DefaultProfile
+				p.Routing = implRouting.EngineOf(newReportRoutingWith(t, routing.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}}))
+				c.DefaultProfile = &p
+			},
+			want: map[string]any{
+				"query.load-balancing.node-preference.type":                   "rack",
+				"query.load-balancing.node-preference.local-dc":               "dc1",
+				"query.load-balancing.node-preference.local-rack":             "rack1",
+				"query.load-balancing.policy.fallback-to-non-preferred-nodes": true,
+			},
+		},
+		{
 			name: "CustomRetry",
-			build: func(b *config.ConfigBuilder) *config.ConfigBuilder {
-				return b.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRetry(reportRetry{}) })
+			edit: func(c *settings.Config) {
+				p := *c.DefaultProfile
+				p.Retry = reportRetry{}
+				c.DefaultProfile = &p
 			},
 			want: map[string]any{
 				"query.retry.policy.type": "custom",
@@ -198,10 +222,11 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 		},
 		{
 			name: "CustomPolicies",
-			build: func(b *config.ConfigBuilder) *config.ConfigBuilder {
-				return b.WithReconnect(reportReconnect{}).ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-					p.WithRetry(retry.Never{}).WithRouting(reportRouting{newReportRouting(t)})
-				})
+			edit: func(c *settings.Config) {
+				c.Reconnect = reportReconnect{}
+				p := *c.DefaultProfile
+				p.Retry, p.Routing = retry.Never{}, implRouting.EngineOf(reportRouting{newReportRouting(t)})
+				c.DefaultProfile = &p
 			},
 			want: map[string]any{
 				"query.load-balancing.policy.type":    "custom",
@@ -213,7 +238,7 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			raw := connectReport(t, func(address string) *config.ConfigBuilder { return tc.build(config.New(address)) })
+			raw := connectReport(t, tc.edit)
 			var doc any
 			if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 				t.Fatalf("DRIVER_CONFIG is not JSON: %v", err)
@@ -251,25 +276,32 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 	// Keys the driver never reports, and why. A key the schema adds fails
 	// here until it is reported or listed.
 	unreported := map[string]string{
-		"connection.heartbeat":                                        "a placeholder with no properties in schema version 1",
-		"connection.write.coalescing":                                 "a placeholder with no properties in schema version 1",
-		"connection.node-preference":                                  "config.WithHostFilter is a function the report cannot see into",
-		"connection.tls":                                              "the fake server speaks no TLS; TestDriverConfigReport/Typed covers it",
-		"connection.tls.hostname-verification":                        "as connection.tls",
-		"control-plane.queries.system.timeout.server-side-ms":         "the fake server is not ScyllaDB; TestDriverConfigReport/Typed covers it",
-		"query.defaults.idempotence":                                  "always false, so not asserted; reported on every connection",
-		"connection.reconnection.policy.delay-ms":                     "the builder offers no constant reconnection policy",
-		"connection.reconnection.policy.max-attempts":                 "the builder offers no attempt-limited reconnection policy",
-		"query.load-balancing.policy.description":                     "custom policies are reported by name only",
-		"query.retry.policy.description":                              "custom policies are reported by name only",
-		"query.speculative-execution.policy.description":              "custom policies are reported by name only",
-		"query.speculative-execution.policy.delay-ms":                 "retry has no built-in speculation policy, so every one is custom",
-		"query.speculative-execution.policy.max-executions":           "as query.speculative-execution.policy.delay-ms",
-		"query.speculative-execution.policy.percentile":               "as query.speculative-execution.policy.delay-ms",
-		"query.retry.backoff":                                         "no built-in retry policy waits between attempts",
-		"query.load-balancing.node-preference":                        "covered with routing options by TestConfig/Report",
-		"query.load-balancing.policy.adaptive-ordering":               "covered with routing options by TestConfig/Report",
-		"query.load-balancing.policy.fallback-to-non-preferred-nodes": "reported on every connection",
+		"connection.heartbeat":                                     "a placeholder with no properties in schema version 1",
+		"connection.write.coalescing":                              "a placeholder with no properties in schema version 1",
+		"connection.node-preference":                               "config.WithHostFilter is a function the report cannot see into",
+		"connection.tls":                                           "the fake server speaks no TLS; TestDriverConfigTypedReport covers it",
+		"connection.tls.hostname-verification":                     "as connection.tls",
+		"control-plane.queries.system.timeout.server-side-ms":      "the fake server is not ScyllaDB; TestDriverConfigTypedReport covers it",
+		"connection.reconnection.policy.delay-ms":                  "the builder offers no constant reconnection policy",
+		"connection.reconnection.policy.max-attempts":              "the builder offers no attempt-limited reconnection policy",
+		"query.load-balancing.policy.description":                  "custom policies are reported by name only",
+		"query.retry.policy.description":                           "custom policies are reported by name only",
+		"query.speculative-execution.policy.description":           "custom policies are reported by name only",
+		"query.speculative-execution.policy.delay-ms":              "retry has no built-in speculation policy, so every one is custom",
+		"query.speculative-execution.policy.max-executions":        "as query.speculative-execution.policy.delay-ms",
+		"query.speculative-execution.policy.percentile":            "as query.speculative-execution.policy.delay-ms",
+		"connection.node-preference.type":                          "as connection.node-preference",
+		"connection.node-preference.local-dc":                      "as connection.node-preference",
+		"connection.node-preference.local-rack":                    "as connection.node-preference",
+		"connection.node-preference.inferred-local-dc":             "as connection.node-preference",
+		"connection.node-preference.inferred-local-rack":           "as connection.node-preference",
+		"query.load-balancing.node-preference.inferred-local-dc":   "the driver infers no datacenter or rack",
+		"query.load-balancing.node-preference.inferred-local-rack": "the driver infers no datacenter or rack",
+		"query.retry.backoff.type":                                 "as query.retry.backoff",
+		"query.retry.backoff.base-ms":                              "as query.retry.backoff",
+		"query.retry.backoff.max-ms":                               "as query.retry.backoff",
+		"query.retry.backoff.delay-ms":                             "as query.retry.backoff",
+		"query.retry.backoff":                                      "no built-in retry policy waits between attempts",
 	}
 	for _, path := range schemaPaths(t) {
 		if seen[path] {
@@ -278,16 +310,18 @@ func TestDriverConfigReportFromBuilder(t *testing.T) {
 		if _, ok := unreported[path]; ok {
 			continue
 		}
-		if slices.ContainsFunc(sortedKeys(unreported), func(p string) bool { return strings.HasPrefix(path, p+".") }) {
-			continue
-		}
-		t.Errorf("schema key %s is neither reported for any builder configuration here nor listed as unreported", path)
+		t.Errorf("schema key %s is neither reported for any configuration here nor listed as unreported", path)
 	}
 }
 
 func newReportRouting(t *testing.T) routing.Policy {
 	t.Helper()
-	policy, err := routing.NewPolicy(routing.Options{TokenAware: true})
+	return newReportRoutingWith(t, routing.Options{TokenAware: true})
+}
+
+func newReportRoutingWith(t *testing.T, options routing.Options) routing.Policy {
+	t.Helper()
+	policy, err := routing.NewPolicy(options)
 	if err != nil {
 		t.Fatal(err)
 	}
