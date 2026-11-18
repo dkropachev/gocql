@@ -4,8 +4,10 @@
 package config
 
 import (
+	"context"
 	"crypto/tls"
 	"errors"
+	"net/netip"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,9 +15,11 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -129,6 +133,111 @@ func TestConfigBuilder(t *testing.T) {
 		c = mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
+		}
+	})
+
+	// DocumentedDefaults pins the default each setter's doc names, so a
+	// changed default fails here until its doc is updated too.
+	t.Run("DocumentedDefaults", func(t *testing.T) {
+		c := mustBuildConfig(t, New("h")).settings
+		p := c.DefaultProfile
+		for name, ok := range map[string]bool{
+			"WithPort 9042":                                  c.Port == 9042,
+			"WithKeyspace none":                              c.Keyspace == "",
+			"WithAuth none":                                  c.Auth == nil,
+			"WithTLS plaintext":                              c.TLS == nil && c.TLSSource == nil,
+			"WithCompression none":                           c.Compression == cql.NoCompression,
+			"WithCQLVersion 3.0.0":                           c.CQLVersion == "3.0.0",
+			"WithMaxFrameSize 256 MiB":                       c.Limits.MaxFrameBytes == 256<<20,
+			"WithMaxDecompressedSize 256 MiB":                c.Limits.MaxDecompressedBytes == 256<<20,
+			"WithMaxMetadataDepth 64":                        c.Limits.MaxMetadataDepth == 64,
+			"WithMaxPagingStates 65536":                      c.Limits.MaxPagingStates == 65536,
+			"WithMaxPagingStateSize 16 MiB":                  c.Limits.MaxPagingStateBytes == 16<<20,
+			"WithDialer net.Dialer":                          c.Dialer == nil,
+			"WithResolver net.DefaultResolver":               c.DNSResolver == nil,
+			"WithLocalAddress any":                           !c.LocalAddress.IsValid(),
+			"WithConnectTimeout 5s":                          c.ConnectTimeout == 5*time.Second,
+			"WithDNSTimeout 5s":                              c.DNSTimeout == 5*time.Second,
+			"WithNagle off":                                  c.NoDelay,
+			"WithTCPKeepalive off":                           c.SocketKeepalive == 0,
+			"WithSocketBuffers the OS's":                     !c.ReceiveBuffer.Set && !c.SendBuffer.Set,
+			"WithLinger the OS's":                            !c.Linger.Set,
+			"WithReadTimeout none":                           c.ReadTimeout == 0,
+			"WithWriteTimeout none":                          c.WriteTimeout == 0,
+			"WithHeartbeat 30s and 30s":                      c.KeepaliveInterval == 30*time.Second && c.KeepaliveTimeout == 30*time.Second,
+			"WithConnectionsPerShard 1":                      c.Pool.ConnectionsPerShard == 1 && c.Pool.ConnectionsPerHost == 0,
+			"WithMaxExcessPerShard 2":                        c.Pool.MaxExcessPerShard == 2,
+			"WithMaxRequestsPerConnection 32768":             c.Pool.MaxRequestsPerConnection == 32768,
+			"WithMaxOrphanedStreams 1024":                    c.Pool.MaxOrphanedStreams == 1024,
+			"WithAdvancedShardAwareness on 49152-65535":      c.Pool.AdvancedShardAwareness == implSettings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535},
+			"WithDiscovery true":                             c.Metadata.InitialDiscovery,
+			"WithHostFilter all nodes":                       c.HostFilter == nil,
+			"WithAddressTranslator identity":                 c.AddressTranslator == nil,
+			"WithClientRoutes none":                          c.ClientRoutes == nil,
+			"WithReconnect jittered backoff":                 c.Reconnect != nil,
+			"WithConviction SimpleConvictionPolicy":          c.Conviction == nil,
+			"WithMetadataMode SchemaFull":                    c.Metadata.Mode == metadata.SchemaFull,
+			"WithMetadataKeyspaces all":                      len(c.Metadata.Keyspaces) == 0,
+			"WithPartitioner built-ins only":                 len(c.Partitioners) == 4,
+			"WithMetadataRefresh 60s":                        c.Metadata.PeriodicRefresh == 60*time.Second,
+			"WithMetadataTimeout 31s":                        c.Metadata.RequestTimeout == 31*time.Second,
+			"WithMetadataServerTimeout unset":                !c.Metadata.ServerTimeout.Set,
+			"WithIgnoreEvents none ignored":                  c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
+			"WithSchemaAgreement 60s and 200ms":              c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
+			"WithAutomaticSchemaAgreement true":              c.Metadata.AutomaticAgreement,
+			"WithRefreshAfterAgreement true":                 c.Metadata.RefreshAfterAgreement,
+			"WithPreparedCacheSize 1000":                     c.PreparedCacheSize == 1000,
+			"WithTimestampGenerator driver stamps":           c.Timestamps.Mode() == implSettings.DriverTimestampMode,
+			"WithApplication none":                           c.Identity.ApplicationName == "" && c.Identity.ApplicationVersion == "",
+			"WithClientID none":                              c.Identity.ClientID == "",
+			"WithLogger slog.Default":                        c.Logger == nil,
+			"WithObserver none":                              c.Observer == nil,
+			"WithLifecycleObserver none":                     c.LifecycleObserver == nil,
+			"WithConfigReport true":                          c.ReportConfiguration,
+			"Profile WithConsistency LOCAL_QUORUM":           p.Consistency == cql.LocalQuorum,
+			"Profile WithSerialConsistency LOCAL_SERIAL":     p.SerialConsistency == cql.Some(cql.LocalSerial),
+			"Profile WithTimeout 30s":                        p.Timeout == 30*time.Second,
+			"Profile WithPageTimeout none":                   p.PageTimeout == 0,
+			"Profile WithPageSize 5000":                      p.PageSize == 5000,
+			"Profile WithPrefetch one":                       p.Prefetch == 1,
+			"Profile WithRetry retry.Safe{MaxAttempts: 3}":   p.Retry == retry.Safe{MaxAttempts: 3},
+			"Profile WithRouting token-aware with shuffling": p.Routing != nil,
+			"Profile WithSpeculation none":                   p.Speculation == nil,
+		} {
+			if !ok {
+				t.Errorf("%s: the built default differs from the documented one", name)
+			}
+		}
+	})
+
+	t.Run("ProfileExclusiveOptionsReplace", func(t *testing.T) {
+		p := codecTestMust(NewProfile().NoSerialConsistency().WithSerialConsistency(cql.Serial).NoTimeout().WithTimeout(time.Second).NoPrefetch().WithPrefetch(1).Build())
+		if p.SerialConsistency != cql.Some(cql.Serial) || p.Timeout != time.Second || p.Prefetch != 1 {
+			t.Fatalf("a later With call did not replace a No call: %+v", p)
+		}
+		p = codecTestMust(NewProfile().WithSerialConsistency(cql.Serial).NoSerialConsistency().WithTimeout(time.Second).NoTimeout().WithPrefetch(1).NoPrefetch().Build())
+		if p.SerialConsistency.Set || p.Timeout != 0 || p.Prefetch != 0 {
+			t.Fatalf("a later No call did not replace a With call: %+v", p)
+		}
+	})
+
+	t.Run("ClientRoutesRejectAddressTranslator", func(t *testing.T) {
+		routes := mustRoutes(NewClientRoutes().WithRoute("c1", ""))
+		translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+			return addr, nil
+		})
+		for name, b := range map[string]*ConfigBuilder{
+			"RoutesFirst":     New("h").WithClientRoutes(routes).WithAddressTranslator(translator),
+			"TranslatorFirst": New("h").WithAddressTranslator(translator).WithClientRoutes(routes),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if _, err := b.Build(); err == nil {
+					t.Fatal("Build accepted client routes with an address translator")
+				} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "client routes" {
+					t.Fatalf("Build = %v, want a client routes ValidationError", err)
+				}
+				mustBuildConfig(t, b.WithClientRoutes(ClientRoutes{}))
+			})
 		}
 	})
 

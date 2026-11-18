@@ -36,8 +36,8 @@ type Config struct {
 // ConfigBuilder assembles a Config. Settings that are not chosen keep the
 // driver's behavior; when a setting is chosen again, the last call wins.
 // Setters only store values; Build validates the final configuration.
-// Zero durations disable optional timeouts and background work. Nil optional
-// providers remove the override. A ConfigBuilder is not safe for concurrent use.
+// Zero durations disable optional timeouts and background work. A nil
+// provider restores the driver's behavior unless its setter says otherwise. A ConfigBuilder is not safe for concurrent use.
 // Start one with New: Build rejects a zero ConfigBuilder with a
 // cql.ValidationError.
 type ConfigBuilder struct {
@@ -190,19 +190,22 @@ func (b *ConfigBuilder) WithCQLVersion(version string) *ConfigBuilder {
 	return b
 }
 
-// WithMaxFrameSize caps a received frame's size in bytes. Default 256 MiB.
+// WithMaxFrameSize caps a received frame's size in bytes, at most 2 GiB - 1.
+// Default 256 MiB.
 func (b *ConfigBuilder) WithMaxFrameSize(bytes int64) *ConfigBuilder {
 	b.settings.Limits.MaxFrameBytes = bytes
 	return b
 }
 
-// WithMaxDecompressedSize caps a frame's decompressed size in bytes. Default 256 MiB.
+// WithMaxDecompressedSize caps a frame's decompressed size in bytes, at most
+// 2 GiB - 1. Default 256 MiB.
 func (b *ConfigBuilder) WithMaxDecompressedSize(bytes int64) *ConfigBuilder {
 	b.settings.Limits.MaxDecompressedBytes = bytes
 	return b
 }
 
-// WithMaxMetadataDepth caps the nesting depth of result type metadata. Default 64.
+// WithMaxMetadataDepth caps the nesting depth of result type metadata, at most
+// 128. Default 64.
 func (b *ConfigBuilder) WithMaxMetadataDepth(depth int) *ConfigBuilder {
 	b.settings.Limits.MaxMetadataDepth = depth
 	return b
@@ -345,7 +348,7 @@ func (b *ConfigBuilder) WithMaxRequestsPerConnection(n int) *ConfigBuilder {
 }
 
 // WithMaxOrphanedStreams caps streams abandoned by cancelled requests before a
-// connection is recycled. Default 1024.
+// connection is recycled; zero recycles it on the first. Default 1024.
 func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 	b.settings.Pool.MaxOrphanedStreams = n
 	return b
@@ -406,7 +409,9 @@ func (b *ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder {
 
 // WithAddressTranslator rewrites node addresses before dialing. It is called
 // for the CQL and any shard-aware endpoint of a node with the node's
-// endpoint.Peer; an error fails that connection attempt. Default identity.
+// endpoint.Peer; an error fails that connection attempt. Build rejects it
+// together with WithClientRoutes, which translates addresses itself. Default
+// identity.
 func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *ConfigBuilder {
 	b.settings.AddressTranslator = translator
 	return b
@@ -414,7 +419,8 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 
 // WithClientRoutes connects through ScyllaDB client routes built with
 // NewClientRoutes. Each call replaces the complete client routes setting; the
-// zero ClientRoutes removes them. Default none.
+// zero ClientRoutes removes them. Build rejects them together with
+// WithAddressTranslator. Default none.
 func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
 	b.routes = routes
 	return b
@@ -450,7 +456,9 @@ func (b *ConfigBuilder) WithMetadataKeyspaces(keyspaces ...string) *ConfigBuilde
 }
 
 // WithPartitioner sets the token partitioner for the partitioner class name,
-// next to the built-in Murmur3 and CDC partitioners.
+// next to the built-in Murmur3 and CDC partitioners; a built-in name is
+// replaced. Build rejects an empty name or a nil partitioner. Default the
+// built-in partitioners only.
 func (b *ConfigBuilder) WithPartitioner(name string, partitioner routing.TokenPartitioner) *ConfigBuilder {
 	if b.settings.Partitioners == nil {
 		b.settings.Partitioners = make(map[string]routing.TokenPartitioner)
@@ -567,7 +575,7 @@ func (b *ConfigBuilder) WithApplication(name, version string) *ConfigBuilder {
 	return b
 }
 
-// WithClientID reports id in STARTUP.
+// WithClientID reports id in STARTUP. Default none.
 func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
 	b.settings.Identity.ClientID = id
 	return b
@@ -593,6 +601,7 @@ func (b *ConfigBuilder) WithObserver(observer observe.Observer) *ConfigBuilder {
 }
 
 // WithLifecycleObserver receives session and connection lifecycle events.
+// Default none.
 func (b *ConfigBuilder) WithLifecycleObserver(observer observe.LifecycleObserver) *ConfigBuilder {
 	b.settings.LifecycleObserver = observer
 	return b
