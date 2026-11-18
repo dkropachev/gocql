@@ -303,6 +303,23 @@ documented methods.
 - **Contains:** reading CQL trace sessions through a `Session`.
 - **Must not contain:** tracing of the client itself, which is `observe`.
 
+### Engine packages that share the node and connection work
+
+Each package's `doc.go` says in full what it contains and must not contain.
+In short:
+
+- **`internal/endpoint`:** one node: `HostInfo` and its state, addresses and
+  their resolution and translation, ScyllaDB node features, tokens and
+  partitioners. Nothing that dials.
+- **`internal/transport`:** one connection: dialing, TLS, the shard-aware
+  source port, connection startup, and the request/response transport.
+  Nothing that spans connections.
+- **`internal/pool`:** the connections kept open to each node: host pools,
+  connection pickers, a pool's own dial retries. Not which hosts exist.
+- **`internal/cluster`:** the cluster view and the session core: control
+  connection, system-table discovery, events, metadata, replica placement,
+  downed-host reconnection, and the wiring of pools to the session.
+
 ### `cmd/cqlgen`
 
 - **Contains:** the code generator for struct mappings used by `cql.ParamsOf`
@@ -342,27 +359,6 @@ own module and does not reuse `internal/testkit`.
   `TestPackageLayers` checks the layers under the same tags.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
-## Internal ownership map
-
-Who owns each engine responsibility shared by `internal/cluster`,
-`internal/endpoint`, `internal/pool` and `internal/transport`, and where
-pieces of it still live elsewhere. The moves are proposals: none has been
-made yet.
-
-| Responsibility | Owner | Elsewhere today | Proposed move |
-|---|---|---|---|
-| Node identity and state (`HostInfo`, `NodeStateCell`, address fields) | `internal/endpoint` (`host_source.go`, `opaque_HostInfo.go`) | `cluster/host_source.go` builds a `HostInfo` from a `system.peers` row | Keep the row parsing in `cluster`, which owns system-table reads; rename the file `peers.go` so it no longer reads as a second host source. |
-| Contact points, DNS and address translation | `internal/endpoint` | Split across `endpoint/session.go`, `endpoint/control.go`, `endpoint/config.go` and `endpoint/address_translators.go` | Merge into `endpoint/resolve.go` and `endpoint/translate.go`; the current names are v1 file names. |
-| Tokens and partitioners (`Token`, `Partitioner`, `InternalTokenRing`) | `internal/endpoint` (`token.go`, `scylla_cdc.go`) | Replica placement (`cluster/topology.go`, `cluster/placement.go`, `cluster/vnode.go`); `cluster/scylla_cdc.go` only asks whether a table is a CDC log | Move `token.go` and the CDC partitioner to `cluster`, next to the placement code, their only consumer outside `endpoint`. |
-| Dialing a socket, TLS, the shard-aware source port | `internal/transport` (`dial.go`, `tls_dial.go`, `scylla.go`) | `endpoint/dial.go` (`HostDialer`, `DialedHost`), `endpoint/scylla.go` (`ScyllaShardAwareDialer`, `ScyllaGetSourcePort`, `InternalScyllaSourcePortCtx`), `endpoint/cluster.go` (`InternalLegacyDialer`) | Move them to `transport`, which implements and calls them; `endpoint` keeps node state only. |
-| Connection startup: SUPPORTED parsing, protocol extensions, STARTUP options | `internal/transport` | `endpoint/scylla.go` (`InternalParseSupported`, the `Internal*Ext` types), `endpoint/cluster.go` (`ApplicationInfo`), `transport/session.go` (one constant) | Move the extensions and `ApplicationInfo` to `transport/startup.go`, and fold `transport/session.go` into it. |
-| Per-host and per-shard connection pools, connection pickers, per-host reconnection policy | `internal/pool` | `cluster/connectionpool.go`, `cluster/pool.go`, `cluster/pool_services.go` wire the pool to the session; `pool/session.go` holds one interface | Merge the three `cluster` files into `cluster/pool_wiring.go`; fold `pool/session.go` into `pool/pool.go`. |
-| Retrying downed hosts | `internal/cluster`, which knows the host list; `internal/pool` retries only its own dials | `cluster/session.go` (`reconnectDownedHosts`) keeps a v1 fixed-interval loop beside the policy-driven `reconnectTypedDownedHosts` in `cluster/config.go`, and picks one at startup | If every v2 session carries a reconnect policy, drop the fixed-interval loop; put the remaining one in `cluster/reconnect.go`. |
-| Session-side dial orchestration (observers, per-shard dial) | `internal/cluster` (`conn.go`, `connection_hooks.go`) | — | Merge into `cluster/dial.go`. |
-| Control connection, topology and schema events, system-table reads | `internal/cluster` (`control.go`, `events.go`, `ring_describer.go`, `metadata*.go`) | — | None. |
-| Host selection | `internal/routing` for v2 execution | `cluster/policies.go` keeps the v1 `HostSelectionPolicy` family, `endpoint/policies.go` its `SelectedHost` interfaces | Check whether anything but session startup and `tests/driver-comparison` still uses the v1 policies; if not, delete them with their interfaces, otherwise move `SelectedHost` into `cluster/policies.go`, its consumer. |
-| Request/response transport, streams, framing on a connection | `internal/transport` | `transport/runtime_types.go` (`InternalResponsePage`) | Fold `runtime_types.go` into `transport.go`. |
-
 ## Where the code stands today
 
 Every public package follows the rules above: no public name aliases an
@@ -372,8 +368,8 @@ need work, tracked in the release review:
 
 - The v1 package split left files with the same names (`connectionpool.go`,
   `policies.go`, `host_source.go`, `pool_services.go`) in
-  `internal/cluster`, `internal/pool` and `internal/endpoint`. The
-  "Internal ownership map" above names the owner of each responsibility and
-  the moves that would leave one owner each.
+  `internal/cluster`, `internal/pool` and `internal/endpoint`, and some
+  code still sits outside the package its `doc.go` says owns it. The moves
+  are tracked in section 11 of the v2 release review (#1188).
 - Several public types still lack doc comments of their own; the API
   golden file lists every exported name to review.
