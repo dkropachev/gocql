@@ -22,7 +22,7 @@ func FuzzDecompress(f *testing.F) {
 	f.Add(block, uint32(len(plain)), uint16(100))
 	f.Add([]byte{0x7f, 0xff, 0xff, 0xff, 0x00}, uint32(1<<30), uint16(64))   // a huge declared length
 	f.Add([]byte{0xff, 0xff, 0xff, 0xff, 0x0f, 0x00}, uint32(0), uint16(64)) // a huge snappy varint
-	f.Add([]byte{0, 0, 0, 8, 0xf0}, uint32(8), uint16(8))                     // a truncated block
+	f.Add([]byte{0, 0, 0, 8, 0xf0}, uint32(8), uint16(8))                    // a truncated block
 	f.Fuzz(func(t *testing.T, data []byte, declared uint32, limit uint16) {
 		for _, c := range []interface{ Name() string }{LZ4Compressor{}, SnappyCompressor{}} {
 			decoder, ok := FrameDecoderWithLimit(c, int64(limit))

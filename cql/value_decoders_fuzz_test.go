@@ -136,7 +136,7 @@ func walkValue(v Value, depth int) {
 // across spans and with a live or released lease.
 func FuzzValueDecoders(f *testing.F) {
 	f.Add(uint8(0), []byte{}, []byte{0, 0, 0, 12, 0, 0, 0, 1, 0, 0, 0, 4, 0, 0, 0, 7}, uint8(0), false)
-	f.Add(uint8(3), []byte{}, []byte{0, 0, 0, 4, 0x7f, 0xff, 0xff, 0xff}, uint8(1), false)        // a huge map count
+	f.Add(uint8(3), []byte{}, []byte{0, 0, 0, 4, 0x7f, 0xff, 0xff, 0xff}, uint8(1), false)             // a huge map count
 	f.Add(uint8(0), []byte{}, []byte{0, 0, 0, 8, 0, 0, 0, 1, 0xff, 0xff, 0xff, 0xfe}, uint8(2), false) // a negative element length
 	f.Add(uint8(7), []byte{}, []byte{0, 0, 0, 9, 0, 0, 0, 1, 7, 0xff, 0xff, 0xff, 0xff}, uint8(0), false)
 	f.Add(uint8(200), []byte{16, 21, 3, 1}, []byte{0, 0, 0, 4, 0, 0, 0, 0}, uint8(0), true)
