@@ -142,11 +142,13 @@ documented methods.
 ## Rules for internal packages
 
 - **One owner per responsibility.** Connection pools live in `internal/pool`,
-  the control connection and topology in `internal/cluster`, execution in
-  `internal/session`. Today several files with the same name (`config.go`,
-  `control.go`, `host_source.go`, `policies.go`, `scylla.go`, `session.go`)
-  exist in `internal/cluster`, `internal/pool` and `internal/endpoint`, left
-  over from splitting the v1 package. Merge each into its owner.
+  the control connection and topology in `internal/cluster`, host selection
+  in `internal/routing`, execution in `internal/session`. A file name that
+  repeats across `internal/cluster`, `internal/pool`, `internal/endpoint` and
+  `internal/transport` names each package's own part of a feature: `dial.go`
+  (the session's per-shard dial in `internal/cluster`, socket dialing in
+  `internal/transport`) and `scylla.go` (the shard-aware connection picker in
+  `internal/pool`, the shard-aware dialer in `internal/transport`).
 - **Name packages after what they do, not after a v1 file.** The `opaque_*.go`
   files and the `runtime_types.go` grab-bags each move to the package that
   owns the concept.
@@ -323,9 +325,10 @@ Each package's `doc.go` says in full what it contains and must not contain.
 In short:
 
 - **`internal/endpoint`:** one node: `HostInfo` and its state, addresses and
-  their resolution and translation, ScyllaDB node features, and the `Token`
-  interface with its int64 form, which the connection pickers in
-  `internal/pool` take. Nothing that dials.
+  their resolution (`resolve.go`) and translation (`translate.go`), ScyllaDB
+  node features, and the `Token` interface with its int64 form
+  (`token_type.go`), which the connection pickers in `internal/pool` take.
+  Nothing that dials.
 - **`internal/transport`:** one connection: dialing, TLS, the shard-aware
   source port, connection startup (SUPPORTED parsing, protocol extensions,
   STARTUP options), and the request/response transport. Nothing that spans
@@ -333,9 +336,11 @@ In short:
 - **`internal/pool`:** the connections kept open to each node: host pools,
   connection pickers, a pool's own dial retries. Not which hosts exist.
 - **`internal/cluster`:** the cluster view and the session core: control
-  connection, system-table discovery, events, metadata, partitioners and the
-  token ring, replica placement, downed-host reconnection, and the wiring of
-  pools to the session.
+  connection, system-table discovery (`peers.go`), events, metadata,
+  partitioners and the token ring, replica placement, downed-host
+  reconnection under the session's reconnect policy (`reconnect.go`), and the
+  wiring of pools to the session. No host selection: that is
+  `internal/routing`.
 
 ### `cmd/cqlgen`
 
@@ -383,10 +388,10 @@ internal type, no public package imports an engine package, and
 `TestPackageLayers` allows no exception. Two parts of the internals still
 need work, tracked in the release review:
 
-- The v1 package split left files with the same names (`config.go`,
-  `control.go`, `host_source.go`, `policies.go`, `scylla.go`, `session.go`)
-  in `internal/cluster`, `internal/pool` and `internal/endpoint`, and some
-  code still sits outside the package its `doc.go` says owns it. The moves
-  are tracked in section 11 of the v2 release review (#1188).
+- Some files still carry v1 names (`internal/endpoint/host_source.go`, the
+  `opaque_*.go` files, `internal/session/runtime_types.go`), though the
+  overlapping files the v1 package split left in `internal/cluster`,
+  `internal/pool`, `internal/endpoint` and `internal/transport` are merged
+  into their owners (section 11 of the v2 release review, #1188).
 - Several public types still lack doc comments of their own; the API
   golden file lists every exported name to review.
