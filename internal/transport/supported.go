@@ -46,6 +46,13 @@ type InternalCqlProtocolExtension interface {
 	InternalSerialize() map[string]string
 }
 
+var (
+	_ InternalCqlProtocolExtension = &InternalTabletsRoutingV1Ext{}
+	_ InternalCqlProtocolExtension = &InternalRateLimitExt{}
+	_ InternalCqlProtocolExtension = &InternalLwtAddMetadataMarkExt{}
+	_ InternalCqlProtocolExtension = &InternalScyllaUseMetadataIDExt{}
+)
+
 func InternalFindCQLProtoExtByName(exts []InternalCqlProtocolExtension, name string) InternalCqlProtocolExtension {
 	for i := range exts {
 		if exts[i].InternalName() == name {

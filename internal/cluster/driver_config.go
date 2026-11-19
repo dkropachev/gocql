@@ -896,7 +896,7 @@ func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 }
 
 // exponentialDelayWindow reports the delay window getExponentialTime
-// (policies.go) actually produces for a configured min/max pair, in
+// (internal/pool/policies.go) actually produces for a configured min/max pair, in
 // milliseconds.
 //
 // Both the exponential retry backoff and the exponential reconnection policy

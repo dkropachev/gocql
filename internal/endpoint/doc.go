@@ -4,12 +4,12 @@
 // Package endpoint owns what the driver knows about a single node.
 //
 // It contains HostInfo and its state, the node's addresses and how they are
-// resolved and translated (contact points, DNS, address translators), the
-// node's ScyllaDB features as values (ScyllaHostFeatures,
-// ScyllaConnectionFeatures), and the Token interface with its int64 form
-// (InternalInt64Token). Those two stay here, not with the partitioners in
-// internal/cluster, because the connection pickers in internal/pool, which
-// internal/cluster imports, pick a shard by them.
+// resolved (contact points and DNS, resolve.go) and translated (address
+// translators, translate.go), the node's ScyllaDB features as values
+// (ScyllaHostFeatures, ScyllaConnectionFeatures), and the Token interface with
+// its int64 form (InternalInt64Token, token_type.go). Those two stay here, not
+// with the partitioners in internal/cluster, because the connection pickers in
+// internal/pool, which internal/cluster imports, pick a shard by them.
 //
 // It must not contain anything that dials or talks to a node: dialers
 // (HostDialer, DialedHost, the shard-aware dialer and source port), TLS,

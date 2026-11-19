@@ -598,3 +598,25 @@ func InternalHostInfoSharderEpoch(h *HostInfo) uint64 {
 	defer h.privateStorage.InternalMu.RUnlock()
 	return h.privateStorage.InternalSharderGeneration
 }
+
+// HostInformation is the read-only view of a HostInfo.
+type HostInformation interface {
+	Peer() net.IP
+	ConnectAddress() net.IP
+	UntranslatedConnectAddress() net.IP
+	BroadcastAddress() net.IP
+	ListenAddress() net.IP
+	RPCAddress() net.IP
+	PreferredIP() net.IP
+	DataCenter() string
+	Rack() string
+	HostID() string
+	Partitioner() string
+	ClusterName() string
+	Tokens() []string
+	Port() int
+	IsUp() bool
+	ScyllaShardAwarePort() uint16
+	ScyllaShardAwarePortTLS() uint16
+	ScyllaShardCount() int
+}

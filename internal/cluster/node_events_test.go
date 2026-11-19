@@ -388,7 +388,7 @@ func TestNodeEvents(t *testing.T) {
 	})
 
 	// TestNodeEvents/RemoveHost covers Session.removeHost, which the ring refresher
-	// calls when a host leaves the ring (host_source.go). It had no coverage in
+	// calls when a host leaves the ring (peers.go). It had no coverage in
 	// either lane.
 	//
 	// It has to retire the host from both places that track it -- the
