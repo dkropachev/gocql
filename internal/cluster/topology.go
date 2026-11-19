@@ -161,7 +161,9 @@ func (s *simpleStrategy) InternalReplicaMap(tokenRing *InternalTokenRing) tokenR
 	ring := make(tokenRingReplicas, len(tokens))
 
 	for i, th := range tokens {
-		replicas := make([]*endpoint.HostInfo, 0, s.rf)
+		// The RF comes from the server and has no upper bound; a token
+		// never has more replicas than the ring has tokens.
+		replicas := make([]*endpoint.HostInfo, 0, min(s.rf, len(tokens)))
 		seen := make(map[*endpoint.HostInfo]bool)
 
 		for j := 0; j < len(tokens) && len(replicas) < s.rf; j++ {
@@ -231,9 +233,13 @@ func (n *networkTopology) InternalReplicaMap(tokenRing *InternalTokenRing) token
 	tokens := tokenRing.InternalTokens
 	replicaRing := make(tokenRingReplicas, 0, len(tokens))
 
+	// The RFs come from the server and have no upper bound, so their sum
+	// is capped at the token count, more replicas than a token can have
+	// (they are distinct hosts); the cap also keeps the sum from
+	// overflowing.
 	var totalRF int
 	for _, rf := range n.dcs {
-		totalRF += rf
+		totalRF = min(totalRF+min(rf, len(tokens)), len(tokens))
 	}
 
 	for i, th := range tokenRing.InternalTokens {
