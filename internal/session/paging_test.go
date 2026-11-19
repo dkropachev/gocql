@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"hash/maphash"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -310,6 +311,75 @@ func TestPaging(t *testing.T) {
 						t.Fatal("terminal error changed")
 					}
 				})
+			}
+		})
+
+		// TestPaging/Rows/CancelMidPageKeepsStreamUntilResponse checks that
+		// cancelling the caller's context while NextInto waits for a
+		// continuation page ends the rows with context.Canceled, and that the
+		// page's stream ID stays in use, counted as orphaned, until the late
+		// response arrives, then is released.
+		t.Run("CancelMidPageKeepsStreamUntilResponse", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 1)
+			orphans := new(atomic.Uint64)
+			conns[0].InternalCfg.InternalOrphans = orphans
+			profile := settings.InternalDefaultProfile()
+			profile.Prefetch = 0
+			handle := new(profile)
+			secondStream := make(chan int, 1)
+			go func() {
+				stream := typedTestReadRequest(t, conns[0], peers[0])
+				if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody([]byte("next"), "one"))); err != nil {
+					t.Error(err)
+					return
+				}
+				secondStream <- typedTestReadRequest(t, conns[0], peers[0])
+			}()
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			b := runtimeQuery(t)
+			defer b.Close()
+			rows := codecTestMust(Run(ctx, s, b, testOptions(Options{Profile: handle})))
+			defer rows.Close()
+			var dst cql.Bytes
+			if !rows.NextInto(&dst) {
+				t.Fatal(rows.Err())
+			}
+			done := make(chan bool, 1)
+			go func() { done <- rows.NextInto(&dst) }()
+			var stream int
+			select {
+			case stream = <-secondStream:
+			case <-time.After(5 * time.Second):
+				t.Fatal("continuation page never requested")
+			}
+			cancel()
+			select {
+			case ok := <-done:
+				if ok {
+					t.Fatal("NextInto returned a row after cancellation")
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("cancellation did not interrupt NextInto")
+			}
+			if !errors.Is(rows.Err(), context.Canceled) {
+				t.Fatalf("rows ended with %v, want context.Canceled", rows.Err())
+			}
+			if n := conns[0].InternalStreams.InUse(); n != 1 {
+				t.Fatalf("%d streams in use before the late response, want 1", n)
+			}
+			if n := orphans.Load(); n != 1 {
+				t.Fatalf("%d orphaned streams, want 1", n)
+			}
+			if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "late"))); err != nil {
+				t.Fatal(err)
+			}
+			deadline := time.Now().Add(5 * time.Second)
+			for conns[0].InternalStreams.InUse() != 0 {
+				if time.Now().After(deadline) {
+					t.Fatal("late response did not release the stream")
+				}
+				time.Sleep(time.Millisecond)
 			}
 		})
 	})
