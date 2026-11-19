@@ -945,6 +945,7 @@ package cqlerr
 		cqlerr.NoHostsError field Operation string
 		cqlerr.NoHostsError field Causes []error
 		cqlerr.NoHostsError method (*T) Error() string
+		cqlerr.NoHostsError method (*T) Kind() cqlerr.Kind
 		cqlerr.NoHostsError method (*T) Unwrap() []error
 	const cqlerr.NotExecuted cqlerr.ExecutionStatus = 1
 	type cqlerr.OpType uint8

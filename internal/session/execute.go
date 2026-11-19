@@ -649,7 +649,25 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 	return runtimeOf(s).admit(ctx, b, options)
 }
 
+// admit is admitRequest, reporting a refusal as a request that was not sent.
 func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
+	runctx, cancel, request, err := rt.admitRequest(ctx, b, options)
+	return runctx, cancel, request, notSent(err)
+}
+
+// notSent reports err, a failure before a request was sent, as an
+// ExecutionError whose status says nothing was applied.
+func notSent(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errors.AsType[*ExecutionError](err); ok {
+		return err
+	}
+	return newExecutionError(err, cql.Result{}, cqlerr.NotExecuted, nil)
+}
+
+func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	if ctx == nil || rt == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
@@ -878,18 +896,18 @@ func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state
 
 func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
-		return nil, cqlerr.ErrPagingComplete
+		return nil, notSent(cqlerr.ErrPagingComplete)
 	}
 	// The token may come from an untrusted client; one larger than the
 	// session keeps for its own executions is refused before it is sent.
 	if limit := rt.config.Limits.MaxPagingStateBytes; limit > 0 && int64(len(cqltype.PageToken(state))) > limit {
-		return nil, fmt.Errorf("%w: page state token of %d bytes is over the %d-byte limit", cqlerr.ErrPagingStateLimit, len(cqltype.PageToken(state)), limit)
+		return nil, notSent(fmt.Errorf("%w: page state token of %d bytes is over the %d-byte limit", cqlerr.ErrPagingStateLimit, len(cqltype.PageToken(state)), limit))
 	}
 	if pageSize < 0 {
-		return nil, cqltype.TypeValidation("page size", "must not be negative")
+		return nil, notSent(cqltype.TypeValidation("page size", "must not be negative"))
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"}
+		return nil, notSent(&settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"})
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
@@ -955,7 +973,7 @@ func Exec[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], options 
 
 func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (cql.Result, error) {
 	if b == nil {
-		return cql.Result{}, cqltype.TypeValidation("binding", "nil binding")
+		return cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
 	}
 	if b.privateStorage.InternalRequest.routing.Kind == cql.ConditionalStatement {
 		return conditionalExec()
@@ -1003,7 +1021,7 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 //
 //go:noinline
 func conditionalExec() (cql.Result, error) {
-	return cql.Result{}, cqlerr.ErrConditionalExec
+	return cql.Result{}, notSent(cqlerr.ErrConditionalExec)
 }
 
 type typedAttemptOutcome struct {

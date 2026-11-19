@@ -50,6 +50,7 @@ func unsent(err error) bool {
 	}
 	switch err {
 	case ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, //nolint:errorlint // one node of a tree walkErrors walks
+		ErrNoStreams, ErrNoHosts, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete,
 		context.Canceled, context.DeadlineExceeded:
 		return true
 	}
@@ -59,6 +60,8 @@ func unsent(err error) bool {
 // ExecutionStatusOf reports what the request that failed with err may have
 // done on the cluster, across all of its attempts. It returns NotExecuted for
 // a nil error and MaybeExecuted for an error the driver cannot attribute.
+// A call that refuses a request before sending it, for example for an
+// invalid argument, returns an ExecutionError reporting NotExecuted.
 func ExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
 		return NotExecuted

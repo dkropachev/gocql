@@ -29,7 +29,7 @@ type eachScratch struct {
 //
 //go:noinline
 func nilEachCallback() (cql.Result, error) {
-	err := cqltype.TypeValidation("row callback", "nil callback")
+	err := notSent(cqltype.TypeValidation("row callback", "nil callback"))
 	return InternalExecutionErrorResult(err), err
 }
 
@@ -60,10 +60,10 @@ func isStopIteration(err error) bool {
 // first row when fn is nil.
 func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, cql.Result, error) {
 	if b == nil {
-		return false, cql.Result{}, cqltype.TypeValidation("binding", "nil binding")
+		return false, cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
 	}
 	if dst == nil {
-		return false, cql.Result{}, cqltype.TypeValidation("destination", "nil row destination")
+		return false, cql.Result{}, notSent(cqltype.TypeValidation("destination", "nil row destination"))
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {

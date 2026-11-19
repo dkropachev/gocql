@@ -185,14 +185,14 @@ func (p *queryPool[P, R]) takeIdle() []*queryState {
 // query may already serve another call.
 func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("context", "nil context")
+		return nil, notSent(cqltype.TypeValidation("context", "nil context"))
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	q, err := p.get()
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	if err := q.capture(ctx, value); err != nil {
 		// A failure after the query turned busy ended its execution, and
@@ -213,14 +213,14 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 // query's owner.
 func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if ctx == nil {
-		return nil, cqltype.TypeValidation("context", "nil context")
+		return nil, notSent(cqltype.TypeValidation("context", "nil context"))
 	}
 	if err := ctx.Err(); err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	q, err := p.get()
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	if err := q.state.begin(ctx); err != nil {
 		// begin fails before the query turned busy: for a closed query,
@@ -228,7 +228,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
 			p.put(q)
 		}
-		return nil, err
+		return nil, notSent(err)
 	}
 	return q, nil
 }
@@ -293,7 +293,7 @@ func (p *queryPool[P, R]) runPage(ctx context.Context, value P, state cql.PageSt
 // pool returns p's query pool, created on first use.
 func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
-		return nil, cqltype.TypeValidation("prepared", "nil handle")
+		return nil, notSent(cqltype.TypeValidation("prepared", "nil handle"))
 	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
@@ -301,7 +301,7 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 			return newPreparedQuery(p, CompiledOptions{}, base)
 		})
 	})
-	return s.pool, s.poolErr
+	return s.pool, notSent(s.poolErr)
 }
 
 // AddToBatch encodes value with the statement's parameters straight into

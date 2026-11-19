@@ -13,6 +13,8 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -251,5 +253,98 @@ func TestExecutionStatusBeforeAttempt(t *testing.T) {
 		if got := cqlerr.ExecutionStatusOf(err); got != cqlerr.NotExecuted {
 			t.Errorf("general=%t: status %v: %v (%T)", general, got, err, err)
 		}
+	}
+}
+
+// TestExecutionStatusRefused checks that a request refused before it was
+// sent, for an invalid argument or a closed session, reports NotExecuted and
+// keeps the reason reachable.
+func TestExecutionStatusRefused(t *testing.T) {
+	ctx := context.Background()
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T) error
+		want error
+	}{
+		{"NegativePageSize", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			bound := runtimeQuery(t)
+			defer bound.Close()
+			_, err := RunPage(ctx, s, bound, cql.StartPage, -1, CompiledOptions{})
+			return err
+		}, nil},
+		{"CompletedPage", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			bound := runtimeQuery(t)
+			defer bound.Close()
+			_, err := RunPage(ctx, s, bound, cqltype.CompletePageState(), 0, CompiledOptions{})
+			return err
+		}, cqlerr.ErrPagingComplete},
+		{"NilDestination", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			bound := runtimeQuery(t)
+			defer bound.Close()
+			_, _, err := RunOne(ctx, s, bound, CompiledOptions{}, nil)
+			return err
+		}, nil},
+		{"EmptyBatch", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			_, err := InternalWrapSession(s).ExecBatch(ctx, &Batch{}, CompiledOptions{})
+			return err
+		}, nil},
+		{"OrdinaryConditionalBatch", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			var batch Batch
+			if err := InternalAddBound(&batch, s, runtimeQuery(t)); err != nil {
+				t.Fatal(err)
+			}
+			_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows[cql.EmptyRow](cql.EmptyRowDecoder), CompiledOptions{})
+			return err
+		}, nil},
+		{"ClosedPreparedQuery", func(t *testing.T) error {
+			s, _, peers := runtimeTestSession(t, 1)
+			p := oneShotPrepare(t, s, peers[0], make(chan oneShotRequest, 1))
+			s.Close()
+			_, err := p.Exec(ctx, 1, CompiledOptions{})
+			return err
+		}, cqlerr.ErrClosed},
+		{"NilEachCallback", func(t *testing.T) error {
+			s, _, peers := runtimeTestSession(t, 1)
+			p := oneShotPrepare(t, s, peers[0], make(chan oneShotRequest, 1))
+			var dst []byte
+			_, err := p.Each(ctx, 1, &dst, nil, CompiledOptions{})
+			return err
+		}, nil},
+		{"UnpreparedTwoOptions", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			_, err := InternalWrapSession(s).UnpreparedExec(ctx, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "DELETE FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyRow{}, Options{}, Options{})
+			return err
+		}, nil},
+		{"ClosedSession", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			s.Close()
+			bound := runtimeQuery(t)
+			defer bound.Close()
+			_, err := Exec(ctx, s, bound, CompiledOptions{})
+			return err
+		}, cqlerr.ErrClosed},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.run(t)
+			if err == nil {
+				t.Fatal("refused request succeeded")
+			}
+			if got := cqlerr.ExecutionStatusOf(err); got != cqlerr.NotExecuted {
+				t.Errorf("status %v: %v (%T)", got, err, err)
+			}
+			if tc.want != nil && !errors.Is(err, tc.want) {
+				t.Errorf("reason lost: %v", err)
+			}
+			if tc.want == nil {
+				if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+					t.Errorf("validation error lost: %v", err)
+				}
+			}
+		})
 	}
 }

@@ -50,9 +50,10 @@ func referenceKindOf(err error) Kind {
 		return KindClosed
 	case hasType[*cql.ValidationError](err), hasType[*cql.CodecError](err), hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
-		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete):
+		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
+			ErrPagingStateLimit, ErrNotFound, ErrNoRows):
 		return KindInvalid
-	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig):
+	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig, ErrPagingNoProgress):
 		return KindProtocol
 	case has(ErrTimeoutNoResponse, ErrReadHeaderTimeout):
 		return KindTimeout
@@ -61,9 +62,9 @@ func referenceKindOf(err error) Kind {
 		return KindTimeout
 	}
 	switch {
-	case hasType[*ConnectError](err), hasType[net.Error](err),
+	case hasType[*ConnectError](err), hasType[*NoHostsError](err), hasType[net.Error](err),
 		has(ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
-			io.EOF, io.ErrUnexpectedEOF, net.ErrClosed):
+			ErrNoControl, ErrScyllaSourcePortAlreadyInUse, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed):
 		return KindConnection
 	}
 	return KindUnknown
@@ -84,7 +85,8 @@ func referenceExecutionStatusOf(err error) ExecutionStatus {
 	if hasType[*SchemaChangedError](err) {
 		return NotExecuted
 	}
-	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, context.Canceled, context.DeadlineExceeded} {
+	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec,
+		ErrNoStreams, ErrNoHosts, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, target) {
 			return NotExecuted
 		}
@@ -114,6 +116,8 @@ func classifiedLeaves() []error {
 		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,
 		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNotFound, ErrNoRows, ErrPagingStateLimit,
+		ErrPagingNoProgress, ErrNoControl, ErrScyllaSourcePortAlreadyInUse,
+		&NoHostsError{Operation: "o"}, &NoHostsError{Operation: "o", Causes: []error{ErrNoConnections}},
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
 		&cql.CodecError{Stage: "decode", Err: errors.New("bad")},
 		&cql.ProtocolError{Stage: "rows", Err: errors.New("bad")},

@@ -295,11 +295,11 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[cql.EmptyRow, cql.E
 // execution no longer needs it.
 func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[cql.EmptyRow, cql.EmptyRow], error) {
 	if err := validateBatch(s, batch); err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	pool, err := InternalRuntimeFor(s).batchQueries()
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	return pool.begin(ctx)
 }
