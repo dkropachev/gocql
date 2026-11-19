@@ -582,3 +582,24 @@ func TestRowsCodec(t *testing.T) {
 		})
 	})
 }
+
+// TestInvalidRowDecoderClone checks that Clone on a decoder Compile rejects
+// returns instead of panicking: a nil field or a nil clone function is an
+// argument error Compile reports, not a reason to crash a caller of Clone.
+func TestInvalidRowDecoderClone(t *testing.T) {
+	type row struct{ A string }
+	fields := RowInto[row](nil, nil)
+	if _, err := fields.Compile(NewColumns(ColumnSpec{Name: "a", Type: TextType})); err == nil {
+		t.Fatal("Compile accepted a nil field")
+	}
+	if got := fields.Clone(row{A: "x"}); got.A != "x" {
+		t.Fatalf("Clone = %+v", got)
+	}
+	mapped := ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, nil)
+	if _, err := mapped.Compile(NewColumns(ColumnSpec{Name: "a", Type: TextType})); err == nil {
+		t.Fatal("Compile accepted a nil clone function")
+	}
+	if got := mapped.Clone("x"); got != "x" {
+		t.Fatalf("Clone = %q", got)
+	}
+}
