@@ -71,14 +71,15 @@ func sentinelKind(err error) Kind {
 	switch err {
 	case ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
 		return KindClosed
-	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete:
+	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
+		ErrPagingStateLimit, ErrNotFound, ErrNoRows:
 		return KindInvalid
-	case ErrFrameTooBig:
+	case ErrFrameTooBig, ErrPagingNoProgress:
 		return KindProtocol
 	case ErrTimeoutNoResponse, ErrReadHeaderTimeout:
 		return KindTimeout
 	case ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
-		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed:
+		ErrNoControl, ErrScyllaSourcePortAlreadyInUse, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed:
 		return KindConnection
 	}
 	return KindUnknown

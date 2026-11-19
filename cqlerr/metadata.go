@@ -68,3 +68,7 @@ type NoHostsError struct {
 func (e *NoHostsError) Error() string { return "gocql: no eligible hosts for " + e.Operation }
 
 func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes...) }
+
+// Kind returns KindConnection: no host could serve the operation. A cause
+// of a more specific kind, such as a server error, decides KindOf.
+func (e *NoHostsError) Kind() Kind { return KindConnection }

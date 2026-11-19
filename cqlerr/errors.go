@@ -358,7 +358,7 @@ type CASWriteUnknownError struct {
 func (e *CASWriteUnknownError) Code() ErrorCode      { return CodeCASWriteUnknown }
 func (e *CASWriteUnknownError) Error() string        { return e.text(CodeCASWriteUnknown) }
 func (e *CASWriteUnknownError) Is(target error) bool { return target == CodeCASWriteUnknown }
-func (e *CASWriteUnknownError) Kind() Kind           { return KindServer }
+func (e *CASWriteUnknownError) Kind() Kind           { return KindTimeout }
 
 // OpType is the kind of operation a rate limit rejected. Its values are
 // ScyllaDB's, so the zero OpType is OpTypeRead. Later releases may add values,
@@ -429,7 +429,7 @@ func (e *OtherServerError) Kind() Kind           { return codeKind(e.code) }
 // carry it.
 func codeKind(c ErrorCode) Kind {
 	switch c {
-	case CodeReadTimeout, CodeWriteTimeout:
+	case CodeReadTimeout, CodeWriteTimeout, CodeCASWriteUnknown:
 		return KindTimeout
 	case CodeUnavailable:
 		return KindUnavailable
