@@ -5,9 +5,11 @@ package protocol
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -30,6 +32,21 @@ func deepListType(levels int) []byte {
 	return f.Buf
 }
 
+// customTypeResult is deepListType with one column of the custom type name.
+func customTypeResult(name string) []byte {
+	f := NewFramer(nil, protoVersion4)
+	f.WriteInt(frm.ResultKindRows)
+	f.WriteInt(int32(frm.FlagGlobalTableSpec))
+	f.WriteInt(1)
+	f.WriteString("ks")
+	f.WriteString("t")
+	f.WriteString("c")
+	f.WriteShort(uint16(cql.TypeCustom))
+	f.WriteString(name)
+	f.WriteInt(0)
+	return f.Buf
+}
+
 // FuzzParseResponse feeds arbitrary response bodies to both parsers. Neither
 // may panic on server data: Framer.ParseFrame returns malformed input as an
 // error and re-panics only on a driver bug, and the typed parser never
@@ -42,6 +59,8 @@ func FuzzParseResponse(f *testing.F) {
 	}
 	f.Add(byte(4), byte(frm.OpResult), byte(0), deepListType(3))
 	f.Add(byte(4), byte(frm.OpResult), byte(0), deepListType(10000))
+	f.Add(byte(4), byte(frm.OpResult), byte(0), customTypeResult(cqltype.ApacheCassandraTypePrefix+"VectorType("+
+		strings.Repeat(cqltype.ApacheCassandraTypePrefix+"ListType(", 1500)+cqltype.ApacheCassandraTypePrefix+"Int32Type"+strings.Repeat(")", 1500)+", 3)"))
 	f.Add(byte(4), byte(frm.OpError), byte(0), errBody(4, 0x1000, "unavailable", func(f *framer) {
 		f.WriteShort(1)
 		f.WriteInt(3)
