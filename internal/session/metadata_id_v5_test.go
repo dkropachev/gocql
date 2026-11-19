@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cluster"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/segment"
 )
@@ -50,10 +52,14 @@ func readV5Requests(peer net.Conn) ([]v5Request, error) {
 	return out, nil
 }
 
-// v5ShortBytes splits a [short bytes] value off the front of b.
-func v5ShortBytes(b []byte) ([]byte, []byte) {
+// v5ShortBytes splits a [short bytes] value off the front of b, reporting
+// whether b held one.
+func v5ShortBytes(b []byte) ([]byte, []byte, bool) {
+	if len(b) < 2 || len(b) < 2+int(binary.BigEndian.Uint16(b)) {
+		return nil, nil, false
+	}
 	n := int(binary.BigEndian.Uint16(b))
-	return b[2 : 2+n], b[2+n:]
+	return b[2 : 2+n], b[2+n:], true
 }
 
 func appendShortBytes(b, v []byte) []byte {
@@ -61,10 +67,59 @@ func appendShortBytes(b, v []byte) []byte {
 	return append(b, v...)
 }
 
-// TestResultMetadataIDV5 drives a prepared statement over a real protocol 5
-// connection: a METADATA_CHANGED response's new result-metadata ID must be the
-// one the next EXECUTE sends, and the driver must keep skipping metadata with it.
+// TestResultMetadataIDV5 drives a prepared statement over a protocol 5
+// connection (segment framing, no handshake) against a fake server: a
+// METADATA_CHANGED response's new result-metadata ID must be the one the next
+// EXECUTE sends, and the driver must keep skipping metadata with it. One and
+// RunPage read a whole response, RunStream reads it incrementally.
 func TestResultMetadataIDV5(t *testing.T) {
+	for _, mode := range []struct {
+		name string
+		run  func(context.Context, *cluster.Core, *Prepared[int32, []byte]) (string, error)
+	}{
+		{"One", func(ctx context.Context, s *cluster.Core, p *Prepared[int32, []byte]) (string, error) {
+			var dst []byte
+			found, _, err := p.One(ctx, 1, &dst, CompiledOptions{})
+			if err == nil && !found {
+				err = fmt.Errorf("no row")
+			}
+			return string(dst), err
+		}},
+		{"RunPage", func(ctx context.Context, s *cluster.Core, p *Prepared[int32, []byte]) (string, error) {
+			page, err := p.RunPage(ctx, 1, cql.PageState{}, 0, CompiledOptions{})
+			if err != nil {
+				return "", err
+			}
+			defer page.Close()
+			var dst []byte
+			if !page.NextInto(&dst) {
+				return "", fmt.Errorf("no row")
+			}
+			return string(dst), nil
+		}},
+		{"RunStream", func(ctx context.Context, s *cluster.Core, p *Prepared[int32, []byte]) (string, error) {
+			bound, err := BindOwned(p, 1)
+			if err != nil {
+				return "", err
+			}
+			defer bound.Close()
+			stream, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			if err != nil {
+				return "", err
+			}
+			defer stream.Close()
+			dst := make([]byte, 0, 16) // StreamBlob decodes into caller capacity
+			if !stream.NextInto(&dst) {
+				return "", fmt.Errorf("no row: %v", stream.Err())
+			}
+			return string(dst), nil
+		}},
+	} {
+		t.Run(mode.name, func(t *testing.T) { testResultMetadataIDV5(t, mode.run) })
+	}
+}
+
+func testResultMetadataIDV5(t *testing.T, run func(context.Context, *cluster.Core, *Prepared[int32, []byte]) (string, error)) {
 	s, c, peer := rowStreamSession(t, 5, nil)
 	if !c.InternalTracksResultMetadataID() {
 		t.Fatal("a protocol 5 connection does not track result metadata IDs")
@@ -79,7 +134,7 @@ func TestResultMetadataIDV5(t *testing.T) {
 			b = binary.BigEndian.AppendUint16(b, uint16(len(s)))
 			b = append(b, s...)
 		}
-		return binary.BigEndian.AppendUint16(b, 0x0003) // blob
+		return binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
 	}
 	prepared := binary.BigEndian.AppendUint32(nil, uint32(frm.ResultKindPrepared))
 	prepared = appendShortBytes(prepared, preparedID)
@@ -93,7 +148,7 @@ func TestResultMetadataIDV5(t *testing.T) {
 		prepared = binary.BigEndian.AppendUint16(prepared, uint16(len(s)))
 		prepared = append(prepared, s...)
 	}
-	prepared = binary.BigEndian.AppendUint16(prepared, 0x0009) // int
+	prepared = binary.BigEndian.AppendUint16(prepared, uint16(cql.TypeInt))
 	// <result_metadata>
 	prepared = binary.BigEndian.AppendUint32(prepared, uint32(frm.FlagGlobalTableSpec))
 	prepared = binary.BigEndian.AppendUint32(prepared, 1)
@@ -140,8 +195,12 @@ func TestResultMetadataIDV5(t *testing.T) {
 				case byte(frm.OpPrepare):
 					body = prepared
 				case byte(frm.OpExecute):
-					id, rest := v5ShortBytes(r.body)
-					metaID, rest := v5ShortBytes(rest)
+					id, rest, ok := v5ShortBytes(r.body)
+					metaID, rest, ok2 := v5ShortBytes(rest)
+					if !ok || !ok2 || len(rest) < 6 {
+						t.Errorf("malformed EXECUTE body %x", r.body)
+						return
+					}
 					flags := binary.BigEndian.Uint32(rest[2:]) // after <consistency>
 					executes <- execute{preparedID: bytes.Clone(id), metadataID: bytes.Clone(metaID), skipMetadata: flags&frm.FlagSkipMetaData != 0}
 					if len(responses) == 0 {
@@ -178,13 +237,12 @@ func TestResultMetadataIDV5(t *testing.T) {
 		{secondID, true, "third"},
 	}
 	for i, w := range want {
-		var dst []byte
-		found, _, err := p.One(ctx, 1, &dst, CompiledOptions{})
-		if err != nil || !found {
-			t.Fatalf("execution %d: found=%v err=%v", i+1, found, err)
+		value, err := run(ctx, s, p)
+		if err != nil {
+			t.Fatalf("execution %d: %v", i+1, err)
 		}
-		if string(dst) != w.value {
-			t.Fatalf("execution %d decoded %q, want %q", i+1, dst, w.value)
+		if value != w.value {
+			t.Fatalf("execution %d decoded %q, want %q", i+1, value, w.value)
 		}
 		got := <-executes
 		if !bytes.Equal(got.preparedID, preparedID) {
