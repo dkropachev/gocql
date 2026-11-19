@@ -1021,7 +1021,7 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 //
 //go:noinline
 func conditionalExec() (cql.Result, error) {
-	return cql.Result{}, cqlerr.ErrConditionalExec
+	return cql.Result{}, notSent(cqlerr.ErrConditionalExec)
 }
 
 type typedAttemptOutcome struct {

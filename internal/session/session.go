@@ -73,7 +73,7 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 // a Batch must not be changed while it is sent.
 func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledOptions) (cql.Result, error) {
 	if s == nil {
-		err := cqltype.TypeValidation("session", "nil session")
+		err := notSent(cqltype.TypeValidation("session", "nil session"))
 		return InternalExecutionErrorResult(err), err
 	}
 	core := s.Core()
@@ -97,10 +97,10 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options CompiledO
 // same.
 func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options CompiledOptions) (Rows[R], error) {
 	if s == nil {
-		return Rows[R]{}, cqltype.TypeValidation("session", "nil session")
+		return Rows[R]{}, notSent(cqltype.TypeValidation("session", "nil session"))
 	}
 	if decoder == nil {
-		return Rows[R]{}, cqltype.TypeValidation("batch rows", "nil decoder")
+		return Rows[R]{}, notSent(cqltype.TypeValidation("batch rows", "nil decoder"))
 	}
 	_, rows, err := sendBatchRows(ctx, s.Core(), batch, decoder, options)
 	return rows, err

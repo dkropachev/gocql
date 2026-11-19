@@ -310,6 +310,11 @@ func (s *queryState) begin(ctx context.Context) error {
 // capture captures value into the query's storage in a new execution
 // generation.
 func (q *Query[P, R]) capture(ctx context.Context, value P) error {
+	return notSent(q.captureValue(ctx, value))
+}
+
+// captureValue is capture, returning the reason it refused the execution.
+func (q *Query[P, R]) captureValue(ctx context.Context, value P) error {
 	if q == nil {
 		return cqltype.TypeValidation("query", "nil query")
 	}

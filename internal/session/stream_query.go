@@ -68,7 +68,7 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 
 func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
 	if q == nil {
-		return nil, cqltype.TypeValidation("query", "nil query")
+		return nil, notSent(cqltype.TypeValidation("query", "nil query"))
 	}
 	if err := q.query.capture(ctx, value); err != nil {
 		return nil, err

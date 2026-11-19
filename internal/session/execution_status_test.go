@@ -286,6 +286,27 @@ func TestExecutionStatusRefused(t *testing.T) {
 			_, _, err := RunOne(ctx, s, bound, CompiledOptions{}, nil)
 			return err
 		}, nil},
+		{"EmptyBatch", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			_, err := InternalWrapSession(s).ExecBatch(ctx, &Batch{}, CompiledOptions{})
+			return err
+		}, nil},
+		{"OrdinaryConditionalBatch", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			var batch Batch
+			if err := InternalAddBound(&batch, s, runtimeQuery(t)); err != nil {
+				t.Fatal(err)
+			}
+			_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows[cql.EmptyRow](cql.EmptyRowDecoder), CompiledOptions{})
+			return err
+		}, nil},
+		{"ClosedPreparedQuery", func(t *testing.T) error {
+			s, _, peers := runtimeTestSession(t, 1)
+			p := oneShotPrepare(t, s, peers[0], make(chan oneShotRequest, 1))
+			s.Close()
+			_, err := p.Exec(ctx, 1, CompiledOptions{})
+			return err
+		}, cqlerr.ErrClosed},
 		{"ClosedSession", func(t *testing.T) error {
 			s, _, _ := runtimeTestSession(t, 1)
 			s.Close()

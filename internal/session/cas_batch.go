@@ -130,20 +130,20 @@ func (r CASBatchRows[X]) Info() cql.Result { return r.rows.Info() }
 // has no [applied] column.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options CompiledOptions) (CASBatchRows[X], error) {
 	if s == nil {
-		return CASBatchRows[X]{}, cqltype.TypeValidation("session", "nil session")
+		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("session", "nil session"))
 	}
 	if decoder == nil {
-		return CASBatchRows[X]{}, cqltype.TypeValidation("batch rows", "nil decoder")
+		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("batch rows", "nil decoder"))
 	}
 	core := s.Core()
 	if err := validateBatch(core, batch); err != nil {
-		return CASBatchRows[X]{}, err
+		return CASBatchRows[X]{}, notSent(err)
 	}
 	// A batch known to hold no condition gets a VOID result, which has no
 	// [applied] to report: reject it before sending, as ExecBatch rejects a
 	// conditional one.
 	if batch.routing.Kind == cql.OrdinaryStatement {
-		return CASBatchRows[X]{}, cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch")
+		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch"))
 	}
 	r, rows, err := sendBatchRows(ctx, core, batch, decoder, options)
 	if err != nil {
