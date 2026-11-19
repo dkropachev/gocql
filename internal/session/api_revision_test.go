@@ -82,7 +82,8 @@ func TestQueryDrainAdmission(t *testing.T) {
 		<-served
 	})
 
-	// Close stops the query and waits for its drain: once it returns, the
+	// Close stops the query and returns while an observer callback of its
+	// execution still runs; Wait joins that drain, and once it returns the
 	// query is idle and refuses executions.
 	t.Run("CloseWaitsForDrain", func(t *testing.T) {
 		s, conns, peers := runtimeTestSession(t, 1)
