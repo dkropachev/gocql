@@ -896,8 +896,8 @@ func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 }
 
 // exponentialDelayWindow reports the delay window getExponentialTime
-// (internal/pool/policies.go) actually produces for a configured min/max pair, in
-// milliseconds.
+// (internal/pool/policies.go) actually produces for a configured min/max
+// pair, in milliseconds.
 //
 // Both the exponential retry backoff and the exponential reconnection policy
 // route their delays through getExponentialTime, and both describe the result
@@ -929,12 +929,13 @@ func effectiveExpBackoff(configured, fallback time.Duration) time.Duration {
 }
 
 // legacyLoadBalancingReport describes host selection for a session built
-// from InternalClusterSettings alone, which has no routing profile: such a
-// session routes token-aware over the replica set and falls back to any node.
+// from InternalClusterSettings alone, which has no routing profile. It is what
+// such a session reported before its v1 host selection policy was removed:
+// token-aware, replicas shuffled, falling back to any node.
 func legacyLoadBalancingReport() queryLoadBalancingReport {
 	return queryLoadBalancingReport{Policy: InternalLoadBalancingTokenAwareReport{
 		Type:                        "token-aware",
-		LoadDistribution:            "replica-set",
+		LoadDistribution:            "shuffle",
 		FallbackToNonPreferredNodes: true,
 	}}
 }

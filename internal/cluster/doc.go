@@ -11,11 +11,11 @@
 // CDC partitioner among them) and the token ring, replica placement for each
 // replication strategy, client routes, the loop that reconnects downed hosts
 // under the session's reconnect policy (reconnect.go), and the Core that ties
-// the control connection, the connection pools and the metadata together. It also wires internal/pool to the
-// session: the pool services and the connection configuration built from
-// the cluster settings (pool_wiring.go), and the per-shard dial with its
-// observers and the hooks through which a connection calls back into the
-// session (dial.go).
+// the control connection, the connection pools and the metadata together. It
+// also wires internal/pool to the session: the pool services and the
+// connection configuration built from the cluster settings (pool_wiring.go),
+// and the per-shard dial with its observers and the hooks through which a
+// connection calls back into the session (dial.go).
 //
 // It must not contain connection pool internals (internal/pool), the
 // request/response transport or socket dialing (internal/transport), node
