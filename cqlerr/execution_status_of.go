@@ -99,14 +99,23 @@ type AttemptFailure struct {
 }
 
 func (a AttemptFailure) String() string {
+	var b strings.Builder
+	a.writeTarget(&b)
+	fmt.Fprintf(&b, ": %v", a.Err)
+	return b.String()
+}
+
+// writeTarget writes the attempt's number and where it ran: "#2 host:port",
+// with "/shardN" on a shard-aware host.
+func (a AttemptFailure) writeTarget(b *strings.Builder) {
 	target := a.Address
 	if target == "" {
 		target = a.HostID.String()
 	}
+	fmt.Fprintf(b, "#%d %s", a.Number, target)
 	if a.Shard.Set {
-		target += fmt.Sprintf("/shard%d", a.Shard.Value)
+		fmt.Fprintf(b, "/shard%d", a.Shard.Value)
 	}
-	return fmt.Sprintf("#%d %s: %v", a.Number, target, a.Err)
 }
 
 // maxRenderedAttempts bounds how many attempts an error message lists.
@@ -119,10 +128,11 @@ type ExecutionError struct {
 	// Err is the reason the request stopped: the last attempt's error, the
 	// caller's cancellation, or a failure before any attempt.
 	Err error
-	// Attempts lists the failed attempts in the order they finished,
-	// speculative attempts included. When the caller's context ended the
-	// request, the attempts it stopped waiting for come last, with the
-	// context's error and MaybeExecuted.
+	// Attempts lists the failed attempts, speculative attempts included, in
+	// the order the request received their failures. When the caller's
+	// context ended the request, the attempts it stopped waiting for come
+	// last, in the order they started, with the context's error and
+	// MaybeExecuted. Error names the last attempt's host with Err.
 	Attempts []AttemptFailure
 	Result   cql.Result
 	status   ExecutionStatus
@@ -137,6 +147,13 @@ func newExecutionError(err error, result cql.Result, status ExecutionStatus, att
 func (e *ExecutionError) Error() string {
 	var b strings.Builder
 	b.WriteString("gocql: request: ")
+	attempts := e.Attempts
+	if n := len(attempts); n > 0 && errors.Is(e.Err, attempts[n-1].Err) {
+		// Err is the last attempt's failure: name where it ran.
+		attempts[n-1].writeTarget(&b)
+		b.WriteString(": ")
+		attempts = attempts[:n-1]
+	}
 	if e.Err != nil {
 		b.WriteString(e.Err.Error())
 	} else {
@@ -145,10 +162,6 @@ func (e *ExecutionError) Error() string {
 	// A single attempt's error already names its own status.
 	if ExecutionStatusOf(e.Err) != e.status {
 		b.WriteString(executionSuffix(e.status))
-	}
-	attempts := e.Attempts
-	if n := len(attempts); n > 0 && errors.Is(e.Err, attempts[n-1].Err) {
-		attempts = attempts[:n-1] // already rendered as Err
 	}
 	if len(attempts) == 0 {
 		return b.String()

@@ -155,7 +155,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	t.Run("LastAttemptIsCause", func(t *testing.T) {
 		err := newExecutionError(timeout, cql.Result{}, MaybeExecuted, attempts)
 		got := err.Error()
-		if strings.Count(got, "no response received") != 1 || !strings.Contains(got, "earlier attempts: #1 10.0.0.1:9042: overloaded") {
+		if !strings.HasPrefix(got, "gocql: request: #2 10.0.0.2:9042/shard3: gocql: no response received") || strings.Count(got, "no response received") != 1 || !strings.Contains(got, "earlier attempts: #1 10.0.0.1:9042: overloaded") {
 			t.Fatalf("message %q", got)
 		}
 	})

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,46 +14,21 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
-	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
-// recordingRoutes routes to its targets in order and records every attempt
-// event it observes.
-type recordingRoutes struct {
-	targets []metadata.Target
-	mu      sync.Mutex
-	events  []routing2.AttemptEvent
-}
-
-func (p *recordingRoutes) Validate(*routing.MetadataSnapshot) error { return nil }
-func (p *recordingRoutes) Pick(routing2.Info, *routing.MetadataSnapshot) (routing.Route, bool) {
-	return routing.Route{}, false
-}
-func (p *recordingRoutes) Fallback(routing2.Info, *routing.MetadataSnapshot) routing.QueryPlan {
-	return &routing.InternalTargetPlan{InternalTargets: append([]metadata.Target(nil), p.targets...)}
-}
-func (p *recordingRoutes) Observe(e routing2.AttemptEvent) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.events = append(p.events, e)
-}
-func (p *recordingRoutes) observed() []routing2.AttemptEvent {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]routing2.AttemptEvent(nil), p.events...)
-}
-
-// twoHostSession is a session of two hosts whose plan tries the first, then
-// the second.
-func twoHostSession(t *testing.T) (*cluster.Core, *recordingRoutes, func(*Options) error, []*transport.Conn, []net.Conn) {
+// hostsSession is a session of n hosts whose plan tries them in order, and
+// a function that runs one query on it.
+func hostsSession(t *testing.T, n int) (*cluster.Core, *runtimePolicy, func(*Options) error, []*transport.Conn, []net.Conn) {
 	t.Helper()
-	s, conns, peers := runtimeTestSession(t, 2)
-	routes := &recordingRoutes{targets: []metadata.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)}}}
+	s, conns, peers := runtimeTestSession(t, n)
+	routes := &runtimePolicy{}
+	for _, c := range conns {
+		routes.targets = append(routes.targets, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost)})
+	}
 	run := func(o *Options) error {
 		bound := runtimeQuery(t)
 		defer bound.Close()
@@ -69,8 +43,8 @@ func twoHostSession(t *testing.T) (*cluster.Core, *recordingRoutes, func(*Option
 	return s, routes, run, conns, peers
 }
 
-// silent reports, on the returned channel, whether peer received any byte
-// before the test ends.
+// silent reports, on the returned channel, whether peer received nothing
+// before it was closed.
 func silent(t *testing.T, peer net.Conn) <-chan bool {
 	t.Helper()
 	got := make(chan bool, 1)
@@ -89,7 +63,7 @@ func TestRetrySafety(t *testing.T) {
 	for _, general := range []bool{false, true} {
 		name := map[bool]string{false: "Direct", true: "General"}[general]
 		t.Run(name, func(t *testing.T) {
-			profileFor := func(routes *recordingRoutes) *settings.Profile {
+			profileFor := func(routes *runtimePolicy) *settings.Profile {
 				profile := settings.InternalDefaultProfile()
 				profile.Routing = routes
 				profile.Retry = retry.Safe{}
@@ -102,7 +76,7 @@ func TestRetrySafety(t *testing.T) {
 			// A non-idempotent request whose connection broke after it was
 			// written may have been applied: Safe must not replay it.
 			t.Run("NonIdempotentNotReplayedAfterSend", func(t *testing.T) {
-				_, routes, run, conns, peers := twoHostSession(t)
+				_, routes, run, conns, peers := hostsSession(t, 2)
 				second := silent(t, peers[1])
 				go func() {
 					typedTestReadRequest(t, conns[0], peers[0])
@@ -128,7 +102,7 @@ func TestRetrySafety(t *testing.T) {
 			// The same failure of an idempotent request is replayed on the
 			// next host.
 			t.Run("IdempotentReplayedAfterSend", func(t *testing.T) {
-				_, routes, run, conns, peers := twoHostSession(t)
+				_, routes, run, conns, peers := hostsSession(t, 2)
 				go func() {
 					typedTestReadRequest(t, conns[0], peers[0])
 					peers[0].Close()
@@ -145,7 +119,7 @@ func TestRetrySafety(t *testing.T) {
 			// A server rejection before execution is replayed even for a
 			// non-idempotent request.
 			t.Run("NonIdempotentReplayedWhenNotExecuted", func(t *testing.T) {
-				_, routes, run, conns, peers := twoHostSession(t)
+				_, routes, run, conns, peers := hostsSession(t, 2)
 				go func() {
 					stream := typedTestReadRequest(t, conns[0], peers[0])
 					_, _ = peers[0].Write(serverError(t, stream, cqlerr.CodeUnavailable, unavailableBody()))
@@ -165,7 +139,7 @@ func TestRetrySafety(t *testing.T) {
 			// A server error after which the write may have been applied
 			// stops a non-idempotent request.
 			t.Run("NonIdempotentWriteTimeoutStops", func(t *testing.T) {
-				_, routes, run, conns, peers := twoHostSession(t)
+				_, routes, run, conns, peers := hostsSession(t, 2)
 				second := silent(t, peers[1])
 				go func() {
 					stream := typedTestReadRequest(t, conns[0], peers[0])
