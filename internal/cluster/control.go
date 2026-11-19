@@ -55,9 +55,8 @@ var (
 
 func init() {
 	b := make([]byte, 4)
-	if _, err := crand.Read(b); err != nil {
-		panic(fmt.Sprintf("unable to seed random number generator: %v", err))
-	}
+	// crypto/rand.Read never fails; it fills the buffer.
+	_, _ = crand.Read(b)
 
 	randr = rand.New(rand.NewSource(int64(protocol.ReadInt(b))))
 }
