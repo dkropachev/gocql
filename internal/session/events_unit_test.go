@@ -357,11 +357,10 @@ func (m *schemaDataMock) querySystem(statement string, values ...any) *nativeRes
 	return &nativeResultFixture{}
 }
 
-func newSchemaEventTestSession(control cluster.InternalControlConnection, policy cluster.HostSelectionPolicy, keyspace string) *cluster.Core {
+func newSchemaEventTestSession(control cluster.InternalControlConnection, keyspace string) *cluster.Core {
 	s := func() *cluster.Core {
 		opaqueStorageValue := new(cluster.Core)
 		implCluster.SessionData(opaqueStorageValue).InternalControl = control
-		implCluster.SessionData(opaqueStorageValue).InternalPolicy = policy
 		implCluster.SessionData(opaqueStorageValue).InternalLogger = slog.Default()
 		implCluster.SessionData(opaqueStorageValue).InternalCfg = cluster.InternalClusterSettings{Keyspace: keyspace}
 		return opaqueStorageValue
@@ -382,22 +381,10 @@ func newSchemaEventTestSession(control cluster.InternalControlConnection, policy
 }
 
 func newSchemaEventTestSessionWithMock(mockCtrl *schemaDataMock) *cluster.Core {
-	s := newSchemaEventTestSession(mockCtrl, &trackingPolicy{}, "")
+	s := newSchemaEventTestSession(mockCtrl, "")
 	implCluster.SessionData(s).InternalUseSystemSchema = true
 	implCluster.SessionData(s).InternalHasAggregatesAndFunctions = false
 	return s
-}
-
-type trackingPolicy struct {
-	roundRobinHostPolicy
-	mu                   sync.Mutex
-	keyspaceChangedCalls []cluster.KeyspaceUpdateEvent
-}
-
-func (t *trackingPolicy) KeyspaceChanged(event cluster.KeyspaceUpdateEvent) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.keyspaceChangedCalls = append(t.keyspaceChangedCalls, event)
 }
 
 type queryRecord struct {

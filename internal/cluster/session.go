@@ -153,12 +153,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		return s.refreshRing()
 	})
 
-	if cfg.PoolConfig.HostSelectionPolicy == nil {
-		cfg.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
-	}
-	s.privateStorage.InternalPool = cfg.PoolConfig.buildPool(s)
-	s.privateStorage.InternalPolicy = cfg.PoolConfig.HostSelectionPolicy
-	s.privateStorage.InternalPolicy.Init(s)
+	s.privateStorage.InternalPool = newPolicyConnPool(s)
 	s.privateStorage.connectObserver = cfg.ConnectObserver
 	s.privateStorage.frameObserver = cfg.FrameHeaderObserver
 	s.privateStorage.streamObserver = cfg.StreamObserver
@@ -266,8 +261,6 @@ func (s *Core) init() error {
 		return err
 	}
 
-	var partitioner string
-
 	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		s.privateStorage.InternalControl = createControlConn(s)
 		reconnectionPolicy := s.privateStorage.InternalCfg.InitialReconnectionPolicy
@@ -306,7 +299,7 @@ func (s *Core) init() error {
 
 		if !s.privateStorage.InternalCfg.DisableInitialHostLookup {
 			var newHosts []*implEndpoint.HostInfo
-			newHosts, partitioner, err = s.privateStorage.InternalHostSource.GetHostsFromSystem()
+			newHosts, _, err = s.privateStorage.InternalHostSource.GetHostsFromSystem()
 			if err != nil {
 				return err
 			}
@@ -329,10 +322,6 @@ func (s *Core) init() error {
 				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}
-	}
-
-	if partitioner != "" {
-		s.privateStorage.InternalPolicy.SetPartitioner(partitioner)
 	}
 
 	hostMap := make(map[string]*implEndpoint.HostInfo, len(hosts))
@@ -383,26 +372,8 @@ func (s *Core) init() error {
 		s.privateStorage.InternalHasAggregatesAndFunctions = version.AtLeast(2, 2, 0)
 	}
 
-	// before waiting for them to connect, add them all to the policy so we can
-	// utilize efficiencies by calling AddHosts if the policy supports it
-	type bulkAddHosts interface {
-		AddHosts([]*implEndpoint.HostInfo)
-	}
-	if v, ok := s.privateStorage.InternalPolicy.(bulkAddHosts); ok {
-		v.AddHosts(hosts)
-	} else {
-		for _, host := range hosts {
-			s.privateStorage.InternalPolicy.AddHost(host)
-		}
-	}
-
-	readyPolicy, _ := s.privateStorage.InternalPolicy.(ReadyPolicy)
-	// now loop over connectedCh until it's closed (meaning we've connected to all)
-	// or until the policy says we're ready
+	// Wait until every host has tried to connect.
 	for range connectedCh {
-		if readyPolicy != nil && readyPolicy.Ready() {
-			break
-		}
 	}
 
 	s.startReconnectingDownedHosts()
@@ -413,15 +384,6 @@ func (s *Core) init() error {
 		return ErrNoConnectionsStarted
 	}
 
-	// Invoke KeyspaceChanged to let the policy cache the session keyspace
-	// parameters. This is used by tokenAwareHostPolicy to discover replicas.
-	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn && s.privateStorage.InternalCfg.Keyspace != "" {
-		s.privateStorage.InternalPolicy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: s.privateStorage.InternalCfg.Keyspace})
-	}
-
-	if err = s.privateStorage.InternalPolicy.IsOperational(s); err != nil {
-		return fmt.Errorf("gocql: unable to create session: %w", err)
-	}
 	s.privateStorage.InternalSessionStateMu.Lock()
 	s.privateStorage.isInitialized = true
 	s.privateStorage.InternalSessionStateMu.Unlock()
@@ -538,7 +500,6 @@ func sessionReady(s *Core) error {
 }
 
 func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
-	s.privateStorage.InternalPolicy.RemoveHost(h)
 	s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 	s.privateStorage.InternalHostSource.InternalRemoveHost(h.HostID())
 }

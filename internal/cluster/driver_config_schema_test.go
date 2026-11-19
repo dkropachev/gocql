@@ -46,18 +46,16 @@ func loadDriverConfigSchema(t *testing.T) *jsonschema.Schema {
 }
 
 // driverConfigCases spans the report's decision points: every optional group
-// present and absent, every policy discriminant, and the boundary values that
+// present and absent, and the boundary values that
 // the schema constrains but nothing in the driver rejects.
 func driverConfigCases() []struct {
 	name         string
 	cfg          func(*InternalClusterSettings)
-	policy       HostSelectionPolicy
 	isScyllaConn bool
 } {
 	return []struct {
 		name         string
 		cfg          func(*InternalClusterSettings)
-		policy       HostSelectionPolicy
 		isScyllaConn bool
 	}{
 		{name: "defaults"},
@@ -136,10 +134,6 @@ func driverConfigCases() []struct {
 			cfg: func(c *InternalClusterSettings) {
 				c.Data().defaultProfile.Retry = (*customRetry)(nil)
 			},
-		},
-		{
-			name:   "typed-nil load balancing fallback",
-			policy: TokenAwareHostPolicy((*dcAwareRR)(nil)),
 		},
 		{
 			name: "exponential reconnection with unset intervals",
@@ -227,43 +221,17 @@ func driverConfigCases() []struct {
 			name: "host dialer that can target a shard",
 			cfg:  func(c *InternalClusterSettings) { c.HostDialer = fakeShardDialer{} },
 		},
-		{name: "dc-aware policy", policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1"))},
-		{
-			name:   "dc-aware policy without failover",
-			policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1", HostPolicyOptionDisableDCFailover)),
-		},
-		{name: "rack-aware policy", policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "rack1"))},
-		{
-			name:   "rack-aware policy without dc failover",
-			policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "rack1", HostPolicyOptionDisableDCFailover)),
-		},
-		{
-			name:   "non-local replicas fallback over a confined fallback",
-			policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1", HostPolicyOptionDisableDCFailover), NonLocalReplicasFallback()),
-		},
-		{name: "empty datacenter", policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy(""))},
-		{name: "replica-set ordering", policy: TokenAwareHostPolicy(RoundRobinHostPolicy(), DontShuffleReplicas())},
-		{
-			name:   "adaptive ordering by in-flight requests",
-			policy: TokenAwareHostPolicy(RoundRobinHostPolicy(), AvoidSlowReplicas(MAX_IN_FLIGHT_THRESHOLD)),
-		},
-		{name: "non-token-aware policy", policy: RoundRobinHostPolicy()},
-		{name: "wrapped policy", policy: SingleHostReadyPolicy(TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1")))},
-		{name: "custom policy", policy: &fakeHostSelectionPolicy{HostSelectionPolicy: RoundRobinHostPolicy()}},
 	}
 }
 
 // buildCaseReport produces the report a case describes, decoded for
 // validation.
-func buildCaseReport(t *testing.T, cfgFn func(*InternalClusterSettings), policy HostSelectionPolicy, isScyllaConn bool) any {
+func buildCaseReport(t *testing.T, cfgFn func(*InternalClusterSettings), isScyllaConn bool) any {
 	t.Helper()
 
 	cfg := *InternalNewClusterSettings("127.0.0.1")
 	if cfgFn != nil {
 		cfgFn(&cfg)
-	}
-	if policy == nil {
-		policy = TokenAwareHostPolicy(RoundRobinHostPolicy())
 	}
 	// Resolve SslOpts the way session creation does, so the TLS group is built
 	// from the config the driver would really dial with.
@@ -271,7 +239,7 @@ func buildCaseReport(t *testing.T, cfgFn func(*InternalClusterSettings), policy 
 		t.Fatalf("unable to initialize ssl config: %v", err)
 	}
 
-	raw, err := newDriverConfigReporter(newTestReportSession(cfg, policy)).buildReport(isScyllaConn)
+	raw, err := newDriverConfigReporter(newTestReportSession(cfg)).buildReport(isScyllaConn)
 	if err != nil {
 		t.Fatalf("unable to build the report: %v", err)
 	}

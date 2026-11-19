@@ -88,8 +88,8 @@ func TestHostConnPool(t *testing.T) {
 			f.session.HandleNodeDown(host.ConnectAddress(), host.Port())
 			close(release)
 			<-done
-			if host.IsUp() || len(f.policy.hostUpCalls()) != 0 {
-				t.Fatal("delayed callback reintroduced host after DOWN", f.policy.hostUpCalls())
+			if host.IsUp() {
+				t.Fatal("delayed callback reintroduced host after DOWN")
 			}
 		})
 	})

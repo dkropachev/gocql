@@ -816,22 +816,20 @@ func TestSchemaMetadata(t *testing.T) {
 				populateTables      []string
 				event               protocol.Frame
 				wantSchemaAgreement int
-				wantKsChanged       []KeyspaceUpdateEvent
 			}{
 				{
-					name:                "keyspace event calls policy without blocking on agreement",
+					name:                "keyspace event: no schema agreement",
 					event:               &frm.SchemaChangeKeyspace{Change: "UPDATED", Keyspace: "test_ks"},
 					wantSchemaAgreement: 0,
-					wantKsChanged:       []KeyspaceUpdateEvent{{Keyspace: "test_ks", Change: "UPDATED"}},
 				},
 				{
-					name:                "table event: no schema agreement, no policy callback",
+					name:                "table event: no schema agreement",
 					populateTables:      []string{"tbl_a"},
 					event:               &frm.SchemaChangeTable{Change: "CREATED", Keyspace: "test_ks", Object: "tbl_a"},
 					wantSchemaAgreement: 0,
 				},
 				{
-					name:                "type event: no schema agreement, no policy callback",
+					name:                "type event: no schema agreement",
 					event:               &frm.SchemaChangeType{Change: "CREATED", Keyspace: "test_ks", Object: "my_type"},
 					wantSchemaAgreement: 0,
 				},
@@ -841,8 +839,7 @@ func TestSchemaMetadata(t *testing.T) {
 				t.Run(tt.name, func(t *testing.T) {
 					t.Parallel()
 					ctrl := &schemaDataMock{knownKeyspaces: map[string][]tableInfo{}}
-					policy := &trackingPolicy{}
-					s := newSchemaEventTestSession(ctrl, policy, "")
+					s := newSchemaEventTestSession(ctrl, "")
 					defer s.Close()
 					SessionData(s).InternalUseSystemSchema = true
 					populateKeyspace(s, "test_ks", tt.populateTables...)
@@ -850,21 +847,6 @@ func TestSchemaMetadata(t *testing.T) {
 
 					if got := ctrl.getAwaitSchemaAgreementCalls(); got != tt.wantSchemaAgreement {
 						t.Fatalf("awaitSchemaAgreement: got %d, want %d", got, tt.wantSchemaAgreement)
-					}
-					kc := policy.getKeyspaceChangedCalls()
-					if len(tt.wantKsChanged) == 0 {
-						if len(kc) != 0 {
-							t.Fatalf("KeyspaceChanged should not be called, got %+v", kc)
-						}
-					} else {
-						if len(kc) != len(tt.wantKsChanged) {
-							t.Fatalf("KeyspaceChanged: got %d calls, want %d", len(kc), len(tt.wantKsChanged))
-						}
-						for i, want := range tt.wantKsChanged {
-							if kc[i] != want {
-								t.Errorf("KeyspaceChanged[%d]: got %+v, want %+v", i, kc[i], want)
-							}
-						}
 					}
 				})
 			}
@@ -1216,8 +1198,7 @@ func TestSchemaMetadata(t *testing.T) {
 					},
 				},
 			}
-			policy := &trackingPolicy{}
-			s := newSchemaEventTestSession(ctrl, policy, "")
+			s := newSchemaEventTestSession(ctrl, "")
 			defer s.Close()
 			SessionData(s).InternalUseSystemSchema = true
 			SessionData(s).InternalHasAggregatesAndFunctions = false

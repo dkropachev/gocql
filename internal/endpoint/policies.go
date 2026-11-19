@@ -29,28 +29,14 @@ import (
 	"strconv"
 )
 
-// SelectedHost is an interface returned when picking a host from a host
-// selection policy.
-type SelectedHost interface {
-	Info() *HostInfo
-	Token() Token
-	Mark(error)
-}
-
-// int64TokenSelectedHost is an optional fast path: SelectedHost implementations
-// that resolve routing via an int64Token expose the raw value so the shard-aware
-// conn picker can consume it without boxing it into the Token interface.
-type InternalInt64TokenSelectedHost interface {
-	TokenInt64() (InternalInt64Token, bool)
-}
-
-// a Token
+// Token is a position on the token ring.
 type Token interface {
 	fmt.Stringer
 	Less(Token) bool
 }
 
-// int64 token
+// InternalInt64Token is a token of an int64 partitioner, such as Murmur3 or
+// the ScyllaDB CDC partitioner.
 type InternalInt64Token int64
 
 func (m InternalInt64Token) String() string {

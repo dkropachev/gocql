@@ -48,21 +48,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
-// PoolConfig configures the connection pool used by the driver, it defaults to
-// using a round-robin host selection policy and a round-robin connection selection
-// policy for each host.
-type PoolConfig struct {
-	// HostSelectionPolicy sets the policy for selecting which host to use for a
-	// given query (default: RoundRobinHostPolicy())
-	// It is not supported to use a single HostSelectionPolicy in multiple sessions
-	// (even if you close the old session before using in a new session).
-	HostSelectionPolicy HostSelectionPolicy
-}
-
-func (p PoolConfig) buildPool(session *Core) *pool.InternalPolicyConnPool {
-	return newPolicyConnPool(session)
-}
-
 // clusterSettings is a struct to configure the default cluster implementation
 // of gocql. It has a variety of attributes that can be used to modify the
 // behavior to fit the most common use cases. Applications that require a
@@ -109,9 +94,6 @@ type InternalClusterSettings struct {
 	Compressor protocol.Compressor
 	// Default: nil
 	Authenticator transport.Authenticator
-	// PoolConfig configures the underlying connection pool, allowing the
-	// configuration of host selection and connection selection policies.
-	PoolConfig PoolConfig
 	// Default retry policy to use for queries.
 	// Default: SimpleRetryPolicy{NumRetries: 3}.
 	// ConvictionPolicy decides whether to mark host as down based on the error and host info.

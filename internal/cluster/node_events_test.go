@@ -39,13 +39,12 @@ func TestNodeEvents(t *testing.T) {
 	t.Parallel()
 
 	// TestNodeEvents/HandleNodeConnected covers Session.handleNodeConnected, which the pool
-	// calls once a connection to a host is up. Its filter branch was the uncovered
-	// part: a filtered host still gets its state set, but must not be announced to
-	// the policy.
+	// calls once a connection to a host is up. A filtered host still gets its
+	// state set.
 	t.Run("HandleNodeConnected", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("unfiltered host is marked up and announced", func(t *testing.T) {
+		t.Run("unfiltered host is marked up", func(t *testing.T) {
 			t.Parallel()
 
 			f := newNodeEventFixture(t)
@@ -61,10 +60,9 @@ func TestNodeEvents(t *testing.T) {
 			if state := host.State(); state != endpoint.NodeUp {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeUp)
 			}
-			assertStrings(t, "HostUp", f.policy.hostUpCalls(), []string{"127.0.10.1"})
 		})
 
-		t.Run("filtered host is marked up but not announced", func(t *testing.T) {
+		t.Run("filtered host is marked up", func(t *testing.T) {
 			t.Parallel()
 
 			f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
@@ -77,7 +75,6 @@ func TestNodeEvents(t *testing.T) {
 			if state := host.State(); state != endpoint.NodeUp {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeUp)
 			}
-			assertStrings(t, "HostUp", f.policy.hostUpCalls(), nil)
 		})
 	})
 
@@ -86,13 +83,13 @@ func TestNodeEvents(t *testing.T) {
 	//
 	// The asymmetry is deliberate to pin, because it is easy to "fix" in the wrong
 	// direction: handleNodeDown sets the host's state before consulting the filter,
-	// so a filtered host is still marked NodeDown, but it is not handed to
-	// policy.HostDown. handleNodeUp does the opposite -- it drops a filtered host
+	// so a filtered host is still marked NodeDown, but keeps its pool.
+	// handleNodeUp does the opposite -- it drops a filtered host
 	// before touching anything.
 	t.Run("HandleNodeDown", func(t *testing.T) {
 		t.Parallel()
 
-		t.Run("unfiltered host is marked down and dispatched", func(t *testing.T) {
+		t.Run("unfiltered host is marked down and loses its pool", func(t *testing.T) {
 			t.Parallel()
 
 			f := newNodeEventFixture(t)
@@ -103,13 +100,12 @@ func TestNodeEvents(t *testing.T) {
 			if state := host.State(); state != endpoint.NodeDown {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
 			}
-			assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
 			if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); ok {
 				t.Error("host that went down still has a connection pool")
 			}
 		})
 
-		t.Run("filtered host is marked down but not dispatched", func(t *testing.T) {
+		t.Run("filtered host is marked down but keeps its pool", func(t *testing.T) {
 			t.Parallel()
 
 			f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
@@ -123,9 +119,7 @@ func TestNodeEvents(t *testing.T) {
 			if state := host.State(); state != endpoint.NodeDown {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
 			}
-			assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
-			// The filter returns before both policy.HostDown and pool.removeHost,
-			// so the pool survives -- the other half of the asymmetry this test
+			// The filter skips pool.removeHost, so the pool survives -- the other half of the asymmetry this test
 			// exists to pin.
 			if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); !ok {
 				t.Error("filtered host lost its connection pool")
@@ -141,7 +135,6 @@ func TestNodeEvents(t *testing.T) {
 			f := newNodeEventFixture(t)
 			f.session.HandleNodeDown(net.ParseIP("127.0.10.9"), 9042)
 
-			assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
 			f.assertNoRefresh(t)
 		})
 	})
@@ -163,35 +156,32 @@ func TestNodeEvents(t *testing.T) {
 				t.Parallel()
 
 				f := newNodeEventFixture(t)
-				f.addHost(t, "127.0.10.1")
+				host := f.addHost(t, "127.0.10.1")
 				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 				})
 
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
+				if state := host.State(); state != endpoint.NodeDown {
+					t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
+				}
 			})
 
 			t.Run("distinct hosts each dispatch", func(t *testing.T) {
 				t.Parallel()
 
 				f := newNodeEventFixture(t)
-				f.addHost(t, "127.0.10.1")
-				f.addHost(t, "127.0.10.2")
+				first := f.addHost(t, "127.0.10.1")
+				second := f.addHost(t, "127.0.10.2")
 				f.session.HandleNodeEvent([]protocol.Frame{
 					statusChange("DOWN", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.2"),
 				})
 
-				got := f.policy.hostDownCalls()
-				if len(got) != 2 {
-					t.Fatalf("HostDown: got %v, want one call per host", got)
-				}
-				seen := map[string]bool{got[0]: true, got[1]: true}
-				for _, want := range []string{"127.0.10.1", "127.0.10.2"} {
-					if !seen[want] {
-						t.Errorf("HostDown: %s never dispatched (got %v)", want, got)
+				for _, host := range []*endpoint.HostInfo{first, second} {
+					if state := host.State(); state != endpoint.NodeDown {
+						t.Errorf("host %s state: got %v, want %v", host.ConnectAddress(), state, endpoint.NodeDown)
 					}
 				}
 			})
@@ -206,8 +196,6 @@ func TestNodeEvents(t *testing.T) {
 					statusChange("DOWN", "127.0.10.1"),
 				})
 
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
-				assertStrings(t, "AddHost", f.policy.addHostCalls(), nil)
 				if state := host.State(); state != endpoint.NodeDown {
 					t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
 				}
@@ -238,7 +226,6 @@ func TestNodeEvents(t *testing.T) {
 				if state := host.State(); state != endpoint.NodeUp {
 					t.Errorf("host state: got %v, want %v -- the superseded DOWN was dispatched", state, endpoint.NodeUp)
 				}
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
 			})
 		})
 
@@ -252,10 +239,12 @@ func TestNodeEvents(t *testing.T) {
 				t.Parallel()
 
 				f := newNodeEventFixture(t)
-				f.addHost(t, "127.0.10.1")
+				host := f.addHost(t, "127.0.10.1")
 				f.session.HandleNodeEvent([]protocol.Frame{statusChange("DOWN", "127.0.10.1")})
 
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
+				if state := host.State(); state != endpoint.NodeDown {
+					t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
+				}
 			})
 
 			t.Run("disabled drops DOWN", func(t *testing.T) {
@@ -267,7 +256,6 @@ func TestNodeEvents(t *testing.T) {
 				host := f.addHost(t, "127.0.10.1")
 				f.session.HandleNodeEvent([]protocol.Frame{statusChange("DOWN", "127.0.10.1")})
 
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), nil)
 				if state := host.State(); state == endpoint.NodeDown {
 					t.Error("host was marked down even though node status events are disabled")
 				}
@@ -319,13 +307,15 @@ func TestNodeEvents(t *testing.T) {
 				f := newNodeEventFixture(t, func(cfg *InternalClusterSettings) {
 					cfg.Events.DisableTopologyEvents = true
 				})
-				f.addHost(t, "127.0.10.1")
+				host := f.addHost(t, "127.0.10.1")
 				f.session.HandleNodeEvent([]protocol.Frame{
 					topologyChange("NEW_NODE", "127.0.10.1"),
 					statusChange("DOWN", "127.0.10.1"),
 				})
 
-				assertStrings(t, "HostDown", f.policy.hostDownCalls(), []string{"127.0.10.1"})
+				if state := host.State(); state != endpoint.NodeDown {
+					t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
+				}
 			})
 		})
 
@@ -362,7 +352,6 @@ func TestNodeEvents(t *testing.T) {
 			})
 
 			f.awaitRefresh(t)
-			assertStrings(t, "AddHost", f.policy.addHostCalls(), nil)
 		})
 	})
 
@@ -381,7 +370,6 @@ func TestNodeEvents(t *testing.T) {
 			sessionHandleNodeUp(f.session, net.ParseIP("127.0.10.9"), 9042)
 
 			f.awaitRefresh(t)
-			assertStrings(t, "AddHost", f.policy.addHostCalls(), nil)
 		})
 
 		t.Run("filtered host is ignored", func(t *testing.T) {
@@ -395,7 +383,6 @@ func TestNodeEvents(t *testing.T) {
 
 			// The host is known, so this is not the unknown-host path: a filtered
 			// host must be dropped outright, with no refresh and no pool fill.
-			assertStrings(t, "AddHost", f.policy.addHostCalls(), nil)
 			f.assertNoRefresh(t)
 		})
 	})
@@ -404,16 +391,15 @@ func TestNodeEvents(t *testing.T) {
 	// calls when a host leaves the ring (host_source.go). It had no coverage in
 	// either lane.
 	//
-	// It has to retire the host from all three places that track it -- the
-	// selection policy, the connection pool and the host source. Dropping any one
+	// It has to retire the host from both places that track it -- the
+	// connection pool and the host source. Dropping either one
 	// leaves the driver routing to a node that is gone, so each is asserted
 	// separately.
 	t.Run("RemoveHost", func(t *testing.T) {
 		t.Parallel()
 
 		// newNodeEventFixture (events_node_test.go) already assembles exactly the
-		// trio removeHost touches: a recording policy, a connection pool and a
-		// host source.
+		// pair removeHost touches: a connection pool and a host source.
 		f := newNodeEventFixture(t)
 		host := f.addHost(t, "127.0.20.1")
 		other := f.addHost(t, "127.0.20.2")
@@ -434,8 +420,6 @@ func TestNodeEvents(t *testing.T) {
 			t.Fatal("precondition: host has no connection pool")
 		}
 		sessionRemoveHost(f.session, host)
-
-		assertStrings(t, "RemoveHost", f.policy.removeHostCalls(), []string{"127.0.20.1"})
 
 		// policyConnPool.removeHost does two things, and the map entry only proves
 		// the first. Dropping the entry without closing the pool leaves the retired

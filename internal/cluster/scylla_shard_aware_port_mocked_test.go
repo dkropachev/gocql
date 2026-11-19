@@ -100,7 +100,6 @@ func startServerWithShardAwarePort(t testing.TB, useTLS bool) (makeCluster makeC
 			useTLS: useTLS,
 			port:   shardTestContactPort(cluster.Hosts, uint16(cluster.Port)),
 			connect: func(_ context.Context, dialer transport.InternalLegacyDialer) (*Core, error) {
-				cluster.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
 				cluster.Dialer = dialer
 				return cluster.Open()
 			},

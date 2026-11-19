@@ -7,4 +7,3 @@ import (
 // Aliases for types embedded by moved test fixtures.
 
 type nopConnPicker = implPool.InternalNopConnPicker
-type roundRobinHostPolicy = InternalRoundRobinHostPolicy

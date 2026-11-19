@@ -18,12 +18,11 @@ import (
 
 // newTestReportSession builds a *Session suitable for exercising the report
 // builders directly, without dialing anything. Only the fields the builders
-// read (cfg, policy, logger) are populated.
-func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolicy) *Core {
+// read (cfg, logger) are populated.
+func newTestReportSession(cfg InternalClusterSettings) *Core {
 	return func() *Core {
 		opaqueStorageValuex := new(Core)
 		SessionData(opaqueStorageValuex).InternalCfg = cfg
-		SessionData(opaqueStorageValuex).InternalPolicy = policy
 		SessionData(opaqueStorageValuex).InternalLogger = slog.Default()
 		return opaqueStorageValuex
 	}()
@@ -33,13 +32,6 @@ func newTestReportSession(cfg InternalClusterSettings, policy HostSelectionPolic
 // (used for the "custom" report branch) is distinct from any built-in policy.
 type fakeReconnectionPolicy struct {
 	pool.ReconnectionPolicy
-}
-
-// fakeHostSelectionPolicy wraps a HostSelectionPolicy so its dynamic type
-// name is distinct from any built-in policy, without reimplementing the
-// (large) HostSelectionPolicy interface by hand.
-type fakeHostSelectionPolicy struct {
-	HostSelectionPolicy
 }
 
 // fakeShardDialer is a HostDialer that can target a shard, like the
