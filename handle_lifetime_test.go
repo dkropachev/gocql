@@ -58,10 +58,11 @@ func closeTwice(t *testing.T, name string, close func() error, want error) {
 }
 
 // TestHandleLifetimes checks the Close and Wait contract of every execution
-// handle: Close is idempotent and reports the same error each time, Wait
-// after Close returns nil, a closed query refuses work with cqlerr.ErrClosed,
-// and handles left open across Session.Close or Query.Close end with
-// cqlerr.ErrClosed instead of failing.
+// handle: Close is idempotent, and Rows, Page and RowStream report the same
+// error each time; Wait after Close returns nil; a closed query refuses work
+// with cqlerr.ErrClosed; handles left open across Session.Close,
+// Query.Close or StreamQuery.Close end with cqlerr.ErrClosed instead of
+// failing; and Session.Close waits for a running Each or All callback.
 func TestHandleLifetimes(t *testing.T) {
 	// TestHandleLifetimes/CloseIsIdempotent checks that closing each handle
 	// twice is harmless and that a closed query or stream query refuses new
