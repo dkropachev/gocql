@@ -119,7 +119,10 @@ type ExecutionError struct {
 	// Err is the reason the request stopped: the last attempt's error, the
 	// caller's cancellation, or a failure before any attempt.
 	Err error
-	// Attempts lists the failed attempts in the order they finished.
+	// Attempts lists the failed attempts in the order they finished,
+	// speculative attempts included. When the caller's context ended the
+	// request, the attempts it stopped waiting for come last, with the
+	// context's error and MaybeExecuted.
 	Attempts []AttemptFailure
 	Result   cql.Result
 	status   ExecutionStatus

@@ -30,7 +30,12 @@ type attemptLog struct {
 //go:noinline
 func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID]) cqlerr.ExecutionStatus {
 	status := cqlerr.ExecutionStatusOf(err)
-	failure := AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}
+	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}, conn)
+	return status
+}
+
+// record adds failure, filling in where conn sent it.
+func (l *attemptLog) record(failure AttemptFailure, conn *transport.Conn) {
 	if conn != nil {
 		failure.Address = conn.Address()
 		failure.HostID = conn.InternalHostID()
@@ -39,8 +44,7 @@ func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consisten
 		}
 	}
 	l.failures = append(l.failures, failure)
-	l.raise(status)
-	return status
+	l.raise(failure.Status)
 }
 
 // responseTraceID returns the CQL trace session a possibly nil response names.
@@ -92,4 +96,28 @@ func (l *attemptLog) merge(err error, result cql.Result) error {
 	merged := later.Result
 	merged.Attempts += len(l.failures)
 	return runtimeerrors.NewExecutionError(later.Err, merged, status, failures)
+}
+
+// inflightAttempt is an attempt whose outcome its execution has not received.
+type inflightAttempt struct {
+	conn        *transport.Conn
+	number      int
+	consistency cql.Consistency
+}
+
+// removeInflight drops attempt number from attempts.
+func removeInflight(attempts []inflightAttempt, number int) []inflightAttempt {
+	for i, a := range attempts {
+		if a.number == number {
+			return append(attempts[:i], attempts[i+1:]...)
+		}
+	}
+	return attempts
+}
+
+// abandon records an attempt its execution stopped waiting for because err,
+// the execution's context error, ended it. The attempt may have been sent,
+// so it may have been applied.
+func (l *attemptLog) abandon(err error, conn *transport.Conn, number int, consistency cql.Consistency) {
+	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: cqlerr.MaybeExecuted}, conn)
 }
