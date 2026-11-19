@@ -20,6 +20,12 @@
 // combines the same way, the earliest of the profile's and
 // Options.PageTimeout bounding each page fetch on its own, within the
 // execution's deadline.
+//
+// Preparation takes no Options. Session.Prepare and Session.PrepareStream are
+// bounded by their context and the session default profile's Timeout,
+// whichever expires first. A statement the driver prepares again during an
+// execution, after an UNPREPARED error or on a host that has not seen it, is
+// bounded by that execution's deadline.
 package exec
 
 import (

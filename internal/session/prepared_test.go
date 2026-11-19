@@ -268,6 +268,120 @@ func TestPrepared(t *testing.T) {
 			}
 		})
 
+		// TestPrepared/Discovery/ProfileTimeoutBoundsPrepare checks that
+		// Session.Prepare is bounded by the session's default profile Timeout
+		// when its context has no deadline, and by the context when that ends
+		// first.
+		t.Run("ProfileTimeoutBoundsPrepare", func(t *testing.T) {
+			for _, tc := range []struct {
+				name         string
+				profile, ctx time.Duration
+			}{
+				{name: "ProfileEarlier", profile: 50 * time.Millisecond},
+				{name: "ContextEarlier", profile: time.Minute, ctx: 50 * time.Millisecond},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					s, conns, peers := runtimeTestSession(t, 1)
+					implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
+					rt := InternalRuntimeFor(s)
+					profile := settings.InternalDefaultProfile()
+					profile.Timeout = tc.profile
+					rt.InternalSetProfile(&profile)
+					go func() { _, _, _, _ = readRequest(peers[0]) }() // never answered
+					ctx := context.Background()
+					if tc.ctx > 0 {
+						var cancel context.CancelFunc
+						ctx, cancel = context.WithTimeout(ctx, tc.ctx)
+						defer cancel()
+					}
+					options := new(PrepareOptions)
+					PrepareOptionsData(options).InternalConnection = conns[0]
+					done := make(chan error, 1)
+					go func() {
+						_, err := rt.prepareTyped(ctx, "SELECT value FROM ks.tbl", "ks", *options)
+						done <- err
+					}()
+					select {
+					case err := <-done:
+						if !errors.Is(err, context.DeadlineExceeded) {
+							t.Fatalf("prepare returned %v, want context.DeadlineExceeded", err)
+						}
+					case <-time.After(5 * time.Second):
+						t.Fatal("prepare was not bounded")
+					}
+				})
+			}
+		})
+
+		// TestPrepared/Discovery/CancelledStarterDoesNotFailJoiner checks that
+		// a caller that joined another caller's PREPARE of the same statement
+		// does not inherit that caller's cancellation: it prepares again.
+		t.Run("CancelledStarterDoesNotFailJoiner", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 1)
+			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
+			rt := InternalRuntimeFor(s)
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			options := new(PrepareOptions)
+			PrepareOptionsData(options).InternalConnection = conns[0]
+			const statement = "SELECT value FROM ks.tbl"
+			firstRead := make(chan struct{})
+			serverDone := make(chan error, 1)
+			go func() {
+				// The starter's PREPARE is never answered; the joiner's retry is.
+				if _, _, _, err := readRequest(peers[0]); err != nil {
+					serverDone <- err
+					return
+				}
+				close(firstRead)
+				_, stream, _, err := readRequest(peers[0])
+				if err == nil {
+					_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("id"), implCql.NewColumns(), columns)))
+				}
+				serverDone <- err
+			}()
+			starterCtx, cancelStarter := context.WithCancel(context.Background())
+			defer cancelStarter()
+			starter := make(chan error, 1)
+			go func() {
+				_, err := rt.prepareTyped(starterCtx, statement, "ks", *options)
+				starter <- err
+			}()
+			select {
+			case <-firstRead:
+			case <-time.After(5 * time.Second):
+				t.Fatal("starter sent no PREPARE")
+			}
+			rt.InternalMu.Lock()
+			flight := rt.preparing[prepareCacheKey{InternalCql: statement, InternalKeyspace: "ks"}]
+			rt.InternalMu.Unlock()
+			if flight == nil {
+				t.Fatal("no flight for the starter's PREPARE")
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			joiner := make(chan error, 1)
+			go func() {
+				_, err := rt.prepareTyped(ctx, statement, "ks", *options)
+				joiner <- err
+			}()
+			for flight.joined.Load() == 0 {
+				if ctx.Err() != nil {
+					t.Fatal("joiner did not join the starter's PREPARE")
+				}
+				runtime.Gosched()
+			}
+			cancelStarter()
+			if err := <-starter; !errors.Is(err, context.Canceled) {
+				t.Fatalf("starter returned %v, want context.Canceled", err)
+			}
+			if err := <-joiner; err != nil {
+				t.Fatalf("joiner returned %v", err)
+			}
+			if err := <-serverDone; err != nil {
+				t.Fatal(err)
+			}
+		})
+
 		t.Run("OrderRemovesAllDuplicates", func(t *testing.T) {
 			a, b := prepareCacheKey{InternalCql: "a"}, prepareCacheKey{InternalCql: "b"}
 			rt := &InternalSessionRuntime{InternalPrepareOrder: []prepareCacheKey{a, b, a}}

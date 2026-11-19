@@ -39,6 +39,8 @@ type prepareFlight struct {
 	done  chan struct{}
 	state *InternalPreparedState
 	err   error
+	// joined counts the callers that joined the flight; tests read it.
+	joined atomic.Int32
 }
 type InternalSessionRuntime struct {
 	*implCluster.Core
@@ -168,7 +170,35 @@ func (rt *InternalSessionRuntime) requestCount() uint64 {
 	return rt.requestID.Load() - refused
 }
 
-func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, err error) {
+// prepareTyped prepares statement for Session.Prepare, bounded by ctx and the
+// session's default profile Timeout, whichever ends first. Concurrent calls
+// for the same statement share one PREPARE. A caller that joined another's
+// PREPARE does not inherit that caller's cancellation or deadline: when the
+// shared PREPARE ends on its starter's context while the joiner's own context
+// is live, the joiner starts again.
+func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, keyspace string, options PrepareOptions) (*InternalPreparedState, error) {
+	if timeout := s.defaultOptions.InternalProfile.Timeout; timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = InternalExecutionContext(ctx, timeout)
+		defer cancel()
+	}
+	for {
+		state, joined, err := s.prepareTypedOnce(ctx, statement, keyspace, options)
+		if !joined || err == nil || ctx.Err() != nil || !isContextError(err) {
+			return state, err
+		}
+	}
+}
+
+// isContextError reports whether err ended on a context's cancellation or
+// deadline.
+func isContextError(err error) bool {
+	return errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// prepareTypedOnce is one try of prepareTyped. joined reports that the result
+// came from a PREPARE another caller started.
+func (s *InternalSessionRuntime) prepareTypedOnce(ctx context.Context, statement, keyspace string, options PrepareOptions) (state *InternalPreparedState, joined bool, err error) {
 	rt := s
 	generation := s.Core.TypedGeneration()
 	tracker := rt.InternalSchemaTracker()
@@ -179,19 +209,20 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	if cached != nil && cached.cacheCurrent() {
 		rt.touchPrepare(key)
 		rt.InternalMu.Unlock()
-		return cached, nil
+		return cached, false, nil
 	}
 	if cached != nil {
 		delete(rt.InternalPrepared, key)
 		rt.forgetPrepareOrder(key)
 	}
 	if flight := rt.preparing[key]; flight != nil {
+		flight.joined.Add(1)
 		rt.InternalMu.Unlock()
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, true, ctx.Err()
 		case <-flight.done:
-			return flight.state, flight.err
+			return flight.state, true, flight.err
 		}
 	}
 	flight := &prepareFlight{done: make(chan struct{})}
@@ -213,12 +244,12 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		conn, err = s.Core.SelectTypedConn(ctx, routing2.Info{HostID: options.HostID}, nil)
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	wireKeyspace := keyspace
 	if !conn.InternalWire().QueryKeyspace {
 		if keyspace != implCluster.SessionData(s.Core).InternalCfg.Keyspace && !qualifiedForKeyspace(statement, keyspace) {
-			return nil, cqltype.TypeValidation("prepare keyspace", "protocol v4 requires the session keyspace")
+			return nil, false, cqltype.TypeValidation("prepare keyspace", "protocol v4 requires the session keyspace")
 		}
 		wireKeyspace = ""
 	}
@@ -227,14 +258,14 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 		defer page.Owner.Release()
 	}
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if page == nil {
-		return nil, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
+		return nil, false, &cql.ProtocolError{Stage: "prepare", Err: fmt.Errorf("missing response")}
 	}
 	info, err := s.hostPreparedInfo(conn, page, &InternalPreparedState{InternalStatement: statement, InternalKeyspace: keyspace})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	info.Generation = generation
 	dependencies := tracker.InternalDependencies(info.Keyspace, page.BindColumns(), page.Columns)
@@ -249,14 +280,14 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	defer rt.InternalMu.Unlock()
 	if cached = rt.InternalPrepared[key]; cached != nil && cached.cacheCurrent() {
 		rt.touchPrepare(key)
-		return cached, nil
+		return cached, false, nil
 	}
 	limit := rt.config.PreparedCacheSize
 	if rt.InternalProfile == nil && limit == 0 {
 		limit = 1000
 	}
 	if limit == 0 || !epoch.InternalCurrent() {
-		return state, nil
+		return state, false, nil
 	}
 	for len(rt.InternalPrepared) >= limit && len(rt.InternalPrepareOrder) > 0 {
 		old := rt.InternalPrepareOrder[0]
@@ -266,7 +297,7 @@ func (s *InternalSessionRuntime) prepareTyped(ctx context.Context, statement, ke
 	}
 	rt.InternalPrepared[key] = state
 	rt.touchPrepare(key)
-	return state, nil
+	return state, false, nil
 }
 func (s *InternalSessionRuntime) prepareOnConn(ctx context.Context, conn *transport.Conn, state *InternalPreparedState, values model.EncodedValues, force bool) (*InternalHostPrepared, error) {
 	return s.prepareOnConnExpected(ctx, conn, state, values, force, nil)

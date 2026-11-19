@@ -44,4 +44,10 @@
 // PageTimeout combines the same way, the earliest of the profile's and
 // exec.Options.PageTimeout bounding each page fetch on its own, within the
 // execution's deadline.
+//
+// Preparation takes no exec.Options. Session.Prepare and
+// Session.PrepareStream are bounded by their context and the session's
+// default profile Timeout, whichever expires first. A statement the driver
+// prepares again during an execution, after an UNPREPARED error or on a host
+// that has not seen it, is bounded by that execution's deadline.
 package config

@@ -40,6 +40,10 @@ func (s *Session) Dialect() Dialect {
 // Prepare prepares statement for repeated execution. The returned handle is
 // immutable and safe to share between goroutines. At most one exec.PrepareOptions
 // may be passed; omitting it uses the session keyspace and any eligible host.
+// Prepare is bounded by ctx and the session's default profile Timeout,
+// whichever expires first. Concurrent calls for the same statement and
+// keyspace share one PREPARE; a call never fails because another caller's
+// context ended.
 func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*Prepared[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
@@ -57,7 +61,7 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement
 // The immutable handle can be shared between workers. It validates the streaming
 // decoder against server metadata when available; conditional result metadata
 // unavailable during preparation is checked on execution. At most one
-// exec.PrepareOptions may be supplied.
+// exec.PrepareOptions may be supplied. Its time limits are those of Prepare.
 func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
