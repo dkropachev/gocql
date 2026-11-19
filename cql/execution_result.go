@@ -155,7 +155,8 @@ func mergeResult(dst *Result, src Result) {
 // forge one to resume another query's paging. A token resumes the same
 // statement with the same parameters on any session of the same cluster and
 // protocol version. RunPage rejects a token longer than the session's paging
-// state size limit (config.ConfigBuilder.WithMaxPagingStateSize).
+// state size limit (config.ConfigBuilder.WithMaxPagingStateSize) with an error
+// matching cqlerr.ErrPagingStateLimit.
 type PageState struct {
 	token []byte
 	kind  uint8

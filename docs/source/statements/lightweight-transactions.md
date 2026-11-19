@@ -8,7 +8,11 @@ conditional write reports whether it applied: read it with `One`, `Each`,
 prepared metadata. Cassandra does not, so declare the kind there. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
-replica ordering. A statement executed with SERIAL or LOCAL_SERIAL consistency
+replica ordering: every conditional request on a partition tries the same
+replica first, so concurrent requests share one coordinator and its Paxos
+rounds instead of contending from several. The driver has no other notion of
+a Paxos leader; leader routing for strongly consistent tablet tables is
+`routing.Options.LeaderAware`. A statement executed with SERIAL or LOCAL_SERIAL consistency
 is a Paxos read, not a conditional statement: `Exec` does not reject it up
 front, and fails on its result columns like any other row-returning statement.
 
