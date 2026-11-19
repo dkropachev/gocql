@@ -70,14 +70,14 @@ type RowStream[R any] struct {
 
 func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound *Bound[B], decoder cql.StreamRowDecoder[R], options CompiledOptions, streamLimits transport.StreamLimits, incremental bool, plans *streamPlanCache[R]) (*RowStream[R], error) {
 	if decoder == nil {
-		return nil, cqltype.TypeValidation("stream decoder", "nil decoder")
+		return nil, notSent(cqltype.TypeValidation("stream decoder", "nil decoder"))
 	}
 	limits, err := transport.InternalCheckedStreamLimits(streamLimits)
 	if err != nil {
-		return nil, err
+		return nil, notSent(err)
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
+		return nil, notSent(cqltype.TypeValidation("stream prefetch", "must be zero"))
 	}
 	runctx, cancel, request, err := rt.admit(ctx, bound, options)
 	if err != nil {

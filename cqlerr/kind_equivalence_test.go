@@ -85,7 +85,8 @@ func referenceExecutionStatusOf(err error) ExecutionStatus {
 	if hasType[*SchemaChangedError](err) {
 		return NotExecuted
 	}
-	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, context.Canceled, context.DeadlineExceeded} {
+	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec,
+		ErrNoStreams, ErrNoHosts, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, target) {
 			return NotExecuted
 		}
