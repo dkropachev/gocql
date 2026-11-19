@@ -148,7 +148,7 @@ func (e *ExecutionError) Error() string {
 	var b strings.Builder
 	b.WriteString("gocql: request: ")
 	attempts := e.Attempts
-	if n := len(attempts); n > 0 && errors.Is(e.Err, attempts[n-1].Err) {
+	if n := len(attempts); n > 0 && e.Err != nil && errors.Is(e.Err, attempts[n-1].Err) {
 		// Err is the last attempt's failure: name where it ran.
 		attempts[n-1].writeTarget(&b)
 		b.WriteString(": ")

@@ -174,6 +174,14 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		}
 	})
 
+	t.Run("EmptyAttempt", func(t *testing.T) {
+		// errors.Is(nil, nil) holds; a value without a cause names no attempt.
+		got := (&ExecutionError{Attempts: []AttemptFailure{{}}}).Error()
+		if !strings.HasPrefix(got, "gocql: request: unknown failure") {
+			t.Fatalf("message %q", got)
+		}
+	})
+
 	t.Run("Bounded", func(t *testing.T) {
 		many := make([]AttemptFailure, 10)
 		for i := range many {
