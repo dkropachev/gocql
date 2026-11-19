@@ -213,52 +213,68 @@ func TestHandleLifetimes(t *testing.T) {
 	})
 
 	// TestHandleLifetimes/CloseWaitsForCallback checks that Session.Close
-	// does not return while an Each callback runs, since the row it borrows
-	// stays valid until the callback returns, and that Each then ends with
-	// cqlerr.ErrClosed without calling the callback again.
+	// does not return while an Each callback or an All loop body runs, since
+	// the row it borrows stays valid until it returns, and that the call then
+	// ends with cqlerr.ErrClosed without running the callback again.
 	t.Run("CloseWaitsForCallback", func(t *testing.T) {
-		f := newLifetimeFixture(t)
-		entered, release := make(chan struct{}), make(chan struct{})
-		calls := 0
-		var dst []byte
-		eachDone := make(chan error, 1)
-		go func() {
-			_, err := f.p.Each(f.ctx, gridKey, &dst, func(*[]byte) error {
-				calls++
-				if calls == 1 {
-					close(entered)
-					<-release
+		for _, call := range []string{"Each", "All"} {
+			t.Run(call, func(t *testing.T) {
+				f := newLifetimeFixture(t)
+				entered, release := make(chan struct{}), make(chan struct{})
+				calls := 0
+				body := func() {
+					calls++
+					if calls == 1 {
+						close(entered)
+						<-release
+					}
 				}
-				return nil
-			}, f.options)
-			eachDone <- err
-		}()
-		select {
-		case <-entered:
-		case <-time.After(5 * time.Second):
-			t.Fatal("callback never ran")
-		}
-		closed := make(chan error, 1)
-		go func() { closed <- f.s.Close() }()
-		select {
-		case <-closed:
-			t.Fatal("Session.Close returned while a callback ran")
-		case <-time.After(50 * time.Millisecond):
-		}
-		close(release)
-		select {
-		case err := <-closed:
-			if err != nil {
-				t.Fatalf("Session.Close returned %v", err)
-			}
-		case <-time.After(5 * time.Second):
-			t.Fatal("Session.Close did not return after the callback")
-		}
-		if err := <-eachDone; !errors.Is(err, cqlerr.ErrClosed) {
-			t.Errorf("Each returned %v, want cqlerr.ErrClosed", err)
-		}
-		if calls != 1 {
-			t.Errorf("callback ran %d times, want 1", calls)
+				var dst []byte
+				done := make(chan error, 1)
+				go func() {
+					if call == "Each" {
+						_, err := f.p.Each(f.ctx, gridKey, &dst, func(*[]byte) error { body(); return nil }, f.options)
+						done <- err
+						return
+					}
+					var err error
+					for _, e := range f.p.All(f.ctx, gridKey, &dst, f.options) {
+						if e != nil {
+							err = e
+							break
+						}
+						body()
+					}
+					done <- err
+				}()
+				select {
+				case <-entered:
+				case <-time.After(5 * time.Second):
+					t.Fatal("callback never ran")
+				}
+				closed := make(chan error, 1)
+				go func() { closed <- f.s.Close() }()
+				select {
+				case <-closed:
+					t.Fatal("Session.Close returned while a callback ran")
+				case <-time.After(50 * time.Millisecond):
+				}
+				close(release)
+				select {
+				case err := <-closed:
+					if err != nil {
+						t.Fatalf("Session.Close returned %v", err)
+					}
+				case <-time.After(5 * time.Second):
+					t.Fatal("Session.Close did not return after the callback")
+				}
+				if err := <-done; !errors.Is(err, cqlerr.ErrClosed) {
+					t.Errorf("%s returned %v, want cqlerr.ErrClosed", call, err)
+				}
+				if calls != 1 {
+					t.Errorf("callback ran %d times, want 1", calls)
+				}
+			})
 		}
 	})
 

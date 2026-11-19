@@ -117,9 +117,13 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 	cursor.privateStorage.active.Lock()
 	err = cursor.loadPage()
 	if err == nil {
+		// StreamQuery.Close and Session.Close mark the query or session closed
+		// before they cancel runctx, so the cancellation they cause reports
+		// ErrClosed, as their stop below does, whichever runs first.
+		owner := executionCursor(request)
 		cursor.privateStorage.stop = context.AfterFunc(runctx, func() {
 			cause := runctx.Err()
-			if session.Closed() {
+			if session.Closed() || owner.stopped() {
 				cause = cqlerr.ErrClosed
 			}
 			rowStreamCloseWithError(cursor, cause)
