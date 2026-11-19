@@ -1483,7 +1483,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
@@ -1692,9 +1692,6 @@ func InternalExecutionErrorResult(err error) cql.Result {
 		return failure.Result
 	}
 	return cql.Result{}
-}
-func attemptBytesWritten(err error) bool {
-	return cqlerr.ExecutionStatusOf(err) != cqlerr.NotExecuted
 }
 
 // hasCounterColumn reports whether columns, a statement's parameters, include

@@ -1543,7 +1543,6 @@ type Attempt struct {
     Idempotent bool
     Consistency cql.Consistency
     Conditional bool
-    BytesWritten bool                        // Deprecated: use ExecutionStatus
     ExecutionStatus cqlerr.ExecutionStatus
 }
 type Decision struct {
