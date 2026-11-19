@@ -164,7 +164,7 @@ type PrepareOptions struct {
 // Back-pressure comes from paging: a stream requests the next page only when
 // NextInto reaches the end of the current one. An incremental stream also
 // reads the current response from its socket only as the decoder needs it,
-// ReadAheadBytes at a time, so a slow consumer keeps its reserved connection
+// never in the background, so a slow consumer keeps its reserved connection
 // and lets the transport's flow control hold back the server.
 type StreamOptions struct {
 	Options     Options
