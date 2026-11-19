@@ -58,6 +58,9 @@ func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, in
 				if state.stopped || now.Before(state.next) {
 					continue
 				}
+				if s.privateStorage.InternalCtx.Err() != nil {
+					return
+				}
 				s.privateStorage.InternalPool.InternalAddHost(host)
 				state.attempt++
 				delay, again := policy.Delay(state.attempt)
