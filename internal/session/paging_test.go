@@ -235,8 +235,16 @@ func TestPaging(t *testing.T) {
 			}
 		})
 
+		// TestPaging/Rows/NextIntoPagingAndCloseInterrupt checks that Close
+		// interrupts a NextInto blocked on a continuation page. Prefetch is
+		// off so that the third request comes from NextInto itself: with
+		// prefetch, the prefetcher sends it while the first NextInto returns,
+		// and Close could then run before the second NextInto starts.
 		t.Run("NextIntoPagingAndCloseInterrupt", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
+			profile := settings.InternalDefaultProfile()
+			profile.Prefetch = 0
+			handle := new(profile)
 			nextRequested := make(chan struct{})
 			stopped := make(chan struct{})
 			go func() {
@@ -254,7 +262,7 @@ func TestPaging(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
+			rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
 			defer rows.Close()
 			var dst cql.Bytes
 			if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
