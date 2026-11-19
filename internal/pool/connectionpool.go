@@ -689,8 +689,8 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		defer typed.InternalDialFinished(shardID, nrShards)
 	}
 
-	// Past these attempts, the session's reconnectDownedHosts loop retries the
-	// host when ReconnectInterval is set.
+	// Past these attempts, the session's reconnectTypedDownedHosts loop retries
+	// the host when the session has a reconnect policy.
 	var conn *transport.Conn
 	reconnectionPolicy := pool.InternalServices.Reconnection
 	for i := 0; i < reconnectionPolicy.GetMaxRetries(); i++ {

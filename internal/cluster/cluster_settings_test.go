@@ -64,7 +64,6 @@ func TestClusterSettings(t *testing.T) {
 			tests.AssertEqual(t, "cluster config page-size", 5000, cfg.PageSize)
 			tests.AssertEqual(t, "cluster config default timestamp", true, cfg.DefaultTimestamp)
 			tests.AssertEqual(t, "cluster config max wait schema agreement", 60*time.Second, cfg.MaxWaitSchemaAgreement)
-			tests.AssertEqual(t, "cluster config reconnect interval", 60*time.Second, cfg.ReconnectInterval)
 			tests.AssertTrue(t, "cluster config conviction policy",
 				reflect.DeepEqual(&endpoint2.SimpleConvictionPolicy{}, cfg.ConvictionPolicy))
 			tests.AssertTrue(t, "cluster config reconnection policy",
@@ -421,7 +420,6 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeConnectTimeout", func(c *InternalClusterSettings) { c.ConnectTimeout = -time.Second }, "ConnectTimeout"},
 				{"NegativeMetadataSchemaRequestTimeout", func(c *InternalClusterSettings) { c.MetadataSchemaRequestTimeout = -time.Second }, "MetadataSchemaRequestTimeout"},
 				{"NegativeWriteCoalesceWaitTime", func(c *InternalClusterSettings) { c.WriteCoalesceWaitTime = -time.Second }, "WriteCoalesceWaitTime"},
-				{"NegativeReconnectInterval", func(c *InternalClusterSettings) { c.ReconnectInterval = -time.Second }, "ReconnectInterval"},
 				{"NegativeMaxWaitSchemaAgreement", func(c *InternalClusterSettings) { c.MaxWaitSchemaAgreement = -time.Second }, "MaxWaitSchemaAgreement"},
 				{"NonSerialSerialConsistency", func(c *InternalClusterSettings) { c.SerialConsistency = cql.Quorum }, "SERIAL or LOCAL_SERIAL"},
 				{"NilDNSResolver", func(c *InternalClusterSettings) { c.DNSResolver = nil }, "invalid DNSResolver"},

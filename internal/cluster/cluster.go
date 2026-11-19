@@ -167,8 +167,6 @@ type InternalClusterSettings struct {
 	// The keepalive period to use, enabled if > 0 (default: 15 seconds)
 	// SocketKeepalive is used to set up the default dialer and is ignored if Dialer or HostDialer is provided.
 	SocketKeepalive time.Duration
-	// If not zero, gocql attempt to reconnect known DOWN nodes in every ReconnectInterval.
-	ReconnectInterval time.Duration
 	// The maximum amount of time to wait for schema agreement in a cluster after
 	// receiving a schema change frame. (default: 60s)
 	MaxWaitSchemaAgreement time.Duration
@@ -381,7 +379,6 @@ func InternalNewClusterSettings(hosts ...string) *InternalClusterSettings {
 		DriverName:                    settings.InternalDefaultDriverName,
 		DriverVersion:                 settings.InternalDefaultDriverVersion,
 		MaxWaitSchemaAgreement:        60 * time.Second,
-		ReconnectInterval:             60 * time.Second,
 		ConvictionPolicy:              &endpoint2.SimpleConvictionPolicy{},
 		ReconnectionPolicy:            &pool.ConstantReconnectionPolicy{MaxRetries: 3, Interval: 1 * time.Second},
 		InitialReconnectionPolicy:     &pool.NoReconnectionPolicy{},
@@ -549,10 +546,6 @@ func (cfg *InternalClusterSettings) Validate() error {
 
 	if cfg.WriteCoalesceWaitTime < 0 {
 		return cqltype.TypeValidation("WriteCoalesceWaitTime", "must not be negative")
-	}
-
-	if cfg.ReconnectInterval < 0 {
-		return cqltype.TypeValidation("ReconnectInterval", "must not be negative")
 	}
 
 	if cfg.MaxWaitSchemaAgreement < 0 {

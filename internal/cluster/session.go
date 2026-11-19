@@ -405,9 +405,7 @@ func (s *Core) init() error {
 		}
 	}
 
-	if s.privateStorage.InternalCfg.ReconnectInterval > 0 {
-		go s.reconnectDownedHosts(s.privateStorage.InternalCfg.ReconnectInterval)
-	}
+	s.startReconnectingDownedHosts()
 
 	// The control connection reached a node, but the session still needs a
 	// pooled connection to run requests on.
@@ -439,45 +437,6 @@ func (s *Core) init() error {
 // after the timeout specified in MaxWaitSchemaAgreement elapses.
 func (s *Core) AwaitSchemaAgreement(ctx context.Context) error {
 	return s.awaitV2SchemaAgreement(ctx)
-}
-
-func (s *Core) reconnectDownedHosts(intv time.Duration) {
-	var reconnect implSettings.ReconnectPolicy
-	if owner := s.CurrentExecution(); owner != nil {
-		reconnect = owner.ConfigSnapshot().Reconnect
-	}
-	if policy := reconnect; policy != nil {
-		s.reconnectTypedDownedHosts(policy, intv)
-		return
-	}
-	reconnectTicker := time.NewTicker(intv)
-	defer reconnectTicker.Stop()
-
-	for {
-		select {
-		case <-reconnectTicker.C:
-			hosts := s.privateStorage.InternalHostSource.InternalGetHostsList()
-
-			if s.logger().Enabled(context.Background(), slog.LevelDebug) {
-				states := make([]string, 0, len(hosts))
-				for _, h := range hosts {
-					states = append(states, h.ConnectAddress().String()+":"+h.State().String())
-				}
-				s.logger().Debug("reconnect tick", "hosts", states)
-			}
-
-			for _, h := range hosts {
-				if h.IsUp() {
-					continue
-				}
-
-				// we let the pool call handleNodeConnected to change the host state
-				s.privateStorage.InternalPool.InternalAddHost(h)
-			}
-		case <-s.privateStorage.InternalCtx.Done():
-			return
-		}
-	}
 }
 
 // SetConsistency sets the default consistency level for this session. This
