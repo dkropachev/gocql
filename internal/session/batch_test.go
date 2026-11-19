@@ -467,6 +467,54 @@ func TestBatch(t *testing.T) {
 		})
 	})
 
+	// TestBatch/MaxStatements checks that a batch takes MaxBatchStatements
+	// statements, the native protocol's limit, and refuses the next without
+	// changing.
+	t.Run("MaxStatements", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 0)
+		var batch Batch
+		for i := range implCluster.MaxBatchStatements {
+			if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, model.EncodedValues{}); err != nil {
+				t.Fatalf("statement %d: %v", i+1, err)
+			}
+		}
+		err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, model.EncodedValues{})
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+			t.Fatalf("statement %d: %v, want a cql.ValidationError", implCluster.MaxBatchStatements+1, err)
+		}
+		if batch.Len() != implCluster.MaxBatchStatements {
+			t.Fatalf("batch holds %d statements", batch.Len())
+		}
+	})
+
+	// TestBatch/KindOnWire checks that each batch kind is sent as its native
+	// protocol type byte, counter batches included.
+	t.Run("KindOnWire", func(t *testing.T) {
+		for _, kind := range []cql.BatchKind{cql.LoggedBatch, cql.UnloggedBatch, cql.CounterBatch} {
+			t.Run(kind.String(), func(t *testing.T) {
+				s, _, peers := runtimeTestSession(t, 1)
+				q := batchTestQuery(t, s)
+				served := make(chan []byte, 1)
+				go func() {
+					_, body := batchTestServe(t, peers[0])
+					served <- body
+				}()
+				batch := Batch{Kind: kind}
+				if err := q.AddToBatch(&batch, []byte("v")); err != nil {
+					t.Fatal(err)
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if _, err := InternalWrapSession(s).ExecBatch(ctx, &batch, CompiledOptions{}); err != nil {
+					t.Fatal(err)
+				}
+				if body := <-served; len(body) == 0 || body[0] != byte(kind) {
+					t.Fatalf("batch type byte %v, want %d", body[:min(len(body), 1)], kind)
+				}
+			})
+		}
+	})
+
 	t.Run("StatementKind", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		for _, tc := range []struct {
