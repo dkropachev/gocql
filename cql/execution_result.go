@@ -144,6 +144,18 @@ func mergeResult(dst *Result, src Result) {
 
 // PageState distinguishes the initial page, a continuation (whose token may be
 // empty), and completion. Its zero value starts paging.
+//
+// A continuation's token is the server's paging state, opaque to the driver:
+// the driver sends it back unchanged and does not check where it came from.
+// It may reveal partition and clustering key values of the rows around the
+// page boundary. Before handing a token to an untrusted client, for example as
+// a cursor in a web API, authenticate it (an HMAC over the token and the
+// statement it belongs to) or encrypt it, and verify it before
+// PageStateFromToken; a client could otherwise read key values from it or
+// forge one to resume another query's paging. A token resumes the same
+// statement with the same parameters on any session of the same cluster and
+// protocol version. RunPage rejects a token longer than the session's paging
+// state size limit (config.ConfigBuilder.WithMaxPagingStateSize).
 type PageState struct {
 	token []byte
 	kind  uint8

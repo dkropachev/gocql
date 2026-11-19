@@ -880,6 +880,11 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	if state.Complete() {
 		return nil, cqlerr.ErrPagingComplete
 	}
+	// The token may come from an untrusted client; one larger than the
+	// session keeps for its own executions is refused before it is sent.
+	if limit := rt.config.Limits.MaxPagingStateBytes; limit > 0 && int64(len(cqltype.PageToken(state))) > limit {
+		return nil, cqlerr.ErrPagingStateLimit
+	}
 	if pageSize < 0 {
 		return nil, cqltype.TypeValidation("page size", "must not be negative")
 	}

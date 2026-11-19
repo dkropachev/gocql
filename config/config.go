@@ -217,7 +217,9 @@ func (b *ConfigBuilder) WithMaxPagingStates(n int) *ConfigBuilder {
 	return b
 }
 
-// WithMaxPagingStateSize caps one paging state's size in bytes. Default 16 MiB.
+// WithMaxPagingStateSize caps, in bytes, the paging states one execution keeps
+// to detect a server that repeats a state, and the token a RunPage call may
+// resume from. Default 16 MiB.
 func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
 	b.settings.Limits.MaxPagingStateBytes = bytes
 	return b
@@ -734,7 +736,9 @@ func (p *ProfileBuilder) NoPrefetch() *ProfileBuilder {
 }
 
 // WithPrefetch sets how many continuation pages to prefetch: zero or one.
-// It replaces NoPrefetch. Default one.
+// It replaces NoPrefetch. Default one. With one, Rows request the next page as
+// soon as a page arrives, so they hold at most two response pages; Each, All,
+// One, RunPage and streams never prefetch.
 func (p *ProfileBuilder) WithPrefetch(pages int) *ProfileBuilder {
 	p.profile.Prefetch = pages
 	return p
