@@ -57,8 +57,8 @@ const (
 )
 
 // nodeEventFixture is a Session cut down to exactly what the node-event path
-// touches: a host source to resolve event IPs against, a ring refresher to observe debounced refreshes, and a connection
-// pool.
+// touches: a host source to resolve event IPs against, a ring refresher to
+// observe debounced refreshes, and a connection pool.
 //
 // The pool starts as an empty &policyConnPool{}. policyConnPool.removeHost
 // short-circuits on a missing host, so the DOWN path is safe, but addHost would

@@ -119,8 +119,8 @@ func TestNodeEvents(t *testing.T) {
 			if state := host.State(); state != endpoint.NodeDown {
 				t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
 			}
-			// The filter skips pool.removeHost, so the pool survives -- the other half of the asymmetry this test
-			// exists to pin.
+			// The filter skips pool.removeHost, so the pool survives -- the other
+			// half of the asymmetry this test exists to pin.
 			if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); !ok {
 				t.Error("filtered host lost its connection pool")
 			}
