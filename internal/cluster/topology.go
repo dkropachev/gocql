@@ -276,6 +276,7 @@ func (n *networkTopology) InternalReplicaMap(tokenRing *InternalTokenRing) token
 				continue
 			} else if replicasInDC[dc] >= rf {
 				if replicasInDC[dc] > rf {
+					// Invariant: every append is guarded by rf.
 					panic(fmt.Sprintf("replica overflow. rf=%d have=%d in dc %q", rf, replicasInDC[dc], dc))
 				}
 
@@ -323,6 +324,9 @@ func (n *networkTopology) InternalReplicaMap(tokenRing *InternalTokenRing) token
 			}
 		}
 
+		// Invariant, not server data: the walk starts at th's own host,
+		// whose datacenter has a positive RF and whose rack is in dcRacks,
+		// so the first step always takes it.
 		if len(replicas) == 0 {
 			panic(fmt.Sprintf("no replicas for token: %v", th.InternalToken))
 		} else if !replicas[0].Equal(th.InternalHost) {
@@ -332,16 +336,9 @@ func (n *networkTopology) InternalReplicaMap(tokenRing *InternalTokenRing) token
 		replicaRing = append(replicaRing, hostTokens{token: th.InternalToken, hosts: replicas})
 	}
 
-	dcsWithReplicas := 0
-	for _, dc := range n.dcs {
-		if dc > 0 {
-			dcsWithReplicas++
-		}
-	}
-
-	if dcsWithReplicas == len(dcRacks) && len(replicaRing) != len(tokens) {
-		panic(fmt.Sprintf("token map different size to token ring: got %d expected %d", len(replicaRing), len(tokens)))
-	}
-
+	// Tokens of a datacenter the keyspace does not replicate to have no
+	// entry. The replication comes from the server and may name
+	// datacenters the ring lacks, so counting datacenters cannot tell
+	// whether every token should have one.
 	return replicaRing
 }
