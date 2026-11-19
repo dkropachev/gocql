@@ -527,7 +527,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		// this provides some time between failed attempts
 		// to fill the pool for the host to recover
 		if _, typed := pool.typedConfig(); !typed {
-			time.Sleep(time.Duration(rand.Int31n(100)+31) * time.Millisecond)
+			sleepCtx(pool.InternalRepairCtx, time.Duration(rand.Int31n(100)+31)*time.Millisecond)
 		}
 	}
 
@@ -703,7 +703,11 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		}
 		pool.logger().Debug("connection failed; reconnecting", logging.KeyHost, pool.InternalHost.ConnectAddress().String(),
 			logging.Err(err), "attempt", i, "policy", fmt.Sprintf("%T", reconnectionPolicy))
-		time.Sleep(reconnectionPolicy.GetInterval(i))
+		// Session or pool close cancels the repair context: stop retrying
+		// then instead of sleeping out the remaining attempts.
+		if !sleepCtx(pool.InternalRepairCtx, reconnectionPolicy.GetInterval(i)) {
+			break
+		}
 	}
 
 	if err != nil {
@@ -879,4 +883,23 @@ func (pool *InternalHostConnPool) IsClosed() bool {
 	pool.InternalMu.Lock()
 	defer pool.InternalMu.Unlock()
 	return pool.InternalClosed
+}
+
+// sleepCtx waits for d or until ctx ends, and reports whether d elapsed.
+func sleepCtx(ctx context.Context, d time.Duration) bool {
+	if ctx == nil {
+		time.Sleep(d)
+		return true
+	}
+	if ctx.Err() != nil {
+		return false
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-t.C:
+		return true
+	case <-ctx.Done():
+		return false
+	}
 }
