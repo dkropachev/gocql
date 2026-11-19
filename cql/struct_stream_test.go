@@ -79,3 +79,36 @@ func streamDecodeRow[R any](t testing.TB, columns Columns, rows StreamRowDecoder
 		t.Fatal(err)
 	}
 }
+
+// A [][]byte field decodes a list of text, ascii or varint when its stream
+// tag names the element decoder, as the buffered codec= tag does.
+func TestStreamRowOfElementListTag(t *testing.T) {
+	type row struct {
+		Names  [][]byte `cql:"names,stream=Text"`
+		Codes  [][]byte `cql:"codes,stream=ASCII"`
+		Counts [][]byte `cql:"counts,stream=Varint"`
+	}
+	columns := NewColumns(
+		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, TypeText)))},
+		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, TypeAscii)))},
+		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, TypeVarint)))},
+	)
+	type source struct{ Names, Codes []string }
+	params := Params(
+		Param("names", ListEncoder(StringCodec), func(v source) []string { return v.Names }),
+		Param("codes", ListEncoder(ASCIIStringCodec), func(v source) []string { return v.Codes }),
+		Param("counts", ListEncoder(VarintCodec), func(source) []Varint {
+			return []Varint{CodecTestMust(VarintFromBytes([]byte{1})), CodecTestMust(VarintFromBytes([]byte{0xff}))}
+		}),
+	)
+	data := chainBytes(t, encodeTestParams(t, columns, params, source{Names: []string{"héllo", ""}, Codes: []string{"a"}}))
+	// Streaming decoders write into the destination's storage.
+	seed := func() [][]byte { return [][]byte{make([]byte, 0, 8), make([]byte, 0, 8)}[:0] }
+	got := row{Names: seed(), Codes: seed(), Counts: seed()}
+	streamDecodeRow(t, columns, MustStreamRowOf[row](), data, &got)
+	if len(got.Names) != 2 || string(got.Names[0]) != "héllo" || len(got.Names[1]) != 0 ||
+		len(got.Codes) != 1 || string(got.Codes[0]) != "a" ||
+		len(got.Counts) != 2 || !bytes.Equal(got.Counts[0], []byte{1}) || !bytes.Equal(got.Counts[1], []byte{0xff}) {
+		t.Fatalf("decoded %q %q %x", got.Names, got.Codes, got.Counts)
+	}
+}

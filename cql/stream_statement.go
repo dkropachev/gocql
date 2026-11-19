@@ -23,7 +23,9 @@ type StreamStatement[P, R any] struct {
 // cql.RowOf but with the streaming decoders, which have their own Go types:
 // text, ascii, blob and varint columns decode into []byte (blob by default;
 // pick another with `cql:"name,stream=Text"`), and slices decode lists
-// (`stream=Set` for sets, `stream=Vector` for vectors). Storage of []byte and
+// (`stream=Set` for sets, `stream=Vector` for vectors). A [][]byte field
+// decodes a list of blobs, or with `stream=Text`, `stream=ASCII` or
+// `stream=Varint` a list of those. Storage of []byte and
 // slice fields is reused across rows. Every column needs a field.
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its

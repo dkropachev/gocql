@@ -506,7 +506,8 @@ type streamBuiltinField[P any] struct {
 func (f streamBuiltinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
 
 // streamBuiltinFields returns the built-in streaming field types, each with
-// its Nullable form and, for scalars, its list and set forms.
+// its Nullable form and its list form, and for a type's default decoder its
+// set and vector forms.
 func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	var fields []streamBuiltinField[P]
 	add := func(entries ...streamBuiltinField[P]) { fields = append(fields, entries...) }
@@ -534,7 +535,10 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 }
 
 // streamBuiltin returns the entries for V, Nullable[V], and []V as a list
-// (the default), a set (`stream=Set`), or a vector (`stream=Vector`).
+// (the default), a set (`stream=Set`), or a vector (`stream=Vector`). For a
+// decoder that is not its type's default, as Text is not for []byte, the tag
+// that names it also selects the list of it, and there is no set or vector
+// entry: "Set" and "Vector" already select those of the default decoder.
 func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool) []streamBuiltinField[P] {
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
 		return streamBuiltinField[P]{column: column, BuiltinFieldType: structmap.BuiltinFieldType{
@@ -542,10 +546,16 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 		}}
 	}
 	src := "cql.Stream" + name
-	return []streamBuiltinField[P]{
+	plain := []streamBuiltinField[P]{
 		entry(reflect.TypeFor[V](), typeSrc, src, []string{name}, def, fieldStreamColumn[P](dec)),
 		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",
 			[]string{name}, def, fieldStreamColumn[P](StreamNullable(dec))),
+	}
+	if !def {
+		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
+			[]string{name}, false, fieldStreamColumn[P](StreamList(dec))))
+	}
+	return append(plain, []streamBuiltinField[P]{
 		// A list or set takes its element's default decoder.
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
 			[]string{"List"}, def, fieldStreamColumn[P](StreamList(dec))),
@@ -553,7 +563,7 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 			[]string{"Set"}, false, fieldStreamColumn[P](StreamSet(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",
 			[]string{"Vector"}, false, fieldStreamColumn[P](StreamVector(dec))),
-	}
+	}...)
 }
 
 // StreamBuiltinFieldTypes returns the Go field types StreamRowOf maps without

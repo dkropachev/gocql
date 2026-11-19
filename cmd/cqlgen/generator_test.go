@@ -12,7 +12,8 @@ import (
 
 func TestGenerator(t *testing.T) {
 	// The committed fixture output must be what cqlgen generates now; regenerate
-	// with go generate ./cmd/cqlgen/internal/fixture after changing either.
+	// with go generate ./cmd/cqlgen/internal/fixture or go test ./cmd/cqlgen
+	// -update after changing either.
 	t.Run("Generate", func(t *testing.T) {
 		dir := filepath.Join("internal", "fixture")
 		name, got, err := generate(dir, []string{"Fixture", "Point", "StreamFixture"})
@@ -22,12 +23,18 @@ func TestGenerator(t *testing.T) {
 		if name != "fixture_cql.go" {
 			t.Fatalf("output name %q", name)
 		}
+		if *update {
+			if err := os.WriteFile(filepath.Join(dir, name), got, 0o644); err != nil {
+				t.Fatal(err)
+			}
+			return
+		}
 		want, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if string(got) != string(want) {
-			t.Fatalf("%s is stale; run go generate ./cmd/cqlgen/internal/fixture\n%s", name, got)
+			t.Fatalf("%s is stale; run go generate ./cmd/cqlgen/internal/fixture or go test ./cmd/cqlgen -update\n%s", name, got)
 		}
 	})
 
