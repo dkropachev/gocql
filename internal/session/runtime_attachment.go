@@ -64,6 +64,11 @@ func (d queryDrain) Wait() {
 		_ = q.wait(context.Background())
 	}
 	d.runtime.waitPooled()
+	d.runtime.InternalMu.Lock()
+	collected := d.runtime.takeCollected()
+	d.runtime.collectedFinal = true
+	d.runtime.InternalMu.Unlock()
+	d.runtime.reportCollected(collected)
 }
 func (rt *InternalSessionRuntime) MetricsSnapshot() metrics.Snapshot {
 	return rt.metricsSnapshot()

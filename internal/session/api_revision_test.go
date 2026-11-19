@@ -82,9 +82,11 @@ func TestQueryDrainAdmission(t *testing.T) {
 		<-served
 	})
 
-	// Close stops the query and waits for its drain: once it returns, the
+	// TestQueryDrainAdmission/WaitJoinsDrainAfterClose checks that Close
+	// stops the query and returns while an observer callback of its
+	// execution still runs; Wait joins that drain, and once it returns the
 	// query is idle and refuses executions.
-	t.Run("CloseWaitsForDrain", func(t *testing.T) {
+	t.Run("WaitJoinsDrainAfterClose", func(t *testing.T) {
 		s, conns, peers := runtimeTestSession(t, 1)
 		entered, release := make(chan struct{}), make(chan struct{})
 		observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) { close(entered); <-release }}
@@ -105,7 +107,7 @@ func TestQueryDrainAdmission(t *testing.T) {
 		defer stopShort()
 		query.Close()
 		if err := query.Wait(short); !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatal("Close returned before the drain:", err)
+			t.Fatal("Wait returned before the drain:", err)
 		}
 		close(release)
 		joined, finish := context.WithTimeout(context.Background(), 5*time.Second)

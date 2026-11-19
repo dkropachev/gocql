@@ -208,7 +208,14 @@ func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
 }
 
 // Close stops new work, cancels in-flight requests and joins connections,
-// writers and callbacks. Retained output page leases remain valid.
+// writers and callbacks. It is idempotent. Retained output page leases remain
+// valid. Rows, CASBatchRows, Page and RowStream handles left open report
+// cqlerr.ErrClosed; close them as usual. Queries need no Close afterwards.
+//
+// Close cannot interrupt application code: it waits for a running Each or
+// All callback, or loop body, to return, because the borrowed fields that
+// code may hold stay valid until then. The cancelled iteration then ends at
+// its next row. A callback that blocks therefore blocks Close.
 func (s *Session) Close() error { return s.internal().Close() }
 
 // Closed reports whether session shutdown has started.

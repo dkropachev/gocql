@@ -85,6 +85,17 @@ func (c queryCursor) current() bool {
 	return c.query == nil || c.query.generation.Load() == c.generation
 }
 
+// stopped reports whether the cursor's query was closed. A cursor without a
+// query is never stopped.
+func (c queryCursor) stopped() bool {
+	if c.query == nil {
+		return false
+	}
+	c.query.mu.Lock()
+	defer c.query.mu.Unlock()
+	return c.query.closed
+}
+
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {

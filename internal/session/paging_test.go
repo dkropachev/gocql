@@ -237,6 +237,37 @@ func TestPaging(t *testing.T) {
 			}
 		})
 
+		// TestPaging/Rows/RetainedViewSurvivesSessionClose checks that a view
+		// borrowed from a row stays readable through Session.Close while a
+		// PageLease retains its page, and that the rows report ErrClosed.
+		t.Run("RetainedViewSurvivesSessionClose", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 1)
+			go func() {
+				stream := typedTestReadRequest(t, conns[0], peers[0])
+				if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "kept", "more"))); err != nil {
+					t.Error(err)
+				}
+			}()
+			b := runtimeQuery(t)
+			defer b.Close()
+			rows := codecTestMust(Run(context.Background(), s, b, CompiledOptions{}))
+			var view cql.Bytes
+			if !rows.NextInto(&view) {
+				t.Fatal(rows.Err())
+			}
+			lease := codecTestMust(rows.Retain())
+			s.Close()
+			var next cql.Bytes
+			if rows.NextInto(&next) || !errors.Is(rows.Err(), cqlerr.ErrClosed) {
+				t.Fatalf("rows after Session.Close: %v", rows.Err())
+			}
+			_ = rows.Close()
+			if got := string(view.OwnedBytes()); got != "kept" {
+				t.Fatalf("retained view reads %q after Session.Close", got)
+			}
+			lease.Close()
+		})
+
 		// TestPaging/Rows/NextIntoPagingAndCloseInterrupt checks that Close
 		// interrupts a NextInto blocked on a continuation page, fetched by
 		// NextInto itself (prefetch=0) or by the prefetcher (prefetch=1). Close

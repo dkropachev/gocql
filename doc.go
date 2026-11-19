@@ -52,9 +52,9 @@
 // copied during execution admission. A call while
 // a Rows, Page or RowStream of the query is open, or while another goroutine's
 // call runs, returns cqlerr.ErrBusy; a call after an execution that already returned
-// waits until its accepted writes drain. Close stops a query and waits for its
-// drain. Do not keep Query values in a sync.Pool: a query the pool drops stays
-// open until it is closed.
+// waits until its accepted writes drain. Close stops a query and returns at
+// once; Wait joins its drain. Do not keep Query values in a sync.Pool: a query
+// the pool drops stays open until it is closed.
 //
 // Prepared.AddToBatch, Query.AddToBatch and Session.UnpreparedAddToBatch
 // append statements to a Batch; Session.ExecBatch sends it, and

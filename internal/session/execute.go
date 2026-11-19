@@ -57,6 +57,9 @@ type InternalSessionRuntime struct {
 	// pooledWake, guarded by InternalMu, is the channel Close waits on for
 	// pooledBusy to reach zero.
 	pooledWake chan struct{}
+	// collected queues Debug reports of queries collected without Close,
+	// written outside the cleanup that queued them.
+	collected []collectedQuery
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]
@@ -79,6 +82,9 @@ type InternalSessionRuntime struct {
 	// admission writes no separate request counter.
 	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
+	// collectedFinal is set once Session.Close wrote the last queued
+	// reports; later collections queue none.
+	collectedFinal bool
 
 	// The fields below are written on the request path. Each group has its
 	// own cache line, so that the writes do not evict the read-mostly fields
@@ -921,14 +927,18 @@ func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *B
 	page.privateStorage.cursor = executionCursor(request)
 	page.privateStorage.cancel = cancel
 	page.privateStorage.session = rt.Core
+	// The page can outlive the request: Session.Close or Query.Close stops the
+	// execution and retires the query, which clears request. The closures
+	// keep the execution itself.
+	logical := request.InternalLogical
 	page.privateStorage.release = func() {
 		cancel()
-		request.InternalLogical.InternalFinish(response.Result, page.privateStorage.err)
-		request.InternalLogical.releaseInput()
+		logical.InternalFinish(response.Result, page.privateStorage.err)
+		logical.releaseInput()
 	}
-	request.InternalLogical.installStop(stopFunc(func() {
-		request.InternalLogical.InternalFinish(response.Result, cqlerr.ErrClosed)
-		request.InternalLogical.releaseInput()
+	logical.installStop(stopFunc(func() {
+		logical.InternalFinish(response.Result, cqlerr.ErrClosed)
+		logical.releaseInput()
 	}))
 	return page, nil
 }
