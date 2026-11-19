@@ -317,6 +317,12 @@ func TestHostDiscovery(t *testing.T) {
 			return opaqueStorageValue
 		}()
 
+		// 0.0.0.0 is not an address to connect to; with nothing else the
+		// peer is unusable.
+		if isValidPeer(host) {
+			t.Errorf("expected %+v without a connect address to NOT be a valid peer", host)
+		}
+		implEndpoint.HostInfoData(host).InternalPeer = net.ParseIP("10.0.0.1")
 		if !isValidPeer(host) {
 			t.Errorf("expected %+v to be a valid peer", host)
 		}

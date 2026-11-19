@@ -121,9 +121,12 @@ func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultP
 	return peers, nil
 }
 
-// Return true if the host is a valid peer
+// isValidPeer reports whether a peer row is complete enough to use. A peer
+// without any usable address (an rpc_address of 0.0.0.0 and no peer,
+// broadcast or preferred address) is not: HostInfo.ConnectAddress panics on
+// such a host.
 func isValidPeer(host *implEndpoint.HostInfo) bool {
-	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "")
+	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "" || implEndpoint.InternalHostInfoInvalidConnectAddr(host))
 }
 
 func isZeroToken(host *implEndpoint.HostInfo) bool {
@@ -296,6 +299,7 @@ func (r *InternalRingDescriber) InternalAddOrUpdate(host *implEndpoint.HostInfo)
 }
 
 func (r *InternalRingDescriber) addHostIfMissing(host *implEndpoint.HostInfo) (*implEndpoint.HostInfo, bool) {
+	// Invariant: see isValidPeer; ConnectAddress itself panics first.
 	if !implEndpoint.InternalValidIpAddr(host.ConnectAddress()) {
 		panic(fmt.Sprintf("invalid host: %v", host))
 	}
