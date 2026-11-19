@@ -104,8 +104,9 @@ streaming already handle this. With `RunPage`, decide whether to continue with
 When a conditional write times out, the server cannot say whether it was
 applied. Cassandra reports this as `CAS_WRITE_UNKNOWN` on protocol v5, and as a
 write timeout of type `CAS` on v4. ScyllaDB reports a write timeout of type
-`CAS`. `cqlerr.IsCASWriteUnknown(err)` matches all three, and
-`cqlerr.ExecutionStatusOf(err)` returns `MaybeExecuted` for them. Read the row
+`CAS`. `cqlerr.IsCASWriteUnknown(err)` matches all three,
+`cqlerr.ExecutionStatusOf(err)` returns `MaybeExecuted` for them, and
+`cqlerr.KindOf(err)` returns `KindTimeout`. Read the row
 back before retrying a non-idempotent conditional write, and use these checks
 instead of matching a specific error, so the check works on both servers.
 

@@ -55,6 +55,16 @@ func TestKindOf(t *testing.T) {
 		{"dial", dial, KindConnection},
 		{"request stops on cancel", newExecutionError(context.Canceled, cql.Result{}, MaybeExecuted, []AttemptFailure{{Err: overloaded}}), KindCanceled},
 		{"request last attempt", newExecutionError(overloaded, cql.Result{}, NotExecuted, []AttemptFailure{{Err: overloaded}}), KindOverloaded},
+		{"cas write unknown", &CASWriteUnknownError{}, KindTimeout},
+		{"cas write unknown code", server(CodeCASWriteUnknown), KindTimeout},
+		{"no control connection", ErrNoControl, KindConnection},
+		{"source port in use", ErrScyllaSourcePortAlreadyInUse, KindConnection},
+		{"no hosts", &NoHostsError{Operation: "o"}, KindConnection},
+		{"no hosts, server cause", &NoHostsError{Operation: "o", Causes: []error{server(CodeUnauthorized)}}, KindUnauthorized},
+		{"paging state limit", ErrPagingStateLimit, KindInvalid},
+		{"not found", ErrNotFound, KindInvalid},
+		{"no rows", ErrNoRows, KindInvalid},
+		{"paging no progress", ErrPagingNoProgress, KindProtocol},
 	} {
 		if got := KindOf(test.err); got != test.want {
 			t.Errorf("%s: KindOf = %v, want %v", test.name, got, test.want)

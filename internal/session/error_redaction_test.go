@@ -64,22 +64,26 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		timeout time.Duration
-		serve   server
+		// attempts is how many attempts the error lists; zero for a
+		// failure after the response arrived.
+		attempts int
+		serve    server
 	}{
-		{"Invalid", 0, answer(func(t *testing.T, stream int) []byte {
+		{"Invalid", 0, 1, answer(func(t *testing.T, stream int) []byte {
 			return serverError(t, stream, cqlerr.CodeInvalid, nil)
 		})},
-		{"UnavailableThenWriteTimeout", 0, func(t *testing.T, attempt int, stream int, peer net.Conn) {
+		{"UnavailableThenWriteTimeout", 0, 2, func(t *testing.T, attempt int, stream int, peer net.Conn) {
 			if attempt == 0 {
 				_, _ = peer.Write(serverError(t, stream, cqlerr.CodeUnavailable, unavailableBody()))
 				return
 			}
 			_, _ = peer.Write(serverError(t, stream, cqlerr.CodeWriteTimeout, writeTimeoutBody(1, "SIMPLE")))
 		}},
-		{"ConnectionClosed", 0, func(_ *testing.T, _ int, _ int, peer net.Conn) { peer.Close() }},
-		{"NoResponse", 100 * time.Millisecond, func(*testing.T, int, int, net.Conn) {}},
-		{"UndecodableRows", 0, answer(func(t *testing.T, stream int) []byte {
-			// An int column whose cell is three bytes long.
+		{"ConnectionClosed", 0, 2, func(_ *testing.T, _ int, _ int, peer net.Conn) { peer.Close() }},
+		{"NoResponse", 100 * time.Millisecond, 1, func(*testing.T, int, int, net.Conn) {}},
+		{"UndecodableRows", 0, 0, answer(func(t *testing.T, stream int) []byte {
+			// The rows say the blob column is an int, which the
+			// statement's blob decoder rejects.
 			body := runtimeRowsBody(nil, "abc")
 			body[len(body)-12] = byte(cql.TypeInt) // low byte of the column type
 			return typedTestResponse(t, 4, stream, body)
@@ -149,11 +153,21 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 				} else if strings.Contains(logged, redactionSecret) || logs.Contains(redactionSecret) {
 					t.Errorf("a log record leaks the bound value: %s", logged)
 				}
-				// The message says where the failure happened.
-				if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok && len(failure.Attempts) > 0 {
-					last := failure.Attempts[len(failure.Attempts)-1]
-					if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", last.Number, last.HostID)) {
-						t.Errorf("message %q does not name attempt #%d on %s", err, last.Number, last.HostID)
+				if tc.attempts == 0 {
+					return // a decoding failure, reported by the page
+				}
+				// The message names every attempt and where it ran.
+				failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
+				if !ok || len(failure.Attempts) != tc.attempts {
+					t.Fatalf("want an ExecutionError of %d attempts: %v", tc.attempts, err)
+				}
+				for _, a := range failure.Attempts {
+					target := a.Address
+					if target == "" {
+						target = a.HostID.String()
+					}
+					if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Number, target)) {
+						t.Errorf("message %q does not name attempt #%d on %s", err, a.Number, target)
 					}
 				}
 			})

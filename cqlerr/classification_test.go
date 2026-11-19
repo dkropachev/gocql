@@ -146,13 +146,4 @@ func TestErrorTypesClassified(t *testing.T) {
 			}
 		}
 	}
-	if got := KindOf(&CASWriteUnknownError{}); got != KindTimeout {
-		t.Errorf("CAS write unknown is %v, want timeout like a CAS write timeout", got)
-	}
-	if got := KindOf(NewOtherServerError(CodeCASWriteUnknown, "")); got != KindTimeout {
-		t.Errorf("CAS write unknown code is %v, want timeout", got)
-	}
-	if got := KindOf(&NoHostsError{Operation: "o", Causes: []error{NewOtherServerError(CodeUnauthorized, "")}}); got != KindUnauthorized {
-		t.Errorf("a no-hosts error's server cause is %v, want unauthorized", got)
-	}
 }
