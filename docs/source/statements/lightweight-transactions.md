@@ -10,9 +10,11 @@ metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
 replica ordering: a client tries a partition's replicas in the same order
 for every conditional request, preferred datacenter and rack first, without
-shuffling or random picks, skipping only replicas that are down or that
-latency avoidance marked slow. Concurrent requests from a client therefore
-share one coordinator and its Paxos rounds instead of contending from several.
+shuffling or random picks. Replicas that are down, unconnected or outside the
+allowed datacenters are skipped, and latency avoidance moves a replica it
+marked slow to the end of the plan. Otherwise concurrent requests from a
+client share one coordinator and its Paxos rounds instead of contending from
+several.
 The driver has no other notion of a Paxos leader; leader routing for strongly
 consistent tablet tables is `routing.Options.LeaderAware`. A statement
 executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read, not a
