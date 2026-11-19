@@ -109,10 +109,12 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 	return types
 }
 
-// unsafe: offset is the reflect offset of a field of type exactly V
-// (eachStructField sums the offsets of flattened value embeds; pointer
-// embeds are rejected), so it stays inside the struct the arithmetic starts
-// from and the result is a typed pointer the GC sees.
+// unsafe: in fieldParam, fieldColumn and fieldStreamColumn, offset is the
+// reflect offset of a field of type exactly V (eachStructField sums the
+// offsets of flattened value embeds; pointer embeds are rejected), so it
+// stays inside the struct the arithmetic starts from and the result is a
+// typed pointer the GC sees.
+
 func fieldParam[P, V any](enc Encoder[V]) func(string, uintptr) InputField[P] {
 	return func(name string, offset uintptr) InputField[P] {
 		return Param(name, enc, func(v P) V { return *(*V)(unsafe.Add(unsafe.Pointer(&v), offset)) })
@@ -565,9 +567,9 @@ func streamBuiltinFieldTypes() []structmap.BuiltinFieldType {
 	return types
 }
 
-// unsafe: as fieldParam.
 func fieldStreamColumn[R, V any](dec StreamDecoder[V]) func(string, uintptr) StreamOutputField[R] {
 	return func(name string, offset uintptr) StreamOutputField[R] {
+		// unsafe: as fieldParam.
 		return StreamColumn(name, dec, func(r *R) *V { return (*V)(unsafe.Add(unsafe.Pointer(r), offset)) })
 	}
 }

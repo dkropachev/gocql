@@ -23,8 +23,9 @@ type ParameterBuffer struct {
 	builder   wire.Builder
 }
 
-// unsafe: Sizeof is a compile-time constant.
+// RetainedBytes is the memory b keeps between encodes.
 func (b *ParameterBuffer) RetainedBytes() int {
+	// unsafe: Sizeof is a compile-time constant.
 	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
 

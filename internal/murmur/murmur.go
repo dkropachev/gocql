@@ -61,9 +61,9 @@ func Murmur3H1(data []byte) int64 {
 	// body
 	nBlocks := length / 16
 	for body := data[:nBlocks*16]; len(body) >= 16; body = body[16:] {
-		// Each Uint64 compiles to one load on little-endian targets; unlike
-		// a pointer cast it is right on big-endian ones and needs no
-		// alignment.
+		// Each Uint64 compiles to one load on 64-bit little-endian
+		// targets; unlike a pointer cast it is right on big-endian ones
+		// and needs no alignment.
 		k1 = int64(binary.LittleEndian.Uint64(body[:8]))
 		k2 = int64(binary.LittleEndian.Uint64(body[8:16]))
 
