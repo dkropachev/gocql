@@ -47,7 +47,7 @@ var (
 	NewStreamRowReader = NewSlot("cql.newStreamRowReader")
 	// StreamReaderStorageBytes holds func(*cql.StreamRowReader) int64.
 	StreamReaderStorageBytes = NewSlot("cql.streamReaderStorageBytes")
-	// DetachRow holds func(plan any, dst unsafe.Pointer) bool: it detaches the
+	// DetachRow holds func(plan any, dst any) bool: it detaches the
 	// row at dst when plan is a built-in plan, and reports whether it did.
 	DetachRow = NewSlot("cql.detachRow")
 	// ManagesRowDestination holds func(plan any) bool.
