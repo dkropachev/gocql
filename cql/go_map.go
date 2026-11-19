@@ -212,6 +212,12 @@ func ownsDecoded[T any](d Decoder[T]) bool {
 // struct-mapping table holds every built-in key and value pair without
 // instantiating code for each pair and struct type: the fields below are
 // generic only in the struct.
+//
+// unsafe: a map value is one pointer word, so a map[K]V and an unsafe.Pointer
+// convert both ways and the GC sees the map through either. offset is the
+// reflect offset of a field whose type is exactly map[K]V (resolveField
+// matches builtins by reflect.Type), inside the row or parameter struct the
+// pointer arithmetic starts from.
 type goMapField interface {
 	compile(DataType) (goMapField, error)
 	encode(w *ParamWriter, m unsafe.Pointer) error

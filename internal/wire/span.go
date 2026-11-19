@@ -46,6 +46,9 @@ func Borrow(b []byte) Span { return Span{data: b[:len(b):len(b)]} }
 // BorrowString borrows s without copying. The returned bytes MUST NOT be
 // modified: their storage may be read-only. This is the only unsafe conversion
 // needed by the wire representation.
+//
+// unsafe: the Span's capacity equals len(s), so appends copy, and the slice
+// points into s, which keeps s's storage reachable.
 func BorrowString(s string) Span {
 	return Span{data: unsafe.Slice(unsafe.StringData(s), len(s))}
 }

@@ -19,6 +19,11 @@ import (
 
 // PublicRoute returns r as a metadata.Route; the two share a layout, which
 // TestMirrorLayouts checks.
+//
+// unsafe: metadata.Route's unsafe.Pointer mirrors Route's *pool.HostRoute,
+// so the conversions in this file keep the host visible to the GC. The
+// RouteHost and RouteShardOf links receive only pointers that came from a
+// Route.
 func PublicRoute(r Route) metadata.Route { return *(*metadata.Route)(unsafe.Pointer(&r)) }
 
 // EngineRoute returns r as a Route.

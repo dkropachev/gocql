@@ -380,6 +380,9 @@ func (r *batchRows[R]) retag(rows Rows[R]) Rows[R] {
 // passed again matches; an equal decoder built anew may not, which only
 // costs a plan compile. Plain == would panic on decoders that are not
 // comparable, such as cql.Row's.
+//
+// unsafe: every Go interface value is two pointer words, the type (or itab)
+// and the data; they are compared, never dereferenced.
 func sameRowDecoder[R any](a, b cql.RowDecoder[R]) bool {
 	type iface struct{ tab, data unsafe.Pointer }
 	return *(*iface)(unsafe.Pointer(&a)) == *(*iface)(unsafe.Pointer(&b))

@@ -17,6 +17,8 @@ func perfOutput(output []byte, input int) {
 	perfCalls.Add(1)
 	perfInput.Add(int64(input))
 	perfOutputLen.Store(int64(len(output)))
+	// unsafe: the address is kept as a uintptr for identity checks in
+	// tests only; it is never converted back or dereferenced.
 	perfOutputPointer.Store(uintptr(unsafe.Pointer(unsafe.SliceData(output))))
 }
 

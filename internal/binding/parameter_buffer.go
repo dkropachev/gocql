@@ -23,6 +23,7 @@ type ParameterBuffer struct {
 	builder   wire.Builder
 }
 
+// unsafe: Sizeof is a compile-time constant.
 func (b *ParameterBuffer) RetainedBytes() int {
 	return cap(b.storage) + cap(b.cells)*int(unsafe.Sizeof(model.EncodedCell{})) + cap(b.positions)*int(unsafe.Sizeof(codec.ParamCell{}))
 }
@@ -112,6 +113,8 @@ func (b *ParameterBuffer) EncodeAppend[P any](plan cql.CompiledParams[P], column
 	if freezeErr != nil {
 		return storage, model.EncodedValues{}, freezeErr
 	}
+	// unsafe: SliceData only compares the two arrays' addresses, to see
+	// whether the builder wrote straight into storage's spare capacity.
 	if cap(tail) > 0 && unsafe.SliceData(encoded) == unsafe.SliceData(tail) {
 		storage = storage[:len(storage)+len(encoded)]
 	} else {
