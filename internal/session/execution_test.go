@@ -735,6 +735,64 @@ func TestExecution(t *testing.T) {
 			}
 		})
 
+		// TestExecution/Speculation/ConditionalNeverSpeculates checks that a
+		// conditional statement and a SERIAL read, both idempotent and with a
+		// speculation policy, send one attempt only, to the first replica:
+		// a second Paxos round would compete with the first.
+		t.Run("ConditionalNeverSpeculates", func(t *testing.T) {
+			for _, tc := range []struct {
+				name        string
+				kind        implCql.StatementKind
+				consistency implCql.Option[implCql.Consistency]
+			}{
+				{name: "Conditional", kind: implCql.ConditionalStatement},
+				{name: "SerialRead", kind: implCql.OrdinaryStatement, consistency: implCql.Some(implCql.Serial)},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					s, conns, peers := runtimeTestSession(t, 2)
+					policy := &runtimePolicy{targets: []metadata.Target{{HostID: implEndpoint.InternalHostInfoHostUUID(conns[0].InternalHost)}, {HostID: implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)}}}
+					profile := settings.InternalDefaultProfile()
+					profile.Routing = policy
+					profile.Speculation = runtimeSpeculation{}
+					handle := new(profile)
+					speculated := make(chan struct{})
+					go func() {
+						// The second replica must see nothing; a read only
+						// returns when the test closes the pipe.
+						var b [1]byte
+						if n, _ := peers[1].Read(b[:]); n > 0 {
+							close(speculated)
+						}
+					}()
+					go func() {
+						stream := typedTestReadRequest(t, conns[0], peers[0])
+						time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
+						_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
+					}()
+					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer b.Close()
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					page, err := RunPage(ctx, s, b, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, Consistency: tc.consistency}))
+					if err != nil {
+						t.Fatal(err)
+					}
+					page.Close()
+					select {
+					case <-speculated:
+						t.Fatal("a speculative attempt reached the second replica")
+					default:
+					}
+					if n := policy.events.Load(); n != 1 {
+						t.Fatalf("%d attempts, want 1", n)
+					}
+				})
+			}
+		})
+
 		t.Run("SpeculativeTraceRef", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 2)
 			second := implEndpoint.InternalHostInfoHostUUID(conns[1].InternalHost)

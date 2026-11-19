@@ -189,6 +189,57 @@ func TestPaging(t *testing.T) {
 			}
 		})
 
+		// TestPaging/Rows/PrefetchStaysOnePageAhead checks that prefetch asks
+		// for the next page once and only once per page: while the caller
+		// reads page one, page two is requested, but page three is not until
+		// the caller moves on to page two.
+		t.Run("PrefetchStaysOnePageAhead", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 1)
+			var requests atomic.Int32
+			go func() {
+				for i, body := range [][]byte{runtimeRowsBody([]byte("p2"), "a"), runtimeRowsBody([]byte("p3"), "b"), runtimeRowsBody(nil, "c")} {
+					stream := typedTestReadRequest(t, conns[0], peers[0])
+					requests.Store(int32(i + 1))
+					if _, err := peers[0].Write(typedTestResponse(t, 4, stream, body)); err != nil {
+						return
+					}
+				}
+			}()
+			profile := settings.InternalDefaultProfile()
+			profile.Prefetch = 1
+			b := runtimeQuery(t)
+			defer b.Close()
+			rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: new(profile)})))
+			defer rows.Close()
+			var row cql.Bytes
+			waitRequests := func(want int32) {
+				t.Helper()
+				deadline := time.Now().Add(5 * time.Second)
+				for requests.Load() < want {
+					if time.Now().After(deadline) {
+						t.Fatalf("%d requests, want %d", requests.Load(), want)
+					}
+					time.Sleep(time.Millisecond)
+				}
+				time.Sleep(20 * time.Millisecond)
+				if got := requests.Load(); got != want {
+					t.Fatalf("%d requests, want %d", got, want)
+				}
+			}
+			waitRequests(2) // page one, and page two prefetched
+			for i, want := range []string{"a", "b", "c"} {
+				if !rows.NextInto(&row) || string(row.OwnedBytes()) != want {
+					t.Fatalf("row %d: %v", i, rows.Err())
+				}
+				if i == 0 {
+					waitRequests(2) // reading page one asks for nothing more
+				}
+			}
+			if rows.NextInto(&row) || rows.Err() != nil {
+				t.Fatal(rows.Err())
+			}
+		})
+
 		t.Run("CycleAndBudgetBeforePrefetch", func(t *testing.T) {
 			for _, prefetch := range []int{0, 1} {
 				for _, mode := range []string{"cycle", "budget"} {
@@ -416,6 +467,52 @@ func TestPaging(t *testing.T) {
 	})
 
 	t.Run("RunPage", func(t *testing.T) {
+		// TestPaging/RunPage/RejectsOversizedToken checks that RunPage refuses a
+		// page state whose token is longer than the session's paging state
+		// size limit before sending anything, and sends one at the limit.
+		t.Run("RejectsOversizedToken", func(t *testing.T) {
+			s, conns, peers := runtimeTestSession(t, 1)
+			InternalRuntimeFor(s).config.Limits.MaxPagingStateBytes = 4
+			sent := make(chan []byte, 1)
+			go func() {
+				_, stream, body, err := readRequest(peers[0])
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				sent <- body
+				if _, err := peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row"))); err != nil {
+					t.Error(err)
+				}
+			}()
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			bound := runtimeQuery(t)
+			defer bound.Close()
+			if page, err := RunPage(ctx, s, bound, cql.PageStateFromToken([]byte("12345")), 0, CompiledOptions{}); !errors.Is(err, cqlerr.ErrPagingStateLimit) {
+				if page != nil {
+					page.Close()
+				}
+				t.Fatalf("oversized token: %v, want cqlerr.ErrPagingStateLimit", err)
+			}
+			if n := conns[0].InternalStreams.InUse(); n != 0 {
+				t.Fatalf("%d streams in use after a refused token", n)
+			}
+			page, err := RunPage(ctx, s, bound, cql.PageStateFromToken([]byte("1234")), 0, CompiledOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			page.Close()
+			select {
+			case body := <-sent:
+				if !bytes.Contains(body, []byte("1234")) {
+					t.Fatalf("request does not carry the token: %q", body)
+				}
+			case <-time.After(5 * time.Second):
+				t.Fatal("token at the limit was not sent")
+			}
+		})
+
 		// A page deadline cancels accepted attempts and drains their input without
 		// cancelling the caller's context or releasing an orphan's stream too early.
 		t.Run("DeadlinePreservesCaller", func(t *testing.T) {

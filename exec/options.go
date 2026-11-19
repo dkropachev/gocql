@@ -160,24 +160,37 @@ type PrepareOptions struct {
 // incremental stream, which reads its reserved connection itself, closes that
 // connection. Closing an incremental stream between rows instead reads the
 // rest of a current response of up to 1 MiB and keeps the connection.
+//
+// Back-pressure comes from paging: a stream requests the next page only when
+// NextInto reaches the end of the current one. An incremental stream also
+// reads the current response from its socket only as the decoder needs it,
+// never in the background, so a slow consumer keeps its reserved connection
+// and lets the transport's flow control hold back the server.
 type StreamOptions struct {
 	Options     Options
 	Limits      StreamLimits
 	Incremental bool
 }
 
-// StreamLimits bounds the receive scratch of an incremental stream.
+// StreamLimits bounds the receive scratch of an incremental stream, which
+// holds no response page: its memory is these budgets, whatever the size of
+// the result. A buffered stream instead holds one response page at a time,
+// bounded by the session's frame and decompression limits. Streams never
+// prefetch.
 //
-// Zero fields take defaults, so the zero StreamLimits is ready to use.
+// Zero fields take defaults, so the zero StreamLimits is ready to use. A
+// negative field, or a MaxTransformBytes below 16, is rejected with a
+// cql.ValidationError.
 type StreamLimits struct {
 	// MaxMetadataBytes caps a page's result metadata. Default 1 MiB.
 	MaxMetadataBytes int64
 	// ReadAheadBytes is how much the stream reads ahead of the decoder.
 	// Default 32 KiB.
 	ReadAheadBytes int
-	// DiscardBytes is the scratch used to skip unread data.
+	// DiscardBytes is the scratch used to skip unread data. Default 32 KiB.
 	DiscardBytes int
 	// MaxTransformBytes caps the scratch a decompressing stream holds.
+	// Default two maximum protocol v5 segment payloads, about 256 KiB.
 	MaxTransformBytes int64
 }
 
