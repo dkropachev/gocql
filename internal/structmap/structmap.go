@@ -17,10 +17,18 @@ type FieldTag struct {
 }
 
 // ParseFieldTag returns the column mapping of a struct field. ok is false for
-// a field that maps to no column: an unexported one, or one tagged "-".
+// a field that maps to no column: an unexported one, or one tagged "-". An
+// unexported field with any other cql tag is an error: the mapping cannot
+// reach it, and silently skipping it would hide the column.
 func ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (FieldTag, bool, error) {
 	value, tagged := tag.Lookup("cql")
-	if value == "-" || !exported {
+	if value == "-" {
+		return FieldTag{}, false, nil
+	}
+	if !exported {
+		if tagged {
+			return FieldTag{}, false, fmt.Errorf("gocql: field %s: tagged unexported field; export it or tag it `cql:\"-\"`", fieldName)
+		}
 		return FieldTag{}, false, nil
 	}
 	parts := splitTag(value)
@@ -128,16 +136,19 @@ type FieldCandidate struct {
 
 // ResolveFieldConflicts returns, in order, the candidates that map their
 // column, like Go's field promotion: a shallower field hides deeper ones with
-// the same column, and two at the same depth are an error.
+// the same column, whatever the order of the fields, and two at the
+// shallowest depth of a column are an error.
 func ResolveFieldConflicts(candidates []FieldCandidate) ([]int, error) {
 	best := map[string]int{}
 	for i, c := range candidates {
-		j, ok := best[c.Column]
-		switch {
-		case !ok || c.Depth < candidates[j].Depth:
+		if j, ok := best[c.Column]; !ok || c.Depth < candidates[j].Depth {
 			best[c.Column] = i
-		case c.Depth == candidates[j].Depth:
-			return nil, fmt.Errorf("fields %s and %s both map column %q", candidates[j].Path, c.Path, c.Column)
+		}
+	}
+	for i, c := range candidates {
+		if j := best[c.Column]; j != i && c.Depth == candidates[j].Depth {
+			first, second := candidates[min(i, j)], candidates[max(i, j)]
+			return nil, fmt.Errorf("fields %s and %s both map column %q", first.Path, second.Path, c.Column)
 		}
 	}
 	keep := make([]int, 0, len(best))

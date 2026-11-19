@@ -139,6 +139,31 @@ type T struct {
 			}
 		})
 
+		// A shallower field hides a same-depth pair declared before it, as
+		// reflection does.
+		t.Run("LateShallowerField", func(t *testing.T) {
+			_, out, err := generateSource(t, "x.go", `package x
+
+type A struct{ ID int64 }
+type B struct{ ID int64 }
+
+type T struct {
+	A
+	B
+	ID int64
+}
+`, "T")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := `cql.Param("id", cql.Int64Codec, func(v T) int64 { return v.ID })`; !strings.Contains(out, want) {
+				t.Errorf("missing %s in:\n%s", want, out)
+			}
+			if strings.Contains(out, "v.A.ID") || strings.Contains(out, "v.B.ID") {
+				t.Errorf("embedded ID not hidden by T.ID:\n%s", out)
+			}
+		})
+
 		t.Run("Errors", func(t *testing.T) {
 			for want, src := range map[string]string{
 				"no codec for type int":        "type T struct{ A int }",
@@ -146,6 +171,7 @@ type T struct {
 				"no codec for type Defined":    "import \"github.com/scylladb/gocql/v2/cql\"\ntype Defined cql.UUID\ntype T struct{ A Defined }",
 				"embedded pointer field E":     "type E struct{ A int32 }\ntype T struct{ *E }",
 				"only the tag":                 "type E struct{ A int32 }\ntype T struct{ E `cql:\"e\"` }",
+				"tagged unexported field":      "type T struct{ a int32 `cql:\"a\"` }",
 				"both map column \"a\"":        "type E struct{ A int32 }\ntype F struct{ A int32 }\ntype T struct{ E; F }",
 				"both map column":              "type T struct{ A int32; B int32 `cql:\"a\"` }",
 				"unknown cql tag option":       "type T struct{ A int32 `cql:\"a,omitempty\"` }",
