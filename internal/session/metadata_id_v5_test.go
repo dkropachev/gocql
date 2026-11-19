@@ -39,15 +39,16 @@ func readV5Requests(peer net.Conn) ([]v5Request, error) {
 	}
 	var out []v5Request
 	for len(payload) > 0 {
-		if len(payload) < 9 {
-			return nil, fmt.Errorf("truncated frame header in segment")
+		h, err := frm.DecodeHeader(payload)
+		if err != nil {
+			return nil, err
 		}
-		n := int(binary.BigEndian.Uint32(payload[5:9]))
-		if len(payload) < 9+n {
+		end := frm.HeaderSize + h.Length
+		if len(payload) < end {
 			return nil, fmt.Errorf("frame body exceeds segment")
 		}
-		out = append(out, v5Request{op: payload[4], stream: int(binary.BigEndian.Uint16(payload[2:4])), body: bytes.Clone(payload[9 : 9+n])})
-		payload = payload[9+n:]
+		out = append(out, v5Request{op: byte(h.Op), stream: h.Stream, body: bytes.Clone(payload[frm.HeaderSize:end])})
+		payload = payload[end:]
 	}
 	return out, nil
 }
@@ -184,6 +185,7 @@ func testResultMetadataIDV5(t *testing.T, run func(context.Context, *cluster.Cor
 	go func() {
 		defer close(serverDone)
 		defer close(executes)
+		defer peer.Close() // a server error ends the client's wait at once
 		for {
 			requests, err := readV5Requests(peer)
 			if err != nil {
