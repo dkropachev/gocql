@@ -11,6 +11,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	publicRouting "github.com/scylladb/gocql/v2/routing"
 
 	"context"
 	"testing"
@@ -68,3 +69,7 @@ func readStartupOptions(t *testing.T, f *implProtocol.Framer) (opts map[string]s
 	}
 	return opts
 }
+
+// fakeRoutingPolicy is an application routing.Policy, so the report names it
+// as custom. It is only ever reported, never asked to route.
+type fakeRoutingPolicy struct{ publicRouting.Policy }

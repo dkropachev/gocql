@@ -24,9 +24,11 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
+	publicRouting "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestDriverConfigReport(t *testing.T) {
@@ -243,6 +245,87 @@ func TestDriverConfigReport(t *testing.T) {
 				got := buildControlPlaneReport(&cfg, nil, tt.isScyllaConn)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Errorf("buildControlPlaneReport() mismatch:\n%s", diff)
+				}
+			})
+		}
+	})
+
+	// TestDriverConfigReport/BuildTypedLoadBalancingReport covers the
+	// load-balancing group a session built from config.Config reports: the
+	// value for each routing option, and that each value conforms to the
+	// schema.
+	t.Run("BuildTypedLoadBalancingReport", func(t *testing.T) {
+		builtin := func(o publicRouting.Options) implRouting.RoutingPolicy {
+			p, err := implRouting.NewRoutingPolicy(o)
+			if err != nil {
+				t.Fatalf("NewRoutingPolicy(%+v): %v", o, err)
+			}
+			return p
+		}
+		tokenAware := func(distribution string, fallback bool) InternalLoadBalancingTokenAwareReport {
+			return InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: distribution, FallbackToNonPreferredNodes: fallback}
+		}
+		latency := tokenAware("replica-set", false)
+		latency.AdaptiveOrdering = &adaptiveOrderingReport{Signals: []string{"latency"}}
+		schema := loadDriverConfigSchema(t)
+		for _, tt := range []struct {
+			name   string
+			policy implRouting.RoutingPolicy
+			want   queryLoadBalancingReport
+		}{
+			{
+				name:   "not token-aware",
+				policy: builtin(publicRouting.Options{}),
+				want:   queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}},
+			},
+			{
+				name:   "token-aware, fixed replica order",
+				policy: builtin(publicRouting.Options{TokenAware: true}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false)},
+			},
+			{
+				name:   "token-aware, shuffled, remote allowed",
+				policy: builtin(publicRouting.Options{TokenAware: true, ShuffleReplicas: true, AllowRemote: true}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("shuffle", true)},
+			},
+			{
+				name:   "latency-aware",
+				policy: builtin(publicRouting.Options{TokenAware: true, Latency: publicRouting.LatencyOptions{Enabled: true}}),
+				want:   queryLoadBalancingReport{Policy: latency},
+			},
+			{
+				name:   "local datacenter",
+				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1"}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: nodeLocationDCReport{Type: "dc", LocalDC: "dc1"}},
+			},
+			{
+				name:   "local rack",
+				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1"}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: InternalNodeLocationRackReport{Type: "rack", LocalDC: "dc1", LocalRack: "rack1"}},
+			},
+			{
+				name:   "application policy",
+				policy: implRouting.EngineOf(fakeRoutingPolicy{}),
+				want:   queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: "fakeRoutingPolicy"}},
+			},
+		} {
+			t.Run(tt.name, func(t *testing.T) {
+				got := buildTypedLoadBalancingReport(tt.policy)
+				if diff := cmp.Diff(tt.want, got); diff != "" {
+					t.Fatalf("buildTypedLoadBalancingReport() mismatch:\n%s", diff)
+				}
+				report := buildCaseReport(t, nil, false)
+				encoded, err := json.Marshal(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var group any
+				if err := json.Unmarshal(encoded, &group); err != nil {
+					t.Fatal(err)
+				}
+				report.(map[string]any)["query"].(map[string]any)["load-balancing"] = group
+				if err := schema.Validate(report); err != nil {
+					t.Errorf("load-balancing group does not conform to %s:\n%v\n\ngroup: %s", driverConfigSchemaPath, err, encoded)
 				}
 			})
 		}
