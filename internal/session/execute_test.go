@@ -128,6 +128,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 		_, err := io.ReadFull(peers[0], loserHeader[:])
 		loserStarted <- err
 		if err != nil {
+			t.Error(err)
 			return
 		}
 		stream := typedTestReadRequest(t, conns[1], peers[1])

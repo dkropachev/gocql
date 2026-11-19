@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/maphash"
+	"runtime"
 	"testing"
 	"time"
 
@@ -236,63 +237,79 @@ func TestPaging(t *testing.T) {
 		})
 
 		// TestPaging/Rows/NextIntoPagingAndCloseInterrupt checks that Close
-		// interrupts a NextInto blocked on a continuation page. Prefetch is
-		// off so that the third request comes from NextInto itself: with
-		// prefetch, the prefetcher sends it while the first NextInto returns,
-		// and Close could then run before the second NextInto starts.
+		// interrupts a NextInto blocked on a continuation page, fetched by
+		// NextInto itself (prefetch=0) or by the prefetcher (prefetch=1). Close
+		// starts only once the blocked NextInto holds the rows' lock: before
+		// that, Close would find nothing to interrupt and close idle rows,
+		// which reports no error.
 		t.Run("NextIntoPagingAndCloseInterrupt", func(t *testing.T) {
-			s, conns, peers := runtimeTestSession(t, 1)
-			profile := settings.InternalDefaultProfile()
-			profile.Prefetch = 0
-			handle := new(profile)
-			nextRequested := make(chan struct{})
-			stopped := make(chan struct{})
-			go func() {
-				defer close(stopped)
-				for i, body := range [][]byte{runtimeRowsBody([]byte{}), runtimeRowsBody([]byte("next"), "one")} {
-					stream := typedTestReadRequest(t, conns[0], peers[0])
-					if _, err := peers[0].Write(typedTestResponse(t, 4, stream, body)); err != nil {
-						t.Error(err)
-						return
+			for _, prefetch := range []int{0, 1} {
+				t.Run(fmt.Sprintf("prefetch=%d", prefetch), func(t *testing.T) {
+					s, conns, peers := runtimeTestSession(t, 1)
+					profile := settings.InternalDefaultProfile()
+					profile.Prefetch = prefetch
+					handle := new(profile)
+					nextRequested := make(chan struct{})
+					stopped := make(chan struct{})
+					go func() {
+						defer close(stopped)
+						for _, body := range [][]byte{runtimeRowsBody([]byte{}), runtimeRowsBody([]byte("next"), "one")} {
+							stream := typedTestReadRequest(t, conns[0], peers[0])
+							if _, err := peers[0].Write(typedTestResponse(t, 4, stream, body)); err != nil {
+								t.Error(err)
+								return
+							}
+						}
+						typedTestReadRequest(t, conns[0], peers[0])
+						close(nextRequested)
+					}()
+					b := runtimeQuery(t)
+					defer b.Close()
+					rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
+					defer rows.Close()
+					var dst cql.Bytes
+					if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
+						t.Fatal(rows.Err())
 					}
-					_ = i
-				}
-				typedTestReadRequest(t, conns[0], peers[0])
-				close(nextRequested)
-			}()
-			b := runtimeQuery(t)
-			defer b.Close()
-			rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
-			defer rows.Close()
-			var dst cql.Bytes
-			if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
-				t.Fatal(rows.Err())
-			}
-			retained := codecTestMust(rows.Retain())
-			defer retained.Close()
-			copyView := dst
-			done := make(chan bool)
-			go func() { done <- rows.NextInto(&dst) }()
-			<-nextRequested
-			closed := make(chan error)
-			go func() { closed <- rows.Close() }()
-			select {
-			case ok := <-done:
-				if ok || dst.Len() != 0 {
-					t.Fatal("cancelled NextInto succeeded")
-				}
-			case <-time.After(time.Second):
-				t.Fatal("close did not interrupt next page")
-			}
-			if err := <-closed; !errors.Is(err, context.Canceled) {
-				t.Fatal(err)
-			}
-			if string(copyView.OwnedBytes()) != "one" {
-				t.Fatal("retained view lost")
-			}
-			<-stopped
-			if rows.NextInto(nil) || !errors.Is(rows.Err(), context.Canceled) {
-				t.Fatal("terminal error changed")
+					retained := codecTestMust(rows.Retain())
+					defer retained.Close()
+					copyView := dst
+					done := make(chan bool)
+					go func() { done <- rows.NextInto(&dst) }()
+					select {
+					case <-nextRequested:
+					case <-time.After(5 * time.Second):
+						t.Fatal("next page never requested")
+					}
+					deadline := time.Now().Add(5 * time.Second)
+					for RowsData(rows).mu.TryLock() {
+						RowsData(rows).mu.Unlock()
+						if time.Now().After(deadline) {
+							t.Fatal("NextInto never took the rows' lock")
+						}
+						runtime.Gosched()
+					}
+					closed := make(chan error)
+					go func() { closed <- rows.Close() }()
+					select {
+					case ok := <-done:
+						if ok || dst.Len() != 0 {
+							t.Fatal("cancelled NextInto succeeded")
+						}
+					case <-time.After(5 * time.Second):
+						t.Fatal("close did not interrupt next page")
+					}
+					if err := <-closed; !errors.Is(err, context.Canceled) {
+						t.Fatal(err)
+					}
+					if string(copyView.OwnedBytes()) != "one" {
+						t.Fatal("retained view lost")
+					}
+					<-stopped
+					if rows.NextInto(nil) || !errors.Is(rows.Err(), context.Canceled) {
+						t.Fatal("terminal error changed")
+					}
+				})
 			}
 		})
 	})
