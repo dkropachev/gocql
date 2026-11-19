@@ -39,8 +39,9 @@ const (
 // result has V's exact underlying type: integerWidth matches only int8,
 // int16, int32, int64 and Counter, and the blob, text, []byte and string
 // kinds are chosen by the codec's dynamic type, which fixes V. The closure
-// pointer is held as an unsafe.Pointer, which the GC follows. Constructors
-// reject nil accessors before an op is built.
+// pointer is held as an unsafe.Pointer, which the GC follows. A field's
+// compile rejects a nil accessor, and ops are built only from compiled
+// fields.
 func funcPointer[F any](f *F) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(f)) }
 
 // integerWidth returns the width of V when it is a signed integer type, or 0.
