@@ -26,8 +26,8 @@ func TestParamCellLayout(t *testing.T) {
 }
 
 // TestDetachRowBuiltinPlans checks that DetachRow's link reaches each
-// built-in plan's detachRowAt with the destination type it asserts, and that
-// another plan falls back to Clone.
+// built-in plan's detachRowAt with the destination type it asserts, and
+// reports no detach for another plan, which DetachRow then clones.
 func TestDetachRowBuiltinPlans(t *testing.T) {
 	one := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: cql.TextType})
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: cql.TextType}, cql.ColumnSpec{Name: "b", Type: cql.IntType})
