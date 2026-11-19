@@ -9,6 +9,7 @@ import (
 	"net"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
@@ -226,3 +227,60 @@ type convictionPicker struct {
 func (p convictionPicker) NextShard() (int, int) { return p.shard, p.shards }
 
 func (p convictionPicker) Size() (int, int) { return p.count, 0 }
+
+// A host pool requested after the policy pool closed (by the session's
+// reconnect loop or a topology event racing Session.Close) is closed at
+// once and kept out of the map, where nothing would close it.
+func TestPolicyConnPoolAfterClose(t *testing.T) {
+	id := cql.MustParseUUID("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
+	host := (endpoint.HostInfoBuilder{HostId: id.String(), ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042, DataCenter: "dc1", Rack: "r1"}).Build()
+	p := &InternalPolicyConnPool{
+		InternalServices:      InternalPoolServices{Config: &connectivity.Config{}, Context: context.Background()},
+		InternalHostConnPools: map[cql.UUID]*InternalHostConnPool{},
+		InternalNumConns:      1,
+	}
+	p.Close()
+	hp := p.InternalEnsureHost(&host)
+	if !hp.InternalClosed {
+		t.Fatal("host pool made after Close is open")
+	}
+	p.SetHosts([]*endpoint.HostInfo{&host})
+	if len(p.InternalHostConnPools) != 0 {
+		t.Fatalf("closed policy pool holds %d host pools", len(p.InternalHostConnPools))
+	}
+}
+
+// Closing a pool cancels its repair context; InternalConnect must stop
+// retrying a failed dial then, rather than sleep out the reconnection
+// policy's remaining intervals.
+func TestHostConnPoolConnectStopsRetriesWhenRepairEnds(t *testing.T) {
+	id := cql.MustParseUUID("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
+	host := (endpoint.HostInfoBuilder{HostId: id.String(), ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042, DataCenter: "dc1", Rack: "r1"}).Build()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{count: 1}, InternalLogger: logging.Nop(), InternalRepairCtx: ctx}
+	p.InternalServices = InternalPoolServices{
+		Config:       &connectivity.Config{},
+		Conviction:   &convictionRecorder{callback: func(endpoint2.ConvictionEvent) bool { return false }},
+		Down:         func(net.IP, int) {},
+		Connected:    func(*InternalHostConnPool) {},
+		Reconnection: &ConstantReconnectionPolicy{MaxRetries: 5, Interval: time.Hour},
+	}
+	cause := errors.New("dial failed")
+	dials := 0
+	p.InternalServices.Dial = func(context.Context, *endpoint.HostInfo, transport.ConnErrorHandler, int, int) (*transport.Conn, error) {
+		dials++
+		cancel()
+		return nil, cause
+	}
+	done := make(chan error, 1)
+	go func() { done <- p.InternalConnect() }()
+	select {
+	case err := <-done:
+		if !errors.Is(err, cause) || dials != 1 {
+			t.Fatalf("InternalConnect = %v after %d dials, want the dial error after one", err, dials)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the retry loop kept sleeping after its repair context ended")
+	}
+}

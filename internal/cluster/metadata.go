@@ -188,7 +188,8 @@ func (s *Core) Metrics() metrics.Snapshot {
 // every schema event in the cluster changes one, so under concurrent DDL a
 // few immediate rebuilds can all lose. That is transient: each change
 // publishes again itself. After four immediate attempts it backs off, 1 ms
-// doubling up to 100 ms, for about a second in all before reporting failure.
+// doubling up to 100 ms, for about 0.7s in all before reporting failure. It
+// reports failure at once when the backoff finds the session closing.
 func (s *Core) PublishV2Metadata() bool {
 	delay := time.Millisecond
 	for attempt := 0; attempt < 16; attempt++ {
@@ -196,6 +197,11 @@ func (s *Core) PublishV2Metadata() bool {
 			return true
 		}
 		if attempt >= 3 {
+			// Close joins the workers that publish; stop backing off
+			// once it has started.
+			if s.Closed() {
+				return false
+			}
 			time.Sleep(delay)
 			delay = min(2*delay, 100*time.Millisecond)
 		}
@@ -1301,6 +1307,10 @@ func (s *Core) v2SchemaRefreshFailure(name string, cause error) error {
 }
 
 func (s *Core) v2MetadataPublicationError() error {
+	if s.Closed() {
+		// PublishV2Metadata stops retrying once Close has started.
+		return cqlerr.ErrClosed
+	}
 	return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Keyspaces: map[string]error{"<publication>": fmt.Errorf("metadata sources changed throughout publication; refresh again")}}
 }
 

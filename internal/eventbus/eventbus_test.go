@@ -20,6 +20,8 @@ package eventbus
 
 import (
 	"context"
+	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -391,6 +393,24 @@ func TestEventBus(t *testing.T) {
 		}
 	})
 
+	t.Run("SubscribeWithContextEndsOnStop", func(t *testing.T) {
+		eb := New[int](EventBusConfig{InputEventsQueueSize: 10}, nil)
+		if err := eb.Start(); err != nil {
+			t.Fatalf("Start failed: %v", err)
+		}
+		eb.SubscribeWithContext(context.Background(), "test", 10, nil)
+		if err := eb.Stop(); err != nil {
+			t.Fatal(err)
+		}
+		// The watcher must end although the subscription's context never
+		// does.
+		for deadline := time.Now().Add(time.Second); watchers() > 0; time.Sleep(time.Millisecond) {
+			if time.Now().After(deadline) {
+				t.Fatalf("%d SubscribeWithContext watchers outlived Stop", watchers())
+			}
+		}
+	})
+
 	t.Run("SubscribeWithContext", func(t *testing.T) {
 		eb := New[int](
 			EventBusConfig{
@@ -494,4 +514,11 @@ func TestEventBus(t *testing.T) {
 			}
 		})
 	})
+}
+
+// watchers counts the live goroutines SubscribeWithContext started.
+func watchers() int {
+	buf := make([]byte, 1<<20)
+	buf = buf[:runtime.Stack(buf, true)]
+	return strings.Count(string(buf), "eventbus.(*EventBus[...]).SubscribeWithContext.func1(")
 }
