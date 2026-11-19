@@ -22,7 +22,7 @@
 // execution's deadline.
 //
 // Preparation takes no Options. Session.Prepare and Session.PrepareStream are
-// bounded by their context and the session default profile's Timeout,
+// bounded by their context and the session's default profile Timeout,
 // whichever expires first. A statement the driver prepares again during an
 // execution, after an UNPREPARED error or on a host that has not seen it, is
 // bounded by that execution's deadline.
@@ -154,7 +154,11 @@ type PrepareOptions struct {
 // StreamOptions chooses caller-storage decoding and its receive mode. The zero
 // value buffers one response page on a multiplexed connection. Incremental
 // reserves a connection for bounded receive scratch. Both modes require seeded
-// output capacity and disable prefetch and speculation.
+// output capacity and disable prefetch and speculation. Cancelling a stream
+// while a response is outstanding never reuses its stream ID early: a
+// buffered stream leaves the ID in use until the response arrives, while an
+// incremental stream, which reads its reserved connection itself, closes that
+// connection.
 type StreamOptions struct {
 	Options     Options
 	Limits      StreamLimits
