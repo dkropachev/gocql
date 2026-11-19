@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -117,7 +118,19 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	profile.Speculation = runtimeSpeculation{}
 	profile.PageTimeout = pageTimeout
 	handle := new(profile)
+	// The winner answers only once the loser's frame header has been read,
+	// so the loser's writer is known to be blocked mid-frame. Without this,
+	// the winner could answer before the loser's write was accepted, and the
+	// loser would be cancelled with nothing to drain.
+	var loserHeader [9]byte
+	loserStarted := make(chan error, 1)
 	go func() {
+		_, err := io.ReadFull(peers[0], loserHeader[:])
+		loserStarted <- err
+		if err != nil {
+			t.Error(err)
+			return
+		}
 		stream := typedTestReadRequest(t, conns[1], peers[1])
 		_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "winner")))
 	}()
@@ -139,7 +152,13 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	if !errors.Is(bound.Wait(short), context.DeadlineExceeded) {
 		t.Fatal("Wait released loser while its writer was blocked")
 	}
-	stream := typedTestReadRequest(t, conns[0], peers[0])
+	if err := <-loserStarted; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.CopyN(io.Discard, peers[0], int64(binary.BigEndian.Uint32(loserHeader[5:]))); err != nil {
+		t.Fatal(err)
+	}
+	stream := int(binary.BigEndian.Uint16(loserHeader[2:4]))
 	go func() { _, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "loser"))) }()
 	if err = bound.Wait(ctx); err != nil {
 		t.Fatal(err)

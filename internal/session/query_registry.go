@@ -89,30 +89,36 @@ func (rt *InternalSessionRuntime) openQueries() []*queryState {
 }
 
 // collectQuery removes the entry of a query collected without Close and,
-// when the session logs at Debug, reports where it was created. A collected pooled query
-// was busy, held by a handle dropped without Close; it will never become idle,
-// so its collection ends its busy count instead.
+// when the session logs at Debug, reports where it was created. The report is
+// written before the entry is removed, so once the registry no longer holds
+// the query its report is complete. A collected pooled query was busy, held by
+// a handle dropped without Close; it will never become idle, so its
+// collection ends its busy count instead.
+//
+// A collected query is unreachable, so no Close can race with the cleanup:
+// unregisterQuery would have stopped it first.
 func collectQuery(ref queryRef) {
 	rt := ref.runtime
 	rt.InternalMu.Lock()
 	entry := rt.queries[ref.key]
-	delete(rt.queries, ref.key)
 	rt.InternalMu.Unlock()
 	if entry == nil {
 		return
 	}
+	if entry.stack != nil {
+		what := "query"
+		if entry.pooled {
+			what = "Rows or Page"
+		}
+		if logger := rt.debugLogger(); logger != nil {
+			logger.Debug(what+" collected without Close", slog.String("created_at", formatQueryStack(entry.stack)))
+		}
+	}
+	rt.InternalMu.Lock()
+	delete(rt.queries, ref.key)
+	rt.InternalMu.Unlock()
 	if entry.pooled {
 		rt.pooledIdle()
-	}
-	if entry.stack == nil {
-		return
-	}
-	what := "query"
-	if entry.pooled {
-		what = "Rows or Page"
-	}
-	if logger := rt.debugLogger(); logger != nil {
-		logger.Debug(what+" collected without Close", slog.String("created_at", formatQueryStack(entry.stack)))
 	}
 }
 
