@@ -61,7 +61,9 @@ func (rt *InternalSessionRuntime) addQuery(state *queryState, pooled bool) {
 		rt.queries = make(map[weak.Pointer[queryState]]*queryEntry)
 	}
 	rt.queries[key] = entry
+	collected := rt.takeCollected()
 	rt.InternalMu.Unlock()
+	rt.reportCollected(collected)
 }
 
 // unregisterQuery removes a closed query's entry and its cleanup.
@@ -88,12 +90,21 @@ func (rt *InternalSessionRuntime) openQueries() []*queryState {
 	return queries
 }
 
-// collectQuery removes the entry of a query collected without Close and,
-// when the session logs at Debug, reports where it was created. The report is
-// written before the entry is removed, so once the registry no longer holds
-// the query its report is complete. A collected pooled query was busy, held by
-// a handle dropped without Close; it will never become idle, so its
-// collection ends its busy count instead.
+// collectedQuery is a query collected without Close whose creation the
+// session has yet to report.
+type collectedQuery struct {
+	stack  []uintptr
+	pooled bool
+}
+
+// collectQuery removes the entry of a query collected without Close. A
+// collected pooled query was busy, held by a handle dropped without Close; it
+// will never become idle, so its collection ends its busy count instead.
+//
+// It runs on the runtime's cleanup goroutine, shared by the whole process, so
+// it calls no application code: when the query's creation stack was recorded
+// for a Debug report, it only queues the report. The next query registration,
+// or Session.Close, writes it through the session's logger.
 //
 // A collected query is unreachable, so no Close can race with the cleanup:
 // unregisterQuery would have stopped it first.
@@ -101,24 +112,40 @@ func collectQuery(ref queryRef) {
 	rt := ref.runtime
 	rt.InternalMu.Lock()
 	entry := rt.queries[ref.key]
+	delete(rt.queries, ref.key)
+	if entry != nil && entry.stack != nil {
+		rt.collected = append(rt.collected, collectedQuery{stack: entry.stack, pooled: entry.pooled})
+	}
 	rt.InternalMu.Unlock()
-	if entry == nil {
+	if entry != nil && entry.pooled {
+		rt.pooledIdle()
+	}
+}
+
+// takeCollected returns and clears the queued reports of collected queries.
+// The caller holds rt.InternalMu.
+func (rt *InternalSessionRuntime) takeCollected() []collectedQuery {
+	collected := rt.collected
+	rt.collected = nil
+	return collected
+}
+
+// reportCollected writes the Debug reports of collected queries. The caller
+// must not hold rt.InternalMu: the logger is application code.
+func (rt *InternalSessionRuntime) reportCollected(collected []collectedQuery) {
+	if len(collected) == 0 {
 		return
 	}
-	if entry.stack != nil {
+	logger := rt.debugLogger()
+	if logger == nil {
+		return
+	}
+	for _, c := range collected {
 		what := "query"
-		if entry.pooled {
+		if c.pooled {
 			what = "Rows or Page"
 		}
-		if logger := rt.debugLogger(); logger != nil {
-			logger.Debug(what+" collected without Close", slog.String("created_at", formatQueryStack(entry.stack)))
-		}
-	}
-	rt.InternalMu.Lock()
-	delete(rt.queries, ref.key)
-	rt.InternalMu.Unlock()
-	if entry.pooled {
-		rt.pooledIdle()
+		logger.Debug(what+" collected without Close", slog.String("created_at", formatQueryStack(c.stack)))
 	}
 }
 

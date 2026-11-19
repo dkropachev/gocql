@@ -57,6 +57,9 @@ type InternalSessionRuntime struct {
 	// pooledWake, guarded by InternalMu, is the channel Close waits on for
 	// pooledBusy to reach zero.
 	pooledWake chan struct{}
+	// collected queues Debug reports of queries collected without Close,
+	// written outside the cleanup that queued them.
+	collected []collectedQuery
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]

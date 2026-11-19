@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -39,6 +40,22 @@ func (r *recordingLogger) String() string {
 
 func (r *recordingLogger) logger(level slog.Level) *slog.Logger {
 	return slog.New(slog.NewTextHandler(r, &slog.HandlerOptions{Level: level}))
+}
+
+// countingHandler counts the calls the driver makes into a slog.Handler.
+type countingHandler struct {
+	slog.Handler
+	calls atomic.Int64
+}
+
+func (h *countingHandler) Enabled(ctx context.Context, level slog.Level) bool {
+	h.calls.Add(1)
+	return h.Handler.Enabled(ctx, level)
+}
+
+func (h *countingHandler) Handle(ctx context.Context, r slog.Record) error {
+	h.calls.Add(1)
+	return h.Handler.Handle(ctx, r)
 }
 
 func registeredQueries(rt *InternalSessionRuntime) int {
@@ -92,18 +109,25 @@ func dropQuery(t *testing.T, s *cluster.Core, pending bool) *wire.Lease {
 func TestQueryRegistry(t *testing.T) {
 	// TestQueryRegistry/CollectsUnclosedQuery checks that a query dropped
 	// without Close leaves the session's registry once collected, and that
-	// Session.Close then has nothing to wait for.
+	// Session.Close then has nothing to wait for. The cleanup calls no
+	// application code: the logger is not touched until Session.Close writes
+	// the queued report.
 	t.Run("CollectsUnclosedQuery", func(t *testing.T) {
 		for _, level := range []slog.Level{slog.LevelDebug, slog.LevelInfo} {
 			t.Run(level.String(), func(t *testing.T) {
 				s, rt := attachmentSession()
 				log := new(recordingLogger)
-				cluster.SessionData(s).InternalLogger = log.logger(level)
+				handler := &countingHandler{Handler: slog.NewTextHandler(log, &slog.HandlerOptions{Level: level})}
+				cluster.SessionData(s).InternalLogger = slog.New(handler)
 				dropQuery(t, s, false)
 				if registeredQueries(rt) != 1 {
 					t.Fatal("query not registered")
 				}
+				calls := handler.calls.Load()
 				waitCollected(t, rt)
+				if n := handler.calls.Load() - calls; n != 0 {
+					t.Fatalf("the cleanup called the logger %d times", n)
+				}
 				done := make(chan struct{})
 				go func() { rt.StopActive().Wait(); close(done) }()
 				select {
