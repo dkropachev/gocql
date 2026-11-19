@@ -59,6 +59,9 @@ func unsent(err error) bool {
 // ExecutionStatusOf reports what the request that failed with err may have
 // done on the cluster, across all of its attempts. It returns NotExecuted for
 // a nil error and MaybeExecuted for an error the driver cannot attribute.
+// An error a call returns for an invalid argument before it starts the
+// request, such as a negative page size, is a cql.ValidationError of
+// KindInvalid that no attempt reported, so it is one of those.
 func ExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
 		return NotExecuted
