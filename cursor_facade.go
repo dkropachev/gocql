@@ -38,7 +38,10 @@ func (r Rows[R]) NextInto(dst *R) bool { return (implSession.Rows[R])(r).NextInt
 // Err returns the terminal iteration error, if any.
 func (r Rows[R]) Err() error { return (implSession.Rows[R])(r).Err() }
 
-// Close stops iteration and releases this execution. It is idempotent.
+// Close stops iteration and releases this execution. It is idempotent and
+// returns the same error each time: the error that ended iteration, if any,
+// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// first.
 func (r Rows[R]) Close() error { return (implSession.Rows[R])(r).Close() }
 
 // Columns returns the current page's actual immutable result metadata.
@@ -81,7 +84,10 @@ func (r CASBatchRows[X]) Applied() (bool, error) {
 // Err returns the terminal iteration error, if any.
 func (r CASBatchRows[X]) Err() error { return (implSession.CASBatchRows[X])(r).Err() }
 
-// Close stops iteration and releases this execution. It is idempotent.
+// Close stops iteration and releases this execution. It is idempotent and
+// returns the same error each time: the error that ended iteration, if any,
+// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// first.
 func (r CASBatchRows[X]) Close() error { return (implSession.CASBatchRows[X])(r).Close() }
 
 // Columns returns the actual immutable result metadata.
@@ -120,7 +126,10 @@ func (r *Page[R]) NextInto(dst *R) bool { return (*implSession.Page[R])(r).NextI
 // Err returns the terminal iteration error, if any.
 func (r *Page[R]) Err() error { return (*implSession.Page[R])(r).Err() }
 
-// Close stops iteration and releases this execution. It is idempotent.
+// Close stops iteration and releases this execution. It is idempotent and
+// returns the same error each time: the error that ended iteration, if any,
+// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// first.
 func (r *Page[R]) Close() error { return (*implSession.Page[R])(r).Close() }
 
 // Columns returns the current page's actual immutable result metadata.
@@ -149,7 +158,10 @@ func (r *RowStream[R]) NextInto(dst *R) bool { return (*implSession.RowStream[R]
 // Err returns the terminal iteration error, if any.
 func (r *RowStream[R]) Err() error { return (*implSession.RowStream[R])(r).Err() }
 
-// Close stops iteration and releases this execution. It is idempotent.
+// Close stops iteration and releases this execution. It is idempotent and
+// returns the same error each time: the error that ended iteration, if any,
+// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// first.
 // It cancels and joins any in-progress destination access before returning.
 func (r *RowStream[R]) Close() error { return (*implSession.RowStream[R])(r).Close() }
 
