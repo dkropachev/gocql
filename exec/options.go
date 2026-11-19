@@ -155,10 +155,11 @@ type PrepareOptions struct {
 // value buffers one response page on a multiplexed connection. Incremental
 // reserves a connection for bounded receive scratch. Both modes require seeded
 // output capacity and disable prefetch and speculation. Cancelling a stream
-// while a response is outstanding never reuses its stream ID early: a
-// buffered stream leaves the ID in use until the response arrives, while an
+// while it waits for a response never reuses its stream ID early: a buffered
+// stream leaves the ID in use until the response arrives, while an
 // incremental stream, which reads its reserved connection itself, closes that
-// connection.
+// connection. Closing an incremental stream between rows instead reads the
+// rest of a current response of up to 1 MiB and keeps the connection.
 type StreamOptions struct {
 	Options     Options
 	Limits      StreamLimits

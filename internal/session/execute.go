@@ -171,7 +171,7 @@ func (rt *InternalSessionRuntime) requestCount() uint64 {
 }
 
 // prepareTyped prepares statement for Session.Prepare, bounded by ctx and the
-// session's default profile Timeout, whichever ends first. Concurrent calls
+// session's default profile Timeout, whichever expires first. Concurrent calls
 // for the same statement share one PREPARE. A caller that joined another's
 // PREPARE does not inherit that caller's cancellation or deadline: when the
 // shared PREPARE ends on its starter's context while the joiner's own context
