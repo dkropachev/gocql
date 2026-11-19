@@ -101,6 +101,8 @@ func VarintFromBigInt(v *big.Int) Varint {
 }
 
 // BigInt explicitly materializes an independent arbitrary precision integer.
+// It panics, like Bytes.OwnedBytes, when v borrows a page that was already
+// released.
 func (v Varint) BigInt() *big.Int {
 	if v.bytes.Len() == 0 {
 		if err := checkBytesAlive(v.bytes); err != nil {

@@ -58,6 +58,8 @@ func New() *IDGenerator {
 }
 
 func NewLimited(maxStreams int) *IDGenerator {
+	// Invariant: settings validation bounds MaxRequestsPerConnection to
+	// 1..32768.
 	if maxStreams < 1 || maxStreams > 32768 {
 		panic("streams: capacity must be 1..32768")
 	}

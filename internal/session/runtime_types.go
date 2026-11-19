@@ -112,6 +112,7 @@ func (o *inputOwner) InternalRelease() {
 	for {
 		v = o.state.Load()
 		if v&ownerRefsMask == 0 {
+			// Invariant: every release pairs with a driver-taken reference.
 			panic("gocql: unbalanced input owner release")
 		}
 		if o.state.CompareAndSwap(v, v-1) {

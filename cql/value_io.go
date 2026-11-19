@@ -262,6 +262,9 @@ func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.R
 func (r ValueReader) Type() DataType   { return r.typ }
 func (r ValueReader) State() CellState { return r.state }
 func (r ValueReader) Bytes() Bytes {
+	// Invariant: err is set only for an invalid type or cell state, and the
+	// driver builds readers only from validated column types and the
+	// states it derives from a cell's length. The zero reader has no err.
 	if r.err != nil {
 		panic(r.err)
 	}

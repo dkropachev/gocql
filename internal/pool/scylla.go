@@ -55,6 +55,7 @@ func newScyllaConnPicker(conn *transport.Conn, logger *slog.Logger) *InternalScy
 	addr := conn.Address()
 
 	if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards == 0 {
+		// Invariant: the only caller checks NrShards != 0 first.
 		panic(fmt.Sprintf("scylla: %s not a sharded connection", addr))
 	}
 

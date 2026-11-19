@@ -426,6 +426,8 @@ func (f *Framer) Finish() error {
 
 	if !VersionFor(f.Proto).Segments && f.Buf[1]&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
+			// Invariant: the driver sets FlagCompress only on a framer
+			// built with a compressor.
 			panic("compress flag set with no compressor")
 		}
 
