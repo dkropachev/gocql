@@ -593,9 +593,9 @@ func (o streamCodecOption[P, V]) apply(c *structConfig[P]) {
 }
 
 // WithStreamCodec maps P's fields of type V, cql.Nullable[V] and []V (as a list)
-// with decoder in RowOf. Recognized built-in stream tags take precedence,
-// including in generated mappings. It affects RowOf only; cql.ParamsOf and
-// cql.RowOf ignore it.
+// with decoder in StreamRowOf. Recognized built-in stream tags take
+// precedence, including in generated mappings. It affects StreamRowOf only;
+// cql.ParamsOf and cql.RowOf ignore it.
 func WithStreamCodec[P, V any](decoder StreamDecoder[V]) StructOption[P] {
 	return streamCodecOption[P, V]{decoder: decoder}
 }

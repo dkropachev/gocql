@@ -334,11 +334,11 @@ func exportData(dir string) (map[string]string, error) {
 }
 
 // structFields maps s's fields, and those of the structs it embeds by value,
-// with the rules reflection applies (codec.EmbeddedField and
-// codec.ResolveFieldConflicts). The buffered mapping (Params and Columns) and
-// the streaming one are each generated only when every field has a codec for
-// it; a struct neither covers is an error, as is a wrong `codec=` or
-// `stream=` tag.
+// with the rules reflection applies (structmap.EmbeddedField and
+// structmap.ResolveFieldConflicts). The buffered mapping (Params and
+// Columns) and the streaming one are each generated only when every field
+// has a codec for it; a struct neither covers is an error, as is a wrong
+// `codec=` or `stream=` tag.
 func (g *generator) structFields(s structType) (_ []genField, buffered, stream bool, _ error) {
 	st := g.pkg.Scope().Lookup(s.name).Type().Underlying().(*types.Struct)
 	type found struct {
