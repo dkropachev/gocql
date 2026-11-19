@@ -28,7 +28,8 @@ func InternalSchemaDataType(ks *metadata.Keyspace, source string) (cql.DataType,
 	if ks == nil {
 		return cql.DataType{}, cqltype.TypeValidation("schema type", "nil keyspace")
 	}
-	p := schemaTypeBuilder{v2CQLTypeParser: v2CQLTypeParser{source: source, keyspace: ks.Name, maxDepth: 64}, ks: ks}
+	budget := maxSchemaTypeNodes
+	p := schemaTypeBuilder{v2CQLTypeParser: v2CQLTypeParser{source: source, keyspace: ks.Name, maxDepth: 64}, ks: ks, budget: &budget}
 	t, err := p.build(0)
 	if err != nil {
 		return cql.DataType{}, err
@@ -40,8 +41,17 @@ func InternalSchemaDataType(ks *metadata.Keyspace, source string) (cql.DataType,
 	return t, nil
 }
 
+// maxSchemaTypeNodes bounds the types one schema type string expands into.
+// Every use of a UDT expands its definition again, so without it a chain of
+// UDTs, each with two fields of the next, doubles the work at every level:
+// sixty of them, which the depth limit allows, never finish.
+const maxSchemaTypeNodes = 1 << 16
+
 type schemaTypeBuilder struct {
 	ks *metadata.Keyspace
+	// budget counts the types left to build; nested UDT field builders
+	// share it.
+	budget *int
 	v2CQLTypeParser
 }
 
@@ -49,6 +59,10 @@ func (p *schemaTypeBuilder) build(depth int) (cql.DataType, error) {
 	if depth >= p.maxDepth {
 		return cql.DataType{}, cqltype.TypeValidation("schema type", "maximum nesting depth exceeded")
 	}
+	if *p.budget <= 0 {
+		return cql.DataType{}, cqltype.TypeValidation("schema type", "type expands to more than %d types", maxSchemaTypeNodes)
+	}
+	*p.budget--
 	p.space()
 	if p.offset < len(p.source) && p.source[p.offset] == '\'' {
 		return cql.DataType{}, cqltype.TypeValidation("schema type", "custom type %q is not supported", p.source)
@@ -160,7 +174,7 @@ func (p *schemaTypeBuilder) userType(name string, depth int) (cql.DataType, erro
 	}
 	fields := make([]cql.ColumnSpec, len(udt.FieldNames))
 	for i, fieldType := range udt.FieldTypes {
-		field := schemaTypeBuilder{v2CQLTypeParser: v2CQLTypeParser{source: fieldType, keyspace: p.keyspace, maxDepth: p.maxDepth}, ks: p.ks}
+		field := schemaTypeBuilder{v2CQLTypeParser: v2CQLTypeParser{source: fieldType, keyspace: p.keyspace, maxDepth: p.maxDepth}, ks: p.ks, budget: p.budget}
 		t, err := field.build(depth + 1)
 		if err != nil {
 			return cql.DataType{}, err

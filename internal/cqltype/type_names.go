@@ -14,7 +14,9 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
 
-func AsVectorType(t TypeInfo) (VectorType, bool) {
+func AsVectorType(t TypeInfo) (VectorType, bool) { return asVectorType(t, 0) }
+
+func asVectorType(t TypeInfo, depth int) (VectorType, bool) {
 	if v, ok := t.(VectorType); ok {
 		return v, true
 	}
@@ -42,8 +44,12 @@ func AsVectorType(t TypeInfo) (VectorType, bool) {
 	}
 	subType := GetCassandraLongType(subStr, n.Version(), logging.Nop())
 	// recurse if subtype itself is still a custom vector
-	if innerVec, ok := AsVectorType(subType); ok {
-		subType = innerVec
+	// A subtype nested too deeply is left custom instead of being parsed
+	// again, which would repeat the work once per MaxLongTypeDepth levels.
+	if depth < MaxLongTypeDepth {
+		if innerVec, ok := asVectorType(subType, depth+1); ok {
+			subType = innerVec
+		}
 	}
 	return VectorType{
 		NativeType: NewCustomType(n.Version(), cql.TypeCustom, vectorTypePrefix),
@@ -52,18 +58,45 @@ func AsVectorType(t TypeInfo) (VectorType, bool) {
 	}, true
 }
 
+// MaxLongTypeDepth bounds how deeply GetCassandraLongType nests composite
+// types, matching the default metadata depth limit. The names come from the
+// server, so without it a hostile name nests until the stack overflows, and
+// every level rescans the rest of the name.
+const MaxLongTypeDepth = 64
+
+// GetCassandraLongType parses a Java marshal class name, such as
+// org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.Int32Type).
+// A name it cannot parse, or one nested deeper than MaxLongTypeDepth, is
+// returned as a custom type and logged.
 func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeInfo {
-	logger = logging.Or(logger)
+	return GetCassandraLongTypeLimit(name, protoVer, logger, MaxLongTypeDepth)
+}
+
+// GetCassandraLongTypeLimit is GetCassandraLongType with maxDepth in place of
+// MaxLongTypeDepth, for a name inside metadata whose remaining depth budget is
+// smaller.
+func GetCassandraLongTypeLimit(name string, protoVer byte, logger *slog.Logger, maxDepth int) TypeInfo {
+	return getCassandraLongType(name, protoVer, logging.Or(logger), maxDepth)
+}
+
+// getCassandraLongType parses name with remaining more levels of nesting
+// allowed below it.
+func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remaining int) TypeInfo {
 	const prefix = ApacheCassandraTypePrefix
+	if remaining < 0 {
+		logger.Warn("unparsable type definition", "detail", "type nesting exceeds the depth limit")
+		return NewCustomType(protoVer, cql.TypeCustom, name)
+	}
+	depth := remaining - 1
 	if strings.HasPrefix(name, prefix+"SetType") {
 		return CollectionType{
 			NativeType: NewNativeType(protoVer, cql.TypeSet),
-			Elem:       GetCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"SetType", '('), protoVer, logger),
+			Elem:       getCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"SetType", '('), protoVer, logger, depth),
 		}
 	} else if strings.HasPrefix(name, prefix+"ListType") {
 		return CollectionType{
 			NativeType: NewNativeType(protoVer, cql.TypeList),
-			Elem:       GetCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"ListType", '('), protoVer, logger),
+			Elem:       getCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"ListType", '('), protoVer, logger, depth),
 		}
 	} else if strings.HasPrefix(name, prefix+"MapType") {
 		names := SplitJavaCompositeTypes(name, prefix+"MapType")
@@ -73,15 +106,15 @@ func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeI
 		}
 		return CollectionType{
 			NativeType: NewNativeType(protoVer, cql.TypeMap),
-			Key:        GetCassandraLongType(names[0], protoVer, logger),
-			Elem:       GetCassandraLongType(names[1], protoVer, logger),
+			Key:        getCassandraLongType(names[0], protoVer, logger, depth),
+			Elem:       getCassandraLongType(names[1], protoVer, logger, depth),
 		}
 	} else if strings.HasPrefix(name, prefix+"TupleType") {
 		names := SplitJavaCompositeTypes(name, prefix+"TupleType")
 		types := make([]TypeInfo, len(names))
 
 		for i, name := range names {
-			types[i] = GetCassandraLongType(name, protoVer, logger)
+			types[i] = getCassandraLongType(name, protoVer, logger, depth)
 		}
 
 		return TupleTypeInfo{
@@ -106,7 +139,7 @@ func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeI
 			fieldName, _ := hex.DecodeString(spec[0])
 			fields[i-2] = UDTField{
 				Name: string(fieldName),
-				Type: GetCassandraLongType(spec[1], protoVer, logger),
+				Type: getCassandraLongType(spec[1], protoVer, logger, depth),
 			}
 		}
 
@@ -133,7 +166,7 @@ func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeI
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector type %q: missing element type", name))
 			return NewCustomType(protoVer, cql.TypeCustom, name)
 		}
-		subType := GetCassandraLongType(elem, protoVer, logger)
+		subType := getCassandraLongType(elem, protoVer, logger, depth)
 		// A negative dimension reaches unmarshalVector's MakeSlice.
 		dim, err := strconv.Atoi(strings.TrimSpace(names[1]))
 		if err != nil {
@@ -153,7 +186,7 @@ func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeI
 		}
 	} else if strings.HasPrefix(name, prefix+"FrozenType") {
 		names := SplitJavaCompositeTypes(name, prefix+"FrozenType")
-		return GetCassandraLongType(strings.TrimSpace(names[0]), protoVer, logger)
+		return getCassandraLongType(strings.TrimSpace(names[0]), protoVer, logger, depth)
 	} else {
 		// basic type
 		typ := GetApacheCassandraType(name)
@@ -185,26 +218,27 @@ func SplitCompositeTypes(name string, typeName string, typeOpen int32, typeClose
 		}
 		return parts
 	}
+	// Segments are slices of def, so splitting is linear in its length: the
+	// name comes from the server, and copying a segment one character at a
+	// time made a long name quadratic.
 	var parts []string
 	lessCount := 0
-	segment := ""
-	for _, char := range def {
-		if char == ',' && lessCount == 0 {
-			if segment != "" {
-				parts = append(parts, strings.TrimSpace(segment))
+	start := 0
+	for i, char := range def {
+		switch {
+		case char == ',' && lessCount == 0:
+			if i > start {
+				parts = append(parts, strings.TrimSpace(def[start:i]))
 			}
-			segment = ""
-			continue
-		}
-		segment += string(char)
-		if char == typeOpen {
+			start = i + 1
+		case char == typeOpen:
 			lessCount++
-		} else if char == typeClose {
+		case char == typeClose:
 			lessCount--
 		}
 	}
-	if segment != "" {
-		parts = append(parts, strings.TrimSpace(segment))
+	if start < len(def) {
+		parts = append(parts, strings.TrimSpace(def[start:]))
 	}
 	return parts
 }

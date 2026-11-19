@@ -4,6 +4,7 @@
 package metadata
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -44,4 +45,46 @@ func TestSchemaDataType(t *testing.T) {
 			t.Errorf("%q: no error", bad)
 		}
 	}
+}
+
+// TestSchemaDataTypeExpansion checks that a chain of UDTs, each with two
+// fields of the next, is rejected once it expands past the budget instead of
+// doubling the work at every level.
+func TestSchemaDataTypeExpansion(t *testing.T) {
+	ks := &metadata.Keyspace{Name: "ks", Types: map[string]*metadata.Type{}}
+	const levels = 60
+	for i := range levels {
+		next := "int"
+		if i+1 < levels {
+			next = fmt.Sprintf("u%d", i+1)
+		}
+		name := fmt.Sprintf("u%d", i)
+		ks.Types[name] = &metadata.Type{Keyspace: "ks", Name: name, FieldNames: []string{"a", "b"}, FieldTypes: []string{next, next}}
+	}
+	if _, err := InternalSchemaDataType(ks, "u0"); err == nil {
+		t.Fatal("a type of 2^60 nodes was built")
+	}
+	// A chain short enough to stay within the budget still resolves.
+	if _, err := InternalSchemaDataType(ks, fmt.Sprintf("u%d", levels-10)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// FuzzSchemaDataType feeds schema type strings, as system_schema rows hold
+// them, to the schema type builder, with UDTs that may refer to each other
+// or to themselves. It must not panic or hang.
+func FuzzSchemaDataType(f *testing.F) {
+	f.Add("frozen<map<text, frozen<list<a>>>>", "int", "frozen<a>")
+	f.Add("tuple<int, vector<float, 3>, b>", "frozen<b>, int", "text")
+	f.Add("a", "frozen<b>", "frozen<a>")
+	f.Add(`frozen<"a">`, "list<frozen<b>>", "map<frozen<b>, frozen<b>>")
+	f.Fuzz(func(t *testing.T, source, a, b string) {
+		ks := &metadata.Keyspace{Name: "ks", Types: map[string]*metadata.Type{
+			"a": {Keyspace: "ks", Name: "a", FieldNames: []string{"x", "y"}, FieldTypes: []string{a, b}},
+			"b": {Keyspace: "ks", Name: "b", FieldNames: []string{"x", "y"}, FieldTypes: []string{b, a}},
+		}}
+		if typ, err := InternalSchemaDataType(ks, source); err == nil {
+			_ = typ.String()
+		}
+	})
 }

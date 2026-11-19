@@ -147,7 +147,13 @@ func (s LZ4Compressor) AppendDecompressed(dst, src []byte, uncompressedLength ui
 	if uncompressedLength > maxDecompressedSize {
 		return nil, fmt.Errorf("cassandra lz4 uncompressed length %d exceeds maximum of %d", uncompressedLength, maxDecompressedSize)
 	}
-	return appendLZ4Decompressed(dst, src, int(uncompressedLength))
+	out, err := appendLZ4Decompressed(dst, src, int(uncompressedLength))
+	if err == nil && len(out)-len(dst) != int(uncompressedLength) {
+		// A block shorter than its declared length is corrupt; the
+		// segment readers check this too, but direct callers did not.
+		err = fmt.Errorf("cassandra lz4 block decoded to %d bytes, declared %d", len(out)-len(dst), uncompressedLength)
+	}
+	return out, err
 }
 
 // The caller checked the configured/default bound and int conversion before

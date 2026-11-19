@@ -5,9 +5,11 @@ package protocol
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -30,6 +32,21 @@ func deepListType(levels int) []byte {
 	return f.Buf
 }
 
+// customTypeResult is deepListType with one column of the custom type name.
+func customTypeResult(name string) []byte {
+	f := NewFramer(nil, protoVersion4)
+	f.WriteInt(frm.ResultKindRows)
+	f.WriteInt(int32(frm.FlagGlobalTableSpec))
+	f.WriteInt(1)
+	f.WriteString("ks")
+	f.WriteString("t")
+	f.WriteString("c")
+	f.WriteShort(uint16(cql.TypeCustom))
+	f.WriteString(name)
+	f.WriteInt(0)
+	return f.Buf
+}
+
 // FuzzParseResponse feeds arbitrary response bodies to both parsers. Neither
 // may panic on server data: Framer.ParseFrame returns malformed input as an
 // error and re-panics only on a driver bug, and the typed parser never
@@ -42,6 +59,8 @@ func FuzzParseResponse(f *testing.F) {
 	}
 	f.Add(byte(4), byte(frm.OpResult), byte(0), deepListType(3))
 	f.Add(byte(4), byte(frm.OpResult), byte(0), deepListType(10000))
+	f.Add(byte(4), byte(frm.OpResult), byte(0), customTypeResult(cqltype.ApacheCassandraTypePrefix+"VectorType("+
+		strings.Repeat(cqltype.ApacheCassandraTypePrefix+"ListType(", 1500)+cqltype.ApacheCassandraTypePrefix+"Int32Type"+strings.Repeat(")", 1500)+", 3)"))
 	f.Add(byte(4), byte(frm.OpError), byte(0), errBody(4, 0x1000, "unavailable", func(f *framer) {
 		f.WriteShort(1)
 		f.WriteInt(3)
@@ -86,6 +105,39 @@ func TestParseFrameDeepTypeNesting(t *testing.T) {
 		}
 		if levels > maxTypeInfoDepth && err == nil {
 			t.Fatalf("%d levels: parsed, want a nesting error", levels)
+		}
+	}
+}
+
+// TestVectorElementDepth checks that the nesting of a vector's element type,
+// which arrives as a marshal class name, counts against MaxMetadataDepth like
+// any other nested type.
+func TestVectorElementDepth(t *testing.T) {
+	t.Parallel()
+	vector := func(lists int) []byte {
+		const prefix = cqltype.ApacheCassandraTypePrefix
+		return customTypeResult(prefix + "VectorType(" + strings.Repeat(prefix+"ListType(", lists) +
+			prefix + "Int32Type" + strings.Repeat(")", lists) + ", 3)")
+	}
+	head := frm.FrameHeader{Version: protoVersion4 | protoDirectionMask, Op: frm.OpResult, Stream: 1}
+	for _, test := range []struct {
+		maxDepth, lists int
+		ok              bool
+	}{
+		// vector at depth 0, the lists below it, int at depth lists+1.
+		{maxDepth: 2, lists: 1, ok: true},
+		{maxDepth: 2, lists: 2, ok: false},
+		{maxDepth: 64, lists: 63, ok: true},
+		{maxDepth: 64, lists: 64, ok: false},
+	} {
+		settings := protocolSettings(4)
+		settings.MaxMetadataDepth = test.maxDepth
+		body := wire.ChainOf(vector(test.lists))
+		owner := wire.NewLease(body, nil)
+		_, err := settings.ParseTypedResponse(head, body, owner)
+		owner.Release()
+		if (err == nil) != test.ok {
+			t.Errorf("max depth %d, %d lists: err=%v, want ok=%v", test.maxDepth, test.lists, err, test.ok)
 		}
 	}
 }
