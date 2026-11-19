@@ -107,6 +107,23 @@ func (p *Page[R]) NextInto(dst *R) bool {
 	}
 	return ok
 }
+
+// cancelled returns the error of the page's cancelled context, or nil. A
+// context Query.Close cancelled reports cqlerr.ErrClosed. It is out of line to
+// keep the row loop small.
+//
+//go:noinline
+func (p *Page[R]) cancelled() error {
+	if p.privateStorage.ctx == nil {
+		return nil
+	}
+	err := p.privateStorage.ctx.Err()
+	if err != nil && p.privateStorage.cursor.stopped() {
+		err = cqlerr.ErrClosed
+	}
+	return err
+}
+
 func clearDestination[R any](dst *R) {
 	if dst != nil {
 		var zero R
@@ -128,8 +145,8 @@ func (p *Page[R]) advance(dst *R) bool {
 		p.closeLocked()
 		return false
 	}
-	if p.privateStorage.ctx != nil && p.privateStorage.ctx.Err() != nil {
-		p.privateStorage.err = p.privateStorage.ctx.Err()
+	if err := p.cancelled(); err != nil {
+		p.privateStorage.err = err
 		p.closeLocked()
 		return false
 	}
@@ -151,8 +168,8 @@ func (p *Page[R]) advance(dst *R) bool {
 	if err == nil {
 		err = codec.FinishRowReader(&p.privateStorage.reader)
 	}
-	if err == nil && p.privateStorage.ctx != nil {
-		err = p.privateStorage.ctx.Err()
+	if err == nil {
+		err = p.cancelled()
 	}
 	if err == nil && p.privateStorage.session != nil && p.privateStorage.session.Closed() {
 		err = cqlerr.ErrClosed
@@ -183,6 +200,9 @@ func (p *Page[R]) Close() error {
 		p.privateStorage.cancel()
 	}
 	defer p.afterAdvance()
+	if !p.privateStorage.closed && p.privateStorage.err == nil && p.privateStorage.cursor.stopped() {
+		p.privateStorage.err = cqlerr.ErrClosed
+	}
 	p.closeLocked()
 	return p.privateStorage.err
 }
@@ -697,6 +717,11 @@ func (r *rowsImpl[R]) stopExecution(l *logicalExecution) {
 	if r.privateStorage.future != nil {
 		r.privateStorage.future.InternalClose()
 		r.privateStorage.future = nil
+	}
+	// Open rows the stop reached between calls report ErrClosed; a NextInto
+	// running at that moment already ended on the cancellation.
+	if !r.privateStorage.closed && r.privateStorage.err == nil {
+		r.privateStorage.err = cqlerr.ErrClosed
 	}
 	r.privateStorage.mu.Unlock()
 	l.InternalFinish(r.Info(), cqlerr.ErrClosed)
