@@ -1443,7 +1443,6 @@ package retry
 		retry.Attempt field Idempotent bool
 		retry.Attempt field Consistency cql.Consistency
 		retry.Attempt field Conditional bool
-		retry.Attempt field BytesWritten bool
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
 	type retry.Decision struct
 		retry.Decision field Action retry.Action

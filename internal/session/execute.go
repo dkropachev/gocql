@@ -1204,6 +1204,11 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 	}
 	aggregate := cql.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
 	startedCount, active := 0, 0
+	// inflight lists the attempts started on goroutines whose outcome the
+	// loop has not received, so that an execution the context ends can
+	// report them.
+	var inflight []inflightAttempt
+	var log attemptLog
 	// spec coordinates a first attempt running on this goroutine with the
 	// speculative attempts that its timer starts.
 	var spec inlineSpeculation
@@ -1221,6 +1226,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		startedCount++
 		active++
 		index := startedCount
+		inflight = append(inflight, inflightAttempt{conn: conn, number: index, consistency: consistency})
 		request.InternalOwner.retain()
 		s.attempts.Add(1)
 		if speculative {
@@ -1326,6 +1332,10 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				if inline.response != nil {
 					inline.response.Owner.Release()
 				}
+				// It ended without reaching the loop: record it as the
+				// loop records a failed attempt.
+				active--
+				log.fail(inline.err, conn, 1, consistency, inline.event.CQLTraceID)
 				ended = true
 			default:
 				firstOutcome = &inline
@@ -1365,14 +1375,13 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 		}
 	}()
 	var lastErr error
-	var log attemptLog
 	// contextEnded ends the execution with the context's error.
 	contextEnded := func() (*transport.InternalResponsePage, error) {
 		aggregate.Attempts = startedCount
 		failure := ctx.Err()
-		if active > 0 {
-			// An abandoned in-flight attempt may have been applied.
-			log.raise(cqlerr.MaybeExecuted)
+		// An abandoned in-flight attempt may have been applied.
+		for _, a := range inflight {
+			log.abandon(failure, a.conn, a.number, a.consistency)
 		}
 		if request.InternalLogical != nil {
 			if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
@@ -1437,6 +1446,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 				}
 			case outcome = <-outcomes:
 				received = true
+				inflight = removeInflight(inflight, outcome.event.Attempt)
 			}
 			if !received {
 				continue
@@ -1483,7 +1493,7 @@ func (s *InternalSessionRuntime) executePage(ctx context.Context, request *Inter
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, BytesWritten: attemptStatus != cqlerr.NotExecuted, ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
@@ -1692,9 +1702,6 @@ func InternalExecutionErrorResult(err error) cql.Result {
 		return failure.Result
 	}
 	return cql.Result{}
-}
-func attemptBytesWritten(err error) bool {
-	return cqlerr.ExecutionStatusOf(err) != cqlerr.NotExecuted
 }
 
 // hasCounterColumn reports whether columns, a statement's parameters, include

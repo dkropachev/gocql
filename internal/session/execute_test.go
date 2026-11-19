@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -91,9 +92,13 @@ func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
 	return b
 }
 
+// runtimePolicy routes to its targets in order, counting the attempt events
+// it observes and keeping them.
 type runtimePolicy struct {
 	targets []metadata.Target
 	events  atomic.Int32
+	mu      sync.Mutex
+	seen    []routing2.AttemptEvent
 }
 
 func (p *runtimePolicy) Validate(*routing.MetadataSnapshot) error { return nil }
@@ -103,7 +108,19 @@ func (p *runtimePolicy) Pick(routing2.Info, *routing.MetadataSnapshot) (routing.
 func (p *runtimePolicy) Fallback(routing2.Info, *routing.MetadataSnapshot) routing.QueryPlan {
 	return &routing.InternalTargetPlan{InternalTargets: append([]metadata.Target(nil), p.targets...)}
 }
-func (p *runtimePolicy) Observe(routing2.AttemptEvent) { p.events.Add(1) }
+func (p *runtimePolicy) Observe(e routing2.AttemptEvent) {
+	p.events.Add(1)
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.seen = append(p.seen, e)
+}
+
+// observed returns the attempt events seen so far.
+func (p *runtimePolicy) observed() []routing2.AttemptEvent {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]routing2.AttemptEvent(nil), p.seen...)
+}
 
 type runtimeSpeculation struct{}
 

@@ -57,11 +57,6 @@ type Attempt struct {
 	Consistency cql.Consistency
 	// Conditional reports a lightweight transaction.
 	Conditional bool
-	// BytesWritten reports that the attempt may have been applied, that is
-	// ExecutionStatus != cqlerr.NotExecuted.
-	//
-	// Deprecated: use ExecutionStatus.
-	BytesWritten bool
 	// ExecutionStatus reports what this attempt may have done on the cluster.
 	ExecutionStatus cqlerr.ExecutionStatus
 }
