@@ -33,7 +33,7 @@ var (
 	beginStreamRow          = link.Get[func(*cql.StreamRowReader)](link.BeginStreamRow)
 	newStreamRowReader      = link.Get[func(cql.Columns, *wire.Stream, *cql.StreamRowReader) (*cql.StreamRowReader, error)](link.NewStreamRowReader)
 	streamReaderBytes       = link.Get[func(*cql.StreamRowReader) int64](link.StreamReaderStorageBytes)
-	detachRow               = link.Get[func(any, unsafe.Pointer) bool](link.DetachRow)
+	detachRow               = link.Get[func(any, any) bool](link.DetachRow)
 	managesRowDestination   = link.Get[func(any) bool](link.ManagesRowDestination)
 	preservesRowDestination = link.Get[func(any) bool](link.PreservesRowDestination)
 	cloneResult             = link.Get[func(cql.Result) cql.Result](link.CloneResult)
@@ -67,6 +67,8 @@ func FinishParamWriter(w *cql.ParamWriter) error { return finishParamWriter(w) }
 // CaptureParamCells makes w record where each column's value lands, one cell
 // per column.
 func CaptureParamCells(w *cql.ParamWriter, cells []ParamCell) {
+	// unsafe: ParamCell mirrors cql's paramCell (TestParamCellLayout), and
+	// w keeps a typed slice of cells' array, so the array stays reachable.
 	captureParamCells(w, unsafe.Pointer(unsafe.SliceData(cells)), len(cells))
 }
 
@@ -143,7 +145,7 @@ func CompileRow[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.Comp
 // before its page is released. Built-in plans detach only borrowed fields and
 // keep owned buffers; other plans use their Clone.
 func DetachRow[R any](plan cql.CompiledRow[R], dst *R) {
-	if !detachRow(plan, unsafe.Pointer(dst)) {
+	if !detachRow(plan, dst) {
 		*dst = plan.Clone(*dst)
 	}
 }

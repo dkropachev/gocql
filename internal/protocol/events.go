@@ -87,6 +87,7 @@ func (p *TypedParser) StreamExtensions(h frm.FrameHeader) cql.Result {
 	if h.Flags&frm.FlagTracing != 0 {
 		b := p.Copy(16)
 		if p.Err == nil {
+			// unsafe: Sizeof is a compile-time constant.
 			p.ReserveAllocation(int64(unsafe.Sizeof(cql.CQLTraceRef{})))
 			var id cql.UUID
 			copy(id[:], b)

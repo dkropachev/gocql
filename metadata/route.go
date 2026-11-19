@@ -27,6 +27,9 @@ const anyShard int32 = -1
 type Route struct {
 	// host is the session's handle of the host. The engine reads it
 	// through the mirror in internal/routing.
+	//
+	// unsafe: it holds a *pool.HostRoute, which this package cannot
+	// name; an unsafe.Pointer keeps it visible to the GC.
 	host  unsafe.Pointer
 	shard int32
 }

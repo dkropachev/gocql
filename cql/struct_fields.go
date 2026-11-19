@@ -109,6 +109,12 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 	return types
 }
 
+// unsafe: in fieldParam, fieldColumn and fieldStreamColumn, offset is the
+// reflect offset of a field of type exactly V (eachStructField sums the
+// offsets of flattened value embeds; pointer embeds are rejected), so it
+// stays inside the struct the arithmetic starts from and the result is a
+// typed pointer the GC sees.
+
 func fieldParam[P, V any](enc Encoder[V]) func(string, uintptr) InputField[P] {
 	return func(name string, offset uintptr) InputField[P] {
 		return Param(name, enc, func(v P) V { return *(*V)(unsafe.Add(unsafe.Pointer(&v), offset)) })
@@ -348,6 +354,8 @@ func bufferReset[R any](reuse bool) (func(*R), error) {
 		old := *r
 		var zero R
 		*r = zero
+		// unsafe: offsets are the reflect offsets of R's slice fields
+		// (see fieldParam), and old keeps the previous backing arrays alive.
 		base, prev := unsafe.Pointer(r), unsafe.Pointer(&old)
 		for _, off := range offsets {
 			// Every slice header has the same layout, so truncating it as a
@@ -561,6 +569,7 @@ func streamBuiltinFieldTypes() []structmap.BuiltinFieldType {
 
 func fieldStreamColumn[R, V any](dec StreamDecoder[V]) func(string, uintptr) StreamOutputField[R] {
 	return func(name string, offset uintptr) StreamOutputField[R] {
+		// unsafe: as fieldParam.
 		return StreamColumn(name, dec, func(r *R) *V { return (*V)(unsafe.Add(unsafe.Pointer(r), offset)) })
 	}
 }

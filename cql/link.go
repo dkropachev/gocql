@@ -17,6 +17,9 @@ func init() {
 	link.Set(link.NewParamWriter, newParamWriter)
 	link.Set(link.ResetParamWriter, resetParamWriter)
 	link.Set(link.FinishParamWriter, finishParamWriter)
+	// unsafe: cells is the first of n internal/codec.ParamCell values, which
+	// mirror paramCell (internal/codec's TestParamCellLayout checks the
+	// layout). The slice keeps the engine's array reachable while w holds it.
 	link.Set(link.CaptureParamCells, func(w *ParamWriter, cells unsafe.Pointer, n int) {
 		captureParamCells(w, unsafe.Slice((*paramCell)(cells), n))
 	})
@@ -30,8 +33,8 @@ func init() {
 	link.Set(link.BeginStreamRow, beginStreamRow)
 	link.Set(link.NewStreamRowReader, newStreamRowReaderReusingValidation)
 	link.Set(link.StreamReaderStorageBytes, streamReaderWorkingStorageBytes)
-	link.Set(link.DetachRow, func(plan any, dst unsafe.Pointer) bool {
-		p, ok := plan.(interface{ detachRowAt(unsafe.Pointer) })
+	link.Set(link.DetachRow, func(plan any, dst any) bool {
+		p, ok := plan.(interface{ detachRowAt(any) })
 		if ok {
 			p.detachRowAt(dst)
 		}

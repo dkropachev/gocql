@@ -3,8 +3,6 @@
 
 package cql
 
-import "unsafe"
-
 // DetachRow makes decoded fields independent of the response before its page
 // is released. Built-in plans preserve owned destination buffers and detach
 // only borrowed fields. Custom plans use their recursive Clone contract.
@@ -85,7 +83,10 @@ func (c mapDecoder[K, V]) detachValue(dst *[]Entry[K, V]) {
 
 func (c recordDecoder[T]) detachValue(dst *T) { detachRowFor(c.plan, dst) }
 
-// detachRowAt is detachRow for a destination the engine passes untyped.
-func (p compiledRow[R]) detachRowAt(dst unsafe.Pointer)          { p.detachRow((*R)(dst)) }
-func (p singleColumnPlan[T]) detachRowAt(dst unsafe.Pointer)     { p.detachRow((*T)(dst)) }
-func (p compiledPairedRow[A, B]) detachRowAt(dst unsafe.Pointer) { p.detachRow((*Pair[A, B])(dst)) }
+// detachRowAt is detachRow for a destination the engine passes as any. The
+// engine passes the *R of the plan's own CompiledRow[R], so the assertion
+// holds; it costs a type comparison and panics rather than corrupting memory
+// if that ever changes.
+func (p compiledRow[R]) detachRowAt(dst any)          { p.detachRow(dst.(*R)) }
+func (p singleColumnPlan[T]) detachRowAt(dst any)     { p.detachRow(dst.(*T)) }
+func (p compiledPairedRow[A, B]) detachRowAt(dst any) { p.detachRow(dst.(*Pair[A, B])) }

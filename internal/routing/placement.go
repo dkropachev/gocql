@@ -281,6 +281,9 @@ type InternalTabletLookup struct {
 	// *placementCacheEntry holding the table's token ranges in the snapshot
 	// the lookup ran in. One field for both keeps the lookup at 16 bytes,
 	// which execution and planning copy on every request.
+	//
+	// unsafe: an unsafe.Pointer keeps either target visible to the GC, and
+	// tracked says which type it is.
 	ref unsafe.Pointer
 	// tracked reports that the snapshot tracks the table's tablets, so
 	// a missing node means no replicas rather than vnode placement.

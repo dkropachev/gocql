@@ -12,6 +12,10 @@ import (
 // Mirror converts p, a pointer to a public type, into a pointer to Rep, an
 // internal struct with the same layout. The result aliases p. Each Pub and
 // Rep pair must have a test that calls CheckLayout.
+//
+// unsafe: CheckLayout proves the two types have the same size, alignment,
+// field offsets and pointer positions, so the GC and every field access see
+// the same memory through either type.
 func Mirror[Rep, Pub any](p *Pub) *Rep {
 	return (*Rep)(unsafe.Pointer(p))
 }

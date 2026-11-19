@@ -24,6 +24,8 @@
 
 package murmur
 
+import "encoding/binary"
+
 const (
 	c1    int64 = -8663945395140668459 // 0x87c37b91114253d5
 	c2    int64 = 5545529020109919103  // 0x4cf5ad432745937f
@@ -58,8 +60,12 @@ func Murmur3H1(data []byte) int64 {
 
 	// body
 	nBlocks := length / 16
-	for i := 0; i < nBlocks; i++ {
-		k1, k2 = getBlock(data, i)
+	for body := data[:nBlocks*16]; len(body) >= 16; body = body[16:] {
+		// Each Uint64 compiles to one load on 64-bit little-endian
+		// targets; unlike a pointer cast it is right on big-endian ones
+		// and needs no alignment.
+		k1 = int64(binary.LittleEndian.Uint64(body[:8]))
+		k2 = int64(binary.LittleEndian.Uint64(body[8:16]))
 
 		k1 *= c1
 		k1 = rotl(k1, 31)

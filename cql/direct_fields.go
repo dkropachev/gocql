@@ -34,12 +34,21 @@ const (
 // layouts are called the same way, so a direct op can call an accessor
 // returning *V as one returning unsafe.Pointer, or a getter returning V as
 // one returning the integer of V's width.
+//
+// unsafe: every reinterpreting call in this file uses a func type whose
+// result has V's exact underlying type: integerWidth matches only int8,
+// int16, int32, int64 and Counter, and the blob, text, []byte and string
+// kinds are chosen by the codec's dynamic type, which fixes V. The closure
+// pointer is held as an unsafe.Pointer, which the GC follows. A field's
+// compile rejects a nil accessor, and ops are built only from compiled
+// fields.
 func funcPointer[F any](f *F) unsafe.Pointer { return *(*unsafe.Pointer)(unsafe.Pointer(f)) }
 
 // integerWidth returns the width of V when it is a signed integer type, or 0.
 func integerWidth[V any]() int64 {
 	switch any((*V)(nil)).(type) {
 	case *int8, *int16, *int32, *int64, *Counter:
+		// unsafe: Sizeof is a compile-time constant.
 		var v V
 		return int64(unsafe.Sizeof(v))
 	}

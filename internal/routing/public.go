@@ -16,6 +16,11 @@ import (
 // The bridge between the session's routing and packages routing and
 // metadata: the engine works on Route, RoutingPolicy and QueryPlan, an
 // application on metadata.Route, routing.Policy and routing.Plan.
+//
+// unsafe: metadata.Route's unsafe.Pointer mirrors Route's *pool.HostRoute,
+// so the conversions in this file (PublicRoute, EngineRoute, PublicRoutes)
+// keep the host visible to the GC. The RouteHost and RouteShardOf links
+// receive only pointers that came from a Route.
 
 // PublicRoute returns r as a metadata.Route; the two share a layout, which
 // TestMirrorLayouts checks.
