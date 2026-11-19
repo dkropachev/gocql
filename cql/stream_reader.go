@@ -427,7 +427,7 @@ func newStreamRowReader(columns Columns, scope *wire.Stream) (*StreamRowReader, 
 	for i, c := range columnSlice(columns) {
 		p, err := compileStreamValidation(c.Type, 0)
 		if err != nil {
-			return nil, err
+			return nil, &CodecError{Column: c.Name, Index: i, Stage: "stream compile", Err: err}
 		}
 		r.validations[i] = p
 	}
@@ -488,13 +488,17 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 	} else {
 		n, err := r.framingUint32()
 		if err != nil {
+			// Not yet the column's failure: a cell that fails after its
+			// length is read is the column's, even when the connection
+			// caused it.
 			return r.shared.fail(err)
 		}
 		size = int64(int32(n))
 		if size == -1 {
 			state, size = Null, 0
 		} else if size < 0 {
-			return r.shared.fail(typeValidation("stream length", "invalid result length %d", size))
+			err := typeValidation("stream length", "invalid result length %d", size)
+			return r.shared.fail(&CodecError{Column: column.Name, Index: i, Stage: "stream decode", Err: err})
 		}
 	}
 	err := r.scope.Child(size, func(scope *wire.Stream) error {

@@ -4,6 +4,7 @@
 package cql
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/scylladb/gocql/v2/internal/syncx"
@@ -93,11 +94,11 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 	cell.ownBorrowed = w.ownBorrowed
 	if err := encoder.Encode(cell, value); err != nil {
 		abortValueWriter(cell)
-		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, err)
+		return columnError("encode", w.index, column.Name, err)
 	}
 	if err := finishValueWriter(cell); err != nil {
 		abortValueWriter(cell)
-		return fmt.Errorf("gocql: parameter %d (%s): %w", w.index, column.Name, err)
+		return columnError("encode", w.index, column.Name, err)
 	}
 	if w.capture != nil {
 		if w.index >= len(w.capture) {
@@ -150,7 +151,7 @@ func (r *RowReader) nextValue() (ValueReader, error) {
 	}
 	v, err := readFramedValue(r.cursor, column.Type, r.lease, false, false)
 	if err != nil {
-		return ValueReader{}, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, err)
+		return ValueReader{}, columnError("decode", r.index, column.Name, err)
 	}
 	r.index++
 	return v, nil
@@ -169,7 +170,7 @@ func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error) {
 	result, err := decoder.Decode(value)
 	if err != nil {
 		column, _ := r.columns.At(r.index - 1)
-		return zero, fmt.Errorf("gocql: column %d (%s): %w", r.index-1, column.Name, err)
+		return zero, columnError("decode", r.index-1, column.Name, err)
 	}
 	return result, nil
 }
@@ -258,7 +259,7 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 	for i, location := range locations {
 		matches := 0
 		if !location.positional && location.name == "" {
-			return nil, fmt.Errorf("gocql: empty field name")
+			return nil, typeValidation("field", "empty field name")
 		}
 		for j := 0; j < columns.Len(); j++ {
 			column, _ := columns.At(j)
@@ -267,7 +268,7 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 				continue
 			}
 			if ordered[j] != -1 {
-				return nil, fmt.Errorf("gocql: multiple accessors for column %d (%s)", j, column.Name)
+				return nil, columnError("compile", j, column.Name, errors.New("multiple accessors for the column"))
 			}
 			ordered[j] = i
 			matches++
@@ -276,16 +277,16 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 			if optional {
 				continue
 			}
-			return nil, fmt.Errorf("gocql: field %q at index %d has no database column", location.name, location.index)
+			return nil, typeValidation("field", "field %q at index %d has no database column", location.name, location.index)
 		}
 		if matches > 1 && !repeatedNames {
-			return nil, fmt.Errorf("gocql: duplicate result name %q requires positional mapping", location.name)
+			return nil, typeValidation("field", "duplicate result name %q requires positional mapping", location.name)
 		}
 	}
 	for i, field := range ordered {
 		if field < 0 && !extra {
 			column, _ := columns.At(i)
-			return nil, fmt.Errorf("gocql: no accessor for column %d (%s)", i, column.Name)
+			return nil, columnError("compile", i, column.Name, errors.New("no accessor for the column"))
 		}
 	}
 	return ordered, nil
@@ -308,7 +309,7 @@ func (c paramsCodec[P]) Compile(columns Columns) (CompiledParams[P], error) {
 		column, _ := columns.At(index)
 		compiled, err := c.fields[field].compile(column.Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: parameter %d (%s): %w", index, column.Name, err)
+			return nil, columnError("compile", index, column.Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -486,7 +487,7 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow
 		}
 		compiled, err := c.fields[field].compile(column.Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: result column %d (%s): %w", index, column.Name, err)
+			return nil, columnError("compile", index, column.Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -517,6 +518,7 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	}
 	for i := range p.ops {
 		op := &p.ops[i]
+		at := reader.index
 		var err error
 		if op.kind == directNone {
 			err = op.field.decode(reader, dst)
@@ -524,7 +526,8 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 			err = op.decodeDirect(reader, dst)
 		}
 		if err != nil {
-			return err
+			column, _ := reader.columns.At(at)
+			return columnError("decode", at, column.Name, err)
 		}
 	}
 	return nil
@@ -552,12 +555,12 @@ type singleColumnPlan[T any] struct{ decoder Decoder[T] }
 
 func (c singleColumnRows[T]) Compile(columns Columns) (CompiledRow[T], error) {
 	if columns.Len() != 1 {
-		return nil, fmt.Errorf("gocql: single column decoder expected 1 column, got %d", columns.Len())
+		return nil, typeValidation("columns", "single column decoder expected 1 column, got %d", columns.Len())
 	}
 	column, _ := columns.At(0)
 	decoder, err := compileValueDecoder(c.decoder, column.Type)
 	if err != nil {
-		return nil, err
+		return nil, columnError("compile", 0, column.Name, err)
 	}
 	return singleColumnPlan[T]{decoder: decoder}, nil
 }
@@ -571,7 +574,12 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	}
 	var zero T
 	*dst = zero
-	return readColumnInto(reader, p.decoder, dst)
+	at := reader.index
+	if err := readColumnInto(reader, p.decoder, dst); err != nil {
+		column, _ := reader.columns.At(at)
+		return columnError("decode", at, column.Name, err)
+	}
+	return nil
 }
 func (p singleColumnPlan[T]) Clone(value T) T { return p.decoder.Clone(value) }
 
@@ -763,7 +771,7 @@ func (c pairedParams[A, B]) Compile(columns Columns) (CompiledParams[Pair[A, B]]
 	}
 	b, err := compileParams(c.b, right)
 	if err != nil {
-		return nil, err
+		return nil, rebaseColumnError(err, left.Len())
 	}
 	return compiledPairedParams[A, B]{left: left, right: right, a: a, b: b}, nil
 }
@@ -782,12 +790,15 @@ func (p compiledPairedParams[A, B]) Encode(w *ParamWriter, value Pair[A, B]) err
 	if err == nil {
 		err = finishParamWriter(w)
 	}
-	w.columns, w.index = p.right, 0
-	if err == nil {
+	if err != nil {
+		err = rebaseColumnError(err, index)
+	} else {
+		w.columns, w.index = p.right, 0
 		err = p.b.Encode(w, value.Second)
-	}
-	if err == nil {
-		err = finishParamWriter(w)
+		if err == nil {
+			err = finishParamWriter(w)
+		}
+		err = rebaseColumnError(err, index+p.left.Len())
 	}
 	if err != nil {
 		w.builder.Rollback(mark)
@@ -832,7 +843,7 @@ func (c pairedRows[A, B]) Compile(columns Columns) (CompiledRow[Pair[A, B]], err
 	}
 	b, err := compileRow(c.b, right)
 	if err != nil {
-		return nil, err
+		return nil, rebaseColumnError(err, left.Len())
 	}
 	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
 }
@@ -863,7 +874,7 @@ func (p compiledPairedRow[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error
 		err = finishRowReader(r)
 	}
 	if err != nil {
-		return err
+		return rebaseColumnError(err, index)
 	}
 	r.columns, r.index = p.right, 0
 	err = p.b.DecodeInto(r, &dst.Second)
@@ -871,7 +882,7 @@ func (p compiledPairedRow[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error
 		err = finishRowReader(r)
 	}
 	if err != nil {
-		return err
+		return rebaseColumnError(err, index+p.left.Len())
 	}
 	completed = true
 	return nil

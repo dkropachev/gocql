@@ -118,9 +118,17 @@ func (w *kindWalk) visit(err error) bool {
 	k := sentinelKind(err)
 	if k == KindUnknown {
 		switch typed := err.(type) { //nolint:errorlint // one node of a tree walkErrors walks
-		case *cql.ValidationError, *cql.CodecError:
-			// Package cql defines them and cannot name Kind.
+		case *cql.ValidationError:
+			// Package cql defines it and cannot name Kind.
 			k = KindInvalid
+		case *cql.CodecError:
+			// A codec failure is invalid input, or a protocol violation
+			// when the cell itself is malformed. Either outranks the
+			// io.ErrUnexpectedEOF of a cell shorter than its length.
+			k = KindInvalid
+			if _, ok := errors.AsType[*cql.ProtocolError](typed.Err); ok {
+				k = KindProtocol
+			}
 		case *cql.ProtocolError:
 			k = KindProtocol
 		case kinded:
@@ -143,7 +151,10 @@ func (w *kindWalk) visit(err error) bool {
 // When err wraps several errors, a cancellation wins over a deadline, a
 // deadline over a server error, and a server error over the driver's own
 // errors, so a ConnectError whose host rejected the credentials reports
-// KindUnauthorized.
+// KindUnauthorized. A cql.CodecError reports KindProtocol when it wraps a
+// cql.ProtocolError, as for a malformed cell, and KindInvalid otherwise; an
+// error it wraps that ranks higher, such as cql.ErrReleased (KindClosed) or a
+// cql.ValidationError (KindInvalid), decides instead.
 func KindOf(err error) Kind {
 	if err == nil {
 		return KindUnknown

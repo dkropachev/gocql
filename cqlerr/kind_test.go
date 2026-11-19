@@ -38,6 +38,13 @@ func TestKindOf(t *testing.T) {
 		{"rate limited", &RateLimitReachedError{}, KindRateLimited},
 		{"syntax", server(CodeSyntax), KindInvalid},
 		{"validation", &cql.ValidationError{Field: "f", Err: errors.New("bad")}, KindInvalid},
+		{"typed row decoder", typedRowError(), KindInvalid},
+		{"struct row decoder", structRowError(), KindInvalid},
+		{"malformed cell", &cql.CodecError{Stage: "decode", Err: &cql.ProtocolError{Stage: "cell", Err: io.ErrUnexpectedEOF}}, KindProtocol},
+		{"released cell", &cql.CodecError{Stage: "decode", Err: cql.ErrReleased}, KindClosed},
+		{"short cell", &cql.CodecError{Stage: "decode", Err: io.ErrUnexpectedEOF}, KindInvalid},
+		{"malformed and invalid", &cql.CodecError{Stage: "decode", Err: errors.Join(&cql.ProtocolError{Stage: "cell", Err: io.ErrUnexpectedEOF}, &cql.ValidationError{Field: "f", Err: errors.New("bad")})}, KindInvalid},
+		{"short value", &cql.CodecError{Stage: "decode", Err: fmt.Errorf("wrap: %w", io.EOF)}, KindInvalid},
 		{"unauthorized", server(CodeUnauthorized), KindUnauthorized},
 		{"credentials", server(CodeBadCredentials), KindUnauthorized},
 		{"server protocol", server(CodeProtocol), KindProtocol},
@@ -80,4 +87,17 @@ func TestKindOf(t *testing.T) {
 			t.Errorf("%v transient", k)
 		}
 	}
+}
+
+// typedRowError is the error of a typed row decoder compiled for a column of
+// another type.
+func typedRowError() error {
+	_, err := cql.OneColumn(cql.Int32Codec).Compile(cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.TextType}))
+	return err
+}
+
+// structRowError is typedRowError for a struct mapping.
+func structRowError() error {
+	_, err := cql.MustRowOf[struct{ V int32 }]().Compile(cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.TextType}))
+	return err
 }

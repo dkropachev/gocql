@@ -4,8 +4,6 @@
 package cql
 
 import (
-	"fmt"
-
 	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -85,7 +83,7 @@ func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) 
 		plan, err = compileParams(c.codec, columns)
 	}
 	if err != nil {
-		return nil, err
+		return nil, recordMemberError(c.kind, err)
 	}
 	c.typ, c.columns, c.plan = typ, columns, plan
 	return c, nil
@@ -107,7 +105,7 @@ func (c recordEncoder[T]) Encode(w *ValueWriter, value T) error {
 	params := newParamWriter(w.builder, c.columns, false)
 	params.ownBorrowed = w.ownBorrowed
 	if err := c.plan.Encode(params, value); err != nil {
-		return w.fail(err)
+		return w.fail(recordMemberError(c.kind, err))
 	}
 	return w.fail(finishParamWriter(params))
 }
@@ -164,7 +162,7 @@ func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) 
 		plan, err = compileRow(c.codec, columns)
 	}
 	if err != nil {
-		return nil, err
+		return nil, recordMemberError(c.kind, err)
 	}
 	c.typ, c.columns, c.plan = typ, columns, plan
 	c.readers = syncx.NewPool(func() *recordReaderState { return new(recordReaderState) })
@@ -208,13 +206,15 @@ func (c recordDecoder[T]) DecodeInto(r ValueReader, dst *T) error {
 		return err
 	}
 	if err := validateRecordBody(r, c.columns); err != nil {
-		return err
+		return recordMemberError(c.kind, err)
 	}
 	state := c.readers.Get()
 	state.cursor = *wire.NewCursor(r.body)
 	state.reader = RowReader{columns: c.columns, cursor: &state.cursor, lease: r.lease, allowMissing: true}
 	err := c.plan.DecodeInto(&state.reader, dst)
-	if err == nil {
+	if err != nil {
+		err = recordMemberError(c.kind, err)
+	} else {
 		err = finishRowReader(&state.reader)
 	}
 	if err == nil {
@@ -235,10 +235,13 @@ func validateRecordBody(r ValueReader, columns Columns) error {
 			break
 		}
 		if _, err := cursor.Child(column.Type); err != nil {
-			return fmt.Errorf("gocql: field %d (%s): %w", index, column.Name, err)
+			return columnError("decode", index, column.Name, &ProtocolError{Stage: "cell", Err: err})
 		}
 	}
-	return cursor.RequireEnd()
+	if err := cursor.RequireEnd(); err != nil {
+		return &ProtocolError{Stage: "cell", Err: err}
+	}
+	return nil
 }
 
 // udtFieldMapping resolves source fields once while distinguishing missing
@@ -322,7 +325,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 		}
 		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: UDT field %q: %w", columnSlice(columns)[index].Name, err)
+			return nil, columnError("compile", index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -349,7 +352,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 		}
 		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: UDT field %q: %w", columnSlice(columns)[index].Name, err)
+			return nil, columnError("compile", index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -428,7 +431,7 @@ func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Com
 	}
 	b, err := compileUDTParamEncoder(c.b, right, options)
 	if err != nil {
-		return nil, err
+		return nil, rebaseColumnError(err, left.Len())
 	}
 	return compiledPairedParams[A, B]{left: left, right: right, a: a, b: b}, nil
 }
@@ -443,7 +446,7 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (Compi
 	}
 	b, err := compileUDTRowDecoder(c.b, right, options)
 	if err != nil {
-		return nil, err
+		return nil, rebaseColumnError(err, left.Len())
 	}
 	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
 }
