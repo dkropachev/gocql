@@ -13,6 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -307,6 +308,18 @@ func TestExecutionStatusRefused(t *testing.T) {
 			_, err := p.Exec(ctx, 1, CompiledOptions{})
 			return err
 		}, cqlerr.ErrClosed},
+		{"NilEachCallback", func(t *testing.T) error {
+			s, _, peers := runtimeTestSession(t, 1)
+			p := oneShotPrepare(t, s, peers[0], make(chan oneShotRequest, 1))
+			var dst []byte
+			_, err := p.Each(ctx, 1, &dst, nil, CompiledOptions{})
+			return err
+		}, nil},
+		{"UnpreparedTwoOptions", func(t *testing.T) error {
+			s, _, _ := runtimeTestSession(t, 1)
+			_, err := InternalWrapSession(s).UnpreparedExec(ctx, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "DELETE FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyRow{}, Options{}, Options{})
+			return err
+		}, nil},
 		{"ClosedSession", func(t *testing.T) error {
 			s, _, _ := runtimeTestSession(t, 1)
 			s.Close()

@@ -29,7 +29,7 @@ type eachScratch struct {
 //
 //go:noinline
 func nilEachCallback() (cql.Result, error) {
-	err := cqltype.TypeValidation("row callback", "nil callback")
+	err := notSent(cqltype.TypeValidation("row callback", "nil callback"))
 	return InternalExecutionErrorResult(err), err
 }
 
