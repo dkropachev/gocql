@@ -82,6 +82,9 @@ type InternalSessionRuntime struct {
 	// admission writes no separate request counter.
 	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
+	// collectedFinal is set once Session.Close wrote the last queued
+	// reports; later collections queue none.
+	collectedFinal bool
 
 	// The fields below are written on the request path. Each group has its
 	// own cache line, so that the writes do not evict the read-mostly fields

@@ -66,6 +66,7 @@ func (d queryDrain) Wait() {
 	d.runtime.waitPooled()
 	d.runtime.InternalMu.Lock()
 	collected := d.runtime.takeCollected()
+	d.runtime.collectedFinal = true
 	d.runtime.InternalMu.Unlock()
 	d.runtime.reportCollected(collected)
 }

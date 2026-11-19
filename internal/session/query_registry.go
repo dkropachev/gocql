@@ -104,7 +104,9 @@ type collectedQuery struct {
 // It runs on the runtime's cleanup goroutine, shared by the whole process, so
 // it calls no application code: when the query's creation stack was recorded
 // for a Debug report, it only queues the report. The next query registration,
-// or Session.Close, writes it through the session's logger.
+// or Session.Close, writes it through the session's logger. Nothing registers
+// after Session.Close, so a query collected after Close wrote the last
+// reports goes unreported.
 //
 // A collected query is unreachable, so no Close can race with the cleanup:
 // unregisterQuery would have stopped it first.
@@ -113,7 +115,7 @@ func collectQuery(ref queryRef) {
 	rt.InternalMu.Lock()
 	entry := rt.queries[ref.key]
 	delete(rt.queries, ref.key)
-	if entry != nil && entry.stack != nil {
+	if entry != nil && entry.stack != nil && !rt.collectedFinal {
 		rt.collected = append(rt.collected, collectedQuery{stack: entry.stack, pooled: entry.pooled})
 	}
 	rt.InternalMu.Unlock()
