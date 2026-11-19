@@ -108,3 +108,36 @@ func TestParseFrameDeepTypeNesting(t *testing.T) {
 		}
 	}
 }
+
+// TestVectorElementDepth checks that the nesting of a vector's element type,
+// which arrives as a marshal class name, counts against MaxMetadataDepth like
+// any other nested type.
+func TestVectorElementDepth(t *testing.T) {
+	t.Parallel()
+	vector := func(lists int) []byte {
+		const prefix = cqltype.ApacheCassandraTypePrefix
+		return customTypeResult(prefix + "VectorType(" + strings.Repeat(prefix+"ListType(", lists) +
+			prefix + "Int32Type" + strings.Repeat(")", lists) + ", 3)")
+	}
+	head := frm.FrameHeader{Version: protoVersion4 | protoDirectionMask, Op: frm.OpResult, Stream: 1}
+	for _, test := range []struct {
+		maxDepth, lists int
+		ok              bool
+	}{
+		// vector at depth 0, the lists below it, int at depth lists+1.
+		{maxDepth: 2, lists: 1, ok: true},
+		{maxDepth: 2, lists: 2, ok: false},
+		{maxDepth: 64, lists: 63, ok: true},
+		{maxDepth: 64, lists: 64, ok: false},
+	} {
+		settings := protocolSettings(4)
+		settings.MaxMetadataDepth = test.maxDepth
+		body := wire.ChainOf(vector(test.lists))
+		owner := wire.NewLease(body, nil)
+		_, err := settings.ParseTypedResponse(head, body, owner)
+		owner.Release()
+		if (err == nil) != test.ok {
+			t.Errorf("max depth %d, %d lists: err=%v, want ok=%v", test.maxDepth, test.lists, err, test.ok)
+		}
+	}
+}

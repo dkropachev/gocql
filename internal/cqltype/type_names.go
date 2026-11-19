@@ -69,16 +69,25 @@ const MaxLongTypeDepth = 64
 // A name it cannot parse, or one nested deeper than MaxLongTypeDepth, is
 // returned as a custom type and logged.
 func GetCassandraLongType(name string, protoVer byte, logger *slog.Logger) TypeInfo {
-	return getCassandraLongType(name, protoVer, logging.Or(logger), 0)
+	return GetCassandraLongTypeLimit(name, protoVer, logger, MaxLongTypeDepth)
 }
 
-func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, depth int) TypeInfo {
+// GetCassandraLongTypeLimit is GetCassandraLongType with maxDepth in place of
+// MaxLongTypeDepth, for a name inside metadata whose remaining depth budget is
+// smaller.
+func GetCassandraLongTypeLimit(name string, protoVer byte, logger *slog.Logger, maxDepth int) TypeInfo {
+	return getCassandraLongType(name, protoVer, logging.Or(logger), maxDepth)
+}
+
+// getCassandraLongType parses name with remaining more levels of nesting
+// allowed below it.
+func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remaining int) TypeInfo {
 	const prefix = ApacheCassandraTypePrefix
-	if depth > MaxLongTypeDepth {
-		logger.Warn("unparsable type definition", "detail", fmt.Sprintf("type nesting exceeds %d", MaxLongTypeDepth))
+	if remaining < 0 {
+		logger.Warn("unparsable type definition", "detail", "type nesting exceeds the depth limit")
 		return NewCustomType(protoVer, cql.TypeCustom, name)
 	}
-	depth++
+	depth := remaining - 1
 	if strings.HasPrefix(name, prefix+"SetType") {
 		return CollectionType{
 			NativeType: NewNativeType(protoVer, cql.TypeSet),

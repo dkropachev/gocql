@@ -86,7 +86,7 @@ func TestLongTypeNestingDepth(t *testing.T) {
 func TestLongTypeParseLinear(t *testing.T) {
 	const tuple = ApacheCassandraTypePrefix + "TupleType("
 	for name, input := range map[string]string{
-		"deep":  nestedLongType(1600, true),
+		"deep":  nestedLongType(1500, true),
 		"wide":  tuple + strings.Repeat(nestedLongType(3, false)+",", 400) + marshalInt + ")",
 		"nests": tuple + strings.Repeat(tuple+marshalInt+",", 60) + marshalInt + strings.Repeat(")", 61),
 	} {
@@ -107,7 +107,7 @@ func TestLongTypeParseLinear(t *testing.T) {
 }
 
 func BenchmarkLongTypeParse(b *testing.B) {
-	name := nestedLongType(1600, true)
+	name := nestedLongType(1500, true)
 	b.SetBytes(int64(len(name)))
 	b.ReportAllocs()
 	for b.Loop() {

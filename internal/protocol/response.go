@@ -358,7 +358,9 @@ func (p *TypedParser) dataType(depth int) cql.DataType {
 				break
 			}
 			// This legacy adapter translates schema descriptions only, never values.
-			element, parseErr := DataTypeFromInfo(GetCassandraLongType(strings.TrimSpace(args[:split]), p.Proto, logging.Nop()))
+			// The element type's nesting counts against the metadata depth
+			// limit like any other nested type.
+			element, parseErr := DataTypeFromInfo(GetCassandraLongTypeLimit(strings.TrimSpace(args[:split]), p.Proto, logging.Nop(), maxDepth-depth-1))
 			if parseErr != nil {
 				err = parseErr
 				break
