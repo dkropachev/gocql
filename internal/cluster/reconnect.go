@@ -28,7 +28,8 @@ func (s *Core) startReconnectingDownedHosts() {
 	if !again || delay < 0 {
 		return
 	}
-	go s.reconnectTypedDownedHosts(policy, max(delay, time.Millisecond))
+	// A session worker, so Close joins the loop after cancelling its ctx.
+	s.Peripheral().InternalStartWorker(func() { s.reconnectTypedDownedHosts(policy, max(delay, time.Millisecond)) })
 }
 
 // reconnectTypedDownedHosts keeps independent bounded backoff state for each host.
