@@ -296,7 +296,6 @@ func (s *Core) handleKeyspaceChange(keyspace, change string) {
 	if change == "DROPPED" || change == "UPDATED" {
 		s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithKeyspace(keyspace)
 	}
-	s.privateStorage.InternalPolicy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: keyspace, Change: change})
 }
 
 func (s *Core) handleTableChange(keyspace, table, change string) {
@@ -405,7 +404,6 @@ func (s *Core) startPoolFill(host *implEndpoint.HostInfo) {
 	}
 	pool := s.privateStorage.InternalPool.InternalEnsureHost(host)
 	p.hostMu.Unlock()
-	s.privateStorage.InternalPolicy.AddHost(host)
 	pool.InternalFill_debounce()
 }
 
@@ -428,7 +426,6 @@ func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
 	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
-	s.synchronizeV2HostPolicy(pool.InternalHost)
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	if s.privateStorage.InternalPool != nil {
@@ -441,10 +438,6 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
 	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "connected", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
-
-	if !s.privateStorage.InternalCfg.FilterHost(host) {
-		s.privateStorage.InternalPolicy.HostUp(host)
-	}
 }
 
 func (s *Core) HandleNodeDown(ip net.IP, port int) {
@@ -465,10 +458,6 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 		}
 		p.hostMu.Unlock()
 		sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "down", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
-		if filtered {
-			return
-		}
-		s.synchronizeV2HostPolicy(host)
 	}
 }
 
@@ -505,9 +494,6 @@ func (s *Core) RecordV2Topology(event *events.TopologyChangeEvent) {
 		if s.privateStorage.InternalPool != nil {
 			s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(removed))
 		}
-		if s.privateStorage.InternalPolicy != nil {
-			s.privateStorage.InternalPolicy.RemoveHost(removed)
-		}
 		if s.privateStorage.InternalMetadataDescriber != nil {
 			s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithHost(removed)
 		}
@@ -534,43 +520,4 @@ func (s *Core) fenceV2Down(ip net.IP, port int) {
 	}
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
-}
-
-// A notification may run user code and race a newer DOWN/removal/replacement.
-// Reconcile against the current host/pool after each callback; a stale callback
-// cannot leave the policy containing the superseded emitting host.
-func (s *Core) synchronizeV2HostPolicy(fallback *implEndpoint.HostInfo) {
-	type stamp struct {
-		host       *implEndpoint.HostInfo
-		pool       *pool.InternalHostConnPool
-		state      implEndpoint.InternalNodeState
-		generation uint64
-	}
-	capture := func() stamp {
-		p := s.Peripheral()
-		p.hostMu.Lock()
-		defer p.hostMu.Unlock()
-		h := s.privateStorage.InternalHostSource.InternalGetHost(fallback.HostID())
-		if h == nil {
-			return stamp{}
-		}
-		pool, _ := s.privateStorage.InternalPool.InternalGetPool(h)
-		implEndpoint.HostInfoData(h).InternalMu.RLock()
-		out := stamp{h, pool, implEndpoint.HostInfoData(h).InternalState.Load(), implEndpoint.HostInfoData(h).InternalLifecycleGeneration}
-		implEndpoint.HostInfoData(h).InternalMu.RUnlock()
-		return out
-	}
-	for !s.Closed() {
-		before := capture()
-		if before.host == nil {
-			s.privateStorage.InternalPolicy.RemoveHost(fallback)
-		} else if before.state == implEndpoint.NodeUp && before.pool != nil && before.pool.Size() > 0 && !s.privateStorage.InternalCfg.FilterHost(before.host) {
-			s.privateStorage.InternalPolicy.HostUp(before.host)
-		} else {
-			s.privateStorage.InternalPolicy.HostDown(before.host)
-		}
-		if before == capture() {
-			return
-		}
-	}
 }

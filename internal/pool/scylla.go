@@ -97,7 +97,7 @@ func (p *InternalScyllaConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 
 // PickInt64 is the raw-int64 fast-path variant of Pick, avoiding the Token
 // interface boxing. It must only be called with int64-based routing tokens
-// (Murmur3/ScyllaCDC), which is guaranteed by int64TokenSelectedHost.
+// (Murmur3/ScyllaCDC).
 func (p *InternalScyllaConnPicker) PickInt64(token int64) *transport.Conn {
 	p.InternalMu.RLock()
 	defer p.InternalMu.RUnlock()

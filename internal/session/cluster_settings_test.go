@@ -481,7 +481,6 @@ func TestClusterSettings(t *testing.T) {
 			defer srv.Stop()
 
 			cluster := createTestSslCluster(srv.Address, defaultProto, true)
-			cluster.PoolConfig.HostSelectionPolicy = implCluster.RoundRobinHostPolicy()
 
 			db, err := cluster.Open()
 			if err != nil {

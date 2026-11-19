@@ -45,7 +45,6 @@ type SessionStorage struct {
 	InternalControl             InternalControlConnection
 	InternalCtx                 context.Context
 	InternalLogger              *slog.Logger
-	InternalPolicy              HostSelectionPolicy
 	connectObserver             ConnectObserver
 	frameObserver               transport.FrameHeaderObserver
 	streamObserver              transport.StreamObserver

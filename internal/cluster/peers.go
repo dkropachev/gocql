@@ -204,15 +204,11 @@ func (s *Core) refreshRing() error {
 	epoch := r.eventEpoch
 	r.mu.Unlock()
 	var hosts []*implEndpoint.HostInfo
-	var partitioner string
 	var err error
 	if s.privateStorage.InternalCfg.DisableInitialHostLookup {
 		hosts, err = s.v2ContactIdentities(metadata.InternalV2SchemaContext(s.NewSchemaSource()), r.InternalGetHostsList())
-		if len(hosts) > 0 {
-			partitioner = hosts[0].Partitioner()
-		}
 	} else {
-		hosts, partitioner, err = r.GetHostsFromSystem()
+		hosts, _, err = r.GetHostsFromSystem()
 	}
 	if err != nil {
 		return &cqlerr.PartialRefreshError{Generation: s.Metadata().Generation(), Topology: err}
@@ -264,7 +260,6 @@ func (s *Core) refreshRing() error {
 			s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithHost(h)
 		}
 		s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
-		s.privateStorage.InternalPolicy.RemoveHost(h)
 	}
 	s.PublishV2Metadata()
 	for _, h := range added {
@@ -277,7 +272,6 @@ func (s *Core) refreshRing() error {
 			s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 		}
 	}
-	s.privateStorage.InternalPolicy.SetPartitioner(partitioner)
 	if !s.PublishV2Metadata() {
 		return s.v2MetadataPublicationError()
 	}

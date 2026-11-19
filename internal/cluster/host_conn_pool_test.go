@@ -267,11 +267,11 @@ func TestHostConnPool(t *testing.T) {
 		assert.False(t, isScyllaPicker, "must not build scyllaConnPicker without shards")
 	})
 
-	// TestHostConnPool/PickConn is a regression
-	// guard: a SelectedHost carrying an unboxed int64Token must still reach the
-	// shard-aware picker. If the raw token were dropped, scyllaConnPicker would
-	// fall back to leastBusyConn() and shard-aware routing would silently degrade.
-	t.Run("PickConn", func(t *testing.T) {
+	// TestHostConnPool/PickInt64 is a regression guard: a raw int64 token must
+	// still reach the shard-aware picker. If the raw token were dropped,
+	// scyllaConnPicker would fall back to leastBusyConn() and shard-aware
+	// routing would silently degrade.
+	t.Run("PickInt64", func(t *testing.T) {
 		t.Parallel()
 
 		picker := implPool.InternalScyllaConnPicker{InternalNrShards: 4, InternalMsbIgnore: 12, InternalNrConns: 4}
@@ -285,14 +285,9 @@ func TestHostConnPool(t *testing.T) {
 		want := picker.InternalConns[shard]
 
 		pool := &implPool.InternalHostConnPool{InternalConnPicker: &picker}
-		host := int64SelectedHost{info: func() *endpoint.HostInfo {
-			opaqueStorageValue := new(endpoint.HostInfo)
-			return opaqueStorageValue
-		}(), tokenCasted: tok}
-
-		got := pool.PickConn(host)
+		got := pool.PickInt64(int64(tok))
 		if got != want {
-			t.Fatalf("PickConn returned %p (least-busy fallback?); want shard-aware conn %p for shard %d",
+			t.Fatalf("PickInt64 returned %p (least-busy fallback?); want shard-aware conn %p for shard %d",
 				got, want, shard)
 		}
 	})

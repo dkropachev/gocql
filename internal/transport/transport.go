@@ -22,6 +22,13 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
+// InternalResponsePage is one response page read off a connection with the
+// result metadata it was decoded with.
+type InternalResponsePage struct {
+	InternalMetadata *model.ResultSchemaIdentity
+	model.ResponseData
+}
+
 // executeTyped issues one attempt with the connection's negotiated protocol.
 // Canonical values are borrowed unchanged; retries and metadata repair belong to
 // the execution layer. A received page owns its storage independently of Conn.

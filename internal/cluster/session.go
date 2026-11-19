@@ -153,12 +153,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 		return s.refreshRing()
 	})
 
-	if cfg.PoolConfig.HostSelectionPolicy == nil {
-		cfg.PoolConfig.HostSelectionPolicy = TokenAwareHostPolicy(RoundRobinHostPolicy())
-	}
-	s.privateStorage.InternalPool = cfg.PoolConfig.buildPool(s)
-	s.privateStorage.InternalPolicy = cfg.PoolConfig.HostSelectionPolicy
-	s.privateStorage.InternalPolicy.Init(s)
+	s.privateStorage.InternalPool = newPolicyConnPool(s)
 	s.privateStorage.connectObserver = cfg.ConnectObserver
 	s.privateStorage.frameObserver = cfg.FrameHeaderObserver
 	s.privateStorage.streamObserver = cfg.StreamObserver
@@ -266,8 +261,6 @@ func (s *Core) init() error {
 		return err
 	}
 
-	var partitioner string
-
 	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		s.privateStorage.InternalControl = createControlConn(s)
 		reconnectionPolicy := s.privateStorage.InternalCfg.InitialReconnectionPolicy
@@ -306,7 +299,7 @@ func (s *Core) init() error {
 
 		if !s.privateStorage.InternalCfg.DisableInitialHostLookup {
 			var newHosts []*implEndpoint.HostInfo
-			newHosts, partitioner, err = s.privateStorage.InternalHostSource.GetHostsFromSystem()
+			newHosts, _, err = s.privateStorage.InternalHostSource.GetHostsFromSystem()
 			if err != nil {
 				return err
 			}
@@ -329,10 +322,6 @@ func (s *Core) init() error {
 				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}
-	}
-
-	if partitioner != "" {
-		s.privateStorage.InternalPolicy.SetPartitioner(partitioner)
 	}
 
 	hostMap := make(map[string]*implEndpoint.HostInfo, len(hosts))
@@ -383,31 +372,11 @@ func (s *Core) init() error {
 		s.privateStorage.InternalHasAggregatesAndFunctions = version.AtLeast(2, 2, 0)
 	}
 
-	// before waiting for them to connect, add them all to the policy so we can
-	// utilize efficiencies by calling AddHosts if the policy supports it
-	type bulkAddHosts interface {
-		AddHosts([]*implEndpoint.HostInfo)
-	}
-	if v, ok := s.privateStorage.InternalPolicy.(bulkAddHosts); ok {
-		v.AddHosts(hosts)
-	} else {
-		for _, host := range hosts {
-			s.privateStorage.InternalPolicy.AddHost(host)
-		}
-	}
-
-	readyPolicy, _ := s.privateStorage.InternalPolicy.(ReadyPolicy)
-	// now loop over connectedCh until it's closed (meaning we've connected to all)
-	// or until the policy says we're ready
+	// Wait until every host has tried to connect.
 	for range connectedCh {
-		if readyPolicy != nil && readyPolicy.Ready() {
-			break
-		}
 	}
 
-	if s.privateStorage.InternalCfg.ReconnectInterval > 0 {
-		go s.reconnectDownedHosts(s.privateStorage.InternalCfg.ReconnectInterval)
-	}
+	s.startReconnectingDownedHosts()
 
 	// The control connection reached a node, but the session still needs a
 	// pooled connection to run requests on.
@@ -415,15 +384,6 @@ func (s *Core) init() error {
 		return ErrNoConnectionsStarted
 	}
 
-	// Invoke KeyspaceChanged to let the policy cache the session keyspace
-	// parameters. This is used by tokenAwareHostPolicy to discover replicas.
-	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn && s.privateStorage.InternalCfg.Keyspace != "" {
-		s.privateStorage.InternalPolicy.KeyspaceChanged(KeyspaceUpdateEvent{Keyspace: s.privateStorage.InternalCfg.Keyspace})
-	}
-
-	if err = s.privateStorage.InternalPolicy.IsOperational(s); err != nil {
-		return fmt.Errorf("gocql: unable to create session: %w", err)
-	}
 	s.privateStorage.InternalSessionStateMu.Lock()
 	s.privateStorage.isInitialized = true
 	s.privateStorage.InternalSessionStateMu.Unlock()
@@ -439,45 +399,6 @@ func (s *Core) init() error {
 // after the timeout specified in MaxWaitSchemaAgreement elapses.
 func (s *Core) AwaitSchemaAgreement(ctx context.Context) error {
 	return s.awaitV2SchemaAgreement(ctx)
-}
-
-func (s *Core) reconnectDownedHosts(intv time.Duration) {
-	var reconnect implSettings.ReconnectPolicy
-	if owner := s.CurrentExecution(); owner != nil {
-		reconnect = owner.ConfigSnapshot().Reconnect
-	}
-	if policy := reconnect; policy != nil {
-		s.reconnectTypedDownedHosts(policy, intv)
-		return
-	}
-	reconnectTicker := time.NewTicker(intv)
-	defer reconnectTicker.Stop()
-
-	for {
-		select {
-		case <-reconnectTicker.C:
-			hosts := s.privateStorage.InternalHostSource.InternalGetHostsList()
-
-			if s.logger().Enabled(context.Background(), slog.LevelDebug) {
-				states := make([]string, 0, len(hosts))
-				for _, h := range hosts {
-					states = append(states, h.ConnectAddress().String()+":"+h.State().String())
-				}
-				s.logger().Debug("reconnect tick", "hosts", states)
-			}
-
-			for _, h := range hosts {
-				if h.IsUp() {
-					continue
-				}
-
-				// we let the pool call handleNodeConnected to change the host state
-				s.privateStorage.InternalPool.InternalAddHost(h)
-			}
-		case <-s.privateStorage.InternalCtx.Done():
-			return
-		}
-	}
 }
 
 // SetConsistency sets the default consistency level for this session. This
@@ -579,7 +500,6 @@ func sessionReady(s *Core) error {
 }
 
 func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
-	s.privateStorage.InternalPolicy.RemoveHost(h)
 	s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(h))
 	s.privateStorage.InternalHostSource.InternalRemoveHost(h.HostID())
 }

@@ -328,8 +328,7 @@ type InternalLoadBalancingTokenAwareReport struct {
 // adaptiveOrderingReport names the runtime observations that reorder
 // otherwise eligible candidates. The schema deliberately stops there: it
 // records which signals feed the decision, not the algorithm or its
-// thresholds, so AvoidSlowReplicas' MAX_IN_FLIGHT_THRESHOLD has nowhere to go
-// and is not reported.
+// thresholds.
 type adaptiveOrderingReport struct {
 	Signals []string `json:"signals"`
 }
@@ -362,11 +361,8 @@ type InternalNodeLocationRackReport struct {
 //
 // The reporter holds the *Session itself and builds the report lazily, at
 // first use, rather than at construction time: newDriverConfigReporter runs
-// inside newSessionCommon before fields such as s.policy are assigned, so a
-// report built eagerly would see a partially initialized Session. For the
-// same reason, the host selection policy is read off s.policy, not
-// s.cfg.PoolConfig.HostSelectionPolicy: the latter is never assigned the
-// default policy that newSessionCommon applies.
+// inside newSessionCommon before fields such as s.pool are assigned, so a
+// report built eagerly would see a partially initialized Session.
 type driverConfigReporter struct {
 	session *Core
 }
@@ -508,7 +504,7 @@ func buildTypedReconnectionReport(policy settings.ReconnectPolicy) any {
 // driver holds connections to.
 //
 // Only HostFilter narrows that: Session.init drops every host cfg.filterHost
-// rejects, so such a host never gets a pool at all. The host selection policy's
+// rejects, so such a host never gets a pool at all. The routing policy's
 // DC/rack preference is reported separately and does not belong here -- it
 // orders and restricts routing among hosts that all still have pools.
 //
@@ -779,7 +775,6 @@ func buildControlPlaneReport(cfg *InternalClusterSettings, typed *connectivity.C
 
 func (s *Core) BuildQueryReport() queryReport {
 	cfg := s.privateStorage.InternalCfg
-	loadBalancing := buildLoadBalancingReport(s.privateStorage.InternalPolicy)
 	runtime := s.CurrentExecution()
 	if runtime != nil && runtime.Profile() != nil {
 		profile := *runtime.Profile()
@@ -804,7 +799,7 @@ func (s *Core) BuildQueryReport() queryReport {
 		}
 		return report
 	}
-	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: loadBalancing}
+	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: legacyLoadBalancingReport()}
 }
 func buildTypedLoadBalancingReport(policy routing.RoutingPolicy) queryLoadBalancingReport {
 	builtin, ok := policy.(*routing.InternalRoutingPolicy)
@@ -901,8 +896,8 @@ func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 }
 
 // exponentialDelayWindow reports the delay window getExponentialTime
-// (policies.go) actually produces for a configured min/max pair, in
-// milliseconds.
+// (internal/pool/policies.go) actually produces for a configured min/max
+// pair, in milliseconds.
 //
 // Both the exponential retry backoff and the exponential reconnection policy
 // route their delays through getExponentialTime, and both describe the result
@@ -933,141 +928,16 @@ func effectiveExpBackoff(configured, fallback time.Duration) time.Duration {
 	return configured
 }
 
-func buildLoadBalancingReport(policy HostSelectionPolicy) queryLoadBalancingReport {
-	policy = unwrapHostSelectionPolicy(policy)
-	return queryLoadBalancingReport{
-		Policy:         buildLoadBalancingPolicyReport(policy),
-		NodePreference: buildNodeLocationPreferenceReport(policy),
-	}
-}
-
-func buildLoadBalancingPolicyReport(policy HostSelectionPolicy) any {
-	tap, ok := policy.(*tokenAwareHostPolicy)
-	if !ok || isNilPolicy(policy) {
-		// The schema's built-in load-balancing type only ever admits
-		// "token-aware" (matching csharp-driver/java-driver's own narrowing);
-		// any other policy -- including gocql's plain RoundRobinHostPolicy or
-		// DCAwareRoundRobinPolicy used without token-awareness -- is reported as
-		// custom.
-		return loadBalancingCustomReport{Type: "custom", Name: customPolicyName(policy)}
-	}
-	distribution := "replica-set"
-	if tap.privateStorage.shuffleReplicas {
-		distribution = "shuffle"
-	}
-	report := InternalLoadBalancingTokenAwareReport{
+// legacyLoadBalancingReport describes host selection for a session built
+// from InternalClusterSettings alone, which has no routing profile. It is what
+// such a session reported before its v1 host selection policy was removed:
+// token-aware, replicas shuffled, falling back to any node.
+func legacyLoadBalancingReport() queryLoadBalancingReport {
+	return queryLoadBalancingReport{Policy: InternalLoadBalancingTokenAwareReport{
 		Type:                        "token-aware",
-		LoadDistribution:            distribution,
-		FallbackToNonPreferredNodes: fallbackToNonPreferredNodesAllowed(tap),
-	}
-	if tap.privateStorage.avoidSlowReplicas {
-		// AvoidSlowReplicas makes Pick partition the replica set so hosts at or
-		// above MAX_IN_FLIGHT_THRESHOLD outstanding requests sort last: see
-		// partitionHealthy, which orders by HostInfo.IsBusy. That is adaptive
-		// ordering, and the count of outstanding requests is the one signal it
-		// reads.
-		report.AdaptiveOrdering = &adaptiveOrderingReport{Signals: []string{"in-flight-requests"}}
-	}
-	return report
-}
-
-// maxPolicyUnwrapDepth bounds the walk below. A wrapper cycle is not
-// reachable through the constructors, but the report must never hang a
-// connection over a policy someone assembled by hand.
-const maxPolicyUnwrapDepth = 16
-
-// unwrapHostSelectionPolicy peels driver-supplied wrappers off a host
-// selection policy so the report describes the policy the caller actually
-// configured rather than the wrapper around it.
-//
-// SingleHostReadyPolicy is the only such wrapper, and it is transparent to
-// routing: it forwards every selection decision to the policy it holds and
-// adds only a readiness signal. Left wrapped, both the load-balancing
-// discriminant and the DC/rack preference behind it would be lost, which is
-// everything the group exists to report.
-func unwrapHostSelectionPolicy(p HostSelectionPolicy) HostSelectionPolicy {
-	for range maxPolicyUnwrapDepth {
-		wrapper, ok := p.(*singleHostReadyPolicy)
-		if !ok || isNilPolicy(p) {
-			return p
-		}
-		p = wrapper.HostSelectionPolicy
-	}
-	return p
-}
-
-// fallbackToNonPreferredNodesAllowed reports whether a request can reach a
-// node outside the DC/rack preference this policy reports.
-//
-// Two separate things can let it. NonLocalReplicasFallback makes Pick serve
-// replicas from remote tiers itself, out of its own `remote` buckets and
-// before it ever delegates to the fallback policy, so requests escape the
-// preference however the fallback is configured. Failing that it comes down to
-// the fallback: only dcAwareRR and rackAwareRR confine requests at all, and
-// only when DC failover is disabled. Any other fallback has no DC/rack notion,
-// so nothing is confined.
-func fallbackToNonPreferredNodesAllowed(tap *tokenAwareHostPolicy) bool {
-	if tap.privateStorage.nonLocalReplicasFallback {
-		return true
-	}
-	if isNilPolicy(tap.privateStorage.fallback) {
-		return true
-	}
-	switch p := tap.privateStorage.fallback.(type) {
-	case *dcAwareRR:
-		// The preference is the whole local DC, and disabling failover confines
-		// requests to exactly that.
-		return !p.dcFailoverDisabled()
-	case *rackAwareRR:
-		// The preference reported for this fallback names a rack as well as a
-		// DC, but Pick always serves tier 1 -- the local DC's other racks --
-		// before giving up, whether or not DC failover is disabled. Requests
-		// therefore always reach nodes outside the reported preference;
-		// disabling failover only stops them leaving the DC, which the schema's
-		// single boolean cannot express.
-		return true
-	default:
-		// No DC/rack notion at all, so nothing is confined.
-		return true
-	}
-}
-
-// buildNodeLocationPreferenceReport looks for a DC/rack preference on policy
-// itself or, if policy is token-aware, on its fallback -- there is no separate
-// session-level DC/rack setting, only what a DCAwareRoundRobinPolicy or
-// RackAwareRoundRobinPolicy carries. Returns nil (omitted) for any other
-// policy: the driver infers no datacenter, so the schema's dc-auto/rack-auto
-// branches are never produced.
-//
-// An empty datacenter or rack is also reported as no preference. The schema
-// declares both local-dc and local-rack nonEmptyString and requires them on
-// the branch that names them, so an empty one cannot be reported -- and a
-// policy constructed with an empty name expresses no preference anyway.
-func buildNodeLocationPreferenceReport(policy HostSelectionPolicy) any {
-	if isNilPolicy(policy) {
-		return nil
-	}
-	target := policy
-	if tap, ok := policy.(*tokenAwareHostPolicy); ok {
-		target = tap.privateStorage.fallback
-	}
-	if isNilPolicy(target) {
-		return nil
-	}
-	switch p := target.(type) {
-	case *dcAwareRR:
-		if p.localDatacenter() == "" {
-			return nil
-		}
-		return nodeLocationDCReport{Type: "dc", LocalDC: p.localDatacenter()}
-	case *rackAwareRR:
-		if p.localDatacenter() == "" || p.localRackName() == "" {
-			return nil
-		}
-		return InternalNodeLocationRackReport{Type: "rack", LocalDC: p.localDatacenter(), LocalRack: p.localRackName()}
-	default:
-		return nil
-	}
+		LoadDistribution:            "shuffle",
+		FallbackToNonPreferredNodes: true,
+	}}
 }
 
 // customPolicyName returns a short, package-qualifier-free name for a

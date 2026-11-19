@@ -18,7 +18,6 @@ package cluster
 
 import (
 	"net"
-	"sync"
 	"testing"
 	"time"
 
@@ -57,64 +56,9 @@ const (
 	nodeEventQuietWindow = 150 * time.Millisecond
 )
 
-// nodeEventPolicy records the HostStateNotifier half of HostSelectionPolicy.
-// The rest of the interface comes from the embedded roundRobinHostPolicy, the
-// same approach trackingPolicy takes in events_unit_test.go.
-type nodeEventPolicy struct {
-	roundRobinHostPolicy
-
-	mu         sync.Mutex
-	addHost    []string
-	removeHost []string
-	hostUp     []string
-	hostDown   []string
-}
-
-func (p *nodeEventPolicy) AddHost(host *endpoint.HostInfo)    { p.record(&p.addHost, host) }
-func (p *nodeEventPolicy) RemoveHost(host *endpoint.HostInfo) { p.record(&p.removeHost, host) }
-func (p *nodeEventPolicy) HostUp(host *endpoint.HostInfo)     { p.record(&p.hostUp, host) }
-func (p *nodeEventPolicy) HostDown(host *endpoint.HostInfo)   { p.record(&p.hostDown, host) }
-
-func (p *nodeEventPolicy) record(dst *[]string, host *endpoint.HostInfo) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	*dst = append(*dst, host.ConnectAddress().String())
-}
-
-func (p *nodeEventPolicy) snapshot(src []string) []string {
-	dst := make([]string, len(src))
-	copy(dst, src)
-	return dst
-}
-
-func (p *nodeEventPolicy) addHostCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.addHost)
-}
-
-func (p *nodeEventPolicy) removeHostCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.removeHost)
-}
-
-func (p *nodeEventPolicy) hostUpCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.hostUp)
-}
-
-func (p *nodeEventPolicy) hostDownCalls() []string {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return p.snapshot(p.hostDown)
-}
-
 // nodeEventFixture is a Session cut down to exactly what the node-event path
-// touches: a host source to resolve event IPs against, a policy to observe
-// dispatch, a ring refresher to observe debounced refreshes, and a connection
-// pool.
+// touches: a host source to resolve event IPs against, a ring refresher to
+// observe debounced refreshes, and a connection pool.
 //
 // The pool starts as an empty &policyConnPool{}. policyConnPool.removeHost
 // short-circuits on a missing host, so the DOWN path is safe, but addHost would
@@ -128,19 +72,16 @@ func (p *nodeEventPolicy) hostDownCalls() []string {
 // TestNodeEvents/RemoveHost in node_events_test.go.
 type nodeEventFixture struct {
 	session   *Core
-	policy    *nodeEventPolicy
 	refreshes chan struct{}
 }
 
 func newNodeEventFixture(t *testing.T, opts ...func(*InternalClusterSettings)) *nodeEventFixture {
 	t.Helper()
 
-	policy := &nodeEventPolicy{}
 	refreshes := make(chan struct{}, 16)
 
 	s := func() *Core {
 		opaqueStorageValue := new(Core)
-		SessionData(opaqueStorageValue).InternalPolicy = policy
 		SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 		return opaqueStorageValue
 	}()
@@ -159,7 +100,7 @@ func newNodeEventFixture(t *testing.T, opts ...func(*InternalClusterSettings)) *
 	})
 	t.Cleanup(SessionData(s).InternalRingRefresher.Stop)
 
-	return &nodeEventFixture{session: s, policy: policy, refreshes: refreshes}
+	return &nodeEventFixture{session: s, refreshes: refreshes}
 }
 
 // addHost registers a host with the fixture's host source so that an event

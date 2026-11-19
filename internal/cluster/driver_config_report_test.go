@@ -24,9 +24,11 @@ import (
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
+	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
+	publicRouting "github.com/scylladb/gocql/v2/routing"
 )
 
 func TestDriverConfigReport(t *testing.T) {
@@ -248,176 +250,82 @@ func TestDriverConfigReport(t *testing.T) {
 		}
 	})
 
-	t.Run("BuildLoadBalancingPolicyReport", func(t *testing.T) {
-		// TestDriverConfigReport/BuildLoadBalancingPolicyReport/NilPolicy pins that a nil policy is
-		// reported rather than panicking. Reporting must never prevent a connection
-		// from being established, and this runs on the goroutine that establishes it.
-		t.Run("NilPolicy", func(t *testing.T) {
-			got, ok := buildLoadBalancingPolicyReport(nil).(loadBalancingCustomReport)
-			if !ok {
-				t.Fatalf("expected a custom policy report, got %#v", buildLoadBalancingPolicyReport(nil))
+	// TestDriverConfigReport/BuildTypedLoadBalancingReport covers the
+	// load-balancing group a session built from config.Config reports: the
+	// value for each routing option, and that each value conforms to the
+	// schema.
+	t.Run("BuildTypedLoadBalancingReport", func(t *testing.T) {
+		builtin := func(o publicRouting.Options) implRouting.RoutingPolicy {
+			p, err := implRouting.NewRoutingPolicy(o)
+			if err != nil {
+				t.Fatalf("NewRoutingPolicy(%+v): %v", o, err)
 			}
-			if got.Name == "" {
-				t.Error("expected a non-empty name, which the schema requires")
-			}
-		})
-
-		t.Run("Policies", func(t *testing.T) {
-			tests := []struct {
-				name   string
-				policy HostSelectionPolicy
-				want   any
-			}{
-				{
-					name:   "token-aware over plain round-robin: shuffle, fallback to non-preferred nodes allowed",
-					policy: TokenAwareHostPolicy(RoundRobinHostPolicy()),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true},
-				},
-				{
-					// AvoidSlowReplicas orders candidates by outstanding request count
-					// (partitionHealthy / HostInfo.IsBusy), which is what the schema's
-					// adaptive-ordering group describes. The threshold it also sets is
-					// deliberately not reported: the schema records signals, not
-					// algorithm parameters.
-					//
-					// The threshold is passed as its own default so this test does not
-					// mutate the MAX_IN_FLIGHT_THRESHOLD package global out from under
-					// anything else.
-					name:   "token-aware with AvoidSlowReplicas reports adaptive ordering",
-					policy: TokenAwareHostPolicy(RoundRobinHostPolicy(), AvoidSlowReplicas(MAX_IN_FLIGHT_THRESHOLD)),
-					want: InternalLoadBalancingTokenAwareReport{
-						Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true,
-						AdaptiveOrdering: &adaptiveOrderingReport{Signals: []string{"in-flight-requests"}},
-					},
-				},
-				{
-					name:   "token-aware without AvoidSlowReplicas omits adaptive ordering",
-					policy: TokenAwareHostPolicy(RoundRobinHostPolicy()),
-					want: InternalLoadBalancingTokenAwareReport{
-						Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true,
-					},
-				},
-				{
-					name:   "token-aware with DontShuffleReplicas reports replica-set",
-					policy: TokenAwareHostPolicy(RoundRobinHostPolicy(), DontShuffleReplicas()),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "replica-set", FallbackToNonPreferredNodes: true},
-				},
-				{
-					name:   "token-aware over DC-aware fallback with fallback to non-preferred nodes disabled",
-					policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1", HostPolicyOptionDisableDCFailover)),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: false},
-				},
-				{
-					name:   "token-aware over rack-aware fallback with fallback to non-preferred nodes allowed",
-					policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "rack1")),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true},
-				},
-				{
-					// rackAwareRR serves the local DC's other racks whether or not DC
-					// failover is disabled, and those are outside the {dc1, rack1}
-					// preference this same report names. See
-					// TestFallbackToNonPreferredNodesMatchesQueryPlan.
-					name:   "token-aware over rack-aware fallback still leaves the rack when DC failover is disabled",
-					policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "rack1", HostPolicyOptionDisableDCFailover)),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true},
-				},
-				{
-					// NonLocalReplicasFallback makes Pick serve remote replicas itself,
-					// before it consults the fallback at all.
-					name:   "NonLocalReplicasFallback escapes the preference despite a confined fallback",
-					policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1", HostPolicyOptionDisableDCFailover), NonLocalReplicasFallback()),
-					want:   InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: "shuffle", FallbackToNonPreferredNodes: true},
-				},
-				{
-					name:   "non-token-aware built-in reports as custom",
-					policy: RoundRobinHostPolicy(),
-					want:   loadBalancingCustomReport{Type: "custom", Name: "roundRobinHostPolicy"},
-				},
-				{
-					name:   "custom",
-					policy: &fakeHostSelectionPolicy{HostSelectionPolicy: RoundRobinHostPolicy()},
-					want:   loadBalancingCustomReport{Type: "custom", Name: "fakeHostSelectionPolicy"},
-				},
-			}
-			for _, tt := range tests {
-				t.Run(tt.name, func(t *testing.T) {
-					got := buildLoadBalancingPolicyReport(tt.policy)
-					if diff := cmp.Diff(tt.want, got); diff != "" {
-						t.Errorf("buildLoadBalancingPolicyReport() mismatch:\n%s", diff)
-					}
-				})
-			}
-		})
-	})
-
-	// TestDriverConfigReport/BuildLoadBalancingReport pins that a policy wrapped in
-	// SingleHostReadyPolicy is still described by what it wraps. The wrapper is
-	// transparent to routing, so reporting it as the policy would drop both the
-	// token-aware discriminant and the DC preference behind it.
-	t.Run("BuildLoadBalancingReport", func(t *testing.T) {
-		inner := TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1"))
-		want := buildLoadBalancingReport(inner)
-
+			return p
+		}
+		tokenAware := func(distribution string, fallback bool) InternalLoadBalancingTokenAwareReport {
+			return InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: distribution, FallbackToNonPreferredNodes: fallback}
+		}
+		latency := tokenAware("replica-set", false)
+		latency.AdaptiveOrdering = &adaptiveOrderingReport{Signals: []string{"latency"}}
+		schema := loadDriverConfigSchema(t)
 		for _, tt := range []struct {
 			name   string
-			policy HostSelectionPolicy
+			policy implRouting.RoutingPolicy
+			want   queryLoadBalancingReport
 		}{
-			{"wrapped once", SingleHostReadyPolicy(inner)},
-			{"wrapped twice", SingleHostReadyPolicy(SingleHostReadyPolicy(inner))},
+			{
+				name:   "not token-aware",
+				policy: builtin(publicRouting.Options{}),
+				want:   queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}},
+			},
+			{
+				name:   "token-aware, fixed replica order",
+				policy: builtin(publicRouting.Options{TokenAware: true}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false)},
+			},
+			{
+				name:   "token-aware, shuffled, remote allowed",
+				policy: builtin(publicRouting.Options{TokenAware: true, ShuffleReplicas: true, AllowRemote: true}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("shuffle", true)},
+			},
+			{
+				name:   "latency-aware",
+				policy: builtin(publicRouting.Options{TokenAware: true, Latency: publicRouting.LatencyOptions{Enabled: true}}),
+				want:   queryLoadBalancingReport{Policy: latency},
+			},
+			{
+				name:   "local datacenter",
+				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1"}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: nodeLocationDCReport{Type: "dc", LocalDC: "dc1"}},
+			},
+			{
+				name:   "local rack",
+				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1"}),
+				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: InternalNodeLocationRackReport{Type: "rack", LocalDC: "dc1", LocalRack: "rack1"}},
+			},
+			{
+				name:   "application policy",
+				policy: implRouting.EngineOf(fakeRoutingPolicy{}),
+				want:   queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: "fakeRoutingPolicy"}},
+			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				if diff := cmp.Diff(want, buildLoadBalancingReport(tt.policy)); diff != "" {
-					t.Errorf("expected the wrapped policy to report as the policy it wraps:\n%s", diff)
-				}
-			})
-		}
-	})
-
-	t.Run("BuildNodeLocationPreferenceReport", func(t *testing.T) {
-		tests := []struct {
-			name   string
-			policy HostSelectionPolicy
-			want   any
-		}{
-			{
-				name:   "no DC/rack preference at all",
-				policy: TokenAwareHostPolicy(RoundRobinHostPolicy()),
-				want:   nil,
-			},
-			{
-				name:   "DC preference behind token-awareness",
-				policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("dc1")),
-				want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
-			},
-			{
-				name:   "rack preference behind token-awareness",
-				policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "rack1")),
-				want:   InternalNodeLocationRackReport{Type: "rack", LocalDC: "dc1", LocalRack: "rack1"},
-			},
-			{
-				name:   "DC preference reported independently of the load-balancing discriminant, when not wrapped in token-awareness",
-				policy: DCAwareRoundRobinPolicy("dc1"),
-				want:   nodeLocationDCReport{Type: "dc", LocalDC: "dc1"},
-			},
-			{
-				// local-dc is nonEmptyString and required on the branch that names
-				// it, so an empty datacenter cannot be reported -- and expresses no
-				// preference anyway.
-				name:   "an empty datacenter is no preference",
-				policy: TokenAwareHostPolicy(DCAwareRoundRobinPolicy("")),
-				want:   nil,
-			},
-			{
-				name:   "an empty rack is no preference",
-				policy: TokenAwareHostPolicy(RackAwareRoundRobinPolicy("dc1", "")),
-				want:   nil,
-			},
-		}
-		for _, tt := range tests {
-			t.Run(tt.name, func(t *testing.T) {
-				got := buildNodeLocationPreferenceReport(tt.policy)
+				got := buildTypedLoadBalancingReport(tt.policy)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
-					t.Errorf("buildNodeLocationPreferenceReport() mismatch:\n%s", diff)
+					t.Fatalf("buildTypedLoadBalancingReport() mismatch:\n%s", diff)
+				}
+				report := buildCaseReport(t, nil, false)
+				encoded, err := json.Marshal(got)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var group any
+				if err := json.Unmarshal(encoded, &group); err != nil {
+					t.Fatal(err)
+				}
+				report.(map[string]any)["query"].(map[string]any)["load-balancing"] = group
+				if err := schema.Validate(report); err != nil {
+					t.Errorf("load-balancing group does not conform to %s:\n%v\n\ngroup: %s", driverConfigSchemaPath, err, encoded)
 				}
 			})
 		}
@@ -896,7 +804,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 			for _, tt := range driverConfigCases() {
 				t.Run(tt.name, func(t *testing.T) {
-					report := buildCaseReport(t, tt.cfg, tt.policy, tt.isScyllaConn)
+					report := buildCaseReport(t, tt.cfg, tt.isScyllaConn)
 					if err := schema.Validate(report); err != nil {
 						encoded, _ := json.Marshal(report)
 						t.Errorf("report does not conform to %s:\n%v\n\nreport: %s", driverConfigSchemaPath, err, encoded)
@@ -929,7 +837,7 @@ func TestDriverConfigReport(t *testing.T) {
 				{"unrecognized default consistency", cql.Consistency(0x42)},
 			} {
 				t.Run(tt.name, func(t *testing.T) {
-					report := buildCaseReport(t, func(c *InternalClusterSettings) { c.Consistency = tt.cons }, nil, false)
+					report := buildCaseReport(t, func(c *InternalClusterSettings) { c.Consistency = tt.cons }, false)
 
 					err := schema.Validate(report)
 					if err == nil {
@@ -1140,7 +1048,7 @@ func TestDriverConfigReport(t *testing.T) {
 	t.Run("UpdateStartupOptions", func(t *testing.T) {
 		t.Run("EncodesReport", func(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
-			s := newTestReportSession(cfg, TokenAwareHostPolicy(RoundRobinHostPolicy()))
+			s := newTestReportSession(cfg)
 			reporter := newDriverConfigReporter(s)
 
 			opts := map[string]string{}
@@ -1179,7 +1087,7 @@ func TestDriverConfigReport(t *testing.T) {
 
 		t.Run("ScyllaConnGatesServerSideMs", func(t *testing.T) {
 			cfg := *InternalNewClusterSettings("127.0.0.1")
-			s := newTestReportSession(cfg, TokenAwareHostPolicy(RoundRobinHostPolicy()))
+			s := newTestReportSession(cfg)
 			reporter := newDriverConfigReporter(s)
 
 			for _, isScylla := range []bool{false, true} {

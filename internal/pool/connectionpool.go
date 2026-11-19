@@ -52,11 +52,6 @@ type SetHosts interface {
 	SetHosts(hosts []*implEndpoint.HostInfo)
 }
 
-// interface to implement to receive the partitioner value
-type SetPartitioner interface {
-	SetPartitioner(partitioner string)
-}
-
 // interface to implement to receive the tablets value
 type SetTablets interface {
 	SetTablets(tablets tablets.TabletInfoList)
@@ -336,17 +331,6 @@ func (pool *InternalHostConnPool) PickInt64(token int64) *transport.Conn {
 		pool.InternalScheduleTypedRepair()
 	}
 	return conn
-}
-
-// PickConn routes a picked host to the raw-int64 fast path when it exposes one,
-// and to the boxed Token path otherwise.
-func (pool *InternalHostConnPool) PickConn(host implEndpoint.SelectedHost) *transport.Conn {
-	if th, ok := host.(implEndpoint.InternalInt64TokenSelectedHost); ok {
-		if token, has := th.TokenInt64(); has {
-			return pool.PickInt64(int64(token))
-		}
-	}
-	return pool.Pick(host.Token())
 }
 
 // pickable reports whether the pool is open and has (or is filling)
@@ -689,8 +673,8 @@ func (pool *InternalHostConnPool) InternalConnect() (err error) {
 		defer typed.InternalDialFinished(shardID, nrShards)
 	}
 
-	// Past these attempts, the session's reconnectDownedHosts loop retries the
-	// host when ReconnectInterval is set.
+	// Past these attempts, the session's reconnectTypedDownedHosts loop retries
+	// the host when the session has a reconnect policy.
 	var conn *transport.Conn
 	reconnectionPolicy := pool.InternalServices.Reconnection
 	for i := 0; i < reconnectionPolicy.GetMaxRetries(); i++ {

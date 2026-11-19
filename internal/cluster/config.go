@@ -5,7 +5,6 @@ package cluster
 
 import (
 	"context"
-	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -72,14 +71,9 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		legacy.ConvictionPolicy = config.Conviction
 	}
 	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
-	legacy.ReconnectInterval = 0
 	if config.Reconnect != nil {
-		delay, again := config.Reconnect.Delay(0)
-		if delay < 0 {
+		if delay, _ := config.Reconnect.Delay(0); delay < 0 {
 			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
-		}
-		if again {
-			legacy.ReconnectInterval = max(delay, time.Millisecond)
 		}
 	}
 	legacy.DriverName = config.Identity.DriverName
@@ -156,41 +150,4 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	s.privateStorage.readyCh <- struct{}{}
 	close(s.privateStorage.readyCh)
 	return s, nil
-}
-
-// reconnectTypedDownedHosts keeps independent bounded backoff state for each host.
-func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, initial time.Duration) {
-	type retryState struct {
-		next    time.Time
-		attempt int
-		stopped bool
-	}
-	retries := make(map[cql.UUID]retryState)
-	tick := min(max(initial, time.Millisecond), time.Second)
-	timer := time.NewTicker(tick)
-	defer timer.Stop()
-	for {
-		select {
-		case <-s.privateStorage.InternalCtx.Done():
-			return
-		case now := <-timer.C:
-			for _, host := range s.privateStorage.InternalHostSource.InternalGetHostsList() {
-				id := implEndpoint.InternalHostInfoHostUUID(host)
-				if host.IsUp() {
-					delete(retries, id)
-					continue
-				}
-				state := retries[id]
-				if state.stopped || now.Before(state.next) {
-					continue
-				}
-				s.privateStorage.InternalPool.InternalAddHost(host)
-				state.attempt++
-				delay, again := policy.Delay(state.attempt)
-				state.stopped = !again || delay < 0
-				state.next = now.Add(max(delay, time.Millisecond))
-				retries[id] = state
-			}
-		}
-	}
 }

@@ -79,7 +79,6 @@ func testCluster(proto frm.ProtoVersion, addresses ...string) *implCluster.Inter
 	cluster := implCluster.InternalNewClusterSettings(addresses...)
 	cluster.ProtoVersion = int(proto)
 	cluster.Data().InternalDisableControlConn = true
-	cluster.PoolConfig.HostSelectionPolicy = implCluster.RoundRobinHostPolicy()
 	return cluster
 }
 

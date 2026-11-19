@@ -22,33 +22,27 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package cluster
+package endpoint
 
 import (
-	"log/slog"
-	"sync"
-	"sync/atomic"
-
-	metadata2 "github.com/scylladb/gocql/v2/metadata"
+	"fmt"
+	"strconv"
 )
 
-type tokenAwareHostPolicyStorage struct {
-	fallback HostSelectionPolicy
-	// atomic store for *clusterMeta
-	metadata            atomic.Pointer[clusterMeta]
-	logger              *slog.Logger
-	getKeyspaceMetadata func(keyspace string) (*metadata2.Keyspace, error)
-	getKeyspaceName     func() string
-	hosts               cowHostList
-	partitioner         string
-	// mu protects writes to hosts, partitioner, metadata.
-	// reads can be unlocked as long as they are not used for updating state later.
-	mu                       sync.Mutex
-	shuffleReplicas          bool
-	nonLocalReplicasFallback bool
-	avoidSlowReplicas        bool
+// Token is a position on the token ring.
+type Token interface {
+	fmt.Stringer
+	Less(Token) bool
 }
 
-func tokenAwareHostPolicyData(v *tokenAwareHostPolicy) *tokenAwareHostPolicyStorage {
-	return &v.privateStorage
+// InternalInt64Token is a token of an int64 partitioner, such as Murmur3 or
+// the ScyllaDB CDC partitioner.
+type InternalInt64Token int64
+
+func (m InternalInt64Token) String() string {
+	return strconv.FormatInt(int64(m), 10)
+}
+
+func (m InternalInt64Token) Less(token Token) bool {
+	return m < token.(InternalInt64Token)
 }
