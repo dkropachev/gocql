@@ -21,15 +21,16 @@ import (
 	"github.com/scylladb/gocql/v2/retry"
 )
 
-// driverConfigStartupKey is the STARTUP option carrying the JSON description
-// of the effective driver configuration. The configuration is identical for
-// every connection of a session, so it is only sent on the control connection
-// to keep the other STARTUP frames small.
+// InternalDriverConfigStartupKey is the STARTUP option carrying the JSON
+// description of the effective driver configuration. The configuration is
+// identical for every connection of a session, so it is only sent on the
+// control connection to keep the other STARTUP frames small.
 const InternalDriverConfigStartupKey = "DRIVER_CONFIG"
 
-// driverConfigVersion is the major version of the reported configuration schema.
-// Adding keys to the report is backwards compatible and does not bump it, only
-// changing or removing the meaning of an existing key does.
+// InternalDriverConfigVersion is the major version of the reported
+// configuration schema. Adding keys to the report is backwards compatible and
+// does not bump it, only changing or removing the meaning of an existing key
+// does.
 const InternalDriverConfigVersion = 1
 
 // maxDriverConfigSize bounds the size of the DRIVER_CONFIG STARTUP option.
@@ -46,10 +47,11 @@ const InternalDriverConfigVersion = 1
 // limit csharp-driver and java-driver use for the same report.
 const maxDriverConfigSize = 32 * 1024
 
-// driverConfigReport is the value sent under driverConfigStartupKey, conforming
-// to docs/driver-config-schema.json. It groups the effective configuration the
-// way the schema does: connection-level settings, control-plane (system query
-// and schema agreement) settings, and query-execution defaults.
+// InternalDriverConfigReport is the value sent under
+// InternalDriverConfigStartupKey, conforming to docs/driver-config-schema.json.
+// It groups the effective configuration the way the schema does:
+// connection-level settings, control-plane (system query and schema
+// agreement) settings, and query-execution defaults.
 // Field order here (and in the other report structs) is chosen for field
 // alignment, not readability: it decides how much of the struct the GC has to
 // scan, which govet's fieldalignment check enforces. The JSON key order it

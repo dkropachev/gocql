@@ -15,7 +15,7 @@ import (
 
 // Cold-path replica precomputation uses the same distinct-node/rack-budget
 // traversal for every factor, then retains its global ring order for LWT.
-func InternalBuildV2VnodeRanges(ring *implEndpoint.InternalTokenRing, ks *metadata2.Keyspace) ([]metadata2.TokenRange, error) {
+func InternalBuildV2VnodeRanges(ring *InternalTokenRing, ks *metadata2.Keyspace) ([]metadata2.TokenRange, error) {
 	hosts := make(map[cql.UUID]*implEndpoint.HostInfo)
 	dcHosts := make(map[string]int)
 	dcRacks := make(map[string]map[string]bool)

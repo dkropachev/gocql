@@ -7,12 +7,15 @@
 // It contains the control connection, topology and schema discovery from
 // the system tables (system.local, system.peers and system.peers_v2 rows
 // become endpoint.HostInfo values here), the topology, status and schema
-// event handling, keyspace metadata and replica placement for each
+// event handling, keyspace metadata, the partitioners (the ScyllaDB CDC
+// partitioner among them) and the token ring, replica placement for each
 // replication strategy, client routes, the loop that reconnects downed
 // hosts, and the Core that ties the control connection, the connection
 // pools and the metadata together. It also wires internal/pool to the
-// session: the pool services, the per-shard dial with its observers, and
-// the connection configuration built from the cluster settings.
+// session: the pool services and the connection configuration built from
+// the cluster settings (pool_wiring.go), and the per-shard dial with its
+// observers and the hooks through which a connection calls back into the
+// session (dial.go).
 //
 // It must not contain connection pool internals (internal/pool), the
 // request/response transport or socket dialing (internal/transport), node

@@ -28,6 +28,8 @@ import (
 	"net"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/connectivity"
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -82,4 +84,30 @@ func newPolicyConnPool(session *Core) *pool.InternalPolicyConnPool {
 	}
 
 	return pool
+}
+
+func (s *Core) v2PoolConfig() (*connectivity.Config, bool) {
+	if s == nil || s.privateStorage.InternalConnCfg == nil || s.privateStorage.InternalConnCfg.TypedConfig == nil {
+		return nil, false
+	}
+	return s.privateStorage.InternalConnCfg.TypedConfig, true
+}
+
+func (s *Core) NewPoolServices() pool.InternalPoolServices {
+	cfg, _ := s.v2PoolConfig()
+	return pool.InternalPoolServices{
+		Context:      s.privateStorage.InternalCtx,
+		Logger:       s.privateStorage.InternalLogger,
+		Config:       cfg,
+		Conviction:   s.privateStorage.InternalCfg.ConvictionPolicy,
+		Reconnection: s.privateStorage.InternalCfg.ReconnectionPolicy,
+		Worker:       func(f func()) bool { return s.Peripheral().InternalStartWorker(f) },
+		Dial:         s.connectShard,
+		Connected:    s.HandlePoolConnected,
+		Down:         s.HandleNodeDown,
+	}
+}
+
+func (s *Core) NewHostConnPool(h *endpoint.HostInfo, size int, keyspace string) *pool.InternalHostConnPool {
+	return s.NewPoolServices().NewHostPool(h, size, keyspace)
 }

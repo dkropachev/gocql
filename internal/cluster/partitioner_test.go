@@ -26,7 +26,7 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package metadata
+package cluster
 
 import (
 	"bytes"
@@ -44,7 +44,7 @@ func TestPartitioner(t *testing.T) {
 		t.Run("Hash", func(t *testing.T) {
 			t.Parallel()
 
-			token := endpoint.InternalMurmur3Partitioner{}.ParseString("-1053604476080545076")
+			token := InternalMurmur3Partitioner{}.ParseString("-1053604476080545076")
 
 			if "-1053604476080545076" != token.String() {
 				t.Errorf("Expected '-1053604476080545076' but was '%s'", token)
@@ -53,7 +53,7 @@ func TestPartitioner(t *testing.T) {
 			// at least verify that the partitioner
 			// doesn't return nil
 			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
-			token = endpoint.InternalMurmur3Partitioner{}.Hash(pk)
+			token = InternalMurmur3Partitioner{}.Hash(pk)
 			if token == nil {
 				t.Fatal("token was nil")
 			}
@@ -62,8 +62,8 @@ func TestPartitioner(t *testing.T) {
 		t.Run("HashInt64MatchesHash", func(t *testing.T) {
 			t.Parallel()
 
-			var p endpoint.InternalMurmur3Partitioner
-			var _ endpoint.InternalInt64Hasher = p // compile-time contract check, mirrors token.go's var _ assertion
+			var p InternalMurmur3Partitioner
+			var _ InternalInt64Hasher = p // compile-time contract check, mirrors token.go's var _ assertion
 
 			keys := [][]byte{
 				nil,
@@ -94,7 +94,7 @@ func TestPartitioner(t *testing.T) {
 			}
 		})
 		t.Run("HashInt64ZeroAlloc", func(t *testing.T) {
-			var p endpoint.InternalMurmur3Partitioner
+			var p InternalMurmur3Partitioner
 			pk := []byte("routing-key")
 
 			var sink int64
@@ -124,7 +124,7 @@ func TestPartitioner(t *testing.T) {
 
 		// at least verify that the partitioner
 		// doesn't return nil
-		p := endpoint.InternalOrderedPartitioner{}
+		p := InternalOrderedPartitioner{}
 		pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
 		token := p.Hash(pk)
 		if token == nil {
@@ -134,11 +134,11 @@ func TestPartitioner(t *testing.T) {
 		str := token.String()
 		parsedToken := p.ParseString(str)
 
-		if !bytes.Equal([]byte(token.(endpoint.InternalOrderedToken)), []byte(parsedToken.(endpoint.InternalOrderedToken))) {
+		if !bytes.Equal([]byte(token.(InternalOrderedToken)), []byte(parsedToken.(InternalOrderedToken))) {
 			t.Errorf("Failed to convert to and from a string %s expected %x but was %x",
 				str,
-				[]byte(token.(endpoint.InternalOrderedToken)),
-				[]byte(parsedToken.(endpoint.InternalOrderedToken)),
+				[]byte(token.(InternalOrderedToken)),
+				[]byte(parsedToken.(InternalOrderedToken)),
 			)
 		}
 	})
@@ -151,7 +151,7 @@ func TestPartitioner(t *testing.T) {
 
 			// at least verify that the partitioner
 			// doesn't return nil
-			p := endpoint.InternalRandomPartitioner{}
+			p := InternalRandomPartitioner{}
 			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
 			token := p.Hash(pk)
 			if token == nil {
@@ -161,7 +161,7 @@ func TestPartitioner(t *testing.T) {
 			str := token.String()
 			parsedToken := p.ParseString(str)
 
-			if (*big.Int)(token.(*endpoint.InternalRandomToken)).Cmp((*big.Int)(parsedToken.(*endpoint.InternalRandomToken))) != 0 {
+			if (*big.Int)(token.(*InternalRandomToken)).Cmp((*big.Int)(parsedToken.(*InternalRandomToken))) != 0 {
 				t.Errorf("Failed to convert to and from a string %s expected %v but was %v",
 					str,
 					token,
@@ -176,7 +176,7 @@ func TestPartitioner(t *testing.T) {
 			//    >>> from cassandra.metadata import MD5Token
 			//    >>> MD5Token.hash_fn("test")
 			//    12707736894140473154801792860916528374L
-			var p endpoint.InternalRandomPartitioner
+			var p InternalRandomPartitioner
 			expect := "12707736894140473154801792860916528374"
 			actual := p.Hash([]byte("test")).String()
 			if actual != expect {

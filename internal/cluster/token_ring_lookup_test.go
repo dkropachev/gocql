@@ -26,7 +26,7 @@
  * See the NOTICE file distributed with this work for additional information.
  */
 
-package metadata
+package cluster
 
 import (
 	"sort"
@@ -36,7 +36,7 @@ import (
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
-func TestTokenRing(t *testing.T) {
+func TestTokenRingLookup(t *testing.T) {
 	t.Parallel()
 	// Test of the token ring implementation based on example at the start of this
 	// page of documentation:
@@ -64,10 +64,10 @@ func TestTokenRing(t *testing.T) {
 			return opaqueStorageValuexxx
 		}()
 
-		ring := &endpoint.InternalTokenRing{
+		ring := &InternalTokenRing{
 			InternalPartitioner: nil,
 			// these tokens and hosts are out of order to test sorting
-			InternalTokens: []endpoint.InternalHostToken{
+			InternalTokens: []InternalHostToken{
 				{InternalToken: intToken(0), InternalHost: host0},
 				{InternalToken: intToken(50), InternalHost: host50},
 				{InternalToken: intToken(75), InternalHost: host75},
@@ -123,12 +123,12 @@ func TestTokenRing(t *testing.T) {
 
 		// Note, strings are parsed directly to int64, they are not murmur3 hashed
 		hosts := hostsForTests(4)
-		ring, err := endpoint.InternalNewTokenRing("Murmur3Partitioner", hosts)
+		ring, err := InternalNewTokenRing("Murmur3Partitioner", hosts)
 		if err != nil {
 			t.Fatalf("Failed to create token ring due to error: %v", err)
 		}
 
-		p := endpoint.InternalMurmur3Partitioner{}
+		p := InternalMurmur3Partitioner{}
 
 		for _, host := range hosts {
 			actual, _ := ring.GetHostForToken(p.ParseString(implEndpoint.HostInfoData(host).InternalTokens[0]))
@@ -151,7 +151,7 @@ func TestTokenRing(t *testing.T) {
 	t.Run("Nil", func(t *testing.T) {
 		t.Parallel()
 
-		var ring *endpoint.InternalTokenRing = nil
+		var ring *InternalTokenRing = nil
 
 		if host, endToken := ring.GetHostForToken(nil); host != nil || endToken != nil {
 			t.Error("Expected nil for nil token ring")
@@ -167,12 +167,12 @@ func TestTokenRing(t *testing.T) {
 		// Tokens here more or less are similar layout to the int tokens above due
 		// to each numeric character translating to a consistently offset byte.
 		hosts := hostsForTests(4)
-		ring, err := endpoint.InternalNewTokenRing("OrderedPartitioner", hosts)
+		ring, err := InternalNewTokenRing("OrderedPartitioner", hosts)
 		if err != nil {
 			t.Fatalf("Failed to create token ring due to error: %v", err)
 		}
 
-		p := endpoint.InternalOrderedPartitioner{}
+		p := InternalOrderedPartitioner{}
 
 		var actual *endpoint.HostInfo
 		for _, host := range hosts {
@@ -198,12 +198,12 @@ func TestTokenRing(t *testing.T) {
 
 		// String tokens are parsed into big.Int in base 10
 		hosts := hostsForTests(4)
-		ring, err := endpoint.InternalNewTokenRing("RandomPartitioner", hosts)
+		ring, err := InternalNewTokenRing("RandomPartitioner", hosts)
 		if err != nil {
 			t.Fatalf("Failed to create token ring due to error: %v", err)
 		}
 
-		p := endpoint.InternalRandomPartitioner{}
+		p := InternalRandomPartitioner{}
 
 		var actual *endpoint.HostInfo
 		for _, host := range hosts {
@@ -227,7 +227,7 @@ func TestTokenRing(t *testing.T) {
 	t.Run("UnknownPartitioner", func(t *testing.T) {
 		t.Parallel()
 
-		_, err := endpoint.InternalNewTokenRing("UnknownPartitioner", nil)
+		_, err := InternalNewTokenRing("UnknownPartitioner", nil)
 		if err == nil {
 			t.Error("Expected error for unknown partitioner value, but was nil")
 		}

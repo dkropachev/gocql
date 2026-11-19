@@ -16,7 +16,7 @@
  * limitations under the License.
  */
 
-package endpoint
+package cluster
 
 import (
 	"encoding/binary"
@@ -24,6 +24,8 @@ import (
 	"testing"
 
 	"log/slog"
+
+	"github.com/scylladb/gocql/v2/internal/endpoint"
 )
 
 func TestScyllaCDCPartitioner(t *testing.T) {
@@ -57,11 +59,11 @@ func TestScyllaCDCPartitioner(t *testing.T) {
 
 			for _, k := range keys {
 				want := p.Hash(k)
-				wantInt64, ok := want.(InternalInt64Token)
+				wantInt64, ok := want.(endpoint.InternalInt64Token)
 				if !ok {
 					t.Fatalf("Hash(%v) returned %T, want int64Token", k, want)
 				}
-				got := InternalInt64Token(p.InternalHashInt64(k))
+				got := endpoint.InternalInt64Token(p.InternalHashInt64(k))
 				if got != wantInt64 {
 					t.Errorf("hashInt64(%v) = %d, want %d (from Hash)", k, got, wantInt64)
 				}
