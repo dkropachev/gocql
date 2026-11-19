@@ -407,6 +407,86 @@ func TestStream(t *testing.T) {
 	})
 
 	t.Run("Deadline", func(t *testing.T) {
+		// TestStream/Deadline/CancelMidStreamReleasesStream checks that
+		// cancelling the caller's context while NextInto waits for a
+		// continuation page ends the stream with context.Canceled and never
+		// frees the page's stream ID while its response may still arrive. A
+		// buffered stream keeps the stream ID until the late response arrives,
+		// then releases it and keeps the connection. An incremental stream
+		// reads its reserved connection itself, so nothing is left to receive
+		// the late response: cancellation closes the connection instead.
+		t.Run("CancelMidStreamReleasesStream", func(t *testing.T) {
+			for _, incremental := range []bool{false, true} {
+				t.Run(fmt.Sprintf("incremental=%v", incremental), func(t *testing.T) {
+					s, c, peer := rowStreamSession(t, 4, nil)
+					secondStream := make(chan int, 1)
+					go func() {
+						stream := typedTestReadRequest(t, c, peer)
+						if _, err := peer.Write(testResponse(t, c, stream, runtimeRowsBody([]byte{7}, "first"))); err != nil {
+							t.Error(err)
+							return
+						}
+						secondStream <- typedTestReadRequest(t, c, peer)
+					}()
+					ctx, cancel := context.WithCancel(context.Background())
+					defer cancel()
+					b := runtimeQuery(t)
+					defer b.Close()
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: incremental})
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer cursor.Close()
+					dst := make([]byte, 0, 16)
+					if !cursor.NextInto(&dst) {
+						t.Fatal(cursor.Err())
+					}
+					done := make(chan bool, 1)
+					go func() { done <- cursor.NextInto(&dst) }()
+					var stream int
+					select {
+					case stream = <-secondStream:
+					case <-time.After(5 * time.Second):
+						t.Fatal("continuation page never requested")
+					}
+					cancel()
+					select {
+					case ok := <-done:
+						if ok {
+							t.Fatal("NextInto returned a row after cancellation")
+						}
+					case <-time.After(5 * time.Second):
+						t.Fatal("cancellation did not interrupt NextInto")
+					}
+					if !errors.Is(cursor.Err(), context.Canceled) {
+						t.Fatalf("stream ended with %v, want context.Canceled", cursor.Err())
+					}
+					if incremental {
+						if !c.Closed() {
+							t.Fatal("cancelling an incremental stream kept its connection")
+						}
+						return
+					}
+					if n := c.InternalStreams.InUse(); n != 1 {
+						t.Fatalf("%d streams in use before the late response, want 1", n)
+					}
+					if _, err := peer.Write(testResponse(t, c, stream, runtimeRowsBody(nil, "late"))); err != nil {
+						t.Fatal(err)
+					}
+					deadline := time.Now().Add(5 * time.Second)
+					for c.InternalStreams.InUse() != 0 {
+						if time.Now().After(deadline) {
+							t.Fatal("late response did not release the stream")
+						}
+						time.Sleep(time.Millisecond)
+					}
+					if c.Closed() {
+						t.Fatal("cancellation closed the connection")
+					}
+				})
+			}
+		})
+
 		t.Run("PageEndsAtExactBoundary", func(t *testing.T) {
 			s, c, peer := rowStreamSession(t, 4, nil)
 			go func() {
