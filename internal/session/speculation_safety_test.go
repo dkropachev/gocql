@@ -32,10 +32,13 @@ func TestSpeculationSafety(t *testing.T) {
 	// A request not marked idempotent never speculates, however long its
 	// first attempt takes.
 	t.Run("NonIdempotentNeverSpeculates", func(t *testing.T) {
-		_, routes, run, conns, peers := hostsSession(t, 2)
+		_, routes, run, _, peers := hostsSession(t, 2)
 		second := silent(t, peers[1])
 		go func() {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
+			stream, ok := serverRead(peers[0])
+			if !ok {
+				return
+			}
 			time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
 			_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
@@ -55,13 +58,16 @@ func TestSpeculationSafety(t *testing.T) {
 	// loser's event says it was cancelled and speculative attempts are
 	// marked.
 	t.Run("LoserCancelled", func(t *testing.T) {
-		_, routes, run, conns, peers := hostsSession(t, 2)
+		_, routes, run, _, peers := hostsSession(t, 2)
 		go func() {
 			// The primary never answers.
-			typedTestReadRequest(t, conns[0], peers[0])
+			serverRead(peers[0])
 		}()
 		go func() {
-			stream := typedTestReadRequest(t, conns[1], peers[1])
+			stream, ok := serverRead(peers[1])
+			if !ok {
+				return
+			}
 			_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
 		if err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true}); err != nil {
@@ -94,10 +100,13 @@ func TestSpeculationSafety(t *testing.T) {
 	// When every attempt fails, the error lists each of them, speculative
 	// ones included, with the host it ran on.
 	t.Run("EveryFailedAttemptReported", func(t *testing.T) {
-		_, routes, run, conns, peers := hostsSession(t, 2)
+		_, routes, run, _, peers := hostsSession(t, 2)
 		release := make(chan struct{})
 		go func() {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
+			stream, ok := serverRead(peers[0])
+			if !ok {
+				return
+			}
 			select { // fail after the speculative attempt
 			case <-release:
 			case <-time.After(5 * time.Second):
@@ -105,7 +114,10 @@ func TestSpeculationSafety(t *testing.T) {
 			_, _ = peers[0].Write(serverError(t, stream, cqlerr.CodeOverloaded, nil))
 		}()
 		go func() {
-			stream := typedTestReadRequest(t, conns[1], peers[1])
+			stream, ok := serverRead(peers[1])
+			if !ok {
+				return
+			}
 			_, _ = peers[1].Write(serverError(t, stream, cqlerr.CodeOverloaded, nil))
 			close(release)
 		}()
@@ -138,7 +150,7 @@ func TestSpeculationSafety(t *testing.T) {
 		for i := range conns {
 			go func() {
 				defer wg.Done()
-				typedTestReadRequest(t, conns[i], peers[i]) // never answered
+				serverRead(peers[i]) // never answered
 			}()
 		}
 		bound := runtimeQuery(t)
@@ -179,10 +191,13 @@ func TestSpeculationSafety(t *testing.T) {
 	// the retry to the third, and its success ends the execution and
 	// cancels the speculative attempt. Each is counted once.
 	t.Run("RetryAlongsideSpeculation", func(t *testing.T) {
-		s, routes, run, conns, peers := hostsSession(t, 3)
+		s, routes, run, _, peers := hostsSession(t, 3)
 		speculated := make(chan struct{})
 		go func() {
-			stream := typedTestReadRequest(t, conns[0], peers[0])
+			stream, ok := serverRead(peers[0])
+			if !ok {
+				return
+			}
 			select {
 			case <-speculated:
 			case <-time.After(5 * time.Second):
@@ -190,11 +205,14 @@ func TestSpeculationSafety(t *testing.T) {
 			_, _ = peers[0].Write(serverError(t, stream, cqlerr.CodeOverloaded, nil))
 		}()
 		go func() {
-			typedTestReadRequest(t, conns[1], peers[1]) // never answered
+			serverRead(peers[1]) // never answered
 			close(speculated)
 		}()
 		go func() {
-			stream := typedTestReadRequest(t, conns[2], peers[2])
+			stream, ok := serverRead(peers[2])
+			if !ok {
+				return
+			}
 			_, _ = peers[2].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
 		if err := run(&Options{Profile: profileFor(routes, retry.Safe{}), Idempotent: true}); err != nil {

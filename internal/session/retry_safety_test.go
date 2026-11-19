@@ -43,6 +43,14 @@ func hostsSession(t *testing.T, n int) (*cluster.Core, *runtimePolicy, func(*Opt
 	return s, routes, run, conns, peers
 }
 
+// serverRead reads one request from peer and returns its stream, or false
+// once peer is closed. It never reports to the test, so a fake server may
+// call it after the test has ended.
+func serverRead(peer net.Conn) (int, bool) {
+	_, stream, _, err := readRequest(peer)
+	return stream, err == nil
+}
+
 // silent reports, on the returned channel, whether peer received nothing
 // before it was closed.
 func silent(t *testing.T, peer net.Conn) <-chan bool {
@@ -76,10 +84,10 @@ func TestRetrySafety(t *testing.T) {
 			// A non-idempotent request whose connection broke after it was
 			// written may have been applied: Safe must not replay it.
 			t.Run("NonIdempotentNotReplayedAfterSend", func(t *testing.T) {
-				_, routes, run, conns, peers := hostsSession(t, 2)
+				_, routes, run, _, peers := hostsSession(t, 2)
 				second := silent(t, peers[1])
 				go func() {
-					typedTestReadRequest(t, conns[0], peers[0])
+					serverRead(peers[0])
 					peers[0].Close()
 				}()
 				err := run(&Options{Profile: profileFor(routes)})
@@ -102,13 +110,16 @@ func TestRetrySafety(t *testing.T) {
 			// The same failure of an idempotent request is replayed on the
 			// next host.
 			t.Run("IdempotentReplayedAfterSend", func(t *testing.T) {
-				_, routes, run, conns, peers := hostsSession(t, 2)
+				_, routes, run, _, peers := hostsSession(t, 2)
 				go func() {
-					typedTestReadRequest(t, conns[0], peers[0])
+					serverRead(peers[0])
 					peers[0].Close()
 				}()
 				go func() {
-					stream := typedTestReadRequest(t, conns[1], peers[1])
+					stream, ok := serverRead(peers[1])
+					if !ok {
+						return
+					}
 					_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 				}()
 				if err := run(&Options{Profile: profileFor(routes), Idempotent: true}); err != nil {
@@ -119,13 +130,19 @@ func TestRetrySafety(t *testing.T) {
 			// A server rejection before execution is replayed even for a
 			// non-idempotent request.
 			t.Run("NonIdempotentReplayedWhenNotExecuted", func(t *testing.T) {
-				_, routes, run, conns, peers := hostsSession(t, 2)
+				_, routes, run, _, peers := hostsSession(t, 2)
 				go func() {
-					stream := typedTestReadRequest(t, conns[0], peers[0])
+					stream, ok := serverRead(peers[0])
+					if !ok {
+						return
+					}
 					_, _ = peers[0].Write(serverError(t, stream, cqlerr.CodeUnavailable, unavailableBody()))
 				}()
 				go func() {
-					stream := typedTestReadRequest(t, conns[1], peers[1])
+					stream, ok := serverRead(peers[1])
+					if !ok {
+						return
+					}
 					_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 				}()
 				if err := run(&Options{Profile: profileFor(routes)}); err != nil {
@@ -139,10 +156,13 @@ func TestRetrySafety(t *testing.T) {
 			// A server error after which the write may have been applied
 			// stops a non-idempotent request.
 			t.Run("NonIdempotentWriteTimeoutStops", func(t *testing.T) {
-				_, routes, run, conns, peers := hostsSession(t, 2)
+				_, routes, run, _, peers := hostsSession(t, 2)
 				second := silent(t, peers[1])
 				go func() {
-					stream := typedTestReadRequest(t, conns[0], peers[0])
+					stream, ok := serverRead(peers[0])
+					if !ok {
+						return
+					}
 					_, _ = peers[0].Write(serverError(t, stream, cqlerr.CodeWriteTimeout, writeTimeoutBody(0, "SIMPLE")))
 				}()
 				err := run(&Options{Profile: profileFor(routes)})
