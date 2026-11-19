@@ -275,10 +275,15 @@ func (eb *EventBus[T]) distribute(event T) {
 func (eb *EventBus[T]) SubscribeWithContext(ctx context.Context, name string, chanSize int, filter FilterFunc[T]) *Subscriber[T] {
 	sub := eb.Subscribe(name, chanSize, filter)
 
-	// Start a goroutine to handle context cancellation
+	// Unsubscribe when ctx ends. Stop closes every subscriber, so the
+	// goroutine also ends then rather than outliving the bus until ctx
+	// does.
 	go func() {
-		<-ctx.Done()
-		_ = eb.remove(sub) // Ignore error if already unsubscribed
+		select {
+		case <-ctx.Done():
+			_ = eb.remove(sub) // Ignore error if already unsubscribed
+		case <-eb.closedSignal:
+		}
 	}()
 
 	return sub
