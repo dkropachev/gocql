@@ -391,3 +391,69 @@ func TestNetworkTopologyReplicasAreDistinct(t *testing.T) {
 		}
 	}
 }
+
+// A keyspace's replication comes from the server and may name a datacenter
+// the ring does not have (a removed DC, or one a host filter hides) while
+// leaving a ring datacenter unreplicated. The replica map then has no entry
+// for that ring datacenter's tokens; it used to panic because the counts of
+// datacenters matched.
+func TestNetworkTopologyUnknownDatacenter(t *testing.T) {
+	t.Parallel()
+
+	var (
+		hosts  []*endpoint.HostInfo
+		tokens []InternalHostToken
+	)
+	for i := 0; i < 3; i++ {
+		h := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(h).InternalHostId = tUUID(i)
+		implEndpoint.HostInfoData(h).InternalDataCenter = "dc1"
+		implEndpoint.HostInfoData(h).InternalRack = "rack1"
+		hosts = append(hosts, h)
+		tokens = append(tokens, InternalHostToken{InternalToken: InternalOrderedToken(fmt.Sprint(i)), InternalHost: h})
+	}
+	sort.Sort(&InternalTokenRing{InternalTokens: tokens})
+
+	for _, dcs := range []map[string]int{{"gone": 3}, {"dc1": 0, "gone": 3}} {
+		strat := &networkTopology{dcs: dcs}
+		if ring := strat.InternalReplicaMap(&InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens}); len(ring) != 0 {
+			t.Fatalf("replication %v: %d tokens have replicas, want none", dcs, len(ring))
+		}
+	}
+}
+
+// Replication factors come from the server unbounded. A huge one must not
+// size an allocation, and a sum that overflows int must not wrap negative.
+func TestReplicaMapHugeReplicationFactor(t *testing.T) {
+	t.Parallel()
+
+	var (
+		hosts  []*endpoint.HostInfo
+		tokens []InternalHostToken
+	)
+	for i := 0; i < 3; i++ {
+		h := new(endpoint.HostInfo)
+		implEndpoint.HostInfoData(h).InternalHostId = tUUID(i)
+		implEndpoint.HostInfoData(h).InternalDataCenter = fmt.Sprintf("dc%d", i%2)
+		implEndpoint.HostInfoData(h).InternalRack = "rack1"
+		hosts = append(hosts, h)
+		tokens = append(tokens, InternalHostToken{InternalToken: InternalOrderedToken(fmt.Sprint(i)), InternalHost: h})
+	}
+	sort.Sort(&InternalTokenRing{InternalTokens: tokens})
+	ring := &InternalTokenRing{InternalHosts: hosts, InternalTokens: tokens}
+
+	for name, strat := range map[string]placementStrategy{
+		"Simple":          &simpleStrategy{rf: math.MaxInt},
+		"NetworkTopology": &networkTopology{dcs: map[string]int{"dc0": math.MaxInt, "dc1": math.MaxInt}},
+	} {
+		replicas := strat.InternalReplicaMap(ring)
+		if len(replicas) != len(tokens) {
+			t.Fatalf("%s: %d tokens have replicas, want %d", name, len(replicas), len(tokens))
+		}
+		for _, ht := range replicas {
+			if len(ht.hosts) != len(hosts) {
+				t.Fatalf("%s: token %v has %d replicas, want every host", name, ht.token, len(ht.hosts))
+			}
+		}
+	}
+}

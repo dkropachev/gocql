@@ -131,6 +131,7 @@ const (
 )
 
 func InternalNewScyllaPortIterator(shardID, shardCount int) *scyllaPortIterator {
+	// Invariant: Dial calls DialShard, the only caller, with nrShards > 0.
 	if shardCount == 0 {
 		panic("shardCount cannot be 0")
 	}

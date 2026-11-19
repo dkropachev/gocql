@@ -426,6 +426,8 @@ func (f *Framer) Finish() error {
 
 	if !VersionFor(f.Proto).Segments && f.Buf[1]&frm.FlagCompress == frm.FlagCompress {
 		if f.Compressor == nil {
+			// Invariant: the driver sets FlagCompress only on a framer
+			// built with a compressor.
 			panic("compress flag set with no compressor")
 		}
 
@@ -520,7 +522,20 @@ func (w *WriteStartupFrame) BuildFrame(f *Framer, streamID int) error {
 	return f.Finish()
 }
 
-func (f *Framer) ReadTypeInfo() TypeInfo {
+// maxTypeInfoDepth bounds the nesting ReadTypeInfo follows. It is the
+// highest depth config.WithMaxMetadataDepth accepts; without a bound a peer
+// could nest list<list<...>> two bytes per level until the recursion
+// overflows the goroutine stack, a fatal error no recover catches. A
+// vector's element type is a string parsed by GetCassandraLongType instead,
+// whose nesting the 64 KiB string length bounds.
+const maxTypeInfoDepth = 128
+
+func (f *Framer) ReadTypeInfo() TypeInfo { return f.readTypeInfo(0) }
+
+func (f *Framer) readTypeInfo(depth int) TypeInfo {
+	if depth > maxTypeInfoDepth {
+		panic(MalformedFramef("type metadata nesting exceeds %d", maxTypeInfoDepth))
+	}
 	id := f.ReadShort()
 
 	simple := cqltype.NewCustomType(f.Proto,
@@ -547,7 +562,7 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 		}
 
 		for i := 0; i < int(n); i++ {
-			tuple.Elems[i] = f.ReadTypeInfo()
+			tuple.Elems[i] = f.readTypeInfo(depth + 1)
 		}
 
 		return tuple
@@ -564,7 +579,7 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 		for i := 0; i < int(n); i++ {
 			field := &udt.Elements[i]
 			field.Name = f.ReadString()
-			field.Type = f.ReadTypeInfo()
+			field.Type = f.readTypeInfo(depth + 1)
 		}
 
 		return udt
@@ -574,10 +589,10 @@ func (f *Framer) ReadTypeInfo() TypeInfo {
 		}
 
 		if cqltype.NativeKind(simple) == cql.TypeMap {
-			collection.Key = f.ReadTypeInfo()
+			collection.Key = f.readTypeInfo(depth + 1)
 		}
 
-		collection.Elem = f.ReadTypeInfo()
+		collection.Elem = f.readTypeInfo(depth + 1)
 
 		return collection
 	case cql.TypeCustom:

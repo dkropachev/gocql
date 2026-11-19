@@ -292,6 +292,9 @@ func (h *HostInfo) ConnectAddress() net.IP {
 	if addr, _ := hostInfoConnectAddressLocked(h); InternalValidIpAddr(addr) {
 		return addr
 	}
+	// Invariant: hosts without a usable address never reach the session:
+	// isValidPeer and getLocalHostInfo in internal/cluster drop them, and
+	// the control connection's setupConn gives one the dialed address.
 	panic(fmt.Sprintf("no valid connect address for host: %v. Is your cluster configured correctly?", h))
 }
 

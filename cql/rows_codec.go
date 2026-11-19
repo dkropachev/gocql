@@ -445,8 +445,10 @@ func (dynamicRowsPlan) managesRowDestination()         {}
 func (c rowCodec[R]) Clone(source R) R {
 	dst := source
 	for _, field := range c.fields {
+		// Compile rejects a nil field, so such a decoder never produced
+		// source; there is nothing of the field's to detach.
 		if field == nil {
-			panic("gocql: nil field in row clone")
+			continue
 		}
 		field.clone(&dst, &source)
 	}
@@ -621,8 +623,10 @@ func ConvertRows[A, B any](codec RowDecoder[A], mapValue func(A) B, cloneValue f
 	return mappedRows[A, B]{codec: codec, mapValue: mapValue, cloneValue: cloneValue}
 }
 func (c mappedRows[A, B]) Clone(value B) B {
+	// Compile rejects a nil cloneValue, so such a decoder never produced
+	// value; it is returned as it is.
 	if c.cloneValue == nil {
-		panic("gocql: nil row clone function")
+		return value
 	}
 	return c.cloneValue(value)
 }

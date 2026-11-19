@@ -55,9 +55,8 @@ var (
 
 func init() {
 	b := make([]byte, 4)
-	if _, err := crand.Read(b); err != nil {
-		panic(fmt.Sprintf("unable to seed random number generator: %v", err))
-	}
+	// crypto/rand.Read never fails; it fills the buffer.
+	_, _ = crand.Read(b)
 
 	randr = rand.New(rand.NewSource(int64(protocol.ReadInt(b))))
 }
@@ -245,6 +244,14 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 			err = cqltype.TypeValidation("control topology", "expected one local identity")
 		} else {
 			host = hosts[0]
+			// A row without a usable address (rpc_address 0.0.0.0 and no
+			// broadcast address) takes the address this connection dialed,
+			// which the merge into conn.InternalHost below keeps anyway:
+			// FilterHost and the error below read ConnectAddress, which
+			// panics on a host without one.
+			if implEndpoint.InternalHostInfoInvalidConnectAddr(host) {
+				implEndpoint.HostInfoData(host).InternalConnectAddress = conn.InternalHost.ConnectAddress()
+			}
 		}
 	}
 	if err != nil {

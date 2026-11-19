@@ -8,7 +8,9 @@ import (
 	"errors"
 	"net"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -70,6 +72,48 @@ func TestTopology(t *testing.T) {
 			}
 			if len(s.Metadata().Hosts()) != 2 {
 				t.Fatal("explicit refresh discovered unrelated peers or collapsed contacts")
+			}
+		})
+		// A system.local row without any usable address (rpc_address
+		// 0.0.0.0 and no broadcast address) keeps the dialed address.
+		// HostInfo.ConnectAddress panics on a host without one, and
+		// control setup reads it to apply the host filter and to report
+		// a filtered host.
+		t.Run("LocalHostWithoutAddress", func(t *testing.T) {
+			for _, filtered := range []bool{false, true} {
+				srv := newControlTestServer(t, func(s *controlTestServer) {
+					s.localRows = func(stream int, response *protocol.Framer) {
+						writeRows(response, stream, systemLocalCols, [][][]byte{systemLocalRow(net.IPv4zero)})
+					}
+				})
+				config := settings.DefaultConfig(srv.Address)
+				config.Protocol = 4
+				config.Metadata.Mode = metadata.SchemaNone
+				config.Metadata.InitialDiscovery = false
+				config.Metadata.AutomaticAgreement = false
+				config.Pool.AdvancedShardAwareness.Enabled = false
+				config.Pool.ConnectionsPerHost = 1
+				config.Logger = logging.Nop()
+				if filtered {
+					config.HostFilter = func(metadata.HostSnapshot) bool { return false }
+				}
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				s, err := Connect(ctx, config)
+				cancel()
+				if !filtered {
+					if err != nil {
+						t.Fatal(err)
+					}
+					_ = s.Close()
+					continue
+				}
+				if err == nil {
+					_ = s.Close()
+					t.Fatal("Connect succeeded with every host filtered")
+				}
+				if !strings.Contains(err.Error(), "host was filtered: 127.0.0.1") {
+					t.Fatalf("Connect = %v, want the dialed host filtered", err)
+				}
 			}
 		})
 	})

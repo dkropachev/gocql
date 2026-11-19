@@ -28,7 +28,6 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -61,16 +60,14 @@ func init() {
 		// we will use a randomly generated 6 byte sequence instead and set
 		// the multicast bit as recommended in RFC 4122.
 		hardwareAddr = make([]byte, 6)
-		_, err := io.ReadFull(rand.Reader, hardwareAddr)
-		if err != nil {
-			panic(err)
-		}
+		// crypto/rand.Read never fails; it fills the buffer.
+		_, _ = rand.Read(hardwareAddr)
 		hardwareAddr[0] = hardwareAddr[0] | 0x01
 	}
 
 	// initialize the clock sequence with a random number
 	var clockSeqRand [2]byte
-	io.ReadFull(rand.Reader, clockSeqRand[:])
+	_, _ = rand.Read(clockSeqRand[:])
 	clockSeq = uint32(clockSeqRand[1])<<8 | uint32(clockSeqRand[0])
 }
 
@@ -121,10 +118,7 @@ func UUIDFromBytes(input []byte) (UUID, error) {
 }
 
 func mustRandomUUID() UUID {
-	uuid, err := randomUUID()
-	if err != nil {
-		panic(err)
-	}
+	uuid, _ := randomUUID()
 	return uuid
 }
 
@@ -132,10 +126,8 @@ func mustRandomUUID() UUID {
 // RFC 4122.
 func randomUUID() (UUID, error) {
 	var u UUID
-	_, err := io.ReadFull(rand.Reader, u[:])
-	if err != nil {
-		return u, err
-	}
+	// crypto/rand.Read never fails; it fills the buffer.
+	_, _ = rand.Read(u[:])
 	u[6] &= 0x0F // clear version
 	u[6] |= 0x40 // set version to 4 (random uuid)
 	u[8] &= 0x3F // clear variant

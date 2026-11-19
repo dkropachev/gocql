@@ -60,6 +60,8 @@ func (p *InternalDefaultConnPicker) GetShardCount() int {
 }
 
 func InternalNewDefaultConnPicker(size int) *InternalDefaultConnPicker {
+	// Invariant: settings validation rejects a config whose connections
+	// per host and per shard are both zero, and neither can be negative.
 	if size <= 0 {
 		panic(fmt.Sprintf("invalid pool size %d", size))
 	}
