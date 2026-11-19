@@ -11,6 +11,10 @@ while preserving their behavioral assertions; legacy signatures, reflection-led
 APIs, and compatibility adapters are not deliverables. Reusing correct transport
 and routing internals is permissible when they satisfy the v2 contracts.
 
+This directory is maintainer material, not part of the published Go module:
+its own `go.mod` makes the Go toolchain leave it out of the
+`github.com/scylladb/gocql/v2` module zip. It holds no Go code.
+
 ## Source revisions
 
 - Rust driver: `scylladb/scylla-rust-driver` at
