@@ -11,6 +11,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
+	"runtime"
 	"testing"
 	"time"
 
@@ -23,9 +25,9 @@ import (
 // carries.
 const hotPathPageRows = 32
 
-// hotPathToken is the paging state of the scan fixture's first page. A
-// request that carries it gets the last page.
-var hotPathToken = []byte("hot-path-next-page")
+// hotPathTokens are the paging states of a paged fixture's pages: a request
+// that carries hotPathTokens[i] gets page i+1.
+var hotPathTokens = [][]byte{[]byte("hot-path-page-1"), []byte("hot-path-page-2")}
 
 // hotPathRow decodes the blob column into the caller's slice, reusing its
 // capacity, so a warm read allocates nothing for the value itself.
@@ -33,8 +35,9 @@ var hotPathRow = cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSlice
 
 // hotPathSession returns a session on one fake connection serving prepared
 // statements by the tag their CQL ends with: "E" answers EXECUTE with a void
-// result, "O" with one row, "S" with two pages of hotPathPageRows rows and
-// "T" with one page of hotPathPageRows rows. Every row is one blob column.
+// result, "O" with one row, "T" with one page of hotPathPageRows rows, "S"
+// with two such pages and "R" with three. Every row is one blob column. A
+// request the fixture does not serve closes the connection.
 func hotPathSession(t *testing.T) *Session {
 	t.Helper()
 	s, _, peers := runtimeTestSession(t, 1)
@@ -49,22 +52,38 @@ func hotPathSession(t *testing.T) *Session {
 	for i := range rows {
 		rows[i] = fmt.Sprintf("row-%02d", i)
 	}
-	prepared := map[byte][]byte{
-		'E': preparedBody([]byte("id-E"), key, cql.NewColumns(), 0),
-		'O': preparedBody([]byte("id-O"), key, value, 0),
-		'S': preparedBody([]byte("id-S"), key, value, 0),
-		'T': preparedBody([]byte("id-T"), key, value, 0),
+	// pages returns n pages of rows, each but the last with the token of
+	// the next.
+	pages := func(n int) [][]byte {
+		out := make([][]byte, n)
+		for i := range out {
+			var token []byte
+			if i+1 < n {
+				token = hotPathTokens[i]
+			}
+			out[i] = runtimeRowsBody(token, rows...)
+		}
+		return out
 	}
-	executed := map[byte][]byte{
-		'E': binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid),
-		'O': runtimeRowsBody(nil, "x"),
-		'S': runtimeRowsBody(hotPathToken, rows...),
-		'T': runtimeRowsBody(nil, rows...),
+	prepared := map[byte][]byte{}
+	executed := map[byte][][]byte{
+		'E': {binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid)},
+		'O': {runtimeRowsBody(nil, "x")},
+		'T': pages(1),
+		'S': pages(2),
+		'R': pages(3),
 	}
-	lastPage := runtimeRowsBody(nil, rows...)
+	for tag := range executed {
+		columns := value
+		if tag == 'E' {
+			columns = cql.NewColumns()
+		}
+		prepared[tag] = preparedBody([]byte{'i', 'd', '-', tag}, key, columns, 0)
+	}
 	// The server allocates nothing per request: AllocsPerRun counts every
 	// goroutine's allocations, the server's too.
 	go func() {
+		defer peer.Close()
 		var header [9]byte
 		in := make([]byte, 1<<16)
 		out := make([]byte, 0, 4096)
@@ -78,15 +97,25 @@ func hotPathSession(t *testing.T) *Session {
 			}
 			op, stream := header[4], binary.BigEndian.Uint16(header[2:4])
 			var resp []byte
-			if op == byte(frm.OpPrepare) {
+			switch {
+			case op == byte(frm.OpPrepare) && len(body) > 0:
 				resp = prepared[body[len(body)-1]] // the CQL ends with the tag
-			} else {
-				id := body[2 : 2+int(binary.BigEndian.Uint16(body))]
-				tag := id[len(id)-1]
-				resp = executed[tag]
-				if tag == 'S' && bytes.Contains(body, hotPathToken) {
-					resp = lastPage
+			case op == byte(frm.OpExecute) && len(body) >= 2 && len(body) >= 2+int(binary.BigEndian.Uint16(body)):
+				if id := body[2 : 2+int(binary.BigEndian.Uint16(body))]; len(id) > 0 {
+					served := executed[id[len(id)-1]]
+					page := 0
+					for i, token := range hotPathTokens {
+						if bytes.Contains(body, token) {
+							page = i + 1
+						}
+					}
+					if page < len(served) {
+						resp = served[page]
+					}
 				}
+			}
+			if resp == nil {
+				return
 			}
 			out = append(out[:0], 0x84, 0, byte(stream>>8), byte(stream), byte(frm.OpResult))
 			out = binary.BigEndian.AppendUint32(out, uint32(len(resp)))
@@ -115,8 +144,9 @@ func hotPathPrepare[R any](t *testing.T, ctx context.Context, session *Session, 
 }
 
 // TestHotPathAllocs gates what a warm execution allocates on each hot path of
-// a prepared statement against a fake node: exec, select one, a paged scan and
-// streaming, each through Prepared and through a reused Query. Batches have
+// a prepared statement against a fake node: exec, select one and a paged
+// scan, each through Prepared and through a reused Query, and streaming
+// through a reused StreamQuery. Batches have
 // their own gates (TestBatchAllocs, TestRunBatchAllocs). The limits are
 // ceilings: lowering one is progress, raising one needs a reason. It runs
 // without the race detector, whose instrumentation allocates on its own.
@@ -156,51 +186,59 @@ func TestHotPathAllocs(t *testing.T) {
 		})
 	})
 
-	// The one allocation is the first page's paging state, copied out of
-	// the response so that it outlives it and goes into the next request.
+	// Each page after the first costs one allocation: the previous page's
+	// paging state, copied out of its response so that it outlives it and
+	// goes into the next request.
 	t.Run("PagedScan", func(t *testing.T) {
-		const pagingState = 1
 		session, ctx := hotPathSession(t), hotPathContext(t)
-		p := hotPathPrepare(t, ctx, session, "S", hotPathRow)
 		values := Options{PageSize: cql.Option[int32]{Set: true, Value: hotPathPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
-		q := hotPathQuery(t, p, values)
 		options := testOptions(values)
 		dst := make([]byte, 0, 16)
 		count := 0
 		countRow := func(*[]byte) error { count++; return nil }
-		check := func(err error) {
-			if err != nil || count != 2*hotPathPageRows {
-				t.Fatal(count, err)
+		for _, tc := range []struct {
+			tag   string
+			pages int
+		}{{"S", 2}, {"R", 3}} {
+			p := hotPathPrepare(t, ctx, session, tc.tag, hotPathRow)
+			q := hotPathQuery(t, p, values)
+			check := func(err error) {
+				if err != nil || count != tc.pages*hotPathPageRows {
+					t.Fatal(count, err)
+				}
+				count = 0
 			}
-			count = 0
+			limit := float64(tc.pages - 1)
+			gateAllocs(t, fmt.Sprintf("Prepared.Each over %d pages", tc.pages), limit, func() {
+				_, err := p.Each(ctx, 1, &dst, countRow, options)
+				check(err)
+			})
+			gateAllocs(t, fmt.Sprintf("Query.Each over %d pages", tc.pages), limit, func() {
+				_, err := q.Each(ctx, 1, &dst, countRow)
+				check(err)
+			})
 		}
-		gateAllocs(t, "Prepared.Each over two pages", pagingState, func() {
-			_, err := p.Each(ctx, 1, &dst, countRow, options)
-			check(err)
-		})
-		gateAllocs(t, "Query.Each over two pages", pagingState, func() {
-			_, err := q.Each(ctx, 1, &dst, countRow)
-			check(err)
-		})
 	})
 
-	// A stream pays per execution, not per row: its row reader, cursor and
+	// A stream, run through a reused StreamQuery of a PreparedStream, pays
+	// per execution and per page, not per row: its row reader, cursor and
 	// context. An incremental stream also reserves the connection, which
 	// interrupts the connection's reader with a deadline. The limits are what
-	// this costs today; rows may not add to it.
+	// this costs today: limit for the first page, perPage for each next one.
+	// More rows in a page may not add to it.
 	t.Run("Stream", func(t *testing.T) {
 		session, ctx := hotPathSession(t), hotPathContext(t)
 		for _, tc := range []struct {
-			incremental bool
-			limit       float64
-		}{{false, 25}, {true, 55}} {
+			incremental    bool
+			limit, perPage float64
+		}{{false, 25, 14}, {true, 55, 27}} {
 			t.Run(fmt.Sprintf("incremental=%t", tc.incremental), func(t *testing.T) {
 				run := func(tag string, rows int) func() {
 					p, err := PrepareStream(ctx, session.Core(), StreamStatement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ? -- " + tag, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamBlob)}, PrepareOptions{})
 					if err != nil {
 						t.Fatal(err)
 					}
-					q, err := p.Query(StreamOptions{Incremental: tc.incremental})
+					q, err := p.Query(StreamOptions{Options: Options{PageSize: cql.Option[int32]{Set: true, Value: hotPathPageRows}}, Incremental: tc.incremental})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -222,9 +260,11 @@ func TestHotPathAllocs(t *testing.T) {
 				}
 				one := gateAllocs(t, "StreamQuery.Run of one row", tc.limit, run("O", 1))
 				page := gateAllocs(t, fmt.Sprintf("StreamQuery.Run of %d rows", hotPathPageRows), tc.limit, run("T", hotPathPageRows))
-				if page > one {
+				if page > one+allocTolerance {
 					t.Errorf("a stream of %d rows allocates %v times, of one row %v", hotPathPageRows, page, one)
 				}
+				gateAllocs(t, "StreamQuery.Run of two pages", tc.limit+tc.perPage, run("S", 2*hotPathPageRows))
+				gateAllocs(t, "StreamQuery.Run of three pages", tc.limit+2*tc.perPage, run("R", 3*hotPathPageRows))
 			})
 		}
 	})
@@ -240,15 +280,35 @@ func hotPathQuery[R any](t *testing.T, p *Prepared[int32, R], options Options) *
 	return q
 }
 
+// allocTolerance is how far above its limit gateAllocs lets an average go:
+// a stray allocation every five runs, from goroutines the gate does not
+// measure.
+const allocTolerance = 0.2
+
 // gateAllocs runs f once to warm it, then fails t when f allocates more than
-// limit times per run. It returns the count.
+// limit times per run on average. It returns that average.
+//
+// The average is a fraction, not testing.AllocsPerRun's truncated quotient,
+// so an allocation on some runs only still counts. The connection's own
+// goroutines can allocate during a run, so the best of three samples is
+// kept and allocTolerance is allowed.
 func gateAllocs(t *testing.T, name string, limit float64, f func()) float64 {
 	t.Helper()
+	const runs, samples = 1000, 3
 	f()
-	n := testing.AllocsPerRun(1000, f)
-	t.Logf("%s allocates %v times per run", name, n)
-	if n > limit {
-		t.Errorf("%s allocates %v times per run, want at most %v", name, n, limit)
+	n := math.Inf(1)
+	for range samples {
+		var before, after runtime.MemStats
+		runtime.ReadMemStats(&before)
+		for range runs {
+			f()
+		}
+		runtime.ReadMemStats(&after)
+		n = min(n, float64(after.Mallocs-before.Mallocs)/runs)
+	}
+	t.Logf("%s allocates %.3f times per run", name, n)
+	if n > limit+allocTolerance {
+		t.Errorf("%s allocates %.3f times per run, want at most %v", name, n, limit)
 	}
 	return n
 }

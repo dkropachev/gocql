@@ -21,14 +21,16 @@ func TestBuildTagsCost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds the streaming example three times")
 	}
+	// Each tag's markers are one symbol per package the tag changes.
 	const module = `github\.com/scylladb/gocql/v2/internal/`
-	markers := map[string]*regexp.Regexp{
-		"gocql_perf":  regexp.MustCompile(module + `(cqlperf\.compiles|(wire|session|routing|paging)\.perfCounts|wirecompress\.perfCalls)$`),
-		"gocql_debug": regexp.MustCompile(module + `wire\.\(\*Cursor\)\.assertHead$`),
+	markers := map[string][]*regexp.Regexp{}
+	for _, pkg := range []string{`cqlperf\.compiles`, `wire\.perfCounts`, `session\.perfCounts`, `routing\.perfCounts`, `paging\.perfCounts`, `wirecompress\.perfCalls`} {
+		markers["gocql_perf"] = append(markers["gocql_perf"], regexp.MustCompile(module+pkg+`$`))
 	}
+	markers["gocql_debug"] = []*regexp.Regexp{regexp.MustCompile(module + `wire\.\(\*Cursor\)\.assertHead$`)}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	symbols := func(tags string) []string {
+	symbols := func(t *testing.T, tags string) []string {
 		t.Helper()
 		bin := filepath.Join(t.TempDir(), "streaming")
 		build := exec.CommandContext(ctx, "go", "build", "-tags="+tags, "-o", bin, "./examples/streaming")
@@ -42,26 +44,30 @@ func TestBuildTagsCost(t *testing.T) {
 		// Each line is "address kind name"; the name is the last field.
 		return regexp.MustCompile(`(?m)\S+$`).FindAllString(string(out), -1)
 	}
-	linked := func(syms []string, marker *regexp.Regexp) []string {
-		var found []string
+	linked := func(syms []string, marker *regexp.Regexp) bool {
 		for _, s := range syms {
 			if marker.MatchString(s) {
-				found = append(found, s)
+				return true
 			}
 		}
-		return found
+		return false
 	}
 
-	production := symbols("")
-	for tag, marker := range markers {
-		if found := linked(production, marker); len(found) != 0 {
-			t.Errorf("a build without tags links the %s code: %q", tag, found)
+	production := symbols(t, "")
+	for tag, list := range markers {
+		for _, marker := range list {
+			if linked(production, marker) {
+				t.Errorf("a build without tags links the %s code %s", tag, marker)
+			}
 		}
 	}
-	for tag, marker := range markers {
+	for tag, list := range markers {
 		t.Run(tag, func(t *testing.T) {
-			if len(linked(symbols(tag), marker)) == 0 {
-				t.Errorf("-tags %s links none of %s", tag, marker)
+			syms := symbols(t, tag)
+			for _, marker := range list {
+				if !linked(syms, marker) {
+					t.Errorf("-tags %s does not link %s", tag, marker)
+				}
 			}
 		})
 	}
