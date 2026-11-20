@@ -8,6 +8,7 @@ execution results.
 :maxdepth: 2
 
 quick-start
+migrating-from-v1
 connecting/index
 statements/index
 data-types
