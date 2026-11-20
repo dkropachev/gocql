@@ -356,6 +356,10 @@ scylla-stop: .prepare-scylla-ccm
 test-integration-cassandra: cassandra-start
 	@echo "Run integration tests for proto ${TEST_CQL_PROTOCOL} on cassandra ${CASSANDRA_VERSION}"
 	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_CASSANDRA_CLUSTER_NAME}
+	# The suite runs ccm itself (node versions, node-control clusters), and
+	# ccm refuses to run when the java on PATH differs from JAVA_HOME's, as on
+	# the runners (PATH 17, JAVA_HOME 11); cassandra-start uses SDKMAN's java.
+	if [ -f ~/.sdkman/bin/sdkman-init.sh ]; then source ~/.sdkman/bin/sdkman-init.sh; fi
 	echo "go test -v ${TEST_OPTS} -tags \"${TEST_INTEGRATION_TAGS} dialect_cassandra_v${TEST_CQL_PROTOCOL}\" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}"
 	go test -v ${TEST_OPTS} -tags "${TEST_INTEGRATION_TAGS} dialect_cassandra_v${TEST_CQL_PROTOCOL}" ${COVER_BUILD_ARGS} -timeout=${TEST_INTEGRATION_TIMEOUT} ${INTEGRATION_PKG} -args -distribution cassandra -runauth -runcassandrafixtures -gocql.timeout=60s -runssl -proto=${TEST_CQL_PROTOCOL} -rf=3 -autowait=2000ms -compressor=${TEST_COMPRESSOR} ${COVER_RUNTIME_ARGS}
 
