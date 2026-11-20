@@ -379,6 +379,11 @@ own module and does not reuse `internal/testkit`.
   API. It also builds with each of the library's build tags (`gocql_perf`,
   `gocql_debug`, `integration`) and fails when a tag changes the public API;
   `TestPackageLayers` checks the layers under the same tags.
+- `TestBuildTagsCost` (`build_tags_test.go`) builds `examples/streaming`
+  with and without `gocql_perf` and `gocql_debug` and fails when a build
+  without tags links the perf counters or the debug assertions.
+  `make test-unit-tags` (the `unit-tags` CI job) runs the unit tests
+  without `-race`, which the allocation gates need, and once per tag.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
 ## Where the code stands today

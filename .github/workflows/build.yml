@@ -86,3 +86,31 @@ jobs:
         run: make test-unit
 
       - run: sudo sh -c "echo 2097152 >> /proc/sys/fs/aio-max-nr"
+
+  # make test-unit runs with -race, which skips the allocation gates and
+  # compiles no gocql_perf or gocql_debug file. This job runs beside build.
+  unit-tags:
+    name: Allocation gates and measurement tags (${{ matrix.arch }})
+    needs: [matrix]
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        arch: ${{ fromJSON(needs.matrix.outputs.arch) }}
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.target_commit }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+
+      - name: Run tests without -race and with each measurement tag
+        run: make test-unit-tags

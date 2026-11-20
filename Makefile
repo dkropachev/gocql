@@ -445,6 +445,15 @@ BENCH_OPTS = -run '^$$' -bench=. -benchmem
 test-bench:
 	go test ${BENCH_OPTS} ./...
 
+# test-unit runs with -race, which skips the allocation gates (the race
+# detector allocates on its own) and compiles no file behind the gocql_perf
+# or gocql_debug tag. This runs the suite once more without -race, then once
+# per measurement tag.
+test-unit-tags: .prepare-pki
+	go test -timeout=5m ./...
+	go test -timeout=5m -tags gocql_perf ./...
+	go test -timeout=5m -tags gocql_debug ./...
+
 # Benchmarks that need a live cluster: same cluster setup and flags as the
 # integration suite, run against ./tests/bench/integration.
 bench-integration-scylla:
