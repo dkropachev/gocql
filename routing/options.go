@@ -22,7 +22,9 @@ type Options struct {
 	Latency LatencyOptions
 	// TokenAware routes a request to the replicas of its partition.
 	TokenAware bool
-	// AllowRemote lets requests fall back to hosts outside Datacenter.
+	// AllowRemote lets requests fall back to hosts outside Datacenter. With
+	// TokenAware, replicas there are tried before local hosts that are not
+	// replicas.
 	AllowRemote bool
 	// ShuffleReplicas spreads requests over replicas at random rather than in
 	// a fixed order per token.
