@@ -30,11 +30,12 @@ type gridRequest struct {
 	pageSize    int32 // -1 without a page size
 	key         int32
 	pageState   string
+	batch       bool // a BATCH, whose body is not parsed
 }
 
 // gridServer is a fake node for the execution grid tests. It answers
 // PREPARE with a statement of one int parameter and, for a SELECT, one blob
-// column, records each QUERY and EXECUTE, and answers it with answer.
+// column, records each QUERY, EXECUTE and BATCH, and answers it with answer.
 type gridServer struct {
 	mu         sync.Mutex
 	requests   []gridRequest
@@ -69,6 +70,12 @@ func newGridServer(t *testing.T, peer net.Conn, answer func(gridRequest) []byte)
 				response = typedTestResponse(t, 4, stream, gridPreparedBody(key, columns))
 			case frm.OpQuery, frm.OpExecute:
 				r := parseGridRequest(frm.Op(h[4]), stream, body)
+				srv.mu.Lock()
+				srv.requests = append(srv.requests, r)
+				srv.mu.Unlock()
+				response = answer(r)
+			case frm.OpBatch:
+				r := gridRequest{stream: stream, pageSize: -1, batch: true}
 				srv.mu.Lock()
 				srv.requests = append(srv.requests, r)
 				srv.mu.Unlock()
