@@ -119,8 +119,8 @@ func TestSafe(t *testing.T) {
 
 	// Cassandra can reject an unlogged or counter batch as Unavailable or
 	// Overloaded after it sent some partitions' writes: a non-idempotent one
-	// is not replayed. A logged batch, a conditional batch and Bootstrapping
-	// reject the batch whole.
+	// is not replayed. A logged batch and Bootstrapping reject the batch
+	// whole.
 	t.Run("PartialBatch", func(t *testing.T) {
 		unavailable := &cqlerr.UnavailableError{Required: 2, Alive: 1}
 		overloaded := cqlerr.NewOtherServerError(cqlerr.CodeOverloaded, "")
@@ -144,7 +144,9 @@ func TestSafe(t *testing.T) {
 			{"Unlogged/Bootstrapping", bootstrapping, cql.Some(cql.UnloggedBatch), false, false, retry.Next},
 			{"Unlogged/Idempotent", unavailable, cql.Some(cql.UnloggedBatch), true, false, retry.Next},
 			{"Counter/IdempotentOverloaded", overloaded, cql.Some(cql.CounterBatch), true, false, retry.Next},
-			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, true, retry.Next},
+			// Conditional is also set for a batch with a member of unknown
+			// kind, which may span partitions.
+			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, true, retry.Stop},
 		} {
 			a := attempt(tc.err, true, tc.idempotent)
 			a.Batch, a.Conditional = tc.batch, tc.conditional

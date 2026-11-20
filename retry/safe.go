@@ -20,9 +20,9 @@ import (
 // can reject it after it sent the earlier partitions' writes, so a replay
 // could apply them twice; the driver then reports the attempt MaybeExecuted.
 // The rule holds on every server, ScyllaDB included: the driver does not rely
-// on the order in which a server checks a batch's partitions. A logged batch
-// is checked whole before its batch log is written, and a conditional batch
-// holds one partition, so both are retried.
+// on the order in which a server checks a batch's partitions. It also holds
+// for a conditional batch, whose kind the driver may not know. A logged batch
+// is checked whole before its batch log is written, so it is retried.
 //
 // It retries in place a read timeout that had enough replicas but no data,
 // and moves an idempotent request on after a coordinator server error. Every
@@ -87,7 +87,7 @@ func (p Safe) Decide(a Attempt) Decision {
 
 // partialBatch reports whether a is an attempt of a non-idempotent batch a
 // server may have applied in part before it rejected it as Unavailable or
-// Overloaded: an unlogged or counter batch that is not conditional.
+// Overloaded: an unlogged or counter batch.
 func partialBatch(a Attempt) bool {
-	return !a.Idempotent && !a.Conditional && a.Batch.Set && a.Batch.Value != cql.LoggedBatch
+	return !a.Idempotent && a.Batch.Set && a.Batch.Value != cql.LoggedBatch
 }

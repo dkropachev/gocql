@@ -45,9 +45,9 @@ func statusSeverity(s cqlerr.ExecutionStatus) int {
 	}
 }
 
-// fail records a failed attempt, of a request that partialBatch reports may
-// be applied in part when partial is set, and returns its execution status. It stays out of line so the
-// request loops keep their happy-path frame small.
+// fail records a failed attempt and returns its execution status; partial
+// reports a batch a server may apply in part (see partialBatch). It stays out
+// of line so the request loops keep their happy-path frame small.
 //
 //go:noinline
 func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID], partial bool) cqlerr.ExecutionStatus {

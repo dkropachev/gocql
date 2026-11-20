@@ -14,6 +14,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/retry"
@@ -39,31 +40,43 @@ func (p *sameHostSafe) Decide(a retry.Attempt) retry.Decision {
 
 // TestBatchRejectedAfterPartialApply checks that an unlogged or counter
 // batch rejected as Unavailable or Overloaded reports MaybeExecuted and that
-// retry.Safe does not replay it, while a logged batch is replayed.
+// retry.Safe does not replay it, while a logged batch is replayed. A batch
+// whose member is of unknown kind, which the driver treats as conditional,
+// is not replayed either.
 func TestBatchRejectedAfterPartialApply(t *testing.T) {
 	for _, kind := range []cql.BatchKind{cql.LoggedBatch, cql.UnloggedBatch, cql.CounterBatch} {
 		for _, code := range []cqlerr.ErrorCode{cqlerr.CodeUnavailable, cqlerr.CodeOverloaded} {
-			for _, general := range []bool{false, true} {
-				t.Run(fmt.Sprintf("%v/%v/general=%t", kind, code, general), func(t *testing.T) {
-					testBatchRejected(t, kind, code, general)
-				})
+			for _, member := range []cql.StatementKind{cql.OrdinaryStatement, cql.UnknownStatement} {
+				for _, general := range []bool{false, true} {
+					t.Run(fmt.Sprintf("%v/%v/%v/general=%t", kind, code, member, general), func(t *testing.T) {
+						testBatchRejected(t, kind, code, member, general)
+					})
+				}
 			}
 		}
 	}
 }
 
-func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, general bool) {
+func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, member cql.StatementKind, general bool) {
 	s, conns, peers := runtimeTestSession(t, 1)
 	defer s.Close()
 	partial := kind != cql.LoggedBatch
-	q := batchTestQuery(t, s)
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: member, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer q.Close()
 	batch := Batch{Kind: kind}
 	for range 2 {
 		if err := q.AddToBatch(&batch, []byte("v")); err != nil {
 			t.Fatal(err)
 		}
 	}
+	served := make(chan struct{})
+	defer func() { <-served }()
+	defer s.Close() // ends a server read the driver never answers
 	go func() {
+		defer close(served)
 		stream := typedTestReadRequest(t, conns[0], peers[0])
 		var body []byte
 		if code == cqlerr.CodeUnavailable {
@@ -83,7 +96,7 @@ func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, 
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_, err := InternalWrapSession(s).ExecBatch(ctx, &batch, testOptions(Options{Profile: new(profile)}))
+	_, err = InternalWrapSession(s).ExecBatch(ctx, &batch, testOptions(Options{Profile: new(profile)}))
 	if len(policy.attempts) == 0 {
 		t.Fatalf("the retry policy saw no attempt: %v", err)
 	}

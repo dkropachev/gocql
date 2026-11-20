@@ -222,9 +222,9 @@ func (r *InternalExecutionRequest) batchKind() cql.Option[cql.BatchKind] {
 
 // partialBatch reports whether r is a batch that a server may apply in part
 // before it rejects it as Unavailable or Overloaded: an unlogged or counter
-// batch that is not conditional. A conditional batch holds one partition.
+// batch.
 func (r *InternalExecutionRequest) partialBatch() bool {
-	return r.batch != nil && r.batch.kind != cql.LoggedBatch && !r.routing.Conditional
+	return r.batch != nil && r.batch.kind != cql.LoggedBatch
 }
 
 // ownOptions makes request's options its own to change, for an execution

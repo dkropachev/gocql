@@ -46,8 +46,9 @@ Overloaded. Cassandra checks such a batch one partition at a time and can
 reject it after it sent the earlier partitions' writes, so a replay could
 apply them twice; the attempt reports `cqlerr.MaybeExecuted`. The rule applies
 to ScyllaDB as well: the driver does not rely on the order in which a server
-checks a batch's partitions. A logged batch is checked whole before its batch
-log is written, and a conditional batch holds one partition, so both are
+checks a batch's partitions, and it covers conditional batches too, since a
+batch whose statements the driver did not classify counts as conditional. A
+logged batch is checked whole before its batch log is written, so it is
 retried as other requests are. Mark a batch idempotent
 (`exec.Options.Idempotent`) when replaying all of it is safe.
 
