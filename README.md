@@ -4,7 +4,7 @@ gocql provides a typed Go driver for ScyllaDB and Apache Cassandra. Statements
 pair explicit parameter encoders with result decoders. Worker-owned queries reuse an owned parameter snapshot across retries and paging.
 
 ```sh
-go get github.com/scylladb/gocql/v2@v2.0.0
+go get github.com/scylladb/gocql/v2@v2.0.0-rc.1
 ```
 
 The root package `github.com/scylladb/gocql/v2` (`gocql`) connects and runs
@@ -207,5 +207,6 @@ recordings; [their recipe](tests/bench/e2e/README.md) explains regeneration. Nat
 integration requires [owned fixtures](tests/fixtures/README.md).
 
 See the [documentation](docs/source/index.md),
-[API contract](feature-specs/gocql-v2-api.md), [contribution guide](CONTRIBUTING.md)
-and [license](LICENSE).
+[migration guide from v1](docs/source/migrating-from-v1.md),
+[API contract](https://github.com/scylladb/gocql/blob/master/feature-specs/gocql-v2-api.md),
+[contribution guide](CONTRIBUTING.md) and [license](LICENSE).
