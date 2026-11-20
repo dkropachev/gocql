@@ -65,27 +65,16 @@ jobs:
           RELEASE_VERSION: ${{ inputs.version }}
         run: $RUNNER_TEMP/release-helper preflight
 
-  build:
-    name: Full Build matrix
+  # The build on amd64 and arm64, the full integration matrix and the fuzz
+  # targets, on the resolved candidate commit.
+  matrix:
+    name: Release candidate matrix
     needs: preflight
-    uses: ./.github/workflows/build.yml
+    uses: ./.github/workflows/release-matrix.yml
     permissions:
       contents: read
     with:
-      target_commit: ${{ needs.preflight.outputs.resolved_sha }}
-      arch: amd64,arm64
-
-  integration:
-    name: Full Integration matrix
-    needs: [preflight, build]
-    uses: ./.github/workflows/integration.yml
-    permissions:
-      contents: read
-    with:
-      target_commit: ${{ needs.preflight.outputs.resolved_sha }}
-      scylla_versions: LATEST,PRIOR,LTS-LATEST,LTS-PRIOR
-      cassandra_versions: 5-LATEST,4-LATEST
-      arch: amd64,arm64
+      target: ${{ needs.preflight.outputs.resolved_sha }}
 
   pre-release-integration:
     name: Driver compatibility matrix
@@ -105,7 +94,7 @@ jobs:
 
   publication-gate:
     name: Final publication gate
-    needs: [preflight, build, integration, pre-release-integration, docs-precheck]
+    needs: [preflight, matrix, pre-release-integration, docs-precheck]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     outputs:
@@ -149,7 +138,7 @@ jobs:
   publish:
     name: Publish signed tag and GitHub Release
     if: inputs.mode == 'publish'
-    needs: [preflight, build, integration, publication-gate]
+    needs: [preflight, matrix, publication-gate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: release

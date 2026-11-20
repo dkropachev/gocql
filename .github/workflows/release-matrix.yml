@@ -1,0 +1,62 @@
+name: Release candidate matrix
+run-name: Release candidate matrix @ ${{ inputs.target }}
+
+# The full test matrix a release candidate must pass: the build and unit tests
+# on amd64 and arm64, every ScyllaDB (LATEST, PRIOR, LTS-LATEST, LTS-PRIOR)
+# and Cassandra (4, 5) integration lane on both architectures, Cassandra 5
+# on protocol 5 as well, and every fuzz target for a fixed budget. PR CI runs
+# a reduced set; the Release workflow calls this one on the resolved
+# candidate commit and publishes only when it passes. Dispatch it by hand to
+# check a candidate before starting a release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Commit SHA, branch or tag to test
+        required: true
+        type: string
+      fuzz_time:
+        description: Budget per fuzz target (go test -fuzztime)
+        required: false
+        default: 1m
+        type: string
+  workflow_call:
+    inputs:
+      target:
+        description: Commit to test
+        required: true
+        type: string
+      fuzz_time:
+        description: Budget per fuzz target (go test -fuzztime)
+        required: false
+        default: 1m
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Full Build matrix
+    uses: ./.github/workflows/build.yml
+    with:
+      target_commit: ${{ inputs.target }}
+      arch: amd64,arm64
+
+  integration:
+    name: Full Integration matrix
+    needs: [build]
+    uses: ./.github/workflows/integration.yml
+    with:
+      target_commit: ${{ inputs.target }}
+      scylla_versions: LATEST,PRIOR,LTS-LATEST,LTS-PRIOR
+      cassandra_versions: 5-LATEST,4-LATEST
+      arch: amd64,arm64
+
+  fuzz:
+    name: Fuzz
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      target_commit: ${{ inputs.target }}
+      fuzz_time: ${{ inputs.fuzz_time }}
