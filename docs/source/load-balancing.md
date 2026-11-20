@@ -37,6 +37,36 @@ leader-aware, latency-penalized and unshuffled requests go straight to
 Fallback. It keeps private immutable indices and does not copy all hosts to
 choose its first target.
 
+### Built-in plan order
+
+A plan of `routing.NewPolicy` tries, in order: the replicas in the local rack
+(`Rack`), the other replicas in the local datacenter (`Datacenter`, or every
+datacenter without one), the replicas in other datacenters when `AllowRemote`
+is set, then the hosts that are no replicas in the same tiers: local rack,
+local datacenter, other datacenters. So with `AllowRemote` a remote replica
+comes before a local host that is no replica. Hosts that are down or have no
+connection come after every reachable host. `ShuffleReplicas` orders the
+replicas of a tier at random per request, and otherwise in an order fixed for
+each replica set; the hosts that are no replicas take turns.
+
+- Without `TokenAware`, or without a token, a plan has no replicas and starts
+  with the hosts.
+- A host the host filter (`config.ConfigBuilder.WithHostFilter`) skips is in
+  no plan, a `SingleTarget` one included, and does not count for `Validate`.
+- With `Latency.Enabled`, a host measured much slower than the fastest is
+  tried after every other host until `RetryPeriod` passes.
+- A table with tablets is placed by its tablets, not by the token ring. A
+  token no known tablet holds has no replicas, and the plan starts with the
+  hosts; the response then carries the tablet, which later plans use.
+- A replica's route goes to its tablet's shard, or to the shard that owns the
+  token, followed by a route to any shard of the same host. `SingleTarget`
+  routes only to its host: to its shard first when it names one and the host
+  has it, then to any shard, unless `StrictShard` is set.
+
+A tablet hint in a response replaces every tablet its range overlaps, so a
+migrated, split or merged tablet takes effect at the next request. A plan
+keeps the snapshot it was built from.
+
 Config.Partitioners maps server names to TokenPartitioner implementations.
 PartitionKey.ForEach streams canonical encoded components without gathering;
 consume borrowed spans synchronously. Unknown partitioners disable token routing
