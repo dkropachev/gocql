@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - gocql-v2
     paths-ignore:
       - "**.md"
       - "docs/**"
@@ -147,3 +148,10 @@ jobs:
           disable_search: true
           plugins: noop
           fail_ci_if_error: ${{ secrets.CODECOV_TOKEN != '' }}
+
+      # Every exported function of the public packages must run in a unit or
+      # integration test. Only a run that measured both can tell. It comes
+      # last so that a failure here does not hold back the uploads above.
+      - name: Check that every public function is tested
+        if: success() && steps.scylla-version.outputs.value != 'NOT-FOUND'
+        run: make coverage-public

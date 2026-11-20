@@ -5,10 +5,15 @@ package auth
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // TestPasswordIsNotPrinted prints a Password provider every way a
@@ -30,5 +35,35 @@ func TestPasswordIsNotPrinted(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "cassandra") {
 		t.Fatalf("the username was not printed:\n%s", out.String())
+	}
+}
+
+// TestPasswordExchange runs a whole PasswordAuthenticator exchange: the
+// initial response carries the credentials, a challenge fails, Success
+// accepts the server's final message, and Close releases the exchange.
+func TestPasswordExchange(t *testing.T) {
+	ctx := context.Background()
+	exchange, response, err := Password("user", "pass").Start(ctx, metadata.HostSnapshot{}, "org.apache.cassandra.auth.PasswordAuthenticator")
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	if want := []byte("\x00user\x00pass"); !response.Valid || !bytes.Equal(response.Value, want) {
+		t.Fatalf("initial response = %q (valid %v), want %q", response.Value, response.Valid, want)
+	}
+	if got, err := exchange.Challenge(ctx, cql.Nullable[cql.Bytes]{}); err == nil || got.Valid {
+		t.Fatalf("Challenge = %v, %v; want an unexpected-challenge error", got, err)
+	}
+	if err := exchange.Success(ctx, cql.Nullable[cql.Bytes]{}); err != nil {
+		t.Fatalf("Success: %v", err)
+	}
+	exchange.Close()
+
+	cancelled, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := exchange.Success(cancelled, cql.Nullable[cql.Bytes]{}); !errors.Is(err, context.Canceled) {
+		t.Fatalf("Success after cancel = %v, want context.Canceled", err)
+	}
+	if _, _, err := Password("us\x00er", "pass").Start(ctx, metadata.HostSnapshot{}, ""); err == nil {
+		t.Fatal("Start accepted credentials containing NUL")
 	}
 }

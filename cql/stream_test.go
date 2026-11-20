@@ -752,3 +752,108 @@ func TestStream(t *testing.T) {
 		})
 	})
 }
+
+// TestStreamValueReaderAccessors decodes cells with a custom decoder that
+// reads the cell's type and state and its body as fixed-width integers.
+func TestStreamValueReaderAccessors(t *testing.T) {
+	blob := FoundationScalar(t, TypeBlob)
+	body := []byte{0x12, 0x34, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}
+	var got streamWords
+	for _, step := range []int{1, len(body) + 4} {
+		if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, streamCellBytes(body), &got, step); err != nil {
+			t.Fatalf("step %d: %v", step, err)
+		}
+		if want := (streamWords{Type: blob, State: Present, Short: 0x1234, Long: 0x0123456789abcdef}); !got.Type.Equal(want.Type) || got.State != want.State || got.Short != want.Short || got.Long != want.Long {
+			t.Fatalf("step %d: decoded %+v, want %+v", step, got, want)
+		}
+	}
+	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, []byte{0xff, 0xff, 0xff, 0xff}, &got, 1); err != nil || got.State != Null || !got.Type.Equal(blob) {
+		t.Fatalf("null cell: %+v %v", got, err)
+	}
+	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, streamCellBytes(body[:9]), &got, 1); err == nil {
+		t.Fatal("Uint64 read past the end of the cell")
+	}
+	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, streamCellBytes(body[:1]), &got, 1); err == nil {
+		t.Fatal("Uint16 read past the end of the cell")
+	}
+}
+
+// TestStreamResetters resets seeded storage through the StreamResetter each
+// stream decoder declares: the logical value is cleared and buffer capacity
+// is kept.
+func TestStreamResetters(t *testing.T) {
+	t.Run("Map", func(t *testing.T) {
+		dst := []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}}
+		key := dst[0].Key
+		StreamMap(StreamBlob, StreamList(StreamBlob)).(StreamResetter[[]Entry[[]byte, [][]byte]]).Reset(&dst)
+		if len(dst) != 0 || cap(dst) != 1 {
+			t.Fatalf("map len %d cap %d", len(dst), cap(dst))
+		}
+		entry := dst[:1][0]
+		if len(entry.Key) != 0 || cap(entry.Key) != cap(key) || &entry.Key[:1][0] != &key[0] || len(entry.Value) != 0 || cap(entry.Value) != 1 {
+			t.Fatalf("entry not reset in place: %+v", entry)
+		}
+	})
+	t.Run("Decimal", func(t *testing.T) {
+		dst := DecimalParts{Unscaled: []byte{1, 2}, Scale: 3}
+		StreamDecimal.(StreamResetter[DecimalParts]).Reset(&dst)
+		if dst.Scale != 0 || len(dst.Unscaled) != 0 || cap(dst.Unscaled) != 2 {
+			t.Fatalf("decimal %+v cap %d", dst, cap(dst.Unscaled))
+		}
+	})
+	t.Run("Nullable", func(t *testing.T) {
+		dst := Nullable[[]byte]{Valid: true, Value: []byte("text")}
+		StreamNullable(StreamText).(StreamResetter[Nullable[[]byte]]).Reset(&dst)
+		if dst.Valid || len(dst.Value) != 0 || cap(dst.Value) != 4 {
+			t.Fatalf("nullable %+v", dst)
+		}
+	})
+	t.Run("Empty", func(t *testing.T) {
+		dst := MaybeEmpty[[]byte]{Empty: true, Value: []byte("text")}
+		StreamEmpty(StreamText).(StreamResetter[MaybeEmpty[[]byte]]).Reset(&dst)
+		if dst.Empty || len(dst.Value) != 0 || cap(dst.Value) != 4 {
+			t.Fatalf("maybe-empty %+v", dst)
+		}
+	})
+	t.Run("Encoded", func(t *testing.T) {
+		dst := StreamCell{Type: FoundationScalar(t, TypeInt), State: Null, Bytes: []byte{1, 2}}
+		StreamEncoded.(StreamResetter[StreamCell]).Reset(&dst)
+		if !dst.Type.Equal(DataType{}) || dst.State != Present || len(dst.Bytes) != 0 || cap(dst.Bytes) != 2 {
+			t.Fatalf("cell %+v", dst)
+		}
+	})
+	t.Run("OneColumn", func(t *testing.T) {
+		dst := []byte("text")
+		StreamOneColumn(StreamText).(StreamResetter[[]byte]).Reset(&dst)
+		if len(dst) != 0 || cap(dst) != 4 {
+			t.Fatalf("column len %d cap %d", len(dst), cap(dst))
+		}
+	})
+	t.Run("RowsAndRecords", func(t *testing.T) {
+		resets := 0
+		row := StreamRowInto(func(*Pair[int32, int32]) { resets++ },
+			StreamColumnAt(0, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.First }),
+			StreamColumnAt(1, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.Second }))
+		dst := Pair[int32, int32]{1, 2}
+		row.(StreamResetter[Pair[int32, int32]]).Reset(&dst)
+		if dst != (Pair[int32, int32]{}) || resets != 1 {
+			t.Fatalf("row %+v after %d application resets", dst, resets)
+		}
+		dst = Pair[int32, int32]{3, 4}
+		StreamTuple(row).(StreamResetter[Pair[int32, int32]]).Reset(&dst)
+		if dst != (Pair[int32, int32]{}) || resets != 2 {
+			t.Fatalf("tuple %+v after %d application resets", dst, resets)
+		}
+	})
+	t.Run("NilDestination", func(t *testing.T) {
+		StreamMap(StreamBlob, StreamList(StreamBlob)).(StreamResetter[[]Entry[[]byte, [][]byte]]).Reset(nil)
+		StreamDecimal.(StreamResetter[DecimalParts]).Reset(nil)
+		StreamNullable(StreamText).(StreamResetter[Nullable[[]byte]]).Reset(nil)
+		StreamEmpty(StreamText).(StreamResetter[MaybeEmpty[[]byte]]).Reset(nil)
+		StreamEncoded.(StreamResetter[StreamCell]).Reset(nil)
+		StreamOneColumn(StreamText).(StreamResetter[[]byte]).Reset(nil)
+		row := StreamRowInto(func(*Pair[int32, int32]) { t.Fatal("reset callback ran for a nil destination") })
+		row.(StreamResetter[Pair[int32, int32]]).Reset(nil)
+		StreamTuple(row).(StreamResetter[Pair[int32, int32]]).Reset(nil)
+	})
+}
