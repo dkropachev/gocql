@@ -139,6 +139,54 @@ func TestNodeEvents(t *testing.T) {
 		})
 	})
 
+	// TestNodeEvents/HandleHostDown covers the conviction path: the pool and
+	// the control connection hold the host itself, so they mark it down by
+	// identity, not by the node-to-node address HandleNodeDown looks up.
+	t.Run("HandleHostDown", func(t *testing.T) {
+		t.Parallel()
+
+		t.Run("host known by another address is marked down and loses its pool", func(t *testing.T) {
+			t.Parallel()
+
+			f := newNodeEventFixture(t)
+			host := f.addHost(t, "127.0.10.1")
+			// Clients dial rpc_address, which differs from broadcast_address.
+			implEndpoint.HostInfoData(host).InternalConnectAddress = net.ParseIP("127.0.20.1")
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(host): f.session.NewHostConnPool(host, 1, "")}
+			f.session.HandleHostDown(host)
+
+			if state := host.State(); state != endpoint.NodeDown {
+				t.Errorf("host state: got %v, want %v", state, endpoint.NodeDown)
+			}
+			if _, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(host.HostID()); ok {
+				t.Error("convicted host still has a connection pool")
+			}
+		})
+
+		t.Run("replaced host is ignored", func(t *testing.T) {
+			t.Parallel()
+
+			// A pool of a host the ring has since replaced must not mark
+			// down the host that replaced it.
+			f := newNodeEventFixture(t)
+			current := f.addHost(t, "127.0.10.1")
+			stale := new(endpoint.HostInfo)
+			implEndpoint.HostInfoData(stale).InternalHostId = implEndpoint.HostInfoData(current).InternalHostId
+			implEndpoint.HostInfoData(stale).InternalConnectAddress = net.ParseIP("127.0.10.1")
+			implEndpoint.HostInfoData(stale).InternalPort = 9042
+			pool := f.session.NewHostConnPool(current, 1, "")
+			SessionData(f.session).InternalPool.InternalHostConnPools = map[cql.UUID]*implPool.InternalHostConnPool{implEndpoint.InternalHostInfoHostUUID(current): pool}
+			f.session.HandleHostDown(stale)
+
+			if state := current.State(); state != endpoint.NodeUp {
+				t.Errorf("current host state: got %v, want %v", state, endpoint.NodeUp)
+			}
+			if got, ok := SessionData(f.session).InternalPool.InternalGetPoolByHostID(current.HostID()); !ok || got != pool {
+				t.Error("stale conviction removed the current host's pool")
+			}
+		})
+	})
+
 	t.Run("HandleNodeEvent", func(t *testing.T) {
 		t.Parallel()
 

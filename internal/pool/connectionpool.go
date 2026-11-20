@@ -545,17 +545,18 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		}
 	}
 	host := pool.InternalHost
-	port := pool.InternalHost.Port()
 	// A closed pool no longer speaks for its host, which may be served by
-	// a new pool by now.
-	convict := pool.shardConvicted && !pool.InternalClosed
+	// a new pool by now, and its fill fails because Close cancelled it, not
+	// because the host did: report nothing and leave the host alone.
+	closed := pool.InternalClosed
+	convict := pool.shardConvicted && !closed
 	pool.shardConvicted = false
 	pool.InternalMu.Unlock()
 
 	// if we errored and the size is now zero, make sure the host is marked as down
 	// see https://github.com/apache/cassandra-gocql-driver/issues/1614
 	pool.logger().Debug("pool size after filling stopped", logging.KeyHost, host.ConnectAddress().String(), "conns", count)
-	if err != nil && count == 0 {
+	if err != nil && count == 0 && !closed {
 		// An empty failed pool supplies its detached physical host context. Avoid
 		// looking the pool up through its parent while initial SetHosts may be
 		// waiting for this fill to finish under the parent's membership lock.
@@ -565,7 +566,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		}
 	}
 	if convict {
-		pool.InternalServices.Down(host.ConnectAddress(), port)
+		pool.InternalServices.Down(host)
 	}
 
 	// The fill ends only after the policy saw its failures, so the Reset of
