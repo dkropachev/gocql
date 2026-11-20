@@ -23,12 +23,17 @@ type Keyspace struct {
 	Types           map[string]*Type
 	Indexes         map[string]*Index
 	Views           map[string]*View
-	state           keyspaceState
 	ConsistencyMode string
 	Name            string
 	StrategyClass   string
-	TabletBased     bool
-	DurableWrites   bool
+	state           keyspaceState
+	// InitialTablets is the tablet count a tablet keyspace was created with.
+	// Zero lets the server choose.
+	InitialTablets int
+	// TabletBased reports a ScyllaDB keyspace that distributes its data in
+	// tablets rather than vnodes.
+	TabletBased   bool
+	DurableWrites bool
 }
 
 // Clone returns a shallow copy of the keyspace metadata with
@@ -36,7 +41,7 @@ type Keyspace struct {
 // do not race with concurrent readers of the original.
 func (ks *Keyspace) Clone() *Keyspace {
 	cloned := &Keyspace{
-		TabletBased: ks.TabletBased, ConsistencyMode: ks.ConsistencyMode,
+		TabletBased: ks.TabletBased, InitialTablets: ks.InitialTablets, ConsistencyMode: ks.ConsistencyMode,
 		Name:            ks.Name,
 		DurableWrites:   ks.DurableWrites,
 		StrategyClass:   ks.StrategyClass,
@@ -49,6 +54,7 @@ func (ks *Keyspace) Clone() *Keyspace {
 		Views:           maps.Clone(ks.Views),
 	}
 	cloned.state.ServerCQL = ks.state.ServerCQL
+	cloned.state.TabletsOption = ks.state.TabletsOption
 	if ks.state.InternalTablesInvalidated != nil {
 		cloned.state.InternalTablesInvalidated = maps.Clone(ks.state.InternalTablesInvalidated)
 	}
@@ -407,4 +413,5 @@ func (c ColumnKind) String() string {
 type keyspaceState struct {
 	InternalTablesInvalidated map[string]struct{}
 	ServerCQL                 string
+	TabletsOption             bool
 }

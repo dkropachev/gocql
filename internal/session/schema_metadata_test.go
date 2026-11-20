@@ -118,6 +118,12 @@ func TestSchemaMetadata(t *testing.T) {
 					if ks == nil || len(ks.Tables) != 0 {
 						t.Fatal("minimal metadata expanded schema")
 					}
+					// Keyspaces mode reads keyspace rows only.
+					for _, q := range queries {
+						if !strings.Contains(q.stmt, "system_schema.keyspaces") && !strings.Contains(q.stmt, "system_schema.scylla_keyspaces") {
+							t.Fatal("keyspaces mode read more than keyspaces", q.stmt)
+						}
+					}
 				}
 			}
 		})

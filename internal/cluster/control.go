@@ -81,11 +81,14 @@ type InternalControlConn struct {
 	InternalConn    atomic.Pointer[InternalConnHost]
 	InternalSession *Core
 	InternalQuit    chan struct{}
-	workers         sync.WaitGroup
-	closeOnce       sync.Once
-	workerMu        sync.Mutex
-	state           int32
-	reconnecting    int32
+	// wake asks the heartbeat loop to reconnect now: the control connection
+	// closed.
+	wake         chan struct{}
+	workers      sync.WaitGroup
+	closeOnce    sync.Once
+	workerMu     sync.Mutex
+	state        int32
+	reconnecting int32
 }
 
 func (c *InternalControlConn) InternalGetSession() *Core {
@@ -97,17 +100,28 @@ func createControlConn(session *Core) *InternalControlConn {
 	control := &InternalControlConn{
 		InternalSession: session,
 		InternalQuit:    make(chan struct{}),
+		wake:            make(chan struct{}, 1),
 	}
 
 	return control
 }
 
+// controlRetryDelay bounds the wait between attempts to reconnect the
+// control connection while no node takes it; the wait starts at a second and
+// doubles up to it.
+const controlRetryDelay = 10 * time.Second
+
+// InternalHeartBeat checks the control connection and owns its reconnection:
+// a failed check, or the connection closing, reconnects at once, and failed
+// reconnects retry with a backoff, so that the control connection returns
+// soon after a node does rather than at the next check.
 func (c *InternalControlConn) InternalHeartBeat() {
 	if !atomic.CompareAndSwapInt32(&c.state, controlConnStarting, controlConnStarted) {
 		return
 	}
 
 	sleepTime := 1 * time.Second
+	retryDelay := time.Second
 	timer := time.NewTimer(sleepTime)
 	defer timer.Stop()
 
@@ -117,38 +131,65 @@ func (c *InternalControlConn) InternalHeartBeat() {
 		select {
 		case <-c.InternalQuit:
 			return
+		case <-c.wake:
+			// A wake can outlive the connection it was sent for: one that
+			// broke while the loop was already reconnecting.
+			if c.connected() {
+				continue
+			}
+			goto reconn
 		case <-timer.C:
 		}
 
-		resp, err := c.writeFrame(&protocol.WriteOptionsFrame{})
-		if err != nil {
-			goto reconn
-		}
+		{
+			resp, err := c.writeFrame(&protocol.WriteOptionsFrame{})
+			if err != nil {
+				goto reconn
+			}
 
-		switch resp.(type) {
-		case *frm.SupportedFrame:
-			// Everything ok
-			sleepTime = 30 * time.Second
-			continue
-		case error:
-			goto reconn
-		default:
+			switch resp.(type) {
+			case *frm.SupportedFrame:
+				// Everything ok
+				sleepTime = 30 * time.Second
+				retryDelay = time.Second
+				continue
+			case error:
+				goto reconn
+			default:
 
-			// Reachable from the wire: parseFrame builds a frame for every opcode it
-			// knows, and this goroutine has no recover above it. There is no failure
-			// counter here as there is in Conn.heartBeat -- every non-SUPPORTED
-			// outcome already reconnects, so this arm joins them rather than adding
-			// a bound only it would respect.
-			c.InternalSession.logger().Warn("control connection: unexpected frame in response to OPTIONS; reconnecting", "frame", fmt.Sprintf("%T", resp))
-			goto reconn
+				// Reachable from the wire: parseFrame builds a frame for every opcode it
+				// knows, and this goroutine has no recover above it. There is no failure
+				// counter here as there is in Conn.heartBeat -- every non-SUPPORTED
+				// outcome already reconnects, so this arm joins them rather than adding
+				// a bound only it would respect.
+				c.InternalSession.logger().Warn("control connection: unexpected frame in response to OPTIONS; reconnecting", "frame", fmt.Sprintf("%T", resp))
+				goto reconn
+			}
 		}
 
 	reconn:
-		// try to connect a bit faster
-		sleepTime = 1 * time.Second
-		c.InternalReconnect()
-		continue
+		_ = c.InternalReconnect()
+		if c.connected() {
+			// Check the new connection soon.
+			sleepTime = time.Second
+			retryDelay = time.Second
+		} else {
+			sleepTime = retryDelay
+			retryDelay = min(2*retryDelay, controlRetryDelay)
+		}
 	}
+}
+
+// connected reports whether the control connection is open.
+func (c *InternalControlConn) connected() bool {
+	ch := c.InternalGetConn()
+	if ch == nil || ch.InternalConn == nil {
+		return false
+	}
+	if conn, ok := ch.InternalConn.(interface{ Closed() bool }); ok {
+		return !conn.Closed()
+	}
+	return true
 }
 
 func shuffleHosts(hosts []*implEndpoint.HostInfo) []*implEndpoint.HostInfo {
@@ -363,7 +404,8 @@ func (c *InternalControlConn) InternalReconnect() error {
 	err := c.attemptReconnect()
 	if err != nil {
 		err = fmt.Errorf("gocql: unable to reconnect control connection: %w", err)
-		c.InternalSession.logger().Error("control connection: reconnect failed", logging.Err(err))
+		// The heartbeat loop retries: degraded, not given up.
+		c.InternalSession.logger().Warn("control connection: reconnect failed", logging.Err(err))
 		return err
 	}
 
@@ -432,14 +474,8 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint
 			conn.Close()
 			continue
 		}
+		// setupConn published the ControlConnectionRecreatedEvent.
 		conn.InternalFinalizeConnection()
-		sessionPublishEvent(c.InternalSession, &events.ControlConnectionRecreatedEvent{
-			NewHost: events.HostInfo{
-				Host:   host.ConnectAddress(),
-				Port:   host.Port(),
-				HostID: host.HostID(),
-			},
-		})
 		return nil
 	}
 	return fmt.Errorf("unable to connect to any known node: %v", hosts)
@@ -458,7 +494,12 @@ func (c *InternalControlConn) HandleError(conn *transport.Conn, err error, close
 		return
 	}
 
-	c.startWorker(func() { _ = c.InternalReconnect() })
+	// The heartbeat loop reconnects, and retries until a node takes the
+	// connection.
+	select {
+	case c.wake <- struct{}{}:
+	default:
+	}
 }
 
 func (c *InternalControlConn) InternalGetConn() *InternalConnHost {

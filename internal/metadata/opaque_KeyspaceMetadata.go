@@ -16,6 +16,9 @@ type KeyspaceState struct {
 	// ServerCQL is the keyspace's DESCRIBE KEYSPACE ... WITH INTERNALS output,
 	// which ToCQL returns as is when the server supplied it.
 	ServerCQL string
+	// TabletsOption reports that the server takes the tablets keyspace
+	// option, so that ToCQL states it for a vnode keyspace too.
+	TabletsOption bool
 }
 
 // keyspaceRep mirrors metadata.Keyspace.
@@ -27,10 +30,11 @@ type keyspaceRep struct {
 	Types           map[string]*metadata.Type
 	Indexes         map[string]*metadata.Index
 	Views           map[string]*metadata.View
-	state           KeyspaceState
 	ConsistencyMode string
 	Name            string
 	StrategyClass   string
+	state           KeyspaceState
+	InitialTablets  int
 	TabletBased     bool
 	DurableWrites   bool
 }

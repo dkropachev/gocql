@@ -29,6 +29,7 @@ func (source schemaSource) InternalSchemaSettings() implMetadata.QuerySettings {
 	if s.privateStorage.InternalHostSource != nil && s.privateStorage.InternalPool != nil {
 		if c := s.GetConn(); c != nil {
 			v.Scylla = c.InternalIsScyllaConn()
+			v.Tablets = c.InternalIsTabletSupported()
 			v.TabletsV2 = c.InternalFramers.InternalDefaults.InternalTabletsRoutingV2
 		}
 	}

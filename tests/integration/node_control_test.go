@@ -132,5 +132,16 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+	// The deferred DROP KEYSPACE refreshes metadata on the control
+	// connection, which returns on its own schedule, after the pool may have.
+	for deadline := time.Now().Add(40 * time.Second); ; time.Sleep(100 * time.Millisecond) {
+		err := s.RefreshMetadata(ctx)
+		if err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("control connection did not recover", err)
+		}
+	}
 	t.Logf("coordinator stop after one delivered row: %v; restart and pinned probe succeeded", terminal)
 }

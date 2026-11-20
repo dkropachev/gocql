@@ -32,7 +32,10 @@ func sortedByName[T any](m map[string]T) []T {
 
 // ToCQL returns a CQL query that can be used to recreate keyspace with all
 // user defined types, tables, indexes, functions, aggregates and views associated
-// with this keyspace.
+// with this keyspace. It is the server's DESCRIBE KEYSPACE output when the
+// session loaded it, and otherwise built from the metadata. The built
+// statement states a ScyllaDB keyspace's tablets option rather than leave it
+// to the server's default.
 func (ks *Keyspace) ToCQL() (string, error) {
 	// The server's own DESCRIBE KEYSPACE ... WITH INTERNALS output, when the
 	// loader fetched it, is the authoritative schema.
@@ -493,12 +496,13 @@ var keyspaceCQLTemplate = template.Must(template.New("keyspace").
 	Funcs(map[string]any{
 		"escape":      cqlHelpers.escape,
 		"fixStrategy": cqlHelpers.fixStrategy,
+		"tablets":     cqlHelpers.tablets,
 		"ident":       cqlHelpers.ident,
 	}).
 	// Single-line, always-explicit durable_writes to match what DESCRIBE KEYSPACE
 	// returns from Cassandra/Scylla, so this fallback stays consistent with the
 	// server-echoed DESCRIBE output in ToCQL.
-	Parse(`CREATE KEYSPACE {{ ident .Name }} WITH replication = {'class': {{ escape ( fixStrategy .StrategyClass) }}{{ range $key, $value := .StrategyOptions }}, {{ escape $key }}: {{ escape $value }}{{ end }}} AND durable_writes = {{ .DurableWrites }};
+	Parse(`CREATE KEYSPACE {{ ident .Name }} WITH replication = {'class': {{ escape ( fixStrategy .StrategyClass) }}{{ range $key, $value := .StrategyOptions }}, {{ escape $key }}: {{ escape $value }}{{ end }}} AND durable_writes = {{ .DurableWrites }}{{ tablets . }};
 `))
 
 func keyspaceMetadataKeyspaceToCQL(ks *Keyspace, w io.Writer) error {
@@ -602,6 +606,22 @@ func (h toCQLHelpers) stripFrozen(v string) string {
 	}
 	return v
 }
+
+// tablets renders the tablets option of a keyspace. A server's default for a
+// keyspace that does not state it may be either, so a tablet keyspace states
+// it always, and a vnode keyspace whenever the server takes the option.
+func (h toCQLHelpers) tablets(ks *Keyspace) string {
+	switch {
+	case ks.TabletBased && ks.InitialTablets > 0:
+		return " AND tablets = {'initial': " + strconv.Itoa(ks.InitialTablets) + "}"
+	case ks.TabletBased:
+		return " AND tablets = {'enabled': true}"
+	case ks.state.TabletsOption:
+		return " AND tablets = {'enabled': false}"
+	}
+	return ""
+}
+
 func (h toCQLHelpers) fixStrategy(v string) string {
 	return strings.TrimPrefix(v, "org.apache.cassandra.locator.")
 }

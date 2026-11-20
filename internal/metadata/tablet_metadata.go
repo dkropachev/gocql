@@ -25,6 +25,9 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 	if !settings.Scylla {
 		return nil
 	}
+	for _, ks := range keyspaces {
+		KeyspaceData(ks).TabletsOption = settings.Tablets
+	}
 	decoder := InternalV2SchemaRows[v2ScyllaKeyspaceRow]{initialize: func() *v2ScyllaKeyspaceRow { return &v2ScyllaKeyspaceRow{initial: -1} }, InternalFields: []InternalV2SchemaField[v2ScyllaKeyspaceRow]{
 		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *v2ScyllaKeyspaceRow) *string { return &r.name }),
 		InternalV2SchemaColumn("initial_tablets", cql.Int32Codec, func(r *v2ScyllaKeyspaceRow) *int32 { return &r.initial }),
@@ -51,6 +54,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 		seen[r.name] = true
 		if ks := keyspaces[r.name]; ks != nil {
 			ks.TabletBased = r.initial >= 0
+			ks.InitialTablets = max(int(r.initial), 0)
 			if settings.TabletsV2 && r.consistency == "global" {
 				ks.ConsistencyMode = "global"
 			}
