@@ -80,7 +80,7 @@ func hotPathSession(t *testing.T) *Session {
 		}
 		prepared[tag] = preparedBody([]byte{'i', 'd', '-', tag}, key, columns, 0)
 	}
-	// The server allocates nothing per request: AllocsPerRun counts every
+	// The server allocates nothing per request: gateAllocs counts every
 	// goroutine's allocations, the server's too.
 	go func() {
 		defer peer.Close()
@@ -146,10 +146,10 @@ func hotPathPrepare[R any](t *testing.T, ctx context.Context, session *Session, 
 // TestHotPathAllocs gates what a warm execution allocates on each hot path of
 // a prepared statement against a fake node: exec, select one and a paged
 // scan, each through Prepared and through a reused Query, and streaming
-// through a reused StreamQuery. Batches have
-// their own gates (TestBatchAllocs, TestRunBatchAllocs). The limits are
-// ceilings: lowering one is progress, raising one needs a reason. It runs
-// without the race detector, whose instrumentation allocates on its own.
+// through a reused StreamQuery. Batches have their own gates
+// (TestBatchAllocs, TestRunBatchAllocs). The limits are ceilings: lowering
+// one is progress, raising one needs a reason. It runs without the race
+// detector, whose instrumentation allocates on its own.
 func TestHotPathAllocs(t *testing.T) {
 	t.Run("Exec", func(t *testing.T) {
 		session, ctx := hotPathSession(t), hotPathContext(t)
