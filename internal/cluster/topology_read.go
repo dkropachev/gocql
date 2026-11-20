@@ -17,18 +17,7 @@ import (
 )
 
 func readV2Topology(ctx context.Context, conn transport.ConnInterface, stmt string, port int) ([]*implEndpoint.HostInfo, error) {
-	backend, ok := conn.(interface {
-		InternalExecuteTyped(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error)
-	})
-	if !ok {
-		return nil, cqltype.TypeValidation("topology query", "connection does not support typed requests")
-	}
-	timeout := timeForTopology(conn)
-	execute := backend.InternalExecuteTyped
-	if c, ok := conn.(*transport.Conn); ok {
-		execute = c.InternalExecuteV2System
-	}
-	rows, err := readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
+	rows, err := readV2TopologyRows(ctx, conn, stmt)
 	if err != nil {
 		return nil, err
 	}
@@ -41,6 +30,22 @@ func readV2Topology(ctx context.Context, conn transport.ConnInterface, stmt stri
 		hosts = append(hosts, h)
 	}
 	return hosts, nil
+}
+
+// readV2TopologyRows reads the rows of the topology query stmt.
+func readV2TopologyRows(ctx context.Context, conn transport.ConnInterface, stmt string) ([]metadata.InternalV2TopologyRow, error) {
+	backend, ok := conn.(interface {
+		InternalExecuteTyped(context.Context, *model.AttemptRequest) (*transport.InternalResponsePage, error)
+	})
+	if !ok {
+		return nil, cqltype.TypeValidation("topology query", "connection does not support typed requests")
+	}
+	timeout := timeForTopology(conn)
+	execute := backend.InternalExecuteTyped
+	if c, ok := conn.(*transport.Conn); ok {
+		execute = c.InternalExecuteV2System
+	}
+	return readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
 }
 
 func timeForTopology(conn transport.ConnInterface) time.Duration {

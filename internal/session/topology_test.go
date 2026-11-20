@@ -6,8 +6,10 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"reflect"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -137,7 +139,103 @@ func TestTopology(t *testing.T) {
 		})
 	})
 
+	t.Run("InvalidPeers", func(t *testing.T) {
+		// A peer row that does not parse is skipped like an incomplete
+		// one, rather than failing the whole read.
+		t.Run("NewPeerSkipped", func(t *testing.T) {
+			good := newTestPeer("127.0.0.2")
+			srv := newRingTestServer(t, good)
+			s := srv.session(t, nil)
+			bad := newTestPeer("127.0.0.3")
+			bad.tokens = []string{"not-a-token"}
+			incomplete := newTestPeer("127.0.0.4")
+			incomplete.dc = ""
+			srv.setPeers(good, bad, incomplete)
+			if err := s.RefreshRingNow(); err != nil {
+				t.Fatal("an invalid new peer failed the read:", err)
+			}
+			want := []string{good.hostID.String() + "@127.0.0.2", testLocalHostID.String() + "@127.0.0.1"}
+			sort.Strings(want)
+			if got := ringHosts(s); !reflect.DeepEqual(got, want) {
+				t.Fatalf("ring %v, want %v", got, want)
+			}
+			diagnostics := fmt.Sprint(s.Metadata().Diagnostics())
+			if !strings.Contains(diagnostics, "invalid peer "+bad.hostID.String()) || !strings.Contains(diagnostics, "incomplete peer "+incomplete.hostID.String()) {
+				t.Fatal("skipped peers not in the diagnostics:", diagnostics)
+			}
+		})
+		t.Run("KnownPeerRetainsTopology", func(t *testing.T) {
+			good := newTestPeer("127.0.0.2")
+			srv := newRingTestServer(t, good)
+			s := srv.session(t, nil)
+			before := ringHosts(s)
+			bad := good
+			bad.tokens = []string{"not-a-token"}
+			srv.setPeers(bad)
+			if err := s.RefreshRingNow(); err == nil {
+				t.Fatal("a known node's invalid row was skipped")
+			}
+			if got := ringHosts(s); !reflect.DeepEqual(got, before) {
+				t.Fatal("invalid read changed the topology", before, got)
+			}
+		})
+	})
+
+	t.Run("AddressChange", func(t *testing.T) {
+		t.Run("Refresh", func(t *testing.T) {
+			peer := newTestPeer("127.0.0.2")
+			srv := newRingTestServer(t, peer)
+			s := srv.session(t, nil)
+			moved := peer
+			moved.ip = net.ParseIP("127.0.0.3")
+			srv.setPeers(moved)
+			if err := s.RefreshRingNow(); err != nil {
+				t.Fatal(err)
+			}
+			if h := implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()); h == nil || !h.ConnectAddress().Equal(moved.ip) {
+				t.Fatal("moved node not at its new address:", ringHosts(s))
+			}
+		})
+		// A node that changes address is removed at the old one, and the
+		// tombstone that hides its old row must not hide it at the new one.
+		t.Run("AfterRemovedNode", func(t *testing.T) {
+			peer := newTestPeer("127.0.0.2")
+			srv := newRingTestServer(t, peer)
+			s := srv.session(t, nil)
+			moved := peer
+			moved.ip = net.ParseIP("127.0.0.3")
+			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "REMOVED_NODE", Host: peer.ip, Port: 9042})
+			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "NEW_NODE", Host: moved.ip, Port: 9042})
+			srv.setPeers(moved)
+			if err := s.RefreshRingNow(); err != nil {
+				t.Fatal(err)
+			}
+			if h := implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()); h == nil || !h.ConnectAddress().Equal(moved.ip) {
+				t.Fatal("moved node not at its new address:", ringHosts(s))
+			}
+		})
+	})
+
 	t.Run("Removal", func(t *testing.T) {
+		// A removed node's row that a read skips, or that a read does not
+		// list, does not end its tombstone: another read can list it again.
+		t.Run("TombstoneSurvivesSkippedRow", func(t *testing.T) {
+			peer := newTestPeer("127.0.0.2")
+			srv := newRingTestServer(t, peer)
+			s := srv.session(t, nil)
+			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "REMOVED_NODE", Host: peer.ip, Port: 9042})
+			incomplete := peer
+			incomplete.rack = ""
+			for _, peers := range [][]testPeer{{incomplete}, {}, {peer}} {
+				srv.setPeers(peers...)
+				// The incomplete row may fail the read, as the node was
+				// known before; either way the tombstone stays.
+				_ = s.RefreshRingNow()
+			}
+			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) != nil {
+				t.Fatal("removed node came back")
+			}
+		})
 		t.Run("TombstoneAndRecreate", func(t *testing.T) {
 			peer := newTestPeer("127.0.0.2")
 			srv := newRingTestServer(t, peer)

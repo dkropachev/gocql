@@ -45,6 +45,21 @@ func InternalV2DecodeTopology() cql.RowDecoder[InternalV2TopologyRow] {
 		InternalV2SchemaColumn("tokens", v2MetadataStrings{}, func(r *InternalV2TopologyRow) *[]string { return &r.InternalTokens }),
 	}}
 }
+
+// InternalIdentity returns a host that has only the row's host ID and node
+// addresses, which identify a row InternalHost rejects.
+func (r InternalV2TopologyRow) InternalIdentity() *implEndpoint.HostInfo {
+	h := new(implEndpoint.HostInfo)
+	implEndpoint.HostInfoData(h).InternalHostId = r.id
+	if r.peer.IsValid() {
+		implEndpoint.HostInfoData(h).InternalPeer = net.IP(r.peer.AsSlice())
+	}
+	if r.broadcast.IsValid() {
+		implEndpoint.HostInfoData(h).InternalBroadcastAddress = net.IP(r.broadcast.AsSlice())
+	}
+	return h
+}
+
 func (r InternalV2TopologyRow) InternalHost(defaultPort int) (*implEndpoint.HostInfo, error) {
 	ip := func(a netip.Addr) net.IP {
 		if !a.IsValid() {
