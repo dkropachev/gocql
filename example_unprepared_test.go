@@ -24,7 +24,7 @@ func ExampleSession_UnpreparedExec() {
 	}
 	defer session.Close()
 	// An occasional command needs no preparation or reusable query to close.
-	_, err = session.UnpreparedExec(ctx, cql.Command("CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1}"), cql.EmptyParams{})
+	_, err = session.UnpreparedExec(ctx, cql.Command("CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}"), cql.EmptyParams{})
 	if err != nil {
 		log.Fatal(err)
 	}
