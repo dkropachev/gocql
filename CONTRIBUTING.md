@@ -69,8 +69,9 @@ That said, the point of writing tests is to provide a safety net to catch regres
 The driver is one module, `github.com/scylladb/gocql/v2`, including codec,
 compression and replay benchmark packages. `feature-specs/`,
 `tests/affinity/results/` and `tests/driver-comparison/` carry their own
-`go.mod`, so the Go toolchain leaves them out of the published module zip; put repository-only material that the
-module zip should not carry in such a directory. Run `make check-go-mod-drift`,
+`go.mod`, so the Go toolchain leaves them out of the published module zip;
+put repository-only material that the module zip should not carry in such a
+directory. Run `make check-go-mod-drift`,
 `go test -race -timeout=5m ./...` and compilation with
 `-tags integration`. New examples must compile with the normal
 consumer package build and use typed codecs.

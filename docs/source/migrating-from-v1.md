@@ -32,9 +32,10 @@ packages are named `gocql`.
   `config.Config`. Per-request defaults (consistency, timeouts, paging, retry,
   routing, speculation) live in a `config.Profile`, and per-call overrides in
   `exec.Options`.
-- **Errors live in `cqlerr`.** Server errors are typed (`*cqlerr.WriteTimeoutError`,
-  `*cqlerr.UnavailableError`, ...), and `cqlerr.ExecutionStatusOf` reports
-  whether a failed request may have changed data.
+- **Errors live in `cqlerr`.** Server errors are typed
+  (`*cqlerr.WriteTimeoutError`, `*cqlerr.UnavailableError`, ...), and
+  `cqlerr.ExecutionStatusOf` reports whether a failed request may have
+  changed data.
 - **Rows are borrowed.** Text and blob views returned by `cql.TextCodec` and
   `cql.BlobCodec` point into the response page and expire when the iteration
   moves on; `cql.StringCodec` and `cql.ByteSliceCodec` decode owned copies.
@@ -101,7 +102,7 @@ defer session.Close()
 | `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFiles` to reload certificate files |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting`; see [load balancing](load-balancing.md) |
-| `cluster.RetryPolicy` | the profile's `WithRetry(retry.Safe{MaxAttempts: n})`; see [retries](retry-policy.md) |
+| `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; see [retries](retry-policy.md) |
 | `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
 | `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |
@@ -232,8 +233,8 @@ client. See [paging](statements/paging.md).
 
 `Exec` and `ExecBatch` reject a statement or batch known to be conditional,
 since only the rows say whether it applied. Cassandra does not mark
-conditional statements in prepared metadata: set `Kind: cql.ConditionalStatement`
-there. See [batches](statements/batches.md) and
+conditional statements in prepared metadata: set
+`Kind: cql.ConditionalStatement` there. See [batches](statements/batches.md) and
 [lightweight transactions](statements/lightweight-transactions.md).
 
 ## Types
@@ -267,7 +268,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | `routing.NewPolicy(routing.Options{Datacenter: dc, TokenAware: true})` |
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `routing.Options{Datacenter: dc, Rack: rack, TokenAware: true}` |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy`; see [load balancing](load-balancing.md) |
-| `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it never replays a non-idempotent write that may have run |
+| `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
