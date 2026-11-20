@@ -10,15 +10,19 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"io"
 	"math/big"
 	"net"
 	"net/netip"
+	"os"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -186,6 +190,72 @@ func TestTLSVerification(t *testing.T) {
 			})
 		}
 	})
+}
+
+// A dial takes the TLS source's configuration at that time: after a
+// TLSFileSource reloads a rotated CA file, the next dial trusts the new CA
+// and no longer the old one.
+func TestTLSFileSourceReloadReachesDials(t *testing.T) {
+	ip := []net.IP{net.IPv4(127, 0, 0, 1)}
+	oldCert, _ := tlsServerCert(t, nil, ip)
+	newCert, _ := tlsServerCert(t, nil, ip)
+	caFile := filepath.Join(t.TempDir(), "ca.pem")
+	writeCA := func(cert tls.Certificate) {
+		t.Helper()
+		if err := os.WriteFile(caFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]}), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeCA(oldCert)
+	source, err := config.NewTLSFiles(nil, config.TLSFiles{CAFile: caFile, Interval: time.Hour})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dial := func(cert tls.Certificate) error {
+		t.Helper()
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer listener.Close()
+		go func() {
+			raw, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			defer raw.Close()
+			server := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{cert}})
+			if server.Handshake() == nil {
+				io.Copy(io.Discard, server)
+			}
+		}()
+		cfg := settings.DefaultConfig("127.0.0.1")
+		cfg.TLSSource = source
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		conn, err := (&transport.InternalV2TLSHostDialer{InternalConfig: cfg.Connectivity()}).DialHost(ctx, tlsTestHost(t, listener.Addr(), ""))
+		if err == nil {
+			conn.Conn.Close()
+		}
+		return err
+	}
+	var unknownCA x509.UnknownAuthorityError
+	if err := dial(oldCert); err != nil {
+		t.Fatal("old CA before rotation:", err)
+	}
+	if err := dial(newCert); !errors.As(err, &unknownCA) {
+		t.Fatalf("new CA before rotation: %v, want x509.UnknownAuthorityError", err)
+	}
+	writeCA(newCert)
+	if err := source.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if err := dial(newCert); err != nil {
+		t.Fatal("new CA after rotation:", err)
+	}
+	if err := dial(oldCert); !errors.As(err, &unknownCA) {
+		t.Fatalf("old CA after rotation: %v, want x509.UnknownAuthorityError", err)
+	}
 }
 
 // nilTLSSource is a TLS source that has no configuration to give.
