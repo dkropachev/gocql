@@ -74,7 +74,10 @@ put repository-only material that the module zip should not carry in such a
 directory. Run `make check-go-mod-drift`,
 `go test -race -timeout=5m ./...` and compilation with
 `-tags integration`. New examples must compile with the normal
-consumer package build and use typed codecs.
+consumer package build and use typed codecs. A root example that needs a
+cluster connects to `localhost:9042`; add it to `TestClusterExamples`
+(`example_cluster_test.go`), which `make test-integration-examples` runs
+against ScyllaDB.
 
 Use the owned native fixture runner described in tests/fixtures/README.md for
 actual database tests. Select Cassandra protocol 5 explicitly for v5 segments;

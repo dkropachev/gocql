@@ -380,7 +380,7 @@ test-integration-ccm: scylla-start
 # 127.0.0.1:9042 to node 1 of the ScyllaDB cluster, creates the tables the
 # examples assume and checks what each one prints.
 test-integration-examples: scylla-start
-	go test -v -tags integration -count=1 -timeout=${TEST_INTEGRATION_TIMEOUT} -run '^TestClusterExamples$$' . -args -examples.cluster=${CCM_SCYLLA_IP_PREFIX}1
+	go test -v ${TEST_OPTS} -tags integration -count=1 -timeout=${TEST_INTEGRATION_TIMEOUT} -run '^TestClusterExamples$$' . -args -examples.cluster=${CCM_SCYLLA_IP_PREFIX}1
 
 # One module includes compressor and replay workload tests.
 # UNIT_TEST_TIMEOUT bounds each package's unit tests. The coverage run
