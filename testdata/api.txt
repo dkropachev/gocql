@@ -1303,6 +1303,7 @@ package metadata
 		metadata.Keyspace field ConsistencyMode string
 		metadata.Keyspace field Name string
 		metadata.Keyspace field StrategyClass string
+		metadata.Keyspace field InitialTablets int
 		metadata.Keyspace field TabletBased bool
 		metadata.Keyspace field DurableWrites bool
 		metadata.Keyspace method (*T) Clone() *metadata.Keyspace

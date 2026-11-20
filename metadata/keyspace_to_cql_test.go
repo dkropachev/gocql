@@ -278,19 +278,48 @@ func TestKeyspaceToCQL(t *testing.T) {
 				})
 			}
 		})
-		t.Run("TabletsNotModeled", func(t *testing.T) {
-			ks := &Keyspace{
-				Name:            "ks1",
-				StrategyClass:   "org.apache.cassandra.locator.NetworkTopologyStrategy",
-				StrategyOptions: map[string]string{"datacenter1": "2"},
-				DurableWrites:   true,
+		// A server's default for a keyspace that does not state its tablets
+		// option may be either, so the fallback states it (scylladb/gocql#1055).
+		t.Run("Tablets", func(t *testing.T) {
+			t.Parallel()
+
+			base := func() *Keyspace {
+				return &Keyspace{
+					Name:            "ks1",
+					StrategyClass:   "org.apache.cassandra.locator.NetworkTopologyStrategy",
+					StrategyOptions: map[string]string{"datacenter1": "2"},
+					DurableWrites:   true,
+				}
 			}
-			var sb strings.Builder
-			if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
-				t.Fatal(err)
-			}
-			if strings.Contains(sb.String(), "tablets") {
-				t.Fatal("keyspaceToCQL now renders a tablets clause: update this test, see scylladb/gocql#1055")
+			const head = "CREATE KEYSPACE ks1 WITH replication = {'class': 'NetworkTopologyStrategy', 'datacenter1': '2'} AND durable_writes = true"
+			for _, tc := range []struct {
+				name string
+				edit func(*Keyspace)
+				want string
+			}{
+				{"Vnodes", func(*Keyspace) {}, head + ";\n"},
+				{"VnodesOnTabletServer", func(ks *Keyspace) { ks.state.TabletsOption = true }, head + " AND tablets = {'enabled': false};\n"},
+				{"Tablets", func(ks *Keyspace) { ks.TabletBased = true }, head + " AND tablets = {'enabled': true};\n"},
+				{"InitialTablets", func(ks *Keyspace) { ks.TabletBased, ks.InitialTablets = true, 8 }, head + " AND tablets = {'initial': 8};\n"},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
+					ks := base()
+					tc.edit(ks)
+					var sb strings.Builder
+					if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
+						t.Fatal(err)
+					}
+					if sb.String() != tc.want {
+						t.Fatalf("got  %q\nwant %q", sb.String(), tc.want)
+					}
+					// Clone keeps what the clause is rendered from.
+					sb.Reset()
+					if err := keyspaceMetadataKeyspaceToCQL(ks.Clone(), &sb); err != nil || sb.String() != tc.want {
+						t.Fatalf("clone: %q, %v", sb.String(), err)
+					}
+				})
 			}
 		})
 	})

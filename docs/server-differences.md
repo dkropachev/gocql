@@ -70,7 +70,7 @@ when the server reports it, is a documented no-op on the other dialect.
 | `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
 | Shard awareness: `WithConnectionsPerShard`, `WithMaxExcessPerShard` | ScyllaV4 | Apply per node: a Cassandra node counts as one shard | Pool |
 | Shard-aware port: `WithAdvancedShardAwareness`, `WithDefaultAdvancedShardAwareness`, `NoAdvancedShardAwareness` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
-| Tablet routing, `routing.Options.LeaderAware`, `metadata.Keyspace.TabletBased` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
+| Tablet routing, `routing.Options.LeaderAware`, `metadata.Keyspace.TabletBased` and `InitialTablets` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
 | LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
 | `routing.CDCTokenPartitioner`, `config.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |

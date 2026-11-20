@@ -25,9 +25,10 @@ type Source interface {
 	InternalSchemaContext() context.Context
 }
 type QuerySettings struct {
-	SystemSchema, Available, Scylla, TabletsV2, Aggregates bool
-	Timeout                                                time.Duration
-	Depth                                                  int
+	// Tablets reports a server that takes the tablets keyspace option.
+	SystemSchema, Available, Scylla, Tablets, TabletsV2, Aggregates bool
+	Timeout                                                         time.Duration
+	Depth                                                           int
 }
 type Query[P, R any] struct {
 	Params cql.ParamEncoder[P]
