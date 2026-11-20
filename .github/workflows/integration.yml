@@ -162,6 +162,10 @@ jobs:
         if: steps.scylla-version.outputs.value != 'NOT-FOUND'
         run: make test-integration-ccm
 
+      - name: Run the cluster-backed root examples with ScyllaDB ${{ matrix.version }}(${{ steps.scylla-version.outputs.value }})
+        if: steps.scylla-version.outputs.value != 'NOT-FOUND'
+        run: make test-integration-examples
+
       # Clusters the suite creates through internal/testkit/ccm (node-control
       # tests) keep ccm.log and the node logs of failed tests here.
       - name: Upload ccm artifacts
