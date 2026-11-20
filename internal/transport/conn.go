@@ -304,6 +304,9 @@ type Conn struct {
 	pauseRequested   atomic.Bool // mirrors pauseWanted for the reader's lock-free check
 	tabletsRoutingV1 int32
 	orphans          atomic.Int32 // calls that stopped waiting for an outstanding response
+	// received counts what the shared reader received; only it writes. A
+	// heartbeat that finds every stream in use reads it as proof of life.
+	received atomic.Uint64
 	// headerBuf holds the frame or segment header, or segment trailer, being
 	// read or decoded, so none escapes through the reader. Like headerReader it
 	// is only touched by the receiving goroutine, one header at a time.
@@ -655,6 +658,7 @@ func (c *Conn) InternalServe(ctx context.Context) {
 		}
 		err = c.InternalRecv(ctx, true)
 		if err == nil {
+			c.received.Add(1)
 			continue
 		}
 

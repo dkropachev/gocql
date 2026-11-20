@@ -500,7 +500,8 @@ type typedHeartbeat struct {
 	ctx               context.Context
 	timer             *time.Timer
 	interval, timeout time.Duration
-	failures          int // read by one beat at a time: each re-arms the timer last
+	failures          int    // read by one beat at a time: each re-arms the timer last
+	received          uint64 // conn.received at the previous beat, likewise
 }
 
 func (h *typedHeartbeat) beat() {
@@ -512,6 +513,7 @@ func (h *typedHeartbeat) beat() {
 // once sends one heartbeat and reports whether to schedule the next.
 func (h *typedHeartbeat) once() bool {
 	c, ctx := h.conn, h.ctx
+	received := c.received.Load()
 	callCtx := ctx
 	cancel := func() {}
 	if h.timeout > 0 {
@@ -540,6 +542,17 @@ func (h *typedHeartbeat) once() bool {
 			}
 		}
 	}
+	if errors.Is(err, cqlerr.ErrNoStreams) && received != h.received {
+		// Every stream is in use, but responses arrived since the last beat:
+		// the connection is busy, not failing. Without responses it counts
+		// as a failed beat, as callers without a timeout never leave orphans
+		// for the orphan budget to close it. Proof of life clears earlier
+		// failures, as a successful heartbeat does.
+		h.received = received
+		h.failures = 0
+		return true
+	}
+	h.received = received
 	if err == nil {
 		h.failures = 0
 	} else {
