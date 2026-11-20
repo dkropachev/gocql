@@ -51,6 +51,8 @@ func BorrowText(s string) (Text, error) {
 	c, _ := wire.NewChain(wire.BorrowString(s))
 	return Text{bytes: Bytes{chain: c}}, nil
 }
+
+// Len returns the number of bytes in the view.
 func (b Bytes) Len() int64 { return b.chain.Len() }
 func (b Bytes) checkAlive() error {
 	if !b.lease.IsZero() && !b.lease.Alive() {
@@ -64,6 +66,9 @@ func (b Bytes) each(fn func(wire.Span) error) error {
 	}
 	return b.chain.Each(fn)
 }
+
+// At returns the byte at offset. It returns ErrReleased once the view has
+// expired, and an error for an offset out of range.
 func (b Bytes) At(offset int64) (byte, error) {
 	if err := b.checkAlive(); err != nil {
 		return 0, err
@@ -77,6 +82,10 @@ func (b Bytes) At(offset int64) (byte, error) {
 	}
 	return wire.NewCursor(c).Uint8()
 }
+
+// Slice returns the view of length bytes starting at offset, with the same
+// lifetime as b. It returns ErrReleased once the view has expired, and an
+// error for a range outside the view.
 func (b Bytes) Slice(offset, length int64) (Bytes, error) {
 	if err := b.checkAlive(); err != nil {
 		return Bytes{}, err
@@ -87,6 +96,9 @@ func (b Bytes) Slice(offset, length int64) (Bytes, error) {
 	}
 	return Bytes{chain: c, lease: b.lease}, nil
 }
+
+// WriteTo writes the bytes to w, implementing io.WriterTo. It returns
+// ErrReleased once the view has expired.
 func (b Bytes) WriteTo(w io.Writer) (int64, error) {
 	var total int64
 	err := b.each(func(s wire.Span) error {
@@ -105,12 +117,19 @@ func (b Bytes) WriteTo(w io.Writer) (int64, error) {
 	})
 	return total, err
 }
+
+// CopyTo copies the bytes into dst and returns how many it copied. When dst
+// is too short it copies the prefix that fits and returns io.ErrShortBuffer.
+// It returns ErrReleased once the view has expired.
 func (b Bytes) CopyTo(dst []byte) (int, error) {
 	if err := b.checkAlive(); err != nil {
 		return 0, err
 	}
 	return b.chain.CopyTo(dst)
 }
+
+// Clone returns an owned copy that never expires. It panics with ErrReleased
+// once the view has expired; Copy is the checked form.
 func (b Bytes) Clone() Bytes { return BorrowBytes(b.OwnedBytes()) }
 
 // OwnedBytes is Copy, panicking with Copy's error.
@@ -137,8 +156,13 @@ func (b Bytes) Copy() ([]byte, error) {
 	}
 	return dst, nil
 }
+
+// Bytes returns the text's UTF-8 bytes, with the same lifetime.
 func (t Text) Bytes() Bytes { return t.bytes }
-func (t Text) Clone() Text  { return Text{bytes: t.bytes.Clone()} }
+
+// Clone returns an owned copy that never expires. It panics with ErrReleased
+// once the view has expired.
+func (t Text) Clone() Text { return Text{bytes: t.bytes.Clone()} }
 
 // String is Copy, panicking with Copy's error.
 func (t Text) String() string {

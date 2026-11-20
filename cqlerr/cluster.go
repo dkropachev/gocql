@@ -5,8 +5,12 @@ package cqlerr
 
 import "errors"
 
+// Session start-up errors.
 var (
-	ErrNoHosts              = errors.New("gocql: no hosts provided")
+	// ErrNoHosts reports a cluster configuration that names no hosts.
+	ErrNoHosts = errors.New("gocql: no hosts provided")
+	// ErrNoConnectionsStarted reports that a session could not open a
+	// connection to any host while connecting. ConnectError matches it.
 	ErrNoConnectionsStarted = errors.New("gocql: no connections were made when creating the session")
 )
 
@@ -19,9 +23,12 @@ var ErrBusy = errors.New("gocql: query is busy")
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ServerMismatchError struct {
+	// Want names the database the dialect expects, and Got the one the
+	// cluster runs.
 	Want, Got string
 }
 
+// Error names the expected and the actual database.
 func (e *ServerMismatchError) Error() string {
 	return "gocql: the session's dialect expects " + e.Want + " but the cluster is " + e.Got
 }

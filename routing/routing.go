@@ -23,26 +23,29 @@ import (
 
 // Plan returns the routes a request tries, in order, until one of them has a
 // connection.
-type Plan interface{ Next() (metadata.Route, bool) }
+type Plan interface {
+	// Next returns the next route, and false when the plan has no more.
+	Next() (metadata.Route, bool)
+}
 
 // Policy chooses the routes of a request in two steps, optimized for the
-// happy path where the first route serves it:
-//
-//   - Pick returns the first route, cheaply: without building a plan and
-//     without allocating. It returns false when it has no cheap answer, and
-//     the request then starts with Fallback's routes.
-//   - Fallback returns every route the request may take, in order. The
-//     driver calls it only when the picked route fails or Pick returned
-//     false, and skips the picked route if Fallback returns it again.
-//
-// Validate checks the policy against a snapshot before the session uses it,
-// and Observe receives the outcome of every attempt. The session combines
-// Pick and Fallback into the plan a request follows. Methods may be called
+// happy path where the first route serves it: Pick returns the first route
+// cheaply, and Fallback every route the request may take. The session
+// combines them into the plan a request follows. Methods may be called
 // concurrently.
 type Policy interface {
+	// Validate checks the policy against a snapshot before the session uses
+	// it.
 	Validate(*metadata.Snapshot) error
+	// Pick returns the first route, cheaply: without building a plan and
+	// without allocating. It returns false when it has no cheap answer, and
+	// the request then starts with Fallback's routes.
 	Pick(Info, *metadata.Snapshot) (metadata.Route, bool)
+	// Fallback returns every route the request may take, in order. The
+	// driver calls it only when the picked route fails or Pick returned
+	// false, and skips the picked route if Fallback returns it again.
 	Fallback(Info, *metadata.Snapshot) Plan
+	// Observe receives the outcome of every attempt.
 	Observe(AttemptEvent)
 }
 

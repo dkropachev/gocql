@@ -13,9 +13,12 @@ import (
 
 // Safe retries bounded transient failures only when replay is safe.
 //
-// MaxAttempts bounds the attempts, the first included; zero or less means
-// three, so the zero Safe is ready to use.
-type Safe struct{ MaxAttempts int }
+// The zero Safe is ready to use.
+type Safe struct {
+	// MaxAttempts bounds the attempts, the first included; zero or less
+	// means three.
+	MaxAttempts int
+}
 
 // Decide implements Policy.
 func (p Safe) Decide(a Attempt) Decision {

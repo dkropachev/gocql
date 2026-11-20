@@ -51,6 +51,8 @@ func newOwnedValueWriter(builder *wire.Builder, typ DataType, allowUnset bool) *
 	w.ownBorrowed = true
 	return w
 }
+
+// Type returns the type of the cell being written.
 func (w *ValueWriter) Type() DataType { return w.typ }
 func (w *ValueWriter) fail(err error) error {
 	if w.err == nil {
@@ -93,8 +95,19 @@ func (w *ValueWriter) setState(state CellState) error {
 	w.state = state
 	return nil
 }
+
+// Empty marks the cell as an empty value: present, with a zero-length body.
+// It fails for a type that does not support empty values, or after any
+// other state or payload was written.
 func (w *ValueWriter) Empty() error { return w.emptyValue() }
-func (w *ValueWriter) Null() error  { return w.setState(Null) }
+
+// Null marks the cell as null. It fails after a state or payload was
+// written.
+func (w *ValueWriter) Null() error { return w.setState(Null) }
+
+// Unset marks the cell as unset, so the server leaves the parameter's column
+// unchanged. It fails where unset is not permitted, such as in a nested value,
+// and after a state or payload was written.
 func (w *ValueWriter) Unset() error { return w.setState(Unset) }
 func (w *ValueWriter) emptyValue() error {
 	if !emptySupported(w.typ) {
@@ -102,6 +115,10 @@ func (w *ValueWriter) emptyValue() error {
 	}
 	return w.setState(EmptyCell)
 }
+
+// BorrowBytes appends b to the cell's body without copying it, unless the
+// writer copies borrowed input, as EncodeValue's does. The caller must keep b
+// unchanged until the request or encoded value using it is no longer in use.
 func (w *ValueWriter) BorrowBytes(b []byte) error {
 	if err := w.payload(); err != nil {
 		return err
@@ -111,6 +128,9 @@ func (w *ValueWriter) BorrowBytes(b []byte) error {
 	}
 	return w.fail(w.builder.Borrow(wire.Borrow(b)))
 }
+
+// BorrowString appends s to the cell's body without copying it, unless the
+// writer copies borrowed input, as EncodeValue's does.
 func (w *ValueWriter) BorrowString(s string) error {
 	if err := w.payload(); err != nil {
 		return err
@@ -141,30 +161,42 @@ func (w *ValueWriter) scalarBytes(n int) ([]byte, error) {
 	}
 	return p, nil
 }
+
+// Uint8 appends v to the cell's body.
 func (w *ValueWriter) Uint8(v uint8) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
 	return w.fail(w.builder.Uint8(v))
 }
+
+// Uint16 appends v to the cell's body in big-endian order.
 func (w *ValueWriter) Uint16(v uint16) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
 	return w.fail(w.builder.Uint16(v))
 }
+
+// Uint32 appends v to the cell's body in big-endian order.
 func (w *ValueWriter) Uint32(v uint32) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
 	return w.fail(w.builder.Uint32(v))
 }
+
+// Uint64 appends v to the cell's body in big-endian order.
 func (w *ValueWriter) Uint64(v uint64) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
 	return w.fail(w.builder.Uint64(v))
 }
+
+// Child appends a nested length-framed cell of type typ, written by encode.
+// If encode fails, the nested cell is rolled back and its error becomes the
+// writer's error.
 func (w *ValueWriter) Child(typ DataType, encode func(*ValueWriter) error) error {
 	if err := w.payload(); err != nil {
 		return err
@@ -259,8 +291,17 @@ func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.R
 	}
 	return r
 }
-func (r ValueReader) Type() DataType   { return r.typ }
+
+// Type returns the cell's type.
+func (r ValueReader) Type() DataType { return r.typ }
+
+// State returns the cell's state. A zero-length cell read from a response is
+// Present with an empty body.
 func (r ValueReader) State() CellState { return r.state }
+
+// Bytes returns the cell's body, a view with the lifetime of the response it
+// was read from. It panics if the reader holds an invalid type or state,
+// which the driver never passes to a decoder.
 func (r ValueReader) Bytes() Bytes {
 	// Invariant: err is set only for an invalid type or cell state, and the
 	// driver builds readers only from validated column types and the
@@ -270,6 +311,8 @@ func (r ValueReader) Bytes() Bytes {
 	}
 	return bytesView(r.body, r.lease)
 }
+
+// Cursor returns a new cursor at the start of the cell's body.
 func (r ValueReader) Cursor() *ValueCursor {
 	c := r.cursorValue()
 	return &c
@@ -294,6 +337,8 @@ type ValueCursor struct {
 	initialized bool
 }
 
+// Remaining returns the number of unread bytes, or 0 for a nil or zero
+// cursor.
 func (c *ValueCursor) Remaining() int64 {
 	if c == nil || !c.initialized {
 		return 0
@@ -317,6 +362,8 @@ func (c *ValueCursor) failure(err error) error {
 	}
 	return c.err
 }
+
+// Uint8 reads one byte.
 func (c *ValueCursor) Uint8() (uint8, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -324,6 +371,8 @@ func (c *ValueCursor) Uint8() (uint8, error) {
 	v, err := c.cursor.Uint8()
 	return v, c.failure(err)
 }
+
+// Uint16 reads a big-endian uint16.
 func (c *ValueCursor) Uint16() (uint16, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -331,6 +380,8 @@ func (c *ValueCursor) Uint16() (uint16, error) {
 	v, err := c.cursor.Uint16()
 	return v, c.failure(err)
 }
+
+// Uint32 reads a big-endian uint32.
 func (c *ValueCursor) Uint32() (uint32, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -338,6 +389,8 @@ func (c *ValueCursor) Uint32() (uint32, error) {
 	v, err := c.cursor.Uint32()
 	return v, c.failure(err)
 }
+
+// Uint64 reads a big-endian uint64.
 func (c *ValueCursor) Uint64() (uint64, error) {
 	if err := c.check(); err != nil {
 		return 0, err
@@ -345,6 +398,9 @@ func (c *ValueCursor) Uint64() (uint64, error) {
 	v, err := c.cursor.Uint64()
 	return v, c.failure(err)
 }
+
+// Take returns the next n bytes as a view with the lifetime of the cell, and
+// advances past them.
 func (c *ValueCursor) Take(n int64) (Bytes, error) {
 	if err := c.check(); err != nil {
 		return Bytes{}, err
@@ -355,6 +411,8 @@ func (c *ValueCursor) Take(n int64) (Bytes, error) {
 	}
 	return bytesView(body, c.lease), nil
 }
+
+// Child reads a nested length-framed cell of type typ and advances past it.
 func (c *ValueCursor) Child(typ DataType) (ValueReader, error) {
 	if err := c.check(); err != nil {
 		return ValueReader{}, err
@@ -365,6 +423,8 @@ func (c *ValueCursor) Child(typ DataType) (ValueReader, error) {
 	}
 	return r, nil
 }
+
+// RequireEnd returns a ProtocolError if unread bytes remain.
 func (c *ValueCursor) RequireEnd() error {
 	if err := c.check(); err != nil {
 		return err

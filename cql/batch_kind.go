@@ -10,10 +10,16 @@ import "fmt"
 // values, so a switch over them needs a default case.
 type BatchKind byte
 
+// Batch kinds, with their native protocol values.
 const (
-	LoggedBatch   BatchKind = 0
+	// LoggedBatch is applied atomically through the batch log.
+	LoggedBatch BatchKind = 0
+
+	// UnloggedBatch skips the batch log, so it is not atomic across partitions.
 	UnloggedBatch BatchKind = 1
-	CounterBatch  BatchKind = 2
+
+	// CounterBatch holds only counter updates.
+	CounterBatch BatchKind = 2
 )
 
 // String returns the batch kind name, or BatchKind(n) for a value it does

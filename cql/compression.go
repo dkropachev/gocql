@@ -10,9 +10,15 @@ import "fmt"
 // them needs a default case.
 type Compression uint8
 
+// Frame compression algorithms.
 const (
+	// NoCompression sends frames uncompressed.
 	NoCompression Compression = iota
+
+	// LZ4Compression compresses frames with LZ4.
 	LZ4Compression
+
+	// SnappyCompression compresses frames with Snappy.
 	SnappyCompression
 )
 

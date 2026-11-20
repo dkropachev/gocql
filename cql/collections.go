@@ -15,7 +15,9 @@ import (
 // preserves the order and duplicates of its encoded representation. Its zero
 // value holds the zero K and V.
 type Entry[K, V any] struct {
-	Key   K
+	// Key is the entry's key.
+	Key K
+	// Value is the entry's value.
 	Value V
 }
 
@@ -40,6 +42,8 @@ func newValueIterator[T any](count int, next func(int) (T, error), clone func(T)
 	return &ValueIterator[T]{count: count, next: next, clone: clone}
 }
 
+// Next advances to the next member and reports whether there is one. It
+// returns false at the end, after a failure, and for a nil iterator.
 func (i *ValueIterator[T]) Next() bool {
 	if i == nil || i.done {
 		return false
@@ -73,6 +77,9 @@ func (i *ValueIterator[T]) Next() bool {
 	i.value = value
 	return true
 }
+
+// Value returns the member Next advanced to, or the zero T before the first
+// call and after the end. The member may borrow the collection's storage.
 func (i *ValueIterator[T]) Value() T {
 	if i == nil {
 		var zero T
@@ -80,6 +87,9 @@ func (i *ValueIterator[T]) Value() T {
 	}
 	return i.value
 }
+
+// Err returns the failure that stopped iteration, or nil. It returns a
+// ValidationError for a nil iterator.
 func (i *ValueIterator[T]) Err() error {
 	if i == nil {
 		return typeValidation("iterator", "nil iterator")

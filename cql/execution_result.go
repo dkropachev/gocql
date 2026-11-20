@@ -15,11 +15,18 @@ import (
 //
 // The zero Result is empty: no warnings, CQL traces or custom payload.
 type Result struct {
-	diag                *resultDiagnostics
-	HostID              UUID
-	Attempts            int
-	Latency             time.Duration
-	Rows                int64
+	diag *resultDiagnostics
+	// HostID is the host ID of the coordinator of the last completed attempt.
+	HostID UUID
+	// Attempts is the number of attempts started, speculative ones included.
+	Attempts int
+	// Latency is the sum of the latencies of the completed attempts.
+	Latency time.Duration
+	// Rows is the number of rows the response held, or that a stream
+	// delivered.
+	Rows int64
+	// AchievedConsistency is the consistency level of the last completed
+	// attempt, which a retry policy may have lowered.
 	AchievedConsistency Consistency
 }
 

@@ -7,10 +7,6 @@ import (
 	"errors"
 )
 
-// Varint is a signed, arbitrary precision integer. Its encoded bytes can borrow
-// segmented page storage; use VarintCodec.Clone to detach them. The zero value
-// represents zero.
-
 func canonicalVarint(b Bytes) (Varint, error) { return varintFromCanonical(b) }
 func cloneVarint(v Varint) Varint             { return varintView(varintBytes(v).Clone()) }
 func encodeVarint(w *ValueWriter, v Varint) error {
@@ -24,7 +20,12 @@ func encodeVarint(w *ValueWriter, v Varint) error {
 }
 func decodeVarint(r ValueReader) (Varint, error) { return canonicalVarint(r.Bytes()) }
 
+// VarintCodec maps varint to Varint. A decoded Varint borrows the response;
+// use VarintCodec.Clone to detach it.
 var VarintCodec Codec[Varint] = scalarCodec[Varint]{kind: TypeVarint, encode: encodeVarint, decode: decodeVarint, clone: cloneVarint}
+
+// DecimalCodec maps decimal to Decimal. A decoded Decimal borrows the
+// response; use DecimalCodec.Clone to detach it.
 var DecimalCodec Codec[Decimal] = scalarCodec[Decimal]{kind: TypeDecimal,
 	encode: func(w *ValueWriter, v Decimal) error {
 		if err := w.Uint32(uint32(v.Scale)); err != nil {

@@ -50,10 +50,13 @@ func (a Action) String() string {
 //
 // Its zero value describes no failure.
 type Attempt struct {
+	// Err is the attempt's error.
 	Err error
 	// Number is the 1-based number of the failed attempt.
-	Number      int
-	Idempotent  bool
+	Number int
+	// Idempotent reports that the request was marked idempotent.
+	Idempotent bool
+	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
 	// Conditional reports a lightweight transaction.
 	Conditional bool
@@ -63,6 +66,7 @@ type Attempt struct {
 
 // Decision is a policy's answer. The zero value stops retrying.
 type Decision struct {
+	// Action is what the driver does next.
 	Action Action
 	// Consistency, when set, replaces the consistency of the next attempt.
 	Consistency cql.Option[cql.Consistency]
@@ -73,6 +77,7 @@ type Decision struct {
 // Policy decides retries. The driver calls it on the request goroutine, so
 // it must not block.
 type Policy interface {
+	// Decide returns what to do after the failed attempt.
 	Decide(Attempt) Decision
 }
 

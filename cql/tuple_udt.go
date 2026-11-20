@@ -13,9 +13,13 @@ import (
 // metadata, not null or absent serialized field values. The zero UDTOptions
 // names no UDT, which those codecs reject with a ValidationError.
 type UDTOptions struct {
-	Keyspace, Name           string
+	// Keyspace and Name name the UDT.
+	Keyspace, Name string
+	// AllowExtraDatabaseFields accepts UDT fields that no application field
+	// maps.
 	AllowExtraDatabaseFields bool
-	AllowMissingFields       bool
+	// AllowMissingFields accepts application fields the UDT does not have.
+	AllowMissingFields bool
 }
 
 // UDTOptionsFor returns options naming typ's UDT, with every relaxation off.

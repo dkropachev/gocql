@@ -13,12 +13,19 @@ import (
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type PartialRefreshError struct {
-	Topology     error
+	// Topology is the topology refresh's error, or nil.
+	Topology error
+	// ClientRoutes is the client routes refresh's error, or nil.
 	ClientRoutes error
-	Keyspaces    map[string]error
-	Generation   uint64
+	// Keyspaces holds the error of each keyspace whose schema was kept, by
+	// name.
+	Keyspaces map[string]error
+	// Generation is the metadata generation the refresh left in place.
+	Generation uint64
 }
 
+// Error names the metadata generation and the error of each keyspace, the
+// topology and the client routes that failed to refresh.
 func (e *PartialRefreshError) Error() string {
 	names := make([]string, 0, len(e.Keyspaces))
 	for name := range e.Keyspaces {
@@ -38,6 +45,8 @@ func (e *PartialRefreshError) Error() string {
 	return fmt.Sprintf("gocql: metadata generation %d retained stale data (%s)", e.Generation, strings.Join(details, "; "))
 }
 
+// Unwrap returns the keyspace errors in keyspace name order, followed by
+// Topology and ClientRoutes when they are set.
 func (e *PartialRefreshError) Unwrap() []error {
 	names := make([]string, 0, len(e.Keyspaces))
 	for name := range e.Keyspaces {
@@ -61,12 +70,16 @@ func (e *PartialRefreshError) Unwrap() []error {
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type NoHostsError struct {
+	// Operation names what needed a host, such as "schema agreement".
 	Operation string
-	Causes    []error
+	// Causes holds the errors that left no host eligible.
+	Causes []error
 }
 
+// Error names the operation that had no eligible host.
 func (e *NoHostsError) Error() string { return "gocql: no eligible hosts for " + e.Operation }
 
+// Unwrap returns a copy of Causes.
 func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes...) }
 
 // Kind returns KindConnection: no host could serve the operation. A cause

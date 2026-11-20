@@ -45,19 +45,26 @@ import (
 // overrides with gocql.Session.CompileOptions for concurrent one-shot calls.
 // Use context deadlines for request time limits without rebuilding options.
 type Options struct {
-	Retry    retry.Policy
+	// Retry replaces the profile's retry policy; nil keeps it. Use
+	// retry.Never{} to disable retries.
+	Retry retry.Policy
+	// Observer replaces the session's observer for the execution; nil keeps
+	// it.
 	Observer observe.Observer
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal
 	// is rejected.
-	Profile  *config.Profile
+	Profile *config.Profile
+	// Keyspace replaces the session's keyspace for the execution; empty keeps
+	// it.
 	Keyspace string
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.
 	CustomPayload []cql.PayloadEntry
 	// Timeout and PageTimeout add a limit to the profile's: the earlier one
 	// applies, so a longer or zero value leaves the profile's limit in force.
 	Timeout, PageTimeout cql.Option[time.Duration]
-	Prefetch             cql.Option[int]
+	// Prefetch replaces the profile's prefetch, zero or one, when set.
+	Prefetch cql.Option[int]
 	// Timestamp is the write timestamp in microseconds since the Unix epoch,
 	// the unit CQL's USING TIMESTAMP takes. Note that cql.Timestamp values
 	// are milliseconds: multiply one by 1000 to use it here.
@@ -74,14 +81,21 @@ type Options struct {
 	// HostID names; it requires HostID. Only ScyllaDB has shards: on a
 	// session of another dialect, Session.CompileOptions and every execution
 	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
-	ShardID     cql.Option[uint32]
+	ShardID cql.Option[uint32]
+	// Consistency replaces the profile's consistency level when set.
 	Consistency cql.Option[cql.Consistency]
-	HostID      cql.Option[cql.UUID]
+	// HostID sends the request to the host with this host ID when set.
+	HostID cql.Option[cql.UUID]
 	// SerialConsistency overrides the profile's serial consistency of
 	// conditional statements. The zero value, SerialInherit, keeps it.
 	SerialConsistency SerialOverride
-	IncludeMetadata   bool
-	Idempotent        bool
+	// IncludeMetadata asks the server for full result metadata even when the
+	// driver has validated metadata cached.
+	IncludeMetadata bool
+	// Idempotent marks the request as safe to run more than once.
+	// Speculative execution requires it, and retry.Safe retries a request
+	// that may have executed only when it is set.
+	Idempotent bool
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
@@ -144,8 +158,11 @@ func (o CompiledOptions) Values() Options {
 // The zero value uses the session's keyspace and any eligible host.
 // Use CompiledOptions for execution settings.
 type PrepareOptions struct {
+	// Keyspace is the keyspace to prepare in; empty uses the session's.
 	Keyspace string
-	HostID   cql.Option[cql.UUID]
+	// HostID prepares on the host with this host ID when set, and on any
+	// eligible host otherwise.
+	HostID cql.Option[cql.UUID]
 	// CQLTrace records a server-side CQL trace session of the PREPARE. The
 	// driver does not report its session ID.
 	CQLTrace bool
@@ -167,8 +184,12 @@ type PrepareOptions struct {
 // never in the background, so a slow consumer keeps its reserved connection
 // and lets the transport's flow control hold back the server.
 type StreamOptions struct {
-	Options     Options
-	Limits      StreamLimits
+	// Options holds the execution overrides.
+	Options Options
+	// Limits bounds an incremental stream's receive scratch.
+	Limits StreamLimits
+	// Incremental decodes the response as it arrives on a reserved
+	// connection, instead of buffering one page.
 	Incremental bool
 }
 

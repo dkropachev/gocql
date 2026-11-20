@@ -9,10 +9,9 @@ import (
 	"math/bits"
 )
 
-// Date counts calendar days relative to 1970-01-01.
-
 const nanosecondsPerDay int64 = 24 * 60 * 60 * 1_000_000_000
 
+// DateCodec maps date to Date.
 var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
 	encode: func(w *ValueWriter, v Date) error { return w.Uint32(uint32(v) ^ 0x80000000) },
 	decode: func(r ValueReader) (Date, error) {
@@ -27,6 +26,8 @@ var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
 		return Date(int32(v ^ 0x80000000)), e
 	},
 }
+
+// TimeCodec maps time to TimeOfDay, rejecting a value outside one day.
 var TimeCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 	encode: func(w *ValueWriter, v TimeOfDay) error {
 		if int64(v) < 0 || int64(v) >= nanosecondsPerDay {
@@ -51,7 +52,11 @@ var TimeCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 		return TimeOfDay(v), nil
 	},
 }
+
+// TimestampCodec maps timestamp to Timestamp.
 var TimestampCodec Codec[Timestamp] = integerCodec[Timestamp](TypeTimestamp, 8)
+
+// DurationCodec maps duration to Duration.
 var DurationCodec Codec[Duration] = scalarCodec[Duration]{kind: TypeDuration, encode: encodeDuration, decode: decodeDuration}
 
 func durationSignsValid(v Duration) bool {

@@ -12,6 +12,7 @@ import (
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type HostError struct {
+	// Err is the reason the connection failed.
 	Err error
 	// Address is the host:port that was dialed.
 	Address string
@@ -28,6 +29,8 @@ type ConnectError struct {
 	Hosts []HostError
 }
 
+// Error names the failed stage and each host's error, listing at most the
+// last three hosts tried.
 func (e *ConnectError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no host reachable during %s", e.Stage)

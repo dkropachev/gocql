@@ -228,8 +228,11 @@ func (r *StreamValueReader) failIf(err error) error {
 // The driver fills it; its zero value is a present cell with no bytes and the
 // invalid zero DataType.
 type StreamCell struct {
-	Type  DataType
+	// Type is the cell's type.
+	Type DataType
+	// Bytes holds the cell's body, written into caller storage.
 	Bytes []byte
+	// State is the cell's state.
 	State CellState
 }
 type streamEncodedCodec struct{}

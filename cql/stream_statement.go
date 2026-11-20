@@ -14,7 +14,8 @@ type StreamStatement[P, R any] struct {
 	Params ParamEncoder[P]
 	// Rows decodes into seeded caller storage and must not be nil.
 	Rows StreamRowDecoder[R]
-	CQL  string
+	// CQL is the statement's text.
+	CQL string
 	// Kind classifies ordinary and conditional statements for safe execution.
 	Kind StatementKind
 }

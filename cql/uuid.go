@@ -34,16 +34,26 @@ import (
 	"time"
 )
 
+// UUID is a 128-bit universally unique identifier, as described in RFC 4122,
+// holding the bytes in network order. The zero UUID is the nil UUID.
 type UUID [16]byte
 
 var hardwareAddr []byte
 var clockSeq uint32
 
+// UUID variants, as Variant reports them.
 const (
+	// VariantNCSCompat is the reserved NCS backward-compatibility variant.
 	VariantNCSCompat = 0
-	VariantIETF      = 2
+
+	// VariantIETF is the RFC 4122 variant.
+	VariantIETF = 2
+
+	// VariantMicrosoft is the reserved Microsoft backward-compatibility variant.
 	VariantMicrosoft = 6
-	VariantFuture    = 7
+
+	// VariantFuture is reserved for future definition.
+	VariantFuture = 7
 )
 
 func init() {
@@ -252,6 +262,7 @@ func (u UUID) Bytes() []byte {
 
 var emptyUUID = UUID{}
 
+// IsEmpty reports whether u is the zero UUID.
 func (u UUID) IsEmpty() bool {
 	return u == emptyUUID
 }
@@ -341,10 +352,14 @@ func (u *UUID) UnmarshalJSON(data []byte) error {
 	return err
 }
 
+// MarshalText implements encoding.TextMarshaler with the canonical string
+// form. Its error is always nil.
 func (u UUID) MarshalText() ([]byte, error) {
 	return []byte(u.String()), nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler with ParseUUID. On error
+// it sets u to the zero UUID.
 func (u *UUID) UnmarshalText(text []byte) (err error) {
 	*u, err = ParseUUID(string(text))
 	return

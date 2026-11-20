@@ -177,7 +177,8 @@ func (e *serverError) Message() string { return e.message }
 // Warnings returns the warnings the server sent with the error.
 func (e *serverError) Warnings() []string { return e.warnings }
 
-// text renders a server error: the code's name and the server's message.
+// text renders a server error: the code's name, and the server's message
+// when it is not empty.
 func (e *serverError) text(code ErrorCode) string {
 	if e.message == "" {
 		return code.Error()
@@ -191,16 +192,26 @@ func (e *serverError) text(code ErrorCode) string {
 // The driver returns it filled in; its zero value is an error without detail.
 type UnavailableError struct {
 	serverError
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
-	Required    int
-	Alive       int
+	// Required is the number of replicas the consistency level needs alive.
+	Required int
+	// Alive is the number of replicas the coordinator knew to be alive.
+	Alive int
 }
 
 // Code returns CodeUnavailable.
-func (e *UnavailableError) Code() ErrorCode      { return CodeUnavailable }
-func (e *UnavailableError) Error() string        { return e.text(CodeUnavailable) }
+func (e *UnavailableError) Code() ErrorCode { return CodeUnavailable }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *UnavailableError) Error() string { return e.text(CodeUnavailable) }
+
+// Is reports whether target is CodeUnavailable.
 func (e *UnavailableError) Is(target error) bool { return target == CodeUnavailable }
-func (e *UnavailableError) Kind() Kind           { return KindUnavailable }
+
+// Kind returns KindUnavailable.
+func (e *UnavailableError) Kind() Kind { return KindUnavailable }
 
 // ErrorMap maps the address of each replica that failed to its failure
 // reason code.
@@ -211,38 +222,65 @@ type ErrorMap map[string]uint16
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type WriteTimeoutError struct {
+	// WriteType is the kind of write, as the server names it, such as
+	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
 	WriteType string
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteTimeout.
-func (e *WriteTimeoutError) Code() ErrorCode      { return CodeWriteTimeout }
-func (e *WriteTimeoutError) Error() string        { return e.text(CodeWriteTimeout) }
+func (e *WriteTimeoutError) Code() ErrorCode { return CodeWriteTimeout }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *WriteTimeoutError) Error() string { return e.text(CodeWriteTimeout) }
+
+// Is reports whether target is CodeWriteTimeout.
 func (e *WriteTimeoutError) Is(target error) bool { return target == CodeWriteTimeout }
-func (e *WriteTimeoutError) Kind() Kind           { return KindTimeout }
+
+// Kind returns KindTimeout.
+func (e *WriteTimeoutError) Kind() Kind { return KindTimeout }
 
 // WriteFailureError reports that replicas failed a write.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type WriteFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
-	ErrorMap  ErrorMap
+	ErrorMap ErrorMap
+	// WriteType is the kind of write, as the server names it, such as
+	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
 	WriteType string
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
+	// NumFailures is the number of replicas that failed.
 	NumFailures int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteFailure.
-func (e *WriteFailureError) Code() ErrorCode      { return CodeWriteFailure }
-func (e *WriteFailureError) Error() string        { return e.text(CodeWriteFailure) }
+func (e *WriteFailureError) Code() ErrorCode { return CodeWriteFailure }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *WriteFailureError) Error() string { return e.text(CodeWriteFailure) }
+
+// Is reports whether target is CodeWriteFailure.
 func (e *WriteFailureError) Is(target error) bool { return target == CodeWriteFailure }
-func (e *WriteFailureError) Kind() Kind           { return KindServer }
+
+// Kind returns KindServer.
+func (e *WriteFailureError) Kind() Kind { return KindServer }
 
 // CDCWriteFailureError reports that a write to a CDC-enabled table failed.
 //
@@ -252,44 +290,70 @@ type CDCWriteFailureError struct {
 }
 
 // Code returns CodeCDCWriteFailure.
-func (e *CDCWriteFailureError) Code() ErrorCode      { return CodeCDCWriteFailure }
-func (e *CDCWriteFailureError) Error() string        { return e.text(CodeCDCWriteFailure) }
+func (e *CDCWriteFailureError) Code() ErrorCode { return CodeCDCWriteFailure }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *CDCWriteFailureError) Error() string { return e.text(CodeCDCWriteFailure) }
+
+// Is reports whether target is CodeCDCWriteFailure.
 func (e *CDCWriteFailureError) Is(target error) bool { return target == CodeCDCWriteFailure }
-func (e *CDCWriteFailureError) Kind() Kind           { return KindServer }
+
+// Kind returns KindServer.
+func (e *CDCWriteFailureError) Kind() Kind { return KindServer }
 
 // ReadTimeoutError reports that replicas did not answer a read in time.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ReadTimeoutError struct {
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that answered.
+	Received int
+	// BlockFor is the number of answers the consistency level needs.
+	BlockFor int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 	// DataPresent reports whether the replica asked for data answered.
 	DataPresent bool
 }
 
 // Code returns CodeReadTimeout.
-func (e *ReadTimeoutError) Code() ErrorCode      { return CodeReadTimeout }
-func (e *ReadTimeoutError) Error() string        { return e.text(CodeReadTimeout) }
+func (e *ReadTimeoutError) Code() ErrorCode { return CodeReadTimeout }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *ReadTimeoutError) Error() string { return e.text(CodeReadTimeout) }
+
+// Is reports whether target is CodeReadTimeout.
 func (e *ReadTimeoutError) Is(target error) bool { return target == CodeReadTimeout }
-func (e *ReadTimeoutError) Kind() Kind           { return KindTimeout }
+
+// Kind returns KindTimeout.
+func (e *ReadTimeoutError) Kind() Kind { return KindTimeout }
 
 // AlreadyExistsError reports that a keyspace or table to create already
 // exists. Table is empty for a keyspace.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type AlreadyExistsError struct {
+	// Keyspace is the keyspace that exists, or that holds the table.
 	Keyspace string
-	Table    string
+	// Table is the table that exists, or empty for a keyspace.
+	Table string
 	serverError
 }
 
 // Code returns CodeAlreadyExists.
-func (e *AlreadyExistsError) Code() ErrorCode      { return CodeAlreadyExists }
-func (e *AlreadyExistsError) Error() string        { return e.text(CodeAlreadyExists) }
+func (e *AlreadyExistsError) Code() ErrorCode { return CodeAlreadyExists }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *AlreadyExistsError) Error() string { return e.text(CodeAlreadyExists) }
+
+// Is reports whether target is CodeAlreadyExists.
 func (e *AlreadyExistsError) Is(target error) bool { return target == CodeAlreadyExists }
-func (e *AlreadyExistsError) Kind() Kind           { return KindInvalid }
+
+// Kind returns KindInvalid.
+func (e *AlreadyExistsError) Kind() Kind { return KindInvalid }
 
 // UnpreparedError reports that the server does not know a prepared
 // statement. The driver prepares it again and retries on its own.
@@ -297,14 +361,22 @@ func (e *AlreadyExistsError) Kind() Kind           { return KindInvalid }
 // The driver returns it filled in; its zero value is an error without detail.
 type UnpreparedError struct {
 	serverError
+	// StatementID is the prepared statement ID the server does not know.
 	StatementID []byte
 }
 
 // Code returns CodeUnprepared.
-func (e *UnpreparedError) Code() ErrorCode      { return CodeUnprepared }
-func (e *UnpreparedError) Error() string        { return e.text(CodeUnprepared) }
+func (e *UnpreparedError) Code() ErrorCode { return CodeUnprepared }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *UnpreparedError) Error() string { return e.text(CodeUnprepared) }
+
+// Is reports whether target is CodeUnprepared.
 func (e *UnpreparedError) Is(target error) bool { return target == CodeUnprepared }
-func (e *UnpreparedError) Kind() Kind           { return KindInvalid }
+
+// Kind returns KindInvalid.
+func (e *UnpreparedError) Kind() Kind { return KindInvalid }
 
 // ReadFailureError reports that replicas failed a read.
 //
@@ -313,34 +385,56 @@ type ReadFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
 	ErrorMap ErrorMap
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that answered.
+	Received int
+	// BlockFor is the number of answers the consistency level needs.
+	BlockFor int
+	// NumFailures is the number of replicas that failed.
 	NumFailures int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
+	// DataPresent reports whether the replica asked for data answered.
 	DataPresent bool
 }
 
 // Code returns CodeReadFailure.
-func (e *ReadFailureError) Code() ErrorCode      { return CodeReadFailure }
-func (e *ReadFailureError) Error() string        { return e.text(CodeReadFailure) }
+func (e *ReadFailureError) Code() ErrorCode { return CodeReadFailure }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *ReadFailureError) Error() string { return e.text(CodeReadFailure) }
+
+// Is reports whether target is CodeReadFailure.
 func (e *ReadFailureError) Is(target error) bool { return target == CodeReadFailure }
-func (e *ReadFailureError) Kind() Kind           { return KindServer }
+
+// Kind returns KindServer.
+func (e *ReadFailureError) Kind() Kind { return KindServer }
 
 // FunctionFailureError reports that a user-defined function failed.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type FunctionFailureError struct {
 	serverError
+	// Keyspace is the function's keyspace.
 	Keyspace string
+	// Function is the function's name.
 	Function string
+	// ArgTypes lists the CQL types of the function's arguments.
 	ArgTypes []string
 }
 
 // Code returns CodeFunctionFailure.
-func (e *FunctionFailureError) Code() ErrorCode      { return CodeFunctionFailure }
-func (e *FunctionFailureError) Error() string        { return e.text(CodeFunctionFailure) }
+func (e *FunctionFailureError) Code() ErrorCode { return CodeFunctionFailure }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *FunctionFailureError) Error() string { return e.text(CodeFunctionFailure) }
+
+// Is reports whether target is CodeFunctionFailure.
 func (e *FunctionFailureError) Is(target error) bool { return target == CodeFunctionFailure }
-func (e *FunctionFailureError) Kind() Kind           { return KindInvalid }
+
+// Kind returns KindInvalid.
+func (e *FunctionFailureError) Kind() Kind { return KindInvalid }
 
 // CASWriteUnknownError reports that a conditional write timed out with an
 // unknown outcome. Cassandra sends it on protocol 5; see IsCASWriteUnknown
@@ -349,24 +443,38 @@ func (e *FunctionFailureError) Kind() Kind           { return KindInvalid }
 // The driver returns it filled in; its zero value is an error without detail.
 type CASWriteUnknownError struct {
 	serverError
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
 }
 
 // Code returns CodeCASWriteUnknown.
-func (e *CASWriteUnknownError) Code() ErrorCode      { return CodeCASWriteUnknown }
-func (e *CASWriteUnknownError) Error() string        { return e.text(CodeCASWriteUnknown) }
+func (e *CASWriteUnknownError) Code() ErrorCode { return CodeCASWriteUnknown }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *CASWriteUnknownError) Error() string { return e.text(CodeCASWriteUnknown) }
+
+// Is reports whether target is CodeCASWriteUnknown.
 func (e *CASWriteUnknownError) Is(target error) bool { return target == CodeCASWriteUnknown }
-func (e *CASWriteUnknownError) Kind() Kind           { return KindTimeout }
+
+// Kind returns KindTimeout.
+func (e *CASWriteUnknownError) Kind() Kind { return KindTimeout }
 
 // OpType is the kind of operation a rate limit rejected. Its values are
 // ScyllaDB's, so the zero OpType is OpTypeRead. Later releases may add values,
 // so a switch over them needs a default case.
 type OpType uint8
 
+// Operation types of a RateLimitReachedError.
 const (
-	OpTypeRead  OpType = 0
+	// OpTypeRead is a rejected read.
+	OpTypeRead OpType = 0
+	// OpTypeWrite is a rejected write.
 	OpTypeWrite OpType = 1
 )
 
@@ -389,6 +497,7 @@ func (o OpType) String() string {
 // The driver returns it filled in; its zero value is an error without detail.
 type RateLimitReachedError struct {
 	serverError
+	// OpType is the kind of operation the limit rejected.
 	OpType OpType
 	// RejectedByCoordinator reports that the coordinator rejected the
 	// request before sending it to any replica, so nothing was applied.
@@ -396,10 +505,17 @@ type RateLimitReachedError struct {
 }
 
 // Code returns CodeRateLimitReached.
-func (e *RateLimitReachedError) Code() ErrorCode      { return CodeRateLimitReached }
-func (e *RateLimitReachedError) Error() string        { return e.text(CodeRateLimitReached) }
+func (e *RateLimitReachedError) Code() ErrorCode { return CodeRateLimitReached }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *RateLimitReachedError) Error() string { return e.text(CodeRateLimitReached) }
+
+// Is reports whether target is CodeRateLimitReached.
 func (e *RateLimitReachedError) Is(target error) bool { return target == CodeRateLimitReached }
-func (e *RateLimitReachedError) Kind() Kind           { return KindRateLimited }
+
+// Kind returns KindRateLimited.
+func (e *RateLimitReachedError) Kind() Kind { return KindRateLimited }
 
 // OtherServerError is a server error whose code carries no fields of its
 // own: Server, Protocol, BadCredentials, Overloaded, Bootstrapping, Truncate,
@@ -420,10 +536,17 @@ func NewOtherServerError(code ErrorCode, message string) *OtherServerError {
 }
 
 // Code returns the error's code.
-func (e *OtherServerError) Code() ErrorCode      { return e.code }
-func (e *OtherServerError) Error() string        { return e.text(e.code) }
+func (e *OtherServerError) Code() ErrorCode { return e.code }
+
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
+func (e *OtherServerError) Error() string { return e.text(e.code) }
+
+// Is reports whether target is the error's code.
 func (e *OtherServerError) Is(target error) bool { return target == e.code }
-func (e *OtherServerError) Kind() Kind           { return codeKind(e.code) }
+
+// Kind returns the Kind that KindOf assigns to the error's code.
+func (e *OtherServerError) Kind() Kind { return codeKind(e.code) }
 
 // CodeKind classifies a code the way KindOf classifies the server errors that
 // carry it.

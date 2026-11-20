@@ -14,7 +14,11 @@ package cql
 //
 // The zero StructFields reflects T in both directions.
 type StructFields[P any] struct {
-	Params  []InputField[P]
+	// Params maps the struct's fields to bind markers, or is nil to reflect
+	// them.
+	Params []InputField[P]
+	// Columns maps result columns to the struct's fields, or is nil to
+	// reflect them.
 	Columns []OutputField[P]
 }
 

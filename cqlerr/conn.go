@@ -30,10 +30,17 @@ import (
 	"time"
 )
 
+// Connection errors.
 var (
+	// ErrTimeoutNoResponse reports that a request got no response within
+	// its timeout.
 	ErrTimeoutNoResponse = errors.New("gocql: no response received from cassandra within timeout period")
-	ErrConnectionClosed  = errors.New("gocql: connection closed waiting for response")
-	ErrNoStreams         = errors.New("gocql: no streams available on connection")
+	// ErrConnectionClosed reports that the connection closed before the
+	// request was sent or its response arrived.
+	ErrConnectionClosed = errors.New("gocql: connection closed waiting for response")
+	// ErrNoStreams reports that the connection had no free stream ID for
+	// the request, so it was not sent.
+	ErrNoStreams = errors.New("gocql: no streams available on connection")
 )
 
 // QueryError is the failure of a single attempt on one connection.
@@ -55,6 +62,8 @@ func (e *QueryError) ExecutionStatus() ExecutionStatus {
 	return MaybeExecuted
 }
 
+// Error returns the attempt's error, with its timeout and in-flight count
+// when it timed out and its execution status when it may have executed.
 func (e *QueryError) Error() string {
 	d := &e.state
 	msg := "unknown failure" // a zero QueryError
@@ -75,6 +84,7 @@ func executionSuffix(x ExecutionStatus) string {
 	return " (" + x.String() + ")"
 }
 
+// Unwrap returns the attempt's error, or nil for a zero QueryError.
 func (e *QueryError) Unwrap() error {
 	return e.state.InternalErr
 }

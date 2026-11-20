@@ -25,16 +25,26 @@ import (
 //
 // The zero Profile is such a literal, and is rejected the same way.
 type Profile struct {
-	Retry                retry.Policy
-	Routing              routing.Policy
-	Speculation          retry.SpeculationPolicy
+	// Retry is the retry policy; nil disables retries.
+	Retry retry.Policy
+	// Routing is the routing policy; nil uses the pool's host selection
+	// without a request-specific plan.
+	Routing routing.Policy
+	// Speculation is the speculative execution policy; nil disables it.
+	Speculation retry.SpeculationPolicy
+	// Timeout bounds one execution, retries included, and PageTimeout the
+	// fetch of one page. Zero means no limit.
 	Timeout, PageTimeout time.Duration
-	Prefetch             int
+	// Prefetch is how many continuation pages Rows prefetch: zero or one.
+	Prefetch int
 	// PageSize is the rows per page; cql.Unpaged requests the whole result
 	// in one response.
-	PageSize          int32
+	PageSize int32
+	// SerialConsistency is the serial consistency of conditional statements,
+	// SERIAL or LOCAL_SERIAL; unset sends none.
 	SerialConsistency cql.Option[cql.Consistency]
-	Consistency       cql.Consistency
+	// Consistency is the consistency level.
+	Consistency cql.Consistency
 	// built reports that ProfileBuilder.Build made the profile.
 	built bool
 }

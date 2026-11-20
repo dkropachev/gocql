@@ -12,10 +12,10 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-// ReconnectPolicy decides how long to wait before reconnecting to a node:
-// Delay returns the wait before the attempt-th reconnection, or false to give
-// up until the node is reported up again.
+// ReconnectPolicy decides how long to wait before reconnecting to a node.
 type ReconnectPolicy interface {
+	// Delay returns the wait before the attempt-th reconnection, or false to
+	// give up until the node is reported up again.
 	Delay(attempt int) (time.Duration, bool)
 }
 
@@ -73,7 +73,8 @@ type ConvictionEvent struct {
 	// one shard: a failed attempt to open it or, in Reset, the connection
 	// to it opened again. It is the shard the pool asked for; a dialer that
 	// cannot target shards connects wherever the server places it.
-	Shard  cql.Option[uint32]
+	Shard cql.Option[uint32]
+	// Source names what failed to connect.
 	Source ConvictionSource
 }
 

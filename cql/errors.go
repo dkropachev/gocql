@@ -8,18 +8,24 @@ import (
 	"fmt"
 )
 
+// ErrReleased reports use of a borrowed view, such as Bytes or Text, after the
+// response storage it borrows was released.
 var ErrReleased = errors.New("gocql: borrowed value has been released")
 
 // ValidationError describes an invalid API argument or type descriptor.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ValidationError struct {
-	Err   error
+	// Err says what is invalid.
+	Err error
+	// Field names the invalid argument or part of the descriptor.
 	Field string
 }
 
+// Error names the invalid field and the reason.
 func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s: %v", e.Field, e.Err) }
 
+// Unwrap returns Err.
 func (e *ValidationError) Unwrap() error { return e.Err }
 
 // CodecError records the physical column and nested path of a codec failure.
@@ -28,6 +34,7 @@ func (e *ValidationError) Unwrap() error { return e.Err }
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type CodecError struct {
+	// Err is the codec's failure.
 	Err error
 	// Column is the name of the failing column, or of the parameter's bind
 	// marker.
@@ -48,10 +55,13 @@ type CodecError struct {
 	Index int
 }
 
+// Error names the stage, the column's index and name, the member's path and
+// the failure.
 func (e *CodecError) Error() string {
 	return fmt.Sprintf("gocql: %s column %d (%s)%s: %v", e.Stage, e.Index, e.Column, e.Path, e.Err)
 }
 
+// Unwrap returns Err.
 func (e *CodecError) Unwrap() error { return e.Err }
 
 // ProtocolError reports that a peer violated the CQL protocol: a frame the
@@ -59,6 +69,7 @@ func (e *CodecError) Unwrap() error { return e.Err }
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ProtocolError struct {
+	// Err is the violation.
 	Err error
 	// Stage names where the violation was found. A violation of the frame
 	// itself, such as an unknown opcode or an unexpected response, has
@@ -69,6 +80,7 @@ type ProtocolError struct {
 	Offset int64
 }
 
+// Error names the stage, the byte offset when it is known, and the failure.
 func (e *ProtocolError) Error() string {
 	if e.Offset < 0 {
 		return fmt.Sprintf("gocql: %s: %v", e.Stage, e.Err)
@@ -76,6 +88,7 @@ func (e *ProtocolError) Error() string {
 	return fmt.Sprintf("gocql: %s at byte %d: %v", e.Stage, e.Offset, e.Err)
 }
 
+// Unwrap returns Err.
 func (e *ProtocolError) Unwrap() error { return e.Err }
 
 // columnError names column index of a codec failure at stage. An error that

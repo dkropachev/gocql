@@ -18,8 +18,10 @@ type Varint struct{ bytes Bytes }
 //
 // The zero Decimal is 0.
 type Decimal struct {
+	// Unscaled is the unscaled integer.
 	Unscaled Varint
-	Scale    int32
+	// Scale is the power of ten Unscaled is divided by.
+	Scale int32
 }
 
 // VarintFromBytes borrows a nonempty signed two's-complement big-endian representation.

@@ -8,6 +8,8 @@ package cql
 //
 // Its zero value has an empty name and no value.
 type PayloadEntry struct {
-	Key   string
+	// Key is the entry's name.
+	Key string
+	// Value is the entry's value, or null.
 	Value Nullable[Bytes]
 }

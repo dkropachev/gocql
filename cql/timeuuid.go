@@ -35,15 +35,36 @@ func MustParseTimeUUID(input string) TimeUUID {
 	return u
 }
 
-func (u TimeUUID) String() string   { return UUID(u).String() }
-func (u TimeUUID) Bytes() []byte    { return UUID(u).Bytes() }
-func (u TimeUUID) IsEmpty() bool    { return UUID(u).IsEmpty() }
-func (u TimeUUID) Variant() int     { return UUID(u).Variant() }
-func (u TimeUUID) Version() int     { return UUID(u).Version() }
-func (u TimeUUID) Node() []byte     { return UUID(u).Node() }
-func (u TimeUUID) Clock() uint32    { return UUID(u).Clock() }
+// String returns the UUID's canonical form; see UUID.String. It formats any
+// value, the zero one included.
+func (u TimeUUID) String() string { return UUID(u).String() }
+
+// Bytes returns a copy of the UUID's 16 bytes.
+func (u TimeUUID) Bytes() []byte { return UUID(u).Bytes() }
+
+// IsEmpty reports whether u is the zero UUID.
+func (u TimeUUID) IsEmpty() bool { return UUID(u).IsEmpty() }
+
+// Variant returns the UUID's variant; see UUID.Variant.
+func (u TimeUUID) Variant() int { return UUID(u).Variant() }
+
+// Version returns the UUID's version, 1 for a valid TimeUUID.
+func (u TimeUUID) Version() int { return UUID(u).Version() }
+
+// Node returns the node of a version 1 UUID, or nil; see UUID.Node.
+func (u TimeUUID) Node() []byte { return UUID(u).Node() }
+
+// Clock returns the clock sequence of a version 1 UUID, or zero; see
+// UUID.Clock.
+func (u TimeUUID) Clock() uint32 { return UUID(u).Clock() }
+
+// Timestamp returns the 100-nanosecond intervals since 15 October 1582 of a
+// version 1 UUID, or zero; see UUID.Timestamp.
 func (u TimeUUID) Timestamp() int64 { return UUID(u).Timestamp() }
-func (u TimeUUID) Time() time.Time  { return UUID(u).Time() }
+
+// Time returns the UUID's timestamp as a UTC time, or the zero time.Time if it
+// is not version 1.
+func (u TimeUUID) Time() time.Time { return UUID(u).Time() }
 
 // MarshalJSON uses the same canonical string representation as UUID, after
 // checking version 1. String supports zero for diagnostics; serialization and

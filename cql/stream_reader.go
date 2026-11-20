@@ -30,10 +30,14 @@ import (
 // StreamCapacityError reports required final storage without implicit growth.
 // The driver returns it filled in; its zero value is an error without detail.
 type StreamCapacityError struct {
-	Path                string
+	// Path names the column of the value.
+	Path string
+	// Required is the capacity the value needs, in bytes or elements, and
+	// Available the capacity the destination has.
 	Required, Available int64
 }
 
+// Error names the value's path and the required and available capacity.
 func (e *StreamCapacityError) Error() string {
 	return fmt.Sprintf("gocql: streaming capacity at %s: need %d, have %d", e.Path, e.Required, e.Available)
 }
@@ -42,40 +46,55 @@ func (e *StreamCapacityError) Error() string {
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type StreamCapabilityError struct {
-	Reason      string
-	Protocol    int
+	// Reason says what cannot be streamed.
+	Reason string
+	// Protocol is the connection's protocol version.
+	Protocol int
+	// Compression is the connection's compression.
 	Compression Compression
 }
 
+// Error names the protocol version, the compression and the reason.
 func (e *StreamCapabilityError) Error() string {
 	return fmt.Sprintf("gocql: streaming protocol %d/compression %v: %s", e.Protocol, e.Compression, e.Reason)
 }
 
 // StreamResetter resets a field absent from metadata while preserving buffer capacity.
-type StreamResetter[T any] interface{ Reset(*T) }
+type StreamResetter[T any] interface {
+	// Reset clears the field at the pointer, keeping its buffer capacity.
+	Reset(*T)
+}
 
 // StreamDecoder compiles a value decoder that writes into seeded caller storage.
 type StreamDecoder[T any] interface {
+	// Compile checks the decoder against the column type and returns the plan
+	// that decodes values of it.
 	Compile(DataType) (CompiledStreamValue[T], error)
 }
 
-// CompiledStreamValue decodes one value of a compiled column type into caller storage.
-// Reset clears the logical value while keeping buffer capacity, and
-// DecodeInto reads the value from a StreamValueReader into the destination.
+// CompiledStreamValue decodes one value of a compiled column type into caller
+// storage.
 type CompiledStreamValue[T any] interface {
+	// Reset clears the logical value at the pointer, keeping its buffer
+	// capacity.
 	Reset(*T)
+	// DecodeInto reads one value from the reader into the destination.
 	DecodeInto(*StreamValueReader, *T) error
 }
 
 // StreamRowDecoder compiles row mappings that decode into seeded caller storage.
 type StreamRowDecoder[R any] interface {
+	// Compile checks the decoder against the result columns and returns the
+	// plan that decodes rows of them.
 	Compile(Columns) (CompiledStreamRow[R], error)
 }
 
 // CompiledStreamRow decodes rows of compiled metadata into caller storage through a
 // StreamRowReader.
 type CompiledStreamRow[R any] interface {
+	// Reset clears the row at the pointer, keeping its buffer capacity.
 	Reset(*R)
+	// DecodeInto reads one row from the reader into the destination.
 	DecodeInto(*StreamRowReader, *R) error
 }
 
@@ -131,14 +150,23 @@ type StreamValueReader struct {
 	active       bool
 }
 
+// Context returns the context of the streaming read, or context.Background
+// for a nil or zero reader.
 func (r *StreamValueReader) Context() context.Context {
 	if r == nil || r.scope == nil {
 		return context.Background()
 	}
 	return r.scope.Context()
 }
-func (r *StreamValueReader) Type() DataType   { return r.typ }
+
+// Type returns the value's type.
+func (r *StreamValueReader) Type() DataType { return r.typ }
+
+// State returns the value's cell state.
 func (r *StreamValueReader) State() CellState { return r.state }
+
+// Remaining returns the number of unread bytes of the value, or 0 for a nil or
+// zero reader.
 func (r *StreamValueReader) Remaining() int64 {
 	if r == nil || r.scope == nil {
 		return 0
@@ -163,6 +191,10 @@ func (r *StreamValueReader) fail(err error) error {
 	}
 	return r.shared.fail(err)
 }
+
+// Read reads up to len(p) bytes of the value, implementing io.Reader. It
+// returns io.EOF at the end of the value, and an error once the reader is
+// used after the callback it was passed to returned. Errors are sticky.
 func (r *StreamValueReader) Read(p []byte) (int, error) {
 	if err := r.check(); err != nil {
 		return 0, err
@@ -224,10 +256,20 @@ func (r *StreamValueReader) uint(size int) (uint64, error) {
 		return binary.BigEndian.Uint64(b), nil
 	}
 }
-func (r *StreamValueReader) Uint8() (uint8, error)   { n, e := r.uint(1); return uint8(n), e }
+
+// Uint8 reads one byte.
+func (r *StreamValueReader) Uint8() (uint8, error) { n, e := r.uint(1); return uint8(n), e }
+
+// Uint16 reads a big-endian uint16.
 func (r *StreamValueReader) Uint16() (uint16, error) { n, e := r.uint(2); return uint16(n), e }
+
+// Uint32 reads a big-endian uint32.
 func (r *StreamValueReader) Uint32() (uint32, error) { n, e := r.uint(4); return uint32(n), e }
+
+// Uint64 reads a big-endian uint64.
 func (r *StreamValueReader) Uint64() (uint64, error) { return r.uint(8) }
+
+// RequireEnd returns an error if unread bytes of the value remain.
 func (r *StreamValueReader) RequireEnd() error {
 	if err := r.check(); err != nil {
 		return err
@@ -453,6 +495,9 @@ func newStreamRowReaderReusingValidation(columns Columns, scope *wire.Stream, pr
 	}
 	return newStreamRowReader(columns, scope)
 }
+
+// Context returns the context of the streaming read, or context.Background
+// for a nil or zero reader.
 func (r *StreamRowReader) Context() context.Context {
 	if r == nil || r.scope == nil {
 		return context.Background()
@@ -523,9 +568,14 @@ func (r *StreamRowReader) ReadColumn[T any](plan CompiledStreamValue[T], dst *T)
 	}
 	return r.column(func(value *StreamValueReader) error { return plan.DecodeInto(value, dst) })
 }
+
+// SkipColumn validates the next column and discards it.
 func (r *StreamRowReader) SkipColumn() error {
 	return r.column(func(value *StreamValueReader) error { return value.Skip() })
 }
+
+// RequireEnd returns an error unless every column of the row was read or
+// skipped.
 func (r *StreamRowReader) RequireEnd() error {
 	if err := r.check(); err != nil {
 		return err

@@ -131,32 +131,62 @@ func streamReadDuration(r *StreamValueReader) (Duration, error) {
 	return durationFromComponents(months, days, nanos)
 }
 
+// Stream decoders of the scalar CQL types. Each accepts only the CQL types it
+// names and decodes into caller storage without borrowing response bytes.
 var (
+	// StreamBool decodes boolean into bool.
 	StreamBool StreamDecoder[bool] = streamFixed(TypeBoolean, 1, func(b []byte) (bool, error) {
 		if b[0] > 1 {
 			return false, typeValidation("boolean", "must be 0 or 1")
 		}
 		return b[0] == 1, nil
 	})
-	StreamInt8      = streamInteger[int8](TypeTinyInt, 1)
-	StreamInt16     = streamInteger[int16](TypeSmallInt, 2)
-	StreamInt32     = streamInteger[int32](TypeInt, 4)
-	StreamInt64     = streamInteger[int64](TypeBigInt, 8)
-	StreamCounter   = streamInteger[Counter](TypeCounter, 8)
+
+	// StreamInt8 decodes tinyint into int8.
+	StreamInt8 = streamInteger[int8](TypeTinyInt, 1)
+
+	// StreamInt16 decodes smallint into int16.
+	StreamInt16 = streamInteger[int16](TypeSmallInt, 2)
+
+	// StreamInt32 decodes int into int32.
+	StreamInt32 = streamInteger[int32](TypeInt, 4)
+
+	// StreamInt64 decodes bigint into int64.
+	StreamInt64 = streamInteger[int64](TypeBigInt, 8)
+
+	// StreamCounter decodes counter into Counter.
+	StreamCounter = streamInteger[Counter](TypeCounter, 8)
+
+	// StreamTimestamp decodes timestamp into Timestamp.
 	StreamTimestamp = streamInteger[Timestamp](TypeTimestamp, 8)
-	StreamFloat32   = streamFixed(TypeFloat, 4, func(b []byte) (float32, error) { return math.Float32frombits(binary.BigEndian.Uint32(b)), nil })
-	StreamFloat64   = streamFixed(TypeDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil })
-	StreamDate      = streamFixed(TypeDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })
-	StreamTime      = streamFixed(TypeTime, 8, func(b []byte) (TimeOfDay, error) {
+
+	// StreamFloat32 decodes float into float32.
+	StreamFloat32 = streamFixed(TypeFloat, 4, func(b []byte) (float32, error) { return math.Float32frombits(binary.BigEndian.Uint32(b)), nil })
+
+	// StreamFloat64 decodes double into float64.
+	StreamFloat64 = streamFixed(TypeDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil })
+
+	// StreamDate decodes date into Date.
+	StreamDate = streamFixed(TypeDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })
+
+	// StreamTime decodes time into TimeOfDay, rejecting a value outside one day.
+	StreamTime = streamFixed(TypeTime, 8, func(b []byte) (TimeOfDay, error) {
 		v := binary.BigEndian.Uint64(b)
 		if v >= uint64(nanosecondsPerDay) {
 			return 0, typeValidation("time", "outside one day")
 		}
 		return TimeOfDay(v), nil
 	})
+
+	// StreamDuration decodes duration into Duration.
 	StreamDuration StreamDecoder[Duration] = streamScalarCodec[Duration]{kind: TypeDuration, minimum: 3, maximum: 27, decode: streamReadDuration}
-	StreamUUID                             = streamFixed(TypeUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil })
-	StreamTimeUUID                         = streamFixed(TypeTimeUUID, 16, func(b []byte) (TimeUUID, error) {
+
+	// StreamUUID decodes uuid into UUID.
+	StreamUUID = streamFixed(TypeUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil })
+
+	// StreamTimeUUID decodes timeuuid into TimeUUID, rejecting a UUID that is not
+	// version 1.
+	StreamTimeUUID = streamFixed(TypeTimeUUID, 16, func(b []byte) (TimeUUID, error) {
 		var v TimeUUID
 		copy(v[:], b)
 		if UUID(v).Version() != 1 {
@@ -164,6 +194,8 @@ var (
 		}
 		return v, nil
 	})
+
+	// StreamInet decodes inet into netip.Addr.
 	StreamInet StreamDecoder[netip.Addr] = streamScalarCodec[netip.Addr]{kind: TypeInet, minimum: 4, maximum: 16, decode: func(r *StreamValueReader) (netip.Addr, error) {
 		n := r.Remaining()
 		if n != 4 && n != 16 {
@@ -176,9 +208,22 @@ var (
 		v, _ := netip.AddrFromSlice(b)
 		return v, nil
 	}}
-	StreamText   StreamDecoder[[]byte] = streamBytesCodec{kind: TypeText}
-	StreamASCII  StreamDecoder[[]byte] = streamBytesCodec{kind: TypeAscii}
-	StreamBlob   StreamDecoder[[]byte] = streamBytesCodec{kind: TypeBlob}
+
+	// StreamText decodes text and varchar into a []byte, validating UTF-8. The
+	// value is written into the destination's existing capacity; a value that
+	// does not fit fails with a StreamCapacityError.
+	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: TypeText}
+
+	// StreamASCII is StreamText for the ascii type.
+	StreamASCII StreamDecoder[[]byte] = streamBytesCodec{kind: TypeAscii}
+
+	// StreamBlob decodes blob into a []byte, within the destination's capacity
+	// as for StreamText.
+	StreamBlob StreamDecoder[[]byte] = streamBytesCodec{kind: TypeBlob}
+
+	// StreamVarint decodes varint into a []byte holding the big-endian
+	// two's-complement integer, within the destination's capacity as for
+	// StreamText.
 	StreamVarint StreamDecoder[[]byte] = streamBytesCodec{kind: TypeVarint}
 )
 
@@ -252,12 +297,17 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 //
 // The driver fills it; its zero value is empty.
 type DecimalParts struct {
+	// Unscaled holds the unscaled integer's bytes, written into its existing
+	// capacity.
 	Unscaled []byte
-	Scale    int32
+	// Scale is the power of ten Unscaled is divided by.
+	Scale int32
 }
 type streamDecimalCodec struct{}
 type streamDecimalPlan struct{ typ DataType }
 
+// StreamDecimal decodes decimal into DecimalParts. Unscaled is written into
+// its existing capacity, as for StreamText.
 var StreamDecimal StreamDecoder[DecimalParts] = streamDecimalCodec{}
 
 func (streamDecimalCodec) Compile(t DataType) (CompiledStreamValue[DecimalParts], error) {
