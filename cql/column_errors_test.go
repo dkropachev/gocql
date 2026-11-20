@@ -5,6 +5,8 @@ package cql
 
 import (
 	"errors"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -233,4 +235,39 @@ func matrixRaw(cells ...[]byte) wire.Chain {
 		b = append(b, cell...)
 	}
 	return wire.ChainOf(b)
+}
+
+// TestMemberError checks the error DecodeValue returns for a failing tuple
+// member when no column encloses it: the message names the member's path,
+// and the member's own error stays reachable through Unwrap.
+func TestMemberError(t *testing.T) {
+	tuple := mustMatrixType(TupleType(matrixType(TypeInt), matrixType(TypeText)))
+	decoder := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextCodec)))
+	for name, test := range map[string]struct {
+		body []byte
+		want string
+		is   error
+	}{
+		// The second member is null, which a Text cannot hold.
+		"NullMember": {[]byte{0, 0, 0, 4, 0, 0, 0, 7, 0xff, 0xff, 0xff, 0xff}, "gocql: member [1]: gocql: nonnullable text cannot decode cell state null", nil},
+		// The second member claims one byte the body does not have.
+		"TruncatedMember": {[]byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 1}, "gocql: member [1]: ", io.ErrUnexpectedEOF},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := DecodeValue(decoder, containerValue(t, tuple, test.body))
+			member, ok := errors.AsType[*memberError](err)
+			if !ok {
+				t.Fatalf("DecodeValue = %T %v, want a member error", err, err)
+			}
+			if !strings.HasPrefix(err.Error(), test.want) || member.path != "[1]" {
+				t.Fatalf("Error() = %q, want prefix %q", err.Error(), test.want)
+			}
+			if inner := errors.Unwrap(err); inner == nil || inner != member.err || strings.HasPrefix(inner.Error(), "gocql: member") {
+				t.Fatalf("Unwrap() = %v, want the member's own error", inner)
+			}
+			if test.is != nil && !errors.Is(err, test.is) {
+				t.Fatalf("errors.Is(%v, %v) = false", err, test.is)
+			}
+		})
+	}
 }

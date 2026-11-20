@@ -823,3 +823,57 @@ func TestDynamic(t *testing.T) {
 		})
 	})
 }
+
+// TestDynamicCodecContracts runs the Codec methods of DynamicCodec and of the
+// plans it compiles that the encode and decode paths skip: a caller's own
+// codec that wraps DynamicCodec reaches Encode, and Clone and CheckType are
+// part of every Decoder and Encoder.
+func TestDynamicCodecContracts(t *testing.T) {
+	blob, integer := dynamicTestType(TypeBlob), dynamicTestType(TypeInt)
+	t.Run("WrappedEncode", func(t *testing.T) {
+		// The wrapper hides DynamicCodec's compiled form, so EncodeValue
+		// checks the type and calls Encode on every value.
+		wrapped := struct{ Codec[Value] }{DynamicCodec}
+		encoded := dynamicTestMust(EncodeValue(integer, wrapped, IntValue(7)))
+		if got := hex.EncodeToString(encoded.Bytes().OwnedBytes()); got != "00000007" {
+			t.Fatalf("wire body %s", got)
+		}
+		if decoded := dynamicTestMust(DecodeValue(wrapped, encoded)); dynamicTestMust(decoded.Signed()) != 7 {
+			t.Fatalf("decoded %v", decoded)
+		}
+		if _, err := EncodeValue(integer, wrapped, BlobValue([]byte("x"))); err == nil {
+			t.Fatal("Encode accepted a blob value for an int cell")
+		}
+		if err := DynamicCodec.Encode(nil, IntValue(7)); err == nil {
+			t.Fatal("Encode accepted a nil writer")
+		}
+	})
+	t.Run("Clone", func(t *testing.T) {
+		body := []byte("payload")
+		value := dynamicTestDecode(t, blob, body)
+		cloned := DynamicCodec.Clone(value)
+		decoder := dynamicTestMust(compileValueDecoder(DynamicCodec, blob))
+		compiledClone := decoder.Clone(value)
+		body[0] = 'P'
+		if got := dynamicTestMust(value.Bytes()).OwnedBytes(); string(got) != "Payload" {
+			t.Fatalf("decoded value %q does not borrow the body", got)
+		}
+		for name, v := range map[string]Value{"Codec": cloned, "Compiled": compiledClone} {
+			if got := dynamicTestMust(v.Bytes()).OwnedBytes(); string(got) != "payload" {
+				t.Errorf("%s Clone = %q, want a copy taken before the body changed", name, got)
+			}
+		}
+	})
+	t.Run("CompiledCheckType", func(t *testing.T) {
+		decoder := dynamicTestMust(compileValueDecoder(DynamicCodec, integer))
+		encoder := dynamicTestMust(compileValueEncoder(DynamicCodec, integer))
+		for name, check := range map[string]func(DataType) error{"Decoder": decoder.CheckType, "Encoder": encoder.CheckType} {
+			if err := check(integer); err != nil {
+				t.Errorf("%s CheckType(int) = %v", name, err)
+			}
+			if err := check(blob); err == nil {
+				t.Errorf("%s CheckType(blob) accepted a type other than the compiled one", name)
+			}
+		}
+	})
+}

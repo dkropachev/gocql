@@ -86,3 +86,35 @@ func (customStreamNoReset) Compile(t DataType) (CompiledStreamValue[int32], erro
 type customStreamResettable struct{ customStreamNoReset }
 
 func (customStreamResettable) Reset(dst *int32) { *dst = 0 }
+
+// streamWords records the reader's view of a cell: its type and state and,
+// for a present cell, a big-endian uint16 followed by a uint64.
+type streamWords struct {
+	Type  DataType
+	State CellState
+	Short uint16
+	Long  uint64
+}
+type streamWordsDecoder struct{}
+
+func (streamWordsDecoder) Compile(t DataType) (CompiledStreamValue[streamWords], error) {
+	if t.Kind() != TypeBlob {
+		return nil, errors.New("expected blob")
+	}
+	return streamWordsDecoder{}, nil
+}
+func (streamWordsDecoder) Reset(dst *streamWords) { *dst = streamWords{} }
+func (streamWordsDecoder) DecodeInto(r *StreamValueReader, dst *streamWords) error {
+	dst.Type, dst.State = r.Type(), r.State()
+	if dst.State != Present {
+		return nil
+	}
+	var err error
+	if dst.Short, err = r.Uint16(); err != nil {
+		return err
+	}
+	if dst.Long, err = r.Uint64(); err != nil {
+		return err
+	}
+	return r.RequireEnd()
+}

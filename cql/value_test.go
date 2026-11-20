@@ -148,6 +148,45 @@ func TestValue(t *testing.T) {
 				t.Fatal("nil decoder accepted")
 			}
 		})
+		t.Run("WrapperCheckType", func(t *testing.T) {
+			integer, text := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeText)
+			list := CodecTestMust(ListType(integer))
+			set := CodecTestMust(SetType(integer))
+			vector := CodecTestMust(VectorType(integer, 2))
+			for _, test := range []struct {
+				name      string
+				check     func(DataType) error
+				ok, wrong DataType
+			}{
+				{"NullableCodec", NullableCodec(Int32Codec).CheckType, integer, text},
+				{"ListEncoder", ListEncoder(Int32Codec).CheckType, list, set},
+				{"SetEncoder", SetEncoder(Int32Codec).CheckType, set, list},
+				{"VectorEncoder", VectorEncoder(Int32Codec).CheckType, vector, list},
+				{"ListEncoderElement", ListEncoder(Int32Codec).CheckType, list, CodecTestMust(ListType(text))},
+			} {
+				t.Run(test.name, func(t *testing.T) {
+					if err := test.check(test.ok); err != nil {
+						t.Fatalf("CheckType(%s) = %v", test.ok, err)
+					}
+					if err := test.check(test.wrong); err == nil {
+						t.Fatalf("CheckType(%s) accepted the wrong type", test.wrong)
+					}
+				})
+			}
+		})
+		t.Run("EmptyCodecClone", func(t *testing.T) {
+			codec := EmptyCodec(TextCodec)
+			payload := []byte("value")
+			value := MaybeEmpty[Text]{Value: Text{bytes: BorrowBytes(payload)}}
+			cloned := codec.Clone(value)
+			payload[0] = 'V'
+			if value.Value.String() != "Value" || cloned.Value.String() != "value" || cloned.Empty {
+				t.Fatalf("Clone shares the borrowed text: original %q clone %q", value.Value.String(), cloned.Value.String())
+			}
+			if got := codec.Clone(MaybeEmpty[Text]{Empty: true, Value: value.Value}); !got.Empty || got.Value.Bytes().Len() != 0 {
+				t.Fatalf("Clone of an empty value = %+v, want only Empty set", got)
+			}
+		})
 	})
 	t.Run("EncodeValue", func(t *testing.T) {
 		t.Run("OwnedAndBorrowed", func(t *testing.T) {
@@ -373,6 +412,38 @@ func TestValue(t *testing.T) {
 			}
 			if err := c.RequireEnd(); err != nil {
 				t.Fatal(err)
+			}
+		})
+		t.Run("Empty", func(t *testing.T) {
+			integer, blob := foundationScalar(t, TypeInt), foundationScalar(t, TypeBlob)
+			builder := wire.NewBuilder(4)
+			w := newValueWriter(builder, integer, true)
+			if err := w.Empty(); err != nil {
+				t.Fatal(err)
+			}
+			if err := finishValueWriter(w); err != nil {
+				t.Fatal(err)
+			}
+			chain, _ := builder.Freeze()
+			out := make([]byte, chain.Len())
+			chain.CopyTo(out)
+			if !bytes.Equal(out, []byte{0, 0, 0, 0}) {
+				t.Fatalf("empty int cell = %x, want a zero length", out)
+			}
+			for name, test := range map[string]struct {
+				typ    DataType
+				encode func(*ValueWriter) error
+			}{
+				"UnsupportedType": {blob, func(w *ValueWriter) error { return w.Empty() }},
+				"AfterNull":       {integer, func(w *ValueWriter) error { _ = w.Null(); return w.Empty() }},
+				"AfterPayload":    {integer, func(w *ValueWriter) error { _ = w.Uint32(1); return w.Empty() }},
+			} {
+				t.Run(name, func(t *testing.T) {
+					w := newValueWriter(wire.NewBuilder(1), test.typ, true)
+					if err := test.encode(w); err == nil {
+						t.Fatal("Empty accepted")
+					}
+				})
 			}
 		})
 		t.Run("FramingTransactions", func(t *testing.T) {

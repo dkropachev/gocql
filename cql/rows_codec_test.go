@@ -70,6 +70,43 @@ func (failingRowEncoder) Encode(w *ValueWriter, value int32) error {
 }
 
 func TestRowsCodec(t *testing.T) {
+	t.Run("CompiledClone", func(t *testing.T) {
+		text, blob := FoundationScalar(t, TypeText), FoundationScalar(t, TypeBlob)
+		t.Run("PairRows", func(t *testing.T) {
+			cols := NewColumns(ColumnSpec{Name: "t", Type: text}, ColumnSpec{Name: "b", Type: blob})
+			plan := CodecTestMust(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec)).Compile(cols))
+			name, payload := []byte("name"), []byte("payload")
+			value := Pair[Text, Bytes]{First: Text{bytes: BorrowBytes(name)}, Second: BorrowBytes(payload)}
+			cloned := plan.Clone(value)
+			name[0], payload[0] = 'N', 'P'
+			if value.First.String() != "Name" || string(value.Second.OwnedBytes()) != "Payload" {
+				t.Fatal("the original pair does not borrow its inputs")
+			}
+			if cloned.First.String() != "name" || string(cloned.Second.OwnedBytes()) != "payload" {
+				t.Fatalf("Clone = (%q, %q), want copies of both sides", cloned.First.String(), cloned.Second.OwnedBytes())
+			}
+		})
+		t.Run("ConvertRows", func(t *testing.T) {
+			cols := NewColumns(ColumnSpec{Name: "t", Type: text})
+			clones := 0
+			mapped := ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, func(s string) string { clones++; return "clone of " + s })
+			plan := CodecTestMust(mapped.Compile(cols))
+			if got := plan.Clone("x"); got != "clone of x" || clones != 1 {
+				t.Fatalf("Clone = %q after %d calls, want the caller's clone function", got, clones)
+			}
+		})
+		t.Run("CASRows", func(t *testing.T) {
+			clones := 0
+			cas := CASRows(ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, func(s string) string { clones++; return "clone of " + s }))
+			previous := CASResult[string]{Previous: Some("x")}
+			if got := cas.Clone(previous); !got.Previous.Set || got.Previous.Value != "clone of x" || got.Applied || clones != 1 {
+				t.Fatalf("Clone = %+v after %d calls, want the previous row cloned", got, clones)
+			}
+			if got := cas.Clone(CASResult[string]{Applied: true}); !got.Applied || got.Previous.Set || clones != 1 {
+				t.Fatalf("Clone of an applied result = %+v after %d calls, want no row cloned", got, clones)
+			}
+		})
+	})
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("ConcurrentAndMetadataSpecific", func(t *testing.T) {
 			columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, TypeInt)})
