@@ -35,18 +35,43 @@ import (
 // default case.
 type Consistency uint16
 
+// Consistency levels, with their native protocol values.
 const (
-	Any         Consistency = 0x00
-	One         Consistency = 0x01
-	Two         Consistency = 0x02
-	Three       Consistency = 0x03
-	Quorum      Consistency = 0x04
-	All         Consistency = 0x05
+	// Any accepts a write once any node, including a hint, stored it.
+	Any Consistency = 0x00
+
+	// One needs one replica.
+	One Consistency = 0x01
+
+	// Two needs two replicas.
+	Two Consistency = 0x02
+
+	// Three needs three replicas.
+	Three Consistency = 0x03
+
+	// Quorum needs a majority of all replicas.
+	Quorum Consistency = 0x04
+
+	// All needs every replica.
+	All Consistency = 0x05
+
+	// LocalQuorum needs a majority of the replicas in the coordinator's
+	// datacenter.
 	LocalQuorum Consistency = 0x06
-	EachQuorum  Consistency = 0x07
-	Serial      Consistency = 0x08
+
+	// EachQuorum needs a majority of the replicas in each datacenter.
+	EachQuorum Consistency = 0x07
+
+	// Serial is the serial consistency of a conditional statement across all
+	// datacenters.
+	Serial Consistency = 0x08
+
+	// LocalSerial is the serial consistency of a conditional statement within
+	// the coordinator's datacenter.
 	LocalSerial Consistency = 0x09
-	LocalOne    Consistency = 0x0A
+
+	// LocalOne needs one replica in the coordinator's datacenter.
+	LocalOne Consistency = 0x0A
 )
 
 // String returns the level's protocol name, such as "LOCAL_QUORUM", or
@@ -80,14 +105,20 @@ func (c Consistency) String() string {
 	}
 }
 
+// IsSerial reports whether c is Serial or LocalSerial.
 func (c Consistency) IsSerial() bool {
 	return c == Serial || c == LocalSerial
 }
 
+// MarshalText implements encoding.TextMarshaler with the level's String
+// form. Its error is always nil.
 func (c Consistency) MarshalText() (text []byte, err error) {
 	return []byte(c.String()), nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler. It accepts the upper-case
+// protocol names String returns for the defined levels, and returns an error
+// for any other text.
 func (c *Consistency) UnmarshalText(text []byte) error {
 	switch string(text) {
 	case "ANY":

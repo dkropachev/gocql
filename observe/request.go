@@ -27,26 +27,24 @@ import (
 type Observer any
 
 // RequestObserver is the hook of an Observer called for each request.
-//
-// StartRequest is called once per request as it is admitted, with the
-// caller's context. The context it returns is passed to StartAttempt for
-// each of the request's attempts, so a span started for the request can
-// parent the attempts' spans; the driver uses it for nothing else and never
-// derives cancellation from it. The function it returns, if not nil, is
-// called once with the completed request.
 type RequestObserver interface {
+	// StartRequest is called once per request as it is admitted, with the
+	// caller's context. The context it returns is passed to StartAttempt for
+	// each of the request's attempts, so a span started for the request can
+	// parent the attempts' spans; the driver uses it for nothing else and
+	// never derives cancellation from it. The function it returns, if not
+	// nil, is called once with the completed request.
 	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
 }
 
 // AttemptObserver is the hook of an Observer called for each attempt.
-//
-// StartAttempt is called as each attempt, retry or speculative attempt is
-// sent, with the context StartRequest returned, or the caller's context when
-// the observer is no RequestObserver. The function it returns, if not nil,
-// is called once with the completed attempt; routing.AttemptEvent.CQLTraceID
-// links it to the server-side CQL trace session when the request runs with
-// exec.Options.CQLTrace.
 type AttemptObserver interface {
+	// StartAttempt is called as each attempt, retry or speculative attempt
+	// is sent, with the context StartRequest returned, or the caller's
+	// context when the observer is no RequestObserver. The function it
+	// returns, if not nil, is called once with the completed attempt;
+	// routing.AttemptEvent.CQLTraceID links it to the server-side CQL trace
+	// session when the request runs with exec.Options.CQLTrace.
 	StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent)
 }
 

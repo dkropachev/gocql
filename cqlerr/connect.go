@@ -28,6 +28,8 @@ type ConnectError struct {
 	Hosts []HostError
 }
 
+// Error names the failed stage and each host's error, listing at most the
+// last three hosts tried.
 func (e *ConnectError) Error() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "no host reachable during %s", e.Stage)

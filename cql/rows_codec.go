@@ -26,14 +26,19 @@ type Pair[A, B any] struct {
 
 // CompiledParams encodes typed parameters in server order using ParamWriter.
 type CompiledParams[P any] interface {
+	// Encode writes every parameter, in server order, with
+	// ParamWriter.WriteParam.
 	Encode(*ParamWriter, P) error
 }
 
 // CompiledRow decodes checked rows into caller destinations. Clone must recursively detach
 // all borrowed response storage; custom plans are cloned before One returns.
 type CompiledRow[R any] interface {
+	// Decode decodes one row.
 	Decode(*RowReader) (R, error)
+	// DecodeInto decodes one row into dst, which the driver clears first.
 	DecodeInto(*RowReader, *R) error
+	// Clone returns a copy of the row that holds no borrowed storage.
 	Clone(R) R
 }
 
@@ -175,6 +180,7 @@ func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error) {
 	return result, nil
 }
 
+// SkipColumn advances past the next column without decoding it.
 func (r *RowReader) SkipColumn() error {
 	_, err := r.nextValue()
 	return err
@@ -583,7 +589,11 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 }
 func (p singleColumnPlan[T]) Clone(value T) T { return p.decoder.Clone(value) }
 
+// EmptyParamsEncoder encodes the parameters of a statement without bind
+// markers.
 var EmptyParamsEncoder ParamEncoder[EmptyRow] = Params[EmptyRow]()
+
+// EmptyRowDecoder decodes rows without columns.
 var EmptyRowDecoder RowDecoder[EmptyRow] = Row[EmptyRow]()
 
 type mappedParams[A, B any] struct {

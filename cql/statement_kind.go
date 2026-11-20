@@ -10,9 +10,17 @@ import "fmt"
 // values, so a switch over them needs a default case.
 type StatementKind uint8
 
+// Statement kinds.
 const (
+	// UnknownStatement is a statement the application did not classify. The
+	// driver treats it as possibly conditional.
 	UnknownStatement StatementKind = iota
+
+	// OrdinaryStatement is a statement known not to be conditional.
 	OrdinaryStatement
+
+	// ConditionalStatement is a conditional (lightweight transaction) statement,
+	// which returns an [applied] row.
 	ConditionalStatement
 )
 

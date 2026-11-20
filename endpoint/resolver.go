@@ -12,5 +12,7 @@ import (
 // network is "ip", "ip4" or "ip6", as for net.Resolver.LookupNetIP.
 // Implementations must return promptly once ctx is done.
 type Resolver interface {
+	// LookupNetIP returns the addresses of host, as net.Resolver.LookupNetIP
+	// does.
 	LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
 }

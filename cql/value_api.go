@@ -42,9 +42,16 @@ func NewEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, e
 	}
 	return EncodedValue{typ: typ, state: state, body: body}, nil
 }
-func (v EncodedValue) Type() DataType   { return v.typ }
+
+// Type returns the value's type.
+func (v EncodedValue) Type() DataType { return v.typ }
+
+// State returns the value's cell state.
 func (v EncodedValue) State() CellState { return v.state }
-func (v EncodedValue) Bytes() Bytes     { return v.body }
+
+// Bytes returns the value's body. A borrowed body has the lifetime of its
+// source.
+func (v EncodedValue) Bytes() Bytes { return v.body }
 
 // Clone detaches all encoded storage. It panics with ErrReleased after release.
 func (v EncodedValue) Clone() EncodedValue {

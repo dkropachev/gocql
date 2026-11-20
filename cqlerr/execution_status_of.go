@@ -101,6 +101,8 @@ type AttemptFailure struct {
 	CQLTraceID cql.Option[cql.UUID]
 }
 
+// String returns the attempt's number, its host, its shard on a shard-aware
+// host, and its error.
 func (a AttemptFailure) String() string {
 	var b strings.Builder
 	a.writeTarget(&b)
@@ -147,6 +149,9 @@ func newExecutionError(err error, result cql.Result, status ExecutionStatus, att
 	return &ExecutionError{Err: err, Result: result, status: status, Attempts: attempts}
 }
 
+// Error returns Err, prefixed with the last attempt's target when Err is that
+// attempt's failure, followed by the execution status when Err does not
+// already report it and by at most three earlier attempts.
 func (e *ExecutionError) Error() string {
 	var b strings.Builder
 	b.WriteString("gocql: request: ")

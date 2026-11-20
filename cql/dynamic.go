@@ -52,7 +52,10 @@ type ValueField struct {
 // Its zero value holds two zero Values.
 type ValueEntry struct{ Key, Value Value }
 
-func (v Value) Type() DataType   { return v.typ }
+// Type returns the value's type.
+func (v Value) Type() DataType { return v.typ }
+
+// State returns the value's cell state.
 func (v Value) State() CellState { return v.state }
 
 var dynamicScalarTypes = func() [TypeDuration + 1]DataType {
@@ -247,11 +250,18 @@ func (v Value) require(kinds ...Type) error {
 	}
 	return typeValidation("value", "accessor does not accept %s", v.typ)
 }
+
+// Bool returns a present boolean.
 func (v Value) Bool() (bool, error) { err := v.require(TypeBoolean); return v.bits != 0, err }
+
+// Signed returns a present tinyint, smallint, int, bigint, counter, date,
+// time or timestamp as an int64.
 func (v Value) Signed() (int64, error) {
 	err := v.require(TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeCounter, TypeDate, TypeTime, TypeTimestamp)
 	return int64(v.bits), err
 }
+
+// Float returns a present float or double as a float64.
 func (v Value) Float() (float64, error) {
 	if err := v.require(TypeFloat, TypeDouble); err != nil {
 		return 0, err
@@ -261,42 +271,60 @@ func (v Value) Float() (float64, error) {
 	}
 	return math.Float64frombits(v.bits), nil
 }
+
+// Text returns a present text, varchar or ascii value. A decoded Text borrows
+// the response; see Clone.
 func (v Value) Text() (Text, error) {
 	if err := v.require(TypeText, TypeVarchar, TypeAscii); err != nil {
 		return Text{}, err
 	}
 	return textView(v.bytes), nil
 }
+
+// Bytes returns a present blob. A decoded Bytes borrows the response; see
+// Clone.
 func (v Value) Bytes() (Bytes, error) {
 	if err := v.require(TypeBlob); err != nil {
 		return Bytes{}, err
 	}
 	return v.bytes, nil
 }
+
+// UUID returns a present uuid or timeuuid.
 func (v Value) UUID() (UUID, error) {
 	if err := v.require(TypeUUID, TypeTimeUUID); err != nil {
 		return UUID{}, err
 	}
 	return v.uuid, nil
 }
+
+// Inet returns a present inet.
 func (v Value) Inet() (netip.Addr, error) {
 	if err := v.require(TypeInet); err != nil {
 		return netip.Addr{}, err
 	}
 	return v.inet, nil
 }
+
+// Duration returns a present duration.
 func (v Value) Duration() (Duration, error) {
 	if err := v.require(TypeDuration); err != nil {
 		return Duration{}, err
 	}
 	return v.duration, nil
 }
+
+// Varint returns a present varint. A decoded Varint borrows the response; see
+// Clone.
 func (v Value) Varint() (Varint, error) {
 	if err := v.require(TypeVarint); err != nil {
 		return Varint{}, err
 	}
 	return varintView(v.bytes), nil
 }
+
+// Decimal returns a present decimal. A decoded Decimal borrows the response;
+// see Clone.
 func (v Value) Decimal() (Decimal, error) {
 	if err := v.require(TypeDecimal); err != nil {
 		return Decimal{}, err
@@ -807,6 +835,9 @@ func (v Value) Elements() (*ValueIterator[Value], error) {
 		return decodeDynamicWithPlan(r, dynamicShapeElement(v.shape))
 	}}, nil
 }
+
+// Entries returns an independent iterator over the key and value of each
+// entry of a map, in encoded order.
 func (v Value) Entries() (*ValueIterator[ValueEntry], error) {
 	if err := v.require(TypeMap); err != nil {
 		return nil, err
@@ -834,6 +865,9 @@ func (v Value) Entries() (*ValueIterator[ValueEntry], error) {
 		return ValueEntry{Key: k, Value: valueDecoded}, nil
 	}}, nil
 }
+
+// Fields returns an independent iterator over the fields of a tuple or UDT,
+// in type order. A tuple's fields have no names.
 func (v Value) Fields() (*ValueIterator[ValueField], error) {
 	if err := v.require(TypeTuple, TypeUDT); err != nil {
 		return nil, err
@@ -1150,7 +1184,11 @@ type DynamicRow struct {
 	allowMissing bool
 }
 
+// Columns returns the row's result metadata.
 func (r DynamicRow) Columns() Columns { return r.columns }
+
+// Clone returns a copy of the row that holds no borrowed storage. It panics
+// with ErrReleased once the row's page has been released.
 func (r DynamicRow) Clone() DynamicRow {
 	r.body = r.body.Clone()
 	r.physical = &dynamicRowIndex{}
@@ -1192,6 +1230,10 @@ func (r DynamicRow) buildPhysicalIndex() {
 		r.physical.cells = cells
 	})
 }
+
+// At decodes the column at index. A decoded Value may borrow the response.
+// It returns ErrReleased once the row's page has been released, and a
+// CodecError when the row or the column does not decode.
 func (r DynamicRow) At(index int) (Value, error) {
 	col, ok := r.columns.At(index)
 	if !ok {
@@ -1220,6 +1262,9 @@ func (r DynamicRow) At(index int) (Value, error) {
 	return decoded, nil
 }
 
+// Get decodes the column named name, as At does. It returns a
+// ValidationError for an unknown name, or for a name the result holds more
+// than once.
 func (r DynamicRow) Get(name string) (Value, error) {
 	index, ok := r.lookup[name]
 	if !ok {

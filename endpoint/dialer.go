@@ -27,12 +27,16 @@ type DialTarget struct {
 
 // Dialer opens the raw connections of a session; TLS is applied afterward.
 type Dialer interface {
+	// DialContext opens a raw connection to the target. It must honor the
+	// target's address and source, and return promptly once the context is
+	// done.
 	DialContext(context.Context, DialTarget) (net.Conn, error)
 }
 
 // DialerFunc adapts a context-aware raw connection hook to Dialer.
 type DialerFunc func(context.Context, DialTarget) (net.Conn, error)
 
+// DialContext calls f.
 func (f DialerFunc) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {
 	return f(ctx, target)
 }
@@ -44,6 +48,10 @@ func (f DialerFunc) DialContext(ctx context.Context, target DialTarget) (net.Con
 // context, and TCP keepalive is off.
 type DefaultDialer struct{ ConnectTimeout, SocketKeepalive time.Duration }
 
+// DialContext dials the target with a net.Dialer bounded by ConnectTimeout,
+// with TCP keepalive every SocketKeepalive, or off when it is zero. A source
+// address requires a TCP network; any other network with one fails with a
+// ValidationError.
 func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {
 	keepalive := d.SocketKeepalive
 	if keepalive == 0 {

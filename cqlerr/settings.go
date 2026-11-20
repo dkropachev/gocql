@@ -8,6 +8,7 @@ package cqlerr
 // an error without detail.
 type UnsupportedSettingError struct{ Setting, Reason string }
 
+// Error names the setting and the reason it cannot be honored.
 func (e *UnsupportedSettingError) Error() string {
 	return "gocql: unsupported " + e.Setting + ": " + e.Reason
 }

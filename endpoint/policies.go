@@ -16,6 +16,8 @@ import (
 // Delay returns the wait before the attempt-th reconnection, or false to give
 // up until the node is reported up again.
 type ReconnectPolicy interface {
+	// Delay returns the wait before the attempt-th reconnection, or false to
+	// give up until the node is reported up again.
 	Delay(attempt int) (time.Duration, bool)
 }
 

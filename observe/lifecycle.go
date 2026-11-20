@@ -12,7 +12,10 @@ import (
 // LifecycleObserver receives the session's and its connections' lifecycle
 // events: connecting, startup, authentication, closing and their failures.
 // ObserveLifecycle must not block.
-type LifecycleObserver interface{ ObserveLifecycle(LifecycleEvent) }
+type LifecycleObserver interface {
+	// ObserveLifecycle receives one event. It must not block.
+	ObserveLifecycle(LifecycleEvent)
+}
 
 // LifecycleEvent is one step of a session's or connection's life: Kind names
 // what happened, Stage how far it got, and Err why it failed, if it did.

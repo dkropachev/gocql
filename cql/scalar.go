@@ -238,13 +238,29 @@ func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
 	}
 }
 
+// Codecs of the scalar CQL types. Each accepts only the CQL types it names,
+// and decodes a value without borrowing response storage unless its Go type
+// is a view (Text, Bytes).
 var (
-	BoolCodec    Codec[bool]    = scalarCodec[bool]{kind: TypeBoolean, encode: encodeBool, decode: decodeBool}
-	Int8Codec    Codec[int8]    = integerCodec[int8](TypeTinyInt, 1)
-	Int16Codec   Codec[int16]   = integerCodec[int16](TypeSmallInt, 2)
-	Int32Codec   Codec[int32]   = integerCodec[int32](TypeInt, 4)
-	Int64Codec   Codec[int64]   = integerCodec[int64](TypeBigInt, 8)
+	// BoolCodec maps boolean to bool.
+	BoolCodec Codec[bool] = scalarCodec[bool]{kind: TypeBoolean, encode: encodeBool, decode: decodeBool}
+
+	// Int8Codec maps tinyint to int8.
+	Int8Codec Codec[int8] = integerCodec[int8](TypeTinyInt, 1)
+
+	// Int16Codec maps smallint to int16.
+	Int16Codec Codec[int16] = integerCodec[int16](TypeSmallInt, 2)
+
+	// Int32Codec maps int to int32.
+	Int32Codec Codec[int32] = integerCodec[int32](TypeInt, 4)
+
+	// Int64Codec maps bigint to int64.
+	Int64Codec Codec[int64] = integerCodec[int64](TypeBigInt, 8)
+
+	// CounterCodec maps counter to Counter.
 	CounterCodec Codec[Counter] = integerCodec[Counter](TypeCounter, 8)
+
+	// Float32Codec maps float to float32.
 	Float32Codec Codec[float32] = scalarCodec[float32]{kind: TypeFloat,
 		encode: func(w *ValueWriter, v float32) error { return w.Uint32(math.Float32bits(v)) },
 		decode: func(r ValueReader) (float32, error) {
@@ -259,6 +275,8 @@ var (
 			return math.Float32frombits(v), e
 		},
 	}
+
+	// Float64Codec maps double to float64.
 	Float64Codec Codec[float64] = scalarCodec[float64]{kind: TypeDouble,
 		encode: func(w *ValueWriter, v float64) error { return w.Uint64(math.Float64bits(v)) },
 		decode: func(r ValueReader) (float64, error) {
@@ -273,18 +291,34 @@ var (
 			return math.Float64frombits(v), e
 		},
 	}
-	UUIDCodec     Codec[UUID]       = scalarCodec[UUID]{kind: TypeUUID, encode: encodeUUID, decode: decodeUUID}
-	TimeUUIDCodec Codec[TimeUUID]   = scalarCodec[TimeUUID]{kind: TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
-	InetCodec     Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: TypeInet, encode: encodeInet, decode: decodeInet}
+
+	// UUIDCodec maps uuid to UUID.
+	UUIDCodec Codec[UUID] = scalarCodec[UUID]{kind: TypeUUID, encode: encodeUUID, decode: decodeUUID}
+
+	// TimeUUIDCodec maps timeuuid to TimeUUID, rejecting a UUID that is not
+	// version 1.
+	TimeUUIDCodec Codec[TimeUUID] = scalarCodec[TimeUUID]{kind: TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
+
+	// InetCodec maps inet to netip.Addr, as a 4- or 16-byte address.
+	InetCodec Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: TypeInet, encode: encodeInet, decode: decodeInet}
 	// StringCodec encodes a string and decodes text into a newly allocated
 	// string that stays valid after the row is released. Use TextCodec to decode
 	// without copying.
 	StringCodec Codec[string] = stringCodec{}
 	// ASCIIStringCodec is StringCodec for the ascii type.
 	ASCIIStringCodec Codec[string] = stringCodec{ascii: true}
-	TextCodec        Codec[Text]   = textCodec{}
-	ASCIICodec       Codec[Text]   = textCodec{ascii: true}
-	BlobCodec        Codec[Bytes]  = scalarCodec[Bytes]{kind: TypeBlob,
+
+	// TextCodec maps text and varchar to Text, validating UTF-8. A decoded Text
+	// borrows the response; Clone or StringCodec detach it.
+	TextCodec Codec[Text] = textCodec{}
+
+	// ASCIICodec is TextCodec for the ascii type.
+	ASCIICodec Codec[Text] = textCodec{ascii: true}
+
+	// BlobCodec maps blob to Bytes. A decoded Bytes borrows the response, and
+	// encoding borrows the Bytes as ValueWriter.BorrowBytes does; Clone
+	// detaches it.
+	BlobCodec Codec[Bytes] = scalarCodec[Bytes]{kind: TypeBlob,
 		decodeRow: blobColumn,
 		encode:    func(w *ValueWriter, v Bytes) error { return w.borrowView(v) },
 		decode:    func(r ValueReader) (Bytes, error) { return r.Bytes(), nil },

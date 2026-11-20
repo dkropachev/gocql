@@ -11,5 +11,7 @@ import (
 // Delay receives the number of attempts started so far and returns how long
 // to wait before starting another, and whether to start one at all.
 type SpeculationPolicy interface {
+	// Delay returns how long to wait before starting another attempt, given the
+	// number of attempts started so far, and false to start no more.
 	Delay(attempt int) (time.Duration, bool)
 }

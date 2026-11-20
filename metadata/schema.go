@@ -101,6 +101,8 @@ type TableOptions struct {
 	InMemory                bool
 }
 
+// Equals reports whether t and other hold equal options. Two nil options are
+// equal, and nil never equals non-nil.
 func (t *TableOptions) Equals(other *TableOptions) bool {
 	if t == nil || other == nil {
 		return t == other // Both must be nil to be equal
@@ -169,6 +171,8 @@ type Column struct {
 	Order           ColumnOrder
 }
 
+// Equals reports whether c and other describe the same column, index
+// included. Two nil columns are equal, and nil never equals non-nil.
 func (c *Column) Equals(other *Column) bool {
 	if c == nil || other == nil {
 		return c == other
@@ -239,6 +243,9 @@ type Index struct {
 	ClusteringColumns []*Column
 }
 
+// Equals reports whether t and other have the same ID, keyspace, name,
+// columns, options, flags and extensions. Two nil tables are equal, and nil
+// never equals non-nil.
 func (t *Table) Equals(other *Table) bool {
 	if t == nil || other == nil {
 		return t == other
@@ -351,6 +358,8 @@ type ColumnIndex struct {
 	Type    string
 }
 
+// Equals reports whether c and other have the same name, type and options.
+// Two nil indexes are equal, and nil never equals non-nil.
 func (c *ColumnIndex) Equals(other *ColumnIndex) bool {
 	if c == nil || other == nil {
 		return c == other

@@ -10,8 +10,10 @@ package endpoint
 // The zero SimpleConvictionPolicy is ready to use.
 type SimpleConvictionPolicy struct{}
 
+// AddFailure returns true unless the event concerns a single shard.
 func (e *SimpleConvictionPolicy) AddFailure(ev ConvictionEvent) bool {
 	return !ev.Shard.Set
 }
 
+// Reset does nothing: the policy keeps no state.
 func (e *SimpleConvictionPolicy) Reset(ConvictionEvent) {}

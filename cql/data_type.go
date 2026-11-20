@@ -166,12 +166,17 @@ func VectorType(element DataType, dimension uint16) (DataType, error) {
 func NewColumns(columns ...ColumnSpec) Columns {
 	return Columns{columns: append([]ColumnSpec(nil), columns...)}
 }
+
+// Kind returns the type's kind. A vector is TypeCustom, and so is the invalid
+// zero DataType.
 func (t DataType) Kind() Type {
 	if t.descriptor == nil {
 		return TypeCustom
 	}
 	return t.descriptor.Kind
 }
+
+// Frozen reports whether the type is annotated frozen. See FrozenKnown.
 func (t DataType) Frozen() bool { return t.descriptor != nil && t.descriptor.frozen }
 
 // FrozenKnown reports whether a schema or caller supplied the frozen annotation.
@@ -179,6 +184,10 @@ func (t DataType) Frozen() bool { return t.descriptor != nil && t.descriptor.fro
 func (t DataType) FrozenKnown() bool {
 	return t.descriptor != nil && t.descriptor.frozenKnown
 }
+
+// WithFrozen returns a copy of the type with the frozen annotation set to
+// frozen, which FrozenKnown then reports. The zero DataType is returned
+// unchanged.
 func (t DataType) WithFrozen(frozen bool) DataType {
 	if t.descriptor == nil {
 		return t
@@ -188,6 +197,9 @@ func (t DataType) WithFrozen(frozen bool) DataType {
 	d.frozenKnown = true
 	return DataType{descriptor: &d}
 }
+
+// Element returns the element type of a list, set or vector, and false for
+// any other type.
 func (t DataType) Element() (DataType, bool) {
 	if t.descriptor == nil {
 		return DataType{}, false
@@ -197,31 +209,46 @@ func (t DataType) Element() (DataType, bool) {
 	}
 	return DataType{}, false
 }
+
+// KeyValue returns the key and value types of a map, and false for any other
+// type.
 func (t DataType) KeyValue() (DataType, DataType, bool) {
 	if t.descriptor == nil || t.Kind() != TypeMap {
 		return DataType{}, DataType{}, false
 	}
 	return t.descriptor.Key, t.descriptor.Element, true
 }
+
+// Fields returns the fields of a tuple or UDT. A tuple's fields have only
+// types; a UDT's also have names. It is empty for any other type.
 func (t DataType) Fields() Columns {
 	if t.descriptor == nil {
 		return Columns{}
 	}
 	return NewColumns(t.descriptor.Fields.columns...)
 }
+
+// UDTName returns the keyspace and name of a UDT, and false for any other
+// type.
 func (t DataType) UDTName() (keyspace, name string, ok bool) {
 	if t.descriptor == nil || t.Kind() != TypeUDT {
 		return "", "", false
 	}
 	return t.descriptor.Keyspace, t.descriptor.Name, true
 }
+
+// Dimension returns the dimension of a vector, and false for any other type.
 func (t DataType) Dimension() (uint16, bool) {
 	if t.descriptor == nil || t.descriptor.Dimension == 0 {
 		return 0, false
 	}
 	return t.descriptor.Dimension, true
 }
+
+// Len returns the number of columns.
 func (c Columns) Len() int { return len(c.columns) }
+
+// At returns the column at index, and false when index is out of range.
 func (c Columns) At(index int) (ColumnSpec, bool) {
 	if index < 0 || index >= len(c.columns) {
 		return ColumnSpec{}, false
@@ -235,6 +262,9 @@ func (c Columns) At(index int) (ColumnSpec, bool) {
 func (c Columns) same(other Columns) bool {
 	return len(c.columns) == len(other.columns) && (len(c.columns) == 0 || &c.columns[0] == &other.columns[0])
 }
+
+// Equal reports whether c and other hold the same columns, in order, with the
+// same keyspace, table, name and equal type.
 func (c Columns) Equal(other Columns) bool {
 	if c.same(other) {
 		return true
@@ -250,6 +280,10 @@ func (c Columns) Equal(other Columns) bool {
 	}
 	return true
 }
+
+// Equal reports whether t and other describe the same type, comparing kind,
+// UDT identity, dimension and every nested type and field. The frozen
+// annotation is not compared.
 func (t DataType) Equal(other DataType) bool {
 	if t.descriptor == other.descriptor {
 		return true
@@ -322,6 +356,9 @@ func (t DataType) fingerprint() string {
 	appendType(t)
 	return b.String()
 }
+
+// String returns the type in CQL syntax, such as "map<text,int>" or
+// "frozen<ks.address>", or "<invalid>" for the zero DataType.
 func (t DataType) String() string {
 	if t.descriptor == nil {
 		return "<invalid>"
@@ -366,10 +403,20 @@ func typeValidation(field, format string, args ...any) error {
 // needs a default case.
 type CellState uint8
 
+// Cell states.
 const (
+	// Present is a cell holding a value.
 	Present CellState = iota
+
+	// Null is a CQL NULL.
 	Null
+
+	// Unset is a bound parameter left unset: the server leaves its column
+	// unchanged.
 	Unset
+
+	// EmptyCell is an empty value: present, with a zero-length body. Only some
+	// types support it; see EmptyCodec.
 	EmptyCell
 )
 

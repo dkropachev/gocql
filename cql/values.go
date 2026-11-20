@@ -16,14 +16,21 @@ type Codec[T any] interface {
 // Decoder decodes one checked CQL value. Clone recursively detaches borrowed storage.
 // Custom decoders must implement this contract even when used only through One.
 type Decoder[T any] interface {
+	// CheckType returns an error unless the decoder can decode values of the
+	// type. The driver calls it when it compiles a plan, before any Decode.
 	CheckType(DataType) error
+	// Decode decodes one value. Borrowed results share the value's lifetime.
 	Decode(ValueReader) (T, error)
+	// Clone returns a copy of the value that holds no borrowed storage.
 	Clone(T) T
 }
 
 // Encoder writes the body of one checked CQL value.
 type Encoder[T any] interface {
+	// CheckType returns an error unless the encoder can encode values of the
+	// type. The driver calls it when it compiles a plan, before any Encode.
 	CheckType(DataType) error
+	// Encode writes the value's body, or a null, unset or empty marker.
 	Encode(*ValueWriter, T) error
 }
 
@@ -47,6 +54,8 @@ func NewTimeUUID() TimeUUID { return TimeUUID(newTimeUUID()) }
 
 // ParamEncoder compiles a reusable parameter plan against bind-marker metadata.
 type ParamEncoder[P any] interface {
+	// Compile checks the encoder against the bind markers and returns the
+	// plan that encodes them.
 	Compile(Columns) (CompiledParams[P], error)
 }
 
@@ -57,13 +66,12 @@ func RandomUUID() UUID { return mustRandomUUID() }
 // RowDecoder compiles a reusable row plan against actual result metadata. Clone must
 // recursively detach response storage, including nested fields; One relies on this contract.
 type RowDecoder[R any] interface {
+	// Compile checks the decoder against the result columns and returns the
+	// plan that decodes them.
 	Compile(Columns) (CompiledRow[R], error)
+	// Clone returns a copy of the row that holds no borrowed storage.
 	Clone(R) R
 }
-
-// Predeclared scalar types. Each equals ScalarType of the matching Type
-// constant. Treat them as constants: reassigning one changes only code that
-// reads the variable, not ScalarType or decoded metadata.
 
 // EmptyParams is the input type of a statement without bind markers.
 type EmptyParams = EmptyRow

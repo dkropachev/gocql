@@ -9,6 +9,7 @@ import (
 	"time"
 )
 
+// Date counts calendar days relative to 1970-01-01.
 type Date int32
 
 // TimeOfDay counts nanoseconds since midnight, in [0, 24 hours).
@@ -30,6 +31,8 @@ func DateFromTime(t time.Time) (Date, error) {
 	}
 	return Date(days), nil
 }
+
+// Time returns midnight UTC of the date. Its error is always nil.
 func (d Date) Time() (time.Time, error) { return time.Unix(int64(d)*86400, 0).UTC(), nil }
 
 // TimestampFromTime converts a time to a CQL millisecond timestamp, rejecting overflow.
@@ -50,6 +53,8 @@ func TimestampFromTime(t time.Time) (Timestamp, error) {
 	}
 	return Timestamp(seconds*1000 + fraction), nil
 }
+
+// Time returns the timestamp as a UTC time. Its error is always nil.
 func (t Timestamp) Time() (time.Time, error) {
 	return time.Unix(int64(t)/1000, (int64(t)%1000)*1_000_000).UTC(), nil
 }

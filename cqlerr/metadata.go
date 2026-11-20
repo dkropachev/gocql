@@ -19,6 +19,8 @@ type PartialRefreshError struct {
 	Generation   uint64
 }
 
+// Error names the metadata generation and the error of each keyspace, the
+// topology and the client routes that failed to refresh.
 func (e *PartialRefreshError) Error() string {
 	names := make([]string, 0, len(e.Keyspaces))
 	for name := range e.Keyspaces {
@@ -38,6 +40,8 @@ func (e *PartialRefreshError) Error() string {
 	return fmt.Sprintf("gocql: metadata generation %d retained stale data (%s)", e.Generation, strings.Join(details, "; "))
 }
 
+// Unwrap returns the keyspace errors in keyspace name order, followed by
+// Topology and ClientRoutes when they are set.
 func (e *PartialRefreshError) Unwrap() []error {
 	names := make([]string, 0, len(e.Keyspaces))
 	for name := range e.Keyspaces {
@@ -65,8 +69,10 @@ type NoHostsError struct {
 	Causes    []error
 }
 
+// Error names the operation that had no eligible host.
 func (e *NoHostsError) Error() string { return "gocql: no eligible hosts for " + e.Operation }
 
+// Unwrap returns a copy of Causes.
 func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes...) }
 
 // Kind returns KindConnection: no host could serve the operation. A cause

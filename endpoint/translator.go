@@ -23,6 +23,7 @@ type Translator interface {
 // TranslatorFunc adapts a function to Translator.
 type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
 
+// Translate calls fn.
 func (fn TranslatorFunc) Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error) {
 	return fn(ctx, peer, addr)
 }

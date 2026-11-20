@@ -39,6 +39,7 @@ func (k PartitionKey) ForEach(fn func(cql.Bytes) error) error {
 
 // TokenPartitioner computes the token of a partition key.
 type TokenPartitioner interface {
+	// Token returns the token of the key.
 	Token(PartitionKey) (int64, error)
 }
 

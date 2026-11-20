@@ -73,6 +73,7 @@ type Decision struct {
 // Policy decides retries. The driver calls it on the request goroutine, so
 // it must not block.
 type Policy interface {
+	// Decide returns what to do after the failed attempt.
 	Decide(Attempt) Decision
 }
 
