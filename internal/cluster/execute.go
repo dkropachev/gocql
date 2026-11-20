@@ -5,6 +5,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -73,16 +74,20 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan i
 // noConnection is the error for a request that found no connection. Close
 // cancels the executions it finds and then closes the pools, so a request
 // that passed SelectTypedConn's checks just before Close can find every pool
-// empty; it reports its cancellation or ErrClosed, not ErrNoConnections.
+// empty. It reports its context's error once that has ended, and ErrClosed
+// once Close has begun; the error also matches ErrNoConnections, so
+// ExecutionStatusOf still reports the request as not executed.
 func (s *Core) noConnection(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
 	if s.Closed() {
-		return cqlerr.ErrClosed
+		return errClosedNoConnection
 	}
 	return cqlerr.ErrNoConnections
 }
+
+var errClosedNoConnection = fmt.Errorf("%w (%w)", cqlerr.ErrClosed, cqlerr.ErrNoConnections)
 
 // sessionPickRoute returns a connection of r's host for r's shard,
 // or nil. A route that belongs to no session resolves its host by ID.

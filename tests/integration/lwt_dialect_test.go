@@ -119,9 +119,9 @@ func TestLWTDialect(t *testing.T) {
 			// static row to fall back to, so it has no previous values.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
-			skipIfTabletsReject(t, err)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
 			rows, err := session.RunConditionalBatch(ctx, &batch, decoder)
+			skipIfTabletsReject(t, err)
 			require.NoError(t, err)
 			defer rows.Close()
 			var out []cql.CASResult[row]

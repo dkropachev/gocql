@@ -365,3 +365,27 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 	}
 	return session.RefreshMetadata(ctx)
 }
+
+// skipIfTabletsReject skips tb when err is ScyllaDB refusing a feature on a
+// keyspace with tablets: ScyllaDB 2025.1 does so for counters, LWT,
+// materialized views and secondary indexes ("... not yet supported with
+// tablets", "... not supported on base tables with tablets"). It skips only
+// on ScyllaDB before 2025.2, so that a newer version refusing the feature
+// still fails the test.
+func skipIfTabletsReject(tb testing.TB, err error) {
+	tb.Helper()
+	if err == nil || *flagDistribution != "scylla" || !flagCassVersion.Before(2025, 2, 0) {
+		return
+	}
+	if msg := err.Error(); strings.Contains(msg, "with tablets") && strings.Contains(msg, "supported") {
+		tb.Skip("the server does not support this on a keyspace with tablets:", err)
+	}
+}
+
+// isGroup0ConflictErr reports whether err is ScyllaDB's explicit abort of a
+// group-0 schema transaction that raced another schema or topology change.
+// The server applied nothing, so the statement can be sent again.
+func isGroup0ConflictErr(err error) bool {
+	server, ok := errors.AsType[cqlerr.ServerError](err)
+	return ok && server.Message() == "Failed to apply group 0 change due to concurrent modification"
+}

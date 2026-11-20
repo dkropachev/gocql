@@ -13,7 +13,7 @@ import (
 
 // TestNoConnection checks the error of a request that found no connection:
 // its context's error once that has ended, ErrClosed once Close has begun,
-// and ErrNoConnections otherwise. Close cancels the executions it finds
+// and ErrNoConnections otherwise. Each reports the request as not executed. Close cancels the executions it finds
 // before closing the pools, so one that picks a host after that must not
 // report an empty pool.
 func TestNoConnection(t *testing.T) {
@@ -32,8 +32,12 @@ func TestNoConnection(t *testing.T) {
 		"CancelledWhileClosing": {closing, cancelled, context.Canceled},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if err := tc.s.noConnection(tc.ctx); !errors.Is(err, tc.want) {
+			err := tc.s.noConnection(tc.ctx)
+			if !errors.Is(err, tc.want) {
 				t.Fatalf("got %v, want %v", err, tc.want)
+			}
+			if status := cqlerr.ExecutionStatusOf(err); status != cqlerr.NotExecuted {
+				t.Fatalf("%v: execution status %v", err, status)
 			}
 		})
 	}

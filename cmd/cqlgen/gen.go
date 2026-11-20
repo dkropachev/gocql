@@ -326,6 +326,8 @@ func exportData(dir string) (map[string]string, error) {
 	return exports, nil
 }
 
+// listExports runs go list -export -deps with args in dir and adds the
+// export data file of each plain package it lists to exports.
 func listExports(dir string, args []string, exports map[string]string) error {
 	cmd := exec.Command("go", append([]string{"list", "-e", "-export", "-deps", "-f", "{{.ImportPath}}\t{{.Export}}"}, args...)...)
 	cmd.Dir = dir

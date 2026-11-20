@@ -98,7 +98,7 @@ func TestMetadata(t *testing.T) {
 				if err == nil {
 					return
 				}
-				if !group0Conflict(err) || attempt == 4 {
+				if !isGroup0ConflictErr(err) || attempt == 4 {
 					t.Fatal(err)
 				}
 				t.Logf("%s: retrying an aborted group-0 change, attempt %d", stmt, attempt)

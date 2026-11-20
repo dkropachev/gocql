@@ -99,25 +99,6 @@ func v2SchemaRoutingTabletsAutoEnabled(t *testing.T, session *gocql.Session) boo
 	return strings.Contains(strings.ToLower(string(statements)), "and tablets")
 }
 
-// skipIfTabletsReject skips t when err is ScyllaDB refusing a feature on a
-// tablets keyspace, as ScyllaDB 2025.1 does for counters, LWT,
-// materialized views and secondary indexes ("... not yet supported with
-// tablets", "... not supported on base tables with tablets").
-func skipIfTabletsReject(t testing.TB, err error) {
-	t.Helper()
-	if err != nil && strings.Contains(err.Error(), "with tablets") && strings.Contains(err.Error(), "not") && strings.Contains(err.Error(), "supported") {
-		t.Skip("the server does not support this on a tablets keyspace:", err)
-	}
-}
-
-// group0Conflict reports whether err is ScyllaDB's explicit abort of a
-// group-0 schema transaction that raced another schema or topology change.
-// The server applied nothing, so the statement can be sent again.
-func group0Conflict(err error) bool {
-	server, ok := errors.AsType[cqlerr.ServerError](err)
-	return ok && server.Message() == "Failed to apply group 0 change due to concurrent modification"
-}
-
 // Development group-0 schema transactions can explicitly abort on a concurrent
 // topology/schema change. Retry only this server-declared aborted transaction;
 // keep all input/dump/golden assertions and propagate every other failure.
@@ -127,7 +108,7 @@ func recreateExec(t testing.TB, s *gocql.Session, stmt string) (cql.Result, erro
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)
-		if !group0Conflict(err) || attempt == 4 {
+		if !isGroup0ConflictErr(err) || attempt == 4 {
 			return result, err
 		}
 		t.Logf("retry explicitly aborted group-0 fixture transaction, attempt %d", attempt)
