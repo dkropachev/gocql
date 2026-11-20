@@ -438,7 +438,7 @@ coverage-report:
 # Fails when an exported function of a public package never ran in the
 # report's tests; run after coverage-report on the unit and integration data.
 coverage-public:
-	ci/public-coverage.sh "${MAKEFILE_PATH}/coverage-root.out"
+	bash "${MAKEFILE_PATH}/ci/public-coverage.sh" "${MAKEFILE_PATH}/coverage-root.out"
 
 clean-coverage:
 	rm -rf "${COVERAGE_DIR}" "${MAKEFILE_PATH}"/coverage-root.*

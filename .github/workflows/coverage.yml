@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - master
+      - gocql-v2
     paths-ignore:
       - "**.md"
       - "docs/**"

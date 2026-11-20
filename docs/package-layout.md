@@ -384,6 +384,10 @@ own module and does not reuse `internal/testkit`.
   without tags links the perf counters or the debug assertions.
   `make test-unit-tags` (the `unit-tags` CI job) runs the unit tests
   without `-race`, which the allocation gates need, and once per tag.
+- The coverage job runs `ci/public-coverage.sh` (`make coverage-public`) on
+  the merged unit and integration profile: it reports statement coverage per
+  public package and fails when an exported function or method of a public
+  package never ran.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
 ## Where the code stands today

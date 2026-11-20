@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Copyright 2026 The Gocql Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license.
+#
 # Reports the coverage of the public packages from a merged coverage profile
 # and fails when an exported function or method of one of them was never
 # run.
@@ -9,12 +12,16 @@
 # and integration runs. A method counts by its own name, whatever its
 # receiver: an exported method of an unexported type is reached through an
 # interface. Public packages are those outside internal/, cmd/, tests/, ci/,
-# docs/ and examples/. A function with an empty body has no statement to
-# cover and is not reported.
+# docs/ and examples/, as in layout_test.go. A function with an empty body
+# has no statement to cover and is not reported. The check is per function:
+# one statement run counts the function as tested.
 set -euo pipefail
 
-profile=${1:-coverage-root.out}
+if (($# > 0)); then
+	profile=$(realpath "$1")
+fi
 cd "$(dirname "$0")/.."
+profile=${profile:-coverage-root.out}
 module=$(go list -m)
 
 public() {
@@ -47,7 +54,7 @@ uncovered=$(go tool cover -func="$profile" | public | awk '$2 ~ /^[A-Z]/ && $3 =
 		file=${loc%%:*}
 		line=${loc#*:}
 		line=${line%%:*}
-		if sed -n "${line}p" "${file#"$module"/}" | grep -q '{ *}$'; then
+		if sed -n "${line}p" "${file#"$module"/}" | grep -Eq '\{ *\}( *//.*)?$'; then
 			continue
 		fi
 		echo "$loc $name"
