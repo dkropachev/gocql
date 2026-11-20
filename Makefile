@@ -486,6 +486,23 @@ bench-integration-scylla:
 bench-integration-cassandra:
 	@$(MAKE) test-integration-cassandra INTEGRATION_PKG=./tests/bench/integration TEST_OPTS='-run=^$$$$ -bench=. -benchmem'
 
+# Every fuzz target for FUZZ_TIME each (go test -fuzztime); see ci/fuzz.sh.
+# The Release candidate matrix workflow runs the script, one minute per
+# target, before a release.
+FUZZ_TIME ?= 30s
+
+test-fuzz:
+	ci/fuzz.sh "${FUZZ_TIME}"
+
+# Known vulnerabilities in the module's dependencies and in the standard
+# library of the Go toolchain running it. govulncheck is built with that
+# toolchain too: go run would otherwise pick the oldest toolchain
+# govulncheck's own go.mod allows, which cannot load this module.
+GOVULNCHECK_VERSION ?= v1.10.0
+
+check-vulns:
+	GOTOOLCHAIN="$$(go env GOVERSION)" go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
 check-go-mod-drift:
 	go mod tidy -diff
 

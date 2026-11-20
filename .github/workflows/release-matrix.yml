@@ -1,0 +1,84 @@
+name: Release candidate matrix
+run-name: Release candidate matrix @ ${{ inputs.target }}
+
+# The full test matrix a release candidate must pass: the build and unit tests
+# on amd64 and arm64, every ScyllaDB (LATEST, PRIOR, LTS-LATEST, LTS-PRIOR)
+# and Cassandra (4, 5) integration lane on both architectures, Cassandra 5
+# on protocol 5 as well, and every fuzz target for a fixed budget. PR CI runs
+# a reduced set; the Release workflow calls this one on the resolved
+# candidate commit and publishes only when it passes. Dispatch it by hand to
+# check a candidate before starting a release.
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Commit SHA, branch or tag to test; resolved once to a commit
+        required: true
+        type: string
+      fuzz_time:
+        description: Budget per fuzz target (go test -fuzztime)
+        required: false
+        default: 1m
+        type: string
+  workflow_call:
+    inputs:
+      target:
+        description: Commit to test
+        required: true
+        type: string
+      fuzz_time:
+        description: Budget per fuzz target (go test -fuzztime)
+        required: false
+        default: 1m
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # Every job checks out the target on its own, so a branch or tag is
+  # resolved to one commit first: all of them test the same code.
+  resolve:
+    name: Resolve the target commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.target }}
+      - name: Record the commit
+        id: resolve
+        run: |
+          sha=$(git rev-parse HEAD)
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Testing \`$sha\`" >> "$GITHUB_STEP_SUMMARY"
+
+  build:
+    name: Full Build matrix
+    needs: [resolve]
+    uses: ./.github/workflows/build.yml
+    with:
+      target_commit: ${{ needs.resolve.outputs.sha }}
+      arch: amd64,arm64
+
+  integration:
+    name: Full Integration matrix
+    needs: [resolve, build]
+    uses: ./.github/workflows/integration.yml
+    with:
+      target_commit: ${{ needs.resolve.outputs.sha }}
+      scylla_versions: LATEST,PRIOR,LTS-LATEST,LTS-PRIOR
+      cassandra_versions: 5-LATEST,4-LATEST
+      arch: amd64,arm64
+
+  fuzz:
+    name: Fuzz
+    needs: [resolve]
+    uses: ./.github/workflows/fuzz.yml
+    with:
+      target_commit: ${{ needs.resolve.outputs.sha }}
+      fuzz_time: ${{ inputs.fuzz_time }}

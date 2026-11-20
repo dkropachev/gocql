@@ -12,7 +12,7 @@ For maintainer instructions and repository setup, see [RELEASING.md](../../RELEA
 workflow inputs
       |
       v
-  preflight -----> full Build, driver matrix, and candidate docs build
+  preflight -----> release candidate matrix, driver matrix, and candidate docs build
       |                         |
       |                         v
       +---------------------> gate
@@ -35,7 +35,7 @@ The controller exposes three commands. The workflow supplies their environment a
    - Emits the immutable commit SHA and the tag for later jobs.
 
 2. `gate`
-   - Runs after the full Build and driver matrices and the candidate docs build at the resolved SHA.
+   - Runs after the release candidate matrix (build, integration, fuzz), the driver matrix and the candidate docs build at the resolved SHA.
    - Requires the resolved target to remain a full commit SHA.
    - Rechecks release blockers, the trusted public key, and the remote tag/Release state.
    - Performs no mutation.
@@ -48,7 +48,7 @@ The controller exposes three commands. The workflow supplies their environment a
    - Creates the GitHub Release with generated notes starting at the highest preceding version tag reachable from the target.
    - Polls and verifies each final tag, Release metadata, signature, target, and Latest state before reporting success.
 
-`validate` mode runs `preflight`, the full Build and driver matrices, the candidate docs build, and `gate`. It never runs `publish`, enters the `release` environment, or receives publication credentials. The same reusable docs workflow runs with `publish: false` before the gate and `publish: true` after the releases are verified. The Pages build takes its version menu from published root releases.
+`validate` mode runs `preflight`, the release candidate and driver matrices, the candidate docs build, and `gate`. It never runs `publish`, enters the `release` environment, or receives publication credentials. The same reusable docs workflow runs with `publish: false` before the gate and `publish: true` after the releases are verified. The Pages build takes its version menu from published root releases.
 
 ## Candidate mapping
 
