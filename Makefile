@@ -343,8 +343,9 @@ scylla-stop: .prepare-scylla-ccm
 	@ccm stop --not-gently ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 	@ccm remove ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 
-# The package pattern below is ./tests/integration only, not "./...". All
-# integration-tagged test files live in that package; the handful of
+# The package pattern below is ./tests/integration only, not "./...". The
+# integration suite lives in that package (test-integration-examples runs the
+# root package's one integration-tagged file on its own); the handful of
 # unconditional (untagged) test files in other packages would also get
 # built and would fail to parse -distribution/-cluster/etc, which only that
 # package's test files register. Cross-package coverage attribution still
@@ -374,6 +375,13 @@ test-integration-scylla: scylla-start
 test-integration-ccm: scylla-start
 	export ${CCM_TEST_ENV} GOCQL_CCM_CLUSTER=${CCM_SCYLLA_CLUSTER_NAME}
 	go test -v -tags integration -timeout=${TEST_INTEGRATION_TIMEOUT} ./internal/testkit/ccm
+
+# The root package's examples connect to localhost:9042 and carry no Output
+# comment, so test-unit only compiles them. TestClusterExamples forwards
+# 127.0.0.1:9042 to node 1 of the ScyllaDB cluster, creates the tables the
+# examples assume and checks what each one prints.
+test-integration-examples: scylla-start
+	go test -v ${TEST_OPTS} -tags integration -count=1 -timeout=${TEST_INTEGRATION_TIMEOUT} -run '^TestClusterExamples$$' . -args -examples.cluster=${CCM_SCYLLA_IP_PREFIX}1
 
 # One module includes compressor and replay workload tests.
 # UNIT_TEST_TIMEOUT bounds each package's unit tests. The coverage run

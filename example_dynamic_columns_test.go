@@ -50,10 +50,48 @@ func Example_dynamicColumns() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(p.Columns())
+	// The result columns are known once the statement is prepared.
+	columns := p.Columns()
+	for i := range columns.Len() {
+		column, _ := columns.At(i)
+		fmt.Println(column.Name, column.Type.Kind())
+	}
 	var row cql.DynamicRow
 	_, err = p.Each(ctx, cql.EmptyParams{}, &row, func(row *cql.DynamicRow) error {
-		fmt.Println(*row)
+		for i := range columns.Len() {
+			value, err := row.At(i)
+			if err != nil {
+				return err
+			}
+			if value.State() == cql.Null {
+				fmt.Print("null ")
+				continue
+			}
+			// Each accessor checks the value's type.
+			switch value.Type().Kind() {
+			case cql.TypeTinyInt, cql.TypeSmallInt, cql.TypeInt, cql.TypeBigInt:
+				n, err := value.Signed()
+				if err != nil {
+					return err
+				}
+				fmt.Print(n, " ")
+			case cql.TypeFloat, cql.TypeDouble:
+				f, err := value.Float()
+				if err != nil {
+					return err
+				}
+				fmt.Print(f, " ")
+			case cql.TypeAscii, cql.TypeText, cql.TypeVarchar:
+				text, err := value.Text()
+				if err != nil {
+					return err
+				}
+				fmt.Print(text.String(), " ")
+			default:
+				fmt.Print(value.Type().Kind(), " ")
+			}
+		}
+		fmt.Println()
 		return nil
 	})
 	if err != nil {
