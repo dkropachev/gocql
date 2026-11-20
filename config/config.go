@@ -753,7 +753,7 @@ func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
 
 // WithRouting sets the routing policy. Nil uses the session pool's host
 // selection without a request-specific routing plan. Default token-aware with
-// shuffled replicas.
+// shuffled replicas and leader-aware for strongly consistent tables.
 func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 	p.profile.Routing = implRouting.EngineOf(policy)
 	return p

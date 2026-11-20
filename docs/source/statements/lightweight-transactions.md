@@ -15,8 +15,10 @@ allowed datacenters are skipped, and latency avoidance moves a replica it
 marked slow to the end of the plan. Otherwise concurrent requests from a
 client share one coordinator and its Paxos rounds instead of contending from
 several.
-The driver has no other notion of a Paxos leader; leader routing for strongly
-consistent tablet tables is `routing.Options.LeaderAware`. A statement
+The driver has no other notion of a Paxos leader. For a table in a strongly
+consistent (`consistency = 'global'`) keyspace, `routing.Options.LeaderAware`,
+which the default policy sets, puts the tablet's Raft leader ahead of that
+order unless the consistency is ONE or LOCAL_ONE (see "Strongly consistent tables" in [Routing](../load-balancing.md)). A statement
 executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read, not a
 conditional statement: `Exec` does not reject it up front, and fails on its
 result columns like any other row-returning statement.

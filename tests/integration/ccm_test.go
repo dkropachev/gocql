@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -221,4 +223,53 @@ func nodeControlCluster(t *testing.T, nodes int) *ccm.Cluster {
 	// with the same shape, whose shared lease lasts the whole run.
 	spec.Tag = "node-control"
 	return ccmPool.MustAcquire(t, ccm.Request{Spec: spec, Exclusive: true})
+}
+
+// strongConsistencyCluster returns a three-node ScyllaDB cluster with the
+// strongly-consistent-tables experimental feature, which strongly consistent
+// keyspaces and the TABLETS_ROUTING_V2_EXPERIMENTAL extension need. Tests
+// share it. It is built from the suite's template (the suite cluster's
+// version, or -ccm.version) with one shard per node and that feature added
+// to the experimental features. It is skipped when that version, or the
+// suite cluster's, is older than ScyllaDB 2026.3, the first release with the
+// extension, and when ccm is unavailable.
+func strongConsistencyCluster(t *testing.T) *ccm.Cluster {
+	t.Helper()
+	if *flagDistribution != "scylla" {
+		t.Skip("strongly consistent tables are ScyllaDB-only")
+	}
+	if flagCassVersion.Before(2026, 3, 0) {
+		t.Skipf("ScyllaDB %v has no TABLETS_ROUTING_V2_EXPERIMENTAL; it ships in 2026.3", flagCassVersion)
+	}
+	if ccmPool == nil || ccmTemplateErr != nil {
+		t.Skip("a strongly consistent cluster needs ccm:", ccmTemplateErr)
+	}
+	if *flagCCMVersion != "" {
+		// -ccm.version may name another release than the suite cluster's.
+		var year, minor int
+		if m := regexp.MustCompile(`(\d{4})\.(\d+)`).FindStringSubmatch(*flagCCMVersion); m != nil {
+			year, _ = strconv.Atoi(m[1])
+			minor, _ = strconv.Atoi(m[2])
+		}
+		if year < 2026 || year == 2026 && minor < 3 {
+			t.Skipf("-ccm.version %s is not ScyllaDB 2026.3 or later, which TABLETS_ROUTING_V2_EXPERIMENTAL needs", *flagCCMVersion)
+		}
+	}
+	spec := ccmTemplate
+	spec.Nodes = []int{3}
+	spec.SMP = 1
+	spec.Tag = "strong-consistency"
+	spec.Config = nil
+	for _, c := range ccmTemplate.Config {
+		if !strings.HasPrefix(c, "experimental_features:") {
+			spec.Config = append(spec.Config, c)
+		}
+	}
+	spec.Config = append(spec.Config, "experimental_features: [udf, strongly-consistent-tables]")
+	// A command-line feature list replaces the configured one.
+	spec.Args = nil
+	for _, a := range ccmTemplate.Args {
+		spec.Args = append(spec.Args, strings.ReplaceAll(a, "--experimental-features udf", "--experimental-features udf --experimental-features strongly-consistent-tables"))
+	}
+	return ccmPool.MustAcquire(t, ccm.Request{Spec: spec})
 }

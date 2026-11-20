@@ -32,8 +32,11 @@ type Keyspace struct {
 	// Views holds the materialized views by name. A view that backs a
 	// secondary index is listed in Indexes instead.
 	Views map[string]*View
-	// ConsistencyMode is "global" for a ScyllaDB tablet keyspace with global
-	// consistency, and empty otherwise.
+	// ConsistencyMode is "global" for a ScyllaDB tablet keyspace created with
+	// consistency = 'global' (a strongly consistent keyspace), and empty
+	// otherwise. It is read only when the session's connections negotiate
+	// TABLETS_ROUTING_V2_EXPERIMENTAL, the extension that reports tablet
+	// leaders.
 	ConsistencyMode string
 	// Name is the keyspace's name.
 	Name string

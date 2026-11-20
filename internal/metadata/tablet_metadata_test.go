@@ -16,10 +16,12 @@ import (
 )
 
 // scyllaKeyspacesSource answers system_schema.scylla_keyspaces with rows of
-// keyspace_name and initial_tablets, a nil initial_tablets being null.
+// keyspace_name and initial_tablets, a nil initial_tablets being null, and
+// with a consistency column when consistency is not nil.
 type scyllaKeyspacesSource struct {
-	rows     map[string]*int32
-	settings QuerySettings
+	rows        map[string]*int32
+	consistency map[string]string
+	settings    QuerySettings
 }
 
 func (s scyllaKeyspacesSource) InternalSchemaSettings() QuerySettings  { return s.settings }
@@ -38,17 +40,57 @@ func (s scyllaKeyspacesSource) InternalQuerySystem(_ context.Context, request *m
 		}
 		body = binary.BigEndian.AppendUint32(body, 4)
 		body = binary.BigEndian.AppendUint32(body, uint32(*initial))
+		if s.consistency != nil {
+			if mode, ok := s.consistency[name]; ok {
+				body = binary.BigEndian.AppendUint32(body, uint32(len(mode)))
+				body = append(body, mode...)
+			} else {
+				body = binary.BigEndian.AppendUint32(body, 0xffffffff)
+			}
+		}
+	}
+	columns := []cql.ColumnSpec{
+		{Keyspace: "system_schema", Table: "scylla_keyspaces", Name: "keyspace_name", Type: cql.TextType},
+		{Keyspace: "system_schema", Table: "scylla_keyspaces", Name: "initial_tablets", Type: cql.IntType},
+	}
+	if s.consistency != nil {
+		columns = append(columns, cql.ColumnSpec{Keyspace: "system_schema", Table: "scylla_keyspaces", Name: "consistency", Type: cql.TextType})
 	}
 	chain := wire.ChainOf(body)
 	return &model.ResponseData{
 		Owner:    wire.NewLease(chain, nil),
 		Rows:     chain,
 		RowCount: int32(len(s.rows)),
-		Columns: cql.NewColumns(
-			cql.ColumnSpec{Keyspace: "system_schema", Table: "scylla_keyspaces", Name: "keyspace_name", Type: cql.TextType},
-			cql.ColumnSpec{Keyspace: "system_schema", Table: "scylla_keyspaces", Name: "initial_tablets", Type: cql.IntType},
-		),
+		Columns:  cql.NewColumns(columns...),
 	}, nil
+}
+
+// TestReadV2ScyllaKeyspacesConsistency checks that a keyspace is strongly
+// consistent ("global") only when the server reports it so, in any case,
+// and the session's connections negotiated TABLETS_ROUTING_V2, which is
+// what gives the reported tablet leaders their meaning.
+func TestReadV2ScyllaKeyspacesConsistency(t *testing.T) {
+	n := func(v int32) *int32 { return &v }
+	for _, v2 := range []bool{false, true} {
+		keyspaces := map[string]*metadata.Keyspace{"global": {Name: "global"}, "upper": {Name: "upper"}, "eventual": {Name: "eventual"}, "null": {Name: "null"}, "local": {Name: "local"}}
+		source := scyllaKeyspacesSource{
+			rows:        map[string]*int32{"global": n(0), "upper": n(0), "eventual": n(0), "null": n(0), "local": n(0)},
+			consistency: map[string]string{"global": "global", "upper": "GLOBAL", "eventual": "eventual", "local": "local"},
+			settings:    QuerySettings{SystemSchema: true, Available: true, Scylla: true, Tablets: true, TabletsV2: v2},
+		}
+		if err := InternalReadV2ScyllaKeyspaces(context.Background(), source, keyspaces, ""); err != nil {
+			t.Fatal(err)
+		}
+		for name, ks := range keyspaces {
+			want := ""
+			if v2 && (name == "global" || name == "upper") {
+				want = "global"
+			}
+			if ks.ConsistencyMode != want {
+				t.Errorf("TabletsV2 %v, %s: ConsistencyMode %q, want %q", v2, name, ks.ConsistencyMode, want)
+			}
+		}
+	}
 }
 
 // TestReadV2ScyllaKeyspacesTablets checks what the loader records for

@@ -6,6 +6,7 @@ package metadata
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -55,7 +56,8 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 		if ks := keyspaces[r.name]; ks != nil {
 			ks.TabletBased = r.initial >= 0
 			ks.InitialTablets = max(int(r.initial), 0)
-			if settings.TabletsV2 && r.consistency == "global" {
+			// The server stores the option as written in CREATE KEYSPACE.
+			if settings.TabletsV2 && strings.EqualFold(r.consistency, "global") {
 				ks.ConsistencyMode = "global"
 			}
 		}
