@@ -139,30 +139,40 @@ func Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
 // ctx bounds the wait; each read also uses the
 // session's default profile timeout.
 func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
-	info := Info{ID: id}
 	if s == nil {
-		return info, errors.New("gocql: nil session")
-	}
-	poll := f.Poll
-	if poll <= 0 {
-		poll = 100 * time.Millisecond
+		return Info{ID: id}, &cql.ValidationError{Field: "session", Err: errors.New("nil session")}
 	}
 	consistency := f.Consistency
 	if consistency == cql.Any {
 		consistency = cql.One
 	}
 	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: true}
-	scylla := s.Dialect() == gocql.ScyllaV4
-	sessionStatement := sessionStatement(scylla)
-	for {
+	statement := sessionStatement(s.Dialect() == gocql.ScyllaV4)
+	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow
-		found, _, err := s.UnpreparedOne(ctx, sessionStatement, id, &row, options)
+		found, _, err := s.UnpreparedOne(ctx, statement, id, &row, options)
+		return row, found, err
+	}, func(ctx context.Context) ([]Event, error) {
+		return readEvents(ctx, s, id, options)
+	})
+}
+
+// fetch is Fetch reading the session row with readSession and its events
+// with readEvents.
+func (f Fetcher) fetch(ctx context.Context, id cql.UUID, readSession func(context.Context) (sessionRow, bool, error), readEvents func(context.Context) ([]Event, error)) (Info, error) {
+	info := Info{ID: id}
+	poll := f.Poll
+	if poll <= 0 {
+		poll = 100 * time.Millisecond
+	}
+	for {
+		row, found, err := readSession(ctx)
 		if err != nil {
 			return info, notReady(ctx, err)
 		}
 		if found && row.Duration.Valid {
 			row.fill(&info)
-			events, err := readEvents(ctx, s, id, options)
+			events, err := readEvents(ctx)
 			if err != nil {
 				return info, notReady(ctx, err)
 			}
@@ -175,9 +185,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info
 			return info, err
 		}
 	}
-	err := f.settle(ctx, &info, func(ctx context.Context) ([]Event, error) {
-		return readEvents(ctx, s, id, options)
-	})
+	err := f.settle(ctx, &info, readEvents)
 	return info, err
 }
 
