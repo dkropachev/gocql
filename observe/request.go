@@ -52,12 +52,21 @@ type AttemptObserver interface {
 //
 // The driver fills it; its zero value is empty.
 type RequestStart struct {
-	Started         time.Time
-	Statement       string
+	// Started is when the request was admitted.
+	Started time.Time
+	// Statement is the CQL text of the request's statement, and empty for a
+	// batch.
+	Statement string
+	// BatchStatements lists the CQL text of each statement of a batch, in
+	// order, and is nil otherwise.
 	BatchStatements []string
-	Parameters      cql.Columns
-	Routing         routing2.Info
-	ID              uint64
+	// Parameters describes the statement's bind markers.
+	Parameters cql.Columns
+	// Routing describes the request for routing.
+	Routing routing2.Info
+	// ID identifies the request within the session; its attempts carry it as
+	// RequestID.
+	ID uint64
 	// CQLTrace reports that the request's attempts ask the cluster to record
 	// CQL trace sessions.
 	CQLTrace bool
@@ -67,11 +76,21 @@ type RequestStart struct {
 //
 // The driver fills it; its zero value is empty.
 type RequestEvent struct {
-	Err             error
-	Statement       string
+	// Err is the request's error, or nil when it succeeded.
+	Err error
+	// Statement is the CQL text of the request's statement, and empty for a
+	// batch.
+	Statement string
+	// BatchStatements lists the CQL text of each statement of a batch, in
+	// order, and is nil otherwise.
 	BatchStatements []string
-	Parameters      cql.Columns
-	Result          cql.Result
-	Routing         routing2.Info
-	ID              uint64
+	// Parameters describes the statement's bind markers.
+	Parameters cql.Columns
+	// Result describes the execution, also when it failed.
+	Result cql.Result
+	// Routing describes the request for routing.
+	Routing routing2.Info
+	// ID identifies the request within the session; its attempts carry it as
+	// RequestID.
+	ID uint64
 }

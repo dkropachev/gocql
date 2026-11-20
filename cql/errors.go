@@ -16,7 +16,9 @@ var ErrReleased = errors.New("gocql: borrowed value has been released")
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ValidationError struct {
-	Err   error
+	// Err says what is invalid.
+	Err error
+	// Field names the invalid argument or part of the descriptor.
 	Field string
 }
 
@@ -32,6 +34,7 @@ func (e *ValidationError) Unwrap() error { return e.Err }
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type CodecError struct {
+	// Err is the codec's failure.
 	Err error
 	// Column is the name of the failing column, or of the parameter's bind
 	// marker.
@@ -66,6 +69,7 @@ func (e *CodecError) Unwrap() error { return e.Err }
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ProtocolError struct {
+	// Err is the violation.
 	Err error
 	// Stage names where the violation was found. A violation of the frame
 	// itself, such as an unknown opcode or an unexpected response, has

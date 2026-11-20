@@ -60,12 +60,30 @@ func (k Kind) String() string {
 //
 // The driver fills it; its zero value is empty, of Kind Unknown.
 type Event struct {
-	Address                          netip.AddrPort
-	Change, Target, Keyspace, Object string
-	ArgumentTypes                    []string
-	Generation                       uint64
-	HostID                           cql.UUID
-	Kind                             Kind
+	// Address is the node's address for a Topology, Status or Control event.
+	Address netip.AddrPort
+	// Change is what happened, as the server names it, such as "NEW_NODE",
+	// "UP" or "CREATED", or as the driver does: "RECONNECTED" for Control,
+	// "PUBLICATION_RESYNC" or "TABLET_RESYNC" for Overflow.
+	Change string
+	// Target is what a Schema event changed: "KEYSPACE", "TABLE", "TYPE",
+	// "FUNCTION" or "AGGREGATE".
+	Target string
+	// Keyspace is the keyspace a Schema event concerns.
+	Keyspace string
+	// Object names the changed table, type, function or aggregate of a
+	// Schema event, and is empty for a keyspace.
+	Object string
+	// ArgumentTypes lists the argument types of a changed function or
+	// aggregate. For a ClientRoute event it lists the changed connection IDs,
+	// then the changed host IDs.
+	ArgumentTypes []string
+	// Generation is the metadata generation when the event was published.
+	Generation uint64
+	// HostID is the new control host of a Control event.
+	HostID cql.UUID
+	// Kind classifies the event.
+	Kind Kind
 }
 
 // Filter selects the kinds of events a Subscription receives and its queue
@@ -74,7 +92,14 @@ type Event struct {
 // The zero Filter receives every kind of event, of every keyspace, through a
 // queue of 64 events.
 type Filter struct {
+	// Keyspace, when not empty, delivers only events of that keyspace, which
+	// excludes events without one, such as Topology events. Overflow events
+	// are always delivered.
 	Keyspace string
-	Kinds    []Kind
+	// Kinds, when not empty, lists the kinds to deliver. Overflow events are
+	// always delivered.
+	Kinds []Kind
+	// Capacity is the queue length; zero means 64, and a negative value is
+	// rejected.
 	Capacity int
 }

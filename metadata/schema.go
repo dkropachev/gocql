@@ -16,23 +16,39 @@ import (
 //
 // The driver fills it; its zero value is empty.
 type Keyspace struct {
+	// StrategyOptions holds the replication options other than the class,
+	// such as replication factors by datacenter.
 	StrategyOptions map[string]string
-	Tables          map[string]*Table
-	Functions       map[string]*Function
-	Aggregates      map[string]*Aggregate
-	Types           map[string]*Type
-	Indexes         map[string]*Index
-	Views           map[string]*View
+	// Tables holds the keyspace's tables by name.
+	Tables map[string]*Table
+	// Functions holds the user-defined functions by name, or by
+	// name(argtype,...) for an overloaded name.
+	Functions map[string]*Function
+	// Aggregates holds the user-defined aggregates, keyed like Functions.
+	Aggregates map[string]*Aggregate
+	// Types holds the user-defined types by name.
+	Types map[string]*Type
+	// Indexes holds the secondary indexes by name.
+	Indexes map[string]*Index
+	// Views holds the materialized views by name. A view that backs a
+	// secondary index is listed in Indexes instead.
+	Views map[string]*View
+	// ConsistencyMode is "global" for a ScyllaDB tablet keyspace with global
+	// consistency, and empty otherwise.
 	ConsistencyMode string
-	Name            string
-	StrategyClass   string
-	state           keyspaceState
+	// Name is the keyspace's name.
+	Name string
+	// StrategyClass is the replication strategy class, such as
+	// "org.apache.cassandra.locator.NetworkTopologyStrategy".
+	StrategyClass string
+	state         keyspaceState
 	// InitialTablets is the tablet count a tablet keyspace was created with.
 	// Zero lets the server choose.
 	InitialTablets int
 	// TabletBased reports a ScyllaDB keyspace that distributes its data in
 	// tablets rather than vnodes.
-	TabletBased   bool
+	TabletBased bool
+	// DurableWrites reports whether writes go through the commit log.
 	DurableWrites bool
 }
 
@@ -65,40 +81,79 @@ func (ks *Keyspace) Clone() *Keyspace {
 //
 // The driver fills it; its zero value is empty.
 type Table struct {
-	ID                string
-	Columns           map[string]*Column
-	Extensions        map[string][]byte
-	Keyspace          string
-	Name              string
-	PartitionKey      []*Column
+	// ID is the table's UUID, in its string form.
+	ID string
+	// Columns holds the table's columns by name.
+	Columns map[string]*Column
+	// Extensions holds the table's schema extensions by name, as raw bytes.
+	Extensions map[string][]byte
+	// Keyspace is the name of the table's keyspace.
+	Keyspace string
+	// Name is the table's name.
+	Name string
+	// PartitionKey lists the partition key columns, in key order.
+	PartitionKey []*Column
+	// ClusteringColumns lists the clustering columns, in key order.
 	ClusteringColumns []*Column
-	OrderedColumns    []string
-	Flags             []string
-	Options           TableOptions
+	// OrderedColumns lists the column names: the partition key, then the
+	// clustering columns, then the others.
+	OrderedColumns []string
+	// Flags holds the table's flags, such as "compound".
+	Flags []string
+	// Options holds the table's options.
+	Options TableOptions
 }
 
 // TableOptions are the options a table was created with.
 //
 // The driver fills it; its zero value is empty.
 type TableOptions struct {
-	Caching                 map[string]string
-	Compaction              map[string]string
-	Compression             map[string]string
-	CDC                     map[string]string
-	SpeculativeRetry        string
-	Comment                 string
-	Version                 string
-	Partitioner             string
-	GcGraceSeconds          int
-	MaxIndexInterval        int
+	// Caching holds the caching options.
+	Caching map[string]string
+	// Compaction holds the compaction options, the class included.
+	Compaction map[string]string
+	// Compression holds the compression options.
+	Compression map[string]string
+	// CDC holds ScyllaDB's change data capture options; it is empty on
+	// Cassandra.
+	CDC map[string]string
+	// SpeculativeRetry is the server-side speculative retry setting, such as
+	// "99.0PERCENTILE".
+	SpeculativeRetry string
+	// Comment is the table's comment.
+	Comment string
+	// Version is ScyllaDB's schema version UUID of the table, in its string
+	// form; it is empty on Cassandra.
+	Version string
+	// Partitioner is the table's partitioner class on ScyllaDB, and empty
+	// when the table uses the cluster's partitioner or on Cassandra.
+	Partitioner string
+	// GcGraceSeconds is how long tombstones are kept, in seconds.
+	GcGraceSeconds int
+	// MaxIndexInterval is the maximum gap between partition index samples.
+	MaxIndexInterval int
+	// MemtableFlushPeriodInMs is the forced memtable flush period, in
+	// milliseconds; zero disables it.
 	MemtableFlushPeriodInMs int
-	MinIndexInterval        int
-	ReadRepairChance        float64
-	BloomFilterFpChance     float64
-	DefaultTimeToLive       int
+	// MinIndexInterval is the minimum gap between partition index samples.
+	MinIndexInterval int
+	// ReadRepairChance is the read repair probability, on servers that still
+	// have the option.
+	ReadRepairChance float64
+	// BloomFilterFpChance is the bloom filter's false positive probability.
+	BloomFilterFpChance float64
+	// DefaultTimeToLive is the default TTL of written data, in seconds; zero
+	// means none.
+	DefaultTimeToLive int
+	// DcLocalReadRepairChance is the datacenter-local read repair
+	// probability, on servers that still have the option.
 	DcLocalReadRepairChance float64
-	CrcCheckChance          float64
-	InMemory                bool
+	// CrcCheckChance is the probability of checking checksums of compressed
+	// data on read.
+	CrcCheckChance float64
+	// InMemory reports ScyllaDB's in_memory option; it is false on
+	// Cassandra.
+	InMemory bool
 }
 
 // Equals reports whether t and other hold equal options. Two nil options are
@@ -139,36 +194,62 @@ func (t *TableOptions) Equals(other *TableOptions) bool {
 //
 // The driver fills it; its zero value is empty.
 type View struct {
-	Columns                 map[string]*Column
-	Extensions              map[string][]byte
-	WhereClause             string
-	BaseTableName           string
-	ID                      string
-	KeyspaceName            string
-	BaseTableID             string
-	ViewName                string
-	OrderedColumns          []string
-	PartitionKey            []*Column
-	ClusteringColumns       []*Column
+	// Columns holds the view's columns by name.
+	Columns map[string]*Column
+	// Extensions holds the view's schema extensions by name, as raw bytes.
+	Extensions map[string][]byte
+	// WhereClause is the view's WHERE clause.
+	WhereClause string
+	// BaseTableName is the name of the table the view selects from.
+	BaseTableName string
+	// ID is the view's UUID, in its string form.
+	ID string
+	// KeyspaceName is the name of the view's keyspace.
+	KeyspaceName string
+	// BaseTableID is the base table's UUID, in its string form.
+	BaseTableID string
+	// ViewName is the view's name.
+	ViewName string
+	// OrderedColumns lists the column names in Table.OrderedColumns order.
+	OrderedColumns []string
+	// PartitionKey lists the partition key columns, in key order.
+	PartitionKey []*Column
+	// ClusteringColumns lists the clustering columns, in key order.
+	ClusteringColumns []*Column
+	// Options holds the view's options.
 	Options                 TableOptions
 	DcLocalReadRepairChance float64 // After Scylla 4.2 by default read_repair turned off
 	ReadRepairChance        float64 // After Scylla 4.2 by default read_repair turned off
-	IncludeAllColumns       bool
+	// IncludeAllColumns reports a view that selects every column of the base
+	// table.
+	IncludeAllColumns bool
 }
 
 // Column is the schema of a column of a table or view.
 //
 // The driver fills it; its zero value is empty.
 type Column struct {
-	Index           ColumnIndex
-	Keyspace        string
-	Table           string
-	Name            string
-	Type            string
+	// Index is the column's index in the schema of older servers. It is
+	// empty when the schema comes from system_schema.
+	Index ColumnIndex
+	// Keyspace is the name of the column's keyspace.
+	Keyspace string
+	// Table is the name of the column's table or view.
+	Table string
+	// Name is the column's name.
+	Name string
+	// Type is the column's CQL type, as the schema spells it.
+	Type string
+	// ClusteringOrder is "asc" or "desc" for a clustering column, and "none"
+	// or empty for any other.
 	ClusteringOrder string
-	ComponentIndex  int
-	Kind            ColumnKind
-	Order           ColumnOrder
+	// ComponentIndex is the column's position in the partition key or among
+	// the clustering columns; it is -1 for other columns.
+	ComponentIndex int
+	// Kind is the column's role in the table.
+	Kind ColumnKind
+	// Order is DESC when ClusteringOrder is "desc", and ASC otherwise.
+	Order ColumnOrder
 }
 
 // Equals reports whether c and other describe the same column, index
@@ -193,13 +274,22 @@ func (c *Column) Equals(other *Column) bool {
 //
 // The driver fills it; its zero value is empty.
 type Function struct {
-	Keyspace          string
-	Name              string
-	Body              string
-	Language          string
-	ReturnType        string
-	ArgumentTypes     []string
-	ArgumentNames     []string
+	// Keyspace is the name of the function's keyspace.
+	Keyspace string
+	// Name is the function's name.
+	Name string
+	// Body is the function's source code.
+	Body string
+	// Language is the language of Body, such as "lua" or "java".
+	Language string
+	// ReturnType is the CQL type the function returns.
+	ReturnType string
+	// ArgumentTypes lists the CQL types of the arguments, in order.
+	ArgumentTypes []string
+	// ArgumentNames lists the names of the arguments, in order.
+	ArgumentNames []string
+	// CalledOnNullInput reports whether the function is called when an
+	// argument is null, rather than returning null.
 	CalledOnNullInput bool
 }
 
@@ -208,23 +298,37 @@ type Function struct {
 // The driver fills it; its zero value is empty.
 type Aggregate struct {
 	privateStorage aggregateStorage
-	Keyspace       string
-	Name           string
-	InitCond       string
-	ReturnType     string
-	StateType      string
-	ArgumentTypes  []string
-	FinalFunc      Function
-	StateFunc      Function
+	// Keyspace is the name of the aggregate's keyspace.
+	Keyspace string
+	// Name is the aggregate's name.
+	Name string
+	// InitCond is the initial state, as CQL literal text, or empty.
+	InitCond string
+	// ReturnType is the CQL type the aggregate returns.
+	ReturnType string
+	// StateType is the CQL type of the aggregate's state.
+	StateType string
+	// ArgumentTypes lists the CQL types of the arguments, in order.
+	ArgumentTypes []string
+	// FinalFunc is the final function, or the zero Function when there is
+	// none or it was not found.
+	FinalFunc Function
+	// StateFunc is the state function, or the zero Function when it was not
+	// found.
+	StateFunc Function
 }
 
 // Type is a user-defined type: its fields' names and types, in order.
 //
 // The driver fills it; its zero value is empty.
 type Type struct {
-	Keyspace   string
-	Name       string
+	// Keyspace is the name of the type's keyspace.
+	Keyspace string
+	// Name is the type's name.
+	Name string
+	// FieldNames lists the names of the fields, in order.
 	FieldNames []string
+	// FieldTypes lists the CQL types of the fields, in FieldNames order.
 	FieldTypes []string
 }
 
@@ -232,14 +336,26 @@ type Type struct {
 //
 // The driver fills it; its zero value is empty.
 type Index struct {
-	Name              string
-	KeyspaceName      string
-	TableName         string // Name of corresponding view.
-	Kind              IndexKind
-	Options           map[string]string
-	Columns           map[string]*Column
-	OrderedColumns    []string
-	PartitionKey      []*Column
+	// Name is the index's name.
+	Name string
+	// KeyspaceName is the name of the index's keyspace.
+	KeyspaceName string
+	TableName    string // Name of corresponding view.
+	// Kind is the kind of index.
+	Kind IndexKind
+	// Options holds the index's options, such as "target".
+	Options map[string]string
+	// Columns holds, on ScyllaDB, the columns of the view that backs the
+	// index, by name.
+	Columns map[string]*Column
+	// OrderedColumns lists the backing view's column names in
+	// Table.OrderedColumns order.
+	OrderedColumns []string
+	// PartitionKey lists the backing view's partition key columns, in key
+	// order.
+	PartitionKey []*Column
+	// ClusteringColumns lists the backing view's clustering columns, in key
+	// order.
 	ClusteringColumns []*Column
 }
 
@@ -353,9 +469,12 @@ const (
 //
 // The driver fills it; its zero value is empty.
 type ColumnIndex struct {
+	// Options holds the index's options.
 	Options map[string]any
-	Name    string
-	Type    string
+	// Name is the index's name.
+	Name string
+	// Type is the index's type.
+	Type string
 }
 
 // Equals reports whether c and other have the same name, type and options.

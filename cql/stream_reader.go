@@ -30,7 +30,10 @@ import (
 // StreamCapacityError reports required final storage without implicit growth.
 // The driver returns it filled in; its zero value is an error without detail.
 type StreamCapacityError struct {
-	Path                string
+	// Path names the column of the value.
+	Path string
+	// Required is the capacity the value needs, in bytes or elements, and
+	// Available the capacity the destination has.
 	Required, Available int64
 }
 
@@ -43,8 +46,11 @@ func (e *StreamCapacityError) Error() string {
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type StreamCapabilityError struct {
-	Reason      string
-	Protocol    int
+	// Reason says what cannot be streamed.
+	Reason string
+	// Protocol is the connection's protocol version.
+	Protocol int
+	// Compression is the connection's compression.
 	Compression Compression
 }
 
@@ -66,11 +72,11 @@ type StreamDecoder[T any] interface {
 	Compile(DataType) (CompiledStreamValue[T], error)
 }
 
-// CompiledStreamValue decodes one value of a compiled column type into caller storage.
-// Reset clears the logical value while keeping buffer capacity, and
-// DecodeInto reads the value from a StreamValueReader into the destination.
+// CompiledStreamValue decodes one value of a compiled column type into caller
+// storage.
 type CompiledStreamValue[T any] interface {
-	// Reset clears the value at the pointer, keeping its buffer capacity.
+	// Reset clears the logical value at the pointer, keeping its buffer
+	// capacity.
 	Reset(*T)
 	// DecodeInto reads one value from the reader into the destination.
 	DecodeInto(*StreamValueReader, *T) error

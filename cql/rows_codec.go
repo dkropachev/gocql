@@ -20,7 +20,9 @@ type EmptyRow struct{}
 //
 // Its zero value holds the zero A and B.
 type Pair[A, B any] struct {
-	First  A
+	// First is the first value.
+	First A
+	// Second is the second value.
 	Second B
 }
 

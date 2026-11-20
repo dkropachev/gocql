@@ -13,10 +13,15 @@ import (
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type PartialRefreshError struct {
-	Topology     error
+	// Topology is the topology refresh's error, or nil.
+	Topology error
+	// ClientRoutes is the client routes refresh's error, or nil.
 	ClientRoutes error
-	Keyspaces    map[string]error
-	Generation   uint64
+	// Keyspaces holds the error of each keyspace whose schema was kept, by
+	// name.
+	Keyspaces map[string]error
+	// Generation is the metadata generation the refresh left in place.
+	Generation uint64
 }
 
 // Error names the metadata generation and the error of each keyspace, the
@@ -65,8 +70,10 @@ func (e *PartialRefreshError) Unwrap() []error {
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type NoHostsError struct {
+	// Operation names what needed a host, such as "schema agreement".
 	Operation string
-	Causes    []error
+	// Causes holds the errors that left no host eligible.
+	Causes []error
 }
 
 // Error names the operation that had no eligible host.

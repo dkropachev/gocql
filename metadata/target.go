@@ -12,7 +12,12 @@ import (
 // The zero Target names no host; a request that routing.SingleTarget sends to
 // it fails with a cql.ValidationError.
 type Target struct {
+	// StrictShard restricts the request to ShardID. Without it, a request
+	// for a shard without a connection may use another shard of the host.
+	// It requires ShardID.
 	StrictShard bool
-	HostID      cql.UUID
-	ShardID     cql.Option[uint32]
+	// HostID names the host.
+	HostID cql.UUID
+	// ShardID names the shard, if set.
+	ShardID cql.Option[uint32]
 }

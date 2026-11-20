@@ -31,7 +31,10 @@ var (
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type SchemaChangedError struct {
-	Statement         string
+	// Statement is the statement's CQL text.
+	Statement string
+	// Previous holds the bound parameters the statement had, and Current
+	// those the server now reports.
 	Previous, Current cql.Columns
 }
 

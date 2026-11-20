@@ -7,8 +7,10 @@ package cql
 // whether the statement applied, and Previous holds the existing row the server
 // returned with it, if any. Its zero value did not apply and holds no row.
 type CASResult[R any] struct {
+	// Previous holds the existing row the server returned, if any.
 	Previous Option[R]
-	Applied  bool
+	// Applied reports whether the statement applied.
+	Applied bool
 }
 type casRows[R any] struct{ decoder RowDecoder[R] }
 type compiledCASRow[R any] struct {

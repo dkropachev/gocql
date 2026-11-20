@@ -15,7 +15,9 @@ import (
 // preserves the order and duplicates of its encoded representation. Its zero
 // value holds the zero K and V.
 type Entry[K, V any] struct {
-	Key   K
+	// Key is the entry's key.
+	Key K
+	// Value is the entry's value.
 	Value V
 }
 

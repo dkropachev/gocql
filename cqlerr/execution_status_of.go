@@ -85,16 +85,20 @@ func ExecutionStatusOf(err error) ExecutionStatus {
 //
 // The driver fills it; its zero value is empty.
 type AttemptFailure struct {
+	// Err is the attempt's error.
 	Err error
 	// Address is the host:port the attempt was sent to.
 	Address string
-	HostID  cql.UUID
+	// HostID is the host ID of the host the attempt was sent to.
+	HostID cql.UUID
 	// Number is the 1-based attempt number.
 	Number int
 	// Shard is the shard of the connection, when the host is shard-aware.
-	Shard       cql.Option[uint32]
+	Shard cql.Option[uint32]
+	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
-	Status      ExecutionStatus
+	// Status reports what the attempt may have done on the cluster.
+	Status ExecutionStatus
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
 	// error. Read it with package cqltrace.
@@ -139,8 +143,10 @@ type ExecutionError struct {
 	// last, in the order they started, with the context's error and
 	// MaybeExecuted. Error names the last attempt's host with Err.
 	Attempts []AttemptFailure
-	Result   cql.Result
-	status   ExecutionStatus
+	// Result holds what the responses carried before the request failed:
+	// warnings, CQL trace IDs and custom payload.
+	Result cql.Result
+	status ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request whose attempts reached

@@ -27,7 +27,10 @@ type dataTypeDescriptor struct {
 //
 // The zero ColumnSpec names no column and has the invalid zero DataType.
 type ColumnSpec struct {
-	Type                  DataType
+	// Type is the column's complete type.
+	Type DataType
+	// Keyspace, Table and Name name the column. Each may be empty, as for a
+	// tuple field or a bind marker without metadata.
 	Keyspace, Table, Name string
 }
 
@@ -441,7 +444,9 @@ func (s CellState) String() string {
 // It supports result decoding and binding nullable application fields.
 // Use BindValue for parameters that also need UNSET.
 type Nullable[T any] struct {
+	// Value is the value when Valid is true.
 	Value T
+	// Valid reports that the value is not NULL.
 	Valid bool
 }
 
@@ -450,13 +455,17 @@ type Nullable[T any] struct {
 // other State, EmptyCell included; to bind an empty value, wrap the base
 // codec with EmptyCodec and bind a MaybeEmpty.
 type BindValue[T any] struct {
+	// Value is the value bound when State is Present.
 	Value T
+	// State is Present, Null or Unset.
 	State CellState
 }
 
 // MaybeEmpty distinguishes an empty CQL value from an ordinary value. Its zero
 // value encodes the ordinary zero value of T; Empty=true selects empty.
 type MaybeEmpty[T any] struct {
+	// Value is the value encoded when Empty is false.
 	Value T
+	// Empty selects the empty value instead of Value.
 	Empty bool
 }

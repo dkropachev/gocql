@@ -32,7 +32,8 @@ import (
 // The driver fills it; its zero value is empty.
 type Info struct {
 	// Started is when the coordinator began the request.
-	Started     time.Time
+	Started time.Time
+	// Coordinator is the address of the node that coordinated the request.
 	Coordinator netip.Addr
 	// Client is the address the request came from.
 	Client netip.Addr
@@ -43,14 +44,17 @@ type Info struct {
 	Command string
 	// Request describes the request, such as "Execute CQL3 query".
 	Request string
-	Events  []Event
+	// Events lists the events the nodes recorded, in the order they were
+	// recorded.
+	Events []Event
 	// Duration is how long the coordinator took to answer.
 	Duration time.Duration
-	// RequestSize and ResponseSize are the request and response sizes in
-	// bytes. ScyllaDB only.
-	RequestSize  cql.Option[int32]
+	// RequestSize is the request size in bytes. ScyllaDB only.
+	RequestSize cql.Option[int32]
+	// ResponseSize is the response size in bytes. ScyllaDB only.
 	ResponseSize cql.Option[int32]
-	ID           cql.UUID
+	// ID is the trace session ID.
+	ID cql.UUID
 	// Settled reports that Events stopped changing for Fetcher.Settle. It is
 	// false when Settle is negative or ctx ended first: nodes may still have
 	// been writing events, so Events may be incomplete.
@@ -61,9 +65,12 @@ type Info struct {
 //
 // The driver fills it; its zero value is empty.
 type Event struct {
-	Source   netip.Addr
+	// Source is the address of the node that recorded the event.
+	Source netip.Addr
+	// Activity describes what the node did.
 	Activity string
-	Thread   string
+	// Thread names the node's thread that recorded the event.
+	Thread string
 	// Elapsed is the time since the source node began its part of the request.
 	Elapsed time.Duration
 	// ID identifies the event; ID.Time is when it was recorded.

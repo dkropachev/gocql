@@ -6,7 +6,12 @@ package cqlerr
 // UnsupportedSettingError reports a setting that the request, the session or
 // its server cannot honor. The driver returns it filled in; its zero value is
 // an error without detail.
-type UnsupportedSettingError struct{ Setting, Reason string }
+type UnsupportedSettingError struct {
+	// Setting names the setting, such as "schema metadata".
+	Setting string
+	// Reason says why it cannot be honored.
+	Reason string
+}
 
 // Error names the setting and the reason it cannot be honored.
 func (e *UnsupportedSettingError) Error() string {

@@ -23,6 +23,8 @@ var ErrBusy = errors.New("gocql: query is busy")
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type ServerMismatchError struct {
+	// Want names the database the dialect expects, and Got the one the
+	// cluster runs.
 	Want, Got string
 }
 

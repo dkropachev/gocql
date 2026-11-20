@@ -177,7 +177,8 @@ func (e *serverError) Message() string { return e.message }
 // Warnings returns the warnings the server sent with the error.
 func (e *serverError) Warnings() []string { return e.warnings }
 
-// text renders a server error: the code's name and the server's message.
+// text renders a server error: the code's name, and the server's message
+// when it is not empty.
 func (e *serverError) text(code ErrorCode) string {
 	if e.message == "" {
 		return code.Error()
@@ -191,15 +192,19 @@ func (e *serverError) text(code ErrorCode) string {
 // The driver returns it filled in; its zero value is an error without detail.
 type UnavailableError struct {
 	serverError
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
-	Required    int
-	Alive       int
+	// Required is the number of replicas the consistency level needs alive.
+	Required int
+	// Alive is the number of replicas the coordinator knew to be alive.
+	Alive int
 }
 
 // Code returns CodeUnavailable.
 func (e *UnavailableError) Code() ErrorCode { return CodeUnavailable }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *UnavailableError) Error() string { return e.text(CodeUnavailable) }
 
 // Is reports whether target is CodeUnavailable.
@@ -217,17 +222,24 @@ type ErrorMap map[string]uint16
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type WriteTimeoutError struct {
+	// WriteType is the kind of write, as the server names it, such as
+	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
 	WriteType string
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteTimeout.
 func (e *WriteTimeoutError) Code() ErrorCode { return CodeWriteTimeout }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *WriteTimeoutError) Error() string { return e.text(CodeWriteTimeout) }
 
 // Is reports whether target is CodeWriteTimeout.
@@ -241,19 +253,27 @@ func (e *WriteTimeoutError) Kind() Kind { return KindTimeout }
 // The driver returns it filled in; its zero value is an error without detail.
 type WriteFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
-	ErrorMap  ErrorMap
+	ErrorMap ErrorMap
+	// WriteType is the kind of write, as the server names it, such as
+	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
 	WriteType string
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
+	// NumFailures is the number of replicas that failed.
 	NumFailures int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 }
 
 // Code returns CodeWriteFailure.
 func (e *WriteFailureError) Code() ErrorCode { return CodeWriteFailure }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *WriteFailureError) Error() string { return e.text(CodeWriteFailure) }
 
 // Is reports whether target is CodeWriteFailure.
@@ -272,7 +292,8 @@ type CDCWriteFailureError struct {
 // Code returns CodeCDCWriteFailure.
 func (e *CDCWriteFailureError) Code() ErrorCode { return CodeCDCWriteFailure }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *CDCWriteFailureError) Error() string { return e.text(CodeCDCWriteFailure) }
 
 // Is reports whether target is CodeCDCWriteFailure.
@@ -286,8 +307,11 @@ func (e *CDCWriteFailureError) Kind() Kind { return KindServer }
 // The driver returns it filled in; its zero value is an error without detail.
 type ReadTimeoutError struct {
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that answered.
+	Received int
+	// BlockFor is the number of answers the consistency level needs.
+	BlockFor int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
 	// DataPresent reports whether the replica asked for data answered.
 	DataPresent bool
@@ -296,7 +320,8 @@ type ReadTimeoutError struct {
 // Code returns CodeReadTimeout.
 func (e *ReadTimeoutError) Code() ErrorCode { return CodeReadTimeout }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *ReadTimeoutError) Error() string { return e.text(CodeReadTimeout) }
 
 // Is reports whether target is CodeReadTimeout.
@@ -310,15 +335,18 @@ func (e *ReadTimeoutError) Kind() Kind { return KindTimeout }
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type AlreadyExistsError struct {
+	// Keyspace is the keyspace that exists, or that holds the table.
 	Keyspace string
-	Table    string
+	// Table is the table that exists, or empty for a keyspace.
+	Table string
 	serverError
 }
 
 // Code returns CodeAlreadyExists.
 func (e *AlreadyExistsError) Code() ErrorCode { return CodeAlreadyExists }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *AlreadyExistsError) Error() string { return e.text(CodeAlreadyExists) }
 
 // Is reports whether target is CodeAlreadyExists.
@@ -333,13 +361,15 @@ func (e *AlreadyExistsError) Kind() Kind { return KindInvalid }
 // The driver returns it filled in; its zero value is an error without detail.
 type UnpreparedError struct {
 	serverError
+	// StatementID is the prepared statement ID the server does not know.
 	StatementID []byte
 }
 
 // Code returns CodeUnprepared.
 func (e *UnpreparedError) Code() ErrorCode { return CodeUnprepared }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *UnpreparedError) Error() string { return e.text(CodeUnprepared) }
 
 // Is reports whether target is CodeUnprepared.
@@ -355,17 +385,23 @@ type ReadFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
 	ErrorMap ErrorMap
 	serverError
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that answered.
+	Received int
+	// BlockFor is the number of answers the consistency level needs.
+	BlockFor int
+	// NumFailures is the number of replicas that failed.
 	NumFailures int
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
+	// DataPresent reports whether the replica asked for data answered.
 	DataPresent bool
 }
 
 // Code returns CodeReadFailure.
 func (e *ReadFailureError) Code() ErrorCode { return CodeReadFailure }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *ReadFailureError) Error() string { return e.text(CodeReadFailure) }
 
 // Is reports whether target is CodeReadFailure.
@@ -379,15 +415,19 @@ func (e *ReadFailureError) Kind() Kind { return KindServer }
 // The driver returns it filled in; its zero value is an error without detail.
 type FunctionFailureError struct {
 	serverError
+	// Keyspace is the function's keyspace.
 	Keyspace string
+	// Function is the function's name.
 	Function string
+	// ArgTypes lists the CQL types of the function's arguments.
 	ArgTypes []string
 }
 
 // Code returns CodeFunctionFailure.
 func (e *FunctionFailureError) Code() ErrorCode { return CodeFunctionFailure }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *FunctionFailureError) Error() string { return e.text(CodeFunctionFailure) }
 
 // Is reports whether target is CodeFunctionFailure.
@@ -403,15 +443,20 @@ func (e *FunctionFailureError) Kind() Kind { return KindInvalid }
 // The driver returns it filled in; its zero value is an error without detail.
 type CASWriteUnknownError struct {
 	serverError
+	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
-	Received    int
-	BlockFor    int
+	// Received is the number of replicas that acknowledged the request.
+	Received int
+	// BlockFor is the number of acknowledgements the consistency level
+	// needs.
+	BlockFor int
 }
 
 // Code returns CodeCASWriteUnknown.
 func (e *CASWriteUnknownError) Code() ErrorCode { return CodeCASWriteUnknown }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *CASWriteUnknownError) Error() string { return e.text(CodeCASWriteUnknown) }
 
 // Is reports whether target is CodeCASWriteUnknown.
@@ -452,6 +497,7 @@ func (o OpType) String() string {
 // The driver returns it filled in; its zero value is an error without detail.
 type RateLimitReachedError struct {
 	serverError
+	// OpType is the kind of operation the limit rejected.
 	OpType OpType
 	// RejectedByCoordinator reports that the coordinator rejected the
 	// request before sending it to any replica, so nothing was applied.
@@ -461,7 +507,8 @@ type RateLimitReachedError struct {
 // Code returns CodeRateLimitReached.
 func (e *RateLimitReachedError) Code() ErrorCode { return CodeRateLimitReached }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *RateLimitReachedError) Error() string { return e.text(CodeRateLimitReached) }
 
 // Is reports whether target is CodeRateLimitReached.
@@ -491,7 +538,8 @@ func NewOtherServerError(code ErrorCode, message string) *OtherServerError {
 // Code returns the error's code.
 func (e *OtherServerError) Code() ErrorCode { return e.code }
 
-// Error returns the code's name and the server's message.
+// Error returns the code's name, followed by the server's message when it
+// is not empty.
 func (e *OtherServerError) Error() string { return e.text(e.code) }
 
 // Is reports whether target is the error's code.

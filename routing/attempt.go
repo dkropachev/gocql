@@ -21,12 +21,17 @@ type Info struct {
 	// Token is the token of the request's partition, when known.
 	Token cql.Option[int64]
 	// Kind and Conditional classify the statement.
-	Kind        cql.StatementKind
+	Kind cql.StatementKind
+	// Conditional reports that the request is routed and retried as a
+	// conditional statement: Kind is not OrdinaryStatement, or its
+	// consistency is serial.
 	Conditional bool
 	// Consistency is the request's consistency level.
 	Consistency cql.Consistency
 	// HostID and ShardID pin the request to a host and shard when set.
-	HostID  cql.Option[cql.UUID]
+	HostID cql.Option[cql.UUID]
+	// ShardID is the shard the request is pinned to, when set; it requires
+	// HostID.
 	ShardID cql.Option[uint32]
 }
 
@@ -34,10 +39,15 @@ type Info struct {
 //
 // The driver fills it; its zero value is empty.
 type AttemptStart struct {
-	Started     time.Time
-	RequestID   uint64
-	Attempt     int
-	Target      metadata.Target
+	// Started is when the attempt was sent.
+	Started time.Time
+	// RequestID is the ID of the attempt's request.
+	RequestID uint64
+	// Attempt is the 1-based number of the attempt within its request.
+	Attempt int
+	// Target is the host, and shard, the attempt was sent to.
+	Target metadata.Target
+	// Speculative reports a speculative attempt.
 	Speculative bool
 }
 
@@ -45,14 +55,22 @@ type AttemptStart struct {
 //
 // The driver fills it; its zero value is empty.
 type AttemptEvent struct {
-	Started   time.Time
-	Err       error
+	// Started is when the attempt was sent.
+	Started time.Time
+	// Err is the attempt's error, or nil when it succeeded.
+	Err error
+	// RequestID is the ID of the attempt's request.
 	RequestID uint64
-	Attempt   int
-	Latency   time.Duration
-	Target    metadata.Target
+	// Attempt is the 1-based number of the attempt within its request.
+	Attempt int
+	// Latency is how long the attempt took.
+	Latency time.Duration
+	// Target is the host, and shard, the attempt was sent to.
+	Target metadata.Target
 	// CQLTraceID is the CQL trace session the attempt's response named, when
 	// the execution ran with CQL tracing and a response arrived.
-	CQLTraceID             cql.Option[cql.UUID]
+	CQLTraceID cql.Option[cql.UUID]
+	// Cancelled reports an attempt that ended with its context, and
+	// Speculative a speculative attempt.
 	Cancelled, Speculative bool
 }

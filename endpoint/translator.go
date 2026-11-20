@@ -42,8 +42,10 @@ type Peer struct {
 	// RPCAddress, BroadcastAddress, ListenAddress and PreferredIP are the
 	// addresses the node advertises.
 	RPCAddress, BroadcastAddress, ListenAddress, PreferredIP netip.Addr
-	Datacenter, Rack                                         string
-	HostID                                                   cql.UUID
+	// Datacenter and Rack are the node's location.
+	Datacenter, Rack string
+	// HostID is the node's host ID, or the zero UUID when not yet known.
+	HostID cql.UUID
 	// Port is the node's CQL port. ShardAwarePort and ShardAwarePortTLS are
 	// its ScyllaDB shard-aware ports, zero when not advertised. Compare the
 	// port being translated with them to tell the endpoints apart.

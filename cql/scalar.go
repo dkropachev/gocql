@@ -301,10 +301,12 @@ var (
 
 	// InetCodec maps inet to netip.Addr, as a 4- or 16-byte address.
 	InetCodec Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: TypeInet, encode: encodeInet, decode: decodeInet}
+
 	// StringCodec encodes a string and decodes text into a newly allocated
 	// string that stays valid after the row is released. Use TextCodec to decode
 	// without copying.
 	StringCodec Codec[string] = stringCodec{}
+
 	// ASCIIStringCodec is StringCodec for the ascii type.
 	ASCIIStringCodec Codec[string] = stringCodec{ascii: true}
 

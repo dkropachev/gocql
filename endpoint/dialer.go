@@ -19,10 +19,18 @@ import (
 //
 // The driver fills it; its zero value names no address.
 type DialTarget struct {
-	LocalAddress     netip.AddrPort
+	// LocalAddress is the source address to dial from, or the zero AddrPort
+	// for any. Its port is set when a shard-aware port connection needs a
+	// source port of the shard, and zero otherwise.
+	LocalAddress netip.AddrPort
+	// Network and Address are the network and address to dial, as for
+	// net.Dialer.DialContext.
 	Network, Address string
-	Host             metadata.HostSnapshot
-	ShardID          cql.Option[uint32]
+	// Host is the host the connection is for.
+	Host metadata.HostSnapshot
+	// ShardID is the shard a shard-aware port connection targets, and is
+	// unset otherwise.
+	ShardID cql.Option[uint32]
 }
 
 // Dialer opens the raw connections of a session; TLS is applied afterward.
@@ -46,7 +54,13 @@ func (f DialerFunc) DialContext(ctx context.Context, target DialTarget) (net.Con
 //
 // The zero DefaultDialer is ready to use: the dial is bounded only by its
 // context, and TCP keepalive is off.
-type DefaultDialer struct{ ConnectTimeout, SocketKeepalive time.Duration }
+type DefaultDialer struct {
+	// ConnectTimeout bounds each dial; zero leaves it bounded only by its
+	// context.
+	ConnectTimeout time.Duration
+	// SocketKeepalive is the TCP keepalive period; zero turns keepalive off.
+	SocketKeepalive time.Duration
+}
 
 // DialContext dials the target with a net.Dialer bounded by ConnectTimeout,
 // with TCP keepalive every SocketKeepalive, or off when it is zero. A source

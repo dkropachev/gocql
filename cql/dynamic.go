@@ -43,14 +43,21 @@ type Value struct {
 //
 // Its zero value has an empty name and the zero Value.
 type ValueField struct {
-	Name  string
+	// Name is the field's name, or the parameter's bind marker name.
+	Name string
+	// Value is the field's value.
 	Value Value
 }
 
 // ValueEntry is one key and value of a map Value.
 //
 // Its zero value holds two zero Values.
-type ValueEntry struct{ Key, Value Value }
+type ValueEntry struct {
+	// Key is the entry's key.
+	Key Value
+	// Value is the entry's value.
+	Value Value
+}
 
 // Type returns the value's type.
 func (v Value) Type() DataType { return v.typ }

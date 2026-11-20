@@ -6,8 +6,10 @@ package cql
 // Option distinguishes an explicit zero value from an inherited setting.
 // Its zero value inherits the setting; Set=true applies Value.
 type Option[T any] struct {
+	// Value is the setting's value when Set is true.
 	Value T
-	Set   bool
+	// Set reports that Value applies instead of the inherited setting.
+	Set bool
 }
 
 // Some returns an Option set to v.

@@ -297,8 +297,11 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 //
 // The driver fills it; its zero value is empty.
 type DecimalParts struct {
+	// Unscaled holds the unscaled integer's bytes, written into its existing
+	// capacity.
 	Unscaled []byte
-	Scale    int32
+	// Scale is the power of ten Unscaled is divided by.
+	Scale int32
 }
 type streamDecimalCodec struct{}
 type streamDecimalPlan struct{ typ DataType }
