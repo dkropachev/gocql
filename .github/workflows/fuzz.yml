@@ -38,7 +38,7 @@ jobs:
       - name: Run every fuzz target
         env:
           FUZZ_TIME: ${{ inputs.fuzz_time }}
-        run: make test-fuzz FUZZ_TIME="$FUZZ_TIME"
+        run: ci/fuzz.sh "$FUZZ_TIME"
 
       # go test writes a failing input under the package's testdata/fuzz/;
       # commit it to keep it as a regression seed.

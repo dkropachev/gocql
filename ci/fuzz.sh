@@ -14,25 +14,37 @@ set -euo pipefail
 
 budget=${1:-30s}
 parallel=${FUZZ_PARALLEL:-2}
+if ! [[ "$budget" =~ ^[0-9]+(ns|us|ms|s|m|h|x)$ && "$parallel" =~ ^[0-9]+$ ]]; then
+	echo "invalid budget ${budget@Q} or FUZZ_PARALLEL ${parallel@Q}" >&2
+	exit 2
+fi
 cd "$(dirname "$0")/.."
 
-# Targets are found in the default build, which every fuzz file uses, in
-# the packages of this module (nested modules are skipped).
+# Targets are the functions func FuzzX(f *testing.F) of this module's test
+# files (nested modules are skipped). Each run below must report that it
+# fuzzed, so a target the default build leaves out fails instead of passing
+# silently.
 module=$(go list -m)
-mapfile -t targets < <(
-	grep -rl --include='*_test.go' --exclude-dir=testdata '^func Fuzz' . |
-		while read -r file; do
-			dir=$(dirname "$file")
-			[[ "$(go list -f '{{.Module.Path}}' "$dir" 2>/dev/null)" == "$module" ]] || continue
-			sed -n 's/^func \(Fuzz[A-Za-z0-9_]*\)(.*/\1/p' "$file" | while read -r name; do
-				echo "$dir $name"
-			done
-		done | sort
-)
+files=$(grep -rl --include='*_test.go' --exclude-dir=testdata '^func Fuzz[A-Za-z0-9_]*(f \*testing\.F)' .)
+targets=()
+for file in $files; do
+	dir=$(dirname "$file")
+	if ! mod=$(go list -f '{{.Module.Path}}' "$dir"); then
+		echo "cannot load package $dir" >&2
+		exit 1
+	fi
+	[[ "$mod" == "$module" ]] || continue
+	for name in $(sed -n 's/^func \(Fuzz[A-Za-z0-9_]*\)(f \*testing\.F).*/\1/p' "$file"); do
+		targets+=("$dir $name")
+	done
+done
 if ((${#targets[@]} == 0)); then
 	echo "no fuzz targets found" >&2
 	exit 1
 fi
+mapfile -t targets < <(printf '%s\n' "${targets[@]}" | sort)
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
 
 failed=()
 summary=()
@@ -40,7 +52,8 @@ for target in "${targets[@]}"; do
 	read -r dir name <<<"$target"
 	echo "::group::$dir $name ($budget)"
 	start=$SECONDS
-	if go test -run='^$' -fuzz="^${name}\$" -fuzztime="$budget" -parallel="$parallel" "$dir"; then
+	if go test -run='^$' -fuzz="^${name}\$" -fuzztime="$budget" -parallel="$parallel" "$dir" 2>&1 | tee "$log" &&
+		grep -q '^fuzz: elapsed' "$log"; then
 		result=pass
 	else
 		result=FAIL
