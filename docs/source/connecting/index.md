@@ -53,8 +53,9 @@ code that serves several dialects takes a plain `*gocql.Session`.
 
 Zero turns a feature off where zero has no other meaning:
 `WithHeartbeat(0, 0)` sends no heartbeats, `WithMetadataRefresh(0)` stops
-periodic metadata reloads and `WithPreparedCacheSize(0)` caches no prepared
-statements. On/off settings take a bool: `WithNagle`, `WithDiscovery`,
+periodic metadata reloads, `WithPreparedCacheSize(0)` caches no prepared
+statements and `WithErrorStatementText(0)`, the default, leaves the statement
+out of request errors ([errors](../errors.md#attempts)). On/off settings take a bool: `WithNagle`, `WithDiscovery`,
 `WithConfigReport`, `WithAutomaticSchemaAgreement` and
 `WithRefreshAfterAgreement`. `NoAdvancedShardAwareness` turns off what
 `WithAdvancedShardAwareness(first, last)` configures.

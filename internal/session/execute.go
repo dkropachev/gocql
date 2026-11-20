@@ -652,7 +652,13 @@ func InternalAdmitExecution[R any](ctx context.Context, s *implCluster.Core, b *
 // admit is admitRequest, reporting a refusal as a request that was not sent.
 func (rt *InternalSessionRuntime) admit[R any](ctx context.Context, b *Bound[R], options CompiledOptions) (context.Context, context.CancelFunc, *InternalExecutionRequest, error) {
 	runctx, cancel, request, err := rt.admitRequest(ctx, b, options)
-	return runctx, cancel, request, notSent(err)
+	if err != nil {
+		err = notSent(err)
+		if b != nil {
+			rt.describeStatement(err, &b.privateStorage.InternalRequest)
+		}
+	}
+	return runctx, cancel, request, err
 }
 
 // notSent reports err, a failure before a request was sent, as an
@@ -1141,7 +1147,16 @@ func pinnedUsable(conn *transport.Conn) bool {
 	return conn != nil && !conn.Closed() && (conn.InternalHost == nil || conn.InternalHost.IsUp())
 }
 
+// executePage executes one page of request, starting from state.
 func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state cql.PageState) (*transport.InternalResponsePage, error) {
+	response, err := s.executePageAttempts(ctx, request, state)
+	if err != nil {
+		s.describeStatement(err, request)
+	}
+	return response, err
+}
+
+func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, request *InternalExecutionRequest, state cql.PageState) (*transport.InternalResponsePage, error) {
 	direct := canExecuteDirect(request)
 	if !direct {
 		pageRequest := *request

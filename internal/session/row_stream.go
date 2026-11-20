@@ -139,7 +139,9 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 			failure.Result = cursor.Info().Result
 			return nil, failure
 		}
-		return nil, newExecutionError(err, cursor.Info().Result, cqlerr.ExecutionStatusOf(err), nil)
+		failure := newExecutionError(err, cursor.Info().Result, cqlerr.ExecutionStatusOf(err), nil)
+		rt.describeStatement(failure, request)
+		return nil, failure
 	}
 	request.InternalLogical.installStop(stopFunc(func() { rowStreamCloseWithError(cursor, cqlerr.ErrClosed) }))
 	return cursor, nil
@@ -543,7 +545,9 @@ func (s *RowStream[R]) loadPage() error {
 	if err == nil || log.empty() {
 		return err
 	}
-	return log.error(err, cql.Result{})
+	failure := log.error(err, cql.Result{})
+	InternalRuntimeFor(s.privateStorage.session).describeStatement(failure, s.privateStorage.request)
+	return failure
 }
 
 // rowStreamLoadPage loads the next page, recording its failed attempts in log.

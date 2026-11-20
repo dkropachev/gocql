@@ -27,10 +27,12 @@ type queryErrorRep struct{ state QueryErrorState }
 
 // executionErrorRep mirrors cqlerr.ExecutionError.
 type executionErrorRep struct {
-	Err      error
-	Attempts []cqlerr.AttemptFailure
-	Result   cql.Result
-	status   cqlerr.ExecutionStatus
+	Err             error
+	Attempts        []cqlerr.AttemptFailure
+	Statement       string
+	Result          cql.Result
+	BatchStatements int
+	status          cqlerr.ExecutionStatus
 }
 
 var serverErrorMessage = link.Get[func(cqlerr.ServerError, string, []string)](link.ServerErrorMessage)

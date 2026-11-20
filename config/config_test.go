@@ -89,6 +89,17 @@ func TestConfigBuilder(t *testing.T) {
 		mustBuildConfig(t, b.WithApplication("", ""))
 	})
 
+	t.Run("ErrorStatementText", func(t *testing.T) {
+		if _, err := New("h").WithErrorStatementText(-1).Build(); err == nil {
+			t.Fatal("Build accepted a negative error statement limit")
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "error statement text" {
+			t.Fatalf("Build = %v, want an error statement text ValidationError", err)
+		}
+		if c := mustBuildConfig(t, New("h").WithErrorStatementText(200)).settings; c.ErrorStatementBytes != 200 {
+			t.Fatalf("ErrorStatementBytes = %d, want 200", c.ErrorStatementBytes)
+		}
+	})
+
 	t.Run("NoContactPoints", func(t *testing.T) {
 		if _, err := New().Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
 			t.Fatalf("Build without contact points = %v", err)
@@ -197,6 +208,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithObserver none":                                                         c.Observer == nil,
 			"WithLifecycleObserver none":                                                c.LifecycleObserver == nil,
 			"WithConfigReport true":                                                     c.ReportConfiguration,
+			"WithErrorStatementText off":                                                c.ErrorStatementBytes == 0,
 			"Profile WithConsistency LOCAL_QUORUM":                                      p.Consistency == cql.LocalQuorum,
 			"Profile WithSerialConsistency LOCAL_SERIAL":                                p.SerialConsistency == cql.Some(cql.LocalSerial),
 			"Profile WithTimeout 30s":                                                   p.Timeout == 30*time.Second,

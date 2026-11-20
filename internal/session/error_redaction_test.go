@@ -90,87 +90,100 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 		})},
 	} {
 		for _, general := range []bool{false, true} {
-			t.Run(fmt.Sprintf("%s/general=%t", tc.name, general), func(t *testing.T) {
-				logger, logs := logging.NewCapture()
-				s, conns, peers := runtimeTestSession(t, 2)
-				implCluster.SessionData(s).InternalLogger = logger
-				routes := &runtimePolicy{}
-				for _, c := range conns {
-					c.InternalLogger = logger
-					routes.targets = append(routes.targets, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost)})
-				}
-				for i := range conns {
-					go func() {
-						_, stream, body, err := readRequest(peers[i])
-						if err != nil {
-							return
+			// statementBytes 0 leaves the statement out of errors; a
+			// positive limit adds its CQL text, never the bound value.
+			for _, statementBytes := range []int{0, 1000} {
+				t.Run(fmt.Sprintf("%s/general=%t/statement=%d", tc.name, general, statementBytes), func(t *testing.T) {
+					logger, logs := logging.NewCapture()
+					s, conns, peers := runtimeTestSession(t, 2)
+					InternalRuntimeFor(s).config.ErrorStatementBytes = statementBytes
+					implCluster.SessionData(s).InternalLogger = logger
+					routes := &runtimePolicy{}
+					for _, c := range conns {
+						c.InternalLogger = logger
+						routes.targets = append(routes.targets, metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost)})
+					}
+					for i := range conns {
+						go func() {
+							_, stream, body, err := readRequest(peers[i])
+							if err != nil {
+								return
+							}
+							if !bytes.Contains(body, []byte(redactionSecret)) {
+								t.Errorf("host %d: the request does not carry the bound value", i)
+							}
+							tc.serve(t, i, stream, peers[i])
+						}()
+					}
+					profile := settings.InternalDefaultProfile()
+					profile.Routing = routes
+					profile.Retry = retry.Safe{}
+					if general {
+						profile.Speculation = neverSpeculate{}
+					}
+					bound, err := BindUnpreparedOwned(binding.Statement[string, cql.Bytes]{
+						Kind:   cql.OrdinaryStatement,
+						CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
+						Params: cql.OneParam(cql.StringCodec),
+						Rows:   cql.OneColumn(cql.BlobCodec),
+					}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer bound.Close()
+					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+					defer cancel()
+					opts := Options{Profile: new(profile), Idempotent: true, Observer: panickingObserver{}}
+					if tc.timeout > 0 {
+						opts.Timeout = cql.Some(tc.timeout)
+					}
+					page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(opts))
+					if err == nil {
+						var row cql.Bytes
+						for page.NextInto(&row) {
 						}
-						if !bytes.Contains(body, []byte(redactionSecret)) {
-							t.Errorf("host %d: the request does not carry the bound value", i)
+						err = page.Err()
+						page.Close()
+					}
+					if err == nil {
+						t.Fatal("request succeeded")
+					}
+					text := errorText(err)
+					if strings.Contains(text, redactionSecret) {
+						t.Errorf("error leaks the bound value: %s", text)
+					}
+					if logged := logs.String(); !strings.Contains(logged, "observer panicked") {
+						t.Errorf("nothing logged the failure: %q", logged)
+					} else if strings.Contains(logged, redactionSecret) || logs.Contains(redactionSecret) {
+						t.Errorf("a log record leaks the bound value: %s", logged)
+					}
+					if tc.attempts == 0 {
+						return // a decoding failure, reported by the page
+					}
+					// The message names every attempt and where it ran.
+					failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
+					if !ok || len(failure.Attempts) != tc.attempts {
+						t.Fatalf("want an ExecutionError of %d attempts: %v", tc.attempts, err)
+					}
+					// The statement is named only when the session asks for it.
+					const named = `statement "SELECT value FROM ks.tbl WHERE k = ?"`
+					if statementBytes == 0 && (failure.Statement != "" || strings.Contains(err.Error(), "statement")) {
+						t.Errorf("statement reported while off: %q in %v", failure.Statement, err)
+					}
+					if statementBytes > 0 && (failure.Statement != "SELECT value FROM ks.tbl WHERE k = ?" || failure.BatchStatements != 0 || !strings.Contains(err.Error(), named)) {
+						t.Errorf("message %q, Statement %q: want %s", err, failure.Statement, named)
+					}
+					for _, a := range failure.Attempts {
+						target := a.Address
+						if target == "" {
+							target = a.HostID.String()
 						}
-						tc.serve(t, i, stream, peers[i])
-					}()
-				}
-				profile := settings.InternalDefaultProfile()
-				profile.Routing = routes
-				profile.Retry = retry.Safe{}
-				if general {
-					profile.Speculation = neverSpeculate{}
-				}
-				bound, err := BindUnpreparedOwned(binding.Statement[string, cql.Bytes]{
-					Kind:   cql.OrdinaryStatement,
-					CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
-					Params: cql.OneParam(cql.StringCodec),
-					Rows:   cql.OneColumn(cql.BlobCodec),
-				}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer bound.Close()
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				opts := Options{Profile: new(profile), Idempotent: true, Observer: panickingObserver{}}
-				if tc.timeout > 0 {
-					opts.Timeout = cql.Some(tc.timeout)
-				}
-				page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(opts))
-				if err == nil {
-					var row cql.Bytes
-					for page.NextInto(&row) {
+						if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Number, target)) {
+							t.Errorf("message %q does not name attempt #%d on %s", err, a.Number, target)
+						}
 					}
-					err = page.Err()
-					page.Close()
-				}
-				if err == nil {
-					t.Fatal("request succeeded")
-				}
-				text := errorText(err)
-				if strings.Contains(text, redactionSecret) {
-					t.Errorf("error leaks the bound value: %s", text)
-				}
-				if logged := logs.String(); !strings.Contains(logged, "observer panicked") {
-					t.Errorf("nothing logged the failure: %q", logged)
-				} else if strings.Contains(logged, redactionSecret) || logs.Contains(redactionSecret) {
-					t.Errorf("a log record leaks the bound value: %s", logged)
-				}
-				if tc.attempts == 0 {
-					return // a decoding failure, reported by the page
-				}
-				// The message names every attempt and where it ran.
-				failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
-				if !ok || len(failure.Attempts) != tc.attempts {
-					t.Fatalf("want an ExecutionError of %d attempts: %v", tc.attempts, err)
-				}
-				for _, a := range failure.Attempts {
-					target := a.Address
-					if target == "" {
-						target = a.HostID.String()
-					}
-					if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Number, target)) {
-						t.Errorf("message %q does not name attempt #%d on %s", err, a.Number, target)
-					}
-				}
-			})
+				})
+			}
 		}
 	}
 
