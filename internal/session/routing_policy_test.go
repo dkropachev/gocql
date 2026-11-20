@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	metadata2 "github.com/scylladb/gocql/v2/metadata"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -65,6 +66,39 @@ func TestRoutingPolicy(t *testing.T) {
 				t.Fatal("binding refreshed captured partitioner", old.calls, newer.calls, b.Routing())
 			}
 		})
+	})
+
+	t.Run("PartitionerByTable", func(t *testing.T) {
+		// A request hashes its key with the partitioner its table names, or
+		// the cluster's; a partitioner the session does not know, or a table
+		// it has no metadata for, gives no partitioner and so no token.
+		s := testSession(t)
+		peripheral := s.Peripheral()
+		peripheral.InternalMu.Lock()
+		config := peripheral.InternalConfig
+		peripheral.InternalMu.Unlock()
+		config.Partitioners = settings.DefaultConfig().Partitioners
+		s.ConfigureV2Peripheral(config)
+		next := implRouting.InternalClonePlacementSnapshot(s.Metadata())
+		ks := metadata.InternalCloneV2Keyspace(routing.SnapshotData(next).InternalKeyspaces["ks"])
+		ks.Tables["cdc"] = &metadata2.Table{Name: "cdc", Options: metadata2.TableOptions{Partitioner: "com.scylladb.dht.CDCPartitioner"}}
+		ks.Tables["random"] = &metadata2.Table{Name: "random", Options: metadata2.TableOptions{Partitioner: "org.apache.cassandra.dht.RandomPartitioner"}}
+		routing.SnapshotData(next).InternalKeyspaces = map[string]*metadata2.Keyspace{"ks": ks}
+		routing.SnapshotData(next).InternalPartitioner = "org.apache.cassandra.dht.Murmur3Partitioner"
+		peripheral.InternalSnapshot.Store(next)
+		for _, test := range []struct {
+			table string
+			want  routing2.TokenPartitioner
+		}{
+			{"table", routing2.Murmur3TokenPartitioner},
+			{"cdc", routing2.CDCTokenPartitioner},
+			{"random", nil},
+			{"missing", nil},
+		} {
+			if got := s.CapturedRoutingPartitioner(s.PreparedPartitionerName("ks", test.table)); got != test.want {
+				t.Errorf("table %s: partitioner %T, want %T", test.table, got, test.want)
+			}
+		}
 	})
 
 	t.Run("Latency", func(t *testing.T) {
