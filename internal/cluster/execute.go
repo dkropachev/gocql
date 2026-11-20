@@ -5,6 +5,7 @@ package cluster
 
 import (
 	"context"
+	"fmt"
 	"math"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -33,13 +34,13 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan i
 		return nil, cqlerr.ErrClosed
 	}
 	if s.privateStorage.InternalPool == nil || s.privateStorage.InternalHostSource == nil {
-		return nil, cqlerr.ErrNoConnections
+		return nil, s.noConnection(ctx)
 	}
 	if plan != nil {
 		for {
 			r, ok := plan.Next()
 			if !ok {
-				return nil, cqlerr.ErrNoConnections
+				return nil, s.noConnection(ctx)
 			}
 			if conn := sessionPickRoute(s, r, routing); conn != nil {
 				return conn, nil
@@ -54,11 +55,11 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan i
 		if conn := sessionPickRoute(s, implRouting.InternalNewRoute(s.privateStorage.InternalPool.InternalRoute(routing.HostID.Value), shard), routing); conn != nil {
 			return conn, nil
 		}
-		return nil, cqlerr.ErrNoConnections
+		return nil, s.noConnection(ctx)
 	}
 	hosts := s.privateStorage.InternalHostSource.InternalHostsView()
 	if len(hosts) == 0 {
-		return nil, cqlerr.ErrNoConnections
+		return nil, s.noConnection(ctx)
 	}
 	start := int(s.privateStorage.nextTypedHost.Add(1) % uint64(len(hosts)))
 	for i := 0; i < len(hosts); i++ {
@@ -67,8 +68,26 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan i
 			return conn, nil
 		}
 	}
-	return nil, cqlerr.ErrNoConnections
+	return nil, s.noConnection(ctx)
 }
+
+// noConnection is the error for a request that found no connection. Close
+// cancels the executions it finds and then closes the pools, so a request
+// that passed SelectTypedConn's checks just before Close can find every pool
+// empty. It reports its context's error once that has ended, and ErrClosed
+// once Close has begun; the error also matches ErrNoConnections, so
+// ExecutionStatusOf still reports the request as not executed.
+func (s *Core) noConnection(ctx context.Context) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.Closed() {
+		return errClosedNoConnection
+	}
+	return cqlerr.ErrNoConnections
+}
+
+var errClosedNoConnection = fmt.Errorf("%w (%w)", cqlerr.ErrClosed, cqlerr.ErrNoConnections)
 
 // sessionPickRoute returns a connection of r's host for r's shard,
 // or nil. A route that belongs to no session resolves its host by ID.

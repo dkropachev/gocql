@@ -108,7 +108,7 @@ func recreateExec(t testing.TB, s *gocql.Session, stmt string) (cql.Result, erro
 	var err error
 	for attempt := 1; attempt <= 4; attempt++ {
 		result, err = v2Exec(context.Background(), s, stmt)
-		if server, ok := errors.AsType[cqlerr.ServerError](err); err == nil || !ok || server.Message() != "Failed to apply group 0 change due to concurrent modification" || attempt == 4 {
+		if !isGroup0ConflictErr(err) || attempt == 4 {
 			return result, err
 		}
 		t.Logf("retry explicitly aborted group-0 fixture transaction, attempt %d", attempt)

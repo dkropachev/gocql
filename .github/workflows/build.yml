@@ -79,7 +79,15 @@ jobs:
           cache-dependency-path: |
             go.sum
 
+      # golangci-lint type-checks the test packages from export data, so a
+      # cold run compiles every test variant, cql's alone taking about 8 GB.
+      # Measured locally with GOMAXPROCS=4 and empty caches, the run peaked at
+      # 13.9 GB summed over its processes, close enough to the runner's 16 GB
+      # to swap or lose the runner; GOGC=50 for the compilers and the linter
+      # lowers that to 11.4 GB in the same time.
       - name: Run linters
+        env:
+          GOGC: "50"
         run: make check
 
       - name: Run unit tests

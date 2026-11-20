@@ -311,17 +311,32 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 
 // exportData maps import paths to export data files for the package in dir,
 // its tests and the packages the table names.
+//
+// The table's packages are listed in a second go list without -test: -test
+// applies to every named package, and the test variant of cql would compile
+// all of cql's test files (about 70s and 7 GB cold) for export data nothing
+// reads.
 func exportData(dir string) (map[string]string, error) {
-	cmd := exec.Command("go", "list", "-e", "-export", "-deps", "-test",
-		"-f", "{{.ImportPath}}\t{{.Export}}", ".", cqlPath, netipPath)
+	exports := map[string]string{}
+	for _, args := range [][]string{{"-test", "."}, {cqlPath, netipPath}} {
+		if err := listExports(dir, args, exports); err != nil {
+			return nil, err
+		}
+	}
+	return exports, nil
+}
+
+// listExports runs go list -export -deps with args in dir and adds the
+// export data file of each plain package it lists to exports.
+func listExports(dir string, args []string, exports map[string]string) error {
+	cmd := exec.Command("go", append([]string{"list", "-e", "-export", "-deps", "-f", "{{.ImportPath}}\t{{.Export}}"}, args...)...)
 	cmd.Dir = dir
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("go list: %w\n%s", err, stderr.Bytes())
+		return fmt.Errorf("go list: %w\n%s", err, stderr.Bytes())
 	}
-	exports := map[string]string{}
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 	for scanner.Scan() {
 		path, file, _ := strings.Cut(scanner.Text(), "\t")
@@ -330,7 +345,7 @@ func exportData(dir string) (map[string]string, error) {
 		}
 		exports[path] = file
 	}
-	return exports, scanner.Err()
+	return scanner.Err()
 }
 
 // structFields maps s's fields, and those of the structs it embeds by value,

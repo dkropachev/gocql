@@ -87,12 +87,22 @@ func TestMetadata(t *testing.T) {
 		}
 		runDDL := func(stmt string) {
 			t.Helper()
-			if _, err := metadataExecOnConn(ctx, s, stmt, *func() *implSession.Options {
-				opaqueStorageValue := new(implSession.Options)
-				implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
-				return opaqueStorageValue
-			}()); err != nil {
-				t.Fatal(err)
+			// Tests running beside this one change the schema too; ScyllaDB
+			// aborts the losing group-0 change, which is safe to resend.
+			for attempt := 1; ; attempt++ {
+				_, err := metadataExecOnConn(ctx, s, stmt, *func() *implSession.Options {
+					opaqueStorageValue := new(implSession.Options)
+					implSession.OptionsData(opaqueStorageValue).InternalConnection = conn
+					return opaqueStorageValue
+				}())
+				if err == nil {
+					return
+				}
+				if !isGroup0ConflictErr(err) || attempt == 4 {
+					t.Fatal(err)
+				}
+				t.Logf("%s: retrying an aborted group-0 change, attempt %d", stmt, attempt)
+				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond)
 			}
 		}
 		runDDL("CREATE KEYSPACE " + keyspace + " WITH replication={'class':'NetworkTopologyStrategy','replication_factor':1}")
@@ -498,6 +508,9 @@ func TestMetadata(t *testing.T) {
 						t.Fatal("query failed with unexpected error", err)
 					}
 				} else if err != nil {
+					// ScyllaDB 2025.1 refuses views and indexes on a
+					// tablets keyspace.
+					skipIfTabletsReject(t, err)
 					t.Fatal("invalid input query", err)
 				}
 

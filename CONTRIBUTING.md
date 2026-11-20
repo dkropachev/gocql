@@ -79,6 +79,9 @@ cluster connects to `localhost:9042`; add it to `TestClusterExamples`
 (`example_cluster_test.go`), which `make test-integration-examples` runs
 against ScyllaDB.
 
+A test that fails in CI for a reason unrelated to the change goes into
+[docs/flaky-tests.md](docs/flaky-tests.md), fixed or explicitly accepted.
+
 Use the owned native fixture runner described in tests/fixtures/README.md for
 actual database tests. Select Cassandra protocol 5 explicitly for v5 segments;
 Scylla fixture protocol rejection is not a v5 pass. Replay regeneration and

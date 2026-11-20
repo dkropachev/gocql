@@ -54,6 +54,7 @@ func TestStructMapping(t *testing.T) {
 
 		counters := testTableName(t, "counters")
 		if err := v2CreateTable(ctx, f.session, "CREATE TABLE IF NOT EXISTS "+counters+" (k int PRIMARY KEY, hits counter)"); err != nil {
+			skipIfTabletsReject(t, err)
 			t.Fatal(err)
 		}
 		type hit struct {
@@ -125,6 +126,7 @@ func TestStructMapping(t *testing.T) {
 		r := smRecordAt(7, 0)
 		var result cql.CASResult[smRecord]
 		if ok, _, err := insert.One(ctx, r, &result); err != nil || !ok || !result.Applied {
+			skipIfTabletsReject(t, err)
 			t.Fatal("first insert:", ok, err, result.Applied)
 		}
 		changed := r
