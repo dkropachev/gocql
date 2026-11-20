@@ -879,19 +879,15 @@ package cqlerr
 	var cqlerr.ErrNoConnections error
 	var cqlerr.ErrNoConnectionsStarted error
 	var cqlerr.ErrNoControl error
-	var cqlerr.ErrNoHosts error
 	var cqlerr.ErrNoKeyspace error
 	var cqlerr.ErrNoRows error
 	var cqlerr.ErrNoStreams error
 	var cqlerr.ErrNoTable error
-	var cqlerr.ErrNotFound error
 	var cqlerr.ErrPagingComplete error
 	var cqlerr.ErrPagingNoProgress error
 	var cqlerr.ErrPagingStateLimit error
 	var cqlerr.ErrReadHeaderTimeout error
 	var cqlerr.ErrScyllaSourcePortAlreadyInUse error
-	var cqlerr.ErrSessionClosed error
-	var cqlerr.ErrSessionNotReady error
 	var cqlerr.ErrStaleRows error
 	var cqlerr.ErrTimeoutNoResponse error
 	var cqlerr.ErrUseStmt error
@@ -907,7 +903,6 @@ package cqlerr
 		cqlerr.ExecutionError method (*T) Unwrap() []error
 	type cqlerr.ExecutionStatus uint8
 		cqlerr.ExecutionStatus method (T) String() string
-		cqlerr.ExecutionStatus method (T) Worse(o cqlerr.ExecutionStatus) cqlerr.ExecutionStatus
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
 	type cqlerr.FunctionFailureError struct
 		cqlerr.FunctionFailureError field Keyspace string
@@ -1125,7 +1120,6 @@ package endpoint
 		endpoint.Dialer method DialContext(context.Context, endpoint.DialTarget) (net.Conn, error)
 	type endpoint.DialerFunc func(context.Context, endpoint.DialTarget) (net.Conn, error)
 		endpoint.DialerFunc method (T) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error)
-	func endpoint.IdentityTranslator() endpoint.Translator
 	type endpoint.Peer struct
 		endpoint.Peer field RPCAddress net/netip.Addr
 		endpoint.Peer field BroadcastAddress net/netip.Addr
@@ -1233,7 +1227,6 @@ package metadata
 		metadata.Aggregate field FinalFunc metadata.Function
 		metadata.Aggregate field StateFunc metadata.Function
 	type metadata.Column struct
-		metadata.Column field Index metadata.ColumnIndex
 		metadata.Column field Keyspace string
 		metadata.Column field Table string
 		metadata.Column field Name string
@@ -1245,11 +1238,6 @@ package metadata
 		metadata.Column method (*T) Equals(other *metadata.Column) bool
 	const metadata.ColumnClusteringKey metadata.ColumnKind = 2
 	const metadata.ColumnCompact metadata.ColumnKind = 4
-	type metadata.ColumnIndex struct
-		metadata.ColumnIndex field Options map[string]any
-		metadata.ColumnIndex field Name string
-		metadata.ColumnIndex field Type string
-		metadata.ColumnIndex method (*T) Equals(other *metadata.ColumnIndex) bool
 	type metadata.ColumnKind int
 		metadata.ColumnKind method (T) String() string
 	const metadata.ColumnKindUnknown metadata.ColumnKind = 0
@@ -1386,8 +1374,6 @@ package metadata
 		metadata.View field PartitionKey []*metadata.Column
 		metadata.View field ClusteringColumns []*metadata.Column
 		metadata.View field Options metadata.TableOptions
-		metadata.View field DcLocalReadRepairChance float64
-		metadata.View field ReadRepairChance float64
 		metadata.View field IncludeAllColumns bool
 
 package metrics

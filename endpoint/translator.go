@@ -28,13 +28,6 @@ func (fn TranslatorFunc) Translate(ctx context.Context, peer Peer, addr netip.Ad
 	return fn(ctx, peer, addr)
 }
 
-// IdentityTranslator returns a translator that leaves addresses unchanged.
-func IdentityTranslator() Translator {
-	return TranslatorFunc(func(_ context.Context, _ Peer, addr netip.AddrPort) (netip.AddrPort, error) {
-		return addr, nil
-	})
-}
-
 // Peer is what a node advertises about itself in system.local or
 // system.peers, as known when its address is translated. Zero fields are
 // unknown; a contact point that has not been discovered yet has no HostID.

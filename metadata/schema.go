@@ -7,7 +7,6 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
-	"reflect"
 )
 
 // Keyspace is the schema of a keyspace: its replication and the tables,
@@ -218,12 +217,6 @@ type View struct {
 	ClusteringColumns []*Column
 	// Options holds the view's options.
 	Options TableOptions
-	// DcLocalReadRepairChance is the view's datacenter-local read repair
-	// probability, on servers that still have the option.
-	DcLocalReadRepairChance float64
-	// ReadRepairChance is the view's read repair probability, on servers that
-	// still have the option.
-	ReadRepairChance float64
 	// IncludeAllColumns reports a view that selects every column of the base
 	// table.
 	IncludeAllColumns bool
@@ -233,9 +226,6 @@ type View struct {
 //
 // The driver fills it; its zero value is empty.
 type Column struct {
-	// Index is the column's index in the schema of older servers. It is
-	// empty when the schema comes from system_schema.
-	Index ColumnIndex
 	// Keyspace is the name of the column's keyspace.
 	Keyspace string
 	// Table is the name of the column's table or view.
@@ -256,8 +246,8 @@ type Column struct {
 	Order ColumnOrder
 }
 
-// Equals reports whether c and other describe the same column, index
-// included. Two nil columns are equal, and nil never equals non-nil.
+// Equals reports whether c and other describe the same column. Two nil
+// columns are equal, and nil never equals non-nil.
 func (c *Column) Equals(other *Column) bool {
 	if c == nil || other == nil {
 		return c == other
@@ -270,8 +260,7 @@ func (c *Column) Equals(other *Column) bool {
 		c.Kind == other.Kind &&
 		c.Type == other.Type &&
 		c.ClusteringOrder == other.ClusteringOrder &&
-		c.Order == other.Order &&
-		c.Index.Equals(&other.Index)
+		c.Order == other.Order
 }
 
 // Function is a user-defined function.
@@ -469,43 +458,6 @@ const (
 	ASC  ColumnOrder = false
 	DESC ColumnOrder = true
 )
-
-// ColumnIndex is the index on a column, in the schema of older servers.
-//
-// The driver fills it; its zero value is empty.
-type ColumnIndex struct {
-	// Options holds the index's options.
-	Options map[string]any
-	// Name is the index's name.
-	Name string
-	// Type is the index's type.
-	Type string
-}
-
-// Equals reports whether c and other have the same name, type and options.
-// Two nil indexes are equal, and nil never equals non-nil.
-func (c *ColumnIndex) Equals(other *ColumnIndex) bool {
-	if c == nil || other == nil {
-		return c == other
-	}
-
-	if c.Name != other.Name || c.Type != other.Type {
-		return false
-	}
-
-	// Compare the Options map
-	if len(c.Options) != len(other.Options) {
-		return false
-	}
-	for k, v := range c.Options {
-		otherValue, exists := other.Options[k]
-		if !exists || !reflect.DeepEqual(v, otherValue) {
-			return false
-		}
-	}
-
-	return true
-}
 
 // ColumnKind is the role of a column in its table. The zero ColumnKind is
 // ColumnKindUnknown. Later releases may add values, so a switch over them needs

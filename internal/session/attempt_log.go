@@ -24,6 +24,27 @@ type attemptLog struct {
 	raised   bool
 }
 
+// worseStatus returns the more severe of a and b, ordering NotExecuted <
+// MaybeExecuted < PartiallyExecuted. An undefined status counts as
+// MaybeExecuted, the safe assumption.
+func worseStatus(a, b cqlerr.ExecutionStatus) cqlerr.ExecutionStatus {
+	if statusSeverity(b) > statusSeverity(a) {
+		return b
+	}
+	return a
+}
+
+func statusSeverity(s cqlerr.ExecutionStatus) int {
+	switch s {
+	case cqlerr.NotExecuted:
+		return 0
+	case cqlerr.PartiallyExecuted:
+		return 2
+	default:
+		return 1
+	}
+}
+
 // fail records a failed attempt and returns its execution status. It stays
 // out of line so the request loops keep their happy-path frame small.
 //
@@ -61,7 +82,7 @@ func (l *attemptLog) raise(status cqlerr.ExecutionStatus) {
 		l.worst, l.raised = status, true
 		return
 	}
-	l.worst = l.worst.Worse(status)
+	l.worst = worseStatus(l.worst, status)
 }
 
 func (l *attemptLog) status() cqlerr.ExecutionStatus {
@@ -92,7 +113,7 @@ func (l *attemptLog) merge(err error, result cql.Result) error {
 		return l.error(err, result)
 	}
 	failures := append(l.failures[:len(l.failures):len(l.failures)], later.Attempts...)
-	status := l.status().Worse(later.ExecutionStatus())
+	status := worseStatus(l.status(), later.ExecutionStatus())
 	merged := later.Result
 	merged.Attempts += len(l.failures)
 	return runtimeerrors.NewExecutionError(later.Err, merged, status, failures)

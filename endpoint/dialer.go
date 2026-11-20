@@ -21,7 +21,10 @@ import (
 type DialTarget struct {
 	// LocalAddress is the source address to dial from, or the zero AddrPort
 	// for any. Its port is set when a shard-aware port connection needs a
-	// source port of the shard, and zero otherwise.
+	// source port of the shard, and zero otherwise. When that port is taken,
+	// return an error that matches syscall.EADDRINUSE or
+	// cqlerr.ErrScyllaSourcePortAlreadyInUse, and the driver tries the next
+	// port of the shard.
 	LocalAddress netip.AddrPort
 	// Network and Address are the network and address to dial, as for
 	// net.Dialer.DialContext.

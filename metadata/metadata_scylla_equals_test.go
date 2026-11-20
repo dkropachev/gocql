@@ -144,11 +144,6 @@ func populatedColumnMetadata() *metadata.Column {
 		ComponentIndex:  1,
 		Kind:            metadata.ColumnRegular,
 		Order:           metadata.ASC,
-		Index: metadata.ColumnIndex{
-			Name:    "idx",
-			Type:    "COMPOSITES",
-			Options: map[string]any{"target": "col"},
-		},
 	}
 }
 

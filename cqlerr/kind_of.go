@@ -69,16 +69,16 @@ func serverKind(err ServerError) Kind {
 // a comparable value, so the comparison cannot panic.
 func sentinelKind(err error) Kind {
 	switch err {
-	case ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
+	case ErrClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
 		return KindClosed
 	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
-		ErrPagingStateLimit, ErrNotFound, ErrNoRows:
+		ErrPagingStateLimit, ErrNoRows:
 		return KindInvalid
 	case ErrFrameTooBig, ErrPagingNoProgress:
 		return KindProtocol
 	case ErrTimeoutNoResponse, ErrReadHeaderTimeout:
 		return KindTimeout
-	case ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
+	case ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
 		ErrNoControl, ErrScyllaSourcePortAlreadyInUse, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed:
 		return KindConnection
 	}

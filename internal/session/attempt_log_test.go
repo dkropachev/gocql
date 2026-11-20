@@ -16,6 +16,17 @@ func TestAttemptLog(t *testing.T) {
 	timeout := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	overloaded := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.NewOtherServerError(cqlerr.CodeOverloaded, ""), InternalPotentiallyExecuted: true})
 
+	t.Run("WorseStatus", func(t *testing.T) {
+		order := []cqlerr.ExecutionStatus{cqlerr.NotExecuted, cqlerr.MaybeExecuted, cqlerr.PartiallyExecuted}
+		for i, a := range order {
+			for j, b := range order {
+				if got, want := worseStatus(a, b), order[max(i, j)]; got != want {
+					t.Errorf("worseStatus(%v, %v) = %v want %v", a, b, got, want)
+				}
+			}
+		}
+	})
+
 	t.Run("Empty", func(t *testing.T) {
 		var log attemptLog
 		if log.status() != cqlerr.NotExecuted || !log.empty() {

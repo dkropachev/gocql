@@ -593,7 +593,10 @@ func (cfg *InternalClusterSettings) Validate() error {
 const defaultCQLPort = 9042
 
 var (
-	ErrNoHosts              = cqlerr.ErrNoHosts
+	// ErrNoHosts reports cluster settings that name no hosts. The public
+	// configuration rejects an empty contact point list first, so a session
+	// never returns it.
+	ErrNoHosts              = errors.New("gocql: no hosts provided")
 	ErrNoConnectionsStarted = cqlerr.ErrNoConnectionsStarted
 )
 

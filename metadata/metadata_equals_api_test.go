@@ -45,104 +45,6 @@ func TestMetadataEqualsAPI(t *testing.T) {
 				return a.(*metadata.Column).Equals(b.(*metadata.Column))
 			})
 		})
-		// Pins a second field of the nested
-		// index. The drift test above does reach Index -- differentValue recurses into
-		// a struct -- but it stops at the first field it can mutate, and
-		// ColumnIndexMetadata declares Options first, so Index.Name is never the field
-		// it changes. This covers that one directly.
-		t.Run("IncludesIndex", func(t *testing.T) {
-			t.Parallel()
-
-			a := populatedColumnMetadata()
-			b := populatedColumnMetadata()
-			b.Index.Name = "different-index"
-
-			if a.Equals(b) {
-				t.Error("Equals() = true for columns differing only in Index.Name")
-			}
-		})
-	})
-	t.Run("ColumnIndex", func(t *testing.T) {
-		t.Parallel()
-
-		// This is the drift guard for
-		// ColumnIndexMetadata. TestMetadataEqualsAPI/ColumnIndex/Semantics below pins the specific
-		// semantics (a renamed key, a composite value); this one only ensures no
-		// exported field can be added and left out of the comparison unnoticed.
-		t.Run("ComparesEveryField", func(t *testing.T) {
-			t.Parallel()
-
-			want := populatedColumnMetadata().Index
-			other := populatedColumnMetadata().Index
-			if !want.Equals(&other) {
-				t.Fatal("Equals() = false for two identically populated values")
-			}
-
-			assertEveryFieldCompared(t, &want, func(a, b any) bool {
-				return a.(*metadata.ColumnIndex).Equals(b.(*metadata.ColumnIndex))
-			})
-		})
-		t.Run("Semantics", func(t *testing.T) {
-			t.Parallel()
-
-			base := func() *metadata.ColumnIndex {
-				return &metadata.ColumnIndex{
-					Name:    "idx",
-					Type:    "COMPOSITES",
-					Options: map[string]any{"target": "col", "nested": []string{"a", "b"}},
-				}
-			}
-
-			tests := []struct {
-				name   string
-				mutate func(*metadata.ColumnIndex)
-				want   bool
-			}{
-				{name: "identical", mutate: func(*metadata.ColumnIndex) {}, want: true},
-				{name: "different name", mutate: func(c *metadata.ColumnIndex) { c.Name = "other" }},
-				{name: "different type", mutate: func(c *metadata.ColumnIndex) { c.Type = "KEYS" }},
-				{
-					name:   "extra option",
-					mutate: func(c *metadata.ColumnIndex) { c.Options["extra"] = "value" },
-				},
-				{
-					name:   "missing option",
-					mutate: func(c *metadata.ColumnIndex) { delete(c.Options, "target") },
-				},
-				{
-					name:   "same key different value",
-					mutate: func(c *metadata.ColumnIndex) { c.Options["target"] = "other" },
-				},
-				{
-					// Options is map[string]any, so its values are compared with
-					// reflect.DeepEqual rather than ==. A slice value must still be
-					// compared by content.
-					name:   "same key different slice value",
-					mutate: func(c *metadata.ColumnIndex) { c.Options["nested"] = []string{"a", "c"} },
-				},
-				{
-					// Equal length, disjoint keys: a length-only check would pass this.
-					name: "same size different keys",
-					mutate: func(c *metadata.ColumnIndex) {
-						delete(c.Options, "target")
-						c.Options["renamed"] = "col"
-					},
-				},
-			}
-
-			for _, tt := range tests {
-				t.Run(tt.name, func(t *testing.T) {
-					t.Parallel()
-
-					a, b := base(), base()
-					tt.mutate(b)
-
-					if got := a.Equals(b); got != tt.want {
-						t.Errorf("Equals() = %v, want %v", got, tt.want)
-					}
-				})
-			}
-		})
 	})
 	// Pins the shared nil contract: two nils are
 	// equal, a nil and a non-nil are not, and neither dereferences.
@@ -179,23 +81,6 @@ func TestMetadataEqualsAPI(t *testing.T) {
 				t.Error("Equals(nil) = true for a populated receiver")
 			}
 			if nilCol.Equals(populated) {
-				t.Error("nil.Equals(populated) = true")
-			}
-		})
-
-		t.Run("ColumnIndexMetadata", func(t *testing.T) {
-			t.Parallel()
-
-			var nilIdx *metadata.ColumnIndex
-			populated := &metadata.ColumnIndex{Name: "idx"}
-
-			if !nilIdx.Equals(nil) {
-				t.Error("Equals() = false for two nils, want true")
-			}
-			if populated.Equals(nil) {
-				t.Error("Equals(nil) = true for a populated receiver")
-			}
-			if nilIdx.Equals(populated) {
 				t.Error("nil.Equals(populated) = true")
 			}
 		})

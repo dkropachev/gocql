@@ -40,26 +40,6 @@ import (
 
 func TestAddressTranslation(t *testing.T) {
 	ctx := context.Background()
-	t.Run("IdentityTranslator", func(t *testing.T) {
-		t.Run("ZeroAddr", func(t *testing.T) {
-			t.Parallel()
-
-			var tr endpoint2.Translator = endpoint2.IdentityTranslator()
-			got, err := tr.Translate(ctx, endpoint2.Peer{}, netip.AddrPort{})
-			tests.AssertNil(t, "should return no error", err)
-			tests.AssertEqual(t, "translated addr", netip.AddrPort{}, got)
-		})
-		t.Run("HostProvided", func(t *testing.T) {
-			t.Parallel()
-
-			var tr endpoint2.Translator = endpoint2.IdentityTranslator()
-			addr := netip.MustParseAddrPort("10.1.2.3:9042")
-			got, err := tr.Translate(ctx, endpoint2.Peer{}, addr)
-			tests.AssertNil(t, "should return no error", err)
-			tests.AssertEqual(t, "translated addr", addr, got)
-		})
-	})
-
 	t.Run("TranslateHostAddresses", func(t *testing.T) {
 		t.Run("NoScyllaPorts", func(t *testing.T) {
 			t.Parallel()

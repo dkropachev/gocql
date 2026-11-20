@@ -5,14 +5,9 @@ package cqlerr
 
 import "errors"
 
-// Session start-up errors.
-var (
-	// ErrNoHosts reports a cluster configuration that names no hosts.
-	ErrNoHosts = errors.New("gocql: no hosts provided")
-	// ErrNoConnectionsStarted reports that a session could not open a
-	// connection to any host while connecting. ConnectError matches it.
-	ErrNoConnectionsStarted = errors.New("gocql: no connections were made when creating the session")
-)
+// ErrNoConnectionsStarted reports that a session could not open a connection
+// to any host while connecting. ConnectError matches it.
+var ErrNoConnectionsStarted = errors.New("gocql: no connections were made when creating the session")
 
 // ErrBusy indicates that a query still owns an active execution, transport
 // write, or callback. Wait joins that execution before the query is reused.

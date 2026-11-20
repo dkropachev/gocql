@@ -28,6 +28,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -489,9 +490,13 @@ func (s *Core) initialized() bool {
 	return initialized
 }
 
+// errSessionNotReady reports use of a session that has not finished
+// connecting. Connect returns a session only once it is ready.
+var errSessionNotReady = errors.New("gocql: session is not ready yet")
+
 func sessionReady(s *Core) error {
 	s.privateStorage.InternalSessionStateMu.RLock()
-	err := cqlerr.ErrSessionNotReady
+	err := errSessionNotReady
 	if s.privateStorage.isInitialized || s.privateStorage.initErr != nil {
 		err = s.privateStorage.initErr
 	}
@@ -507,7 +512,7 @@ func sessionRemoveHost(s *Core, h *implEndpoint.HostInfo) {
 // TableMetadata returns the schema metadata for the specified table. Returns an error if the keyspace or table does not exist.
 func sessionTableMetadata(s *Core, keyspace, table string) (*metadata2.Table, error) {
 	if s.Closed() {
-		return nil, cqlerr.ErrSessionClosed
+		return nil, cqlerr.ErrClosed
 	} else if err := sessionReady(s); err != nil {
 		return nil, err
 	} else if keyspace == "" {
