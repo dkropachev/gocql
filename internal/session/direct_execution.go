@@ -149,7 +149,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				if log == nil {
 					log = new(attemptLog)
 				}
-				log.fail(err, conn, attempt, consistency, trace)
+				log.fail(err, conn, attempt, consistency, trace, request.partialBatch())
 				log.raise(cqlerr.PartiallyExecuted)
 				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
 			}
@@ -157,7 +157,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if log == nil {
 			log = new(attemptLog)
 		}
-		attemptStatus := log.fail(err, conn, attempt, consistency, trace)
+		attemptStatus := log.fail(err, conn, attempt, consistency, trace, request.partialBatch())
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			// The context ended before the attempt failed. A cancellation, such
 			// as Session.Close's, and the failure it causes (the closed
@@ -167,7 +167,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.IgnoreWrite:

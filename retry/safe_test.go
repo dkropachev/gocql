@@ -117,6 +117,45 @@ func TestSafe(t *testing.T) {
 		}
 	})
 
+	// Cassandra can reject an unlogged or counter batch as Unavailable or
+	// Overloaded after it sent some partitions' writes: a non-idempotent one
+	// is not replayed. A logged batch and Bootstrapping reject the batch
+	// whole.
+	t.Run("PartialBatch", func(t *testing.T) {
+		unavailable := &cqlerr.UnavailableError{Required: 2, Alive: 1}
+		overloaded := cqlerr.NewOtherServerError(cqlerr.CodeOverloaded, "")
+		bootstrapping := cqlerr.NewOtherServerError(cqlerr.CodeBootstrapping, "")
+		for _, tc := range []struct {
+			name        string
+			err         error
+			batch       cql.Option[cql.BatchKind]
+			idempotent  bool
+			conditional bool
+			want        retry.Action
+		}{
+			{"NotBatch/Unavailable", unavailable, cql.Option[cql.BatchKind]{}, false, false, retry.Next},
+			{"Logged/Unavailable", unavailable, cql.Some(cql.LoggedBatch), false, false, retry.Next},
+			{"Logged/Overloaded", overloaded, cql.Some(cql.LoggedBatch), false, false, retry.Next},
+			{"Unlogged/Unavailable", unavailable, cql.Some(cql.UnloggedBatch), false, false, retry.Stop},
+			{"Unlogged/Overloaded", overloaded, cql.Some(cql.UnloggedBatch), false, false, retry.Stop},
+			{"Counter/Unavailable", unavailable, cql.Some(cql.CounterBatch), false, false, retry.Stop},
+			{"Counter/Overloaded", overloaded, cql.Some(cql.CounterBatch), false, false, retry.Stop},
+			{"UnknownKind/Unavailable", unavailable, cql.Some(cql.BatchKind(9)), false, false, retry.Stop},
+			{"Unlogged/Bootstrapping", bootstrapping, cql.Some(cql.UnloggedBatch), false, false, retry.Next},
+			{"Unlogged/Idempotent", unavailable, cql.Some(cql.UnloggedBatch), true, false, retry.Next},
+			{"Counter/IdempotentOverloaded", overloaded, cql.Some(cql.CounterBatch), true, false, retry.Next},
+			// Conditional is also set for a batch with a member of unknown
+			// kind, which may span partitions.
+			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, true, retry.Stop},
+		} {
+			a := attempt(tc.err, true, tc.idempotent)
+			a.Batch, a.Conditional = tc.batch, tc.conditional
+			if got := (retry.Safe{}).Decide(a); got.Action != tc.want {
+				t.Errorf("%s: %v, want %v", tc.name, got.Action, tc.want)
+			}
+		}
+	})
+
 	t.Run("MaxAttempts", func(t *testing.T) {
 		for _, tc := range []struct{ max, number int }{{0, 3}, {-1, 3}, {1, 1}, {5, 5}} {
 			a := retry.Attempt{Err: &cqlerr.UnavailableError{}, Number: tc.number - 1, ExecutionStatus: cqlerr.NotExecuted}

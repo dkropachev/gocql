@@ -716,7 +716,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			}
 			s.privateStorage.mu.Unlock()
 		}
-		attemptStatus := log.fail(err, conn, attempt, consistency, event.CQLTraceID)
+		attemptStatus := log.fail(err, conn, attempt, consistency, event.CQLTraceID, request.partialBatch())
 		// OutputStarted is set before Reset, so no decoder/partial row ever replays.
 		if s.Info().OutputStarted {
 			return err
@@ -736,7 +736,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Conditional: request.routing.Conditional, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err

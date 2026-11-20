@@ -43,6 +43,13 @@ batch suits members that share a partition. Prepared metadata, routing,
 parameter schemas and observation remain typed. A batch speculates only when it
 is idempotent and every member is known to be ordinary.
 
+An unlogged or counter batch spanning several partitions is not atomic: the
+coordinator writes each partition separately, and Cassandra can reject the
+batch as Unavailable or Overloaded after it sent the earlier partitions'
+writes. Such a failure therefore reports `cqlerr.MaybeExecuted`, and
+`retry.Safe` does not replay the batch unless it is idempotent; see
+[retries](../retry-policy.md).
+
 `ExecBatch` rejects a batch known to be conditional with
 `cqlerr.ErrConditionalExec` before sending it. Conditional batch results use
 `session.RunBatch(ctx, &batch, decoder)`, which returns `Rows` decoded

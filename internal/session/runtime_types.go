@@ -212,6 +212,21 @@ type InternalExecutionRequest struct {
 	hasTimestamp bool
 }
 
+// batchKind returns the kind of batch r sends, unset when r is not a batch.
+func (r *InternalExecutionRequest) batchKind() cql.Option[cql.BatchKind] {
+	if r.batch == nil {
+		return cql.Option[cql.BatchKind]{}
+	}
+	return cql.Some(r.batch.kind)
+}
+
+// partialBatch reports whether r is a batch that a server may apply in part
+// before it rejects it as Unavailable or Overloaded: an unlogged or counter
+// batch.
+func (r *InternalExecutionRequest) partialBatch() bool {
+	return r.batch != nil && r.batch.kind != cql.LoggedBatch
+}
+
 // ownOptions makes request's options its own to change, for an execution
 // that overrides them: a copy in scratch the request's query keeps for its
 // executions, or in new storage without a query. The query's next

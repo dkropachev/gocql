@@ -10,7 +10,7 @@ safe:
 
 | Status | Meaning |
 | --- | --- |
-| `NotExecuted` | Nothing was applied: the request never left the driver, or the server rejected it first (Unavailable, Overloaded, Syntax, Invalid, Unauthorized, ...). Retrying cannot duplicate it. |
+| `NotExecuted` | Nothing was applied: the request never left the driver, or the server rejected it first (Unavailable, Overloaded, Syntax, Invalid, Unauthorized, ...). Retrying cannot duplicate it. An unlogged or counter batch rejected as Unavailable or Overloaded is the exception: the server may have written some of its partitions, so its attempt reports `MaybeExecuted`. |
 | `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.IsCASWriteUnknown(err)` identifies it. See [server differences](server-differences.md). |
 | `PartiallyExecuted` | Some replicas applied a write without reaching the requested consistency, or a schema change succeeded but its follow-up failed. |
 
