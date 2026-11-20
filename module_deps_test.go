@@ -6,6 +6,7 @@ package gocql_test
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -25,9 +26,9 @@ var runtimeModules = []string{
 }
 
 // libraryPackages returns the import paths of the module's library packages
-// under tags: the public and internal packages, not commands, tests or
-// examples.
-func libraryPackages(t *testing.T, ctx context.Context, tags string) []string {
+// under tags: the public and internal packages, not tests or examples, and
+// with commands the commands users run (cmd/cqlgen) too.
+func libraryPackages(ctx context.Context, t *testing.T, tags string, commands bool) []string {
 	t.Helper()
 	out, err := exec.CommandContext(ctx, "go", "list", "-tags="+tags, "./...").Output()
 	if err != nil {
@@ -39,8 +40,13 @@ func libraryPackages(t *testing.T, ctx context.Context, tags string) []string {
 		if !ok {
 			continue
 		}
-		switch layerOf(strings.TrimPrefix(rel, "/")) {
-		case layerTool, layerExample:
+		rel = strings.TrimPrefix(rel, "/")
+		switch layerOf(rel) {
+		case layerTool:
+			if !commands || !strings.HasPrefix(rel, "cmd/") {
+				continue
+			}
+		case layerExample:
 			continue
 		}
 		pkgs = append(pkgs, pkg)
@@ -48,14 +54,14 @@ func libraryPackages(t *testing.T, ctx context.Context, tags string) []string {
 	return pkgs
 }
 
-// TestRuntimeDependencies checks that the library's packages, under the
-// default build and each of tagSets, import packages only from the standard
-// library, this module and runtimeModules.
+// TestRuntimeDependencies checks that the library's packages and the
+// commands, under the default build and each of tagSets, import packages
+// only from the standard library, this module and runtimeModules.
 func TestRuntimeDependencies(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	for _, tags := range append([]string{""}, tagSets...) {
-		args := append([]string{"list", "-tags=" + tags, "-deps", "-f", "{{with .Module}}{{.Path}} {{end}}{{.ImportPath}}"}, libraryPackages(t, ctx, tags)...)
+		args := append([]string{"list", "-tags=" + tags, "-deps", "-f", "{{with .Module}}{{.Path}} {{end}}{{.ImportPath}}"}, libraryPackages(ctx, t, tags, true)...)
 		out, err := exec.CommandContext(ctx, "go", args...).Output()
 		if err != nil {
 			t.Fatalf("go list -deps -tags=%s: %v", tags, err)
@@ -74,10 +80,11 @@ func TestRuntimeDependencies(t *testing.T) {
 // package, as a user would. go mod tidy must give it only this module and
 // runtimeModules as requirements, and the consumer must build with go.sum
 // holding source hashes for those modules alone, so no test-only module of
-// this module's go.mod is downloaded or built for it. (Tidy still records
-// the test-only modules' hashes in go.sum, for go test of this module's
-// packages from the consumer.) It runs offline, against the module cache the
-// module's own tests filled.
+// this module's go.mod is built for it. Tidy itself still fetches the
+// test-only modules and records their hashes in the consumer's go.sum, so
+// that go test of this module's packages works from there; the build never
+// reads them. It runs offline, against the module cache the module's own
+// tests filled.
 func TestConsumerModuleRequirements(t *testing.T) {
 	if testing.Short() {
 		t.Skip("runs go mod tidy and go build in a temporary module")
@@ -89,7 +96,7 @@ func TestConsumerModuleRequirements(t *testing.T) {
 		t.Fatal(err)
 	}
 	var imports []string
-	for _, pkg := range libraryPackages(t, ctx, "") {
+	for _, pkg := range libraryPackages(ctx, t, "", false) {
 		if rel := strings.TrimPrefix(strings.TrimPrefix(pkg, modulePath), "/"); !strings.HasPrefix(rel, "internal/") && rel != "internal" {
 			imports = append(imports, pkg)
 		}
@@ -129,7 +136,7 @@ func TestConsumerModuleRequirements(t *testing.T) {
 		out, err := cmd.Output()
 		if err != nil {
 			stderr := ""
-			if ee, ok := err.(*exec.ExitError); ok {
+			if ee, ok := errors.AsType[*exec.ExitError](err); ok {
 				stderr = string(ee.Stderr)
 			}
 			t.Fatalf("go %s: %v\n%s%s", strings.Join(args, " "), err, out, stderr)

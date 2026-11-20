@@ -388,6 +388,12 @@ own module and does not reuse `internal/testkit`.
   the merged unit and integration profile: it reports statement coverage per
   public package and fails when an exported function or method of a public
   package never ran.
+- `TestRuntimeDependencies` (`module_deps_test.go`) fails when a library
+  package or a command, under the default build or any of those tags,
+  imports a package from a module other than `klauspost/compress`,
+  `pierrec/lz4/v4` and `golang.org/x/sync`. `TestConsumerModuleRequirements`
+  builds a module importing every public package and fails when `go mod
+  tidy` gives it any other requirement or its build needs another module.
 - After v2.0.0, CI runs `apidiff` against the last release tag.
 
 ## Where the code stands today
