@@ -40,7 +40,8 @@ zero value), `cql.UnloggedBatch` or `cql.CounterBatch`. The kind follows from
 what the batch holds, so it is set once when the batch is built rather than on
 each send: a counter batch contains only counter updates, and an unlogged
 batch suits members that share a partition. Prepared metadata, routing,
-parameter schemas and observation remain typed. Batches do not speculate.
+parameter schemas and observation remain typed. A batch speculates only when it
+is idempotent and every member is known to be ordinary.
 
 `ExecBatch` rejects a batch known to be conditional with
 `cqlerr.ErrConditionalExec` before sending it. Conditional batch results use
