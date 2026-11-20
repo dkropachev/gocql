@@ -75,6 +75,26 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 }
 ```
 
+The message names the last attempt's address (its host ID when the address is
+unknown) and shard, its error, the execution status and up to three earlier
+attempts. It never holds a bound value. By default it does not name the
+statement either: CQL text can carry literals the application wrote into it,
+and error messages often reach logs that are not cleared for application data.
+Opt in per session with `config.New(...).WithErrorStatementText(maxBytes)`:
+`failure.Statement` then holds the statement's CQL text, and the message adds
+it. Text longer than `maxBytes` is cut at a character boundary to at most
+`maxBytes` bytes and `...` is appended:
+
+```text
+gocql: request: #1 10.0.0.1:9042/shard3: invalid query: unconfigured table t; statement "SELECT v FROM ks.t WHERE k = ?"
+```
+
+A prepared statement reports the CQL text it was prepared from. A batch
+reports its statement count in `failure.BatchStatements` and its first
+statement in `failure.Statement`, rendered as
+`batch of 3 statements, first "INSERT ..."`. Bound values are left out in
+every mode; only literals written into the CQL text itself appear.
+
 `failure.Result` holds what the execution gathered before it failed, such as
 its attempt count and latency. A successful call names its coordinator host
 in `Result.HostID`; an `Observer` sees the shard of every attempt in

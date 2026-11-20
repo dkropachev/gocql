@@ -143,10 +143,20 @@ type ExecutionError struct {
 	// last, in the order they started, with the context's error and
 	// MaybeExecuted. Error names the last attempt's host with Err.
 	Attempts []AttemptFailure
+	// Statement is the CQL text of the request's statement, or of a batch's
+	// first statement, when the session was configured with
+	// config.ConfigBuilder.WithErrorStatementText; it is empty otherwise.
+	// Text over that setting's limit is cut to it and "..." is appended.
+	// It never holds bound values, but it does hold literals written into
+	// the CQL text.
+	Statement string
 	// Result holds what the responses carried before the request failed:
 	// warnings, CQL trace IDs and custom payload.
 	Result cql.Result
-	status ExecutionStatus
+	// BatchStatements is the number of statements of a batch whose first
+	// statement Statement holds, and zero otherwise.
+	BatchStatements int
+	status          ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request whose attempts reached
@@ -157,7 +167,8 @@ func newExecutionError(err error, result cql.Result, status ExecutionStatus, att
 
 // Error returns Err, prefixed with the last attempt's target when Err is that
 // attempt's failure, followed by the execution status when Err does not
-// already report it and by at most three earlier attempts.
+// already report it, the statement when Statement is set, and at most three
+// earlier attempts.
 func (e *ExecutionError) Error() string {
 	var b strings.Builder
 	b.WriteString("gocql: request: ")
@@ -177,6 +188,7 @@ func (e *ExecutionError) Error() string {
 	if ExecutionStatusOf(e.Err) != e.status {
 		b.WriteString(executionSuffix(e.status))
 	}
+	e.writeStatement(&b)
 	if len(attempts) == 0 {
 		return b.String()
 	}
@@ -193,6 +205,20 @@ func (e *ExecutionError) Error() string {
 		b.WriteString(a.String())
 	}
 	return b.String()
+}
+
+// writeStatement writes the statement the request ran, quoted, when the
+// session reports it: `; statement "..."`, or for a batch
+// `; batch of N statements, first "..."`.
+func (e *ExecutionError) writeStatement(b *strings.Builder) {
+	if e.Statement == "" {
+		return
+	}
+	if e.BatchStatements > 0 {
+		fmt.Fprintf(b, "; batch of %d statements, first %q", e.BatchStatements, e.Statement)
+		return
+	}
+	fmt.Fprintf(b, "; statement %q", e.Statement)
 }
 
 // Unwrap returns Err followed by the error of every attempt.

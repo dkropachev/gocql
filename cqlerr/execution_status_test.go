@@ -162,6 +162,19 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		}
 	})
 
+	t.Run("Statement", func(t *testing.T) {
+		err := newExecutionError(timeout, cql.Result{}, MaybeExecuted, attempts)
+		err.Statement = "SELECT \"v\"\nFROM t"
+		got := err.Error()
+		if !strings.Contains(got, `(maybe executed); statement "SELECT \"v\"\nFROM t"; earlier attempts: #1`) {
+			t.Fatalf("message %q", got)
+		}
+		err.BatchStatements = 2
+		if got := err.Error(); !strings.Contains(got, `; batch of 2 statements, first "SELECT`) {
+			t.Fatalf("message %q", got)
+		}
+	})
+
 	t.Run("EmptyAttempt", func(t *testing.T) {
 		// errors.Is(nil, nil) holds; a value without a cause names no attempt.
 		got := (&ExecutionError{Attempts: []AttemptFailure{{}}}).Error()

@@ -628,6 +628,20 @@ func (b *ConfigBuilder) WithConfigReport(on bool) *ConfigBuilder {
 	return b
 }
 
+// WithErrorStatementText makes request errors carry the statement they ran:
+// cqlerr.ExecutionError's Statement and BatchStatements, and its message. A
+// batch is described by its statement count and its first statement; a
+// prepared statement by the CQL text it was prepared from. Text longer than
+// maxBytes is cut at a character boundary to at most maxBytes bytes and "..."
+// is appended. Bound values are never included, but literals written into the
+// CQL text are, which is why it is off by default: error messages end up in
+// logs and reports that may not be cleared for application data. Zero turns
+// it off; a few hundred bytes identify most statements. Default 0.
+func (b *ConfigBuilder) WithErrorStatementText(maxBytes int) *ConfigBuilder {
+	b.settings.ErrorStatementBytes = maxBytes
+	return b
+}
+
 // String lists the effective settings. Credentials and TLS material are not
 // printed.
 func (c Config) String() string {

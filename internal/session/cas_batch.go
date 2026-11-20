@@ -137,13 +137,17 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 	}
 	core := s.Core()
 	if err := validateBatch(core, batch); err != nil {
-		return CASBatchRows[X]{}, notSent(err)
+		err = notSent(err)
+		runtimeOf(core).describeBatch(err, batch)
+		return CASBatchRows[X]{}, err
 	}
 	// A batch known to hold no condition gets a VOID result, which has no
 	// [applied] to report: reject it before sending, as ExecBatch rejects a
 	// conditional one.
 	if batch.routing.Kind == cql.OrdinaryStatement {
-		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch"))
+		err := notSent(cqltype.TypeValidation("RunConditionalBatch", "batch has no conditional statement; send it with ExecBatch"))
+		runtimeOf(core).describeBatch(err, batch)
+		return CASBatchRows[X]{}, err
 	}
 	r, rows, err := sendBatchRows(ctx, core, batch, decoder, options)
 	if err != nil {

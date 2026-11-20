@@ -71,6 +71,9 @@ type Config struct {
 	Compression                                       cql.Compression
 	ReportConfiguration                               bool
 	Server                                            Server
+	// ErrorStatementBytes is how much of a statement's CQL text request
+	// errors carry; zero leaves it out.
+	ErrorStatementBytes int
 }
 
 type PoolOptions = connectivity.PoolOptions
@@ -248,6 +251,9 @@ func (config Config) Validate() error {
 	}
 	if config.PreparedCacheSize < 0 {
 		return cqltype.TypeValidation("prepared cache", "must not be negative")
+	}
+	if config.ErrorStatementBytes < 0 {
+		return cqltype.TypeValidation("error statement text", "must not be negative")
 	}
 	if config.Pool.ConnectionsPerHost < 0 || config.Pool.ConnectionsPerShard < 0 || config.Pool.MaxExcessPerShard < 0 || config.Pool.MaxRequestsPerConnection <= 0 || config.Pool.MaxRequestsPerConnection > 32768 || config.Pool.MaxOrphanedStreams < 0 {
 		return cqltype.TypeValidation("pool", "invalid pool limits")
