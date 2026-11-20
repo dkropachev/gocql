@@ -62,7 +62,11 @@ func (d FrameDecoder) DecodedLen(data []byte) (int, error) {
 	if size > d.limit || size > math.MaxInt32 || d.limit <= 0 {
 		return 0, fmt.Errorf("gocql: decompressed frame length %d exceeds maximum of %d", size, min(d.limit, math.MaxInt32))
 	}
-	if !d.snappy && size > 0 && !lz4LengthFits(size, len(data)-dataLengthSize) {
+	if d.snappy {
+		if err := checkSnappyLength(size, data); err != nil {
+			return 0, err
+		}
+	} else if size > 0 && !lz4LengthFits(size, len(data)-dataLengthSize) {
 		return 0, lz4LengthError(size, len(data)-dataLengthSize)
 	}
 	return int(size), nil
