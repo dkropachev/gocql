@@ -222,3 +222,39 @@ func nodeControlCluster(t *testing.T, nodes int) *ccm.Cluster {
 	spec.Tag = "node-control"
 	return ccmPool.MustAcquire(t, ccm.Request{Spec: spec, Exclusive: true})
 }
+
+// strongConsistencyCluster returns a three-node ScyllaDB cluster with the
+// strongly-consistent-tables experimental feature, which strongly consistent
+// keyspaces and the TABLETS_ROUTING_V2_EXPERIMENTAL extension need. Tests
+// share it. It has the suite cluster's version and configuration, and is
+// skipped before ScyllaDB 2026.3, the first release with the extension, and
+// when ccm is unavailable.
+func strongConsistencyCluster(t *testing.T) *ccm.Cluster {
+	t.Helper()
+	if *flagDistribution != "scylla" {
+		t.Skip("strongly consistent tables are ScyllaDB-only")
+	}
+	if flagCassVersion.Before(2026, 3, 0) {
+		t.Skipf("ScyllaDB %v has no TABLETS_ROUTING_V2_EXPERIMENTAL; it ships in 2026.3", flagCassVersion)
+	}
+	if ccmPool == nil || ccmTemplateErr != nil {
+		t.Skip("a strongly consistent cluster needs ccm:", ccmTemplateErr)
+	}
+	spec := ccmTemplate
+	spec.Nodes = []int{3}
+	spec.SMP = 1
+	spec.Tag = "strong-consistency"
+	spec.Config = nil
+	for _, c := range ccmTemplate.Config {
+		if !strings.HasPrefix(c, "experimental_features:") {
+			spec.Config = append(spec.Config, c)
+		}
+	}
+	spec.Config = append(spec.Config, "experimental_features: [udf, strongly-consistent-tables]")
+	// A command-line feature list replaces the configured one.
+	spec.Args = nil
+	for _, a := range ccmTemplate.Args {
+		spec.Args = append(spec.Args, strings.ReplaceAll(a, "--experimental-features udf", "--experimental-features udf --experimental-features strongly-consistent-tables"))
+	}
+	return ccmPool.MustAcquire(t, ccm.Request{Spec: spec})
+}
