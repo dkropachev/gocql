@@ -3,7 +3,7 @@
 Install the single v2 module:
 
 ```sh
-go get github.com/scylladb/gocql/v2@v2.0.0
+go get github.com/scylladb/gocql/v2@v2.0.0-rc.1
 ```
 
 Import `github.com/scylladb/gocql/v2` (`gocql`),
