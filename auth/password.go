@@ -6,6 +6,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"log/slog"
+	"strconv"
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -18,6 +20,18 @@ type passwordAuth struct{ username, password string }
 func Password(username, password string) Provider {
 	return passwordAuth{username: username, password: password}
 }
+
+// String names the username and leaves the password out, so that printing a
+// configuration does not print the password.
+func (p passwordAuth) String() string {
+	return "auth.Password(" + strconv.Quote(p.username) + ", <redacted>)"
+}
+
+// GoString is String, for %#v.
+func (p passwordAuth) GoString() string { return p.String() }
+
+// LogValue is String, for log/slog.
+func (p passwordAuth) LogValue() slog.Value { return slog.StringValue(p.String()) }
 
 func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, _ string) (Exchange, cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
