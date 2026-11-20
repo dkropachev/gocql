@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"runtime"
 	"testing"
 )
 
@@ -69,13 +70,22 @@ func TestFrameDecoder(t *testing.T) {
 					}
 					for _, length := range []uint64{256<<20 + 1, 512 << 20, math.MaxInt32, math.MaxInt32 + 1, math.MaxUint32} {
 						var encoded []byte
+						// Enough body to make the length possible, where that
+						// fits a test; DecodedLen reads only its size.
+						var body uint64
 						if compressor.Name() == "lz4" {
 							encoded = binary.BigEndian.AppendUint32(nil, uint32(length))
+							body = (length + maxLZ4Expansion - 1) / maxLZ4Expansion
 						} else {
 							encoded = binary.AppendUvarint(nil, length)
+							body = (length*snappyMinCopySize + snappyMaxCopy - 1) / snappyMaxCopy
+						}
+						possible := length <= math.MaxInt32 && body <= 32<<20
+						if possible {
+							encoded = append(encoded, make([]byte, body)...)
 						}
 						n, err := decoder.DecodedLen(encoded)
-						if length <= math.MaxInt32 && (err != nil || uint64(n) != length) {
+						if possible && (err != nil || uint64(n) != length) {
 							t.Fatal(length, n, err)
 						}
 						if length > math.MaxInt32 && err == nil {
@@ -107,6 +117,92 @@ func TestFrameDecoder(t *testing.T) {
 						t.Fatal("output allocated/decoded above configured bound")
 					}
 				})
+			}
+		})
+
+		// A declared LZ4 length the block cannot decode to is rejected before
+		// the output is allocated, however generous the limit; a block at
+		// LZ4's real expansion ceiling still decodes.
+		t.Run("LZ4ExpansionBound", func(t *testing.T) {
+			decoder, _ := FrameDecoderWithLimit(LZ4Compressor{}, math.MaxInt32)
+			forged := binary.BigEndian.AppendUint32(nil, 256<<20)
+			forged = append(forged, 0x00)
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			for _, decode := range []func() error{
+				func() error { _, err := decoder.DecodedLen(forged); return err },
+				func() error { _, err := decoder.DecodeTo(nil, forged); return err },
+				func() error { _, err := LZ4Compressor{}.Decode(forged); return err },
+				func() error { _, err := LZ4Compressor{}.AppendDecompressed(nil, forged[4:], 1<<17); return err },
+			} {
+				if err := decode(); err == nil {
+					t.Fatal("forged length accepted")
+				}
+			}
+			runtime.ReadMemStats(&after)
+			if grown := after.TotalAlloc - before.TotalAlloc; grown > 1<<20 {
+				t.Fatalf("rejecting a forged length allocated %d bytes", grown)
+			}
+
+			input := make([]byte, 16<<20) // compresses close to 255:1
+			encoded, err := LZ4Compressor{}.Encode(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ratio := float64(len(input)) / float64(len(encoded)-4); ratio < 250 {
+				t.Fatalf("zeros compressed only %.1f:1; the case no longer tests the ceiling", ratio)
+			}
+			out, err := decoder.DecodeTo(nil, encoded)
+			if err != nil || !bytes.Equal(out, input) {
+				t.Fatal("block at the expansion ceiling", err)
+			}
+			if out, err = (LZ4Compressor{}).Decode(encoded); err != nil || !bytes.Equal(out, input) {
+				t.Fatal("block at the expansion ceiling", err)
+			}
+		})
+
+		// Snappy likewise: a copy element takes three bytes for at most 64.
+		t.Run("SnappyExpansionBound", func(t *testing.T) {
+			decoder, _ := FrameDecoderWithLimit(SnappyCompressor{}, math.MaxInt32)
+			forged := binary.AppendUvarint(nil, 256<<20)
+			forged = append(forged, 0x00)
+			var before, after runtime.MemStats
+			runtime.ReadMemStats(&before)
+			for _, decode := range []func() error{
+				func() error { _, err := decoder.DecodedLen(forged); return err },
+				func() error { _, err := decoder.DecodeTo(nil, forged); return err },
+				func() error { _, err := SnappyCompressor{}.Decode(forged); return err },
+			} {
+				if err := decode(); err == nil {
+					t.Fatal("forged length accepted")
+				}
+			}
+			runtime.ReadMemStats(&after)
+			if grown := after.TotalAlloc - before.TotalAlloc; grown > 1<<20 {
+				t.Fatalf("rejecting a forged length allocated %d bytes", grown)
+			}
+
+			input := make([]byte, 16<<20) // compresses to about 20:1, near the 64:3 ceiling
+			encoded, err := SnappyCompressor{}.Encode(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ratio := float64(len(input)) / float64(len(encoded)); ratio < 19 {
+				t.Fatalf("zeros compressed only %.1f:1; the case no longer tests the ceiling", ratio)
+			}
+			out, err := decoder.DecodeTo(nil, encoded)
+			if err != nil || !bytes.Equal(out, input) {
+				t.Fatal("block at the expansion ceiling", err)
+			}
+			if out, err = (SnappyCompressor{}).Decode(encoded); err != nil || !bytes.Equal(out, input) {
+				t.Fatal("block at the expansion ceiling", err)
+			}
+			// Short legal blocks, down to a single literal, are not rejected.
+			for _, input := range [][]byte{{}, {'a'}, []byte("aaaa"), bytes.Repeat([]byte{'b'}, 70)} {
+				encoded, _ := SnappyCompressor{}.Encode(input)
+				if out, err := decoder.DecodeTo(nil, encoded); err != nil || !bytes.Equal(out, input) {
+					t.Fatalf("short block %q: %q, %v", input, out, err)
+				}
 			}
 		})
 

@@ -49,7 +49,12 @@ func TestCompressor(t *testing.T) {
 			_, err := c.Decode([]byte{0, 1, 2})
 			require.EqualError(t, err, "cassandra lz4 block size should be >4, got=3")
 
+			// 66052 bytes cannot come from one compressed byte: rejected
+			// before the output is allocated.
 			_, err = c.Decode([]byte{0, 1, 2, 4, 5})
+			require.EqualError(t, err, "cassandra lz4 uncompressed length 66052 exceeds what 1 compressed bytes can decode to")
+
+			_, err = c.Decode([]byte{0, 0, 0, 4, 5})
 			require.EqualError(t, err, "lz4: invalid source or destination buffer too short")
 
 			// If uncompressed size is zero then nothing is decoded even if present.
@@ -123,6 +128,10 @@ func TestCompressor(t *testing.T) {
 					require.Contains(t, err.Error(), "exceeds maximum")
 				})
 			}
+
+			// Nor a length one compressed byte cannot produce.
+			_, err := c.AppendDecompressed(nil, []byte{0x00}, maxLZ4Expansion+1)
+			require.ErrorContains(t, err, "exceeds what 1 compressed bytes can decode to")
 
 			// The bound must not reject a legal segment-sized payload.
 			original := []byte("My Test String")

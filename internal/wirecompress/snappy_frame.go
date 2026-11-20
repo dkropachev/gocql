@@ -25,6 +25,7 @@
 package wirecompress
 
 import (
+	"encoding/binary"
 	"fmt"
 
 	"github.com/klauspost/compress/s2"
@@ -74,8 +75,35 @@ func (s SnappyCompressor) DecodedLen(data []byte) (int, error) {
 	if n > frm.MaxFrameSize {
 		return 0, fmt.Errorf("gocql: snappy uncompressed length %d exceeds maximum of %d", n, frm.MaxFrameSize)
 	}
+	if err := checkSnappyLength(int64(n), data); err != nil {
+		return 0, err
+	}
 
 	return n, nil
+}
+
+// Snappy's densest element, a copy with a two-byte offset, takes three bytes
+// for at most 64 output bytes. A declared length above that ratio cannot be
+// honest Snappy, so it is rejected before its output is allocated. S2's
+// repeat codes, which s2.Decode also accepts, can be denser; a Snappy peer
+// never sends them.
+const (
+	snappyMaxCopy     = 64
+	snappyMinCopySize = 3
+)
+
+// checkSnappyLength fails when the Snappy block data, which starts with the
+// length varint, cannot decode to declared bytes.
+func checkSnappyLength(declared int64, data []byte) error {
+	_, header := binary.Uvarint(data)
+	if header <= 0 {
+		return fmt.Errorf("gocql: invalid Snappy length")
+	}
+	compressed := int64(len(data) - header)
+	if declared*snappyMinCopySize > compressed*snappyMaxCopy+snappyMinCopySize-1 {
+		return fmt.Errorf("gocql: snappy uncompressed length %d exceeds what %d compressed bytes can decode to", declared, compressed)
+	}
+	return nil
 }
 
 func (s SnappyCompressor) DecodeTo(dst, data []byte) ([]byte, error) {
