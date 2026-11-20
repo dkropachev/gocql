@@ -493,6 +493,15 @@ FUZZ_TIME ?= 30s
 test-fuzz:
 	ci/fuzz.sh "${FUZZ_TIME}"
 
+# Known vulnerabilities in the module's dependencies and in the standard
+# library of the Go toolchain running it. govulncheck is built with that
+# toolchain too: go run would otherwise pick the oldest toolchain
+# govulncheck's own go.mod allows, which cannot load this module.
+GOVULNCHECK_VERSION ?= v1.10.0
+
+check-vulns:
+	GOTOOLCHAIN="$$(go env GOVERSION)" go run golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION} ./...
+
 check-go-mod-drift:
 	go mod tidy -diff
 

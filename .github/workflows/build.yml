@@ -122,3 +122,28 @@ jobs:
 
       - name: Run tests without -race and with each measurement tag
         run: make test-unit-tags
+
+  govulncheck:
+    name: Known vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.target_commit }}
+
+      # The newest Go release rather than go.mod's minimum: the standard
+      # library a user builds with is the toolchain's, and a patched one is
+      # what the release notes require. The module's dependencies are checked
+      # at the versions go.mod selects.
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: stable
+          check-latest: true
+          cache: false
+
+      - name: Run govulncheck
+        run: make check-vulns
