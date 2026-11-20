@@ -27,9 +27,14 @@ type InternalRingDescriber struct {
 	// key of map is host_id.
 	InternalHosts map[string]*implEndpoint.HostInfo
 	// hostIPToUUID maps host native address to host_id.
-	hostIPToUUID       map[string]string
-	hostsView          atomic.Pointer[ringHostsView] // InternalHostsView cache
-	tombstones         map[string]bool
+	hostIPToUUID map[string]string
+	hostsView    atomic.Pointer[ringHostsView] // InternalHostsView cache
+	// tombstones maps the host_id of each node a REMOVED_NODE event removed
+	// to the address it was removed at, and tombstoneAddresses maps back.
+	// system.peers can list a removed node for a while; its row is ignored
+	// until it shows the node at another address (it moved), or no longer
+	// lists it, or a NEW_NODE event names the address.
+	tombstones         map[string]string
 	tombstoneAddresses map[string]string
 	prevPartitioner    string
 	prevHosts          []*implEndpoint.HostInfo
@@ -67,17 +72,28 @@ func (r *InternalRingDescriber) getClusterPeerInfo(ctx context.Context, c transp
 	} else if c.InternalIsScyllaConn() {
 		stmt = transport.InternalQrySystemPeers
 	}
-	hosts, err := readV2Topology(ctx, c, stmt, r.InternalCfg.Port)
+	rows, err := readV2TopologyRows(ctx, c, stmt)
 	if err != nil {
 		return nil, err
 	}
-	valid := hosts[:0]
-	for _, h := range hosts {
-		if isValidPeer(h) {
+	valid := make([]*implEndpoint.HostInfo, 0, len(rows))
+	for _, row := range rows {
+		h, err := row.InternalHost(r.InternalCfg.Port)
+		if err == nil && isValidPeer(h) {
 			valid = append(valid, h)
 			continue
 		}
-		cause := cqltype.TypeValidation("peer topology", "incomplete peer %s", h.HostID())
+		// A peer row missing a field or holding one that does not parse is
+		// skipped, as gossip can leave rows of nodes that are joining or
+		// gone. A known node's row going bad fails the read instead, so that
+		// the node is not dropped for it.
+		var cause error
+		if err != nil {
+			h = row.InternalIdentity()
+			cause = cqltype.TypeValidation("peer topology", "invalid peer %s: %v", h.HostID(), err)
+		} else {
+			cause = cqltype.TypeValidation("peer topology", "incomplete peer %s", h.HostID())
+		}
 		r.mu.Lock()
 		known := r.InternalHosts[h.HostID()] != nil
 		for _, old := range r.prevHosts {
@@ -93,7 +109,7 @@ func (r *InternalRingDescriber) getClusterPeerInfo(ctx context.Context, c transp
 		if known {
 			return nil, cause
 		}
-
+		logging.Or(r.InternalLogger).Warn("ignoring invalid peer", logging.KeyHost, implEndpoint.InternalHostInfoNodeToNodeAddress(h).String(), logging.Err(cause))
 	}
 	return valid, nil
 }
@@ -218,9 +234,23 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 		return previous, partitionerBefore, cqltype.TypeValidation("topology generation", "topology changed during read")
 	}
 	filtered := hosts[:0]
+	listed := make(map[string]bool, len(hosts))
 	for _, host := range hosts {
-		if !r.tombstones[host.HostID()] {
-			filtered = append(filtered, host)
+		id := host.HostID()
+		listed[id] = true
+		if addr, removed := r.tombstones[id]; removed {
+			if addr == implEndpoint.InternalHostInfoNodeToNodeAddress(host).String() {
+				continue
+			}
+			// The node is back at another address.
+			r.forgetTombstoneLocked(id)
+		}
+		filtered = append(filtered, host)
+	}
+	for id := range r.tombstones {
+		if !listed[id] {
+			// system.peers no longer lists the node.
+			r.forgetTombstoneLocked(id)
 		}
 	}
 	hosts = filtered
@@ -228,6 +258,16 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 	r.prevPartitioner = partitioner
 
 	return hosts, partitioner, nil
+}
+
+// forgetTombstoneLocked drops the tombstone of the node id. Caller holds r.mu
+// for writing.
+func (r *InternalRingDescriber) forgetTombstoneLocked(id string) {
+	addr := r.tombstones[id]
+	delete(r.tombstones, id)
+	if r.tombstoneAddresses[addr] == id {
+		delete(r.tombstoneAddresses, addr)
+	}
 }
 
 func (r *InternalRingDescriber) getHostByIP(ip string) (*implEndpoint.HostInfo, bool) {

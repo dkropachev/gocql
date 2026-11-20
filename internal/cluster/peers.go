@@ -228,7 +228,7 @@ func (s *Core) refreshRing() error {
 	var added, removed []*implEndpoint.HostInfo
 	for _, h := range hosts {
 		id := h.HostID()
-		if r.tombstones[id] {
+		if _, removed := r.tombstones[id]; removed {
 			continue
 		}
 		old := before[id]

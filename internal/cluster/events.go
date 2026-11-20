@@ -470,14 +470,14 @@ func (s *Core) RecordV2Topology(event *events.TopologyChangeEvent) {
 	r.eventEpoch++
 	id := r.hostIPToUUID[event.Host.String()]
 	if r.tombstones == nil {
-		r.tombstones = make(map[string]bool)
+		r.tombstones = make(map[string]string)
 	}
 	if r.tombstoneAddresses == nil {
 		r.tombstoneAddresses = make(map[string]string)
 	}
 	var removed *implEndpoint.HostInfo
 	if event.Change == "REMOVED_NODE" && id != "" {
-		r.tombstones[id] = true
+		r.tombstones[id] = event.Host.String()
 		r.tombstoneAddresses[event.Host.String()] = id
 		removed = r.InternalHosts[id]
 		delete(r.InternalHosts, id)
@@ -485,8 +485,12 @@ func (s *Core) RecordV2Topology(event *events.TopologyChangeEvent) {
 		r.bumpRevisionLocked()
 	}
 	if event.Change == "NEW_NODE" {
-		delete(r.tombstones, id)
-		delete(r.tombstones, r.tombstoneAddresses[event.Host.String()])
+		if id != "" {
+			r.forgetTombstoneLocked(id)
+		}
+		if removed, ok := r.tombstoneAddresses[event.Host.String()]; ok && r.tombstones[removed] == event.Host.String() {
+			r.forgetTombstoneLocked(removed)
+		}
 		delete(r.tombstoneAddresses, event.Host.String())
 	}
 	r.mu.Unlock()
