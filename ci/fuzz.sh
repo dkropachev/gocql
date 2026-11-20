@@ -20,21 +20,24 @@ if ! [[ "$budget" =~ ^[0-9]+(ns|us|ms|s|m|h|x)$ && "$parallel" =~ ^[0-9]+$ ]]; t
 fi
 cd "$(dirname "$0")/.."
 
-# Targets are the functions func FuzzX(f *testing.F) of this module's test
-# files (nested modules are skipped). Each run below must report that it
-# fuzzed, so a target the default build leaves out fails instead of passing
-# silently.
-module=$(go list -m)
-files=$(grep -rl --include='*_test.go' --exclude-dir=testdata '^func Fuzz[A-Za-z0-9_]*(f \*testing\.F)' .)
+# Targets are the functions func FuzzX(name *testing.F) of this module's test
+# files; files of nested modules (a directory with its own go.mod) are
+# skipped. Each run below must report that it fuzzed, so a target the default
+# build leaves out fails instead of passing silently.
+decl='^func Fuzz[A-Za-z0-9_]*\([A-Za-z_][A-Za-z0-9_]* \*testing\.F\)'
+mapfile -t nested < <(find . -mindepth 2 -name go.mod -not -path '*/testdata/*' -printf '%h/\n')
+files=$(grep -rlE --include='*_test.go' --exclude-dir=testdata "$decl" . || true)
 targets=()
 for file in $files; do
+	for dir in "${nested[@]}"; do
+		[[ "$file" == "$dir"* ]] && continue 2
+	done
 	dir=$(dirname "$file")
-	if ! mod=$(go list -f '{{.Module.Path}}' "$dir"); then
+	if ! go list "$dir" >/dev/null; then
 		echo "cannot load package $dir" >&2
 		exit 1
 	fi
-	[[ "$mod" == "$module" ]] || continue
-	for name in $(sed -n 's/^func \(Fuzz[A-Za-z0-9_]*\)(f \*testing\.F).*/\1/p' "$file"); do
+	for name in $(grep -oE "$decl" "$file" | sed -E 's/^func (Fuzz[A-Za-z0-9_]*)\(.*/\1/'); do
 		targets+=("$dir $name")
 	done
 done
