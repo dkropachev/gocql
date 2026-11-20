@@ -67,8 +67,8 @@ func (s scyllaKeyspacesSource) InternalQuerySystem(_ context.Context, request *m
 
 // TestReadV2ScyllaKeyspacesConsistency checks that a keyspace is strongly
 // consistent ("global") only when the server reports it so, in any case,
-// and the control connection negotiated TABLETS_ROUTING_V2, which is what
-// gives the reported tablet leaders their meaning.
+// and the session's connections negotiated TABLETS_ROUTING_V2, which is
+// what gives the reported tablet leaders their meaning.
 func TestReadV2ScyllaKeyspacesConsistency(t *testing.T) {
 	n := func(v int32) *int32 { return &v }
 	for _, v2 := range []bool{false, true} {

@@ -111,11 +111,11 @@ tries the leader first, ahead of nearer replicas:
 - `metadata.Keyspace.ConsistencyMode` is `"global"` for such a keyspace; it is
   read from `system_schema.scylla_keyspaces` on every schema refresh when the
   session's connections negotiate V2.
-- The leader comes first for requests at any consistency except `ONE` and
-  `LOCAL_ONE`: writes, strongly consistent reads and conditional statements.
-  Reads at `ONE` or `LOCAL_ONE` keep the usual replica order, which any
-  replica can serve, and so do eventually consistent keyspaces and tablets
-  learned over V1, which report no leader.
+- The leader comes first for every request, write, read or conditional
+  statement, whose consistency is not `ONE` or `LOCAL_ONE`. Requests at `ONE`
+  or `LOCAL_ONE` keep the usual replica order, since any replica can serve
+  such a read, and so do eventually consistent keyspaces and tablets learned
+  over V1, which report no leader.
 - The leader is not preferred when the policy would not otherwise use it: a
   host the host filter skips, one outside `Datacenter` without
   `AllowRemote`, or one that is down or has no connection. The plan then
