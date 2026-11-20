@@ -236,8 +236,9 @@ func TestShardAwarePool(t *testing.T) {
 				}
 				mu.Lock()
 				defer mu.Unlock()
-				// An advertised port is tried, and the regular port follows
-				// its refusal; one never advertised is not tried at all.
+				// An advertised port is tried, and every connection still
+				// ends on the regular port; one never advertised is not
+				// tried at all.
 				if refused := tc.serve != nil; refused != (targeted > 0) {
 					t.Errorf("%d dials aimed at the shard-aware port", targeted)
 				}

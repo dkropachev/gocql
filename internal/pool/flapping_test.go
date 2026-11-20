@@ -85,8 +85,9 @@ func goroutineSummary(stacks map[string]string) string {
 // TestNodeFlapping takes a node down and up again many times under an open
 // session. Every time the session must notice, drop the node, and when it is
 // back reconnect to exactly one connection per shard, keeping no connection
-// or goroutine of an earlier round; the conviction policy must hear of each
-// failure once, and never of the cancellation of a pool the session closed.
+// or goroutine of an earlier round; the conviction policy must hear of at
+// least one failure each round, of no failed dial twice, and never of the
+// cancellation of a pool the session closed.
 func TestNodeFlapping(t *testing.T) {
 	t.Run("SameAddress", func(t *testing.T) { testNodeFlapping(t, nil) })
 	// The node tells other nodes another address than clients, as with
