@@ -86,6 +86,26 @@ func TestTablets(t *testing.T) {
 			}
 		})
 
+		t.Run("StaleTabletCorrected", func(t *testing.T) {
+			// A response's tablet hint replaces the tablet its request was
+			// routed by, unknown or stale; the next request goes to the
+			// hinted replica's shard first.
+			s := testSession(t)
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true}))
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 50, Set: true}, Kind: cql.OrdinaryStatement}
+			for _, replica := range []metadata.Target{hTarget(1, 2), hTarget(2, 3)} {
+				stamp := s.CaptureTabletFeedback(info, s.Metadata())
+				payload := cql.BorrowBytes(testPayload(testHint(t, 0, 100, cql.Option[uint64]{}, replica)))
+				page := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []cql.PayloadEntry{{Key: "tablets-routing-v1", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: payload}}}}}}
+				s.ApplyTypedFeedbackStamped(page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true})
+				testDrain(s)
+				first, ok := implRouting.InternalNextTarget(implRouting.NewPlan(policy, info, s.Metadata()))
+				if !ok || first.HostID != replica.HostID || first.ShardID != replica.ShardID {
+					t.Fatalf("first target %+v, want the hinted replica %+v", first, replica)
+				}
+			}
+		})
+
 		t.Run("NegotiationVersionAndFailedExecute", func(t *testing.T) {
 			for _, both := range []bool{false, true} {
 				supported := map[string][]string{transport.InternalTabletsRoutingV1: {}}
