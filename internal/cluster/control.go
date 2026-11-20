@@ -421,7 +421,7 @@ func (c *InternalControlConn) attemptReconnectToAnyOfHosts(hosts []*implEndpoint
 		if err != nil {
 			snapshot, _ := snapshotV2Host(c.InternalSession, host)
 			if c.InternalSession.privateStorage.InternalCfg.ConvictionPolicy.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, Source: endpoint.ConvictionControl}) {
-				c.InternalSession.HandleNodeDown(host.ConnectAddress(), host.Port())
+				c.InternalSession.HandleHostDown(host)
 			}
 			c.InternalSession.logger().Warn("control connection: dial failed", logging.KeyHost, hostAddress(host), logging.Err(err))
 			continue

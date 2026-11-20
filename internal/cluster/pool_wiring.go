@@ -104,7 +104,7 @@ func (s *Core) NewPoolServices() pool.InternalPoolServices {
 		Worker:       func(f func()) bool { return s.Peripheral().InternalStartWorker(f) },
 		Dial:         s.connectShard,
 		Connected:    s.HandlePoolConnected,
-		Down:         s.HandleNodeDown,
+		Down:         s.HandleHostDown,
 	}
 }
 

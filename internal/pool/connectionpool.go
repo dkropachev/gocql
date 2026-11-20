@@ -545,7 +545,6 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		}
 	}
 	host := pool.InternalHost
-	port := pool.InternalHost.Port()
 	// A closed pool no longer speaks for its host, which may be served by
 	// a new pool by now, and its fill fails because Close cancelled it, not
 	// because the host did: report nothing and leave the host alone.
@@ -567,7 +566,7 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 		}
 	}
 	if convict {
-		pool.InternalServices.Down(host.ConnectAddress(), port)
+		pool.InternalServices.Down(host)
 	}
 
 	// The fill ends only after the policy saw its failures, so the Reset of

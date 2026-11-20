@@ -6,7 +6,6 @@ package pool
 import (
 	"context"
 	"log/slog"
-	"net"
 
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/connectivity"
@@ -23,7 +22,8 @@ type InternalPoolServices struct {
 	Worker       func(func()) bool
 	Dial         func(context.Context, *endpoint.HostInfo, transport.ConnErrorHandler, int, int) (*transport.Conn, error)
 	Connected    func(*InternalHostConnPool)
-	Down         func(net.IP, int)
+	// Down marks a convicted host down.
+	Down func(*endpoint.HostInfo)
 }
 
 func (p *InternalHostConnPool) typedConfig() (*connectivity.Config, bool) {
