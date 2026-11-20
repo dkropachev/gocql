@@ -72,8 +72,10 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 	return hostRoutes(snapshot)
 }
 
-// ReplicaRoutes returns routes to the replicas of the request info describes:
-// to its token's replicas, or to every host when info has no token.
+// ReplicaRoutes returns routes to the replicas of the token of the request
+// info describes, to the replica's shard when tablet placement names one. It
+// returns none when info has no token, keyspace or table, or when no replica
+// of the token is known; HostRoutes then gives every host.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
 	if !ok {
