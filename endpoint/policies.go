@@ -88,6 +88,15 @@ type ConvictionEvent struct {
 // event without Shard that follows when the host has no connection left. A
 // new pool does not know the shard count, so the failure of its first
 // connection has no Shard.
+//
+// Each failure is reported at most once, so a policy that counts failures
+// sees a lower bound. Two kinds of failure are never reported: a pool dial
+// that fails while its pool is being closed, which races the close and is
+// dropped, and control connection setup failures. Only the control
+// connection's dial failures while it reconnects reach the policy; a failure
+// to set up a connection it dialled (reading the node's identity,
+// registering for events) is not reported, and Connect returns the failures
+// of the first control connection instead of reporting them.
 type ConvictionPolicy interface {
 	// AddFailure reports a failure and returns whether to mark the host
 	// down. A true verdict on a shard event marks the whole host down once
