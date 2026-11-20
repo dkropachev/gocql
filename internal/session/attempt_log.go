@@ -45,13 +45,35 @@ func statusSeverity(s cqlerr.ExecutionStatus) int {
 	}
 }
 
-// fail records a failed attempt and returns its execution status. It stays
-// out of line so the request loops keep their happy-path frame small.
+// fail records a failed attempt, of a request that partialBatch reports may
+// be applied in part when partial is set, and returns its execution status. It stays out of line so the
+// request loops keep their happy-path frame small.
 //
 //go:noinline
-func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID]) cqlerr.ExecutionStatus {
-	status := cqlerr.ExecutionStatusOf(err)
+func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID], partial bool) cqlerr.ExecutionStatus {
+	status := attemptStatus(err, partial)
 	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}, conn)
+	return status
+}
+
+// attemptStatus returns what an attempt that failed with err may have done;
+// partial reports an unlogged or counter batch. Unavailable and Overloaded
+// report a request the server rejected, but Cassandra checks such a batch one
+// partition at a time and can reject it after it sent the earlier
+// partitions' writes, so the batch may have been applied in part. The driver
+// assumes so on every server: it does not rely on the order in which a
+// server checks a batch's partitions. A logged batch is checked whole before
+// its batch log is written.
+func attemptStatus(err error, partial bool) cqlerr.ExecutionStatus {
+	status := cqlerr.ExecutionStatusOf(err)
+	if status != cqlerr.NotExecuted || !partial {
+		return status
+	}
+	if server, ok := errors.AsType[cqlerr.ServerError](err); ok {
+		if code := server.Code(); code == cqlerr.CodeUnavailable || code == cqlerr.CodeOverloaded {
+			return cqlerr.MaybeExecuted
+		}
+	}
 	return status
 }
 

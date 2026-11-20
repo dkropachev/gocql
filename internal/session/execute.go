@@ -1380,7 +1380,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				// It ended without reaching the loop: record it as the
 				// loop records a failed attempt.
 				active--
-				log.fail(inline.err, conn, 1, consistency, inline.event.CQLTraceID)
+				log.fail(inline.err, conn, 1, consistency, inline.event.CQLTraceID, request.partialBatch())
 				ended = true
 			default:
 				firstOutcome = &inline
@@ -1520,12 +1520,12 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			// Automatic post-DDL work cannot cause a successful statement to replay.
 			if response != nil && response.SchemaChange() {
 				response.Owner.Release()
-				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
+				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID, request.partialBatch())
 				log.raise(cqlerr.PartiallyExecuted)
 				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
 			}
 			lastErr = attemptErr
-			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID)
+			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID, request.partialBatch())
 			if response != nil {
 				response.Owner.Release()
 			}
@@ -1538,7 +1538,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil

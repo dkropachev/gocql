@@ -40,7 +40,7 @@ func TestAttemptLog(t *testing.T) {
 
 	t.Run("MergeHandOff", func(t *testing.T) {
 		var log attemptLog
-		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{})
+		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{}, false)
 		later := newExecutionError(overloaded, cql.Result{Attempts: 1}, cqlerr.NotExecuted, []AttemptFailure{{Err: overloaded, Number: 1, Status: cqlerr.NotExecuted}})
 		err := log.merge(later, cql.Result{})
 		merged, ok := errors.AsType[*ExecutionError](err)
@@ -57,7 +57,7 @@ func TestAttemptLog(t *testing.T) {
 
 	t.Run("MergeForeign", func(t *testing.T) {
 		var log attemptLog
-		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{})
+		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{}, false)
 		err := log.merge(errors.New("hand-off failed"), cql.Result{})
 		if cqlerr.ExecutionStatusOf(err) != cqlerr.MaybeExecuted || !errors.Is(err, cqlerr.ErrTimeoutNoResponse) {
 			t.Fatal(err)

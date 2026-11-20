@@ -60,6 +60,9 @@ type Attempt struct {
 	Consistency cql.Consistency
 	// Conditional reports a lightweight transaction.
 	Conditional bool
+	// Batch is the kind of batch the request sends; it is unset for any
+	// other request.
+	Batch cql.Option[cql.BatchKind]
 	// ExecutionStatus reports what this attempt may have done on the cluster.
 	ExecutionStatus cqlerr.ExecutionStatus
 }
