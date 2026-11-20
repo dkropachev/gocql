@@ -3,8 +3,8 @@
 Set `Profile.Routing` to a typed `routing.Policy` with
 `ProfileBuilder.WithRouting`, in the session's default profile
 (`config.ConfigBuilder.WithDefaultProfile` or `ConfigureDefaultProfile`) or in
-the `exec.Options.Profile` of an execution. The default is token-aware with
-shuffled replicas; nil routes without a request-specific plan.
+the `exec.Options.Profile` of an execution. The default is token-aware and
+leader-aware with shuffled replicas; nil routes without a request-specific plan.
 `routing.NewPolicy(routing.Options{...})` configures
 token awareness, datacenter/rack preference, remote fallback, replica shuffling,
 leader-aware routing and latency ordering. Missing required locality is an
@@ -89,6 +89,40 @@ PartitionKey.ForEach streams canonical encoded components without gathering;
 consume borrowed spans synchronously. Unknown partitioners disable token routing
 with a diagnostic. Tablet placement and opaque version identities survive in
 immutable snapshots; retained snapshots remain valid after refresh.
+
+## Strongly consistent tables
+
+A ScyllaDB keyspace created with `consistency = 'global'` keeps each tablet
+strongly consistent: one replica, the tablet's Raft leader, coordinates its
+writes and its linearizable reads, and any other replica only forwards them
+there. With `LeaderAware`, which the default policy sets, the built-in policy
+tries the leader first, ahead of nearer replicas:
+
+- Each connection negotiates `TABLETS_ROUTING_V2_EXPERIMENTAL` when the server
+  offers it (ScyllaDB 2026.3 and later started with the
+  `strongly-consistent-tables` experimental feature), and
+  `TABLETS_ROUTING_V1` otherwise; a server offering neither, such as
+  Cassandra, gets no tablet routing.
+- On a V2 connection every prepared EXECUTE carries one byte sampled from the
+  version of the tablet the driver knows for the request's token. When the
+  server's tablet differs, the response reports the tablet's range, replicas
+  and shards, leader first, and its version, which later plans use. A
+  response with no report means the driver's tablet is current.
+- `metadata.Keyspace.ConsistencyMode` is `"global"` for such a keyspace; it is
+  read from `system_schema.scylla_keyspaces` on every schema refresh when the
+  control connection negotiated V2.
+- The leader comes first for requests at any consistency except `ONE` and
+  `LOCAL_ONE`: writes, strongly consistent reads and conditional statements.
+  Reads at `ONE` or `LOCAL_ONE` keep the usual replica order, which any
+  replica can serve, and so do eventually consistent keyspaces and tablets
+  learned over V1, which report no leader.
+- The leader is not preferred when the policy would not otherwise use it: a
+  host the host filter skips, one outside `Datacenter` without
+  `AllowRemote`, or one that is down or has no connection. The plan then
+  continues as usual and a replica forwards the request. Retries and
+  speculative attempts follow the rest of the plan.
+- Batches are routed like any other batch; a replica forwards them to the
+  leader.
 
 ## Where did my request go?
 

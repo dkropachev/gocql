@@ -250,9 +250,8 @@ documented methods.
   policies are the session's: `NewPolicy` validates its options and returns
   a handle that builds the session's policy on first use.
 - **Must not contain:** pool handles or connection state.
-- **Future:** leader-aware routing for strongly consistent tables (#1175) as
-  an `Options` field, and vector-search or other workload-specific
-  placement as further `Options` or policies.
+- **Future:** vector-search or other workload-specific placement as further
+  `Options` or policies.
 
 ### `retry` (layer 1)
 
