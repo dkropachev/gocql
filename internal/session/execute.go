@@ -897,16 +897,20 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 // the page size options resolve to; cqltype.Unpaged requests the whole result
 // in one response; any other positive value is this page's size.
 func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
-	rt := runtimeOf(s)
-	page, err := rt.runSinglePage(ctx, b, state, pageSize, options)
+	return runtimeOf(s).runSinglePage(ctx, b, state, pageSize, options)
+}
+
+// runSinglePage executes one page of b; see RunPage.
+func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+	page, err := rt.runSinglePageOnce(ctx, b, state, pageSize, options)
 	if err != nil && b != nil {
-		// Covers the refusals runSinglePage makes before admission.
+		// Covers the refusals runSinglePageOnce makes before admission.
 		rt.describeStatement(err, &b.privateStorage.InternalRequest)
 	}
 	return page, err
 }
 
-func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
+func (rt *InternalSessionRuntime) runSinglePageOnce[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	if state.Complete() {
 		return nil, notSent(cqlerr.ErrPagingComplete)
 	}

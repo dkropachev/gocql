@@ -242,6 +242,14 @@ func TestErrorStatementPaths(t *testing.T) {
 			t.Fatalf("RunPage with a negative page size = %v", err)
 		}
 		checkNamed(t, err)
+		// A reusable query's RunPage refuses the same way.
+		_, err = batchTestQuery(t, s).RunPage(ctx, []byte(redactionSecret), cql.StartPage, -1)
+		if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" {
+			t.Errorf("Query.RunPage with a negative page size = %v", err)
+		}
+		if text := errorText(err); strings.Contains(text, redactionSecret) {
+			t.Errorf("error leaks the bound value: %s", text)
+		}
 	})
 	t.Run("BatchRefused", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 1)
