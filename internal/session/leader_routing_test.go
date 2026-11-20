@@ -106,7 +106,10 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 // routes strongly consistent requests to the tablet leader.
 func TestDefaultRoutingIsLeaderAware(t *testing.T) {
 	policy, ok := settings.DefaultConfig().DefaultProfile.Routing.(*implRouting.InternalRoutingPolicy)
-	if !ok || !policy.InternalOptions.LeaderAware || !policy.InternalOptions.TokenAware {
+	if !ok {
+		t.Fatalf("default routing policy %T", settings.DefaultConfig().DefaultProfile.Routing)
+	}
+	if !policy.InternalOptions.LeaderAware || !policy.InternalOptions.TokenAware {
 		t.Fatalf("default routing options %+v", policy.InternalOptions)
 	}
 }

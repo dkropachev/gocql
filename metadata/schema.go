@@ -34,7 +34,7 @@ type Keyspace struct {
 	Views map[string]*View
 	// ConsistencyMode is "global" for a ScyllaDB tablet keyspace created with
 	// consistency = 'global' (a strongly consistent keyspace), and empty
-	// otherwise. It is read only when the control connection negotiated
+	// otherwise. It is read only when the session's connections negotiate
 	// TABLETS_ROUTING_V2_EXPERIMENTAL, the extension that reports tablet
 	// leaders.
 	ConsistencyMode string

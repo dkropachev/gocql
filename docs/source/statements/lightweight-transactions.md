@@ -18,7 +18,7 @@ several.
 The driver has no other notion of a Paxos leader. For a table in a strongly
 consistent (`consistency = 'global'`) keyspace, `routing.Options.LeaderAware`,
 which the default policy sets, puts the tablet's Raft leader ahead of that
-order (see [strongly consistent tables](../load-balancing.md#strongly-consistent-tables)). A statement
+order (see "Strongly consistent tables" in [Routing](../load-balancing.md)). A statement
 executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read, not a
 conditional statement: `Exec` does not reject it up front, and fails on its
 result columns like any other row-returning statement.

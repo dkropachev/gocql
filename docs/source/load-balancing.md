@@ -110,7 +110,7 @@ tries the leader first, ahead of nearer replicas:
   response with no report means the driver's tablet is current.
 - `metadata.Keyspace.ConsistencyMode` is `"global"` for such a keyspace; it is
   read from `system_schema.scylla_keyspaces` on every schema refresh when the
-  control connection negotiated V2.
+  session's connections negotiate V2.
 - The leader comes first for requests at any consistency except `ONE` and
   `LOCAL_ONE`: writes, strongly consistent reads and conditional statements.
   Reads at `ONE` or `LOCAL_ONE` keep the usual replica order, which any
@@ -121,8 +121,9 @@ tries the leader first, ahead of nearer replicas:
   `AllowRemote`, or one that is down or has no connection. The plan then
   continues as usual and a replica forwards the request. Retries and
   speculative attempts follow the rest of the plan.
-- Batches are routed like any other batch; a replica forwards them to the
-  leader.
+- A batch is routed like any other batch, by its first statement with a
+  token, so it goes to the leader of that statement's tablet; the driver does
+  not consider the tablets of its other statements.
 
 ## Where did my request go?
 

@@ -226,9 +226,11 @@ func nodeControlCluster(t *testing.T, nodes int) *ccm.Cluster {
 // strongConsistencyCluster returns a three-node ScyllaDB cluster with the
 // strongly-consistent-tables experimental feature, which strongly consistent
 // keyspaces and the TABLETS_ROUTING_V2_EXPERIMENTAL extension need. Tests
-// share it. It has the suite cluster's version and configuration, and is
-// skipped before ScyllaDB 2026.3, the first release with the extension, and
-// when ccm is unavailable.
+// share it. It is built from the suite's template (the suite cluster's
+// version, or -ccm.version) with one shard per node and that feature added
+// to the experimental features. It is skipped when the suite cluster is
+// older than ScyllaDB 2026.3, the first release with the extension, and when
+// ccm is unavailable.
 func strongConsistencyCluster(t *testing.T) *ccm.Cluster {
 	t.Helper()
 	if *flagDistribution != "scylla" {
