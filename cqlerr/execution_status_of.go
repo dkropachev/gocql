@@ -146,9 +146,9 @@ type ExecutionError struct {
 	// Statement is the CQL text of the request's statement, or of a batch's
 	// first statement, when the session was configured with
 	// config.ConfigBuilder.WithErrorStatementText; it is empty otherwise.
-	// Text over that setting's limit is cut and ends with "...". It never
-	// holds bound values, but it does hold literals written into the CQL
-	// text.
+	// Text over that setting's limit is cut to it and "..." is appended.
+	// It never holds bound values, but it does hold literals written into
+	// the CQL text.
 	Statement string
 	// Result holds what the responses carried before the request failed:
 	// warnings, CQL trace IDs and custom payload.

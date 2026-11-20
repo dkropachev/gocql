@@ -982,7 +982,9 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 		return cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
 	}
 	if b.privateStorage.InternalRequest.routing.Kind == cql.ConditionalStatement {
-		return conditionalExec()
+		result, err := conditionalExec()
+		rt.describeStatement(err, &b.privateStorage.InternalRequest)
+		return result, err
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {

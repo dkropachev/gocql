@@ -77,13 +77,13 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 
 The message names the last attempt's address (its host ID when the address is
 unknown) and shard, its error, the execution status and up to three earlier
-attempts. It never holds a bound
-value. By default it does not name the statement either: CQL text can carry
-literals the application wrote into it, and error messages often reach logs
-that are not cleared for application data. Opt in per session with
-`config.New(...).WithErrorStatementText(maxBytes)`: `failure.Statement` then
-holds up to `maxBytes` of the statement's CQL text, cut at a character
-boundary and ending in `...` when longer, and the message adds it:
+attempts. It never holds a bound value. By default it does not name the
+statement either: CQL text can carry literals the application wrote into it,
+and error messages often reach logs that are not cleared for application data.
+Opt in per session with `config.New(...).WithErrorStatementText(maxBytes)`:
+`failure.Statement` then holds the statement's CQL text, and the message adds
+it. Text longer than `maxBytes` is cut at a character boundary to at most
+`maxBytes` bytes and `...` is appended:
 
 ```text
 gocql: request: #1 10.0.0.1:9042/shard3: invalid query: unconfigured table t; statement "SELECT v FROM ks.t WHERE k = ?"
