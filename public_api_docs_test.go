@@ -77,12 +77,16 @@ func TestPublicMethodDocumentation(t *testing.T) {
 }
 
 // TestExportedSymbolsDocumented fails for a public package without a package
-// doc comment, and for each exported declaration of one without a doc
-// comment: a top-level function, type, constant or variable, a method of an
-// exported type, and a method of an exported interface. A doc comment on a
-// grouped const, var or type declaration covers its members, and a trailing
-// comment documents a constant or variable. Struct fields are not checked.
-// Test files are not checked.
+// doc comment, and for each exported declaration of one without
+// documentation: a top-level function, type, constant or variable, a method
+// of an exported type, a method of an exported interface, and a field of an
+// exported struct type or of a struct type nested in one. Embedded fields are
+// exempt. A doc comment on a grouped const, var or type declaration covers
+// its members. A trailing comment on the same line documents a constant, a
+// variable, an interface method or a struct field, but not a function or a
+// type. A comment holding only directives, such as //go:noinline or
+// //nolint, is not documentation. Test files and nested modules are not
+// checked.
 func TestExportedSymbolsDocumented(t *testing.T) {
 	root := moduleRoot(t)
 	var missing []string
@@ -102,9 +106,14 @@ func TestExportedSymbolsDocumented(t *testing.T) {
 		if rel == "." {
 			rel = ""
 		}
-		name := d.Name()
-		if rel != "" && (name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_")) {
-			return filepath.SkipDir
+		if rel != "" {
+			name := d.Name()
+			if name == "testdata" || strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				return filepath.SkipDir
+			}
+			if _, err := os.Stat(filepath.Join(path, "go.mod")); err == nil {
+				return filepath.SkipDir // a nested module
+			}
 		}
 		if layer := layerOf(rel); layer != layerVocabulary && layer != layerSurface {
 			return nil
@@ -115,7 +124,7 @@ func TestExportedSymbolsDocumented(t *testing.T) {
 		return nil
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("walk %s: %v", root, err)
 	}
 	if checked == 0 {
 		t.Fatalf("no public packages found under %s", root)
@@ -132,7 +141,7 @@ func moduleRoot(t *testing.T) string {
 	t.Helper()
 	dir, err := os.Getwd()
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("working directory: %v", err)
 	}
 	for {
 		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
@@ -152,7 +161,7 @@ func undocumentedInDir(t *testing.T, root, dir string) ([]string, int) {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("read directory %s: %v", dir, err)
 	}
 	fset := token.NewFileSet()
 	files := map[string][]*ast.File{} // by package name
@@ -161,9 +170,10 @@ func undocumentedInDir(t *testing.T, root, dir string) ([]string, int) {
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		f, err := parser.ParseFile(fset, filepath.Join(dir, name), nil, parser.ParseComments|parser.SkipObjectResolution)
+		path := filepath.Join(dir, name)
+		f, err := parser.ParseFile(fset, path, nil, parser.ParseComments|parser.SkipObjectResolution)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("parse %s: %v", path, err)
 		}
 		files[f.Name.Name] = append(files[f.Name.Name], f)
 	}
@@ -179,7 +189,7 @@ func undocumentedInDir(t *testing.T, root, dir string) ([]string, int) {
 	for pkg, pkgFiles := range files {
 		hasDoc := false
 		for _, f := range pkgFiles {
-			hasDoc = hasDoc || f.Doc != nil
+			hasDoc = hasDoc || documented(f.Doc)
 			for _, decl := range f.Decls {
 				checkDecl(decl, report)
 			}
@@ -192,10 +202,23 @@ func undocumentedInDir(t *testing.T, root, dir string) ([]string, int) {
 	return missing, len(files)
 }
 
+// documented reports whether a comment group holds text other than
+// directives.
+func documented(groups ...*ast.CommentGroup) bool {
+	for _, cg := range groups {
+		if cg != nil && strings.TrimSpace(cg.Text()) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// checkDecl reports each exported name decl declares without documentation,
+// as TestExportedSymbolsDocumented defines it.
 func checkDecl(decl ast.Decl, report func(token.Pos, string)) {
 	switch d := decl.(type) {
 	case *ast.FuncDecl:
-		if !d.Name.IsExported() || d.Doc != nil {
+		if !d.Name.IsExported() || documented(d.Doc) {
 			return
 		}
 		if d.Recv == nil {
@@ -212,12 +235,13 @@ func checkDecl(decl ast.Decl, report func(token.Pos, string)) {
 				if !s.Name.IsExported() {
 					continue
 				}
-				if s.Doc == nil && d.Doc == nil {
+				if !documented(s.Doc, d.Doc) {
 					report(s.Pos(), "type "+s.Name.Name)
 				}
-				if it, ok := s.Type.(*ast.InterfaceType); ok {
-					for _, m := range it.Methods.List {
-						if _, isFunc := m.Type.(*ast.FuncType); !isFunc || m.Doc != nil || m.Comment != nil {
+				switch typ := s.Type.(type) {
+				case *ast.InterfaceType:
+					for _, m := range typ.Methods.List {
+						if _, isFunc := m.Type.(*ast.FuncType); !isFunc || documented(m.Doc, m.Comment) {
 							continue
 						}
 						for _, n := range m.Names {
@@ -226,9 +250,11 @@ func checkDecl(decl ast.Decl, report func(token.Pos, string)) {
 							}
 						}
 					}
+				case *ast.StructType:
+					checkFields(s.Name.Name, typ, report)
 				}
 			case *ast.ValueSpec:
-				if s.Doc != nil || d.Doc != nil || s.Comment != nil {
+				if documented(s.Doc, d.Doc, s.Comment) {
 					continue
 				}
 				for _, n := range s.Names {
@@ -237,6 +263,46 @@ func checkDecl(decl ast.Decl, report func(token.Pos, string)) {
 					}
 				}
 			}
+		}
+	}
+}
+
+// checkFields reports the undocumented exported fields of the struct type
+// named owner, and of the struct types nested in its fields.
+func checkFields(owner string, st *ast.StructType, report func(token.Pos, string)) {
+	for _, f := range st.Fields.List {
+		if len(f.Names) == 0 {
+			continue // embedded
+		}
+		for _, n := range f.Names {
+			if !n.IsExported() {
+				continue
+			}
+			if !documented(f.Doc, f.Comment) {
+				report(n.Pos(), "field "+owner+"."+n.Name)
+			}
+			if nested := nestedStruct(f.Type); nested != nil {
+				checkFields(owner+"."+n.Name, nested, report)
+			}
+		}
+	}
+}
+
+// nestedStruct returns the struct type a field's type spells out, through
+// pointers, slices, arrays and map values, or nil.
+func nestedStruct(expr ast.Expr) *ast.StructType {
+	for {
+		switch e := expr.(type) {
+		case *ast.StructType:
+			return e
+		case *ast.StarExpr:
+			expr = e.X
+		case *ast.ArrayType:
+			expr = e.Elt
+		case *ast.MapType:
+			expr = e.Value
+		default:
+			return nil
 		}
 	}
 }
