@@ -77,6 +77,22 @@ const dataLengthSize = 4
 // this limit is below math.MaxInt32.
 const maxDecompressedSize = 256 * 1024 * 1024
 
+// maxLZ4Expansion bounds how many bytes an LZ4 block decodes to per byte of
+// input: a literal costs one input byte per output byte, and a match grows by
+// at most 255 bytes per length-extension byte. A declared length above it
+// cannot be honest, so it is rejected before its output is allocated.
+const maxLZ4Expansion = 255
+
+// lz4LengthFits reports whether a block of compressed bytes can decode to
+// declared bytes.
+func lz4LengthFits(declared int64, compressed int) bool {
+	return declared <= int64(compressed)*maxLZ4Expansion
+}
+
+func lz4LengthError(declared int64, compressed int) error {
+	return fmt.Errorf("cassandra lz4 uncompressed length %d exceeds what %d compressed bytes can decode to", declared, compressed)
+}
+
 func (s LZ4Compressor) Encode(data []byte) ([]byte, error) {
 	maxLength := lz4.CompressBlockBound(len(data))
 	buf := make([]byte, maxLength+dataLengthSize)
@@ -110,6 +126,9 @@ func (s LZ4Compressor) DecodedLen(data []byte) (int, error) {
 	}
 	if uncompressedLength > maxDecompressedSize {
 		return 0, fmt.Errorf("cassandra lz4 uncompressed length %d exceeds maximum of %d", uncompressedLength, maxDecompressedSize)
+	}
+	if !lz4LengthFits(int64(uncompressedLength), len(data)-dataLengthSize) {
+		return 0, lz4LengthError(int64(uncompressedLength), len(data)-dataLengthSize)
 	}
 	return int(uncompressedLength), nil
 }
@@ -146,6 +165,9 @@ func (s LZ4Compressor) AppendDecompressed(dst, src []byte, uncompressedLength ui
 	}
 	if uncompressedLength > maxDecompressedSize {
 		return nil, fmt.Errorf("cassandra lz4 uncompressed length %d exceeds maximum of %d", uncompressedLength, maxDecompressedSize)
+	}
+	if !lz4LengthFits(int64(uncompressedLength), len(src)) {
+		return nil, lz4LengthError(int64(uncompressedLength), len(src))
 	}
 	out, err := appendLZ4Decompressed(dst, src, int(uncompressedLength))
 	if err == nil && len(out)-len(dst) != int(uncompressedLength) {
