@@ -217,11 +217,29 @@ func TestShardAwarePool(t *testing.T) {
 			t.Run(tc.name, func(t *testing.T) {
 				n := newFakeNode(t, testShards, nil, tc.serve...)
 				n.closeListener(shardAwarePort)
-				s := connect(t, n, nil)
+				var mu sync.Mutex
+				targeted := 0
+				s := connect(t, n, func(c *settings.Config) {
+					c.DialHost = func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
+						if target.ShardID.Set {
+							mu.Lock()
+							targeted++
+							mu.Unlock()
+						}
+						return endpoint.DefaultDialer{}.DialContext(ctx, target)
+					}
+				})
 				for _, c := range waitFull(t, s, n) {
 					if c.kind != regularPort {
 						t.Errorf("shard %d connection on the %v port", c.shard, c.kind)
 					}
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				// An advertised port is tried, and the regular port follows
+				// its refusal; one never advertised is not tried at all.
+				if refused := tc.serve != nil; refused != (targeted > 0) {
+					t.Errorf("%d dials aimed at the shard-aware port", targeted)
 				}
 			})
 		}
@@ -320,6 +338,9 @@ func TestShardAwarePool(t *testing.T) {
 			if c.kind != regularPort {
 				t.Errorf("shard %d connection on the %v port after the NAT was detected", c.shard, c.kind)
 			}
+		}
+		if n.acceptedOn(shardAwarePort) == 0 {
+			t.Error("the shard-aware port was never dialed, so no NAT was detected")
 		}
 	})
 }

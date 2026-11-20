@@ -132,7 +132,18 @@ func testNodeFlapping(t *testing.T, broadcast net.IP) {
 		})
 	}
 	waitUp(0, true)
+	// A goroutine that saw the host come up may still be finishing: sample
+	// the baseline once two samples apart agree.
 	settled := tests.DriverGoroutines()
+	waitFor(t, 5*time.Second, func() string {
+		time.Sleep(50 * time.Millisecond)
+		now := tests.DriverGoroutines()
+		if len(now) != len(settled) {
+			settled = now
+			return "the session's goroutines did not settle after it first connected"
+		}
+		return ""
+	})
 
 	for round := 1; round <= rounds; round++ {
 		failuresBefore := len(policy.events())
