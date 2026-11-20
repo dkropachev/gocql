@@ -217,24 +217,23 @@ func TestTopology(t *testing.T) {
 	})
 
 	t.Run("Removal", func(t *testing.T) {
-		// Once system.peers no longer lists a removed node, its tombstone
-		// goes: the node may join again at the same address with a NEW_NODE
-		// event the session missed.
-		t.Run("TombstoneEndsWhenPeersForget", func(t *testing.T) {
+		// A removed node's row that a read skips, or that a read does not
+		// list, does not end its tombstone: another read can list it again.
+		t.Run("TombstoneSurvivesSkippedRow", func(t *testing.T) {
 			peer := newTestPeer("127.0.0.2")
 			srv := newRingTestServer(t, peer)
 			s := srv.session(t, nil)
 			s.RecordV2Topology(&oldevents.TopologyChangeEvent{Change: "REMOVED_NODE", Host: peer.ip, Port: 9042})
-			srv.setPeers()
-			if err := s.RefreshRingNow(); err != nil {
-				t.Fatal(err)
+			incomplete := peer
+			incomplete.rack = ""
+			for _, peers := range [][]testPeer{{incomplete}, {}, {peer}} {
+				srv.setPeers(peers...)
+				// The incomplete row may fail the read, as the node was
+				// known before; either way the tombstone stays.
+				_ = s.RefreshRingNow()
 			}
-			srv.setPeers(peer)
-			if err := s.RefreshRingNow(); err != nil {
-				t.Fatal(err)
-			}
-			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) == nil {
-				t.Fatal("tombstone outlived the node's row")
+			if implCluster.SessionData(s).InternalHostSource.InternalGetHost(peer.hostID.String()) != nil {
+				t.Fatal("removed node came back")
 			}
 		})
 		t.Run("TombstoneAndRecreate", func(t *testing.T) {

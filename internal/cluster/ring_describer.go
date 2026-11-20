@@ -31,9 +31,10 @@ type InternalRingDescriber struct {
 	hostsView    atomic.Pointer[ringHostsView] // InternalHostsView cache
 	// tombstones maps the host_id of each node a REMOVED_NODE event removed
 	// to the address it was removed at, and tombstoneAddresses maps back.
-	// system.peers can list a removed node for a while; its row is ignored
-	// until it shows the node at another address (it moved), or no longer
-	// lists it, or a NEW_NODE event names the address.
+	// system.peers can list a removed node for a while, and a node that lags
+	// in gossip can list it again later; its row is ignored until it shows
+	// the node at another address (it moved) or a NEW_NODE event names the
+	// address.
 	tombstones         map[string]string
 	tombstoneAddresses map[string]string
 	prevPartitioner    string
@@ -234,10 +235,8 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 		return previous, partitionerBefore, cqltype.TypeValidation("topology generation", "topology changed during read")
 	}
 	filtered := hosts[:0]
-	listed := make(map[string]bool, len(hosts))
 	for _, host := range hosts {
 		id := host.HostID()
-		listed[id] = true
 		if addr, removed := r.tombstones[id]; removed {
 			if addr == implEndpoint.InternalHostInfoNodeToNodeAddress(host).String() {
 				continue
@@ -246,12 +245,6 @@ func (r *InternalRingDescriber) GetHostsFromSystem() ([]*implEndpoint.HostInfo, 
 			r.forgetTombstoneLocked(id)
 		}
 		filtered = append(filtered, host)
-	}
-	for id := range r.tombstones {
-		if !listed[id] {
-			// system.peers no longer lists the node.
-			r.forgetTombstoneLocked(id)
-		}
 	}
 	hosts = filtered
 	r.prevHosts = hosts
