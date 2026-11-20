@@ -1,0 +1,52 @@
+name: Fuzz
+
+on:
+  workflow_call:
+    inputs:
+      target_commit:
+        description: Commit to fuzz
+        required: true
+        type: string
+      fuzz_time:
+        description: Budget per fuzz target (go test -fuzztime)
+        required: false
+        default: 1m
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Fuzz targets (${{ inputs.fuzz_time }} each)
+    runs-on: ubuntu-latest
+    # About 20 targets: the budgets, plus one fuzz-instrumented compile per
+    # package.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.target_commit }}
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+
+      - name: Run every fuzz target
+        env:
+          FUZZ_TIME: ${{ inputs.fuzz_time }}
+        run: make test-fuzz FUZZ_TIME="$FUZZ_TIME"
+
+      # go test writes a failing input under the package's testdata/fuzz/;
+      # commit it to keep it as a regression seed.
+      - name: Upload failing inputs
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: fuzz-failures-${{ github.run_attempt }}
+          path: '**/testdata/fuzz/**'
+          if-no-files-found: ignore
+          retention-days: 14

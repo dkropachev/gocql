@@ -486,6 +486,13 @@ bench-integration-scylla:
 bench-integration-cassandra:
 	@$(MAKE) test-integration-cassandra INTEGRATION_PKG=./tests/bench/integration TEST_OPTS='-run=^$$$$ -bench=. -benchmem'
 
+# Every fuzz target for FUZZ_TIME each (go test -fuzztime); see ci/fuzz.sh.
+# The Release candidate matrix workflow runs it before a release.
+FUZZ_TIME ?= 30s
+
+test-fuzz:
+	ci/fuzz.sh "${FUZZ_TIME}"
+
 check-go-mod-drift:
 	go mod tidy -diff
 
