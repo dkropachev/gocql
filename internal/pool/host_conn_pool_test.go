@@ -88,6 +88,24 @@ func TestHostConnPool(t *testing.T) {
 				})
 			}
 		})
+		t.Run("ClosedPool", func(t *testing.T) {
+			// Close cancels a fill in progress, which then fails with the
+			// cancellation and an empty pool. That failure is the pool's own
+			// doing: the policy must not see it, and the host, which a newer
+			// pool may serve by now, must not be marked down.
+			host := (endpoint.HostInfoBuilder{HostId: "9f3b8cab-d382-4c16-9c4c-07283f206bbc", ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042}).Build()
+			calls, downs := 0, 0
+			policy := &convictionRecorder{callback: func(endpoint2.ConvictionEvent) bool { calls++; return true }}
+			p := &InternalHostConnPool{InternalHost: &host, InternalConnPicker: convictionPicker{}, InternalLogger: logging.Nop(), InternalClosed: true, InternalFilling: true}
+			p.InternalServices = InternalPoolServices{Config: &connectivity.Config{}, Conviction: policy, Down: func(net.IP, int) { downs++ }}
+			p.fillingStopped(context.Canceled)
+			if calls != 0 || downs != 0 {
+				t.Fatalf("closed pool reported its cancelled fill: %d policy calls, %d downs", calls, downs)
+			}
+			if p.InternalFilling {
+				t.Fatal("fill not ended")
+			}
+		})
 		t.Run("Shard", func(t *testing.T) {
 			id := cql.MustParseUUID("9f3b8cab-d382-4c16-9c4c-07283f206bbc")
 			host := (endpoint.HostInfoBuilder{HostId: id.String(), ConnectAddress: net.ParseIP("127.0.0.7"), Port: 9042}).Build()
