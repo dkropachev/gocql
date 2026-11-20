@@ -29,9 +29,16 @@ type Options struct {
 	// ShuffleReplicas spreads requests over replicas at random rather than in
 	// a fixed order per token.
 	ShuffleReplicas bool
-	// LeaderAware routes requests of strongly consistent tables to the
-	// tablet's leader first. Only ScyllaDB has tablets; on Cassandra it has
-	// no effect.
+	// LeaderAware routes requests of strongly consistent tables (a ScyllaDB
+	// keyspace created with consistency = 'global') to the tablet's leader
+	// first, ahead of nearer replicas. It needs TokenAware and applies only
+	// once a response has reported the tablet over the
+	// TABLETS_ROUTING_V2_EXPERIMENTAL extension; requests at ONE or
+	// LOCAL_ONE and eventually consistent keyspaces keep normal replica
+	// order. A leader the policy would not otherwise use (host filter,
+	// another datacenter without AllowRemote, down or unconnected) is not
+	// preferred. The session's default policy sets it. Only ScyllaDB has
+	// tablets; on Cassandra it has no effect.
 	LeaderAware bool
 }
 
