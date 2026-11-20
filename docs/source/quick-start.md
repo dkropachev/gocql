@@ -30,7 +30,8 @@ executions, and several queries can share one preparation. A query has the
 same `Exec`, `One`, `Each` and `All`, plus `query.Run`, which returns typed rows:
 check `Rows.Err()` after iteration and close the rows. A query call while a
 `Rows` of that query is open, or while another goroutine's call runs, returns
-`cqlerr.ErrBusy`. Close the query when the worker finishes with `defer query.Close()`.
+`cqlerr.ErrBusy`. Close the query when the worker finishes with
+`defer query.Close()`.
 Close returns at once; transport writes and callbacks still in flight drain in
 the background, and `Session.Close` joins them. Call `query.Wait(ctx)` after
 Close only when the following code must not overlap those callbacks.

@@ -18,13 +18,16 @@ replacing other profile settings. `Profile.Retry == nil` disables retries in a
 complete profile; `retry.Never{}` can express that choice there too.
 
 `retry.Safe` bounds attempts (`MaxAttempts`, the first included; zero means
-three) and retries only when replay is safe: it moves to the next host when
-the server rejected the request before applying it (Unavailable, Overloaded,
-Bootstrapping), retries in place a read timeout that had enough replicas but
-no data, moves an idempotent request on after a coordinator server error, and
-replays other failures only for idempotent requests or attempts whose status
-is `cqlerr.NotExecuted`. Deterministic errors and the caller's cancellation or
-deadline never retry. A custom policy can build on `cqlerr.KindOf` and the
+three) and retries only when replay is safe. Among server errors, it moves to
+the next host on Unavailable, Overloaded and Bootstrapping, which it treats as
+not executed; retries in place a read timeout that had enough replicas but no
+data; and moves an idempotent request on after a coordinator server error
+(`cqlerr.CodeServer`). Every other server error stops, idempotent or not:
+write timeouts, read timeouts with data or too few replicas, read and write
+failures, and deterministic errors. A failure that is not a server error, such
+as a lost connection, is replayed on the next host only for an idempotent
+request or an attempt whose status is `cqlerr.NotExecuted`. The caller's
+cancellation or deadline never retries. A custom policy can build on `cqlerr.KindOf` and the
 attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
 
 ```go
