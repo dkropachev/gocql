@@ -448,7 +448,7 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(ip.String())
 	if ok {
-		s.markHostDown(host)
+		s.markHostDown(host, false)
 	}
 }
 
@@ -464,16 +464,23 @@ func (s *Core) HandleHostDown(host *implEndpoint.HostInfo) {
 		return
 	}
 	defer s.PublishV2Metadata()
-	s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
-	if s.privateStorage.InternalHostSource.InternalGetHost(host.HostID()) == host {
-		s.markHostDown(host)
+	if s.markHostDown(host, true) {
+		s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	}
 }
 
-func (s *Core) markHostDown(host *implEndpoint.HostInfo) {
+// markHostDown marks host down and drops its pool. With current set, it
+// does so only while host is the ring's host for its ID, checked under the
+// same lock startPoolFill opens pools under, so a pool opened for a host
+// that replaced it is kept. It reports whether it marked host down.
+func (s *Core) markHostDown(host *implEndpoint.HostInfo, current bool) bool {
 	filtered := s.privateStorage.InternalCfg.FilterHost(host)
 	p := s.Peripheral()
 	p.hostMu.Lock()
+	if current && s.privateStorage.InternalHostSource.InternalGetHost(host.HostID()) != host {
+		p.hostMu.Unlock()
+		return false
+	}
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeDown)
 	p.InternalMu.Lock()
 	p.InternalPublicationRevision++
@@ -483,6 +490,7 @@ func (s *Core) markHostDown(host *implEndpoint.HostInfo) {
 	}
 	p.hostMu.Unlock()
 	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "host", Stage: "down", HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+	return true
 }
 
 func (s *Core) RecordV2Topology(event *events.TopologyChangeEvent) {
