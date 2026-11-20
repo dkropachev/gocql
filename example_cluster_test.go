@@ -116,7 +116,7 @@ func TestClusterExamples(t *testing.T) {
 	}()
 
 	uuid := `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
-	count := func(query string) int {
+	count := func(t *testing.T, query string) int {
 		t.Helper()
 		var n int64
 		_, err := s.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, int64]{CQL: query, Rows: cql.OneColumn(cql.Int64Codec)},
@@ -135,7 +135,7 @@ func TestClusterExamples(t *testing.T) {
 			// The insert succeeds, so the example inspects a nil error.
 			name: "Errors", run: Example_errors,
 			check: func(t *testing.T) {
-				if n := count("SELECT count(*) FROM example.log WHERE line = 'hello'"); n != 1 {
+				if n := count(t, "SELECT count(*) FROM example.log WHERE line = 'hello'"); n != 1 {
 					t.Errorf("example.log holds %d hello lines", n)
 				}
 			},
@@ -168,7 +168,7 @@ func TestClusterExamples(t *testing.T) {
 			name: "PreparedQuery", run: ExamplePrepared_Query,
 			check: func(t *testing.T) {
 				for _, text := range []string{"first", "second", "third"} {
-					if n := count("SELECT count(*) FROM example.tweet WHERE timeline = 'me' AND text = '" + text + "' ALLOW FILTERING"); n != 1 {
+					if n := count(t, "SELECT count(*) FROM example.tweet WHERE timeline = 'me' AND text = '" + text + "' ALLOW FILTERING"); n != 1 {
 						t.Errorf("%d tweets with text %s", n, text)
 					}
 				}

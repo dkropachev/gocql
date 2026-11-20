@@ -343,8 +343,9 @@ scylla-stop: .prepare-scylla-ccm
 	@ccm stop --not-gently ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 	@ccm remove ${CCM_SCYLLA_CLUSTER_NAME} 2>/dev/null 1>&2 || true
 
-# The package pattern below is ./tests/integration only, not "./...". All
-# integration-tagged test files live in that package; the handful of
+# The package pattern below is ./tests/integration only, not "./...". The
+# integration suite lives in that package (test-integration-examples runs the
+# root package's one integration-tagged file on its own); the handful of
 # unconditional (untagged) test files in other packages would also get
 # built and would fail to parse -distribution/-cluster/etc, which only that
 # package's test files register. Cross-package coverage attribution still
