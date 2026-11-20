@@ -168,7 +168,7 @@ func TestClusterExamples(t *testing.T) {
 			name: "PreparedQuery", run: ExamplePrepared_Query,
 			check: func(t *testing.T) {
 				for _, text := range []string{"first", "second", "third"} {
-					if n := count(t, "SELECT count(*) FROM example.tweet WHERE timeline = 'me' AND text = '" + text + "' ALLOW FILTERING"); n != 1 {
+					if n := count(t, "SELECT count(*) FROM example.tweet WHERE timeline = 'me' AND text = '"+text+"' ALLOW FILTERING"); n != 1 {
 						t.Errorf("%d tweets with text %s", n, text)
 					}
 				}
