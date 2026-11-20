@@ -534,7 +534,10 @@ func (c *Conn) InternalCloseWithError(err error) {
 	}
 	cerr = c.close()
 
-	// A call sits in one slot unless a test arranged otherwise.
+	// A call sits in one slot unless a test arranged otherwise. Drained calls
+	// are recycled only after the whole drain: one recycled earlier could be
+	// taken by a caller, registered on a later stream and found again here,
+	// and seen would then skip it unanswered while its caller waits.
 	var seen map[*InternalCallReq]bool
 	c.InternalCalls.drain(func(req *InternalCallReq) {
 		if seen[req] {
@@ -561,8 +564,10 @@ func (c *Conn) InternalCloseWithError(err error) {
 				})
 			})
 		}
-		putCallReq(req)
 	})
+	for req := range seen {
+		putCallReq(req)
+	}
 
 	c.InternalFramers.close()
 
