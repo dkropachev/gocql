@@ -16,10 +16,6 @@
 
 package cql
 
-import (
-	"fmt"
-)
-
 // StreamOutputField is one column of a streamed row mapping. Only
 // StreamColumn and StreamColumnAt build one: its method is unexported. It is immutable, never boxes a field value and never retains the
 // application destination supplied later.
@@ -155,7 +151,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 		}
 		compiled, err := c.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, fmt.Errorf("gocql: streaming column %d (%s): %w", index, columnSlice(columns)[index].Name, err)
+			return nil, columnError("stream compile", index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 		plan.resets[field] = compiled.reset
@@ -207,7 +203,7 @@ func (c streamOneColumn[T]) Compile(columns Columns) (CompiledStreamRow[T], erro
 	}
 	p, e := compileStreamValue(c.decoder, columnSlice(columns)[0].Type)
 	if e != nil {
-		return nil, e
+		return nil, columnError("stream compile", 0, columnSlice(columns)[0].Name, e)
 	}
 	return streamOneColumnPlan[T]{p, columns}, nil
 }

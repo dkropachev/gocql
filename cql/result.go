@@ -32,7 +32,7 @@ func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) 
 		return nil, typeValidation("CAS result", "first column must be [applied]")
 	}
 	if err := BoolCodec.CheckType(first.Type); err != nil {
-		return nil, err
+		return nil, columnError("compile", 0, first.Name, err)
 	}
 	_, previous, err := splitColumns(columns, 1)
 	if err != nil {
@@ -51,7 +51,7 @@ func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) 
 			p.previous, err = compileRow(c.decoder, previous)
 		}
 		if err != nil {
-			return nil, err
+			return nil, rebaseColumnError(err, 1)
 		}
 	}
 	return p, nil
@@ -69,8 +69,10 @@ func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) erro
 		return typeValidation("destination", "nil CAS destination")
 	}
 	*dst = CASResult[R]{}
+	at := reader.index
 	if err := readColumnInto(reader, BoolCodec, &dst.Applied); err != nil {
-		return err
+		column, _ := reader.columns.At(at)
+		return columnError("decode", at, column.Name, err)
 	}
 	if p.previous == nil {
 		return nil
@@ -86,7 +88,7 @@ func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) erro
 	}
 	reader.columns, reader.index = columns, index
 	if err != nil {
-		return err
+		return rebaseColumnError(err, index)
 	}
 	reader.index += p.columns.Len()
 	dst.Previous.Set = true

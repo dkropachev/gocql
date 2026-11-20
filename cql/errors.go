@@ -23,14 +23,29 @@ func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s
 func (e *ValidationError) Unwrap() error { return e.Err }
 
 // CodecError records the physical column and nested path of a codec failure.
+// Every codec failure of a parameter or result column is one: typed and
+// struct row decoders, parameter encoders, dynamic rows and streams.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type CodecError struct {
-	Err    error
+	Err error
+	// Column is the name of the failing column, or of the parameter's bind
+	// marker.
 	Column string
-	Path   string
-	Stage  string
-	Index  int
+	// Path locates a failing tuple or UDT member inside the column's value,
+	// such as "[1]" for the second tuple member or ".address.zip" for a
+	// nested UDT field. It is empty when the column's value itself failed,
+	// and when the member is inside a collection element or decoded by a
+	// streaming decoder; the message still names the member then.
+	Path string
+	// Stage is where the failure happened: "compile" when the codec rejects
+	// the column's type, "encode" or "decode" for a value, and "stream
+	// compile" or "stream decode" for a streaming decoder.
+	Stage string
+	// Index is the zero-based position of the column, or of the parameter.
+	// DynamicRow.At reports the position in the DynamicRow, which is the
+	// right-hand part of the row when it is decoded by PairRows.
+	Index int
 }
 
 func (e *CodecError) Error() string {
@@ -62,3 +77,60 @@ func (e *ProtocolError) Error() string {
 }
 
 func (e *ProtocolError) Unwrap() error { return e.Err }
+
+// columnError names column index of a codec failure at stage. An error that
+// already is a CodecError names its column and is returned as it is.
+//
+// A memberError, the failure of a tuple or UDT member inside the column, is
+// reported as the column's CodecError with the member's path.
+func columnError(stage string, index int, name string, err error) error {
+	switch e := err.(type) { //nolint:errorlint // only the outermost error names the column or a member path
+	case *CodecError:
+		return err
+	case *memberError:
+		if e.stage != "" {
+			stage = e.stage
+		}
+		return &CodecError{Err: e.err, Column: name, Stage: stage, Index: index, Path: e.path}
+	}
+	return &CodecError{Err: err, Column: name, Stage: stage, Index: index}
+}
+
+// memberError is the failure of a member of a tuple or UDT value: its path,
+// such as "[1]" or ".street", and the error. The CodecError of the column
+// that holds the value reports it with Path set.
+type memberError struct {
+	err   error
+	path  string
+	stage string // the member's stage, such as "compile" for a lazily compiled codec
+}
+
+func (e *memberError) Error() string { return fmt.Sprintf("gocql: member %s: %v", e.path, e.err) }
+
+func (e *memberError) Unwrap() error { return e.err }
+
+// recordMemberError turns the CodecError of a tuple (kind TypeTuple) or UDT
+// member into a memberError, so that the enclosing column names the member
+// by its path instead of being hidden by it.
+func recordMemberError(kind Type, err error) error {
+	e, ok := err.(*CodecError) //nolint:errorlint // only the member plan's own CodecError names a member; a wrapped one belongs to a deeper value
+	if !ok {
+		return err
+	}
+	path := fmt.Sprintf("[%d]", e.Index)
+	if kind == TypeUDT {
+		path = "." + e.Column
+	}
+	return &memberError{err: e.Err, path: path + e.Path, stage: e.Stage}
+}
+
+// rebaseColumnError shifts the column index of a CodecError reported by a
+// plan that decoded or encoded a slice of the columns starting at offset.
+func rebaseColumnError(err error, offset int) error {
+	if e, ok := err.(*CodecError); ok && offset != 0 { //nolint:errorlint // only the sub-plan's own CodecError indexes its columns
+		shifted := *e
+		shifted.Index += offset
+		return &shifted
+	}
+	return err
+}

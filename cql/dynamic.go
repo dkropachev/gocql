@@ -1240,7 +1240,7 @@ func (dynamicRowsCodec) Compile(columns Columns) (CompiledRow[DynamicRow], error
 	for i, col := range columnSlice(columns) {
 		shape, err := compileStreamValidation(col.Type, 0)
 		if err != nil {
-			return nil, err
+			return nil, &CodecError{Column: col.Name, Index: i, Stage: "compile", Err: err}
 		}
 		p.shapes[i] = shape
 		if _, exists := p.lookup[col.Name]; exists {
@@ -1393,7 +1393,7 @@ func compileDynamicColumnShapes(columns Columns) ([]*streamValidationPlan, error
 	for i, c := range columnSlice(columns) {
 		p, err := compileStreamValidationMemo(c.Type, 0, memo)
 		if err != nil {
-			return nil, err
+			return nil, &CodecError{Column: c.Name, Index: i, Stage: "compile", Err: err}
 		}
 		plans[i] = p
 	}

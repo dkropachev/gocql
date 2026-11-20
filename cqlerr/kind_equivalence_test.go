@@ -15,6 +15,25 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
+// invalidCodecError reports whether the tree of err holds a cql.CodecError
+// that does not wrap a cql.ProtocolError.
+func invalidCodecError(err error) bool {
+	if codec, ok := err.(*cql.CodecError); ok && !hasType[*cql.ProtocolError](codec.Err) {
+		return true
+	}
+	switch e := err.(type) {
+	case interface{ Unwrap() error }:
+		return e.Unwrap() != nil && invalidCodecError(e.Unwrap())
+	case interface{ Unwrap() []error }:
+		for _, inner := range e.Unwrap() {
+			if invalidCodecError(inner) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // referenceKindOf is KindOf as a sequence of errors.Is and errors.As checks,
 // each searching the whole tree, in the order of precedence KindOf
 // documents. KindOf must agree with it on every tree.
@@ -48,7 +67,8 @@ func referenceKindOf(err error) Kind {
 	switch {
 	case has(ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased):
 		return KindClosed
-	case hasType[*cql.ValidationError](err), hasType[*cql.CodecError](err), hasType[*SchemaChangedError](err),
+	case hasType[*cql.ValidationError](err), invalidCodecError(err),
+		hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 			ErrPagingStateLimit, ErrNotFound, ErrNoRows):
@@ -120,6 +140,7 @@ func classifiedLeaves() []error {
 		&NoHostsError{Operation: "o"}, &NoHostsError{Operation: "o", Causes: []error{ErrNoConnections}},
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
 		&cql.CodecError{Stage: "decode", Err: errors.New("bad")},
+		&cql.CodecError{Stage: "decode", Err: &cql.ProtocolError{Stage: "cell", Err: io.ErrUnexpectedEOF}},
 		&cql.ProtocolError{Stage: "rows", Err: errors.New("bad")},
 		cqltype.NewFrameError("unknown opcode"),
 		&SchemaChangedError{Statement: "s"},

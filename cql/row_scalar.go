@@ -81,10 +81,10 @@ func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, widt
 	var length int32 = -1
 	if !missing {
 		if err := validateDataType(column.Type); err != nil {
-			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, err)
+			return 0, columnError("decode", r.index, column.Name, err)
 		}
 		if !r.lease.IsZero() && !r.lease.Alive() {
-			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, ErrReleased)
+			return 0, columnError("decode", r.index, column.Name, ErrReleased)
 		}
 		checkpoint := *r.cursor
 		prefix, err := r.cursor.Uint32()
@@ -98,7 +98,7 @@ func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, widt
 		}
 		if err != nil {
 			*r.cursor = checkpoint
-			return 0, fmt.Errorf("gocql: column %d (%s): %w", r.index, column.Name, &ProtocolError{Stage: "cell", Err: err})
+			return 0, columnError("decode", r.index, column.Name, &ProtocolError{Stage: "cell", Err: err})
 		}
 	}
 	r.index++
