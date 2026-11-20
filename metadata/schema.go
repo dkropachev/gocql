@@ -217,9 +217,13 @@ type View struct {
 	// ClusteringColumns lists the clustering columns, in key order.
 	ClusteringColumns []*Column
 	// Options holds the view's options.
-	Options                 TableOptions
-	DcLocalReadRepairChance float64 // After Scylla 4.2 by default read_repair turned off
-	ReadRepairChance        float64 // After Scylla 4.2 by default read_repair turned off
+	Options TableOptions
+	// DcLocalReadRepairChance is the view's datacenter-local read repair
+	// probability, on servers that still have the option.
+	DcLocalReadRepairChance float64
+	// ReadRepairChance is the view's read repair probability, on servers that
+	// still have the option.
+	ReadRepairChance float64
 	// IncludeAllColumns reports a view that selects every column of the base
 	// table.
 	IncludeAllColumns bool
@@ -340,7 +344,8 @@ type Index struct {
 	Name string
 	// KeyspaceName is the name of the index's keyspace.
 	KeyspaceName string
-	TableName    string // Name of corresponding view.
+	// TableName is the name of the indexed table.
+	TableName string
 	// Kind is the kind of index.
 	Kind IndexKind
 	// Options holds the index's options, such as "target".

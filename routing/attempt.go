@@ -20,15 +20,15 @@ type Info struct {
 	Keyspace, Table string
 	// Token is the token of the request's partition, when known.
 	Token cql.Option[int64]
-	// Kind and Conditional classify the statement.
+	// Kind classifies the statement.
 	Kind cql.StatementKind
-	// Conditional reports that the request is routed and retried as a
-	// conditional statement: Kind is not OrdinaryStatement, or its
-	// consistency is serial.
+	// Conditional reports that Kind is not OrdinaryStatement. A request with
+	// SERIAL or LOCAL_SERIAL consistency is routed as conditional even when
+	// this is false.
 	Conditional bool
 	// Consistency is the request's consistency level.
 	Consistency cql.Consistency
-	// HostID and ShardID pin the request to a host and shard when set.
+	// HostID pins the request to a host, when set.
 	HostID cql.Option[cql.UUID]
 	// ShardID is the shard the request is pinned to, when set; it requires
 	// HostID.

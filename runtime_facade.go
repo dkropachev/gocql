@@ -73,7 +73,7 @@ type PreparedInfo struct {
 	// PartitionKeyIndexes are the positions of the bind markers that hold the
 	// partition key, in key order; the session routes with them.
 	PartitionKeyIndexes []int
-	// Kind and Conditional classify the statement.
+	// Kind classifies the statement.
 	Kind cql.StatementKind
 	// Conditional reports that the server flagged the statement as a
 	// lightweight transaction when preparing it, as ScyllaDB does.

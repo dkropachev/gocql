@@ -85,7 +85,7 @@ func TestPublicMethodDocumentation(t *testing.T) {
 // its members. A trailing comment on the same line documents a constant, a
 // variable, an interface method or a struct field, but not a function or a
 // type. A comment holding only directives, such as //go:noinline or
-// //nolint, is not documentation. Test files and nested modules are not
+// //nolint:errcheck, is not documentation. Test files and nested modules are not
 // checked.
 func TestExportedSymbolsDocumented(t *testing.T) {
 	root := moduleRoot(t)
