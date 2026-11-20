@@ -37,21 +37,20 @@ leader-aware, latency-penalized and unshuffled requests go straight to
 Fallback. It keeps private immutable indices and does not copy all hosts to
 choose its first target.
 
-### Built-in plan order
+## Built-in plan order
 
 A plan of `routing.NewPolicy` tries, in order: the tablet's leader when
-`LeaderAware` applies, the replicas in the local rack
-(`Rack`), the other replicas in the local datacenter (`Datacenter`, or every
-datacenter without one), the replicas in other datacenters when `AllowRemote`
-is set, then the hosts that are no replicas in the same tiers: local rack,
-local datacenter, other datacenters. So with `AllowRemote` a remote replica
-comes before a local host that is no replica. Hosts that are down or have no
-connection come after every reachable host. `ShuffleReplicas` orders the
-replicas of a tier at random per request, and otherwise in an order fixed for
-each replica set; the hosts that are no replicas take turns. A conditional
-request (a statement not known to be ordinary, or a `SERIAL` or
-`LOCAL_SERIAL` one) keeps the replicas' order, does not rotate the hosts and
-does not follow a route to a shard with one to any shard.
+`LeaderAware` applies, the replicas in the local rack (`Rack`), the other
+replicas in the local datacenter (`Datacenter`, or every datacenter without
+one), the replicas in other datacenters when `AllowRemote` is set, then the
+hosts that are no replicas in the same tiers: local rack, local datacenter,
+other datacenters. So with `AllowRemote` a remote replica comes before a local
+host that is no replica. Hosts that are down or have no connection come after
+every reachable host. `ShuffleReplicas` orders the replicas of a tier at
+random per request, and otherwise in an order fixed for each replica set; the
+hosts that are no replicas take turns. A request whose statement is not known
+to be ordinary, or whose consistency is `SERIAL` or `LOCAL_SERIAL`, keeps the
+replicas' order and does not rotate the hosts.
 
 - Without `TokenAware`, or without a token, a plan has no replicas and starts
   with the hosts.
@@ -63,15 +62,17 @@ does not follow a route to a shard with one to any shard.
   token no known tablet holds has no replicas, and the plan starts with the
   hosts; the response then carries the tablet, which later plans use.
 - A replica's route goes to its tablet's shard, or to the shard that owns the
-  token, followed by a route to any shard of the same host. `SingleTarget`
-  routes only to its host: to its shard first when it names one and the host
-  has it, then to any shard, unless `StrictShard` is set.
+  token, followed by a route to any shard of the same host, except for a
+  statement not known to be ordinary and a request that names its shard.
+  `SingleTarget` routes only to its host: to its shard first when it names one
+  and the host has it, then to any shard, unless `StrictShard` is set.
 
 A tablet hint in a response replaces every tablet its range overlaps, so a
 migrated, split or merged tablet takes effect at the next request; a plan
 already built keeps the tablets it was built with. When more hints arrive than
-the driver can queue, it forgets every tablet it knows, plans already built
-included, and relearns them from later responses.
+the driver can queue, it forgets every tablet it knows and relearns them from
+later responses; a plan already built then skips its remaining replicas, of
+tablets or of the token ring, and goes on with the hosts.
 
 Config.Partitioners maps server names to TokenPartitioner implementations.
 PartitionKey.ForEach streams canonical encoded components without gathering;

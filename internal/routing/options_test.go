@@ -84,9 +84,9 @@ func routePair(r metadata.Route) [2]int {
 	return [2]int{int(r.HostID()[15]), shard}
 }
 
-// planHosts is the hosts a plan of policy routes to, in order, without the
+// policyHosts is the hosts a plan of policy routes to, in order, without the
 // route to any shard of a host that follows a route to one of its shards.
-func planHosts(policy routing.Policy, info routing.Info, m *implRouting.MetadataSnapshot) []byte {
+func policyHosts(policy routing.Policy, info routing.Info, m *implRouting.MetadataSnapshot) []byte {
 	var hosts []byte
 	plan := implRouting.NewPlan(implRouting.EngineOf(policy), info, m)
 	for target, ok := implRouting.InternalNextTarget(plan); ok; target, ok = implRouting.InternalNextTarget(plan) {
@@ -200,7 +200,7 @@ func TestPolicyOptions(t *testing.T) {
 						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
 					}
 					for range 20 {
-						if hosts := planHosts(policy, test.info, m); !inTiers(hosts, variant.tiers) {
+						if hosts := policyHosts(policy, test.info, m); !inTiers(hosts, variant.tiers) {
 							t.Fatalf("plan %v, want tiers %v", hosts, variant.tiers)
 						}
 					}
@@ -265,7 +265,7 @@ func TestPolicyOptions(t *testing.T) {
 		// host of the plan's tiers, replicas among them.
 		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, TokenAware: true})
 		m := optionsSnapshot(t, func(h []metadata.HostSnapshot) { h[0].Connected, h[1].Up = false, false })
-		if hosts := planHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{3}, {4}, {5}, {1, 2}}) {
+		if hosts := policyHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{3}, {4}, {5}, {1, 2}}) {
 			t.Fatalf("plan %v, want reachable 3, 4, 5, then 1 and 2", hosts)
 		}
 	})
