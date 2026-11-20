@@ -132,6 +132,11 @@ func (c *InternalControlConn) InternalHeartBeat() {
 		case <-c.InternalQuit:
 			return
 		case <-c.wake:
+			// A wake can outlive the connection it was sent for: one that
+			// broke while the loop was already reconnecting.
+			if c.connected() {
+				continue
+			}
 			goto reconn
 		case <-timer.C:
 		}

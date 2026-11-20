@@ -87,4 +87,18 @@ func TestControlReconnect(t *testing.T) {
 	if reconnects != 1 {
 		t.Fatalf("%d Control events for one reconnect, want 1", reconnects)
 	}
+
+	// A wake for a connection that broke while the loop was reconnecting
+	// arrives when the loop has a healthy one, which it keeps.
+	current := implCluster.SessionData(s).InternalControl.InternalGetConn().InternalConn.(*transport.Conn)
+	implCluster.SessionData(s).InternalControl.(*implCluster.InternalControlConn).HandleError(current, errors.New("stale"), true)
+	time.Sleep(200 * time.Millisecond)
+	if now := implCluster.SessionData(s).InternalControl.InternalGetConn().InternalConn; now != current || current.Closed() {
+		t.Fatal("a stale wake replaced a healthy control connection")
+	}
+	select {
+	case e := <-sub.Events():
+		t.Fatalf("a stale wake published %+v", e)
+	default:
+	}
 }
