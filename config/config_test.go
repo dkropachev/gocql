@@ -21,6 +21,7 @@ import (
 	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -577,6 +578,99 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("SettersStoreValues", func(t *testing.T) {
+		lifecycle := &lifecycleRecorder{}
+		addr := netip.MustParseAddr("192.0.2.7")
+		c := mustBuildConfig(t, New("h").
+			WithMaxFrameSize(1<<20).
+			WithMaxDecompressedSize(2<<20).
+			WithMaxMetadataDepth(32).
+			WithMaxPagingStates(100).
+			WithMaxPagingStateSize(4096).
+			WithLocalAddress(addr).
+			WithDNSTimeout(3*time.Second).
+			WithTCPKeepalive(15*time.Second).
+			WithSocketBuffers(1024, 2048).
+			WithLinger(2*time.Second).
+			WithMaxRequestsPerConnection(128).
+			WithMaxOrphanedStreams(0).
+			WithLifecycleObserver(lifecycle)).settings
+		for name, ok := range map[string]bool{
+			"WithMaxFrameSize":             c.Limits.MaxFrameBytes == 1<<20,
+			"WithMaxDecompressedSize":      c.Limits.MaxDecompressedBytes == 2<<20,
+			"WithMaxMetadataDepth":         c.Limits.MaxMetadataDepth == 32,
+			"WithMaxPagingStates":          c.Limits.MaxPagingStates == 100,
+			"WithMaxPagingStateSize":       c.Limits.MaxPagingStateBytes == 4096,
+			"WithLocalAddress":             c.LocalAddress == addr,
+			"WithDNSTimeout":               c.DNSTimeout == 3*time.Second,
+			"WithTCPKeepalive":             c.SocketKeepalive == 15*time.Second,
+			"WithSocketBuffers":            c.ReceiveBuffer == cql.Some(1024) && c.SendBuffer == cql.Some(2048),
+			"WithLinger":                   c.Linger == cql.Some(2*time.Second),
+			"WithMaxRequestsPerConnection": c.Pool.MaxRequestsPerConnection == 128,
+			"WithMaxOrphanedStreams":       c.Pool.MaxOrphanedStreams == 0,
+			"WithLifecycleObserver":        c.LifecycleObserver == observe.LifecycleObserver(lifecycle),
+		} {
+			if !ok {
+				t.Errorf("%s: the built configuration does not carry the chosen value", name)
+			}
+		}
+		if c := mustBuildConfig(t, New("h").WithLinger(0)).settings; c.Linger != cql.Some(time.Duration(0)) {
+			t.Errorf("WithLinger(0) = %+v, want a chosen zero linger", c.Linger)
+		}
+	})
+
+	t.Run("SettersRejectInvalidValues", func(t *testing.T) {
+		for name, b := range map[string]*ConfigBuilder{
+			"MaxFrameSizeZero":                 New("h").WithMaxFrameSize(0),
+			"MaxFrameSizeOver2GiB":             New("h").WithMaxFrameSize(1 << 31),
+			"MaxDecompressedSizeNegative":      New("h").WithMaxDecompressedSize(-1),
+			"MaxDecompressedSizeOver2GiB":      New("h").WithMaxDecompressedSize(1 << 31),
+			"MaxMetadataDepthZero":             New("h").WithMaxMetadataDepth(0),
+			"MaxMetadataDepthOver128":          New("h").WithMaxMetadataDepth(129),
+			"MaxPagingStatesZero":              New("h").WithMaxPagingStates(0),
+			"MaxPagingStateSizeZero":           New("h").WithMaxPagingStateSize(0),
+			"DNSTimeoutNegative":               New("h").WithDNSTimeout(-time.Second),
+			"TCPKeepaliveNegative":             New("h").WithTCPKeepalive(-time.Second),
+			"SocketBuffersNegativeReceive":     New("h").WithSocketBuffers(-1, 0),
+			"SocketBuffersNegativeSend":        New("h").WithSocketBuffers(0, -1),
+			"LingerNegative":                   New("h").WithLinger(-time.Second),
+			"LingerFractionalSeconds":          New("h").WithLinger(1500 * time.Millisecond),
+			"MaxRequestsPerConnectionZero":     New("h").WithMaxRequestsPerConnection(0),
+			"MaxRequestsPerConnectionOver32Ki": New("h").WithMaxRequestsPerConnection(32769),
+			"MaxOrphanedStreamsNegative":       New("h").WithMaxOrphanedStreams(-1),
+		} {
+			t.Run(name, func(t *testing.T) {
+				if _, err := b.Build(); err == nil {
+					t.Fatal("Build accepted the invalid value")
+				} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+					t.Fatalf("Build = %v, want a ValidationError", err)
+				}
+			})
+		}
+		mustBuildConfig(t, New("h").WithMaxFrameSize(1<<31-1).WithMaxDecompressedSize(1<<31-1).WithMaxMetadataDepth(128).WithMaxRequestsPerConnection(32768))
+	})
+
+	t.Run("ProfileSettersStoreValues", func(t *testing.T) {
+		speculation := fixedSpeculation{delay: 50 * time.Millisecond}
+		p := codecTestMust(NewProfile().WithPageTimeout(2 * time.Second).WithSpeculation(speculation).Build())
+		if p.PageTimeout != 2*time.Second || p.Speculation != retry.SpeculationPolicy(speculation) {
+			t.Fatalf("profile = %+v", p)
+		}
+		if d, ok := p.Speculation.Delay(1); !ok || d != 50*time.Millisecond {
+			t.Fatalf("Speculation.Delay = %v, %v", d, ok)
+		}
+		if p := codecTestMust(NewProfile().WithSpeculation(speculation).WithSpeculation(nil).Build()); p.Speculation != nil {
+			t.Fatalf("WithSpeculation(nil) kept %v", p.Speculation)
+		}
+		if _, err := NewProfile().WithPageTimeout(-time.Second).Build(); err == nil {
+			t.Fatal("negative page timeout accepted")
+		}
+		c := mustBuildConfig(t, New("h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageTimeout(time.Second) })).settings
+		if c.DefaultProfile.PageTimeout != time.Second {
+			t.Fatalf("default profile PageTimeout = %v", c.DefaultProfile.PageTimeout)
+		}
+	})
+
 	t.Run("ProfileBuild", func(t *testing.T) {
 		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().NoPrefetch().Build()
 		if err != nil {
@@ -603,6 +697,16 @@ func secretTranslator(secret string) endpoint.Translator {
 		return addr, nil
 	})
 }
+
+type lifecycleRecorder struct{ events []observe.LifecycleEvent }
+
+func (r *lifecycleRecorder) ObserveLifecycle(e observe.LifecycleEvent) {
+	r.events = append(r.events, e)
+}
+
+type fixedSpeculation struct{ delay time.Duration }
+
+func (s fixedSpeculation) Delay(int) (time.Duration, bool) { return s.delay, true }
 
 func mustRoutes(b *ClientRoutesBuilder) ClientRoutes { return codecTestMust(b.Build()) }
 
