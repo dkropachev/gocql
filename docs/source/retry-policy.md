@@ -27,8 +27,9 @@ write timeouts, read timeouts with data or too few replicas, read and write
 failures, and deterministic errors. A failure that is not a server error, such
 as a lost connection, is replayed on the next host only for an idempotent
 request or an attempt whose status is `cqlerr.NotExecuted`. The caller's
-cancellation or deadline never retries. A custom policy can build on `cqlerr.KindOf` and the
-attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
+cancellation or deadline never retries. A custom policy can build on
+`cqlerr.KindOf` and the attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts
+a function:
 
 ```go
 policy := retry.PolicyFunc(func(a retry.Attempt) retry.Decision {

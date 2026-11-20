@@ -1,10 +1,11 @@
 # Routing
 
 Set `Profile.Routing` to a typed `routing.Policy` with
-`ProfileBuilder.WithRouting`, in the session's default profile (`config.ConfigBuilder.WithDefaultProfile` or
-`ConfigureDefaultProfile`) or in the `exec.Options.Profile` of an execution. The
-default is token-aware with shuffled replicas; nil routes without a
-request-specific plan. `routing.NewPolicy(routing.Options{...})` configures
+`ProfileBuilder.WithRouting`, in the session's default profile
+(`config.ConfigBuilder.WithDefaultProfile` or `ConfigureDefaultProfile`) or in
+the `exec.Options.Profile` of an execution. The default is token-aware with
+shuffled replicas; nil routes without a request-specific plan.
+`routing.NewPolicy(routing.Options{...})` configures
 token awareness, datacenter/rack preference, remote fallback, replica shuffling,
 leader-aware routing and latency ordering. Missing required locality is an
 explicit validation error. `routing.SingleTarget` pins a typed host/shard target.
