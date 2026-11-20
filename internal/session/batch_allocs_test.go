@@ -34,9 +34,6 @@ func TestBatchAllocs(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		send() // warm the batch, the query and the frame scratch
-		if n := testing.AllocsPerRun(50, send); n != 0 {
-			t.Fatalf("ExecBatch allocates %v times per send", n)
-		}
+		gateAllocs(t, "ExecBatch", 0, send)
 	})
 }

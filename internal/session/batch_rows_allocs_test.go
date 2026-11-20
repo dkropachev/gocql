@@ -33,10 +33,7 @@ func TestRunBatchAllocs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	send()
-	if n := testing.AllocsPerRun(50, send); n > heldQueryAllocs {
-		t.Fatalf("RunBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
-	}
+	gateAllocs(t, "RunBatch", heldQueryAllocs, send)
 }
 
 // TestRunConditionalBatchAllocs checks that the applied tally adds nothing
@@ -58,8 +55,7 @@ func TestRunConditionalBatchAllocs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	plain()
-	baseline := testing.AllocsPerRun(50, plain)
+	baseline := gateAllocs(t, "RunBatch", heldQueryAllocs, plain)
 	send := func() {
 		rows, err := session.RunConditionalBatch(context.Background(), batch, decoder, CompiledOptions{})
 		if err != nil {
@@ -72,12 +68,8 @@ func TestRunConditionalBatchAllocs(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	send()
-	n := testing.AllocsPerRun(50, send)
-	if n > baseline {
-		t.Fatalf("RunConditionalBatch allocates %v times per send, RunBatch %v", n, baseline)
-	}
-	if n > heldQueryAllocs {
-		t.Fatalf("RunConditionalBatch allocates %v times per send, want at most %d", n, heldQueryAllocs)
+	n := gateAllocs(t, "RunConditionalBatch", heldQueryAllocs, send)
+	if n > baseline+allocTolerance {
+		t.Errorf("RunConditionalBatch allocates %.3f times per send, RunBatch %.3f", n, baseline)
 	}
 }

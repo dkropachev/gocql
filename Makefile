@@ -445,6 +445,22 @@ BENCH_OPTS = -run '^$$' -bench=. -benchmem
 test-bench:
 	go test ${BENCH_OPTS} ./...
 
+# test-unit runs with -race, which skips the allocation gates (the race
+# detector allocates on its own) and compiles no file behind the gocql_perf
+# or gocql_debug tag. This runs the suite once more without -race, then once
+# per measurement tag. cmd/cqlgen is left out: it has nothing behind a tag,
+# test-unit already runs it, and its nested go test of the golden package
+# outruns the timeout beside the other packages' builds.
+TAGGED_TEST_PKGS = $(shell go list ./... | grep -v '/cmd/cqlgen$$')
+# The root package builds the streaming example three times
+# (TestBuildTagsCost) beside every other package's tests.
+test-unit-tags: UNIT_TEST_TIMEOUT = 10m
+
+test-unit-tags: .prepare-pki
+	go test -timeout=$(UNIT_TEST_TIMEOUT) $(TAGGED_TEST_PKGS)
+	go test -timeout=$(UNIT_TEST_TIMEOUT) -tags gocql_perf $(TAGGED_TEST_PKGS)
+	go test -timeout=$(UNIT_TEST_TIMEOUT) -tags gocql_debug $(TAGGED_TEST_PKGS)
+
 # Benchmarks that need a live cluster: same cluster setup and flags as the
 # integration suite, run against ./tests/bench/integration.
 bench-integration-scylla:
