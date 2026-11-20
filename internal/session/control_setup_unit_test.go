@@ -99,7 +99,13 @@ type controlTestServer struct {
 
 func newControlTestServer(t *testing.T, configure func(srv *controlTestServer)) *controlTestServer {
 	t.Helper()
-	srv := &controlTestServer{TestServer: NewTestServer(t, protocol.ProtoVersion4, context.Background())}
+	return newControlTestServerAt(t, "127.0.0.1:0", configure)
+}
+
+// newControlTestServerAt is newControlTestServer listening on addr.
+func newControlTestServerAt(t *testing.T, addr string, configure func(srv *controlTestServer)) *controlTestServer {
+	t.Helper()
+	srv := &controlTestServer{TestServer: NewTestServerWithAddress(addr, t, protocol.ProtoVersion4, context.Background())}
 	t.Cleanup(srv.Stop)
 	if configure != nil {
 		configure(srv)
