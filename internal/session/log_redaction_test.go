@@ -100,7 +100,7 @@ func TestLogsDoNotLeakCredentials(t *testing.T) {
 			if srv != nil && !strings.Contains(strings.Join(srv.received(), "\n"), redactionSecret) {
 				t.Fatal("the password did not reach the server")
 			}
-			printed := fmt.Sprintf("%v\n%+v\n%#v\n", config.Auth, config.Auth, config.Auth)
+			printed := fmt.Sprintf("%v\n%+v\n%#v\n%v\n%+v\n", config.Auth, config.Auth, config.Auth, config, config)
 			if err != nil {
 				printed += errorText(err)
 			}
