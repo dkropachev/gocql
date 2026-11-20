@@ -37,7 +37,8 @@ type Options struct {
 	// LOCAL_ONE and eventually consistent keyspaces keep normal replica
 	// order. A leader the policy would not otherwise use (host filter,
 	// another datacenter without AllowRemote, down or unconnected) is not
-	// preferred. The session's default policy sets it. Only ScyllaDB has
+	// preferred, and latency-aware routing tries a slow leader last. The
+	// session's default policy sets it. Only ScyllaDB has
 	// tablets; on Cassandra it has no effect.
 	LeaderAware bool
 }

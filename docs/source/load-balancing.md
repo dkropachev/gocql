@@ -118,7 +118,9 @@ tries the leader first, ahead of nearer replicas:
   over V1, which report no leader.
 - The leader is not preferred when the policy would not otherwise use it: a
   host the host filter skips, one outside `Datacenter` without
-  `AllowRemote`, or one that is down or has no connection. The plan then
+  `AllowRemote`, or one that is down or has no connection. With
+  `Latency.Enabled`, a leader measured slow is tried last, like any slow
+  host. The plan then
   continues as usual and a replica forwards the request. Retries and
   speculative attempts follow the rest of the plan.
 - A batch is routed like any other batch, by its first statement with a
