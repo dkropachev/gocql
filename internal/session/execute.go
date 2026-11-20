@@ -897,7 +897,13 @@ func (rt *InternalSessionRuntime) newRowsFromResponse[R any](runctx context.Cont
 // the page size options resolve to; cqltype.Unpaged requests the whole result
 // in one response; any other positive value is this page's size.
 func RunPage[R any](ctx context.Context, s *implCluster.Core, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
-	return runtimeOf(s).runSinglePage(ctx, b, state, pageSize, options)
+	rt := runtimeOf(s)
+	page, err := rt.runSinglePage(ctx, b, state, pageSize, options)
+	if err != nil && b != nil {
+		// Covers the refusals runSinglePage makes before admission.
+		rt.describeStatement(err, &b.privateStorage.InternalRequest)
+	}
+	return page, err
 }
 
 func (rt *InternalSessionRuntime) runSinglePage[R any](ctx context.Context, b *Bound[R], state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {

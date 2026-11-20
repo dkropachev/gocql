@@ -211,10 +211,57 @@ func TestErrorStatementPaths(t *testing.T) {
 			_, _ = peer.Write(serverError(t, stream, cqlerr.CodeInvalid, nil))
 		}()
 		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
-		<-served
+		select {
+		case <-served:
+		case <-ctx.Done():
+			t.Fatal("the server never answered")
+		}
 		if err == nil {
 			t.Fatal("stream succeeded")
 		}
 		checkNamed(t, err)
+	})
+	// A stream that fails before any attempt, here for want of a
+	// connection, reports the failure as an ExecutionError of its own.
+	t.Run("RowStreamNoAttempt", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 0)
+		defer s.Close()
+		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
+		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+		if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); !ok || len(failure.Attempts) != 0 {
+			t.Fatalf("RunStream without connections = %v, want an ExecutionError without attempts", err)
+		}
+		checkNamed(t, err)
+	})
+	t.Run("RunPageRefused", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 1)
+		defer s.Close()
+		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
+		_, err := RunPage(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StartPage, -1, CompiledOptions{})
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+			t.Fatalf("RunPage with a negative page size = %v", err)
+		}
+		checkNamed(t, err)
+	})
+	t.Run("BatchRefused", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 1)
+		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
+		var batch Batch
+		if err := batchTestQuery(t, s).AddToBatch(&batch, []byte(redactionSecret)); err != nil {
+			t.Fatal(err)
+		}
+		s.Close()
+		session := InternalWrapSession(s)
+		_, execErr := session.ExecBatch(ctx, &batch, CompiledOptions{})
+		_, runErr := session.RunBatch(ctx, &batch, cql.EmptyRowDecoder, CompiledOptions{})
+		for name, err := range map[string]error{"ExecBatch": execErr, "RunBatch": runErr} {
+			failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
+			if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchStatements != 1 {
+				t.Errorf("%s on a closed session = %v", name, err)
+			}
+			if text := errorText(err); strings.Contains(text, redactionSecret) {
+				t.Errorf("%s: error leaks the bound value: %s", name, text)
+			}
+		}
 	})
 }

@@ -294,6 +294,14 @@ func (rt *InternalSessionRuntime) batchQueries() (*queryPool[cql.EmptyRow, cql.E
 // begun an execution for it. The caller releases the query's owner when the
 // execution no longer needs it.
 func beginBatch(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[cql.EmptyRow, cql.EmptyRow], error) {
+	q, err := beginBatchQuery(ctx, s, batch)
+	if err != nil {
+		runtimeOf(s).describeBatch(err, batch)
+	}
+	return q, err
+}
+
+func beginBatchQuery(ctx context.Context, s *implCluster.Core, batch *Batch) (*Query[cql.EmptyRow, cql.EmptyRow], error) {
 	if err := validateBatch(s, batch); err != nil {
 		return nil, notSent(err)
 	}
