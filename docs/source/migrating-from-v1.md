@@ -268,7 +268,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | `routing.NewPolicy(routing.Options{Datacenter: dc, TokenAware: true})` |
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `routing.Options{Datacenter: dc, Rack: rack, TokenAware: true}` |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy`; see [load balancing](load-balancing.md) |
-| `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed |
+| `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
