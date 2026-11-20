@@ -192,3 +192,103 @@ func TestSettle(t *testing.T) {
 		}
 	})
 }
+
+func TestFetchReadiness(t *testing.T) {
+	ready := sessionRow{Duration: cql.Nullable[int32]{Value: 1500, Valid: true}, Command: cql.Nullable[string]{Value: "QUERY", Valid: true}}
+	notYet := sessionRow{Command: cql.Nullable[string]{Value: "QUERY", Valid: true}}
+	type sessionRead struct {
+		row   sessionRow
+		found bool
+		err   error
+	}
+	// reader returns each result in turn, then repeats the last one, and
+	// counts the reads.
+	reader := func(results ...sessionRead) (func(context.Context) (sessionRow, bool, error), *int) {
+		calls := new(int)
+		return func(context.Context) (sessionRow, bool, error) {
+			r := results[min(*calls, len(results)-1)]
+			*calls++
+			return r.row, r.found, r.err
+		}, calls
+	}
+	events := func(counts ...int) (func(context.Context) ([]Event, error), *int) {
+		calls := new(int)
+		return func(context.Context) ([]Event, error) {
+			n := counts[min(*calls, len(counts)-1)]
+			*calls++
+			return make([]Event, n), nil
+		}, calls
+	}
+	fast := Fetcher{Poll: time.Millisecond, Settle: time.Millisecond}
+	id := cql.RandomUUID()
+	bounded := func(t *testing.T) context.Context {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		t.Cleanup(cancel)
+		return ctx
+	}
+
+	// The session is ready once its row has a duration and an event is
+	// visible: an absent row, a row without a duration and a ready row
+	// without events all poll again.
+	t.Run("PollsUntilReady", func(t *testing.T) {
+		readSession, sessionReads := reader(sessionRead{}, sessionRead{row: notYet, found: true}, sessionRead{row: ready, found: true})
+		readEvents, eventReads := events(0, 2)
+		info, err := fast.fetch(bounded(t), id, readSession, readEvents)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.ID != id || info.Duration != 1500*time.Microsecond || info.Command != "QUERY" || len(info.Events) != 2 || !info.Settled {
+			t.Fatalf("info %+v", info)
+		}
+		// Two polls before the row was ready, one that found no events,
+		// one ready; then a settling read of the events.
+		if *sessionReads != 4 || *eventReads != 3 {
+			t.Fatalf("session reads %d, event reads %d", *sessionReads, *eventReads)
+		}
+	})
+	t.Run("NotReady", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		defer cancel()
+		readSession, _ := reader(sessionRead{row: notYet, found: true})
+		readEvents, _ := events(0)
+		info, err := fast.fetch(ctx, id, readSession, readEvents)
+		if !errors.Is(err, ErrNotReady) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err %v, want ErrNotReady and the context's error", err)
+		}
+		if info.ID != id || info.Events != nil {
+			t.Fatalf("info %+v", info)
+		}
+	})
+	// A read the ended context fails reports ErrNotReady too.
+	t.Run("ReadFailsAsContextEnds", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		readSession := func(context.Context) (sessionRow, bool, error) {
+			cancel()
+			return sessionRow{}, false, context.Canceled
+		}
+		readEvents, _ := events(0)
+		if _, err := fast.fetch(ctx, id, readSession, readEvents); !errors.Is(err, ErrNotReady) || !errors.Is(err, context.Canceled) {
+			t.Fatalf("err %v", err)
+		}
+	})
+	// Any other read failure is returned as it is, not as ErrNotReady.
+	t.Run("ReadError", func(t *testing.T) {
+		failure := errors.New("read failed")
+		readSession, sessionReads := reader(sessionRead{err: failure})
+		readEvents, _ := events(0)
+		if _, err := fast.fetch(bounded(t), id, readSession, readEvents); err != failure || *sessionReads != 1 {
+			t.Fatalf("err %v after %d reads", err, *sessionReads)
+		}
+		readSession, _ = reader(sessionRead{row: ready, found: true})
+		readEvents = func(context.Context) ([]Event, error) { return nil, failure }
+		if _, err := fast.fetch(bounded(t), id, readSession, readEvents); err != failure {
+			t.Fatalf("event read: err %v", err)
+		}
+	})
+	t.Run("NilSession", func(t *testing.T) {
+		info, err := Fetch(context.Background(), nil, id)
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok || info.ID != id {
+			t.Fatalf("err %v, info %+v", err, info)
+		}
+	})
+}

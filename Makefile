@@ -376,6 +376,11 @@ test-integration-ccm: scylla-start
 	go test -v -tags integration -timeout=${TEST_INTEGRATION_TIMEOUT} ./internal/testkit/ccm
 
 # One module includes compressor and replay workload tests.
+# UNIT_TEST_TIMEOUT bounds each package's unit tests. The coverage run
+# raises it: cmd/cqlgen's tests run go list and go test themselves, and those
+# builds compete with the -race -coverpkg=./... compiles of every package.
+UNIT_TEST_TIMEOUT ?= 5m
+
 test-unit: .prepare-pki
 	@echo "Run unit tests"
 	bash ci/resolve-scylla-ccm-version_test.sh
@@ -383,14 +388,14 @@ test-unit: .prepare-pki
 ifeq ($(shell if [[ -n "$${GITHUB_STEP_SUMMARY}" ]]; then echo "running-in-workflow"; else echo "running-in-shell"; fi), running-in-workflow)
 	echo "### Unit Test Results" >>$${GITHUB_STEP_SUMMARY}
 	echo '```' >>$${GITHUB_STEP_SUMMARY}
-	echo go test -timeout=5m -race ./... ${COVER_ARGS}
+	echo go test -timeout=$(UNIT_TEST_TIMEOUT) -race ./... ${COVER_ARGS}
 	TEST_STATUS=0
-	go test -timeout=5m -race ./... ${COVER_ARGS} | tee -a "$${GITHUB_STEP_SUMMARY}" || TEST_STATUS=$${PIPESTATUS[0]}
+	go test -timeout=$(UNIT_TEST_TIMEOUT) -race ./... ${COVER_ARGS} | tee -a "$${GITHUB_STEP_SUMMARY}" || TEST_STATUS=$${PIPESTATUS[0]}
 	echo '```' >>"$${GITHUB_STEP_SUMMARY}"
 	if (( TEST_STATUS != 0 )); then exit "$${TEST_STATUS}"; fi
 	exit "$${TEST_STATUS}"
 else
-	go test -v -timeout=5m -race ./... ${COVER_ARGS}
+	go test -v -timeout=$(UNIT_TEST_TIMEOUT) -race ./... ${COVER_ARGS}
 endif
 
 .prepare-coverage-dir:
@@ -415,7 +420,7 @@ endif
 # needs to agree, not just test-unit-coverage, which is
 # the only one that would otherwise get atomic mode for free from -race.
 test-unit-coverage: .prepare-coverage-dir
-	@$(MAKE) test-unit COVER_ARGS="-cover -covermode=atomic -coverpkg=./... -args -test.gocoverdir=\"${COVERAGE_DIR}\""
+	@$(MAKE) test-unit UNIT_TEST_TIMEOUT=10m COVER_ARGS="-cover -covermode=atomic -coverpkg=./... -args -test.gocoverdir=\"${COVERAGE_DIR}\""
 
 test-integration-scylla-coverage: .prepare-coverage-dir
 	@$(MAKE) test-integration-scylla COVER_BUILD_ARGS="-cover -covermode=atomic -coverpkg=./..." COVER_RUNTIME_ARGS="-test.gocoverdir=\"${COVERAGE_DIR}\""

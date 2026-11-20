@@ -150,6 +150,13 @@ func TestBuiltins(t *testing.T) {
 		if testing.Short() {
 			t.Skip("builds and tests the golden package")
 		}
+		// The coverage job compiles every package with -race and
+		// -coverpkg=./..., and a nested build of this package beside those
+		// compiles outran the test timeout and the runner's memory. Plain
+		// unit test runs still build it.
+		if testing.CoverMode() != "" {
+			t.Skip("builds and tests the golden package; not under -cover")
+		}
 		// go ./... skips testdata, so the package is built and tested here.
 		args := []string{"test", "-count=1", "./" + filepath.ToSlash(builtinsDir)}
 		if out, err := exec.Command("go", args...).CombinedOutput(); err != nil {
