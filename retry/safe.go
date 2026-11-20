@@ -21,8 +21,9 @@ import (
 // could apply them twice; the driver then reports the attempt MaybeExecuted.
 // The rule holds on every server, ScyllaDB included: the driver does not rely
 // on the order in which a server checks a batch's partitions. It also holds
-// for a conditional batch, whose kind the driver may not know. A logged batch
-// is checked whole before its batch log is written, so it is retried.
+// for a conditional batch: Attempt.Conditional is set too for a batch whose
+// statements the driver did not classify, which may span partitions. A logged
+// batch is checked whole before its batch log is written, so it is retried.
 //
 // It retries in place a read timeout that had enough replicas but no data,
 // and moves an idempotent request on after a coordinator server error. Every
