@@ -311,7 +311,7 @@ func TestSchemaMetadata(t *testing.T) {
 
 				for i := range concurrency {
 					if errs[i] == nil {
-						t.Errorf("goroutine %d: expected ErrNotFound, got nil", i)
+						t.Errorf("goroutine %d: expected a not-found error, got nil", i)
 					}
 				}
 			})
@@ -406,7 +406,7 @@ func TestSchemaMetadata(t *testing.T) {
 			t.Run("GetTable/different_tables_one_fails", func(t *testing.T) {
 				t.Parallel()
 				// tbl_a exists in the mock, tbl_x does not — concurrent refreshes
-				// for both: one succeeds, one gets ErrNotFound.
+				// for both: one succeeds, one gets errSchemaNotFound.
 				ctrl := &schemaDataMock{
 					knownKeyspaces: defaultTables,
 					queryDelay:     5 * time.Millisecond,
@@ -438,7 +438,7 @@ func TestSchemaMetadata(t *testing.T) {
 						t.Errorf("tbl_a goroutine %d: unexpected error: %v", i, aErrs[i])
 					}
 					if xErrs[i] == nil {
-						t.Errorf("tbl_x goroutine %d: expected ErrNotFound, got nil", i)
+						t.Errorf("tbl_x goroutine %d: expected a not-found error, got nil", i)
 					}
 				}
 			})

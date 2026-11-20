@@ -246,7 +246,8 @@ type Column struct {
 	Order ColumnOrder
 }
 
-// Equals reports whether c and other describe the same column. Two nil columns are equal, and nil never equals non-nil.
+// Equals reports whether c and other describe the same column. Two nil
+// columns are equal, and nil never equals non-nil.
 func (c *Column) Equals(other *Column) bool {
 	if c == nil || other == nil {
 		return c == other

@@ -33,7 +33,7 @@ v2.1; it can only be removed in v3.
 | `cqlerr.ExecutionStatus.Worse` | Engine plumbing for merging attempt logs. Users read the merged status from `ExecutionStatusOf` or `ExecutionError.ExecutionStatus`. The severity order stays documented on `ExecutionStatus`. |
 | `endpoint.IdentityTranslator` | The same as setting no translator. |
 | `metadata.Column.Index`, `metadata.ColumnIndex` | Described the pre-3.0 `system.schema_columns` index columns. The driver reads only `system_schema`, so they were always empty. Indexes are in `metadata.Keyspace.Indexes`. |
-| `metadata.View.ReadRepairChance`, `DcLocalReadRepairChance` | Duplicated `View.Options`. The driver now fills `View.Options.ReadRepairChance` and `DcLocalReadRepairChance`, as for a table. |
+| `metadata.View.ReadRepairChance`, `DcLocalReadRepairChance` | Duplicated `View.Options`. The driver fills `View.Options.ReadRepairChance` and `DcLocalReadRepairChance`, as for a table. |
 
 ## `gocql`
 
@@ -67,14 +67,14 @@ v2.1; it can only be removed in v3.
 |---|---|
 | `Statement`, `StreamStatement`, `Command`, `StatementKind` and its values | Keep. |
 | `Consistency` and its values, `ParseConsistency`, `MustParseConsistency`, `BatchKind`, `Compression` | Keep. |
-| `Option`, `Some`, `Nullable`, `MaybeEmpty`, `Pair`, `Entry`, `EmptyRow`, `EmptyParams` | Keep. `EmptyParams` is an alias of `EmptyRow` inside the package, so it adds no surface. |
+| `Option`, `Some`, `Nullable`, `MaybeEmpty`, `Pair`, `Entry`, `CASResult`, `EmptyRow`, `EmptyParams`, `EmptyRowDecoder`, `EmptyParamsEncoder` | Keep. `EmptyParams` is an alias of `EmptyRow` inside the package, so it adds no surface. |
 | Codec interfaces and plans (`Codec`, `Encoder`, `Decoder`, `ParamEncoder`, `RowDecoder`, `Stream*Decoder`, `StreamResetter`, `Compiled*`) | Keep (decided under extensibility). |
 | Built-in codecs (`*Codec`, `Stream*` values) and combinators (`List*`, `Set*`, `Map*`, `GoMapCodec`, `Vector*`, `Nullable*`, `EmptyCodec`, `BindEncoder`, `Tuple*`, `UDT*`, `NamedScalar`, `Convert*`, `Pair*`, `OneColumn`, `OneParam`, `CASRows`) | Keep. |
 | Struct mapping (`RowOf`, `ParamsOf`, `StreamRowOf`, their `Must*` twins, `Row`, `RowInto`, `Params`, `Column`, `ColumnAt`, `Param`, `ParamAt`, `IgnoreColumn`, `StreamColumn*`, `StreamRowInto`, `StructOption`, `WithCodec`, `WithStreamCodec`, `ReuseBuffers`, `StructFields`) | Keep. `InputField`, `OutputField`, `StreamOutputField` and `StructOption` are sealed. |
 | Readers and writers (`ValueReader`, `ValueCursor`, `ValueWriter`, `RowReader`, `ParamWriter`, `StreamRowReader`, `StreamValueReader`, `StreamCell`) | Keep. A custom codec needs them. |
 | `Bytes`, `Text`, `BorrowBytes`, `BorrowText`, `EncodeValueBorrowed`, `ErrReleased` | Keep. The zero-copy path is a v2 feature. |
 | Dynamic values (`Value`, `*Value` constructors, `ValueEntry`, `ValueField`, `ValueIterator`, `DynamicRow`, `DynamicRows`, `DynamicCodec`, `DynamicParams`, `NamedDynamicParams`, `EncodedValue`, `NewEncodedValue`, `EncodeValue`, `DecodeValue`, `CellState` and its values) | Keep. |
-| `DataType` and its methods, `Type` and `Type*` values, `*Type` variables and constructors, `ColumnSpec`, `Columns`, `NewColumns`, `UDTOptions`, `UDTOptionsFor` | Keep. `DataType.FrozenKnown` stays: result metadata carries no frozen flag, so a caller needs to tell "not frozen" from "unknown". |
+| `DataType` and its methods, `Type` and `Type*` values, `*Type` variables and constructors, `ScalarType`, `ColumnSpec`, `Columns`, `NewColumns`, `UDTOptions`, `UDTOptionsFor` | Keep. `DataType.FrozenKnown` stays: result metadata carries no frozen flag, so a caller needs to tell "not frozen" from "unknown". |
 | Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers | Keep. See the open decision on `UUID`'s time methods. |
 | `Result`, `CQLTraceRef`, `PayloadEntry`, `PageState`, `PageStateFromToken`, `StartPage`, `Unpaged` | Keep. |
 | `ValidationError`, `CodecError`, `ProtocolError`, `StreamCapabilityError`, `StreamCapacityError` | Keep. |
@@ -89,7 +89,7 @@ v2.1; it can only be removed in v3.
 | `ConnectError`, `HostError`, `NoHostsError`, `PartialRefreshError`, `SchemaChangedError`, `ServerMismatchError`, `UnsupportedSettingError` | Keep. |
 | Sentinels a request or handle can return: `ErrBusy`, `ErrClosed`, `ErrConditionalExec`, `ErrStaleRows`, `ErrNoRows`, `ErrUseStmt`, `ErrPagingComplete`, `ErrPagingNoProgress`, `ErrPagingStateLimit`, `ErrNoKeyspace`, `ErrNoTable`, `ErrNoConnections`, `ErrNoConnectionsStarted`, `ErrNoControl`, `ErrNoStreams`, `ErrConnectionClosed`, `ErrTimeoutNoResponse`, `ErrReadHeaderTimeout`, `ErrFrameTooBig` | Keep. Each can reach a caller, directly or inside an `ExecutionError` attempt, a `ConnectError` or a `PartialRefreshError`. |
 | `ErrKeyspaceDoesNotExist` | Kept for now; see open decision 5. |
-| `ErrScyllaSourcePortAlreadyInUse` | Keep. The driver never returns it; a custom `endpoint.Dialer` returns it to ask for the next source port. `endpoint.DialTarget.LocalAddress` now says so. |
+| `ErrScyllaSourcePortAlreadyInUse` | Keep. The driver never returns it; a custom `endpoint.Dialer` returns it to ask for the next source port. `endpoint.DialTarget.LocalAddress` documents this. |
 
 ## `cqltrace`
 
