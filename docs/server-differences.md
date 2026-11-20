@@ -63,8 +63,8 @@ when the server reports it, is a documented no-op on the other dialect.
 
 | Feature | Supported by | On another dialect | Where |
 |---|---|---|---|
-| `config.WithClientRoutes` | ScyllaV4 | `Connect` fails before dialing | `settings.Config.Validate` |
-| `config.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `Connect` fails before dialing; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
+| `config.ConfigBuilder.WithClientRoutes` | ScyllaV4 | `Connect` fails before dialing | `settings.Config.Validate` |
+| `config.ConfigBuilder.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `Connect` fails before dialing; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
 | `exec.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
 | `exec.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
 | `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
@@ -72,7 +72,7 @@ when the server reports it, is a documented no-op on the other dialect.
 | Shard-aware port: `WithAdvancedShardAwareness`, `WithDefaultAdvancedShardAwareness`, `NoAdvancedShardAwareness` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
 | Tablet routing, `routing.Options.LeaderAware`, `metadata.Keyspace.TabletBased` and `InitialTablets` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
 | LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
-| `routing.CDCTokenPartitioner`, `config.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
+| `routing.CDCTokenPartitioner`, `config.ConfigBuilder.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
 | `event.ClientRoute` events | ScyllaV4 | Never delivered | Events |
 | Shard and shard-aware port outputs (`endpoint.DialTarget.ShardID`, `endpoint.Peer.ShardAwarePort`, `endpoint.ConvictionEvent.Shard`, `metadata.HostSnapshot.Shards` and `ShardingIgnoreMSB`, `metadata.Route.Shard`, `routing.Info.ShardID` when no option sets it, `cqlerr.AttemptFailure.Shard`, `cqlerr.ErrScyllaSourcePortAlreadyInUse`) | ScyllaV4 | Unset, zero or never returned; `metadata.Route.ShardOf` returns shard 0, since a Cassandra node counts as one shard | Pool and metadata |

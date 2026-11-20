@@ -1,7 +1,10 @@
 # Routing
 
-Set `Profile.Routing` to a typed `routing.Policy` in `Config.DefaultProfile` or in
-the `Profile` passed with a query's options. `routing.NewPolicy(routing.Options{...})` configures
+Set `Profile.Routing` to a typed `routing.Policy` with `ProfileBuilder.WithRouting`,
+in the session's default profile (`config.ConfigBuilder.WithDefaultProfile` or
+`ConfigureDefaultProfile`) or in the `exec.Options.Profile` of an execution. The
+default is token-aware with shuffled replicas; nil routes without a
+request-specific plan. `routing.NewPolicy(routing.Options{...})` configures
 token awareness, datacenter/rack preference, remote fallback, replica shuffling,
 leader-aware routing and latency ordering. Missing required locality is an
 explicit validation error. `routing.SingleTarget` pins a typed host/shard target.
@@ -78,7 +81,9 @@ knows and relearns them from later responses; a plan already built then skips
 its remaining replicas, of tablets or of the token ring, and goes on with the
 hosts.
 
-Config.Partitioners maps server names to TokenPartitioner implementations.
+`config.ConfigBuilder.WithPartitioner(name, partitioner)` maps a partitioner
+class name to a `routing.TokenPartitioner`, next to the built-in
+`routing.Murmur3TokenPartitioner` and `routing.CDCTokenPartitioner`.
 PartitionKey.ForEach streams canonical encoded components without gathering;
 consume borrowed spans synchronously. Unknown partitioners disable token routing
 with a diagnostic. Tablet placement and opaque version identities survive in

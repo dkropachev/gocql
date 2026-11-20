@@ -43,7 +43,7 @@ captured parameters through drain. `query.Close()` stops a query at once, and
 
 `exec.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
-custom payload, idempotence and host/shard targeting. `Kind` classifies known
+custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies known
 ordinary/conditional statements; unknown or conditional requests cannot
 speculate. Server-confirmed conditional metadata takes precedence.
 

@@ -16,8 +16,8 @@ dialects, before anything is sent to the cluster:
 
 | Setting | Works with | On another dialect |
 |---|---|---|
-| `config.WithClientRoutes` | `ScyllaV4` | `gocql.Connect` fails |
-| `config.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `gocql.Connect` fails |
+| `config.ConfigBuilder.WithClientRoutes` | `ScyllaV4` | `gocql.Connect` fails |
+| `config.ConfigBuilder.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `gocql.Connect` fails |
 | `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
 | `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
 
