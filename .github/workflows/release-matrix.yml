@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
     inputs:
       target:
-        description: Commit SHA, branch or tag to test
+        description: Full commit SHA to test (every job checks it out on its own, so a branch could move between them)
         required: true
         type: string
       fuzz_time:
