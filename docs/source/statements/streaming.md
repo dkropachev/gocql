@@ -72,7 +72,7 @@ and can leave partial destination data. Rows already delivered are never
 replayed. Close cancels and joins in-progress NextInto destination access;
 caller storage stays valid after Close. Concurrent NextInto calls are rejected.
 
-One query permits one active execution; overlapping `Run` calls return `ErrBusy`.
+One query permits one active execution; overlapping `Run` calls return `cqlerr.ErrBusy`.
 Parameters are copied on admission and retries/pages share that owned snapshot.
 Close the cursor on early termination; the query's next `Run` waits for the
 previous execution's accepted writes to drain. `query.Close()` permanently

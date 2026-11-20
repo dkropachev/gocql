@@ -37,7 +37,7 @@ use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
 without requiring a buffered row mapping. It buffers pages by default; set
 `exec.StreamOptions.Incremental` for bounded incremental receive.
 Queries reject overlap (an open handle, or another goroutine's call) with
-`ErrBusy`, wait for an execution that already returned to drain, and own
+`cqlerr.ErrBusy`, wait for an execution that already returned to drain, and own
 captured parameters through drain. `query.Close()` stops a query at once, and
 `query.Wait(ctx)` waits for its drain.
 
