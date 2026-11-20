@@ -229,7 +229,10 @@ func TestBatch(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 			table := testTableName(t)
-			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,c counter)", table))
+			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,c counter)", table)); err != nil {
+				skipIfTabletsReject(t, err)
+				t.Fatal(err)
+			}
 			batch := &gocql.Batch{Kind: cql.UnloggedBatch}
 			for range 100 {
 				require.NoError(t, session.UnpreparedAddToBatch(batch, cql.Command(fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table)), cql.EmptyParams{}))

@@ -82,6 +82,7 @@ func TestLWTDialect(t *testing.T) {
 		var result cql.CASResult[row]
 		// Applied: only ScyllaDB returns the previous values.
 		found, _, err := conditional.One(ctx, update{K: 1, C: 1, V: 11, Expect: 10}, &result)
+		skipIfTabletsReject(t, err)
 		require.NoError(t, err)
 		require.True(t, found && result.Applied)
 		require.Equal(t, scylla, result.Previous.Set)
@@ -118,6 +119,7 @@ func TestLWTDialect(t *testing.T) {
 			// static row to fall back to, so it has no previous values.
 			require.NoError(t, insert.AddToBatch(&batch, row{K: 1, C: 3, V: 30}))
 			_, err := session.ExecBatch(ctx, &batch)
+			skipIfTabletsReject(t, err)
 			require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
 			rows, err := session.RunConditionalBatch(ctx, &batch, decoder)
 			require.NoError(t, err)
