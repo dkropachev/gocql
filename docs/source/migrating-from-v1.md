@@ -255,7 +255,9 @@ conditional statements in prepared metadata: set
 | `gocql.ErrNotFound` from `Scan` | `One` returns `found == false` |
 | `*gocql.RequestErrWriteTimeout`, `RequestErrReadTimeout`, `RequestErrUnavailable` | `*cqlerr.WriteTimeoutError`, `*cqlerr.ReadTimeoutError`, `*cqlerr.UnavailableError` |
 | `gocql.RequestError` and its `Code()` | `cqlerr.ServerError`, or `errors.Is(err, cqlerr.CodeOverloaded)` |
-| `gocql.ErrTimeoutNoResponse`, `ErrNoConnections`, `ErrSessionClosed` | the same names in `cqlerr` |
+| `gocql.ErrTimeoutNoResponse`, `ErrNoConnections` | the same names in `cqlerr` |
+| `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
+| `gocql.ErrNoHosts` | `ConfigBuilder.Build` rejects an empty contact point list with a `*cql.ValidationError` |
 
 A failed execution returns a `*cqlerr.ExecutionError` that lists every attempt.
 `cqlerr.KindOf` groups errors by cause, and `cqlerr.ExecutionStatusOf` reports
@@ -271,6 +273,8 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
+| `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DcLocalReadRepairChance` |
+| `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
 | `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |
 | `gocql.ConnectObserver`, `HostStateNotifier` | `WithLifecycleObserver(observe.LifecycleObserver)`, or `session.Subscribe(event.Filter{...})` for cluster events |

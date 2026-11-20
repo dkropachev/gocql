@@ -65,18 +65,6 @@ func TestExecutionStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("Worse", func(t *testing.T) {
-		order := []ExecutionStatus{NotExecuted, MaybeExecuted, PartiallyExecuted}
-		for i, a := range order {
-			for j, b := range order {
-				want := order[max(i, j)]
-				if got := a.Worse(b); got != want {
-					t.Errorf("%v.Worse(%v) = %v want %v", a, b, got, want)
-				}
-			}
-		}
-	})
-
 	t.Run("QueryError", func(t *testing.T) {
 		syntax := NewOtherServerError(CodeSyntax, "bad")
 		acked := &WriteTimeoutError{WriteType: "SIMPLE", Received: 1}

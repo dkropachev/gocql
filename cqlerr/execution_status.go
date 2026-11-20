@@ -6,9 +6,9 @@ package cqlerr
 import "fmt"
 
 // ExecutionStatus reports what a failed request may have done on the cluster.
-// States are ordered by severity. The zero ExecutionStatus is MaybeExecuted,
-// the safe assumption. Later releases may add values, so a switch over them
-// needs a default case.
+// By severity, NotExecuted < MaybeExecuted < PartiallyExecuted. The zero
+// ExecutionStatus is MaybeExecuted, the safe assumption. Later releases may
+// add values, so a switch over them needs a default case.
 type ExecutionStatus uint8
 
 const (
@@ -35,24 +35,4 @@ func (e ExecutionStatus) String() string {
 	default:
 		return fmt.Sprintf("ExecutionStatus(%d)", uint8(e))
 	}
-}
-
-// severity orders statuses: NotExecuted < MaybeExecuted < PartiallyExecuted.
-func (e ExecutionStatus) severity() int {
-	switch e {
-	case NotExecuted:
-		return 0
-	case PartiallyExecuted:
-		return 2
-	default:
-		return 1
-	}
-}
-
-// Worse returns the more severe of e and o.
-func (e ExecutionStatus) Worse(o ExecutionStatus) ExecutionStatus {
-	if o.severity() > e.severity() {
-		return o
-	}
-	return e
 }

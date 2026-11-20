@@ -52,7 +52,7 @@ func TestKindOf(t *testing.T) {
 		{"frame violation", cqltype.NewFrameError("unknown opcode %d", 0x42), KindProtocol},
 		{"server failure", server(CodeServer), KindServer},
 		{"write failure", &WriteFailureError{}, KindServer},
-		{"closed", ErrSessionClosed, KindClosed},
+		{"closed", ErrClosed, KindClosed},
 		{"no connections", ErrNoConnections, KindConnection},
 		{"connect", &ConnectError{Stage: "s", Hosts: []HostError{{Address: "h", Err: dial}}}, KindConnection},
 		{"connect rejected credentials", &ConnectError{Stage: "s", Hosts: []HostError{{Address: "h", Err: server(CodeBadCredentials)}}}, KindUnauthorized},
@@ -69,7 +69,6 @@ func TestKindOf(t *testing.T) {
 		{"no hosts", &NoHostsError{Operation: "o"}, KindConnection},
 		{"no hosts, server cause", &NoHostsError{Operation: "o", Causes: []error{server(CodeUnauthorized)}}, KindUnauthorized},
 		{"paging state limit", ErrPagingStateLimit, KindInvalid},
-		{"not found", ErrNotFound, KindInvalid},
 		{"no rows", ErrNoRows, KindInvalid},
 		{"paging no progress", ErrPagingNoProgress, KindProtocol},
 	} {

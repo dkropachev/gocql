@@ -5,6 +5,7 @@
 package cluster
 
 import (
+	"errors"
 	"fmt"
 
 	"golang.org/x/sync/singleflight"
@@ -54,7 +55,7 @@ func (s *InternalMetadataDescriber) getKeyspaceInternal(keyspaceName string) (me
 
 		metadata, found = s.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalGetKeyspace(keyspaceName)
 		if !found {
-			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, cqlerr.ErrNotFound)
+			return nil, true, fmt.Errorf("keyspace %s: %w", keyspaceName, errSchemaNotFound)
 		}
 	}
 
@@ -66,8 +67,12 @@ func (s *InternalMetadataDescriber) GetKeyspace(keyspaceName string) (*metadata.
 	return metadata, err
 }
 
+// errSchemaNotFound reports a keyspace or table the schema describer could
+// not find.
+var errSchemaNotFound = errors.New("gocql: not found")
+
 func tableNotFoundError(keyspaceName, tableName string) error {
-	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, cqlerr.ErrNotFound)
+	return fmt.Errorf("table %s.%s: %w", keyspaceName, tableName, errSchemaNotFound)
 }
 
 // getTableFromSnapshot resolves a table lookup against a keyspace snapshot.

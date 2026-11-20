@@ -59,8 +59,8 @@ func TestClusterSettings(t *testing.T) {
 
 			session.Close()
 
-			if err := execTestStatement(context.Background(), session, "void", CompiledOptions{}); err != cqlerr.ErrSessionClosed {
-				t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, cqlerr.ErrSessionClosed, err)
+			if err := execTestStatement(context.Background(), session, "void", CompiledOptions{}); err != cqlerr.ErrClosed {
+				t.Fatalf("0x%x: expected %#v, got %#v", defaultProto, cqlerr.ErrClosed, err)
 			}
 		})
 

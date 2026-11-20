@@ -208,7 +208,7 @@ func cassandraTable(s *gocql.Session, ks, name string) (*metadata.Table, error) 
 	}
 	table, ok := k.Tables[name]
 	if !ok {
-		return nil, cqlerr.ErrNotFound
+		return nil, fmt.Errorf("table %s.%s: %w", ks, name, cqlerr.ErrNoTable)
 	}
 	return table, nil
 }

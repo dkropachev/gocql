@@ -1746,7 +1746,7 @@ func (m *Snapshot) ReplicaRoutes(routing.Info) []routing.Route
 func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
 // Schema types: Keyspace, Table, TableOptions, Column, ColumnKind, ColumnOrder
-// (ASC, DESC), ColumnIndex, Index, IndexKind, View, Type, Function, Aggregate.
+// (ASC, DESC), Index, IndexKind, View, Type, Function, Aggregate.
 type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
 
 // package metrics
@@ -1921,8 +1921,8 @@ which unwraps the server/context error, lists every failed attempt
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
-`ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNotFound`, `ErrNoKeyspace`,
-`ErrNoTable`, `ErrNoRows`, `ErrNoHosts`, `ErrNoConnections`,
+`ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
+`ErrNoTable`, `ErrNoRows`, `ErrNoConnections`,
 `ErrConditionalExec`, `ErrPagingNoProgress`, `ErrPagingComplete` and
 `ErrPagingStateLimit`. Typed driver errors include `ValidationError`,
 `UnsupportedSettingError`, `CodecError` (column/index/nested path and stage),
@@ -1986,7 +1986,6 @@ type Translator interface {
     Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
 }
 type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
-func IdentityTranslator() Translator
 
 // package auth
 type Provider interface {

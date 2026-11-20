@@ -49,8 +49,8 @@ func unsent(err error) bool {
 		return true
 	}
 	switch err {
-	case ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec, //nolint:errorlint // one node of a tree walkErrors walks
-		ErrNoStreams, ErrNoHosts, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete,
+	case ErrNoConnections, ErrBusy, ErrConditionalExec, //nolint:errorlint // one node of a tree walkErrors walks
+		ErrNoStreams, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete,
 		context.Canceled, context.DeadlineExceeded:
 		return true
 	}

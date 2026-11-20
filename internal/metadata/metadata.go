@@ -22,27 +22,6 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-func cloneV2Any(v any) any {
-	switch x := v.(type) {
-	case map[string]any:
-		return cloneV2AnyMap(x)
-	case map[string]string:
-		return maps.Clone(x)
-	case []byte:
-		return append([]byte(nil), x...)
-	case []string:
-		return append([]string(nil), x...)
-	case []any:
-		r := make([]any, len(x))
-		for i, v := range x {
-			r[i] = cloneV2Any(v)
-		}
-		return r
-	default:
-		return v
-	}
-}
-
 // cloneV2Extensions deep-copies schema extensions.
 func cloneV2Extensions(m map[string][]byte) map[string][]byte {
 	if m == nil {
@@ -54,22 +33,11 @@ func cloneV2Extensions(m map[string][]byte) map[string][]byte {
 	}
 	return r
 }
-func cloneV2AnyMap(m map[string]any) map[string]any {
-	if m == nil {
-		return nil
-	}
-	r := make(map[string]any, len(m))
-	for k, v := range m {
-		r[k] = cloneV2Any(v)
-	}
-	return r
-}
 func cloneV2Column(c *metadata.Column) *metadata.Column {
 	if c == nil {
 		return nil
 	}
 	r := *c
-	r.Index.Options = cloneV2AnyMap(c.Index.Options)
 	return &r
 }
 func cloneV2Columns(c map[string]*metadata.Column) map[string]*metadata.Column {
@@ -450,8 +418,8 @@ func v2DecodeViewMetadata(keyspace string) cql.RowDecoder[metadata.View] {
 		InternalV2RequiredSchemaColumn("include_all_columns", cql.BoolCodec, func(r *metadata.View) *bool { return &r.IncludeAllColumns }),
 		InternalV2RequiredSchemaColumn("where_clause", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.WhereClause }),
 		InternalV2SchemaColumn("extensions", v2MetadataExtensions{}, func(r *metadata.View) *map[string][]byte { return &r.Extensions }),
-		InternalV2SchemaColumn("dclocal_read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.DcLocalReadRepairChance }),
-		InternalV2SchemaColumn("read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.ReadRepairChance }),
+		InternalV2SchemaColumn("dclocal_read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.DcLocalReadRepairChance }),
+		InternalV2SchemaColumn("read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.ReadRepairChance }),
 		InternalV2SchemaColumn("bloom_filter_fp_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.BloomFilterFpChance }),
 		InternalV2SchemaColumn("caching", v2MetadataStringMap{}, func(r *metadata.View) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.Options.Comment }),

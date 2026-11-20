@@ -65,13 +65,13 @@ func referenceKindOf(err error) Kind {
 		return codeKind(server.Code())
 	}
 	switch {
-	case has(ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased):
+	case has(ErrClosed, ErrStaleRows, cql.ErrReleased):
 		return KindClosed
 	case hasType[*cql.ValidationError](err), invalidCodecError(err),
 		hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
-			ErrPagingStateLimit, ErrNotFound, ErrNoRows):
+			ErrPagingStateLimit, ErrNoRows):
 		return KindInvalid
 	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig, ErrPagingNoProgress):
 		return KindProtocol
@@ -83,7 +83,7 @@ func referenceKindOf(err error) Kind {
 	}
 	switch {
 	case hasType[*ConnectError](err), hasType[*NoHostsError](err), hasType[net.Error](err),
-		has(ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
+		has(ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
 			ErrNoControl, ErrScyllaSourcePortAlreadyInUse, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed):
 		return KindConnection
 	}
@@ -105,8 +105,8 @@ func referenceExecutionStatusOf(err error) ExecutionStatus {
 	if hasType[*SchemaChangedError](err) {
 		return NotExecuted
 	}
-	for _, target := range []error{ErrNoConnections, ErrSessionClosed, ErrSessionNotReady, ErrBusy, ErrConditionalExec,
-		ErrNoStreams, ErrNoHosts, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete, context.Canceled, context.DeadlineExceeded} {
+	for _, target := range []error{ErrNoConnections, ErrBusy, ErrConditionalExec,
+		ErrNoStreams, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete, context.Canceled, context.DeadlineExceeded} {
 		if errors.Is(err, target) {
 			return NotExecuted
 		}
@@ -131,11 +131,11 @@ func classifiedLeaves() []error {
 	leaves := []error{
 		errors.New("unclassified"),
 		context.Canceled, context.DeadlineExceeded,
-		ErrClosed, ErrSessionClosed, ErrStaleRows, cql.ErrReleased,
+		ErrClosed, ErrStaleRows, cql.ErrReleased,
 		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,
-		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams, ErrNoHosts, ErrSessionNotReady,
-		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNotFound, ErrNoRows, ErrPagingStateLimit,
+		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
+		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNoRows, ErrPagingStateLimit,
 		ErrPagingNoProgress, ErrNoControl, ErrScyllaSourcePortAlreadyInUse,
 		&NoHostsError{Operation: "o"}, &NoHostsError{Operation: "o", Causes: []error{ErrNoConnections}},
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},

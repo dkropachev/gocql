@@ -30,14 +30,9 @@ import (
 
 // Session errors.
 var (
-	// ErrNotFound reports that a keyspace or table looked up in the schema
-	// does not exist.
-	ErrNotFound = errors.New("gocql: not found")
 	// ErrUseStmt reports a USE statement, which the driver does not run:
 	// set the session keyspace in the configuration, or qualify table names.
 	ErrUseStmt = errors.New("gocql: USE statements are not supported: set the session keyspace in the cluster config, or qualify table names")
-	// ErrSessionClosed reports use of a closed session.
-	ErrSessionClosed = errors.New("gocql: session has been closed")
 	// ErrNoConnections reports that no connection in the pool could take
 	// the request.
 	ErrNoConnections = errors.New("gocql: no hosts available in the pool")
@@ -49,7 +44,4 @@ var (
 	ErrNoTable = errors.New("gocql: no table name provided")
 	// ErrKeyspaceDoesNotExist reports that the server has no such keyspace.
 	ErrKeyspaceDoesNotExist = errors.New("gocql: keyspace does not exist")
-	// ErrSessionNotReady reports use of a session that has not finished
-	// connecting.
-	ErrSessionNotReady = errors.New("gocql: session is not ready yet")
 )

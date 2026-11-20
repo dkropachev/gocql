@@ -426,7 +426,9 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeMaxExcessShardConnectionsRate", func(c *InternalClusterSettings) { c.MaxExcessShardConnectionsRate = -1 }, "MaxExcessShardConnectionsRate"},
 				{"ClientRoutesWithAddressTranslator", func(c *InternalClusterSettings) {
 					c.ClientRoutesConfig = &ClientRoutesConfig{}
-					c.AddressTranslator = endpoint2.IdentityTranslator()
+					c.AddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+						return addr, nil
+					})
 				}, "invalid AddressTranslator: cannot be combined with ClientRoutesConfig"},
 				{"InvalidClientRoutesConfig", func(c *InternalClusterSettings) { c.ClientRoutesConfig = &ClientRoutesConfig{} }, "invalid ClientRoutesConfig"},
 			}
