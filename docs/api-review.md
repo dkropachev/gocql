@@ -66,7 +66,7 @@ v2.1; it can only be removed in v3.
 | Symbols | Decision |
 |---|---|
 | `Statement`, `StreamStatement`, `Command`, `StatementKind` and its values | Keep. |
-| `Consistency` and its values, `ParseConsistency`, `MustParseConsistency`, `BatchKind`, `Compression` | Keep. |
+| `Consistency` and its values, `ParseConsistency`, `MustParseConsistency`, `BatchKind` and its values, `Compression` and its values | Keep. |
 | `Option`, `Some`, `Nullable`, `MaybeEmpty`, `Pair`, `Entry`, `CASResult`, `EmptyRow`, `EmptyParams`, `EmptyRowDecoder`, `EmptyParamsEncoder` | Keep. `EmptyParams` is an alias of `EmptyRow` inside the package, so it adds no surface. |
 | Codec interfaces and plans (`Codec`, `Encoder`, `Decoder`, `ParamEncoder`, `RowDecoder`, `Stream*Decoder`, `StreamResetter`, `Compiled*`) | Keep (decided under extensibility). |
 | Built-in codecs (`*Codec`, `Stream*` values) and combinators (`List*`, `Set*`, `Map*`, `GoMapCodec`, `Vector*`, `Nullable*`, `EmptyCodec`, `BindEncoder`, `Tuple*`, `UDT*`, `NamedScalar`, `Convert*`, `Pair*`, `OneColumn`, `OneParam`, `CASRows`) | Keep. |
@@ -75,7 +75,7 @@ v2.1; it can only be removed in v3.
 | `Bytes`, `Text`, `BorrowBytes`, `BorrowText`, `EncodeValueBorrowed`, `ErrReleased` | Keep. The zero-copy path is a v2 feature. |
 | Dynamic values (`Value`, `*Value` constructors, `ValueEntry`, `ValueField`, `ValueIterator`, `DynamicRow`, `DynamicRows`, `DynamicCodec`, `DynamicParams`, `NamedDynamicParams`, `EncodedValue`, `NewEncodedValue`, `EncodeValue`, `DecodeValue`, `CellState` and its values) | Keep. |
 | `DataType` and its methods, `Type` and `Type*` values, `*Type` variables and constructors, `ScalarType`, `ColumnSpec`, `Columns`, `NewColumns`, `UDTOptions`, `UDTOptionsFor` | Keep. `DataType.FrozenKnown` stays: result metadata carries no frozen flag, so a caller needs to tell "not frozen" from "unknown". |
-| Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers | Keep. See the open decision on `UUID`'s time methods. |
+| Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers, the `Variant*` constants that `Variant` returns | Keep. See the open decision on `UUID`'s time methods. |
 | `Result`, `CQLTraceRef`, `PayloadEntry`, `PageState`, `PageStateFromToken`, `StartPage`, `Unpaged` | Keep. |
 | `ValidationError`, `CodecError`, `ProtocolError`, `StreamCapabilityError`, `StreamCapacityError` | Keep. |
 
@@ -83,8 +83,8 @@ v2.1; it can only be removed in v3.
 
 | Symbols | Decision |
 |---|---|
-| `ServerError` (sealed), the server error types, `NewOtherServerError`, `ErrorCode` and the `Code*` values, `ErrorMap`, `OpType` | Keep. `NewOtherServerError` exists because `OtherServerError` keeps its code unexported; a `retry.Policy` test needs it. |
-| `ExecutionError`, `AttemptFailure`, `QueryError`, `ExecutionStatus`, `ExecutionStatusOf`, `IsCASWriteUnknown` | Keep. `IsCASWriteUnknown` hides the protocol 4 / protocol 5 difference, which `errors.As` alone does not. |
+| `ServerError` (sealed), the server error types, `NewOtherServerError`, `ErrorCode` and the `Code*` values, `ErrorMap`, `OpType` and its values | Keep. `NewOtherServerError` exists because `OtherServerError` keeps its code unexported; a `retry.Policy` test needs it. |
+| `ExecutionError`, `AttemptFailure`, `QueryError`, `ExecutionStatus` and its values, `ExecutionStatusOf`, `IsCASWriteUnknown` | Keep. `IsCASWriteUnknown` hides the protocol 4 / protocol 5 difference, which `errors.As` alone does not. |
 | `Kind`, `KindOf` and the `Kind*` values | Keep. |
 | `ConnectError`, `HostError`, `NoHostsError`, `PartialRefreshError`, `SchemaChangedError`, `ServerMismatchError`, `UnsupportedSettingError` | Keep. |
 | Sentinels a request or handle can return: `ErrBusy`, `ErrClosed`, `ErrConditionalExec`, `ErrStaleRows`, `ErrNoRows`, `ErrUseStmt`, `ErrPagingComplete`, `ErrPagingNoProgress`, `ErrPagingStateLimit`, `ErrNoKeyspace`, `ErrNoTable`, `ErrNoConnections`, `ErrNoConnectionsStarted`, `ErrNoControl`, `ErrNoStreams`, `ErrConnectionClosed`, `ErrTimeoutNoResponse`, `ErrReadHeaderTimeout`, `ErrFrameTooBig` | Keep. Each can reach a caller, directly or inside an `ExecutionError` attempt, a `ConnectError` or a `PartialRefreshError`. |
@@ -122,7 +122,7 @@ v2.1; it can only be removed in v3.
 | Symbols | Decision |
 |---|---|
 | `Snapshot`, `HostSnapshot`, `Route`, `Target`, `TokenRange`, `Mode` and its values | Keep. |
-| `Keyspace`, `Table`, `TableOptions`, `View`, `Column`, `ColumnKind`, `ColumnOrder`, `Index`, `IndexKind`, `Type`, `Function`, `Aggregate` | Keep, less the fields removed above. `Keyspace.ToCQL` and `Clone` stay. See the open decisions on names and the clustering order. |
+| `Keyspace`, `Table`, `TableOptions`, `View`, `Column`, `Index`, `Type`, `Function`, `Aggregate`, and `ColumnKind`, `ColumnOrder` and `IndexKind` with their values | Keep, less the fields removed above. `Keyspace.ToCQL` and `Clone` stay. See the open decisions on names and the clustering order. |
 
 ## `metrics`
 
