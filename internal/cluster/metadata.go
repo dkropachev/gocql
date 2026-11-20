@@ -39,6 +39,7 @@ type v2LatencySummary struct{ p50, p95, p99 time.Duration }
 
 type InternalV2PeripheralState struct {
 	routeDiagnostic     error
+	vnodeRanges         vnodeRangeCache
 	InternalSnapshot    atomic.Pointer[routing.MetadataSnapshot]
 	InternalSubscribers map[*Subscription]struct{}
 	partitioners        atomic.Pointer[map[string]routing2.TokenPartitioner] // InternalConfig.Partitioners, for lock-free reads
@@ -360,14 +361,9 @@ func (s *Core) tryPublishV2Metadata() bool {
 		if err != nil {
 			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, err)
 		} else if _, ok := ring.InternalPartitioner.(InternalMurmur3Partitioner); ok {
-			for ks, meta := range routing.SnapshotData(m).InternalKeyspaces {
-				ranges, err := InternalBuildV2VnodeRanges(ring, meta)
-				if err != nil {
-					routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, err)
-					continue
-				}
-				routing.SnapshotData(m).InternalRanges[ks] = ranges
-			}
+			ranges, errs := p.vnodeRanges.build(ring, routing.SnapshotData(m).InternalKeyspaces)
+			routing.SnapshotData(m).InternalRanges = ranges
+			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, errs...)
 		} else {
 			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "no configured int64 partitioner for %q", routing.SnapshotData(m).InternalPartitioner))
 		}
