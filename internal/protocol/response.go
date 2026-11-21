@@ -6,7 +6,7 @@ package protocol
 import (
 	"bytes"
 	"fmt"
-	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 
@@ -619,8 +619,9 @@ func (p *TypedParser) ReadErrorMap() cqlerr.ErrorMap {
 			p.Check(fmt.Errorf("gocql: invalid error map address size %d", length))
 			break
 		}
-		ip := net.IP(p.Copy(length))
-		out[ip.String()] = p.U16()
+		// The length check above guarantees AddrFromSlice accepts it.
+		ip, _ := netip.AddrFromSlice(p.Copy(length))
+		out[ip.Unmap()] = p.U16()
 	}
 	return out
 }

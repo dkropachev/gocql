@@ -79,7 +79,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Kind:            metadata.ColumnClusteringKey,
 				ComponentIndex:  1,
 				Type:            "text",
-				ClusteringOrder: "desc",
+				ClusteringOrder: metadata.ColumnOrderDesc,
 			},
 			{
 				Keyspace: "V2Keyspace",
@@ -116,7 +116,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Kind:            metadata.ColumnClusteringKey,
 				ComponentIndex:  0,
 				Type:            "bigint",
-				ClusteringOrder: "asc",
+				ClusteringOrder: metadata.ColumnOrderAsc,
 			},
 			{
 				Keyspace:        "V2Keyspace",
@@ -125,7 +125,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Kind:            metadata.ColumnClusteringKey,
 				ComponentIndex:  1,
 				Type:            "text",
-				ClusteringOrder: "asc",
+				ClusteringOrder: metadata.ColumnOrderAsc,
 			},
 			{
 				Keyspace: "V2Keyspace",
@@ -144,12 +144,12 @@ func TestKeyspaceMetadata(t *testing.T) {
 		}
 		views := []metadata.View{
 			{
-				KeyspaceName: "V2Keyspace",
-				ViewName:     "view",
+				Keyspace: "V2Keyspace",
+				Name:     "view",
 			},
 			{
-				KeyspaceName: "V2Keyspace",
-				ViewName:     "buckets_by_owner_index",
+				Keyspace: "V2Keyspace",
+				Name:     "buckets_by_owner_index",
 			},
 		}
 		compileMetadata(keyspace, tables, columns, nil, nil, nil, indexes, views, nil)
@@ -228,14 +228,13 @@ func TestKeyspaceMetadata(t *testing.T) {
 						},
 						ClusteringColumns: []*metadata.Column{
 							{
-								Name:  "Column2",
-								Type:  "text",
-								Order: metadata.ASC,
+								Name: "Column2",
+								Type: "text",
 							},
 							{
-								Name:  "Column3",
-								Type:  "text",
-								Order: true,
+								Name:            "Column3",
+								Type:            "text",
+								ClusteringOrder: metadata.ColumnOrderDesc,
 							},
 						},
 						Columns: map[string]*metadata.Column{
@@ -245,16 +244,15 @@ func TestKeyspaceMetadata(t *testing.T) {
 								Kind: metadata.ColumnPartitionKey,
 							},
 							"Column2": {
-								Name:  "Column2",
-								Type:  "text",
-								Order: metadata.ASC,
-								Kind:  metadata.ColumnClusteringKey,
+								Name: "Column2",
+								Type: "text",
+								Kind: metadata.ColumnClusteringKey,
 							},
 							"Column3": {
-								Name:  "Column3",
-								Type:  "text",
-								Order: true,
-								Kind:  metadata.ColumnClusteringKey,
+								Name:            "Column3",
+								Type:            "text",
+								ClusteringOrder: metadata.ColumnOrderDesc,
+								Kind:            metadata.ColumnClusteringKey,
 							},
 							"Column4": {
 								Name: "Column4",
@@ -269,14 +267,14 @@ func TestKeyspaceMetadata(t *testing.T) {
 				},
 				Indexes: map[string]*metadata.Index{
 					"buckets_by_owner": {
-						Name:      "buckets_by_owner",
-						TableName: "buckets_by_owner_index",
+						Name:  "buckets_by_owner",
+						Table: "buckets_by_owner_index",
 						PartitionKey: []*metadata.Column{
 							{Name: "owner", Type: "text"},
 						},
 						ClusteringColumns: []*metadata.Column{
-							{Name: "idx_token", Type: "bigint"},
-							{Name: "name", Type: "text"},
+							{Name: "idx_token", Type: "bigint", ClusteringOrder: metadata.ColumnOrderAsc},
+							{Name: "name", Type: "text", ClusteringOrder: metadata.ColumnOrderAsc},
 						},
 						OrderedColumns: []string{
 							"owner", "idx_token", "name",
@@ -288,16 +286,16 @@ func TestKeyspaceMetadata(t *testing.T) {
 								Kind: metadata.ColumnPartitionKey,
 							},
 							"idx_token": {
-								Name:  "idx_token",
-								Type:  "bigint",
-								Order: metadata.ASC,
-								Kind:  metadata.ColumnClusteringKey,
+								Name:            "idx_token",
+								Type:            "bigint",
+								ClusteringOrder: metadata.ColumnOrderAsc,
+								Kind:            metadata.ColumnClusteringKey,
 							},
 							"name": {
-								Name:  "name",
-								Type:  "text",
-								Order: metadata.ASC,
-								Kind:  metadata.ColumnClusteringKey,
+								Name:            "name",
+								Type:            "text",
+								ClusteringOrder: metadata.ColumnOrderAsc,
+								Kind:            metadata.ColumnClusteringKey,
 							},
 						},
 					},

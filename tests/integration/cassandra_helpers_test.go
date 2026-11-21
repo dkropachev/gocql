@@ -194,7 +194,7 @@ func cassandraKeyspace(s *gocql.Session, name string) (*metadata.Keyspace, error
 	}
 	ks, ok := s.Metadata().Keyspace(name)
 	if !ok {
-		return nil, cqlerr.ErrKeyspaceDoesNotExist
+		return nil, cqlerr.ErrNoKeyspace
 	}
 	return ks, nil
 }

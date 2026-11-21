@@ -246,7 +246,7 @@ func SplitCompositeTypes(name string, typeName string, typeOpen int32, typeClose
 func GetApacheCassandraType(class string) cql.Type {
 	switch strings.TrimPrefix(class, ApacheCassandraTypePrefix) {
 	case "AsciiType":
-		return cql.TypeAscii
+		return cql.TypeASCII
 	case "LongType":
 		return cql.TypeBigInt
 	case "BytesType":

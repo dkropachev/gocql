@@ -67,7 +67,7 @@ func (v Value) State() CellState { return v.state }
 
 var dynamicScalarTypes = func() [TypeDuration + 1]DataType {
 	var result [TypeDuration + 1]DataType
-	for kind := TypeAscii; kind <= TypeDuration; kind++ {
+	for kind := TypeASCII; kind <= TypeDuration; kind++ {
 		result[kind], _ = ScalarType(kind)
 	}
 	return result
@@ -155,7 +155,7 @@ func TextValue(s string) (Value, error) {
 
 // ASCIIValue constructs a dynamic CQL ascii value, rejecting non-ASCII bytes.
 func ASCIIValue(s string) (Value, error) {
-	v := dynamicScalar(TypeAscii)
+	v := dynamicScalar(TypeASCII)
 	// ASCII validation is also UTF-8 validation; avoid a panicking text constructor.
 	c, _ := wire.NewChain(wire.BorrowString(s))
 	v.bytes = bytesView(c, wire.Ref{})
@@ -282,7 +282,7 @@ func (v Value) Float() (float64, error) {
 // Text returns a present text, varchar or ascii value. A decoded Text borrows
 // the response; see Clone.
 func (v Value) Text() (Text, error) {
-	if err := v.require(TypeText, TypeVarchar, TypeAscii); err != nil {
+	if err := v.require(TypeText, TypeVarchar, TypeASCII); err != nil {
 		return Text{}, err
 	}
 	return textView(v.bytes), nil
@@ -645,7 +645,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return encodeDynamicScalar(w, Float32Codec, math.Float32frombits(uint32(v.bits)))
 	case TypeDouble:
 		return encodeDynamicScalar(w, Float64Codec, math.Float64frombits(v.bits))
-	case TypeText, TypeVarchar, TypeAscii:
+	case TypeText, TypeVarchar, TypeASCII:
 		// TextValue, ASCIIValue and decoding validated the payload for its
 		// kind, and checkDynamicValue matched that kind to the column, so
 		// it is written without validating it again.
@@ -734,9 +734,9 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return decodeDynamicScalar(r, Float32Codec, FloatValue)
 	case TypeDouble:
 		return decodeDynamicScalar(r, Float64Codec, DoubleValue)
-	case TypeText, TypeVarchar, TypeAscii:
+	case TypeText, TypeVarchar, TypeASCII:
 		codec := TextCodec
-		if r.Type().Kind() == TypeAscii {
+		if r.Type().Kind() == TypeASCII {
 			codec = ASCIICodec
 		}
 		return decodeDynamicScalar(r, codec, func(t Text) Value { return Value{bytes: t.Bytes()} })

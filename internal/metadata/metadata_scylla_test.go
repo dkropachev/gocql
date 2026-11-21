@@ -59,8 +59,8 @@ func assertClusteringColumns(t *testing.T, keyspaceName, tableName string, actua
 			if i != actual[i].ComponentIndex {
 				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].ComponentIndex to be %v but was %v", keyspaceName, tableName, i, i, actual[i].ComponentIndex)
 			}
-			if expected[i].Order != actual[i].Order {
-				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Order to be %v but was %v", keyspaceName, tableName, i, expected[i].Order, actual[i].Order)
+			if expected[i].ClusteringOrder != actual[i].ClusteringOrder {
+				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].ClusteringOrder to be %v but was %v", keyspaceName, tableName, i, expected[i].ClusteringOrder, actual[i].ClusteringOrder)
 			}
 			if metadata.ColumnClusteringKey != actual[i].Kind {
 				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnClusteringKey, actual[i].Kind)
@@ -100,8 +100,8 @@ func assertColumns(t *testing.T, keyspaceName, tableName string, actual, expecte
 				if ec.Type != ac.Type {
 					t.Errorf("Expected %s.Tables[%s].Columns[%s].Type.Type to be %v but was %v", keyspaceName, tableName, keyC, ec.Type, ac.Type)
 				}
-				if ec.Order != ac.Order {
-					t.Errorf("Expected %s.Tables[%s].Columns[%s].Order to be %v but was %v", keyspaceName, tableName, keyC, ec.Order, ac.Order)
+				if ec.ClusteringOrder != ac.ClusteringOrder {
+					t.Errorf("Expected %s.Tables[%s].Columns[%s].ClusteringOrder to be %v but was %v", keyspaceName, tableName, keyC, ec.ClusteringOrder, ac.ClusteringOrder)
 				}
 				if ec.Kind != ac.Kind {
 					t.Errorf("Expected %s.Tables[%s].Columns[%s].Kind to be '%v' but was '%v'", keyspaceName, tableName, keyC, ec.Kind, ac.Kind)
@@ -157,8 +157,8 @@ func assertViewsMetadata(t *testing.T, keyspaceName string, actual, expected map
 		if !found {
 			t.Errorf("Expected %s.Views[%s] but was not found", keyspaceName, keyT)
 		} else {
-			if keyT != at.ViewName {
-				t.Errorf("Expected %s.Views[%s].Name to be %v but was %v", keyspaceName, keyT, keyT, at.ViewName)
+			if keyT != at.Name {
+				t.Errorf("Expected %s.Views[%s].Name to be %v but was %v", keyspaceName, keyT, keyT, at.Name)
 			}
 			assertPartitionKey(t, keyspaceName, keyT, at.PartitionKey, et.PartitionKey)
 			assertClusteringColumns(t, keyspaceName, keyT, at.ClusteringColumns, et.ClusteringColumns)

@@ -19,6 +19,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/codec"
 	cqltype "github.com/scylladb/gocql/v2/internal/cqltype"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -1717,7 +1718,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 				} else {
 					refreshErr = s.Core.RefreshMetadata(ctx)
 				}
-				if refreshErr != nil && !errors.Is(refreshErr, cqlerr.ErrKeyspaceDoesNotExist) {
+				if refreshErr != nil && !errors.Is(refreshErr, implMetadata.InternalErrKeyspaceDoesNotExist) {
 					return response, refreshErr
 				}
 			}

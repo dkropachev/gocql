@@ -668,7 +668,7 @@ package cql
 	const cql.Two cql.Consistency = 2
 	type cql.Type int
 		cql.Type method (T) String() string
-	const cql.TypeAscii cql.Type = 1
+	const cql.TypeASCII cql.Type = 1
 	const cql.TypeBigInt cql.Type = 2
 	const cql.TypeBlob cql.Type = 3
 	const cql.TypeBoolean cql.Type = 4
@@ -707,14 +707,10 @@ package cql
 	func cql.UDTValue(t cql.DataType, fields []cql.ValueField) (cql.Value, error)
 	type cql.UUID [16]byte
 		cql.UUID method (T) Bytes() []byte
-		cql.UUID method (T) Clock() uint32
 		cql.UUID method (T) IsEmpty() bool
 		cql.UUID method (T) MarshalJSON() ([]byte, error)
 		cql.UUID method (T) MarshalText() ([]byte, error)
-		cql.UUID method (T) Node() []byte
 		cql.UUID method (T) String() string
-		cql.UUID method (T) Time() time.Time
-		cql.UUID method (T) Timestamp() int64
 		cql.UUID method (*T) UnmarshalJSON(data []byte) error
 		cql.UUID method (*T) UnmarshalText(text []byte) (err error)
 		cql.UUID method (T) Variant() int
@@ -876,7 +872,6 @@ package cqlerr
 	var cqlerr.ErrConditionalExec error
 	var cqlerr.ErrConnectionClosed error
 	var cqlerr.ErrFrameTooBig error
-	var cqlerr.ErrKeyspaceDoesNotExist error
 	var cqlerr.ErrNoConnections error
 	var cqlerr.ErrNoConnectionsStarted error
 	var cqlerr.ErrNoControl error
@@ -894,7 +889,7 @@ package cqlerr
 	var cqlerr.ErrUseStmt error
 	type cqlerr.ErrorCode uint16
 		cqlerr.ErrorCode method (T) Error() string
-	type cqlerr.ErrorMap map[string]uint16
+	type cqlerr.ErrorMap map[net/netip.Addr]uint16
 	type cqlerr.ExecutionError struct
 		cqlerr.ExecutionError field Err error
 		cqlerr.ExecutionError field Attempts []cqlerr.AttemptFailure
@@ -1043,11 +1038,11 @@ package cqlerr
 		cqlerr.UnsupportedSettingError method (*T) Kind() cqlerr.Kind
 	type cqlerr.WriteFailureError struct
 		cqlerr.WriteFailureError field ErrorMap cqlerr.ErrorMap
-		cqlerr.WriteFailureError field WriteType string
 		cqlerr.WriteFailureError field Received int
 		cqlerr.WriteFailureError field BlockFor int
 		cqlerr.WriteFailureError field NumFailures int
 		cqlerr.WriteFailureError field Consistency cql.Consistency
+		cqlerr.WriteFailureError field WriteType cqlerr.WriteType
 		cqlerr.WriteFailureError method (*T) Code() cqlerr.ErrorCode
 		cqlerr.WriteFailureError method (*T) Error() string
 		cqlerr.WriteFailureError method (*T) Is(target error) bool
@@ -1055,16 +1050,27 @@ package cqlerr
 		cqlerr.WriteFailureError method (*T) Message() string
 		cqlerr.WriteFailureError method (*T) Warnings() []string
 	type cqlerr.WriteTimeoutError struct
-		cqlerr.WriteTimeoutError field WriteType string
 		cqlerr.WriteTimeoutError field Received int
 		cqlerr.WriteTimeoutError field BlockFor int
 		cqlerr.WriteTimeoutError field Consistency cql.Consistency
+		cqlerr.WriteTimeoutError field WriteType cqlerr.WriteType
 		cqlerr.WriteTimeoutError method (*T) Code() cqlerr.ErrorCode
 		cqlerr.WriteTimeoutError method (*T) Error() string
 		cqlerr.WriteTimeoutError method (*T) Is(target error) bool
 		cqlerr.WriteTimeoutError method (*T) Kind() cqlerr.Kind
 		cqlerr.WriteTimeoutError method (*T) Message() string
 		cqlerr.WriteTimeoutError method (*T) Warnings() []string
+	type cqlerr.WriteType uint8
+		cqlerr.WriteType method (T) String() string
+	const cqlerr.WriteTypeBatch cqlerr.WriteType = 2
+	const cqlerr.WriteTypeBatchLog cqlerr.WriteType = 5
+	const cqlerr.WriteTypeCAS cqlerr.WriteType = 6
+	const cqlerr.WriteTypeCDC cqlerr.WriteType = 8
+	const cqlerr.WriteTypeCounter cqlerr.WriteType = 4
+	const cqlerr.WriteTypeSimple cqlerr.WriteType = 1
+	const cqlerr.WriteTypeUnknown cqlerr.WriteType = 0
+	const cqlerr.WriteTypeUnloggedBatch cqlerr.WriteType = 3
+	const cqlerr.WriteTypeView cqlerr.WriteType = 7
 
 package cqltrace
 	var cqltrace.ErrNotReady error
@@ -1219,7 +1225,6 @@ package exec
 		exec.StreamOptions field Incremental bool
 
 package metadata
-	const metadata.ASC metadata.ColumnOrder = false
 	type metadata.Aggregate struct
 		metadata.Aggregate field Keyspace string
 		metadata.Aggregate field Name string
@@ -1234,21 +1239,23 @@ package metadata
 		metadata.Column field Table string
 		metadata.Column field Name string
 		metadata.Column field Type string
-		metadata.Column field ClusteringOrder string
 		metadata.Column field ComponentIndex int
 		metadata.Column field Kind metadata.ColumnKind
-		metadata.Column field Order metadata.ColumnOrder
-		metadata.Column method (*T) Equals(other *metadata.Column) bool
+		metadata.Column field ClusteringOrder metadata.ColumnOrder
+		metadata.Column method (*T) Equal(other *metadata.Column) bool
 	const metadata.ColumnClusteringKey metadata.ColumnKind = 2
 	const metadata.ColumnCompact metadata.ColumnKind = 4
 	type metadata.ColumnKind int
 		metadata.ColumnKind method (T) String() string
 	const metadata.ColumnKindUnknown metadata.ColumnKind = 0
-	type metadata.ColumnOrder bool
+	type metadata.ColumnOrder uint8
+		metadata.ColumnOrder method (T) String() string
+	const metadata.ColumnOrderAsc metadata.ColumnOrder = 1
+	const metadata.ColumnOrderDesc metadata.ColumnOrder = 2
+	const metadata.ColumnOrderNone metadata.ColumnOrder = 0
 	const metadata.ColumnPartitionKey metadata.ColumnKind = 1
 	const metadata.ColumnRegular metadata.ColumnKind = 3
 	const metadata.ColumnStatic metadata.ColumnKind = 5
-	const metadata.DESC metadata.ColumnOrder = true
 	type metadata.Function struct
 		metadata.Function field Keyspace string
 		metadata.Function field Name string
@@ -1271,8 +1278,8 @@ package metadata
 		metadata.HostSnapshot field Up bool
 	type metadata.Index struct
 		metadata.Index field Name string
-		metadata.Index field KeyspaceName string
-		metadata.Index field TableName string
+		metadata.Index field Keyspace string
+		metadata.Index field Table string
 		metadata.Index field Kind metadata.IndexKind
 		metadata.Index field Options map[string]string
 		metadata.Index field Columns map[string]*metadata.Column
@@ -1320,7 +1327,6 @@ package metadata
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
 	type metadata.Table struct
-		metadata.Table field ID string
 		metadata.Table field Columns map[string]*metadata.Column
 		metadata.Table field Extensions map[string][]byte
 		metadata.Table field Keyspace string
@@ -1330,7 +1336,8 @@ package metadata
 		metadata.Table field OrderedColumns []string
 		metadata.Table field Flags []string
 		metadata.Table field Options metadata.TableOptions
-		metadata.Table method (*T) Equals(other *metadata.Table) bool
+		metadata.Table field ID cql.UUID
+		metadata.Table method (*T) Equal(other *metadata.Table) bool
 	type metadata.TableOptions struct
 		metadata.TableOptions field Caching map[string]string
 		metadata.TableOptions field Compaction map[string]string
@@ -1338,19 +1345,19 @@ package metadata
 		metadata.TableOptions field CDC map[string]string
 		metadata.TableOptions field SpeculativeRetry string
 		metadata.TableOptions field Comment string
-		metadata.TableOptions field Version string
 		metadata.TableOptions field Partitioner string
-		metadata.TableOptions field GcGraceSeconds int
+		metadata.TableOptions field Version cql.UUID
+		metadata.TableOptions field GCGraceSeconds int
 		metadata.TableOptions field MaxIndexInterval int
-		metadata.TableOptions field MemtableFlushPeriodInMs int
+		metadata.TableOptions field MemtableFlushPeriodInMS int
 		metadata.TableOptions field MinIndexInterval int
 		metadata.TableOptions field ReadRepairChance float64
-		metadata.TableOptions field BloomFilterFpChance float64
+		metadata.TableOptions field BloomFilterFPChance float64
 		metadata.TableOptions field DefaultTimeToLive int
-		metadata.TableOptions field DcLocalReadRepairChance float64
-		metadata.TableOptions field CrcCheckChance float64
+		metadata.TableOptions field DCLocalReadRepairChance float64
+		metadata.TableOptions field CRCCheckChance float64
 		metadata.TableOptions field InMemory bool
-		metadata.TableOptions method (*T) Equals(other *metadata.TableOptions) bool
+		metadata.TableOptions method (*T) Equal(other *metadata.TableOptions) bool
 	type metadata.Target struct
 		metadata.Target field StrictShard bool
 		metadata.Target field HostID cql.UUID
@@ -1368,15 +1375,15 @@ package metadata
 		metadata.View field Columns map[string]*metadata.Column
 		metadata.View field Extensions map[string][]byte
 		metadata.View field WhereClause string
-		metadata.View field BaseTableName string
-		metadata.View field ID string
-		metadata.View field KeyspaceName string
-		metadata.View field BaseTableID string
-		metadata.View field ViewName string
+		metadata.View field BaseTable string
+		metadata.View field Keyspace string
+		metadata.View field Name string
 		metadata.View field OrderedColumns []string
 		metadata.View field PartitionKey []*metadata.Column
 		metadata.View field ClusteringColumns []*metadata.Column
 		metadata.View field Options metadata.TableOptions
+		metadata.View field ID cql.UUID
+		metadata.View field BaseTableID cql.UUID
 		metadata.View field IncludeAllColumns bool
 
 package metrics

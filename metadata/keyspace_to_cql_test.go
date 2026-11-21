@@ -154,7 +154,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			{
 				name: "plain target is emitted as-is",
 				im: &Index{
-					Name: "users_by_email", KeyspaceName: "ks", TableName: "users",
+					Name: "users_by_email", Keyspace: "ks", Table: "users",
 					Options: map[string]string{"target": "email"},
 				},
 				want: "CREATE INDEX users_by_email ON ks.users (email);",
@@ -162,7 +162,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			{
 				name: "a JSON target is expanded into partition and clustering keys",
 				im: &Index{
-					Name: "idx", KeyspaceName: "ks", TableName: "t",
+					Name: "idx", Keyspace: "ks", Table: "t",
 					Options: map[string]string{"target": `{"pk":["a","b"],"ck":["c"]}`},
 				},
 				want: "CREATE INDEX idx ON ks.t ((a,b), c);",
@@ -173,7 +173,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				// identifier is a syntax error.
 				name: "an index with no name stays unnamed",
 				im: &Index{
-					KeyspaceName: "ks", TableName: "t",
+					Keyspace: "ks", Table: "t",
 					Options: map[string]string{"target": "col"},
 				},
 				want: "CREATE INDEX  ON ks.t (col);",
@@ -181,7 +181,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			{
 				name: "custom indexes are skipped -- Scylla does not support them",
 				im: &Index{
-					Name: "custom", KeyspaceName: "ks", TableName: "t", Kind: IndexKindCustom,
+					Name: "custom", Keyspace: "ks", Table: "t", Kind: IndexKindCustom,
 					Options: map[string]string{"target": "x"},
 				},
 				wantNot: "CREATE INDEX",
@@ -352,12 +352,12 @@ func TestKeyspaceToCQL(t *testing.T) {
 							"home": col("home", "frozen<addr>", ColumnRegular),
 						},
 						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
-						Options:      TableOptions{GcGraceSeconds: 864000},
+						Options:      TableOptions{GCGraceSeconds: 864000},
 					},
 				},
 				Indexes: map[string]*Index{
 					"users_by_home": {
-						Name: "users_by_home", KeyspaceName: "ks", TableName: "users",
+						Name: "users_by_home", Keyspace: "ks", Table: "users",
 						Options: map[string]string{"target": "home"},
 					},
 				},
@@ -378,7 +378,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				},
 				Views: map[string]*View{
 					"users_by_zip": {
-						KeyspaceName: "ks", ViewName: "users_by_zip", BaseTableName: "users",
+						Keyspace: "ks", Name: "users_by_zip", BaseTable: "users",
 						WhereClause:    "home IS NOT NULL",
 						OrderedColumns: []string{"id", "home"},
 						PartitionKey:   []*Column{col("id", "uuid", ColumnPartitionKey)},
@@ -464,7 +464,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
 					}
 					ks.Indexes[n+"_idx"] = &Index{
-						Name: n + "_idx", KeyspaceName: "ks", TableName: n,
+						Name: n + "_idx", Keyspace: "ks", Table: n,
 						Options: map[string]string{"target": "id"},
 					}
 					ks.Functions[n+"_fn"] = &Function{
@@ -478,7 +478,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						InitCond: "0", StateFunc: Function{Name: n + "_fn"},
 					}
 					ks.Views[n+"_v"] = &View{
-						KeyspaceName: "ks", ViewName: n + "_v", BaseTableName: n,
+						Keyspace: "ks", Name: n + "_v", BaseTable: n,
 						WhereClause: "id IS NOT NULL", OrderedColumns: []string{"id"},
 						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
 					}
@@ -521,7 +521,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						Keyspace:          "my-ks",
 						Name:              "my-tbl",
 						PartitionKey:      []*Column{{Name: "pk", Type: "int"}},
-						ClusteringColumns: []*Column{{Name: "Order", Type: "int", ClusteringOrder: "DESC"}},
+						ClusteringColumns: []*Column{{Name: "Order", Type: "int", ClusteringOrder: ColumnOrderDesc}},
 						OrderedColumns:    []string{"pk", "Order", "select"},
 						Columns: map[string]*Column{
 							"pk":     {Name: "pk", Type: "int", Kind: ColumnPartitionKey},
@@ -532,13 +532,13 @@ func TestKeyspaceToCQL(t *testing.T) {
 				},
 				Indexes: map[string]*Index{
 					"my-idx": {
-						Name: "my-idx", KeyspaceName: "my-ks", TableName: "my-tbl",
+						Name: "my-idx", Keyspace: "my-ks", Table: "my-tbl",
 						Options: map[string]string{"target": `{"pk":["pk"],"ck":["Order"]}`},
 					},
 				},
 				Views: map[string]*View{
 					"my-view": {
-						KeyspaceName: "my-ks", ViewName: "my-view", BaseTableName: "my-tbl",
+						Keyspace: "my-ks", Name: "my-view", BaseTable: "my-tbl",
 						WhereClause:    `"Order" IS NOT NULL`,
 						OrderedColumns: []string{"pk", "Order"},
 						PartitionKey:   []*Column{{Name: "pk"}},
@@ -834,7 +834,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			t.Parallel()
 
 			vm := &View{
-				KeyspaceName: "ks", ViewName: "v", BaseTableName: "t",
+				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause:    "id IS NOT NULL",
 				OrderedColumns: []string{"id", "name"},
 				PartitionKey:   []*Column{col("id", "int", ColumnPartitionKey)},
@@ -860,7 +860,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			t.Parallel()
 
 			vm := &View{
-				KeyspaceName: "ks", ViewName: "v", BaseTableName: "t",
+				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause: "id IS NOT NULL", IncludeAllColumns: true,
 				OrderedColumns: []string{"id"},
 				PartitionKey:   []*Column{col("id", "int", ColumnPartitionKey)},

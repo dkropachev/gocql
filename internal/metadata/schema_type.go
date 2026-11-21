@@ -12,7 +12,7 @@ import (
 )
 
 var schemaScalarTypes = map[string]cql.Type{
-	"ascii": cql.TypeAscii, "bigint": cql.TypeBigInt, "blob": cql.TypeBlob,
+	"ascii": cql.TypeASCII, "bigint": cql.TypeBigInt, "blob": cql.TypeBlob,
 	"boolean": cql.TypeBoolean, "counter": cql.TypeCounter, "date": cql.TypeDate,
 	"decimal": cql.TypeDecimal, "double": cql.TypeDouble, "duration": cql.TypeDuration,
 	"float": cql.TypeFloat, "inet": cql.TypeInet, "int": cql.TypeInt,

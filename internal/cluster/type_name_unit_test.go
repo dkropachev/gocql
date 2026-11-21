@@ -29,7 +29,7 @@ var typeLookupTest = []struct {
 	TypeName     string
 	ExpectedType cql.Type
 }{
-	{"AsciiType", cql.TypeAscii},
+	{"AsciiType", cql.TypeASCII},
 	{"LongType", cql.TypeBigInt},
 	{"BytesType", cql.TypeBlob},
 	{"BooleanType", cql.TypeBoolean},

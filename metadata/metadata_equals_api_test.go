@@ -22,7 +22,7 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-// The Equals family decides whether a schema refresh sees a table as changed
+// The Equal family decides whether a schema refresh sees a table as changed
 // (see refreshAllSchema). A comparison that silently ignores a field makes a
 // real change invisible, so most of what follows is field-by-field drift
 // detection rather than a handful of hand-written pairs: a new field on one of
@@ -37,12 +37,12 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			t.Parallel()
 
 			want := populatedColumnMetadata()
-			if !want.Equals(populatedColumnMetadata()) {
-				t.Fatal("Equals() = false for two identically populated values")
+			if !want.Equal(populatedColumnMetadata()) {
+				t.Fatal("Equal() = false for two identically populated values")
 			}
 
 			assertEveryFieldCompared(t, want, func(a, b any) bool {
-				return a.(*metadata.Column).Equals(b.(*metadata.Column))
+				return a.(*metadata.Column).Equal(b.(*metadata.Column))
 			})
 		})
 	})
@@ -57,14 +57,14 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			var nilOpts *metadata.TableOptions
 			populated := populatedTableMetadataOptions()
 
-			if !nilOpts.Equals(nil) {
-				t.Error("Equals() = false for two nils, want true")
+			if !nilOpts.Equal(nil) {
+				t.Error("Equal() = false for two nils, want true")
 			}
-			if populated.Equals(nil) {
-				t.Error("Equals(nil) = true for a populated receiver")
+			if populated.Equal(nil) {
+				t.Error("Equal(nil) = true for a populated receiver")
 			}
-			if nilOpts.Equals(populated) {
-				t.Error("nil.Equals(populated) = true")
+			if nilOpts.Equal(populated) {
+				t.Error("nil.Equal(populated) = true")
 			}
 		})
 
@@ -74,14 +74,14 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			var nilCol *metadata.Column
 			populated := populatedColumnMetadata()
 
-			if !nilCol.Equals(nil) {
-				t.Error("Equals() = false for two nils, want true")
+			if !nilCol.Equal(nil) {
+				t.Error("Equal() = false for two nils, want true")
 			}
-			if populated.Equals(nil) {
-				t.Error("Equals(nil) = true for a populated receiver")
+			if populated.Equal(nil) {
+				t.Error("Equal(nil) = true for a populated receiver")
 			}
-			if nilCol.Equals(populated) {
-				t.Error("nil.Equals(populated) = true")
+			if nilCol.Equal(populated) {
+				t.Error("nil.Equal(populated) = true")
 			}
 		})
 
@@ -91,14 +91,14 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			var nilTable *metadata.Table
 			populated := populatedTableMetadata()
 
-			if !nilTable.Equals(nil) {
-				t.Error("Equals() = false for two nils, want true")
+			if !nilTable.Equal(nil) {
+				t.Error("Equal() = false for two nils, want true")
 			}
-			if populated.Equals(nil) {
-				t.Error("Equals(nil) = true for a populated receiver")
+			if populated.Equal(nil) {
+				t.Error("Equal(nil) = true for a populated receiver")
 			}
-			if nilTable.Equals(populated) {
-				t.Error("nil.Equals(populated) = true")
+			if nilTable.Equal(populated) {
+				t.Error("nil.Equal(populated) = true")
 			}
 		})
 
@@ -111,11 +111,11 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			b := deepCopyTableMetadata(a)
 			b.PartitionKey[0] = nil
 
-			if a.Equals(b) {
-				t.Error("Equals() = true when one partition key column is nil")
+			if a.Equal(b) {
+				t.Error("Equal() = true when one partition key column is nil")
 			}
-			if b.Equals(a) {
-				t.Error("Equals() = true when the receiver's partition key column is nil")
+			if b.Equal(a) {
+				t.Error("Equal() = true when the receiver's partition key column is nil")
 			}
 		})
 	})
@@ -130,12 +130,12 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			t.Parallel()
 
 			want := populatedTableMetadata()
-			if !want.Equals(deepCopyTableMetadata(want)) {
-				t.Fatal("Equals() = false for two identically populated values")
+			if !want.Equal(deepCopyTableMetadata(want)) {
+				t.Fatal("Equal() = false for two identically populated values")
 			}
 
 			assertEveryFieldCompared(t, want, func(a, b any) bool {
-				return a.(*metadata.Table).Equals(b.(*metadata.Table))
+				return a.(*metadata.Table).Equal(b.(*metadata.Table))
 			})
 		})
 		// Covers the shapes a table can legitimately
@@ -144,8 +144,8 @@ func TestMetadataEqualsAPI(t *testing.T) {
 		t.Run("EmptyAndZero", func(t *testing.T) {
 			t.Parallel()
 
-			if !(&metadata.Table{}).Equals(&metadata.Table{}) {
-				t.Error("Equals() = false for two zero-valued tables")
+			if !(&metadata.Table{}).Equal(&metadata.Table{}) {
+				t.Error("Equal() = false for two zero-valued tables")
 			}
 
 			nilMaps := &metadata.Table{Keyspace: "ks", Name: "tbl"}
@@ -159,8 +159,8 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			// A nil map and an empty map are both "no entries", and the length-based
 			// guards treat them alike. Pinning this keeps a refresh from reporting a
 			// change when the server simply returned no rows for a section.
-			if !nilMaps.Equals(emptyMaps) {
-				t.Error("Equals() = false for nil maps versus empty maps, want true")
+			if !nilMaps.Equal(emptyMaps) {
+				t.Error("Equal() = false for nil maps versus empty maps, want true")
 			}
 		})
 		// Exercises the guards that make the
@@ -203,16 +203,16 @@ func TestMetadataEqualsAPI(t *testing.T) {
 					// compareColumnSlices and compareStringSlices range over the
 					// receiver's slice and index the argument's at the same offset, so
 					// the overrun needs the receiver to be the longer of the two:
-					// full.Equals(trimmed) is the call that panics if a length guard is
+					// full.Equal(trimmed) is the call that panics if a length guard is
 					// dropped. The reverse direction cannot overrun, since it ranges
 					// over the shorter slice; it is here so the guard is shown to
 					// reject the mismatch either way round rather than only when the
 					// receiver happens to be longer.
-					if full.Equals(trimmed) {
-						t.Error("Equals() = true for a longer receiver and shorter argument")
+					if full.Equal(trimmed) {
+						t.Error("Equal() = true for a longer receiver and shorter argument")
 					}
-					if trimmed.Equals(full) {
-						t.Error("Equals() = true for a shorter receiver and longer argument")
+					if trimmed.Equal(full) {
+						t.Error("Equal() = true for a shorter receiver and longer argument")
 					}
 				})
 			}
@@ -256,7 +256,7 @@ func TestMetadataEqualsAPI(t *testing.T) {
 				{name: "flags", mutate: func(m *metadata.Table) { m.Flags = []string{"dense"} }},
 				{
 					name:   "options",
-					mutate: func(m *metadata.Table) { m.Options.GcGraceSeconds = 0 },
+					mutate: func(m *metadata.Table) { m.Options.GCGraceSeconds = 0 },
 				},
 				{
 					name:   "extension value",
@@ -285,8 +285,8 @@ func TestMetadataEqualsAPI(t *testing.T) {
 					b := deepCopyTableMetadata(a)
 					tt.mutate(b)
 
-					if got := a.Equals(b); got != tt.want {
-						t.Errorf("Equals() = %v, want %v", got, tt.want)
+					if got := a.Equal(b); got != tt.want {
+						t.Errorf("Equal() = %v, want %v", got, tt.want)
 					}
 				})
 			}
@@ -299,12 +299,12 @@ func TestMetadataEqualsAPI(t *testing.T) {
 			t.Parallel()
 
 			want := populatedTableMetadataOptions()
-			if !want.Equals(populatedTableMetadataOptions()) {
-				t.Fatal("Equals() = false for two identically populated values")
+			if !want.Equal(populatedTableMetadataOptions()) {
+				t.Fatal("Equal() = false for two identically populated values")
 			}
 
 			assertEveryFieldCompared(t, want, func(a, b any) bool {
-				return a.(*metadata.TableOptions).Equals(b.(*metadata.TableOptions))
+				return a.(*metadata.TableOptions).Equal(b.(*metadata.TableOptions))
 			})
 		})
 		// Covers what the drift test cannot: it
@@ -354,8 +354,8 @@ func TestMetadataEqualsAPI(t *testing.T) {
 					b := populatedTableMetadataOptions()
 					tt.mutate(b)
 
-					if got := a.Equals(b); got != tt.want {
-						t.Errorf("Equals() = %v, want %v", got, tt.want)
+					if got := a.Equal(b); got != tt.want {
+						t.Errorf("Equal() = %v, want %v", got, tt.want)
 					}
 				})
 			}

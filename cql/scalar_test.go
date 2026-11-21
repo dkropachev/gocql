@@ -177,7 +177,7 @@ func TestScalar(t *testing.T) {
 				t.Fatal("empty decoding incorrect")
 			}
 		}
-		for _, kind := range []Type{TypeText, TypeAscii, TypeVarchar, TypeBlob, TypeCounter, TypeDuration} {
+		for _, kind := range []Type{TypeText, TypeASCII, TypeVarchar, TypeBlob, TypeCounter, TypeDuration} {
 			if emptySupported(scalarType(t, kind)) {
 				t.Fatalf("unexpected empty support for %s", kind)
 			}
@@ -645,16 +645,16 @@ func TestScalar(t *testing.T) {
 				t.Fatal("encoded invalid UTF-8")
 			}
 		}
-		if _, err := scalarEncode(t, ASCIIStringCodec, TypeAscii, "café"); err == nil {
+		if _, err := scalarEncode(t, ASCIIStringCodec, TypeASCII, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
-		if _, err := ASCIICodec.Decode(ScalarReader(t, TypeAscii, Present, []byte{0x7f}, []byte{0x80})); err == nil {
+		if _, err := ASCIICodec.Decode(ScalarReader(t, TypeASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
 			t.Fatal("decoded non-ASCII")
 		}
-		if _, err := scalarEncode(t, ASCIICodec, TypeAscii, CodecTestMust(BorrowText("é"))); err == nil {
+		if _, err := scalarEncode(t, ASCIICodec, TypeASCII, CodecTestMust(BorrowText("é"))); err == nil {
 			t.Fatal("borrowed Text bypassed ASCII validation")
 		}
-		if err := StringCodec.CheckType(scalarType(t, TypeAscii)); err == nil {
+		if err := StringCodec.CheckType(scalarType(t, TypeASCII)); err == nil {
 			t.Fatal("StringCodec accepted ASCII metadata")
 		}
 		source := []byte("hello")

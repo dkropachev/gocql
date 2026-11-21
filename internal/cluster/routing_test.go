@@ -37,13 +37,13 @@ func testSession(t testing.TB) *Core {
 	}()
 	SessionData(s).InternalMetadataDescriber = s.NewMetadataDescriber()
 	m := v2TestMetadata()
-	routing.SnapshotData(m).InternalKeyspaces["ks"].Tables["table"].ID = "identity-1"
+	routing.SnapshotData(m).InternalKeyspaces["ks"].Tables["table"].ID = cql.UUID{1}
 	routing.SnapshotData(m).InternalKeyspaces["ks"].TabletBased = true
 	MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(m).InternalKeyspaces["ks"])
 	p := s.Peripheral()
 	p.InternalFeedbackOnce.Do(func() {})
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
-	routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: "identity-1"})
+	routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalIdentity: cql.UUID{1}.String()})
 	p.InternalSnapshot.Store(m)
 	t.Cleanup(func() {
 		s.CloseV2Peripheral()

@@ -121,7 +121,8 @@ documented methods.
 - **Enum-like types** keep the protocol's values when the protocol numbers
   them (the zero `cql.Consistency` is ANY, the zero `cql.BatchKind` is
   LOGGED); the others start at a safe zero (`retry.Stop`,
-  `cqlerr.MaybeExecuted`, `event.Unknown`, an invalid `gocql.Dialect`). A
+  `cqlerr.MaybeExecuted`, `event.Unknown`, `cqlerr.WriteTypeUnknown`,
+  `metadata.ColumnOrderNone`, an invalid `gocql.Dialect`). A
   setting that may be left unset is a `cql.Option`, never a zero enum. Each
   integer enum has a `String` method that prints `Type(n)` for a value it
   does not define; `cqlerr.ErrorCode` is an error instead, and its `Error`

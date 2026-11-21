@@ -58,7 +58,7 @@ func TestTabletIdentityCapturedSource(t *testing.T) {
 	// The source changed before the request was sent: the stamp sees it.
 	recreated := ks.Clone()
 	table := *recreated.Tables["table"]
-	table.ID = "identity-2"
+	table.ID = cql.UUID{2}
 	recreated.Tables["table"] = &table
 	md.InternalKeyspaceMetadata.InternalSet("ks", recreated)
 	stamp := s.CaptureTabletFeedback(info, s.Metadata())

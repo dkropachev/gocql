@@ -47,10 +47,10 @@ func TestSafe(t *testing.T) {
 		{"ServerError", cqlerr.NewOtherServerError(cqlerr.CodeServer, ""), true, want{retry.Next, retry.Stop}},
 		// Failures after which the request may have been applied, or that a
 		// replay cannot fix.
-		{"WriteTimeout", &cqlerr.WriteTimeoutError{WriteType: "SIMPLE"}, true, want{retry.Stop, retry.Stop}},
-		{"WriteTimeoutCAS", &cqlerr.WriteTimeoutError{WriteType: "CAS"}, true, want{retry.Stop, retry.Stop}},
+		{"WriteTimeout", &cqlerr.WriteTimeoutError{WriteType: cqlerr.WriteTypeSimple}, true, want{retry.Stop, retry.Stop}},
+		{"WriteTimeoutCAS", &cqlerr.WriteTimeoutError{WriteType: cqlerr.WriteTypeCAS}, true, want{retry.Stop, retry.Stop}},
 		{"CASWriteUnknown", &cqlerr.CASWriteUnknownError{}, true, want{retry.Stop, retry.Stop}},
-		{"WriteFailure", &cqlerr.WriteFailureError{WriteType: "SIMPLE"}, true, want{retry.Stop, retry.Stop}},
+		{"WriteFailure", &cqlerr.WriteFailureError{WriteType: cqlerr.WriteTypeSimple}, true, want{retry.Stop, retry.Stop}},
 		{"ReadFailure", &cqlerr.ReadFailureError{}, true, want{retry.Stop, retry.Stop}},
 		{"Truncate", cqlerr.NewOtherServerError(cqlerr.CodeTruncate, ""), true, want{retry.Stop, retry.Stop}},
 		{"RateLimitedByCoordinator", &cqlerr.RateLimitReachedError{RejectedByCoordinator: true}, true, want{retry.Stop, retry.Stop}},

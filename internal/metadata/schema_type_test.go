@@ -88,3 +88,19 @@ func FuzzSchemaDataType(f *testing.F) {
 		}
 	})
 }
+
+// TestColumnOrderFromSchema checks the decoding of
+// system_schema.columns.clustering_order.
+func TestColumnOrderFromSchema(t *testing.T) {
+	for text, want := range map[string]metadata.ColumnOrder{
+		"asc":  metadata.ColumnOrderAsc,
+		"desc": metadata.ColumnOrderDesc,
+		"DESC": metadata.ColumnOrderDesc,
+		"none": metadata.ColumnOrderNone,
+		"":     metadata.ColumnOrderNone,
+	} {
+		if got := columnOrderFromSchema(text); got != want {
+			t.Errorf("columnOrderFromSchema(%q) = %v, want %v", text, got, want)
+		}
+	}
+}

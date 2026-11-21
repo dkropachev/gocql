@@ -51,20 +51,48 @@ func (u TimeUUID) Variant() int { return UUID(u).Variant() }
 // Version returns the UUID's version, 1 for a valid TimeUUID.
 func (u TimeUUID) Version() int { return UUID(u).Version() }
 
-// Node returns the node of a version 1 UUID, or nil; see UUID.Node.
-func (u TimeUUID) Node() []byte { return UUID(u).Node() }
+// Node returns the node (MAC address) field of the UUID, or nil if u is not
+// version 1, as the zero TimeUUID is not.
+func (u TimeUUID) Node() []byte {
+	if u.Version() != 1 {
+		return nil
+	}
+	return u[10:]
+}
 
-// Clock returns the clock sequence of a version 1 UUID, or zero; see
-// UUID.Clock.
-func (u TimeUUID) Clock() uint32 { return UUID(u).Clock() }
+// Clock returns the clock sequence of the UUID, or zero if u is not version
+// 1.
+func (u TimeUUID) Clock() uint32 {
+	if u.Version() != 1 {
+		return 0
+	}
+	// The clock sequence is the lower 14 bits of u[8:10].
+	return uint32(u[8]&0x3F)<<8 | uint32(u[9])
+}
 
-// Timestamp returns the 100-nanosecond intervals since 15 October 1582 of a
-// version 1 UUID, or zero; see UUID.Timestamp.
-func (u TimeUUID) Timestamp() int64 { return UUID(u).Timestamp() }
+// Timestamp returns the 100-nanosecond intervals since 15 October 1582 the
+// UUID records, or zero if u is not version 1.
+func (u TimeUUID) Timestamp() int64 {
+	if u.Version() != 1 {
+		return 0
+	}
+	return int64(uint64(u[0])<<24|uint64(u[1])<<16|
+		uint64(u[2])<<8|uint64(u[3])) +
+		int64(uint64(u[4])<<40|uint64(u[5])<<32) +
+		int64(uint64(u[6]&0x0F)<<56|uint64(u[7])<<48)
+}
 
 // Time returns the UUID's timestamp as a UTC time, or the zero time.Time if it
 // is not version 1.
-func (u TimeUUID) Time() time.Time { return UUID(u).Time() }
+func (u TimeUUID) Time() time.Time {
+	if u.Version() != 1 {
+		return time.Time{}
+	}
+	t := u.Timestamp()
+	sec := t / 1e7
+	nsec := (t % 1e7) * 100
+	return time.Unix(sec+timeBase, nsec).UTC()
+}
 
 // MarshalJSON uses the same canonical string representation as UUID, after
 // checking version 1. String supports zero for diagnostics; serialization and

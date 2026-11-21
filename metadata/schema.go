@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // Keyspace is the schema of a keyspace: its replication and the tables,
@@ -83,8 +85,6 @@ func (ks *Keyspace) Clone() *Keyspace {
 //
 // The driver fills it; its zero value is empty.
 type Table struct {
-	// ID is the table's UUID, in its string form.
-	ID string
 	// Columns holds the table's columns by name.
 	Columns map[string]*Column
 	// Extensions holds the table's schema extensions by name, as raw bytes.
@@ -104,6 +104,8 @@ type Table struct {
 	Flags []string
 	// Options holds the table's options.
 	Options TableOptions
+	// ID is the table's UUID.
+	ID cql.UUID
 }
 
 // TableOptions are the options a table was created with.
@@ -124,55 +126,55 @@ type TableOptions struct {
 	SpeculativeRetry string
 	// Comment is the table's comment.
 	Comment string
-	// Version is ScyllaDB's schema version UUID of the table, in its string
-	// form; it is empty on Cassandra.
-	Version string
 	// Partitioner is the table's partitioner class on ScyllaDB, and empty
 	// when the table uses the cluster's partitioner or on Cassandra.
 	Partitioner string
-	// GcGraceSeconds is how long tombstones are kept, in seconds.
-	GcGraceSeconds int
+	// Version is ScyllaDB's schema version UUID of the table; it is the zero
+	// UUID on Cassandra.
+	Version cql.UUID
+	// GCGraceSeconds is how long tombstones are kept, in seconds.
+	GCGraceSeconds int
 	// MaxIndexInterval is the maximum gap between partition index samples.
 	MaxIndexInterval int
-	// MemtableFlushPeriodInMs is the forced memtable flush period, in
+	// MemtableFlushPeriodInMS is the forced memtable flush period, in
 	// milliseconds; zero disables it.
-	MemtableFlushPeriodInMs int
+	MemtableFlushPeriodInMS int
 	// MinIndexInterval is the minimum gap between partition index samples.
 	MinIndexInterval int
 	// ReadRepairChance is the read repair probability, on servers that still
 	// have the option.
 	ReadRepairChance float64
-	// BloomFilterFpChance is the bloom filter's false positive probability.
-	BloomFilterFpChance float64
+	// BloomFilterFPChance is the bloom filter's false positive probability.
+	BloomFilterFPChance float64
 	// DefaultTimeToLive is the default TTL of written data, in seconds; zero
 	// means none.
 	DefaultTimeToLive int
-	// DcLocalReadRepairChance is the datacenter-local read repair
+	// DCLocalReadRepairChance is the datacenter-local read repair
 	// probability, on servers that still have the option.
-	DcLocalReadRepairChance float64
-	// CrcCheckChance is the probability of checking checksums of compressed
+	DCLocalReadRepairChance float64
+	// CRCCheckChance is the probability of checking checksums of compressed
 	// data on read.
-	CrcCheckChance float64
+	CRCCheckChance float64
 	// InMemory reports ScyllaDB's in_memory option; it is false on
 	// Cassandra.
 	InMemory bool
 }
 
-// Equals reports whether t and other hold equal options. Two nil options are
+// Equal reports whether t and other hold equal options. Two nil options are
 // equal, and nil never equals non-nil.
-func (t *TableOptions) Equals(other *TableOptions) bool {
+func (t *TableOptions) Equal(other *TableOptions) bool {
 	if t == nil || other == nil {
 		return t == other // Both must be nil to be equal
 	}
 
-	if t.BloomFilterFpChance != other.BloomFilterFpChance ||
+	if t.BloomFilterFPChance != other.BloomFilterFPChance ||
 		t.Comment != other.Comment ||
-		t.CrcCheckChance != other.CrcCheckChance ||
-		t.DcLocalReadRepairChance != other.DcLocalReadRepairChance ||
+		t.CRCCheckChance != other.CRCCheckChance ||
+		t.DCLocalReadRepairChance != other.DCLocalReadRepairChance ||
 		t.DefaultTimeToLive != other.DefaultTimeToLive ||
-		t.GcGraceSeconds != other.GcGraceSeconds ||
+		t.GCGraceSeconds != other.GCGraceSeconds ||
 		t.MaxIndexInterval != other.MaxIndexInterval ||
-		t.MemtableFlushPeriodInMs != other.MemtableFlushPeriodInMs ||
+		t.MemtableFlushPeriodInMS != other.MemtableFlushPeriodInMS ||
 		t.MinIndexInterval != other.MinIndexInterval ||
 		t.ReadRepairChance != other.ReadRepairChance ||
 		t.SpeculativeRetry != other.SpeculativeRetry ||
@@ -202,16 +204,12 @@ type View struct {
 	Extensions map[string][]byte
 	// WhereClause is the view's WHERE clause.
 	WhereClause string
-	// BaseTableName is the name of the table the view selects from.
-	BaseTableName string
-	// ID is the view's UUID, in its string form.
-	ID string
-	// KeyspaceName is the name of the view's keyspace.
-	KeyspaceName string
-	// BaseTableID is the base table's UUID, in its string form.
-	BaseTableID string
-	// ViewName is the view's name.
-	ViewName string
+	// BaseTable is the name of the table the view selects from.
+	BaseTable string
+	// Keyspace is the name of the view's keyspace.
+	Keyspace string
+	// Name is the view's name.
+	Name string
 	// OrderedColumns lists the column names in Table.OrderedColumns order.
 	OrderedColumns []string
 	// PartitionKey lists the partition key columns, in key order.
@@ -220,6 +218,10 @@ type View struct {
 	ClusteringColumns []*Column
 	// Options holds the view's options.
 	Options TableOptions
+	// ID is the view's UUID.
+	ID cql.UUID
+	// BaseTableID is the UUID of the table the view selects from.
+	BaseTableID cql.UUID
 	// IncludeAllColumns reports a view that selects every column of the base
 	// table.
 	IncludeAllColumns bool
@@ -237,21 +239,19 @@ type Column struct {
 	Name string
 	// Type is the column's CQL type, as the schema spells it.
 	Type string
-	// ClusteringOrder is "asc" or "desc" for a clustering column, and "none"
-	// or empty for any other.
-	ClusteringOrder string
 	// ComponentIndex is the column's position in the partition key or among
 	// the clustering columns; it is -1 for other columns.
 	ComponentIndex int
 	// Kind is the column's role in the table.
 	Kind ColumnKind
-	// Order is DESC when ClusteringOrder is "desc", and ASC otherwise.
-	Order ColumnOrder
+	// ClusteringOrder is the order of a clustering column, and
+	// ColumnOrderNone for any other column.
+	ClusteringOrder ColumnOrder
 }
 
-// Equals reports whether c and other describe the same column. Two nil
+// Equal reports whether c and other describe the same column. Two nil
 // columns are equal, and nil never equals non-nil.
-func (c *Column) Equals(other *Column) bool {
+func (c *Column) Equal(other *Column) bool {
 	if c == nil || other == nil {
 		return c == other
 	}
@@ -262,8 +262,7 @@ func (c *Column) Equals(other *Column) bool {
 		c.ComponentIndex == other.ComponentIndex &&
 		c.Kind == other.Kind &&
 		c.Type == other.Type &&
-		c.ClusteringOrder == other.ClusteringOrder &&
-		c.Order == other.Order
+		c.ClusteringOrder == other.ClusteringOrder
 }
 
 // Function is a user-defined function.
@@ -334,10 +333,10 @@ type Type struct {
 type Index struct {
 	// Name is the index's name.
 	Name string
-	// KeyspaceName is the name of the index's keyspace.
-	KeyspaceName string
-	// TableName is the name of the indexed table.
-	TableName string
+	// Keyspace is the name of the index's keyspace.
+	Keyspace string
+	// Table is the name of the indexed table.
+	Table string
 	// Kind is the kind of index.
 	Kind IndexKind
 	// Options holds the index's options, such as "target".
@@ -356,10 +355,10 @@ type Index struct {
 	ClusteringColumns []*Column
 }
 
-// Equals reports whether t and other have the same ID, keyspace, name,
+// Equal reports whether t and other have the same ID, keyspace, name,
 // columns, options, flags and extensions. Two nil tables are equal, and nil
 // never equals non-nil.
-func (t *Table) Equals(other *Table) bool {
+func (t *Table) Equal(other *Table) bool {
 	if t == nil || other == nil {
 		return t == other
 	}
@@ -384,7 +383,7 @@ func (t *Table) Equals(other *Table) bool {
 		return false
 	}
 
-	if !t.Options.Equals(&other.Options) {
+	if !t.Options.Equal(&other.Options) {
 		return false
 	}
 
@@ -401,7 +400,7 @@ func (t *Table) Equals(other *Table) bool {
 
 func compareColumnSlices(a, b []*Column) bool {
 	for i := range a {
-		if !a[i].Equals(b[i]) {
+		if !a[i].Equal(b[i]) {
 			return false
 		}
 	}
@@ -411,7 +410,7 @@ func compareColumnSlices(a, b []*Column) bool {
 func compareColumnsMap(a, b map[string]*Column) bool {
 	for k, v := range a {
 		otherValue, exists := b[k]
-		if !exists || !v.Equals(otherValue) {
+		if !exists || !v.Equal(otherValue) {
 			return false
 		}
 	}
@@ -452,15 +451,33 @@ const (
 	IndexKindCustom     IndexKind = "CUSTOM"
 )
 
-// ColumnOrder is the ordering of a clustering column with regard to its
-// comparator.
-type ColumnOrder bool
+// ColumnOrder is the order of a clustering column, as the CLUSTERING ORDER BY
+// clause states it. The zero ColumnOrder is ColumnOrderNone, the order of a
+// column that is not a clustering column. Later releases may add values, so a
+// switch over them needs a default case.
+type ColumnOrder uint8
 
-// The orders of clustering columns.
+// The orders of columns.
 const (
-	ASC  ColumnOrder = false
-	DESC ColumnOrder = true
+	ColumnOrderNone ColumnOrder = iota
+	ColumnOrderAsc
+	ColumnOrderDesc
 )
+
+// String returns "none", "asc" or "desc", the server's spelling, or
+// ColumnOrder(n) for a value it does not define.
+func (o ColumnOrder) String() string {
+	switch o {
+	case ColumnOrderNone:
+		return "none"
+	case ColumnOrderAsc:
+		return "asc"
+	case ColumnOrderDesc:
+		return "desc"
+	default:
+		return fmt.Sprintf("ColumnOrder(%d)", uint8(o))
+	}
+}
 
 // ColumnKind is the role of a column in its table. The zero ColumnKind is
 // ColumnKindUnknown. Later releases may add values, so a switch over them needs

@@ -336,7 +336,7 @@ func TestTablets(t *testing.T) {
 			ks := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"]
 			ks = ks.Clone()
 			table := *ks.Tables["table"]
-			table.ID = "identity-2"
+			table.ID = cql.UUID{2}
 			ks.Tables["table"] = &table
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", ks)
 			s.QueueTabletFeedback(h, sourceStamp)

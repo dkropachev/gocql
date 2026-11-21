@@ -23,8 +23,7 @@ func TestTimeUUIDValueAPI(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			uuid := cql.UUID(id)
 			if id.Version() != 1 || id.IsEmpty() || id.String() != uuid.String() || id.Variant() != uuid.Variant() ||
-				id.Clock() != uuid.Clock() || id.Timestamp() != uuid.Timestamp() || !id.Time().Equal(uuid.Time()) ||
-				!bytes.Equal(id.Node(), uuid.Node()) || !bytes.Equal(id.Bytes(), uuid.Bytes()) {
+				!bytes.Equal(id.Bytes(), uuid.Bytes()) {
 				t.Fatalf("value methods differ from UUID: %v", id)
 			}
 			if _, err := cql.TimeUUIDValue(id); err != nil {

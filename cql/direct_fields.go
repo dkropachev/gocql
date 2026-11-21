@@ -143,7 +143,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		op.kind, op.field, op.compiled = directText, f, c.compiled
 		op.columnKind, op.alt = TypeText, TypeVarchar
 		if c.ascii {
-			op.columnKind, op.alt = TypeAscii, 0
+			op.columnKind, op.alt = TypeASCII, 0
 		}
 	default:
 		return rowOp[R]{}, false

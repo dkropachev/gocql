@@ -15,7 +15,7 @@ type Type int
 // The kinds of CQL data types.
 const (
 	TypeCustom    Type = 0x0000
-	TypeAscii     Type = 0x0001
+	TypeASCII     Type = 0x0001
 	TypeBigInt    Type = 0x0002
 	TypeBlob      Type = 0x0003
 	TypeBoolean   Type = 0x0004
@@ -49,7 +49,7 @@ func (t Type) String() string {
 	switch t {
 	case TypeCustom:
 		return "custom"
-	case TypeAscii:
+	case TypeASCII:
 		return "ascii"
 	case TypeBigInt:
 		return "bigint"

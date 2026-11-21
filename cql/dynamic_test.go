@@ -597,7 +597,7 @@ func TestDynamic(t *testing.T) {
 				typ  DataType
 				body string
 			}{
-				{boolean, "02"}, {integer, "0001"}, {dynamicTestType(TypeBigInt), "00"}, {text, "ff"}, {dynamicTestType(TypeAscii), "ff"},
+				{boolean, "02"}, {integer, "0001"}, {dynamicTestType(TypeBigInt), "00"}, {text, "ff"}, {dynamicTestType(TypeASCII), "ff"},
 				{dynamicTestType(TypeTimeUUID), "00112233445566778899aabbccddeeff"}, {dynamicTestType(TypeTime), "ffffffffffffffff"},
 				{dynamicTestType(TypeDecimal), "00000000"}, {dynamicTestType(TypeDuration), "020103"}, {dynamicTestType(TypeDuration), "00000000"},
 				{dynamicTestType(TypeCounter), ""}, {dynamicTestType(TypeDuration), ""}, {list, ""}, {list, "ffffffff"}, {list, "000000020000000400000001"},
@@ -688,7 +688,7 @@ func TestDynamic(t *testing.T) {
 						if e != nil || a != b {
 							t.Fatalf("Float: %f %v", a, e)
 						}
-					case TypeText, TypeAscii:
+					case TypeText, TypeASCII:
 						a, e := got.Text()
 						b, _ := test.value.Text()
 						if e != nil || a.String() != b.String() {
@@ -790,7 +790,7 @@ func TestDynamic(t *testing.T) {
 					t.Fatalf("%s wire empty lost", typ)
 				}
 			}
-			for _, kind := range []Type{TypeCounter, TypeDuration, TypeAscii, TypeText, TypeBlob} {
+			for _, kind := range []Type{TypeCounter, TypeDuration, TypeASCII, TypeText, TypeBlob} {
 				if _, err := EmptyValue(dynamicTestType(kind)); err == nil {
 					t.Fatalf("unsupported Empty for %s accepted", kind)
 				}

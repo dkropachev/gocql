@@ -37,10 +37,11 @@ declared dimension and reject NULL without a nullable wrapper.
 `TimeUUID` is distinct from `UUID`, so struct mappings choose the appropriate
 codec automatically. `NewTimeUUID`, `TimeUUIDFromTime`, `MinTimeUUID`,
 `MaxTimeUUID`, and `TimeUUIDWith` return `TimeUUID`; `RandomUUID` returns a
-version 4 `UUID`. It supports canonical string, JSON and text
-formatting and timestamp extraction. `ParseTimeUUID` and `TimeUUIDFromUUID`
-validate version 1. Convert with `cql.UUID(id)` when storing an identifier in a
-regular UUID column. The zero value can be formatted with `String`, but checked JSON/text
+version 4 `UUID`. Both support canonical string, JSON and text formatting;
+only `TimeUUID` has the version 1 accessors `Time`, `Timestamp`, `Clock` and
+`Node`. `ParseTimeUUID` and `TimeUUIDFromUUID` validate version 1; use
+`TimeUUIDFromUUID` to read the timestamp of a `UUID`, and `cql.UUID(id)` to
+store a `TimeUUID` in a regular UUID column. The zero value can be formatted with `String`, but checked JSON/text
 serialization and CQL binding require version 1; use `Nullable` for NULL.
 
 `ParamsOf`, `RowOf`, and `cql.StreamRowOf` honor codec options for generated and

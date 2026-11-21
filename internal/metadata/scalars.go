@@ -5,6 +5,7 @@ package metadata
 
 import (
 	"maps"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -12,7 +13,7 @@ import (
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeAscii {
+	if t.Kind() == cql.TypeASCII {
 		return cql.ASCIICodec.CheckType(t)
 	}
 	return cql.TextCodec.CheckType(t)
@@ -20,7 +21,7 @@ func (InternalV2MetadataText) CheckType(t cql.DataType) error {
 func (InternalV2MetadataText) Decode(r cql.ValueReader) (string, error) {
 	var text cql.Text
 	var err error
-	if r.Type().Kind() == cql.TypeAscii {
+	if r.Type().Kind() == cql.TypeASCII {
 		text, err = cql.ASCIICodec.Decode(r)
 	} else {
 		text, err = cql.TextCodec.Decode(r)
@@ -62,6 +63,32 @@ func (v2MetadataKind) Decode(r cql.ValueReader) (metadata.ColumnKind, error) {
 	return columnKindFromSchema(v)
 }
 func (v2MetadataKind) Clone(v metadata.ColumnKind) metadata.ColumnKind { return v }
+
+func (v2MetadataClusteringOrder) CheckType(t cql.DataType) error {
+	return (InternalV2MetadataText{}).CheckType(t)
+}
+
+// Decode reads system_schema.columns.clustering_order: "asc" or "desc" for a
+// clustering column and "none" for any other.
+func (v2MetadataClusteringOrder) Decode(r cql.ValueReader) (metadata.ColumnOrder, error) {
+	v, e := (InternalV2MetadataText{}).Decode(r)
+	if e != nil {
+		return metadata.ColumnOrderNone, e
+	}
+	return columnOrderFromSchema(v), nil
+}
+func (v2MetadataClusteringOrder) Clone(v metadata.ColumnOrder) metadata.ColumnOrder { return v }
+
+func columnOrderFromSchema(order string) metadata.ColumnOrder {
+	switch strings.ToLower(order) {
+	case "asc":
+		return metadata.ColumnOrderAsc
+	case "desc":
+		return metadata.ColumnOrderDesc
+	default:
+		return metadata.ColumnOrderNone
+	}
+}
 
 func (v2MetadataStrings) CheckType(t cql.DataType) error {
 	if t.Kind() == cql.TypeSet {

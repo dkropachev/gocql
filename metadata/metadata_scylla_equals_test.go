@@ -20,6 +20,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -37,6 +38,21 @@ func differentValue(v reflect.Value) (reflect.Value, bool) {
 		return reflect.ValueOf(v.Int() + 1).Convert(v.Type()), true
 	case reflect.Float32, reflect.Float64:
 		return reflect.ValueOf(v.Float() + 1).Convert(v.Type()), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return reflect.ValueOf(v.Uint() + 1).Convert(v.Type()), true
+	case reflect.Array:
+		// A copy whose first element differs, such as a UUID's first byte.
+		if v.Len() == 0 {
+			return reflect.Value{}, false
+		}
+		changed := reflect.New(v.Type()).Elem()
+		changed.Set(v)
+		first, ok := differentValue(changed.Index(0))
+		if !ok {
+			return reflect.Value{}, false
+		}
+		changed.Index(0).Set(first)
+		return changed, true
 	case reflect.Map:
 		if v.Type().Key().Kind() != reflect.String {
 			return reflect.Value{}, false
@@ -57,7 +73,7 @@ func differentValue(v reflect.Value) (reflect.Value, bool) {
 		return reflect.Append(v, reflect.New(v.Type().Elem()).Elem()), true
 	case reflect.Struct:
 		// Mutate the first field this helper can handle, so a nested struct is
-		// compared through its own Equals rather than skipped.
+		// compared through its own Equal rather than skipped.
 		changed := reflect.New(v.Type())
 		changed.Elem().Set(v)
 		for i := 0; i < v.NumField(); i++ {
@@ -105,7 +121,7 @@ func assertEveryFieldCompared(t *testing.T, want any, equals func(a, b any) bool
 			target.Set(changed)
 
 			if equals(want, mutated.Interface()) {
-				t.Errorf("Equals() = true after changing %s; the field is not compared", field.Name)
+				t.Errorf("Equal() = true after changing %s; the field is not compared", field.Name)
 			}
 		})
 	}
@@ -119,17 +135,17 @@ func populatedTableMetadataOptions() *metadata.TableOptions {
 		CDC:                     map[string]string{"enabled": "true"},
 		SpeculativeRetry:        "99p",
 		Comment:                 "a table",
-		Version:                 "3",
+		Version:                 cql.UUID{3},
 		Partitioner:             "org.apache.cassandra.dht.Murmur3Partitioner",
-		GcGraceSeconds:          864000,
+		GCGraceSeconds:          864000,
 		MaxIndexInterval:        2048,
-		MemtableFlushPeriodInMs: 1,
+		MemtableFlushPeriodInMS: 1,
 		MinIndexInterval:        128,
 		ReadRepairChance:        0.1,
-		BloomFilterFpChance:     0.01,
+		BloomFilterFPChance:     0.01,
 		DefaultTimeToLive:       60,
-		DcLocalReadRepairChance: 0.2,
-		CrcCheckChance:          0.9,
+		DCLocalReadRepairChance: 0.2,
+		CRCCheckChance:          0.9,
 		InMemory:                true,
 	}
 }
@@ -140,10 +156,9 @@ func populatedColumnMetadata() *metadata.Column {
 		Table:           "tbl",
 		Name:            "col",
 		Type:            "text",
-		ClusteringOrder: "asc",
+		ClusteringOrder: metadata.ColumnOrderAsc,
 		ComponentIndex:  1,
 		Kind:            metadata.ColumnRegular,
-		Order:           metadata.ASC,
 	}
 }
 
