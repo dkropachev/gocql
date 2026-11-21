@@ -161,6 +161,24 @@ func errorFrameCases() []errorFrameCase {
 				ErrorMap: cqlerr.ErrorMap{netip.MustParseAddr("10.0.0.1"): 1, netip.MustParseAddr("2001:db8::1"): 2}}, "rf")),
 		},
 		errorFrameCase{
+			// A 16-byte IPv4-mapped address keys the map as the IPv4
+			// address, as net.IP's String printed it before.
+			name: "ReadFailureV5MappedAddress", proto: ProtoVersion5,
+			body: errBody(ProtoVersion5, cqlerr.CodeReadFailure, "rf", func(f *Framer) {
+				f.WriteConsistency(cql.All)
+				f.WriteInt(1)
+				f.WriteInt(3)
+				f.WriteInt(1)
+				mapped := netip.MustParseAddr("::ffff:10.0.0.4").As16()
+				f.WriteByteValue(16)
+				f.Buf = append(f.Buf, mapped[:]...)
+				f.WriteShort(5)
+				f.WriteByteValue(0)
+			}),
+			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.ReadFailureError{Consistency: cql.All, Received: 1, BlockFor: 3, NumFailures: 1,
+				ErrorMap: cqlerr.ErrorMap{netip.MustParseAddr("10.0.0.4"): 5}}, "rf")),
+		},
+		errorFrameCase{
 			name: "WriteFailureV4", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, cqlerr.CodeWriteFailure, "wf", func(f *Framer) {
 				f.WriteConsistency(cql.Two)

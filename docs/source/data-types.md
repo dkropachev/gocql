@@ -39,9 +39,9 @@ codec automatically. `NewTimeUUID`, `TimeUUIDFromTime`, `MinTimeUUID`,
 `MaxTimeUUID`, and `TimeUUIDWith` return `TimeUUID`; `RandomUUID` returns a
 version 4 `UUID`. Both support canonical string, JSON and text formatting;
 only `TimeUUID` has the version 1 accessors `Time`, `Timestamp`, `Clock` and
-`Node`. `ParseTimeUUID` and `TimeUUIDFromUUID` validate version 1, so convert
-a `UUID` with `TimeUUIDFromUUID` to read its timestamp. Convert with `cql.UUID(id)` when storing an identifier in a
-regular UUID column. The zero value can be formatted with `String`, but checked JSON/text
+`Node`. `ParseTimeUUID` and `TimeUUIDFromUUID` validate version 1; use
+`TimeUUIDFromUUID` to read the timestamp of a `UUID`, and `cql.UUID(id)` to
+store a `TimeUUID` in a regular UUID column. The zero value can be formatted with `String`, but checked JSON/text
 serialization and CQL binding require version 1; use `Nullable` for NULL.
 
 `ParamsOf`, `RowOf`, and `cql.StreamRowOf` honor codec options for generated and

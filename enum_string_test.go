@@ -64,6 +64,7 @@ func TestEnumStrings(t *testing.T) {
 		{metadata.ColumnStatic, "static"},
 		{metadata.ColumnKind(99), "ColumnKind(99)"},
 		{metadata.ColumnOrderNone, "none"},
+		{metadata.ColumnOrderAsc, "asc"},
 		{metadata.ColumnOrderDesc, "desc"},
 		{metadata.ColumnOrder(9), "ColumnOrder(9)"},
 		{cqlerr.WriteTypeUnknown, "unknown"},

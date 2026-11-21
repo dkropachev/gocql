@@ -215,14 +215,15 @@ func (e *UnavailableError) Is(target error) bool { return target == CodeUnavaila
 func (e *UnavailableError) Kind() Kind { return KindUnavailable }
 
 // ErrorMap maps the address of each replica that failed to its failure
-// reason code.
+// reason code. An IPv4 replica is keyed by its 4-byte address, even when the
+// server sent it IPv4-mapped in 16 bytes.
 type ErrorMap map[netip.Addr]uint16
 
 // WriteType is the kind of write that a WriteTimeoutError or
 // WriteFailureError reports. Its values are the protocol's write types; the
 // zero WriteType is WriteTypeUnknown, which the driver reports for a write
-// type it does not name. Later releases may add values, so a switch over
-// them needs a default case.
+// type it does not name; the server's text of such a type is not kept. Later
+// releases may add values, so a switch over them needs a default case.
 type WriteType uint8
 
 // The write types.

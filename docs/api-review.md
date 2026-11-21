@@ -181,8 +181,10 @@ the v1 names.
 5. **Two "no such keyspace" sentinels. Decided: unexported.**
    `TestKeyspaceAbsenceStaysInternal` shows that the refreshes a public call
    runs turn a keyspace the server no longer lists into a dropped keyspace,
-   and the single-keyspace refresh returns it only to the post-DDL refresh
-   and the schema event handler, which both drop it.
+   and the single-keyspace refresh returns it only to internal callers: the
+   post-DDL refresh, which ignores it, the schema event handler, which
+   schedules a retry, and the schema describer lookups, which no public call
+   reaches.
    `cqlerr.ErrKeyspaceDoesNotExist` is now an internal sentinel that wraps
    `cqlerr.ErrNoKeyspace`, so it classifies as that should it ever escape.
 6. **Time methods on `cql.UUID`. Decided: removed.** `Time`, `Timestamp`,
@@ -193,5 +195,6 @@ the v1 names.
    `cql.UUID`. `cqlerr.WriteTimeoutError.WriteType` and
    `WriteFailureError.WriteType` are a `cqlerr.WriteType`, an integer enum
    with the protocol's write types, `WriteTypeUnknown` as its zero value for a
-   type the driver does not name, and a `String` method that returns the
-   server's name. `cqlerr.ErrorMap` is keyed by `netip.Addr`.
+   type the driver does not name (its text is not kept), and a `String`
+   method that returns the server's name. `cqlerr.ErrorMap` is keyed by
+   `netip.Addr`, an IPv4 replica by its 4-byte address.

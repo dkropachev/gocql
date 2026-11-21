@@ -243,7 +243,7 @@ conditional statements in prepared metadata: set
 | --- | --- |
 | `gocql.UUID`, `gocql.ParseUUID` | `cql.UUID`, `cql.ParseUUID` |
 | `gocql.TimeUUID()`, `gocql.UUIDFromTime` | `cql.NewTimeUUID()`, `cql.TimeUUIDFromTime` (type `cql.TimeUUID`) |
-| `UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
+| `gocql.UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
 | `gocql.UnsetValue` | the `Unset` binding state; see [data types](data-types.md) |
@@ -259,8 +259,8 @@ conditional statements in prepared metadata: set
 | `gocql.ErrTimeoutNoResponse`, `ErrNoConnections` | the same names in `cqlerr` |
 | `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
 | `gocql.ErrKeyspaceDoesNotExist` | removed: a schema refresh treats a keyspace the server no longer has as dropped; a missing keyspace is `cqlerr.ErrNoKeyspace` |
-| `RequestErrWriteTimeout.WriteType`, `RequestErrWriteFailure.WriteType` (strings) | `cqlerr.WriteType` constants (`cqlerr.WriteTypeSimple`, `WriteTypeBatchLog`, `WriteTypeCAS`, ...); its `String` returns the server's name |
-| `ErrorMap` keyed by an address string | `cqlerr.ErrorMap` keyed by `netip.Addr` |
+| `RequestErrWriteTimeout.WriteType`, `RequestErrWriteFailure.WriteType` (strings) | `cqlerr.WriteType` constants (`cqlerr.WriteTypeSimple`, `WriteTypeBatchLog`, `WriteTypeCAS`, ...); its `String` returns the server's name; a type the driver does not know is `WriteTypeUnknown` |
+| `ErrorMap` keyed by an address string | `cqlerr.ErrorMap` keyed by `netip.Addr`; an IPv4 replica is keyed by its 4-byte address |
 | `gocql.ErrNoHosts` | `ConfigBuilder.Build` rejects an empty contact point list with a `*cql.ValidationError` |
 
 A failed execution returns a `*cqlerr.ExecutionError` that lists every attempt.

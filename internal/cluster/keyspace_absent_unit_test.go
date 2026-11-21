@@ -13,9 +13,12 @@ import (
 
 // A keyspace that system_schema no longer lists is schema-refresh control
 // flow, not an error a caller sees, which is why the driver has no public
-// sentinel for it. The refreshes a public call runs turn it into a dropped
-// keyspace. Only RefreshV2Keyspace returns it, to the post-DDL refresh in
-// internal/session and to the schema event handler, which both drop it.
+// sentinel for it. The full refresh, which Session.RefreshMetadata runs, turns
+// it into a dropped keyspace. RefreshV2Keyspace returns it to the post-DDL
+// refresh in internal/session, which ignores it, to the schema event handler,
+// which only schedules a retry, and to the schema describer's GetKeyspace and
+// GetTable, which only tests and an unused CDC helper call. Prepared
+// reconciliation reads the keyspace itself and treats the sentinel as a drop.
 func TestKeyspaceAbsenceStaysInternal(t *testing.T) {
 	t.Parallel()
 
