@@ -41,13 +41,13 @@ func TestServerErrorExecutionStatus(t *testing.T) {
 		{"cas write unknown", &CASWriteUnknownError{Received: 1}, MaybeExecuted},
 		{"cdc write failure", &CDCWriteFailureError{}, MaybeExecuted},
 		{"unknown", NewOtherServerError(0x7777, "m"), MaybeExecuted},
-		{"write timeout no acks", &WriteTimeoutError{WriteType: "SIMPLE"}, MaybeExecuted},
-		{"write timeout simple acked", &WriteTimeoutError{WriteType: "SIMPLE", Received: 1}, PartiallyExecuted},
-		{"write timeout counter acked", &WriteTimeoutError{WriteType: "COUNTER", Received: 1}, PartiallyExecuted},
-		{"write timeout batch log", &WriteTimeoutError{WriteType: "BATCH_LOG", Received: 1}, MaybeExecuted},
-		{"write timeout cas", &WriteTimeoutError{WriteType: "CAS", Received: 1}, MaybeExecuted},
-		{"write failure batch acked", &WriteFailureError{WriteType: "BATCH", Received: 2}, PartiallyExecuted},
-		{"write failure no acks", &WriteFailureError{WriteType: "BATCH"}, MaybeExecuted},
+		{"write timeout no acks", &WriteTimeoutError{WriteType: WriteTypeSimple}, MaybeExecuted},
+		{"write timeout simple acked", &WriteTimeoutError{WriteType: WriteTypeSimple, Received: 1}, PartiallyExecuted},
+		{"write timeout counter acked", &WriteTimeoutError{WriteType: WriteTypeCounter, Received: 1}, PartiallyExecuted},
+		{"write timeout batch log", &WriteTimeoutError{WriteType: WriteTypeBatchLog, Received: 1}, MaybeExecuted},
+		{"write timeout cas", &WriteTimeoutError{WriteType: WriteTypeCAS, Received: 1}, MaybeExecuted},
+		{"write failure batch acked", &WriteFailureError{WriteType: WriteTypeBatch, Received: 2}, PartiallyExecuted},
+		{"write failure no acks", &WriteFailureError{WriteType: WriteTypeBatch}, MaybeExecuted},
 	} {
 		if got := serverErrorExecutionStatus(test.err); got != test.want {
 			t.Errorf("%s: got %v want %v", test.name, got, test.want)
@@ -67,7 +67,7 @@ func TestExecutionStatus(t *testing.T) {
 
 	t.Run("QueryError", func(t *testing.T) {
 		syntax := NewOtherServerError(CodeSyntax, "bad")
-		acked := &WriteTimeoutError{WriteType: "SIMPLE", Received: 1}
+		acked := &WriteTimeoutError{WriteType: WriteTypeSimple, Received: 1}
 		for _, test := range []struct {
 			name    string
 			state   queryErrorState

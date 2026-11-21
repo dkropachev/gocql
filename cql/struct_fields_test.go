@@ -52,7 +52,7 @@ func structFixtureColumns(t testing.TB) Columns {
 		spec("big_value", TypeBigInt),
 		spec("float", TypeFloat),
 		spec("double", TypeDouble),
-		spec("ascii", TypeAscii),
+		spec("ascii", TypeASCII),
 		spec("blob", TypeBlob),
 		spec("timeid", TypeTimeUUID),
 		spec("addr", TypeInet),

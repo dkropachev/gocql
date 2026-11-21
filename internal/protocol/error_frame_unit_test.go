@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"net"
+	"net/netip"
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -107,7 +108,7 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteInt(2)
 				f.WriteString("BATCH_LOG")
 			}),
-			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.WriteTimeoutError{Consistency: cql.Quorum, Received: 1, BlockFor: 2, WriteType: "BATCH_LOG"}, "wt")),
+			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.WriteTimeoutError{Consistency: cql.Quorum, Received: 1, BlockFor: 2, WriteType: cqlerr.WriteTypeBatchLog}, "wt")),
 		},
 		errorFrameCase{
 			name: "ReadTimeout", proto: ProtoVersion4,
@@ -157,7 +158,7 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteByteValue(1)
 			}),
 			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.ReadFailureError{Consistency: cql.All, Received: 1, BlockFor: 3, NumFailures: 2, DataPresent: true,
-				ErrorMap: cqlerr.ErrorMap{"10.0.0.1": 1, "2001:db8::1": 2}}, "rf")),
+				ErrorMap: cqlerr.ErrorMap{netip.MustParseAddr("10.0.0.1"): 1, netip.MustParseAddr("2001:db8::1"): 2}}, "rf")),
 		},
 		errorFrameCase{
 			name: "WriteFailureV4", proto: ProtoVersion4,
@@ -168,7 +169,7 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteInt(1)
 				f.WriteString("SIMPLE")
 			}),
-			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE"}, "wf")),
+			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: cqlerr.WriteTypeSimple}, "wf")),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5", proto: ProtoVersion5,
@@ -179,8 +180,8 @@ func errorFrameCases() []errorFrameCase {
 				writeErrMap(f, errMapEntry{"10.0.0.2", 3})
 				f.WriteString("SIMPLE")
 			}),
-			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: "SIMPLE",
-				ErrorMap: cqlerr.ErrorMap{"10.0.0.2": 3}}, "wf")),
+			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, Received: 0, BlockFor: 2, NumFailures: 1, WriteType: cqlerr.WriteTypeSimple,
+				ErrorMap: cqlerr.ErrorMap{netip.MustParseAddr("10.0.0.2"): 3}}, "wf")),
 		},
 		errorFrameCase{
 			name: "WriteFailureV5EmptyMap", proto: ProtoVersion5,
@@ -191,7 +192,7 @@ func errorFrameCases() []errorFrameCase {
 				writeErrMap(f)
 				f.WriteString("SIMPLE")
 			}),
-			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, BlockFor: 2, WriteType: "SIMPLE", ErrorMap: cqlerr.ErrorMap{}}, "wf")),
+			want: response(ProtoVersion5, runtimeerrors.WithMessage(&cqlerr.WriteFailureError{Consistency: cql.Two, BlockFor: 2, WriteType: cqlerr.WriteTypeSimple, ErrorMap: cqlerr.ErrorMap{}}, "wf")),
 		},
 		errorFrameCase{
 			name: "FunctionFailure", proto: ProtoVersion4,

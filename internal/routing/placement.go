@@ -252,10 +252,10 @@ func InternalMetadataSnapshotTableIdentity(m *MetadataSnapshot, k InternalMetada
 		return ""
 	}
 	if t := ks.Tables[k.InternalTable]; t != nil {
-		return t.ID
+		return t.ID.String()
 	}
 	if v := ks.Views[k.InternalTable]; v != nil {
-		return v.ID
+		return v.ID.String()
 	}
 	return ""
 }
@@ -505,7 +505,7 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPla
 			if previousKS.StrategyClass != currentKS.StrategyClass || !maps.Equal(previousKS.StrategyOptions, currentKS.StrategyOptions) || previousKS.ConsistencyMode != currentKS.ConsistencyMode {
 				ranges = nil
 			}
-			if a, b := previousKS.Tables[k.InternalTable], currentKS.Tables[k.InternalTable]; a != nil && b != nil && !a.Equals(b) {
+			if a, b := previousKS.Tables[k.InternalTable], currentKS.Tables[k.InternalTable]; a != nil && b != nil && !a.Equal(b) {
 				ranges = nil
 			}
 		}

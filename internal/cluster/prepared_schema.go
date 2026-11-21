@@ -78,7 +78,7 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 			tables[n] = true
 		}
 		for name := range tables {
-			if !a.Tables[name].Equals(b.Tables[name]) {
+			if !a.Tables[name].Equal(b.Tables[name]) {
 				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, Target: "TABLE"})
 			}
 		}

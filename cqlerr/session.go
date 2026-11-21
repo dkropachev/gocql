@@ -42,6 +42,4 @@ var (
 	// ErrNoTable reports a missing table: an empty table name, or one the
 	// loaded metadata does not have.
 	ErrNoTable = errors.New("gocql: no table name provided")
-	// ErrKeyspaceDoesNotExist reports that the server has no such keyspace.
-	ErrKeyspaceDoesNotExist = errors.New("gocql: keyspace does not exist")
 )

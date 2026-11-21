@@ -36,7 +36,7 @@ func directColumns(t testing.TB) Columns {
 		ColumnSpec{Name: "view", Type: typ(TypeBlob)},
 		ColumnSpec{Name: "owned", Type: typ(TypeBlob)},
 		ColumnSpec{Name: "text", Type: typ(TypeText)},
-		ColumnSpec{Name: "ascii", Type: typ(TypeAscii)},
+		ColumnSpec{Name: "ascii", Type: typ(TypeASCII)},
 		ColumnSpec{Name: "blob", Type: typ(TypeBlob)},
 		ColumnSpec{Name: "skipped", Type: typ(TypeInt)},
 	)

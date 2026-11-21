@@ -289,10 +289,10 @@ func schemaSourceIdentity(source *map[string]*metadata.Keyspace, keyspace, table
 		return "", false
 	}
 	if t := ks.Tables[table]; t != nil {
-		return t.ID, true
+		return t.ID.String(), true
 	}
 	if v := ks.Views[table]; v != nil {
-		return v.ID, true
+		return v.ID.String(), true
 	}
 	return "", false
 }

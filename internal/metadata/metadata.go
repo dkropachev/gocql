@@ -279,6 +279,8 @@ type InternalV2MetadataInt struct{}
 
 type v2MetadataKind struct{}
 
+type v2MetadataClusteringOrder struct{}
+
 type v2MetadataStrings struct{}
 
 type v2MetadataStringMap struct{}
@@ -337,20 +339,20 @@ func InternalV2SchemaContext(s Source) context.Context {
 
 func v2DecodeTableMetadata(keyspace string) cql.RowDecoder[metadata.Table] {
 	return InternalV2SchemaRows[metadata.Table]{initialize: func() *metadata.Table { return &metadata.Table{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.Table]{
-		InternalV2RequiredSchemaColumn("id", InternalV2MetadataUUIDString{}, func(r *metadata.Table) *string { return &r.ID }),
+		InternalV2RequiredSchemaColumn("id", cql.UUIDCodec, func(r *metadata.Table) *cql.UUID { return &r.ID }),
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *metadata.Table) *string { return &r.Name }),
 		InternalV2SchemaColumn("flags", v2MetadataStrings{}, func(r *metadata.Table) *[]string { return &r.Flags }),
 		InternalV2SchemaColumn("extensions", v2MetadataExtensions{}, func(r *metadata.Table) *map[string][]byte { return &r.Extensions }),
-		InternalV2SchemaColumn("bloom_filter_fp_chance", cql.Float64Codec, func(r *metadata.Table) *float64 { return &r.Options.BloomFilterFpChance }),
+		InternalV2SchemaColumn("bloom_filter_fp_chance", cql.Float64Codec, func(r *metadata.Table) *float64 { return &r.Options.BloomFilterFPChance }),
 		InternalV2SchemaColumn("caching", v2MetadataStringMap{}, func(r *metadata.Table) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *metadata.Table) *string { return &r.Options.Comment }),
 		InternalV2SchemaColumn("compaction", v2MetadataStringMap{}, func(r *metadata.Table) *map[string]string { return &r.Options.Compaction }),
 		InternalV2SchemaColumn("compression", v2MetadataStringMap{}, func(r *metadata.Table) *map[string]string { return &r.Options.Compression }),
-		InternalV2SchemaColumn("crc_check_chance", cql.Float64Codec, func(r *metadata.Table) *float64 { return &r.Options.CrcCheckChance }),
+		InternalV2SchemaColumn("crc_check_chance", cql.Float64Codec, func(r *metadata.Table) *float64 { return &r.Options.CRCCheckChance }),
 		InternalV2SchemaColumn("default_time_to_live", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.DefaultTimeToLive }),
-		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.GcGraceSeconds }),
+		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.GCGraceSeconds }),
 		InternalV2SchemaColumn("max_index_interval", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.MaxIndexInterval }),
-		InternalV2SchemaColumn("memtable_flush_period_in_ms", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.MemtableFlushPeriodInMs }),
+		InternalV2SchemaColumn("memtable_flush_period_in_ms", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.MemtableFlushPeriodInMS }),
 		InternalV2SchemaColumn("min_index_interval", InternalV2MetadataInt{}, func(r *metadata.Table) *int { return &r.Options.MinIndexInterval }),
 		InternalV2SchemaColumn("speculative_retry", InternalV2MetadataText{}, func(r *metadata.Table) *string { return &r.Options.SpeculativeRetry }),
 	}}
@@ -360,7 +362,7 @@ func v2DecodeColumnMetadata(keyspace string) cql.RowDecoder[metadata.Column] {
 	return InternalV2SchemaRows[metadata.Column]{initialize: func() *metadata.Column { return &metadata.Column{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.Column]{
 		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *metadata.Column) *string { return &r.Table }),
 		InternalV2RequiredSchemaColumn("column_name", InternalV2MetadataText{}, func(r *metadata.Column) *string { return &r.Name }),
-		InternalV2SchemaColumn("clustering_order", InternalV2MetadataText{}, func(r *metadata.Column) *string { return &r.ClusteringOrder }),
+		InternalV2SchemaColumn("clustering_order", v2MetadataClusteringOrder{}, func(r *metadata.Column) *metadata.ColumnOrder { return &r.ClusteringOrder }),
 		InternalV2RequiredSchemaColumn("type", InternalV2MetadataText{}, func(r *metadata.Column) *string { return &r.Type }),
 		InternalV2RequiredSchemaColumn("kind", v2MetadataKind{}, func(r *metadata.Column) *metadata.ColumnKind { return &r.Kind }),
 		InternalV2RequiredSchemaColumn("position", InternalV2MetadataInt{}, func(r *metadata.Column) *int { return &r.ComponentIndex }),
@@ -400,36 +402,36 @@ func InternalV2DecodeAggregateMetadata(keyspace string) cql.RowDecoder[metadata.
 }
 
 func v2DecodeIndexMetadata(keyspace string) cql.RowDecoder[metadata.Index] {
-	return InternalV2SchemaRows[metadata.Index]{initialize: func() *metadata.Index { return &metadata.Index{KeyspaceName: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.Index]{
+	return InternalV2SchemaRows[metadata.Index]{initialize: func() *metadata.Index { return &metadata.Index{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.Index]{
 		InternalV2RequiredSchemaColumn("index_name", InternalV2MetadataText{}, func(r *metadata.Index) *string { return &r.Name }),
-		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *metadata.Index) *string { return &r.KeyspaceName }),
-		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *metadata.Index) *string { return &r.TableName }),
+		InternalV2RequiredSchemaColumn("keyspace_name", InternalV2MetadataText{}, func(r *metadata.Index) *string { return &r.Keyspace }),
+		InternalV2RequiredSchemaColumn("table_name", InternalV2MetadataText{}, func(r *metadata.Index) *string { return &r.Table }),
 		InternalV2RequiredSchemaColumn("kind", InternalV2MetadataText{}, func(r *metadata.Index) *string { return (*string)(&r.Kind) }),
 		InternalV2RequiredSchemaColumn("options", v2MetadataStringMap{}, func(r *metadata.Index) *map[string]string { return &r.Options }),
 	}}
 }
 
 func v2DecodeViewMetadata(keyspace string) cql.RowDecoder[metadata.View] {
-	return InternalV2SchemaRows[metadata.View]{initialize: func() *metadata.View { return &metadata.View{KeyspaceName: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.View]{
-		InternalV2RequiredSchemaColumn("id", InternalV2MetadataUUIDString{}, func(r *metadata.View) *string { return &r.ID }),
-		InternalV2RequiredSchemaColumn("view_name", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.ViewName }),
-		InternalV2RequiredSchemaColumn("base_table_id", InternalV2MetadataUUIDString{}, func(r *metadata.View) *string { return &r.BaseTableID }),
-		InternalV2RequiredSchemaColumn("base_table_name", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.BaseTableName }),
+	return InternalV2SchemaRows[metadata.View]{initialize: func() *metadata.View { return &metadata.View{Keyspace: keyspace} }, InternalFields: []InternalV2SchemaField[metadata.View]{
+		InternalV2RequiredSchemaColumn("id", cql.UUIDCodec, func(r *metadata.View) *cql.UUID { return &r.ID }),
+		InternalV2RequiredSchemaColumn("view_name", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.Name }),
+		InternalV2RequiredSchemaColumn("base_table_id", cql.UUIDCodec, func(r *metadata.View) *cql.UUID { return &r.BaseTableID }),
+		InternalV2RequiredSchemaColumn("base_table_name", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.BaseTable }),
 		InternalV2RequiredSchemaColumn("include_all_columns", cql.BoolCodec, func(r *metadata.View) *bool { return &r.IncludeAllColumns }),
 		InternalV2RequiredSchemaColumn("where_clause", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.WhereClause }),
 		InternalV2SchemaColumn("extensions", v2MetadataExtensions{}, func(r *metadata.View) *map[string][]byte { return &r.Extensions }),
-		InternalV2SchemaColumn("dclocal_read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.DcLocalReadRepairChance }),
+		InternalV2SchemaColumn("dclocal_read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.DCLocalReadRepairChance }),
 		InternalV2SchemaColumn("read_repair_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.ReadRepairChance }),
-		InternalV2SchemaColumn("bloom_filter_fp_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.BloomFilterFpChance }),
+		InternalV2SchemaColumn("bloom_filter_fp_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.BloomFilterFPChance }),
 		InternalV2SchemaColumn("caching", v2MetadataStringMap{}, func(r *metadata.View) *map[string]string { return &r.Options.Caching }),
 		InternalV2SchemaColumn("comment", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.Options.Comment }),
 		InternalV2SchemaColumn("compaction", v2MetadataStringMap{}, func(r *metadata.View) *map[string]string { return &r.Options.Compaction }),
 		InternalV2SchemaColumn("compression", v2MetadataStringMap{}, func(r *metadata.View) *map[string]string { return &r.Options.Compression }),
-		InternalV2SchemaColumn("crc_check_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.CrcCheckChance }),
+		InternalV2SchemaColumn("crc_check_chance", cql.Float64Codec, func(r *metadata.View) *float64 { return &r.Options.CRCCheckChance }),
 		InternalV2SchemaColumn("default_time_to_live", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.DefaultTimeToLive }),
-		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.GcGraceSeconds }),
+		InternalV2SchemaColumn("gc_grace_seconds", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.GCGraceSeconds }),
 		InternalV2SchemaColumn("max_index_interval", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.MaxIndexInterval }),
-		InternalV2SchemaColumn("memtable_flush_period_in_ms", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.MemtableFlushPeriodInMs }),
+		InternalV2SchemaColumn("memtable_flush_period_in_ms", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.MemtableFlushPeriodInMS }),
 		InternalV2SchemaColumn("min_index_interval", InternalV2MetadataInt{}, func(r *metadata.View) *int { return &r.Options.MinIndexInterval }),
 		InternalV2SchemaColumn("speculative_retry", InternalV2MetadataText{}, func(r *metadata.View) *string { return &r.Options.SpeculativeRetry }),
 	}}
@@ -445,7 +447,7 @@ func v2DecodeScyllaTable() cql.RowDecoder[v2ScyllaTableRow] {
 		InternalV2SchemaColumn("cdc", v2MetadataStringMap{}, func(r *v2ScyllaTableRow) *map[string]string { return &r.Options.CDC }),
 		InternalV2SchemaColumn("in_memory", cql.BoolCodec, func(r *v2ScyllaTableRow) *bool { return &r.Options.InMemory }),
 		InternalV2SchemaColumn("partitioner", InternalV2MetadataText{}, func(r *v2ScyllaTableRow) *string { return &r.Options.Partitioner }),
-		InternalV2SchemaColumn("version", InternalV2MetadataUUIDString{}, func(r *v2ScyllaTableRow) *string { return &r.Options.Version }),
+		InternalV2SchemaColumn("version", cql.UUIDCodec, func(r *v2ScyllaTableRow) *cql.UUID { return &r.Options.Version }),
 	}}
 }
 
@@ -473,7 +475,7 @@ func InternalGetV2KeyspaceMetadata(ctx context.Context, s Source, name string) (
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, cqlerr.ErrKeyspaceDoesNotExist
+		return nil, InternalErrKeyspaceDoesNotExist
 	}
 	if len(rows) != 1 {
 		return nil, cqltype.TypeValidation("keyspace schema", "duplicate identity %q", name)
@@ -631,11 +633,11 @@ func InternalValidateV2SchemaParts(ks *metadata.Keyspace, tables []metadata.Tabl
 	}
 	names = nil
 	for _, v := range views {
-		names = append(names, v.ViewName)
-		if knownTables[v.ViewName] {
-			return cqltype.TypeValidation("schema", "table/view identity collision %q", v.ViewName)
+		names = append(names, v.Name)
+		if knownTables[v.Name] {
+			return cqltype.TypeValidation("schema", "table/view identity collision %q", v.Name)
 		}
-		knownTables[v.ViewName] = true
+		knownTables[v.Name] = true
 	}
 	if err := unique("view", names); err != nil {
 		return err

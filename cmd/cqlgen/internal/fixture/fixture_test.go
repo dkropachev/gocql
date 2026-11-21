@@ -48,7 +48,7 @@ func columns(t *testing.T) cql.Columns {
 		spec("id", cql.TypeUUID), spec("text", cql.TypeText), spec("bool", cql.TypeBoolean),
 		spec("tiny", cql.TypeTinyInt), spec("small", cql.TypeSmallInt), spec("int", cql.TypeInt),
 		spec("big_value", cql.TypeBigInt), spec("float", cql.TypeFloat), spec("double", cql.TypeDouble),
-		spec("ascii", cql.TypeAscii), spec("blob", cql.TypeBlob), spec("bytes", cql.TypeBlob),
+		spec("ascii", cql.TypeASCII), spec("blob", cql.TypeBlob), spec("bytes", cql.TypeBlob),
 		spec("timeid", cql.TypeTimeUUID), spec("addr", cql.TypeInet), spec("hits", cql.TypeCounter),
 		spec("varint", cql.TypeVarint), spec("decimal", cql.TypeDecimal), spec("day", cql.TypeDate),
 		spec("clock", cql.TypeTime), spec("at", cql.TypeTimestamp), spec("span", cql.TypeDuration),

@@ -178,7 +178,7 @@ func TestSchemaMetadata(t *testing.T) {
 
 				for i := range concurrency {
 					if errs[i] == nil {
-						t.Errorf("goroutine %d: expected ErrKeyspaceDoesNotExist, got nil", i)
+						t.Errorf("goroutine %d: expected an error, got nil", i)
 					}
 				}
 			})
@@ -1274,7 +1274,7 @@ func TestSchemaMetadata(t *testing.T) {
 		ctrl.setQueryError(errors.New("schema unavailable"))
 
 		_, err := getKeyspaceMetadata(s, "ks1")
-		if err == nil || errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) || !strings.Contains(err.Error(), "schema unavailable") {
+		if err == nil || errors.Is(err, implMetadata.InternalErrKeyspaceDoesNotExist) || !strings.Contains(err.Error(), "schema unavailable") {
 			t.Fatalf("getKeyspaceMetadata error = %v, want the query error", err)
 		}
 	})

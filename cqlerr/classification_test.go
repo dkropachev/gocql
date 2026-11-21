@@ -24,7 +24,6 @@ var sentinels = map[string]struct {
 	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use One, Each, All or Run, or RunBatch for a batch"},
 	"ErrConnectionClosed":             {ErrConnectionClosed, "gocql: connection closed waiting for response"},
 	"ErrFrameTooBig":                  {ErrFrameTooBig, "frame length is bigger than the maximum allowed"},
-	"ErrKeyspaceDoesNotExist":         {ErrKeyspaceDoesNotExist, "gocql: keyspace does not exist"},
 	"ErrNoConnections":                {ErrNoConnections, "gocql: no hosts available in the pool"},
 	"ErrNoConnectionsStarted":         {ErrNoConnectionsStarted, "gocql: no connections were made when creating the session"},
 	"ErrNoControl":                    {ErrNoControl, "gocql: no control connection available"},
@@ -63,8 +62,8 @@ func errorTypes() map[string]error {
 		"UnavailableError":        &UnavailableError{Required: 2, Alive: 1},
 		"UnpreparedError":         &UnpreparedError{StatementID: []byte{1}},
 		"UnsupportedSettingError": &UnsupportedSettingError{Setting: "s", Reason: "r"},
-		"WriteFailureError":       &WriteFailureError{WriteType: "SIMPLE"},
-		"WriteTimeoutError":       &WriteTimeoutError{WriteType: "SIMPLE"},
+		"WriteFailureError":       &WriteFailureError{WriteType: WriteTypeSimple},
+		"WriteTimeoutError":       &WriteTimeoutError{WriteType: WriteTypeSimple},
 	}
 }
 
@@ -140,6 +139,24 @@ func TestErrorTypesClassified(t *testing.T) {
 			if _, ok := err.(kinded); !ok {
 				t.Errorf("%s has no Kind method", name)
 			}
+		}
+	}
+}
+
+// TestParseWriteType checks that every write type the protocol names decodes
+// to the WriteType whose String is that name, and that any other name decodes
+// to WriteTypeUnknown.
+func TestParseWriteType(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"SIMPLE", "BATCH", "UNLOGGED_BATCH", "COUNTER", "BATCH_LOG", "CAS", "VIEW", "CDC"} {
+		w := parseWriteType(name)
+		if w == WriteTypeUnknown || w.String() != name {
+			t.Errorf("parseWriteType(%q) = %v", name, w)
+		}
+	}
+	for _, name := range []string{"", "unknown", "simple", "NEW_KIND"} {
+		if w := parseWriteType(name); w != WriteTypeUnknown {
+			t.Errorf("parseWriteType(%q) = %v, want WriteTypeUnknown", name, w)
 		}
 	}
 }

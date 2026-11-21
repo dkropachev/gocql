@@ -215,7 +215,7 @@ var (
 	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: TypeText}
 
 	// StreamASCII is StreamText for the ascii type.
-	StreamASCII StreamDecoder[[]byte] = streamBytesCodec{kind: TypeAscii}
+	StreamASCII StreamDecoder[[]byte] = streamBytesCodec{kind: TypeASCII}
 
 	// StreamBlob decodes blob into a []byte, within the destination's capacity
 	// as for StreamText.
@@ -266,8 +266,8 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 		return err
 	}
 	*dst = (*dst)[:int(n)]
-	validator := newTextValidation(p.typ.Kind() == TypeAscii)
-	text := p.typ.Kind() == TypeText || p.typ.Kind() == TypeVarchar || p.typ.Kind() == TypeAscii
+	validator := newTextValidation(p.typ.Kind() == TypeASCII)
+	text := p.typ.Kind() == TypeText || p.typ.Kind() == TypeVarchar || p.typ.Kind() == TypeASCII
 	b := *dst
 	for len(b) > 0 {
 		n, err := r.Read(b)

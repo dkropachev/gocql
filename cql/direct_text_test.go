@@ -28,7 +28,7 @@ func textColumns(t testing.TB, other Type) Columns {
 	return NewColumns(
 		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
 		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
-		ColumnSpec{Name: "code", Type: rowTestType(t, TypeAscii)},
+		ColumnSpec{Name: "code", Type: rowTestType(t, TypeASCII)},
 		ColumnSpec{Name: "other", Type: rowTestType(t, other)},
 	)
 }

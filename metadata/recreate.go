@@ -377,14 +377,14 @@ var viewTemplate = template.Must(template.New("views").
 		"tablePropertiesToCQL": cqlHelpers.tablePropertiesToCQL,
 	}).
 	Parse(`
-CREATE MATERIALIZED VIEW {{ ident .vm.KeyspaceName }}.{{ ident .vm.ViewName }} AS
+CREATE MATERIALIZED VIEW {{ ident .vm.Keyspace }}.{{ ident .vm.Name }} AS
     SELECT {{ if .vm.IncludeAllColumns }}*{{ else }}
     {{- range $i, $col := .vm.OrderedColumns }}
     {{- if ne $i 0 }}, {{ end }}
     {{ ident $col }}
     {{- end }}
     {{- end }}
-    FROM {{ ident .vm.KeyspaceName }}.{{ ident .vm.BaseTableName }}
+    FROM {{ ident .vm.Keyspace }}.{{ ident .vm.BaseTable }}
     WHERE {{ .vm.WhereClause }}
     PRIMARY KEY ({{ partitionKeyString .vm.PartitionKey .vm.ClusteringColumns }})
     WITH {{ tablePropertiesToCQL .vm.ClusteringColumns .vm.Options .vm.Extensions }};
@@ -481,8 +481,8 @@ func keyspaceMetadataIndexToCQL(ks *Keyspace, w io.Writer, im *Index) error {
 
 	_, err := fmt.Fprintf(w, "\nCREATE INDEX %s ON %s.%s (%s);\n",
 		indexName,
-		cqlHelpers.ident(im.KeyspaceName),
-		cqlHelpers.ident(im.TableName),
+		cqlHelpers.ident(im.Keyspace),
+		cqlHelpers.ident(im.Table),
 		indexTarget,
 	)
 	if err != nil {
@@ -737,13 +737,13 @@ func (h toCQLHelpers) encryptionOptionsToCQL(e *scyllaEncryptionOptions) string 
 // comment = "y` leave here as three properties instead of one.
 func (h toCQLHelpers) tableOptionsToCQL(ops TableOptions) []string {
 	opts := map[string]string{
-		"bloom_filter_fp_chance":      fmt.Sprint(ops.BloomFilterFpChance),
+		"bloom_filter_fp_chance":      fmt.Sprint(ops.BloomFilterFPChance),
 		"comment":                     h.escapeString(ops.Comment),
-		"crc_check_chance":            fmt.Sprint(ops.CrcCheckChance),
+		"crc_check_chance":            fmt.Sprint(ops.CRCCheckChance),
 		"default_time_to_live":        fmt.Sprint(ops.DefaultTimeToLive),
-		"gc_grace_seconds":            fmt.Sprint(ops.GcGraceSeconds),
+		"gc_grace_seconds":            fmt.Sprint(ops.GCGraceSeconds),
 		"max_index_interval":          fmt.Sprint(ops.MaxIndexInterval),
-		"memtable_flush_period_in_ms": fmt.Sprint(ops.MemtableFlushPeriodInMs),
+		"memtable_flush_period_in_ms": fmt.Sprint(ops.MemtableFlushPeriodInMS),
 		"min_index_interval":          fmt.Sprint(ops.MinIndexInterval),
 		"speculative_retry":           h.escapeString(ops.SpeculativeRetry),
 		"caching":                     h.cqlMapLiteral(ops.Caching),
@@ -800,7 +800,11 @@ func (h toCQLHelpers) tablePropertiesToCQL(cks []*Column, opts TableOptions,
 	if len(cks) > 0 {
 		var inner []string
 		for _, col := range cks {
-			inner = append(inner, fmt.Sprintf("%s %s", h.ident(col.Name), col.ClusteringOrder))
+			order := "ASC"
+			if col.ClusteringOrder == ColumnOrderDesc {
+				order = "DESC"
+			}
+			inner = append(inner, fmt.Sprintf("%s %s", h.ident(col.Name), order))
 		}
 		properties = append(properties, fmt.Sprintf("CLUSTERING ORDER BY (%s)", strings.Join(inner, ", ")))
 	}
