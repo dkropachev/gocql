@@ -29,11 +29,14 @@ v2.1; it can only be removed in v3.
 | `cqlerr.ErrNoHosts` | Never returned: `ConfigBuilder.Build` rejects an empty contact point list with a `*cql.ValidationError` before a session sees it. |
 | `cqlerr.ErrSessionNotReady` | Never returned: `Connect` returns a session only once it is ready. |
 | `cqlerr.ErrSessionClosed` | A second "closed" sentinel. A closed session reports `cqlerr.ErrClosed`. |
+| `cqlerr.ErrKeyspaceDoesNotExist` | Never returned by a public call (`TestKeyspaceAbsenceStaysInternal`): the schema refresh treats a keyspace the server no longer lists as dropped. It is an internal sentinel now, which wraps `ErrNoKeyspace`. Decision 5. |
+| `cql.UUID.Time`, `Timestamp`, `Clock`, `Node` | Mean something only for a version 1 UUID; `cql.TimeUUID` keeps them. Decision 6. |
 | `cqlerr.ErrNotFound` | Never returned: only an internal schema lookup that no public call reaches produced it. A missing keyspace or table is `ErrNoKeyspace` or `ErrNoTable`; a missing row is `found == false`. |
 | `cqlerr.ExecutionStatus.Worse` | Engine plumbing for merging attempt logs. Users read the merged status from `ExecutionStatusOf` or `ExecutionError.ExecutionStatus`. The severity order stays documented on `ExecutionStatus`. |
 | `endpoint.IdentityTranslator` | The same as setting no translator. |
 | `metadata.Column.Index`, `metadata.ColumnIndex` | Described the pre-3.0 `system.schema_columns` index columns. The driver reads only `system_schema`, so they were always empty. Indexes are in `metadata.Keyspace.Indexes`. |
-| `metadata.View.ReadRepairChance`, `DcLocalReadRepairChance` | Duplicated `View.Options`. The driver fills `View.Options.ReadRepairChance` and `DcLocalReadRepairChance`, as for a table. |
+| `metadata.View.ReadRepairChance`, `DcLocalReadRepairChance` | Duplicated `View.Options`. The driver fills `View.Options.ReadRepairChance` and `DCLocalReadRepairChance`, as for a table. |
+| `metadata.Column.Order`, `metadata.ASC`, `metadata.DESC` | Duplicated `Column.ClusteringOrder`. Decision 4. |
 
 ## `gocql`
 
@@ -75,7 +78,7 @@ v2.1; it can only be removed in v3.
 | `Bytes`, `Text`, `BorrowBytes`, `BorrowText`, `EncodeValueBorrowed`, `ErrReleased` | Keep. The zero-copy path is a v2 feature. |
 | Dynamic values (`Value`, `*Value` constructors, `ValueEntry`, `ValueField`, `ValueIterator`, `DynamicRow`, `DynamicRows`, `DynamicCodec`, `DynamicParams`, `NamedDynamicParams`, `EncodedValue`, `NewEncodedValue`, `EncodeValue`, `DecodeValue`, `CellState` and its values) | Keep. |
 | `DataType` and its methods, `Type` and `Type*` values, `*Type` variables and constructors, `ScalarType`, `ColumnSpec`, `Columns`, `NewColumns`, `UDTOptions`, `UDTOptionsFor` | Keep. `DataType.FrozenKnown` stays: result metadata carries no frozen flag, so a caller needs to tell "not frozen" from "unknown". |
-| Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers, the `Variant*` constants that `Variant` returns | Keep. See the open decision on `UUID`'s time methods. |
+| Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers, the `Variant*` constants that `Variant` returns | Keep, less `UUID`'s time methods (decision 6). `TypeAscii` is `TypeASCII` (decision 3). |
 | `Result`, `CQLTraceRef`, `PayloadEntry`, `PageState`, `PageStateFromToken`, `StartPage`, `Unpaged` | Keep. |
 | `ValidationError`, `CodecError`, `ProtocolError`, `StreamCapabilityError`, `StreamCapacityError` | Keep. |
 
@@ -83,12 +86,11 @@ v2.1; it can only be removed in v3.
 
 | Symbols | Decision |
 |---|---|
-| `ServerError` (sealed), the server error types, `NewOtherServerError`, `ErrorCode` and the `Code*` values, `ErrorMap`, `OpType` and its values | Keep. `NewOtherServerError` exists because `OtherServerError` keeps its code unexported; a `retry.Policy` test needs it. |
+| `ServerError` (sealed), the server error types, `NewOtherServerError`, `ErrorCode` and the `Code*` values, `ErrorMap`, `OpType` and `WriteType` with their values | Keep. `ErrorMap` and `WriteType` are typed (decision 7). `NewOtherServerError` exists because `OtherServerError` keeps its code unexported; a `retry.Policy` test needs it. |
 | `ExecutionError`, `AttemptFailure`, `QueryError`, `ExecutionStatus` and its values, `ExecutionStatusOf`, `IsCASWriteUnknown` | Keep. `IsCASWriteUnknown` hides the protocol 4 / protocol 5 difference, which `errors.As` alone does not. |
 | `Kind`, `KindOf` and the `Kind*` values | Keep. |
 | `ConnectError`, `HostError`, `NoHostsError`, `PartialRefreshError`, `SchemaChangedError`, `ServerMismatchError`, `UnsupportedSettingError` | Keep. |
 | Sentinels a request or handle can return: `ErrBusy`, `ErrClosed`, `ErrConditionalExec`, `ErrStaleRows`, `ErrNoRows`, `ErrUseStmt`, `ErrPagingComplete`, `ErrPagingNoProgress`, `ErrPagingStateLimit`, `ErrNoKeyspace`, `ErrNoTable`, `ErrNoConnections`, `ErrNoConnectionsStarted`, `ErrNoControl`, `ErrNoStreams`, `ErrConnectionClosed`, `ErrTimeoutNoResponse`, `ErrReadHeaderTimeout`, `ErrFrameTooBig` | Keep. Each can reach a caller, directly or inside an `ExecutionError` attempt, a `ConnectError` or a `PartialRefreshError`. |
-| `ErrKeyspaceDoesNotExist` | Kept for now; see open decision 5. |
 | `ErrScyllaSourcePortAlreadyInUse` | Keep. The driver never returns it; a custom `endpoint.Dialer` returns it to ask for the next source port. `endpoint.DialTarget.LocalAddress` documents this. |
 
 ## `cqltrace`
@@ -122,7 +124,7 @@ v2.1; it can only be removed in v3.
 | Symbols | Decision |
 |---|---|
 | `Snapshot`, `HostSnapshot`, `Route`, `Target`, `TokenRange`, `Mode` and its values | Keep. |
-| `Keyspace`, `Table`, `TableOptions`, `View`, `Column`, `Index`, `Type`, `Function`, `Aggregate`, and `ColumnKind`, `ColumnOrder` and `IndexKind` with their values | Keep, less the fields removed above. `Keyspace.ToCQL` and `Clone` stay. See the open decisions on names and the clustering order. |
+| `Keyspace`, `Table`, `TableOptions`, `View`, `Column`, `Index`, `Type`, `Function`, `Aggregate`, and `ColumnKind`, `ColumnOrder` and `IndexKind` with their values | Keep, less the fields removed above and with decisions 1 to 4 and 7 applied. `Keyspace.ToCQL` and `Clone` stay. |
 
 ## `metrics`
 
@@ -151,40 +153,45 @@ v2.1; it can only be removed in v3.
 | `HostRoutes`, `ReplicaRoutes` | Keep. A custom policy builds on them (`docs/source/load-balancing.md`). |
 | `TokenPartitioner`, `PartitionKey`, `Murmur3TokenPartitioner`, `CDCTokenPartitioner` | Keep. `config.WithPartitioner` takes them. |
 
-## Open decisions
+## Decisions
 
-These would change names or remove symbols that users may already rely on, so
-they need a maintainer's call before `v2.0.0-rc.1`. Nothing below was changed.
+These changed names or removed symbols that users of the earlier v2 code may
+rely on, so they waited for a maintainer's call before `v2.0.0-rc.1`. All
+seven were decided as recommended and are applied; the migration guide maps
+the v1 names.
 
-1. **Schema name fields.** `metadata.Table` uses `Keyspace` and `Name`, but
-   `View` uses `KeyspaceName` and `ViewName`, and `Index` uses `KeyspaceName`
-   and `TableName`. Renaming them to `Keyspace`/`Name`/`Table` would make the
-   three types read alike.
-2. **`Equals` versus `Equal`.** The `metadata` types have `Equals`; `cql.Columns`
-   and `cql.DataType` have `Equal`, the usual Go spelling. Rename the
-   `metadata` methods to `Equal`, or unexport them, since the driver uses them
-   only to detect schema changes.
-3. **Go initialisms in `metadata.TableOptions`.** `GcGraceSeconds`,
-   `MemtableFlushPeriodInMs`, `DcLocalReadRepairChance` and
-   `BloomFilterFpChance` keep their v1 spelling; Go style would be
-   `GCGraceSeconds`, `MemtableFlushPeriodInMS`, `DCLocalReadRepairChance` and
-   `BloomFilterFPChance`.
-4. **Clustering order is stored twice.** `metadata.Column.ClusteringOrder`
-   (`"asc"`, `"desc"`, `"none"`) and `Column.Order` (`ASC`/`DESC`, a `bool`)
-   say the same thing. Keep one; `ColumnOrder` being a `bool` also leaves no
-   room for "not a clustering column".
-5. **Two "no such keyspace" sentinels.** `cqlerr.ErrNoKeyspace` covers both
-   an empty name and one the metadata does not have; `ErrKeyspaceDoesNotExist`
-   is the server's answer while a keyspace is refreshed. Every refresh path
-   seen in this review catches `ErrKeyspaceDoesNotExist` and treats the
-   keyspace as dropped, so it looks like engine control flow. Unexport it, or
-   fold it into `ErrNoKeyspace`, once a test proves no public call returns it.
-6. **Time methods on `cql.UUID`.** `UUID` has `Time`, `Timestamp`, `Clock` and
-   `Node`, which mean something only for a version 1 UUID, and `TimeUUID` has
-   the same methods with a checked version. Drop them from `UUID` and point
-   callers at `TimeUUIDFromUUID`.
-7. **String-typed fields that could be typed.** `metadata.Table.ID` and
-   `View.ID`/`BaseTableID` are UUID strings rather than `cql.UUID`;
-   `cqlerr.WriteTimeoutError.WriteType` and `WriteFailureError.WriteType` are
-   strings rather than an enum; `cqlerr.ErrorMap` is keyed by an address string
-   rather than `netip.Addr`. Typing them later is a breaking change.
+1. **Schema name fields. Decided: renamed.** `metadata.Table` uses `Keyspace`
+   and `Name`; `View` used `KeyspaceName`, `ViewName` and `BaseTableName`,
+   and `Index` used `KeyspaceName` and `TableName`. They are now
+   `View.Keyspace`, `View.Name`, `View.BaseTable`, `Index.Keyspace` and
+   `Index.Table`, so the three types read alike.
+2. **`Equals` versus `Equal`. Decided: renamed to `Equal`.** `cql.Columns`
+   and `cql.DataType` already had `Equal`, the usual Go spelling;
+   `metadata.Table`, `TableOptions` and `Column` now match.
+3. **Go initialisms. Decided: renamed.** `metadata.TableOptions` has
+   `GCGraceSeconds`, `MemtableFlushPeriodInMS`, `DCLocalReadRepairChance`,
+   `BloomFilterFPChance` and `CRCCheckChance`. A scan of `testdata/api.txt`
+   for other initialisms found one more, `cql.TypeAscii`, now `TypeASCII`
+   like `cql.ASCIICodec`.
+4. **Clustering order was stored twice. Decided: one typed field.**
+   `metadata.Column.ClusteringOrder` is a `metadata.ColumnOrder`
+   (`ColumnOrderNone`, `ColumnOrderAsc`, `ColumnOrderDesc`), whose zero value
+   is the order of a column that is not a clustering column. The string field
+   and the `bool` `Column.Order` with `ASC` and `DESC` are gone.
+5. **Two "no such keyspace" sentinels. Decided: unexported.**
+   `TestKeyspaceAbsenceStaysInternal` shows that the refreshes a public call
+   runs turn a keyspace the server no longer lists into a dropped keyspace,
+   and the single-keyspace refresh returns it only to the post-DDL refresh
+   and the schema event handler, which both drop it.
+   `cqlerr.ErrKeyspaceDoesNotExist` is now an internal sentinel that wraps
+   `cqlerr.ErrNoKeyspace`, so it classifies as that should it ever escape.
+6. **Time methods on `cql.UUID`. Decided: removed.** `Time`, `Timestamp`,
+   `Clock` and `Node` remain on `cql.TimeUUID`; convert a `UUID` with
+   `TimeUUIDFromUUID`, which checks the version.
+7. **String-typed fields. Decided: typed.** `metadata.Table.ID`, `View.ID`,
+   `View.BaseTableID` and, for the same reason, `TableOptions.Version` are
+   `cql.UUID`. `cqlerr.WriteTimeoutError.WriteType` and
+   `WriteFailureError.WriteType` are a `cqlerr.WriteType`, an integer enum
+   with the protocol's write types, `WriteTypeUnknown` as its zero value for a
+   type the driver does not name, and a `String` method that returns the
+   server's name. `cqlerr.ErrorMap` is keyed by `netip.Addr`.

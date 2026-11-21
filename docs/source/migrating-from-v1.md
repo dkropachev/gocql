@@ -243,6 +243,7 @@ conditional statements in prepared metadata: set
 | --- | --- |
 | `gocql.UUID`, `gocql.ParseUUID` | `cql.UUID`, `cql.ParseUUID` |
 | `gocql.TimeUUID()`, `gocql.UUIDFromTime` | `cql.NewTimeUUID()`, `cql.TimeUUIDFromTime` (type `cql.TimeUUID`) |
+| `UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
 | `gocql.UnsetValue` | the `Unset` binding state; see [data types](data-types.md) |
@@ -257,6 +258,9 @@ conditional statements in prepared metadata: set
 | `gocql.RequestError` and its `Code()` | `cqlerr.ServerError`, or `errors.Is(err, cqlerr.CodeOverloaded)` |
 | `gocql.ErrTimeoutNoResponse`, `ErrNoConnections` | the same names in `cqlerr` |
 | `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
+| `gocql.ErrKeyspaceDoesNotExist` | removed: a schema refresh treats a keyspace the server no longer has as dropped; a missing keyspace is `cqlerr.ErrNoKeyspace` |
+| `RequestErrWriteTimeout.WriteType`, `RequestErrWriteFailure.WriteType` (strings) | `cqlerr.WriteType` constants (`cqlerr.WriteTypeSimple`, `WriteTypeBatchLog`, `WriteTypeCAS`, ...); its `String` returns the server's name |
+| `ErrorMap` keyed by an address string | `cqlerr.ErrorMap` keyed by `netip.Addr` |
 | `gocql.ErrNoHosts` | `ConfigBuilder.Build` rejects an empty contact point list with a `*cql.ValidationError` |
 
 A failed execution returns a `*cqlerr.ExecutionError` that lists every attempt.
@@ -273,7 +277,14 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
-| `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DcLocalReadRepairChance` |
+| `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DCLocalReadRepairChance` |
+| `ViewMetadata.KeyspaceName`, `ViewName`, `BaseTableName` | `metadata.View.Keyspace`, `Name`, `BaseTable`, as `metadata.Table` names them |
+| `IndexMetadata.KeyspaceName`, `TableName` | `metadata.Index.Keyspace`, `Table` |
+| `TableMetadata.Equals` and the other metadata `Equals` methods | `Equal` |
+| `TableMetadataOptions.GcGraceSeconds`, `MemtableFlushPeriodInMs`, `DcLocalReadRepairChance`, `BloomFilterFpChance`, `CrcCheckChance` | `metadata.TableOptions.GCGraceSeconds`, `MemtableFlushPeriodInMS`, `DCLocalReadRepairChance`, `BloomFilterFPChance`, `CRCCheckChance` |
+| `ColumnMetadata.ClusteringOrder` (string) and `Order` (`ASC`/`DESC`) | `metadata.Column.ClusteringOrder`, a `metadata.ColumnOrder`: `ColumnOrderAsc`, `ColumnOrderDesc`, or `ColumnOrderNone` for a column that is not a clustering column |
+| `TableMetadata.ID`, `ViewMetadata.ID`, `BaseTableID` | `metadata.Table.ID`, `View.ID`, `View.BaseTableID` and `TableOptions.Version`, all `cql.UUID` |
+| `gocql.TypeAscii` | `cql.TypeASCII` |
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
 | `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |
