@@ -22,13 +22,56 @@ Committed trusted fingerprint: `71A6 D227 11CD B7C2 446D 21CF BF4B F97A 8D4D F1A
 3. Merge release changes to `master`.
 4. Update the concrete v2 installation version in README.md to the candidate; the workflow requires an exact match.
 5. If the tip commit changes `.github/workflows/`, merge a release-preparation commit that changes only non-workflow files before tagging. GitHub rejected the `v2.0.0` tag push when its target was a workflow-changing commit, even with `contents: write`; Java Driver's release tags point to a release commit without workflow changes.
-6. Choose target `master` or a full 40-character SHA reachable from `master`. `master` is fetched and resolved once during preflight; every later job uses that immutable SHA. Other branches, abbreviated SHAs, and non-ancestors are rejected.
+6. Check the public API against its baseline; see [API baseline](#api-baseline).
+7. Choose target `master` or a full 40-character SHA reachable from `master`. `master` is fetched and resolved once during preflight; every later job uses that immutable SHA. Other branches, abbreviated SHAs, and non-ancestors are rejected.
 
 Release-control code and trusted public-key material come from the workflow revision on `master`, not from the candidate commit. The controller is built once and passed to later jobs as a short-lived workflow artifact. This permits releasing an older reachable commit without trusting or requiring release scripts in that commit.
 
 Version input: bare canonical v2 SemVer, e.g. `2.0.0` or `2.0.0-rc.1`. No leading `v`. Other major versions, build metadata, leading zeroes and unsafe tag characters are rejected. The module path is `github.com/scylladb/gocql/v2`.
 
 Published Go versions and source commits are immutable. Proxies/checksum databases cache tags immediately. Never move, replace, delete published tag. Correct with new version; add `retract` later if needed.
+
+## API baseline
+
+`testdata/apidiff/v2.0.0/` holds the export data of each public package (the
+packages `testdata/api.txt` lists), written by `golang.org/x/exp/cmd/apidiff`
+at the commit `APIDIFF_VERSION` pins in the Makefile. `make check-api-compat`
+(`ci/apidiff.sh check`), which PR CI runs, fails on any incompatible change to
+those packages: a removed or changed symbol, or a removed package. Compatible
+additions pass, as a minor release allows. `testdata/api.txt` and
+`TestPublicAPI` still record every change, compatible or not.
+
+The baseline was recorded when the API was frozen, before `v2.0.0-rc.1`. Until
+`v2.0.0` is tagged, an API change found in release-candidate testing is made
+deliberately: change the code and `testdata/api.txt`, then rewrite the baseline
+in the same pull request. On the final candidate:
+
+1. Check out the commit to release, with a clean working tree.
+2. List the API changes since the baseline was recorded:
+   `git diff "$(git log -1 --format=%H -- testdata/apidiff)" -- testdata/api.txt`.
+   Confirm each one is intended.
+3. Run `make write-api-baseline`. It rewrites the export data with the pinned
+   apidiff and the module's Go toolchain (`go env GOVERSION`), reading the
+   sources through the symlinks `/tmp/gocql-v2-apidiff` (the checkout) and
+   `/tmp/gocql-v2-apidiff-modcache` (the module cache) so that neither path is
+   recorded. The bytes can still change with the toolchain even
+   when the API does not.
+4. Run `make check-api-compat`; it must pass.
+5. Merge the rewritten baseline, if it changed, before tagging `v2.0.0`.
+
+After `v2.0.0` is tagged, `make check-api-compat` passing is the compatibility
+gate for every v2 release, and `testdata/apidiff/v2.0.0/` keeps the `v2.0.0`
+API (see below for a newer apidiff).
+A minor release adds API that the `v2.0.0` baseline does not cover, so once a
+`v2.N.0` tag is published, record its baseline from that tag with
+`make write-api-baseline APIDIFF_BASELINE=v2.N.0`, set the Makefile's default
+`APIDIFF_BASELINE` to `v2.N.0`, and merge both; keep the older baselines. A
+patch release needs no new baseline.
+
+To move apidiff to a newer commit, change `APIDIFF_VERSION` and run
+`make check-api-compat`. Only if the new apidiff cannot read the old export
+data, rewrite each baseline from its own release tag with
+`make write-api-baseline APIDIFF_BASELINE=<release>`.
 
 ## Validate
 

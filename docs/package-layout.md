@@ -394,7 +394,9 @@ own module and does not reuse `internal/testkit`.
   `pierrec/lz4/v4` and `golang.org/x/sync`. `TestConsumerModuleRequirements`
   builds a module importing every public package and fails when `go mod
   tidy` gives it any other requirement or its build needs another module.
-- After v2.0.0, CI runs `apidiff` against the last release tag.
+- `make check-api-compat` (`ci/apidiff.sh`), which PR CI runs, fails on an
+  incompatible change to a public package against the `apidiff` baseline in
+  `testdata/apidiff`; `RELEASING.md` says when the baseline is rewritten.
 
 ## Where the code stands today
 

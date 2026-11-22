@@ -506,6 +506,19 @@ check-vulns:
 check-go-mod-drift:
 	go mod tidy -diff
 
+# The public API against the v2.0.0 baseline in testdata/apidiff (see
+# RELEASING.md). apidiff is pinned to a golang.org/x/exp commit: it has no
+# releases, and generic methods need a commit from November 2026 or later.
+APIDIFF_VERSION ?= v0.0.0-20261109185158-a52e3aef5920
+# The release whose API later changes must stay compatible with.
+APIDIFF_BASELINE ?= v2.0.0
+
+check-api-compat:
+	APIDIFF_VERSION=${APIDIFF_VERSION} APIDIFF_BASELINE_DIR=testdata/apidiff/${APIDIFF_BASELINE} ci/apidiff.sh check
+
+write-api-baseline:
+	APIDIFF_VERSION=${APIDIFF_VERSION} APIDIFF_BASELINE_DIR=testdata/apidiff/${APIDIFF_BASELINE} ci/apidiff.sh write
+
 # The architecture-dependent part of check. It is not redundant with test-unit:
 # `go test` compiles no non-test file behind a build tag -- integration_only.go,
 # the gocql_perf counters.

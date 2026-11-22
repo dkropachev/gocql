@@ -61,7 +61,7 @@ jobs:
           # Match the API's file count so truncated results cannot hide driver code.
           eligible=$(jq -r --argjson expected "$changed_files" '
             def support_path:
-              test("^docs/|^ci/|^\\.github/|^testdata/|/testdata/|_test\\.go$|\\.md$|^(\\.gitignore|Makefile|codecov\\.yml|integration\\.sh|install_test_deps\\.sh|renovate\\.json)$");
+              test("^docs/|^ci/|^\\.github/|^testdata/|/testdata/|_test\\.go$|\\.md$|^(\\.gitattributes|\\.gitignore|Makefile|codecov\\.yml|integration\\.sh|install_test_deps\\.sh|renovate\\.json)$");
             [.[][]] as $files
             | ($files | length) == $expected
               and ($files | length) > 0
