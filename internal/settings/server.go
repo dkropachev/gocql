@@ -6,7 +6,7 @@ package settings
 import "fmt"
 
 // Server is the database a session is opened for. The public dialects
-// (gocql.ScyllaV4, gocql.CassandraV4, gocql.CassandraV5) set it together with
+// (config.ScyllaV4, config.CassandraV4, config.CassandraV5) set it together with
 // the protocol version. Opening a session checks the server it reaches
 // against it. The zero Server checks nothing; only the driver's own tests use
 // it.
@@ -28,7 +28,40 @@ func (s Server) String() string {
 	return "any server"
 }
 
-// DialectName names the public dialect (gocql.Dialect) of server over
+// The values of the public config.Dialect. DialectSpec and DialectOf map them
+// to and from the protocol version and server they set.
+const (
+	DialectScyllaV4 uint8 = iota + 1
+	DialectCassandraV4
+	DialectCassandraV5
+)
+
+// DialectSpec returns the server and protocol version public dialect d sets;
+// ok is false for a value that names no dialect.
+func DialectSpec(d uint8) (server Server, protocol int, ok bool) {
+	switch d {
+	case DialectScyllaV4:
+		return ServerScylla, 4, true
+	case DialectCassandraV4:
+		return ServerCassandra, 4, true
+	case DialectCassandraV5:
+		return ServerCassandra, 5, true
+	}
+	return ServerAny, 0, false
+}
+
+// DialectOf returns the public dialect whose settings are server and
+// protocol, or zero when none is.
+func DialectOf(server Server, protocol int) uint8 {
+	for _, d := range [...]uint8{DialectScyllaV4, DialectCassandraV4, DialectCassandraV5} {
+		if s, p, _ := DialectSpec(d); s == server && p == protocol {
+			return d
+		}
+	}
+	return 0
+}
+
+// DialectName names the public dialect (config.Dialect) of server over
 // protocol, such as "CassandraV4".
 func DialectName(server Server, protocol int) string {
 	switch {

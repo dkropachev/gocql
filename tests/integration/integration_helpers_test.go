@@ -53,9 +53,14 @@ func createV2ClusterWithout(skip fixtureParts, opts ...func(*config.ConfigBuilde
 }
 
 // newFixtureConfig applies the integration flags, except skip, to a config
-// for hosts, then opts.
+// of the suite's dialect for hosts, then opts.
 func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.ConfigBuilder)) *config.ConfigBuilder {
-	b := config.New(hosts...)
+	return newFixtureConfigFor(testDialect, hosts, skip, opts...)
+}
+
+// newFixtureConfigFor is newFixtureConfig for dialect.
+func newFixtureConfigFor(dialect config.Dialect, hosts []string, skip fixtureParts, opts ...func(*config.ConfigBuilder)) *config.ConfigBuilder {
+	b := config.New(dialect, hosts...)
 	if skip&fixtureProtocol == 0 {
 		b.WithCQLVersion(*flagCQL)
 	}
@@ -218,7 +223,7 @@ func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDis
 			ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
-		session, err := gocql.Connect(ctx, bootstrap, testDialect)
+		session, err := gocql.Connect(ctx, bootstrap)
 		if err != nil {
 			t.Fatalf("connect to create typed integration keyspace: %v", err)
 		}
@@ -238,7 +243,7 @@ func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDis
 	cfg := mustBuild(t, b.WithKeyspace(keyspace))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	session, err := gocql.Connect(ctx, cfg, testDialect)
+	session, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		t.Fatalf("create typed integration session: %v", err)
 	}

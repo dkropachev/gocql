@@ -40,7 +40,7 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	})
-	s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
+	s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}

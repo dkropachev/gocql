@@ -25,11 +25,11 @@ func ExampleNewTLSFiles() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	cfg, err := config.New("192.168.1.1", "192.168.1.2").WithTLSSource(files).Build()
+	cfg, err := config.New(config.ScyllaV4, "192.168.1.1", "192.168.1.2").WithTLSSource(files).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(context.Background(), cfg, gocql.ScyllaV4)
+	session, err := gocql.Connect(context.Background(), cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -48,11 +48,11 @@ func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
 func ExampleConfigBuilder_WithTLSSource() {
 	source := &rotatingTLS{}
 	source.current.Store(&tls.Config{MinVersion: tls.VersionTLS13})
-	cfg, err := config.New("192.168.1.1").WithTLSSource(source).Build()
+	cfg, err := config.New(config.ScyllaV4, "192.168.1.1").WithTLSSource(source).Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(context.Background(), cfg, gocql.ScyllaV4)
+	session, err := gocql.Connect(context.Background(), cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

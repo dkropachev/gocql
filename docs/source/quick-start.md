@@ -8,10 +8,10 @@ go get github.com/scylladb/gocql/v2@v2.0.0-rc.1
 
 Import `github.com/scylladb/gocql/v2` (`gocql`),
 `github.com/scylladb/gocql/v2/config` and `github.com/scylladb/gocql/v2/cql`.
-Build a configuration with `config.New(contactPoints...).Build()` and open it
-with `gocql.Connect(ctx, cfg, gocql.ScyllaV4)`, naming the database and protocol
-version you connect to: `ScyllaV4`, `CassandraV4` or `CassandraV5` (see
-[connecting](connecting/index.md)). Close the session when finished.
+Build a configuration with `config.New(dialect, contactPoints...).Build()`,
+naming the database and protocol version you connect to: `config.ScyllaV4`,
+`config.CassandraV4` or `config.CassandraV5` (see
+[connecting](connecting/index.md)), and open it with `gocql.Connect(ctx, cfg)`. Close the session when finished.
 
 Declare a `cql.Statement[P,R]` with `CQL`, `Params` and `Rows`.
 `session.Prepare(ctx, statement)` prepares it and validates its codecs

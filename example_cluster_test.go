@@ -65,11 +65,11 @@ func TestClusterExamples(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cfg, err := config.New(node).Build()
+	cfg, err := config.New(config.ScyllaV4, node).Build()
 	if err != nil {
 		t.Fatal(err)
 	}
-	s, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+	s, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

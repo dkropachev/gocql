@@ -28,7 +28,7 @@ func makeIntegrationShardAwareCluster() shardAwareTestCluster {
 			if err != nil {
 				return nil, err
 			}
-			return gocql.Connect(ctx, built, testDialect)
+			return gocql.Connect(ctx, built)
 		},
 	}
 }

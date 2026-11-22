@@ -18,7 +18,7 @@ func (p fixedSpeculation) Delay(started int) (time.Duration, bool) {
 	return p.delay, started < p.max
 }
 
-cfg, err := config.New("10.0.0.1").
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
 		p.WithSpeculation(fixedSpeculation{delay: 50 * time.Millisecond, max: 2})
 	}).

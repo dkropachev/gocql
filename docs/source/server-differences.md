@@ -1,8 +1,8 @@
 # Cassandra and ScyllaDB differences
 
 The driver works with both Apache Cassandra and ScyllaDB. You name the one you
-connect to with the session's dialect: `gocql.ScyllaV4`, `gocql.CassandraV4`
-or `gocql.CassandraV5`, passed to `gocql.Connect` (see
+connect to with the session's dialect: `config.ScyllaV4`, `config.CassandraV4`
+or `config.CassandraV5`, passed to `config.New` (see
 [connecting](connecting/index.md)). Most responses are the same on both, and
 the driver absorbs most of the differences. The ones below change what your
 code sees. Code that serves several dialects should handle both;
@@ -16,8 +16,8 @@ dialects, before anything is sent to the cluster:
 
 | Setting | Works with | On another dialect |
 |---|---|---|
-| `config.ConfigBuilder.WithClientRoutes` | `ScyllaV4` | `gocql.Connect` fails |
-| `config.ConfigBuilder.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `gocql.Connect` fails |
+| `config.ConfigBuilder.WithClientRoutes` | `ScyllaV4` | `config.ConfigBuilder.Build` fails |
+| `config.ConfigBuilder.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `config.ConfigBuilder.Build` fails |
 | `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
 | `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
 

@@ -75,7 +75,7 @@ func benchConfig(d endpoint.Dialer) config.Config {
 			address = "127.0.20.1:9042"
 		}
 	}
-	c, err := config.New(address).
+	c, err := config.New(benchDialect, address).
 		WithAuth(auth.Password("cassandra", "cassandra")).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0).
@@ -91,7 +91,7 @@ func benchConfig(d endpoint.Dialer) config.Config {
 }
 
 // benchDialect is the dialect of the recorded corpus and the bench cluster.
-const benchDialect = gocql.ScyllaV4
+const benchDialect = config.ScyllaV4
 
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
 	_, e := s.UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})
@@ -147,7 +147,7 @@ func generateCaptures(ctx context.Context) (err error) {
 	if corpus.Address == "" {
 		return fmt.Errorf("capture generation requires explicit GOCQL_BENCH_ADDRESS")
 	}
-	s, err := gocql.Connect(ctx, benchConfig(nil), benchDialect)
+	s, err := gocql.Connect(ctx, benchConfig(nil))
 	if err != nil {
 		return err
 	}
@@ -259,7 +259,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 }
 func RecordSelectTraffic(ctx context.Context, size int, dir string) error {
 	d := newCaptureDialer(dir, false)
-	s, e := gocql.Connect(ctx, benchConfig(d), benchDialect)
+	s, e := gocql.Connect(ctx, benchConfig(d))
 	if e != nil {
 		return e
 	}
@@ -273,7 +273,7 @@ func RecordSelectTraffic(ctx context.Context, size int, dir string) error {
 }
 func RecordInsertTraffic(ctx context.Context, size int, dir string) error {
 	d := newCaptureDialer(dir, false)
-	s, e := gocql.Connect(ctx, benchConfig(d), benchDialect)
+	s, e := gocql.Connect(ctx, benchConfig(d))
 	if e != nil {
 		return e
 	}
@@ -398,7 +398,7 @@ func (c *captureTCP) SetLinger(v int) error                    { return c.socket
 func BenchmarkSingleConnection(b *testing.B) {
 	b.Run("Insert", func(b *testing.B) {
 		d := newCaptureDialer(corpusPath("rec_insert"), true)
-		s, e := gocql.Connect(context.Background(), benchConfig(d), benchDialect)
+		s, e := gocql.Connect(context.Background(), benchConfig(d))
 		if e != nil {
 			b.Fatal(e)
 		}
@@ -420,7 +420,7 @@ func BenchmarkSingleConnection(b *testing.B) {
 
 	b.Run("Select", func(b *testing.B) {
 		d := newCaptureDialer(corpusPath("rec_select"), true)
-		s, e := gocql.Connect(context.Background(), benchConfig(d), benchDialect)
+		s, e := gocql.Connect(context.Background(), benchConfig(d))
 		if e != nil {
 			b.Fatal(e)
 		}
@@ -451,7 +451,7 @@ func TestSingleConnection(t *testing.T) {
 		} {
 			t.Run(workload.name, func(t *testing.T) {
 				d := newCaptureDialer(corpusPath(workload.dir), true)
-				s, err := gocql.Connect(context.Background(), benchConfig(d), benchDialect)
+				s, err := gocql.Connect(context.Background(), benchConfig(d))
 				if err != nil {
 					t.Fatal(err)
 				}

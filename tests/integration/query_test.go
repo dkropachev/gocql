@@ -359,7 +359,7 @@ func TestQuery(t *testing.T) {
 
 			requireCassandraFixtures(t)
 			cluster := createV2Cluster()
-			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatal("create session:", err)
 			}
@@ -647,7 +647,7 @@ func TestQuery(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		defer cancel()
 		config := createV2Cluster()
-		session, err := gocql.Connect(ctx, mustBuild(t, config), testDialect)
+		session, err := gocql.Connect(ctx, mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}

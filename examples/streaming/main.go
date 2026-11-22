@@ -53,7 +53,18 @@ func run() (resultErr error) {
 	serverName := flag.String("server-name", "", "TLS server DNS identity")
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
-	builder := config.New(strings.Split(*hosts, ",")...).
+	var d config.Dialect
+	switch *dialect {
+	case "scylla-v4":
+		d = config.ScyllaV4
+	case "cassandra-v4":
+		d = config.CassandraV4
+	case "cassandra-v5":
+		d = config.CassandraV5
+	default:
+		return fmt.Errorf("unknown dialect %q", *dialect)
+	}
+	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
 		NoAdvancedShardAwareness().
 		WithHeartbeat(0, 0).
@@ -129,28 +140,17 @@ func run() (resultErr error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
-	var d gocql.Dialect
-	switch *dialect {
-	case "scylla-v4":
-		d = gocql.ScyllaV4
-	case "cassandra-v4":
-		d = gocql.CassandraV4
-	case "cassandra-v5":
-		d = gocql.CassandraV5
-	default:
-		return fmt.Errorf("unknown dialect %q", *dialect)
-	}
 	// Protocol 5 compresses transport segments rather than frames.
-	return streamTable(ctx, cfg, d, *incremental, d == gocql.CassandraV5, frameCompression)
+	return streamTable(ctx, cfg, *incremental, d == config.CassandraV5, frameCompression)
 }
 
-// streamTable connects with dialect d and streams the example table. segments
+// streamTable connects with cfg and streams the example table. segments
 // reports that the dialect's protocol compresses transport segments rather
 // than frames.
-func streamTable(ctx context.Context, cfg config.Config, d gocql.Dialect, incremental, segments bool, frameCompression cql.Compression) (resultErr error) {
+func streamTable(ctx context.Context, cfg config.Config, incremental, segments bool, frameCompression cql.Compression) (resultErr error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	s, err := gocql.Connect(ctx, cfg, d)
+	s, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		return err
 	}

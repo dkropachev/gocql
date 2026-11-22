@@ -104,7 +104,7 @@ func dropLeftoverKeyspaces() error {
 // every session refused. Any other error is returned at once.
 func connectOnceCredentialsWork(ctx context.Context, cfg config.Config) (*gocql.Session, error) {
 	for {
-		s, err := gocql.Connect(ctx, cfg, testDialect)
+		s, err := gocql.Connect(ctx, cfg)
 		if request, ok := errors.AsType[cqlerr.ServerError](err); err == nil || !ok || request.Code() != cqlerr.CodeBadCredentials {
 			return s, err
 		}

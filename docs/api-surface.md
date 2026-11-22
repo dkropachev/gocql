@@ -7,8 +7,9 @@ executes a statement or reads its results.
 
 ## Dialect
 
-A `Session` speaks one `Dialect` (`ScyllaV4`, `CassandraV4`, `CassandraV5`),
-a value passed to `Connect` and reported by `Session.Dialect`. It is not a
+A `Session` speaks one `config.Dialect` (`ScyllaV4`, `CassandraV4`,
+`CassandraV5`), a value passed to `config.New` and reported by
+`Session.Dialect`. It is not a
 type parameter: one `*Session` type serves every dialect, so code that takes a
 session names no dialect. The grid below is the same for every dialect. A
 feature that only one dialect supports returns an error on a session of

@@ -15,10 +15,10 @@ func TestLoggingFacade(t *testing.T) {
 
 	t.Run("WithLoggerBuilds", func(t *testing.T) {
 		t.Parallel()
-		if _, err := config.New("127.0.0.1").WithLogger(slog.New(slog.DiscardHandler)).Build(); err != nil {
+		if _, err := config.New(config.ScyllaV4, "127.0.0.1").WithLogger(slog.New(slog.DiscardHandler)).Build(); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := config.New("127.0.0.1").WithLogger(nil).Build(); err != nil {
+		if _, err := config.New(config.ScyllaV4, "127.0.0.1").WithLogger(nil).Build(); err != nil {
 			t.Fatal(err)
 		}
 	})

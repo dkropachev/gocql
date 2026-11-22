@@ -50,7 +50,7 @@ func TestPerformance(t *testing.T) {
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
-		s, e := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
+		s, e := gocql.Connect(ctx, mustBuild(t, cfg))
 		if e != nil {
 			t.Fatal(e)
 		}
@@ -342,7 +342,7 @@ func TestPerformance(t *testing.T) {
 		defer cancel()
 		runtime.GC()
 		baseRuntime := mem().HeapAlloc
-		s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
+		s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 		if err != nil {
 			t.Fatal(err)
 		}

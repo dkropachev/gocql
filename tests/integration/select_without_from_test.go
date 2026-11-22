@@ -482,7 +482,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		skipUnlessSelectWithoutFrom(t)
 		config := createV2Cluster()
 		v2ConfigureRouting(t, config, routing.Options{TokenAware: true, ShuffleReplicas: true})
-		session, err := gocql.Connect(context.Background(), mustBuild(t, config), testDialect)
+		session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)
 		}

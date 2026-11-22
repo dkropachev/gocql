@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
 // Batch collects statements, each with its values, to send as one CQL
@@ -49,13 +50,13 @@ func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }
 // AddToBatch rejects the statement after it.
 const MaxBatchStatements = implCluster.MaxBatchStatements
 
-// Connect opens a session of dialect with cfg, which must come from
-// config.ConfigBuilder.Build. The dialect fixes the protocol version and the
-// database: Connect fails when the cluster does not speak that version, or is
-// not that database (cqlerr.ServerMismatchError). The zero Dialect is
-// rejected with a *cql.ValidationError.
-func Connect(ctx context.Context, cfg config.Config, dialect Dialect) (*Session, error) {
-	settings, err := dialectSettings(cfg, dialect)
+// Connect opens a session with cfg, which must come from
+// config.ConfigBuilder.Build. The config's dialect fixes the protocol version
+// and the database: Connect fails when the cluster does not speak that
+// version, or is not that database (cqlerr.ServerMismatchError). The zero
+// Config is rejected with a *cql.ValidationError.
+func Connect(ctx context.Context, cfg config.Config) (*Session, error) {
+	settings, err := implSettings.InternalResolvePublic(cfg)
 	if err != nil {
 		return nil, err
 	}

@@ -19,7 +19,7 @@ func TestConfigDoesNotPrintCredentials(t *testing.T) {
 	const password = "s3cr3t-P@ssw0rd-1188"
 	const key = "PRIVATE-KEY-MATERIAL-1188"
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{{Certificate: [][]byte{[]byte("cert")}, PrivateKey: key}}}
-	c, err := New("127.0.0.1").WithAuth(auth.Password("cassandra", password)).WithTLS(tlsConfig).Build()
+	c, err := New(ScyllaV4, "127.0.0.1").WithAuth(auth.Password("cassandra", password)).WithTLS(tlsConfig).Build()
 	if err != nil {
 		t.Fatal(err)
 	}

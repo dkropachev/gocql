@@ -27,7 +27,7 @@ func TestStrongConsistency(t *testing.T) {
 	cluster := strongConsistencyCluster(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	s, err := gocql.Connect(ctx, mustBuild(t, newFixtureConfig(cluster.IPs(), 0)), testDialect)
+	s, err := gocql.Connect(ctx, mustBuild(t, newFixtureConfig(cluster.IPs(), 0)))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,8 +13,9 @@ every group below:
 - the package split of `docs/package-layout.md`;
 - the execution verbs, `Unprepared*`, `With*`/`No*` and `New*`/`Must*` names;
 - the execution grid of `docs/api-surface.md` (`TestExecutionGrid`);
-- the dialect is a `Connect` argument, and dialect-only settings fail at run
-  time (`docs/server-differences.md`);
+- the dialect is a run-time value, not a type parameter, and dialect-only
+  settings fail at run time (`docs/server-differences.md`); decision 8 moved
+  it from a `Connect` argument into the configuration;
 - which interfaces users may implement, and which are sealed;
 - enum zero values and `String` output;
 - every struct documents its zero value (`TestStructZeroValueDocs`).
@@ -42,7 +43,7 @@ v2.1; it can only be removed in v3.
 
 | Symbols | Decision |
 |---|---|
-| `Connect`, `Dialect`, `ScyllaV4`, `CassandraV4`, `CassandraV5` | Keep. |
+| `Connect` | Keep. It takes only the `config.Config` (decision 8). |
 | `Session` and its methods | Keep. `ID` correlates with `system.clients`; `Closed`, `Metadata`, `Metrics`, `Subscribe`, `RefreshMetadata` and `AwaitSchemaAgreement` are the session-level operations. |
 | `Prepared`, `PreparedStream`, `Query`, `StreamQuery`, `PreparedInfo`, `StreamInfo` | Keep. `Query.Routing` lets a caller see the route a value takes without executing. |
 | `Rows`, `Page`, `CASBatchRows`, `RowStream`, `PageLease` | Keep. |
@@ -59,7 +60,8 @@ v2.1; it can only be removed in v3.
 
 | Symbols | Decision |
 |---|---|
-| `New`, `ConfigBuilder` and its setters, `Config` | Keep. Every setter is documented and used by the docs or examples. |
+| `New`, `ConfigBuilder` and its setters, `Config` | Keep. Every setter is documented and used by the docs or examples. `New` takes the dialect first (decision 8). |
+| `Dialect`, `ScyllaV4`, `CassandraV4`, `CassandraV5` | Moved here from `gocql` (decision 8). |
 | `NewProfile`, `ProfileBuilder`, `Profile` | Keep. `Profile` fields are read by `exec.Options.Profile`. |
 | `NewClientRoutes`, `ClientRoutesBuilder`, `ClientRoutes`, `ClientRoute` | Keep. |
 | `NewTLSFiles`, `TLSFiles`, `TLSFileSource` | Keep. |
@@ -158,7 +160,7 @@ v2.1; it can only be removed in v3.
 These changed names or removed symbols that users of the earlier v2 code may
 rely on, so they waited for a maintainer's call before `v2.0.0-rc.1`. All
 seven were decided as recommended and are applied; the migration guide maps
-the v1 names.
+the v1 names. Decision 8 came from a later review pass.
 
 1. **Schema name fields. Decided: renamed.** `metadata.Table` uses `Keyspace`
    and `Name`; `View` used `KeyspaceName`, `ViewName` and `BaseTableName`,
@@ -198,3 +200,14 @@ the v1 names.
    type the driver does not name (its text is not kept), and a `String`
    method that returns the server's name. `cqlerr.ErrorMap` is keyed by
    `netip.Addr`, an IPv4 replica by its 4-byte address.
+8. **Where the dialect lives. Decided: in the configuration.** The dialect
+   was the third argument of `gocql.Connect`. It is now the first argument of
+   `config.New(dialect, contactPoints...)`, the type and values moved to
+   `config.Dialect`, `config.ScyllaV4`, `config.CassandraV4` and
+   `config.CassandraV5`, and `Connect` takes only the `config.Config`. The
+   dialect is deployment data like the contact points, so it belongs with
+   them; `Config.String` reports it; and `Build` now rejects a setting the
+   dialect does not support (client routes or a metadata server timeout on
+   Cassandra, Snappy on protocol 5) where it was written, instead of at
+   `Connect`. `Session.Dialect` returns a `config.Dialect`. The zero
+   `Dialect` fails `Build` with a `cql.ValidationError`.

@@ -48,7 +48,7 @@ var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec,
 
 func connect(hosts []string) (adapter, error) {
 	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
-	builder := config.New(hosts...).
+	builder := config.New(config.ScyllaV4, hosts...).
 		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).
 		ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
@@ -72,7 +72,7 @@ func connect(hosts []string) (adapter, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	s, e := g.Connect(ctx, c, g.ScyllaV4)
+	s, e := g.Connect(ctx, c)
 	if e != nil {
 		return nil, e
 	}

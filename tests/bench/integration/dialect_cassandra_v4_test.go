@@ -2,9 +2,9 @@
 
 package integration
 
-import gocql "github.com/scylladb/gocql/v2"
+import "github.com/scylladb/gocql/v2/config"
 
 // testDialect: see dialect_scylla_test.go.
-const testDialect = gocql.CassandraV4
+const testDialect = config.CassandraV4
 
 const testDialectDistribution, testDialectProtocol = "cassandra", 4

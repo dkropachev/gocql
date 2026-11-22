@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -48,8 +47,8 @@ func TestEnumStrings(t *testing.T) {
 		{endpoint.ConvictionSource(9), "ConvictionSource(9)"},
 		{cqlerr.OpTypeWrite, "write"},
 		{cqlerr.OpType(9), "OpType(9)"},
-		{gocql.ScyllaV4, "ScyllaV4"},
-		{gocql.Dialect(0), "Dialect(0)"},
+		{config.ScyllaV4, "ScyllaV4"},
+		{config.Dialect(0), "Dialect(0)"},
 		{cql.LocalQuorum, "LOCAL_QUORUM"},
 		{cql.Consistency(66), "Consistency(66)"},
 		{cql.TypeUDT, "udt"},
@@ -80,7 +79,7 @@ func TestEnumStrings(t *testing.T) {
 // TestEventKindZeroRejected checks that the zero event.Kind is not a server
 // event.
 func TestEventKindZeroRejected(t *testing.T) {
-	if _, err := config.New("127.0.0.1").WithIgnoreEvents(event.Kind(0)).Build(); err == nil {
+	if _, err := config.New(config.ScyllaV4, "127.0.0.1").WithIgnoreEvents(event.Kind(0)).Build(); err == nil {
 		t.Fatal("WithIgnoreEvents accepted the zero event.Kind")
 	}
 }
