@@ -31,6 +31,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -388,8 +389,9 @@ func (f *Framer) readErrorMap() (errMap cqlerr.ErrorMap) {
 	errMap = make(cqlerr.ErrorMap)
 	numErrs := f.ReadInt()
 	for i := 0; i < numErrs; i++ {
-		ip := f.readInetAdressOnly().String()
-		errMap[ip] = f.ReadShort()
+		// The address is 4 or 16 bytes long, which AddrFromSlice accepts.
+		ip, _ := netip.AddrFromSlice(f.readInetAdressOnly())
+		errMap[ip.Unmap()] = f.ReadShort()
 	}
 	return
 }

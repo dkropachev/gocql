@@ -312,12 +312,12 @@ func (s *Core) tryPublishV2Metadata() bool {
 						copyKS := implMetadata.InternalCloneV2Keyspace(prior)
 						current.Tables[table] = copyKS.Tables[table]
 						for name, view := range copyKS.Views {
-							if view.BaseTableName == table {
+							if view.BaseTable == table {
 								current.Views[name] = view
 							}
 						}
 						for name, index := range copyKS.Indexes {
-							if index.TableName == table {
+							if index.Table == table {
 								current.Indexes[name] = index
 							}
 						}
@@ -791,7 +791,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 			p.InternalMu.Unlock()
 			if attempt > 0 {
 				base, err = implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-				if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
+				if errors.Is(err, implMetadata.InternalErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
 						break
@@ -825,7 +825,7 @@ func (s *Core) RefreshV2AllSchema(ctx context.Context) error {
 				// Empty table/type result sets are legal, so they cannot by
 				// themselves reveal a keyspace dropped during this fetch.
 				current, checkErr := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-				if errors.Is(checkErr, cqlerr.ErrKeyspaceDoesNotExist) {
+				if errors.Is(checkErr, implMetadata.InternalErrKeyspaceDoesNotExist) {
 					if s.dropV2KeyspaceIfCurrent(name, epoch, revision) {
 						delete(failures, name)
 						break
@@ -934,7 +934,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 		return nil
 	}
 	base, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-	if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
+	if errors.Is(err, implMetadata.InternalErrKeyspaceDoesNotExist) {
 		p.InternalMu.Lock()
 		if p.schemaEpoch[name] == epoch && p.schemaRevision[name] == revision {
 			p.schemaRevision[name]++
@@ -965,7 +965,7 @@ func (s *Core) refreshV2KeyspaceAttempt(ctx context.Context, name string, attemp
 			if !s.PublishV2Metadata() {
 				return s.v2MetadataPublicationError()
 			}
-			return cqlerr.ErrKeyspaceDoesNotExist
+			return implMetadata.InternalErrKeyspaceDoesNotExist
 		}
 		if attempt < 7 && waitV2SchemaRetry(ctx, attempt) {
 			return s.refreshV2KeyspaceAttempt(ctx, name, attempt+1)
@@ -1167,7 +1167,7 @@ func (s *Core) invalidateV2ChangedTablets(keyspace string, current *metadata.Key
 	}
 	for name, table := range previous.Tables {
 		next := current.Tables[name]
-		if next == nil || !table.Equals(next) {
+		if next == nil || !table.Equal(next) {
 			s.privateStorage.InternalMetadataDescriber.RemoveTabletsWithTable(keyspace, name)
 		}
 	}
@@ -1199,7 +1199,7 @@ func (s *Core) confirmV2DroppedKeyspace(ctx context.Context, name string) (bool,
 	revision := p.schemaRevision[name]
 	p.InternalMu.Unlock()
 	_, err := implMetadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), name)
-	if errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist) {
+	if errors.Is(err, implMetadata.InternalErrKeyspaceDoesNotExist) {
 		return s.dropV2KeyspaceIfCurrent(name, epoch, revision), nil
 	}
 	return false, err

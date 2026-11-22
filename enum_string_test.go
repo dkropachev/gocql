@@ -63,6 +63,13 @@ func TestEnumStrings(t *testing.T) {
 		{metadata.ColumnKindUnknown, "unknown"},
 		{metadata.ColumnStatic, "static"},
 		{metadata.ColumnKind(99), "ColumnKind(99)"},
+		{metadata.ColumnOrderNone, "none"},
+		{metadata.ColumnOrderAsc, "asc"},
+		{metadata.ColumnOrderDesc, "desc"},
+		{metadata.ColumnOrder(9), "ColumnOrder(9)"},
+		{cqlerr.WriteTypeUnknown, "unknown"},
+		{cqlerr.WriteTypeBatchLog, "BATCH_LOG"},
+		{cqlerr.WriteType(99), "WriteType(99)"},
 	} {
 		if got := tc.value.String(); got != tc.want {
 			t.Errorf("%T(%d).String() = %q, want %q", tc.value, tc.value, got, tc.want)

@@ -25,7 +25,16 @@
 package metadata
 
 import (
+	"fmt"
+
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 var InternalErrNoControl = cqlerr.ErrNoControl
+
+// InternalErrKeyspaceDoesNotExist reports that system_schema has no row for a
+// keyspace. The schema refresh treats it as a dropped keyspace, and no public
+// call returns it (TestKeyspaceAbsenceStaysInternal lists its consumers). It
+// wraps cqlerr.ErrNoKeyspace, so errors.Is and cqlerr.KindOf classify it
+// should it ever reach a caller.
+var InternalErrKeyspaceDoesNotExist = fmt.Errorf("%w: the server has no such keyspace", cqlerr.ErrNoKeyspace)

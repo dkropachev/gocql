@@ -90,7 +90,7 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 	}
 	columns := NewColumns(
 		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, TypeText)))},
-		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, TypeAscii)))},
+		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, TypeASCII)))},
 		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, TypeVarint)))},
 	)
 	type source struct{ Names, Codes []string }

@@ -179,7 +179,7 @@ func textColumn(r *RowReader, kind, alternative Type, compiled bool) (Text, erro
 	if err != nil {
 		return Text{}, err
 	}
-	if err := validateText(v, kind == TypeAscii); err != nil {
+	if err := validateText(v, kind == TypeASCII); err != nil {
 		return Text{}, err
 	}
 	return textView(v), nil
@@ -447,7 +447,7 @@ type stringCodec struct{ ascii, compiled bool }
 
 func checkTextType(t DataType, ascii bool) error {
 	if ascii {
-		if t.Kind() == TypeAscii {
+		if t.Kind() == TypeASCII {
 			return nil
 		}
 	} else if t.Kind() == TypeText || t.Kind() == TypeVarchar {

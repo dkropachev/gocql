@@ -769,8 +769,8 @@ func TestMetadata(t *testing.T) {
 				if _, ok := km.Views[viewName]; !ok {
 					t.Errorf("expected view %q in keyspace metadata", viewName)
 				}
-				if km.Views[viewName].BaseTableName != baseTable {
-					t.Errorf("expected view base table %q, got %q", baseTable, km.Views[viewName].BaseTableName)
+				if km.Views[viewName].BaseTable != baseTable {
+					t.Errorf("expected view base table %q, got %q", baseTable, km.Views[viewName].BaseTable)
 				}
 			})
 

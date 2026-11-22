@@ -245,5 +245,5 @@ func IsCASWriteUnknown(err error) bool {
 		return true
 	}
 	timeout, ok := errors.AsType[*WriteTimeoutError](err)
-	return ok && timeout.WriteType == "CAS"
+	return ok && timeout.WriteType == WriteTypeCAS
 }

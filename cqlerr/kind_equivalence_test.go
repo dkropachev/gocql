@@ -70,7 +70,7 @@ func referenceKindOf(err error) Kind {
 	case hasType[*cql.ValidationError](err), invalidCodecError(err),
 		hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
-		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
+		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 			ErrPagingStateLimit, ErrNoRows):
 		return KindInvalid
 	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig, ErrPagingNoProgress):
@@ -132,7 +132,7 @@ func classifiedLeaves() []error {
 		errors.New("unclassified"),
 		context.Canceled, context.DeadlineExceeded,
 		ErrClosed, ErrStaleRows, cql.ErrReleased,
-		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
+		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,
 		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNoRows, ErrPagingStateLimit,
@@ -151,10 +151,10 @@ func classifiedLeaves() []error {
 		&net.OpError{Op: "read", Err: netTimeout{timeout: true}},
 		netTimeout{timeout: true}, netTimeout{},
 		&UnavailableError{},
-		&WriteTimeoutError{WriteType: "SIMPLE"},
-		&WriteTimeoutError{WriteType: "SIMPLE", Received: 1},
-		&WriteTimeoutError{WriteType: "CAS", Received: 1},
-		&WriteFailureError{WriteType: "BATCH", Received: 1},
+		&WriteTimeoutError{WriteType: WriteTypeSimple},
+		&WriteTimeoutError{WriteType: WriteTypeSimple, Received: 1},
+		&WriteTimeoutError{WriteType: WriteTypeCAS, Received: 1},
+		&WriteFailureError{WriteType: WriteTypeBatch, Received: 1},
 		&ReadTimeoutError{}, &ReadFailureError{},
 		&CDCWriteFailureError{}, &CASWriteUnknownError{},
 		&AlreadyExistsError{}, &UnpreparedError{}, &FunctionFailureError{},

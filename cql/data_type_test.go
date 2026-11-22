@@ -89,7 +89,7 @@ func TestDataType(t *testing.T) {
 	})
 
 	t.Run("ValidateScalarKind", func(t *testing.T) {
-		for kind := TypeAscii; kind <= TypeDuration; kind++ {
+		for kind := TypeASCII; kind <= TypeDuration; kind++ {
 			if err := validateScalarKind(kind); err != nil {
 				t.Fatalf("valid scalar %v: %v", kind, err)
 			}
@@ -115,14 +115,14 @@ func TestDataType(t *testing.T) {
 	t.Run("Predeclared", func(t *testing.T) {
 		t.Run("Shared", func(t *testing.T) {
 			predeclared := map[Type]DataType{
-				TypeAscii: ASCIIType, TypeBigInt: BigIntType, TypeBlob: BlobType, TypeBoolean: BooleanType,
+				TypeASCII: ASCIIType, TypeBigInt: BigIntType, TypeBlob: BlobType, TypeBoolean: BooleanType,
 				TypeCounter: CounterType, TypeDecimal: DecimalType, TypeDouble: DoubleType, TypeFloat: FloatType,
 				TypeInt: IntType, TypeText: TextType, TypeTimestamp: TimestampType, TypeUUID: UUIDType,
 				TypeVarchar: VarcharType, TypeVarint: VarintType, TypeTimeUUID: TimeUUIDType, TypeInet: InetType,
 				TypeDate: DateType, TypeTime: TimeType, TypeSmallInt: SmallIntType, TypeTinyInt: TinyIntType,
 				TypeDuration: DurationType,
 			}
-			for kind := TypeAscii; kind <= TypeDuration; kind++ {
+			for kind := TypeASCII; kind <= TypeDuration; kind++ {
 				want, ok := predeclared[kind]
 				if !ok {
 					t.Fatalf("no predeclared type for %v", kind)

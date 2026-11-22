@@ -247,7 +247,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if got.Version() != 1 {
 				t.Fatalf("UUID version%d", got.Version())
 			}
-			if at := got.Time(); at.Before(before.Add(-time.Hour)) || at.After(after.Add(time.Hour)) {
+			if at := cql.TimeUUID(got).Time(); at.Before(before.Add(-time.Hour)) || at.After(after.Add(time.Hour)) {
 				t.Fatalf("timestamp outside tolerance: %v", at)
 			}
 		})

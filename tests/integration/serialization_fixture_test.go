@@ -233,7 +233,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		a, e := want.Float()
 		b, f := got.Float()
 		equal = e == nil && f == nil && math.Float64bits(a) == math.Float64bits(b)
-	case cql.TypeText, cql.TypeVarchar, cql.TypeAscii:
+	case cql.TypeText, cql.TypeVarchar, cql.TypeASCII:
 		a, e := want.Text()
 		b, f := got.Text()
 		equal = e == nil && f == nil && a.String() == b.String()
@@ -525,7 +525,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		switch kind {
 		case cql.TypeText, cql.TypeVarchar:
 			return cql.TextValue(v)
-		case cql.TypeAscii:
+		case cql.TypeASCII:
 			return cql.ASCIIValue(v)
 		case cql.TypeBlob:
 			return cql.BlobValue([]byte(v)), nil

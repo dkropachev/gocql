@@ -26,6 +26,7 @@ package cqlerr
 
 import (
 	"fmt"
+	"net/netip"
 
 	"github.com/scylladb/gocql/v2/cql"
 )
@@ -214,17 +215,81 @@ func (e *UnavailableError) Is(target error) bool { return target == CodeUnavaila
 func (e *UnavailableError) Kind() Kind { return KindUnavailable }
 
 // ErrorMap maps the address of each replica that failed to its failure
-// reason code.
-type ErrorMap map[string]uint16
+// reason code. An IPv4 replica is keyed by its 4-byte address, even when the
+// server sent it IPv4-mapped in 16 bytes.
+type ErrorMap map[netip.Addr]uint16
+
+// WriteType is the kind of write that a WriteTimeoutError or
+// WriteFailureError reports. Its values are the protocol's write types; the
+// zero WriteType is WriteTypeUnknown, which the driver reports for a write
+// type it does not name; the server's text of such a type is not kept. Later
+// releases may add values, so a switch over them needs a default case.
+type WriteType uint8
+
+// The write types.
+const (
+	// WriteTypeUnknown is a write type the driver does not name.
+	WriteTypeUnknown WriteType = iota
+	// WriteTypeSimple is a write that is neither in a batch nor a counter
+	// update.
+	WriteTypeSimple
+	// WriteTypeBatch is a logged batch whose batch log write succeeded.
+	WriteTypeBatch
+	// WriteTypeUnloggedBatch is an unlogged batch; no batch log write was
+	// attempted.
+	WriteTypeUnloggedBatch
+	// WriteTypeCounter is a counter update, batched or not.
+	WriteTypeCounter
+	// WriteTypeBatchLog is the batch log write of a logged batch.
+	WriteTypeBatchLog
+	// WriteTypeCAS is a conditional (LWT) write.
+	WriteTypeCAS
+	// WriteTypeView is a write that updates a materialized view and could
+	// not take the view's lock in time.
+	WriteTypeView
+	// WriteTypeCDC is a write to a table tracked by change data capture
+	// once the CDC log's space is exhausted.
+	WriteTypeCDC
+)
+
+var writeTypeNames = [...]string{
+	WriteTypeUnknown:       "unknown",
+	WriteTypeSimple:        "SIMPLE",
+	WriteTypeBatch:         "BATCH",
+	WriteTypeUnloggedBatch: "UNLOGGED_BATCH",
+	WriteTypeCounter:       "COUNTER",
+	WriteTypeBatchLog:      "BATCH_LOG",
+	WriteTypeCAS:           "CAS",
+	WriteTypeView:          "VIEW",
+	WriteTypeCDC:           "CDC",
+}
+
+// String returns the server's name of the write type, such as "SIMPLE" or
+// "BATCH_LOG", "unknown" for WriteTypeUnknown, or WriteType(n) for a value it
+// does not define.
+func (w WriteType) String() string {
+	if int(w) < len(writeTypeNames) {
+		return writeTypeNames[w]
+	}
+	return fmt.Sprintf("WriteType(%d)", uint8(w))
+}
+
+// parseWriteType maps the server's name of a write type to its WriteType, and
+// a name the driver does not know to WriteTypeUnknown.
+func parseWriteType(name string) WriteType {
+	for w := WriteTypeSimple; int(w) < len(writeTypeNames); w++ {
+		if writeTypeNames[w] == name {
+			return w
+		}
+	}
+	return WriteTypeUnknown
+}
 
 // WriteTimeoutError reports that replicas did not acknowledge a write in
 // time.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type WriteTimeoutError struct {
-	// WriteType is the kind of write, as the server names it, such as
-	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
-	WriteType string
 	serverError
 	// Received is the number of replicas that acknowledged the request.
 	Received int
@@ -233,6 +298,8 @@ type WriteTimeoutError struct {
 	BlockFor int
 	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
+	// WriteType is the kind of write.
+	WriteType WriteType
 }
 
 // Code returns CodeWriteTimeout.
@@ -254,9 +321,6 @@ func (e *WriteTimeoutError) Kind() Kind { return KindTimeout }
 type WriteFailureError struct {
 	// ErrorMap holds each failed replica's reason on protocol 5 and later.
 	ErrorMap ErrorMap
-	// WriteType is the kind of write, as the server names it, such as
-	// "SIMPLE", "BATCH", "BATCH_LOG", "COUNTER" or "CAS".
-	WriteType string
 	serverError
 	// Received is the number of replicas that acknowledged the request.
 	Received int
@@ -267,6 +331,8 @@ type WriteFailureError struct {
 	NumFailures int
 	// Consistency is the consistency level of the request.
 	Consistency cql.Consistency
+	// WriteType is the kind of write.
+	WriteType WriteType
 }
 
 // Code returns CodeWriteFailure.
@@ -596,12 +662,12 @@ func serverErrorExecutionStatus(err ServerError) ExecutionStatus {
 
 // writeExecution classifies a write that some replicas acknowledged. Batch log
 // and Paxos acknowledgements do not mean the data itself was applied.
-func writeExecution(received int, writeType string) ExecutionStatus {
+func writeExecution(received int, writeType WriteType) ExecutionStatus {
 	if received <= 0 {
 		return MaybeExecuted
 	}
 	switch writeType {
-	case "SIMPLE", "BATCH", "UNLOGGED_BATCH", "COUNTER", "VIEW", "CDC":
+	case WriteTypeSimple, WriteTypeBatch, WriteTypeUnloggedBatch, WriteTypeCounter, WriteTypeView, WriteTypeCDC:
 		return PartiallyExecuted
 	default:
 		return MaybeExecuted
@@ -632,7 +698,7 @@ func decodeServerError(r errorBody, warnings []string, failureReasonMap bool, ra
 		case CodeUnavailable:
 			return &UnavailableError{serverError: base, Consistency: cql.Consistency(r.U16()), Required: r.I32(), Alive: r.I32()}
 		case CodeWriteTimeout:
-			return &WriteTimeoutError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), WriteType: r.Str()}
+			return &WriteTimeoutError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), WriteType: parseWriteType(r.Str())}
 		case CodeReadTimeout:
 			return &ReadTimeoutError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32(), DataPresent: r.U8() != 0}
 		case CodeAlreadyExists:
@@ -657,7 +723,7 @@ func decodeServerError(r errorBody, warnings []string, failureReasonMap bool, ra
 			} else {
 				e.NumFailures = r.I32()
 			}
-			e.WriteType = r.Str()
+			e.WriteType = parseWriteType(r.Str())
 			return e
 		case CodeFunctionFailure:
 			return &FunctionFailureError{serverError: base, Keyspace: r.Str(), Function: r.Str(), ArgTypes: r.Strings()}

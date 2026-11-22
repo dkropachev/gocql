@@ -41,7 +41,7 @@ type Columns struct{ columns []ColumnSpec }
 
 // scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
 var scalarTypes = func() (t [TypeDuration + 1]DataType) {
-	for k := TypeAscii; k <= TypeDuration; k++ {
+	for k := TypeASCII; k <= TypeDuration; k++ {
 		t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
 	}
 	return t
@@ -51,7 +51,7 @@ var scalarTypes = func() (t [TypeDuration + 1]DataType) {
 // constant. Treat them as constants: reassigning one changes only code that
 // reads the variable, not ScalarType or decoded metadata.
 var (
-	ASCIIType     = scalarTypes[TypeAscii]
+	ASCIIType     = scalarTypes[TypeASCII]
 	BigIntType    = scalarTypes[TypeBigInt]
 	BlobType      = scalarTypes[TypeBlob]
 	BooleanType   = scalarTypes[TypeBoolean]
@@ -86,7 +86,7 @@ func ScalarType(kind Type) (DataType, error) {
 
 // ValidateScalarKind checks scalar support without constructing a descriptor.
 func validateScalarKind(kind Type) error {
-	if kind < TypeAscii || kind > TypeDuration {
+	if kind < TypeASCII || kind > TypeDuration {
 		return typeValidation("kind", "unsupported scalar kind %v", kind)
 	}
 	return nil

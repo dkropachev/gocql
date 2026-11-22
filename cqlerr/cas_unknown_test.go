@@ -18,8 +18,8 @@ func TestIsCASWriteUnknown(t *testing.T) {
 	}{
 		{&CASWriteUnknownError{}, true},
 		{fmt.Errorf("wrapped: %w", &CASWriteUnknownError{}), true},
-		{&WriteTimeoutError{WriteType: "CAS"}, true},
-		{&WriteTimeoutError{WriteType: "SIMPLE"}, false},
+		{&WriteTimeoutError{WriteType: WriteTypeCAS}, true},
+		{&WriteTimeoutError{WriteType: WriteTypeSimple}, false},
 		{&ReadTimeoutError{}, false},
 		{nil, false},
 	} {

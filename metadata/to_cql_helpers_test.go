@@ -529,7 +529,7 @@ func TestToCQLHelpers(t *testing.T) {
 
 		opts := TableOptions{
 			Comment:        "hi",
-			GcGraceSeconds: 864000,
+			GCGraceSeconds: 864000,
 			Caching:        map[string]string{"keys": "ALL"},
 			Compaction:     map[string]string{"class": "SizeTieredCompactionStrategy"},
 			Compression:    map[string]string{"sstable_compression": "LZ4Compressor"},
@@ -538,7 +538,7 @@ func TestToCQLHelpers(t *testing.T) {
 		t.Run("clustering order leads the property list", func(t *testing.T) {
 			t.Parallel()
 
-			cks := []*Column{{Name: "c", ClusteringOrder: "DESC"}}
+			cks := []*Column{{Name: "c", ClusteringOrder: ColumnOrderDesc}}
 			got, err := cqlHelpers.tablePropertiesToCQL(cks, opts, nil)
 			if err != nil {
 				t.Fatalf("tablePropertiesToCQL: %v", err)

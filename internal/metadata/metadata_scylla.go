@@ -180,20 +180,16 @@ func compileMetadata(
 	keyspace.Views = make(map[string]*metadata2.View, len(views))
 	for i := range views {
 		v := &views[i]
-		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.ViewName, "_index")]; ok {
+		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.Name, "_index")]; ok {
 			continue
 		}
 
 		v.Columns = make(map[string]*metadata2.Column)
-		keyspace.Views[v.ViewName] = v
+		keyspace.Views[v.Name] = v
 	}
 
 	for i := range columns {
 		col := &columns[i]
-		col.Order = metadata2.ASC
-		if col.ClusteringOrder == "desc" {
-			col.Order = metadata2.DESC
-		}
 
 		table, ok := keyspace.Tables[col.Table]
 		if !ok {
@@ -258,7 +254,7 @@ func InternalCompileTableMetadata(
 	}
 	for name, ix := range keyspace.Indexes {
 		for i := range tables {
-			if ix.TableName == tables[i].Name {
+			if ix.Table == tables[i].Name {
 				delete(keyspace.Indexes, name)
 			}
 		}
@@ -273,26 +269,22 @@ func InternalCompileTableMetadata(
 	}
 	for name, v := range keyspace.Views {
 		for i := range tables {
-			if v.BaseTableName == tables[i].Name {
+			if v.BaseTable == tables[i].Name {
 				delete(keyspace.Views, name)
 			}
 		}
 	}
 	for i := range views {
 		v := &views[i]
-		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.ViewName, "_index")]; ok {
+		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.Name, "_index")]; ok {
 			continue
 		}
 		v.Columns = make(map[string]*metadata2.Column)
-		keyspace.Views[v.ViewName] = v
+		keyspace.Views[v.Name] = v
 	}
 
 	for i := range columns {
 		col := &columns[i]
-		col.Order = metadata2.ASC
-		if col.ClusteringOrder == "desc" {
-			col.Order = metadata2.DESC
-		}
 
 		table, ok := keyspace.Tables[col.Table]
 		if !ok {

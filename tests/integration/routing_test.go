@@ -628,7 +628,7 @@ func TestRouting(t *testing.T) {
 				t.Fatal(err)
 			}
 			ks, _ := s.Metadata().Keyspace(keyspace)
-			if !ks.TabletBased || ks.Tables["records"].ID == "" {
+			if !ks.TabletBased || ks.Tables["records"].ID == (cql.UUID{}) {
 				t.Fatal("server tablet/table UUID metadata absent", ks)
 			}
 			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
@@ -646,7 +646,7 @@ func TestRouting(t *testing.T) {
 				}
 			}
 			// Read the server's authoritative tablet table independently of feedback.
-			id := codecTestMust(cql.ParseUUID(ks.Tables["records"].ID))
+			id := ks.Tables["records"].ID
 			serverRows, err := v2Query(ctx, s, "SELECT last_token,replicas FROM system.tablets WHERE table_id=?", cql.UUIDValue(id))
 			if err != nil {
 				t.Fatal(err)

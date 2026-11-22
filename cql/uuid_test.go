@@ -162,15 +162,15 @@ func TestUUID(t *testing.T) {
 				t.Fatalf("unexpected error %v", err)
 			}
 
-			if node := uuid.Node(); node != nil {
+			if node := TimeUUID(uuid).Node(); node != nil {
 				t.Fatalf("expected nil, got %v", node)
 			}
 
-			if stamp := uuid.Timestamp(); stamp != 0 {
+			if stamp := TimeUUID(uuid).Timestamp(); stamp != 0 {
 				t.Fatalf("expceted 0, got %v", stamp)
 			}
 			zeroT := time.Time{}
-			if to := uuid.Time(); to != zeroT {
+			if to := TimeUUID(uuid).Time(); to != zeroT {
 				t.Fatalf("expected %v, got %v", zeroT, to)
 			}
 		})
@@ -218,8 +218,8 @@ func TestUUID(t *testing.T) {
 			t.Parallel()
 
 			uuid := MustParseUUID("486f3a88-775b-11e3-ae07-d231feb1dc81")
-			if uuid.Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
-				t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", uuid.Time())
+			if TimeUUID(uuid).Time() != time.Date(2014, 1, 7, 5, 19, 29, 222516000, time.UTC) {
+				t.Errorf("Expected date of 1/7/2014 at 5:19:29.222516, got %v", TimeUUID(uuid).Time())
 			}
 		})
 	})
@@ -239,13 +239,13 @@ func TestUUID(t *testing.T) {
 				t.Errorf("wrong version. expected %d got %d", 1, version)
 			}
 
-			if n := uuid.Node(); !bytes.Equal(n, node) && i > 0 {
+			if n := TimeUUID(uuid).Node(); !bytes.Equal(n, node) && i > 0 {
 				t.Errorf("wrong node. expected %x, got %x", node, n)
 			} else if i == 0 {
 				node = n
 			}
 
-			ts := uuid.Timestamp()
+			ts := TimeUUID(uuid).Timestamp()
 			if ts < timestamp {
 				t.Errorf("timestamps must grow: timestamp=%v ts=%v", timestamp, ts)
 			}
@@ -259,13 +259,13 @@ func TestUUID(t *testing.T) {
 		var withHyphens, withoutHypens, tooLong UUID
 
 		withHyphens.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81"`))
-		if withHyphens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
-			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withHyphens.Time())
+		if TimeUUID(withHyphens).Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
+			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", TimeUUID(withHyphens).Time())
 		}
 
 		withoutHypens.UnmarshalJSON([]byte(`"486f3a88775b11e3ae07d231feb1dc81"`))
-		if withoutHypens.Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
-			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", withoutHypens.Time())
+		if TimeUUID(withoutHypens).Time().Truncate(time.Second) != time.Date(2014, 1, 7, 5, 19, 29, 0, time.UTC) {
+			t.Errorf("Expected date of 1/7/2014 at 5:19:29, got %v", TimeUUID(withoutHypens).Time())
 		}
 
 		err := tooLong.UnmarshalJSON([]byte(`"486f3a88-775b-11e3-ae07-d231feb1dc81486f3a88"`))
@@ -305,18 +305,18 @@ func TestUUID(t *testing.T) {
 		minTimeUUID := minTimeUUID(aTime)
 
 		ts := aTime.Unix()
-		tsFromUUID := minTimeUUID.Time().Unix()
+		tsFromUUID := TimeUUID(minTimeUUID).Time().Unix()
 		if ts != tsFromUUID {
 			t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
 		}
 
-		clockFromUUID := minTimeUUID.Clock()
+		clockFromUUID := TimeUUID(minTimeUUID).Clock()
 		// clear two most significant bits, as they are used for IETF variant
 		if minClock&0x3FFF != clockFromUUID {
 			t.Errorf("clocks are not equal: expected %08b, got %08b", minClock&0x3FFF, clockFromUUID)
 		}
 
-		nodeFromUUID := minTimeUUID.Node()
+		nodeFromUUID := TimeUUID(minTimeUUID).Node()
 		if !bytes.Equal(minNode[:], nodeFromUUID) {
 			t.Errorf("nodes are not equal: expected %08b, got %08b", minNode, nodeFromUUID)
 		}
@@ -329,17 +329,17 @@ func TestUUID(t *testing.T) {
 		maxTimeUUID := maxTimeUUID(aTime)
 
 		ts := aTime.Unix()
-		tsFromUUID := maxTimeUUID.Time().Unix()
+		tsFromUUID := TimeUUID(maxTimeUUID).Time().Unix()
 		if ts != tsFromUUID {
 			t.Errorf("timestamps are not equal: expected %d, got %d", ts, tsFromUUID)
 		}
 
-		clockFromUUID := maxTimeUUID.Clock()
+		clockFromUUID := TimeUUID(maxTimeUUID).Clock()
 		if maxClock&0x3FFF != clockFromUUID {
 			t.Errorf("clocks are not equal: expected %08b, got %08b", maxClock&0x3FFF, clockFromUUID)
 		}
 
-		nodeFromUUID := maxTimeUUID.Node()
+		nodeFromUUID := TimeUUID(maxTimeUUID).Node()
 		if !bytes.Equal(maxNode[:], nodeFromUUID) {
 			t.Errorf("nodes are not equal:  expected %08b, got %08b", maxNode, nodeFromUUID)
 		}

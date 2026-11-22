@@ -85,7 +85,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	config := p.InternalConfig
 	p.InternalMu.Unlock()
 	base, err := metadata.InternalGetV2KeyspaceMetadata(ctx, s.NewSchemaSource(), keyspace)
-	absent := errors.Is(err, cqlerr.ErrKeyspaceDoesNotExist)
+	absent := errors.Is(err, metadata.InternalErrKeyspaceDoesNotExist)
 	if err != nil && !absent {
 		return err
 	}

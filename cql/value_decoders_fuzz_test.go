@@ -24,7 +24,7 @@ func fuzzType(t *testing.T, sel *[]byte, depth int) DataType {
 		return b
 	}
 	scalars := []Type{TypeInt, TypeText, TypeBlob, TypeFloat, TypeVarint, TypeDecimal, TypeDuration,
-		TypeBoolean, TypeUUID, TypeInet, TypeDate, TypeTime, TypeSmallInt, TypeTinyInt, TypeBigInt, TypeAscii}
+		TypeBoolean, TypeUUID, TypeInet, TypeDate, TypeTime, TypeSmallInt, TypeTinyInt, TypeBigInt, TypeASCII}
 	b := next()
 	kind := int(b) % (len(scalars) + 6)
 	if depth == 0 || kind < len(scalars) {

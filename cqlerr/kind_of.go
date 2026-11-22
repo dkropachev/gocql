@@ -71,7 +71,7 @@ func sentinelKind(err error) Kind {
 	switch err {
 	case ErrClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
 		return KindClosed
-	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrKeyspaceDoesNotExist, ErrBusy, ErrConditionalExec, ErrPagingComplete,
+	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		ErrPagingStateLimit, ErrNoRows:
 		return KindInvalid
 	case ErrFrameTooBig, ErrPagingNoProgress:

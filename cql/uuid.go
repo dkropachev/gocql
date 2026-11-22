@@ -289,49 +289,6 @@ func (u UUID) Version() int {
 	return int(u[6] & 0xF0 >> 4)
 }
 
-// Node extracts the MAC address of the node who generated this UUID. It will
-// return nil if the UUID is not a time based UUID (version 1).
-func (u UUID) Node() []byte {
-	if u.Version() != 1 {
-		return nil
-	}
-	return u[10:]
-}
-
-// Clock extracts the clock sequence of this UUID. It will return zero if the
-// UUID is not a time based UUID (version 1).
-func (u UUID) Clock() uint32 {
-	if u.Version() != 1 {
-		return 0
-	}
-
-	// Clock sequence is the lower 14bits of u[8:10]
-	return uint32(u[8]&0x3F)<<8 | uint32(u[9])
-}
-
-// Timestamp extracts the timestamp information from a time based UUID
-// (version 1).
-func (u UUID) Timestamp() int64 {
-	if u.Version() != 1 {
-		return 0
-	}
-	return int64(uint64(u[0])<<24|uint64(u[1])<<16|
-		uint64(u[2])<<8|uint64(u[3])) +
-		int64(uint64(u[4])<<40|uint64(u[5])<<32) +
-		int64(uint64(u[6]&0x0F)<<56|uint64(u[7])<<48)
-}
-
-// Time is like Timestamp, except that it returns a time.Time.
-func (u UUID) Time() time.Time {
-	if u.Version() != 1 {
-		return time.Time{}
-	}
-	t := u.Timestamp()
-	sec := t / 1e7
-	nsec := (t % 1e7) * 100
-	return time.Unix(sec+timeBase, nsec).UTC()
-}
-
 // MarshalJSON encodes u as its string form, quoted.
 func (u UUID) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + u.String() + `"`), nil

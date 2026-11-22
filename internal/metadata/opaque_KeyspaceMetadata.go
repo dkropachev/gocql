@@ -48,12 +48,12 @@ func removeTableData(ks *metadata.Keyspace, tableName string) {
 		delete(ks.Tables, tableName)
 	}
 	for name, idx := range ks.Indexes {
-		if idx != nil && idx.TableName == tableName {
+		if idx != nil && idx.Table == tableName {
 			delete(ks.Indexes, name)
 		}
 	}
 	for name, view := range ks.Views {
-		if view != nil && view.BaseTableName == tableName {
+		if view != nil && view.BaseTable == tableName {
 			delete(ks.Views, name)
 		}
 	}
