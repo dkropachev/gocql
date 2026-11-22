@@ -7,7 +7,7 @@ hostname is dialed instead of the address the cluster publishes for it.
 zero `config.ClientRoutes{}` removes it. With TLS configured (`WithTLS` or
 `WithTLSSource`) routed connections dial each route's `tls_port`, otherwise its
 `port`. `Build` rejects client routes together with `WithAddressTranslator`,
-and `Connect` with a Cassandra dialect fails with
+and `Build` with a Cassandra dialect fails with
 `*cqlerr.UnsupportedSettingError`.
 
 ```go
@@ -18,7 +18,7 @@ routes, err := config.NewClientRoutes().
 if err != nil {
 	return err
 }
-cfg, err := config.New("10.0.0.1").
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	WithTLS(tlsConfig).
 	WithClientRoutes(routes).
 	Build()

@@ -648,15 +648,15 @@ hostname)...Build()` and passed to `WithClientRoutes`, so a hostname override
 belongs to its route and one call replaces the whole setting. Routed
 connections dial the route's `tls_port` exactly when TLS is configured.
 
-The root package has one function, `Connect(context.Context, config.Config,
-Dialect) (*Session, error)`, which opens a session of that dialect. It
+The root package has one function, `Connect(context.Context, config.Config)
+(*Session, error)`, which opens a session of the config's dialect. It
 cannot be a method of `config.Config`: package `config` cannot import the
 `Session` it would return. Every other constructor lives in the package that
 owns its type:
 
 | Function | Purpose |
 |---|---|
-| `config.New(contactPoints ...string) *config.ConfigBuilder` | starts a configuration |
+| `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
 | `config.NewClientRoutes() *config.ClientRoutesBuilder` | starts a client routes setting |
 | `config.NewTLSFiles(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
@@ -668,14 +668,16 @@ the root package exports `var StopIteration` (see below).
 ## Statements, preparation, queries and execution
 
 A session speaks one dialect, the database and native protocol version passed
-to Connect as a value; it is not a type parameter, so every session has the
+to `config.New` as a value; it is not a type parameter, so every session has the
 type `*Session`. The caller chooses it; the driver negotiates no protocol
 version. Connect fails with `cqlerr.ServerMismatchError` when the cluster does
-not speak that version or is not that database, and rejects the zero Dialect.
-API only one dialect supports returns an error on a session of another
-dialect, before anything is sent. See docs/source/server-differences.md.
+not speak that version or is not that database; `Build` rejects the zero
+Dialect and settings the dialect does not support. API only one dialect
+supports at execution time returns an error on a session of another dialect,
+before anything is sent. See docs/source/server-differences.md.
 
 ```go
+// package config
 type Dialect uint8
 const (
     ScyllaV4    Dialect = iota + 1 // ScyllaDB, native protocol 4
@@ -683,9 +685,12 @@ const (
     CassandraV5                    // Apache Cassandra 4.0+, native protocol 5
 )
 func (Dialect) String() string
+func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
+
+// package gocql
 type Session struct { /* opaque */ }
-func Connect(context.Context, config.Config, Dialect) (*Session, error)
-func (s *Session) Dialect() Dialect
+func Connect(context.Context, config.Config) (*Session, error)
+func (s *Session) Dialect() config.Dialect
 func (s *Session) ID() string
 ```
 
@@ -1853,7 +1858,7 @@ These functions are the entry points:
 
 ```go
 // package config
-func New(contactPoints ...string) *ConfigBuilder
+func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
@@ -1879,7 +1884,7 @@ func (*ClientRoutesBuilder) Build() (ClientRoutes, error)
 func (ClientRoutes) Routes() []ClientRoute // copy; ClientRoute{ConnectionID, Hostname}
 
 // package gocql
-func Connect(context.Context, config.Config, Dialect) (*Session, error)
+func Connect(context.Context, config.Config) (*Session, error)
 ```
 
 `Connect` rejects the zero `Config`. `WithOnlyHost` connects only to the node
@@ -1958,8 +1963,8 @@ socket represents only its reconciled local host, so remote strict targets fail.
 For example:
 
 ```go
-cfg, err := config.New("unix:/run/scylla/cql.m").Build()
-session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+cfg, err := config.New(config.ScyllaV4, "unix:/run/scylla/cql.m").Build()
+session, err := gocql.Connect(ctx, cfg)
 ```
 
 ```go

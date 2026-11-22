@@ -2,13 +2,13 @@
 
 package integration
 
-import gocql "github.com/scylladb/gocql/v2"
+import "github.com/scylladb/gocql/v2/config"
 
 // testDialect is the dialect the suite connects with. The suite is compiled
 // once per dialect: ScyllaV4 by default, and
 // CassandraV4 or CassandraV5 with the dialect_cassandra_v4 or
 // dialect_cassandra_v5 build tag (make test-integration-cassandra sets it
 // from TEST_CQL_PROTOCOL).
-const testDialect = gocql.ScyllaV4
+const testDialect = config.ScyllaV4
 
 const testDialectDistribution, testDialectProtocol = "scylla", 4

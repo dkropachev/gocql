@@ -7,18 +7,20 @@ import (
 	"context"
 	"iter"
 
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
-// Connect opens a session of a Dialect: ScyllaV4, CassandraV4 or
-// CassandraV5. Session.Dialect reports which; one Session type serves every
-// dialect. Sessions and their prepared statements are safe for concurrent
+// Connect opens a session of the config's config.Dialect: ScyllaV4,
+// CassandraV4 or CassandraV5. Session.Dialect reports which; one Session type
+// serves every dialect. Sessions and their prepared statements are safe for concurrent
 // use. Close the session when the application stops using it.
 //
 // A zero Session was never open: Closed reports true, Dialect returns the zero
@@ -29,12 +31,12 @@ type Session implSession.Session
 func (s *Session) internal() *implSession.Session { return (*implSession.Session)(s) }
 
 // Dialect returns the dialect s was opened with.
-func (s *Session) Dialect() Dialect {
+func (s *Session) Dialect() config.Dialect {
 	if s.internal().Core() == nil {
 		return 0
 	}
 	cfg := &s.internal().Data().InternalCfg
-	return dialectOf(cfg.ProtoVersion, cfg.Server)
+	return config.Dialect(implSettings.DialectOf(cfg.Server, cfg.ProtoVersion))
 }
 
 // Prepare prepares statement for repeated execution. The returned handle is

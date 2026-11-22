@@ -56,7 +56,7 @@ func TestMetadata(t *testing.T) {
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
 			c.WithDiscovery(false).WithConnectionsPerHost(1).NoAdvancedShardAwareness()
 		})
-		s, err := gocql.Connect(ctx, mustBuild(t, cfg), testDialect)
+		s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -172,7 +172,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster().WithIgnoreEvents(event.Topology, event.Status)
 
-			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -204,7 +204,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("SchemaChange", func(t *testing.T) {
 			cluster := createV2Cluster()
 
-			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster), testDialect)
+			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("unable to create session: %v", err)
 			}
@@ -283,7 +283,7 @@ func TestMetadata(t *testing.T) {
 			cfg := createV2ClusterWithout(fixtureProtocol|fixtureCompression, func(c *config.ConfigBuilder) {
 				c.WithCompression(cql.NoCompression).WithDialer(fixture)
 			})
-			session, err := gocql.Connect(context.Background(), mustBuild(t, cfg), testDialect)
+			session, err := gocql.Connect(context.Background(), mustBuild(t, cfg))
 			require.NoError(t, err)
 			defer session.Close()
 			require.Positive(t, fixture.injected.Load(), "discovery must consume injected incomplete peer")

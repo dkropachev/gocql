@@ -122,7 +122,7 @@ documented methods.
   them (the zero `cql.Consistency` is ANY, the zero `cql.BatchKind` is
   LOGGED); the others start at a safe zero (`retry.Stop`,
   `cqlerr.MaybeExecuted`, `event.Unknown`, `cqlerr.WriteTypeUnknown`,
-  `metadata.ColumnOrderNone`, an invalid `gocql.Dialect`). A
+  `metadata.ColumnOrderNone`, an invalid `config.Dialect`). A
   setting that may be left unset is a `cql.Option`, never a zero enum. Each
   integer enum has a `String` method that prints `Type(n)` for a value it
   does not define; `cqlerr.ErrorCode` is an error instead, and its `Error`
@@ -133,7 +133,7 @@ documented methods.
 - **Zero values.** Every exported struct documents its zero value: usable,
   and what it means (`gocql.Batch`, `exec.Options`, `cql.PageState`), or
   rejected with a `cql.ValidationError` (`config.Config`, `cql.DataType`;
-  likewise the zero `gocql.Dialect`). `TestStructZeroValueDocs` checks that
+  likewise the zero `config.Dialect`). `TestStructZeroValueDocs` checks that
   the docs mention the zero value.
 - **Third-party dependencies.** The main module depends only on compression
   libraries and `golang.org/x/sync`. An integration that needs another
@@ -168,25 +168,28 @@ documented methods.
 
 ### `gocql` (root, layer 3)
 
-- **Contains:** `Connect`, `Session`, the `Dialect` values, and the execution
+- **Contains:** `Connect`, `Session`, and the execution
   handles (`Prepared`, `Query`, `PreparedStream`, `StreamQuery`, `Batch`,
   `Rows`, `Page`, `RowStream`, `PageLease`), plus `PreparedInfo` and
   `StreamInfo` as plain data. `Result` lives in `cql`, because `cqlerr`
   needs it and the root package imports `cqlerr`.
 - **Must not contain:** codecs, policies, configuration builders, error types,
   or anything only one dialect supports.
-- **Future:** new dialect values (`ScyllaV5`, a later Cassandra protocol).
+- **Future:** new execution handles.
 
 ### `config` (layer 3)
 
-- **Contains:** `ConfigBuilder`, `Config`, `ProfileBuilder`, `Profile`,
-  `ClientRoutes` and `TLSFileSource`. It is layer 3
+- **Contains:** `ConfigBuilder`, `Config`, `Dialect` and its values,
+  `ProfileBuilder`, `Profile`, `ClientRoutes` and `TLSFileSource`. The dialect
+  is a setting: `New` takes it, and `Build` validates the other settings
+  against it. It is layer 3
   because the engine never imports it: `Connect` turns a `Config` into engine
   settings.
 - **Must not contain:** policy or observer interfaces, event payloads, or
   aliases. `config` refers to them; their own packages define them
   (`observe`, `retry`, `endpoint`).
-- **Future:** new settings. Loading configuration from files or a cloud
+- **Future:** new settings and dialect values (`ScyllaV5`, a later Cassandra
+  protocol). Loading configuration from files or a cloud
   connection bundle lives in a `contrib/` module that drives the builder.
 
 ### `exec` (layer 3)

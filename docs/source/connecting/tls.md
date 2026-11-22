@@ -5,7 +5,7 @@ For a fixed configuration, pass `config.ConfigBuilder.WithTLS` a
 minimum TLS version; it copies it:
 
 ```go
-cfg, err := config.New("10.0.0.1").
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	WithTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}).
 	Build()
 ```
@@ -40,7 +40,7 @@ files, err := config.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, conf
 	KeyFile:  "/etc/scylla-client/tls.key",
 	CAFile:   "/etc/scylla-client/ca.crt",
 })
-cfg, err := config.New("10.0.0.1").WithTLSSource(files).Build()
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLSSource(files).Build()
 ```
 
 The files replace `Certificates` and `RootCAs` of the base config, or of TLS
@@ -69,7 +69,7 @@ func (r *rotatingTLS) TLSConfig() *tls.Config { return r.current.Load() }
 
 source := &rotatingTLS{}
 source.current.Store(initial)
-cfg, err := config.New("10.0.0.1").WithTLSSource(source).Build()
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLSSource(source).Build()
 // later: new dials use the new config
 source.current.Store(next)
 ```

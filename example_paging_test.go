@@ -38,11 +38,11 @@ import (
 
 func Example_paging() {
 	ctx := context.Background()
-	cfg, err := config.New("localhost:9042").Build()
+	cfg, err := config.New(config.ScyllaV4, "localhost:9042").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	s, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+	s, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

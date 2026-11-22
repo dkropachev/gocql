@@ -143,7 +143,7 @@ func TestPrepared(t *testing.T) {
 			ctx := context.Background()
 			cluster := createV2Cluster()
 			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
-			session, err := gocql.Connect(ctx, mustBuild(t, cluster), testDialect)
+			session, err := gocql.Connect(ctx, mustBuild(t, cluster))
 			if err != nil {
 				t.Fatal("connect:", err)
 			}

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2"
+	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
 )
@@ -154,7 +155,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info
 		consistency = cql.One
 	}
 	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: true}
-	statement := sessionStatement(s.Dialect() == gocql.ScyllaV4)
+	statement := sessionStatement(s.Dialect() == config.ScyllaV4)
 	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow
 		found, _, err := s.UnpreparedOne(ctx, statement, id, &row, options)

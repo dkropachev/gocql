@@ -27,11 +27,11 @@ import (
     "github.com/scylladb/gocql/v2/cql"
 )
 
-cfg, err := config.New("127.0.0.1:9042").Build()
-if err != nil { return err }
 // The dialect names the database and protocol version: ScyllaV4,
 // CassandraV4 or CassandraV5. Nothing is negotiated.
-session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+cfg, err := config.New(config.ScyllaV4, "127.0.0.1:9042").Build()
+if err != nil { return err }
+session, err := gocql.Connect(ctx, cfg)
 if err != nil { return err }
 defer session.Close()
 
@@ -163,7 +163,7 @@ per object and 64 objects per session.
 
 Normal buffered execution supports negotiated LZ4 and Snappy subject to native
 protocol rules; protocol 5 compression uses LZ4. Configure
-`config.New(hosts...).WithCompression(cql.LZ4Compression)` without a
+`config.New(config.ScyllaV4, hosts...).WithCompression(cql.LZ4Compression)` without a
 compressor import.
 
 ## Configuration and extensions

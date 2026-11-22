@@ -230,7 +230,7 @@ func cassandraOtherSession(t testing.TB, s *gocql.Session, keyspace string) *goc
 	t.Helper()
 	cassandraDDL(t, s, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", keyspace, *flagRF))
 	cfg := createV2Cluster().WithKeyspace(keyspace)
-	other, err := gocql.Connect(context.Background(), mustBuild(t, cfg), testDialect)
+	other, err := gocql.Connect(context.Background(), mustBuild(t, cfg))
 	if err != nil {
 		t.Fatal(err)
 	}

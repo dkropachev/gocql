@@ -24,8 +24,8 @@ packages are named `gocql`.
 - **The context comes first.** Every call that talks to the cluster takes a
   `context.Context` as its first argument; there is no `WithContext`.
 - **The database and protocol version are chosen, not negotiated.**
-  `gocql.Connect(ctx, cfg, dialect)` takes `gocql.ScyllaV4`,
-  `gocql.CassandraV4` or `gocql.CassandraV5`, and fails with
+  `config.New` takes `config.ScyllaV4`, `config.CassandraV4` or
+  `config.CassandraV5` first, and `gocql.Connect(ctx, cfg)` fails with
   `cqlerr.ServerMismatchError` when the cluster does not match.
 - **Configuration is built and validated.** `config.New(...)` returns a
   builder; `Build` validates every setting and returns an immutable
@@ -71,7 +71,7 @@ policy, err := routing.NewPolicy(routing.Options{Datacenter: "dc1", TokenAware: 
 if err != nil {
 	return err
 }
-cfg, err := config.New("10.0.0.1", "10.0.0.2").
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 	WithKeyspace("app").
 	WithAuth(auth.Password("u", "p")).
 	ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
@@ -81,7 +81,7 @@ cfg, err := config.New("10.0.0.1", "10.0.0.2").
 if err != nil {
 	return err
 }
-session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+session, err := gocql.Connect(ctx, cfg)
 if err != nil {
 	return err
 }
@@ -90,9 +90,9 @@ defer session.Close()
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.NewCluster(hosts...)` | `config.New(hosts...)`; a host without a port uses `WithPort` (9042 by default) |
-| `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg, dialect)` |
-| `cluster.ProtoVersion` | the dialect passed to `Connect` |
+| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort` (9042 by default) |
+| `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg)` |
+| `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
 | `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `ConfigureDefaultProfile` with `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |

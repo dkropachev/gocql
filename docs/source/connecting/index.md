@@ -2,7 +2,7 @@
 
 A `config.Config` is built, never written by hand. Package
 `github.com/scylladb/gocql/v2/config` holds the configuration API:
-`config.New(contactPoints...)` returns a `ConfigBuilder`, and each method sets one setting; settings you do
+`config.New(dialect, contactPoints...)` returns a `ConfigBuilder`, and each method sets one setting; settings you do
 not choose keep the driver's behavior, and when a setting is chosen again the
 last call wins. Setters only store values. `Build` validates the final configuration and
 returns an immutable `Config` or the first validation error. A later setting
@@ -12,7 +12,7 @@ replaces an earlier one even if it was invalid:
 profile, err := config.NewProfile().
     WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second).Build()
 if err != nil { return err }
-cfg, err := config.New("10.0.0.1", "10.0.0.2").
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
     WithConnectionsPerShard(2).
     WithDefaultProfile(profile).
@@ -25,31 +25,34 @@ Unix socket: no host discovery is then filled in unless chosen.
 
 ## Dialects
 
-`Connect` takes the dialect: the database and the native protocol version you
-connect to.
+`config.New` takes the dialect first: the database and the native protocol
+version you connect to.
 
 ```go
-session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").Build()
+if err != nil { return err }
+session, err := gocql.Connect(ctx, cfg)
 ```
 
 | Dialect | Database | Protocol |
 |---|---|---|
-| `gocql.ScyllaV4` | ScyllaDB | 4, with ScyllaDB's extensions |
-| `gocql.CassandraV4` | Apache Cassandra | 4 |
-| `gocql.CassandraV5` | Apache Cassandra 4.0 or later | 5 |
+| `config.ScyllaV4` | ScyllaDB | 4, with ScyllaDB's extensions |
+| `config.CassandraV4` | Apache Cassandra | 4 |
+| `config.CassandraV5` | Apache Cassandra 4.0 or later | 5 |
 
 The driver negotiates no version: every connection speaks the dialect's, and
 `Connect` fails when the cluster does not. It also fails with
 `cqlerr.ServerMismatchError` when the cluster is not the dialect's database.
 The dialect fixes how the driver reads results that differ between Cassandra
 and ScyllaDB ([differences](../server-differences.md)), at no cost per request.
-Protocol 5 has no frame compression, so `CassandraV5` with Snappy fails at
-`Connect`; use LZ4 or none.
+Because the dialect is part of the configuration, `Build` rejects settings the
+dialect does not support. Protocol 5 has no frame compression, so
+`CassandraV5` with Snappy fails at `Build`; use LZ4 or none.
 
 Every session has the same type, `*gocql.Session`, whatever its dialect, so
 code that serves several dialects takes a plain `*gocql.Session`.
 `Session.Dialect` reports the dialect when code needs to branch on it. The zero
-`Dialect` names none, and `Connect` rejects it.
+`Dialect` names none, and `Build` rejects it.
 
 Zero turns a feature off where zero has no other meaning: `WithHeartbeat(0, 0)`
 sends no heartbeats, `WithMetadataRefresh(0)` stops periodic metadata reloads,

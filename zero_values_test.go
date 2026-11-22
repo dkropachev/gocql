@@ -114,14 +114,10 @@ func requireValidation(t *testing.T, what string, err error) {
 // TestZeroValuesRejected checks the zero values documented as rejected.
 func TestZeroValuesRejected(t *testing.T) {
 	ctx := context.Background()
-	cfg, err := config.New("127.0.0.1").Build()
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = gocql.Connect(ctx, config.Config{}, gocql.ScyllaV4)
+	_, err := gocql.Connect(ctx, config.Config{})
 	requireValidation(t, "Connect(zero Config)", err)
-	_, err = gocql.Connect(ctx, cfg, gocql.Dialect(0))
-	requireValidation(t, "Connect(zero Dialect)", err)
+	_, err = config.New(config.Dialect(0), "127.0.0.1").Build()
+	requireValidation(t, "config.New(zero Dialect).Build", err)
 	_, err = cql.ListType(cql.DataType{})
 	requireValidation(t, "ListType(zero DataType)", err)
 
@@ -134,7 +130,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	requireValidation(t, "zero ConfigBuilder with settings", err)
 	_, err = new(config.ProfileBuilder).WithPageSize(10).Build()
 	requireValidation(t, "zero ProfileBuilder.Build", err)
-	_, err = config.New("127.0.0.1").WithDefaultProfile(config.Profile{}).Build()
+	_, err = config.New(config.ScyllaV4, "127.0.0.1").WithDefaultProfile(config.Profile{}).Build()
 	requireValidation(t, "WithDefaultProfile(zero Profile)", err)
 	_, err = config.NewTLSFiles(nil, config.TLSFiles{})
 	requireValidation(t, "NewTLSFiles(zero TLSFiles)", err)
@@ -144,7 +140,7 @@ func TestZeroValuesRejected(t *testing.T) {
 		t.Error("zero TLSFileSource returned a TLS configuration")
 	}
 	requireValidation(t, "zero TLSFileSource.Reload", source.Reload())
-	_, err = config.New("127.0.0.1").WithTLSSource(&source).Build()
+	_, err = config.New(config.ScyllaV4, "127.0.0.1").WithTLSSource(&source).Build()
 	requireValidation(t, "WithTLSSource(zero TLSFileSource)", err)
 
 	var session gocql.Session

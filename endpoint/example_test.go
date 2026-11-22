@@ -38,7 +38,7 @@ func (r preferIPv4) LookupNetIP(ctx context.Context, network, host string) ([]ne
 // ExampleResolver wraps net.DefaultResolver to prefer IPv4 addresses for
 // contact points and client route host names.
 func ExampleResolver() {
-	cfg, err := config.New("db.example.com:9042").
+	cfg, err := config.New(config.ScyllaV4, "db.example.com:9042").
 		WithResolver(preferIPv4{net.DefaultResolver}).
 		Build()
 	if err != nil {
@@ -61,7 +61,7 @@ func ExampleTranslator() {
 		}
 		return addr, nil
 	})
-	cfg, err := config.New("10.0.0.10:9042").
+	cfg, err := config.New(config.ScyllaV4, "10.0.0.10:9042").
 		WithAddressTranslator(translator).
 		Build()
 	if err != nil {

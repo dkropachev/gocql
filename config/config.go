@@ -50,26 +50,33 @@ type ConfigBuilder struct {
 	shardAwarenessChosen bool
 	maxExcessChosen      bool
 	perHost              bool
+	dialect              Dialect
 	// started reports that New made the builder.
 	started bool
 }
 
-// New starts a configuration that connects to contactPoints. A contact
-// point is host[:port], or a single absolute Unix socket path (optionally
-// prefixed with "unix:"); for a socket, no host discovery is filled in unless
-// chosen.
-func New(contactPoints ...string) *ConfigBuilder {
-	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), started: true}
+// New starts a configuration that connects to contactPoints, which speak
+// dialect. A contact point is host[:port], or a single absolute Unix socket
+// path (optionally prefixed with "unix:"); for a socket, no host discovery is
+// filled in unless chosen. Build rejects the zero Dialect.
+func New(dialect Dialect, contactPoints ...string) *ConfigBuilder {
+	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, started: true}
 }
 
 // Build validates the final settings and returns the Config or the first
-// validation error. Later calls on the builder do not affect the returned
-// Config.
+// validation error. A setting the dialect does not support fails with a
+// cqlerr.UnsupportedSettingError. Later calls on the builder do not affect
+// the returned Config.
 func (b *ConfigBuilder) Build() (Config, error) {
 	if !b.started {
 		return Config{}, &cql.ValidationError{Field: "config", Err: errors.New("zero ConfigBuilder; start one with config.New")}
 	}
+	server, protocol, ok := implSettings.DialectSpec(uint8(b.dialect))
+	if !ok {
+		return Config{}, &cql.ValidationError{Field: "dialect", Err: fmt.Errorf("%v is not ScyllaV4, CassandraV4 or CassandraV5", b.dialect)}
+	}
 	settings := b.settings
+	settings.Server, settings.Protocol = server, protocol
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
 	if len(b.routes.routes) > 0 {
@@ -424,9 +431,8 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 // WithClientRoutes connects through ScyllaDB client routes built with
 // NewClientRoutes. Each call replaces the complete client routes setting; the
 // zero ClientRoutes removes them. Build rejects them together with
-// WithAddressTranslator. Only ScyllaDB has client routes: Connect with a
-// Cassandra dialect fails with a cqlerr.UnsupportedSettingError before it
-// dials. Default none.
+// WithAddressTranslator. Only ScyllaDB has client routes: Build with a
+// Cassandra dialect fails with a cqlerr.UnsupportedSettingError. Default none.
 func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
 	b.routes = routes
 	return b
@@ -490,8 +496,8 @@ func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 
 // WithMetadataServerTimeout asks ScyllaDB to bound metadata queries with USING
 // TIMEOUT, in whole milliseconds; zero sends none. Cassandra has no USING
-// TIMEOUT, so Connect with a Cassandra dialect fails on a positive value with
-// a cqlerr.UnsupportedSettingError before it dials. Default 30s on ScyllaDB,
+// TIMEOUT, so Build with a Cassandra dialect fails on a positive value with
+// a cqlerr.UnsupportedSettingError. Default 30s on ScyllaDB,
 // none on Cassandra.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.ServerTimeout = cql.Some(d)
@@ -650,7 +656,7 @@ func (c Config) String() string {
 	}
 	s := c.settings
 	var w strings.Builder
-	fmt.Fprintf(&w, "contact points=%v port=%d keyspace=%q compression=%v", s.ContactPoints, s.Port, s.Keyspace, s.Compression)
+	fmt.Fprintf(&w, "dialect=%v contact points=%v port=%d keyspace=%q compression=%v", Dialect(implSettings.DialectOf(s.Server, s.Protocol)), s.ContactPoints, s.Port, s.Keyspace, s.Compression)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
 	fmt.Fprintf(&w, " discovery=%t metadata=%v prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)

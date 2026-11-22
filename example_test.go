@@ -38,11 +38,11 @@ import (
 func Example() {
 	// Assumes example.tweet(timeline text, id uuid, text text, PRIMARY KEY(timeline,id)).
 	ctx := context.Background()
-	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
+	cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+	session, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}

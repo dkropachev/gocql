@@ -46,8 +46,9 @@ func comparable(c implSettings.Config) implSettings.Config {
 
 func TestConfigBuilder(t *testing.T) {
 	t.Run("DefaultsMatchDriverDefaults", func(t *testing.T) {
-		got := *mustBuildConfig(t, New("10.0.0.1")).settings
+		got := *mustBuildConfig(t, New(ScyllaV4, "10.0.0.1")).settings
 		want := implSettings.DefaultConfig("10.0.0.1")
+		want.Server = implSettings.ServerScylla // the dialect's, which DefaultConfig leaves open
 		if !reflect.DeepEqual(comparable(got), comparable(want)) {
 			t.Fatalf("New defaults differ from DefaultConfig:\n got %+v\nwant %+v", comparable(got), comparable(want))
 		}
@@ -64,7 +65,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildValidatesFinalSettings", func(t *testing.T) {
-		b := New("h").WithPort(0).WithConnectionsPerShard(-1)
+		b := New(ScyllaV4, "h").WithPort(0).WithConnectionsPerShard(-1)
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an invalid port")
 		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "port" {
@@ -79,7 +80,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ApplicationVersionRequiresName", func(t *testing.T) {
-		b := New("h").WithApplication("", "1.0.0")
+		b := New(ScyllaV4, "h").WithApplication("", "1.0.0")
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an application version without a name")
 		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "application" {
@@ -90,24 +91,24 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ErrorStatementText", func(t *testing.T) {
-		if _, err := New("h").WithErrorStatementText(-1).Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithErrorStatementText(-1).Build(); err == nil {
 			t.Fatal("Build accepted a negative error statement limit")
 		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "error statement text" {
 			t.Fatalf("Build = %v, want an error statement text ValidationError", err)
 		}
-		if c := mustBuildConfig(t, New("h").WithErrorStatementText(200)).settings; c.ErrorStatementBytes != 200 {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithErrorStatementText(200)).settings; c.ErrorStatementBytes != 200 {
 			t.Fatalf("ErrorStatementBytes = %d, want 200", c.ErrorStatementBytes)
 		}
 	})
 
 	t.Run("NoContactPoints", func(t *testing.T) {
-		if _, err := New().Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
+		if _, err := New(ScyllaV4).Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
 			t.Fatalf("Build without contact points = %v", err)
 		}
 	})
 
 	t.Run("LastCallWins", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
 			WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("c1", "a").WithRoute("c2", "x"))).
@@ -124,7 +125,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ExclusiveOptionsReplace", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").
+		c := mustBuildConfig(t, New(ScyllaV4, "h").
 			WithHeartbeat(time.Second, time.Second).WithHeartbeat(0, 0).
 			WithConnectionsPerHost(4).WithConnectionsPerShard(2).
 			WithAdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
@@ -135,16 +136,16 @@ func TestConfigBuilder(t *testing.T) {
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
 		}
-		if c := mustBuildConfig(t, New("h")).settings; c.Timestamps.Mode() != implSettings.DriverTimestampMode {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h")).settings; c.Timestamps.Mode() != implSettings.DriverTimestampMode {
 			t.Fatalf("default timestamps: mode %d", c.Timestamps.Mode())
 		}
-		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(func() int64 { return 7 })).settings; c.Timestamps.Mode() != implSettings.GeneratedTimestampMode || c.Timestamps.Generator()() != 7 {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(func() int64 { return 7 })).settings; c.Timestamps.Mode() != implSettings.GeneratedTimestampMode || c.Timestamps.Generator()() != 7 {
 			t.Fatalf("a user timestamp generator: mode %d", c.Timestamps.Mode())
 		}
-		if c := mustBuildConfig(t, New("h").WithTimestampGenerator(nil)).settings; c.Timestamps.Mode() != implSettings.ServerTimestampMode {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(nil)).settings; c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a nil timestamp generator: mode %d", c.Timestamps.Mode())
 		}
-		c = mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
 		}
@@ -153,7 +154,7 @@ func TestConfigBuilder(t *testing.T) {
 	// DocumentedDefaults pins the default each setter's doc names, so a
 	// changed default fails here until its doc is updated too.
 	t.Run("DocumentedDefaults", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h")).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h")).settings
 		p := c.DefaultProfile
 		for name, ok := range map[string]bool{
 			"WithPort 9042":                             c.Port == 9042,
@@ -242,8 +243,8 @@ func TestConfigBuilder(t *testing.T) {
 			return addr, nil
 		})
 		for name, b := range map[string]*ConfigBuilder{
-			"RoutesFirst":     New("h").WithClientRoutes(routes).WithAddressTranslator(translator),
-			"TranslatorFirst": New("h").WithAddressTranslator(translator).WithClientRoutes(routes),
+			"RoutesFirst":     New(ScyllaV4, "h").WithClientRoutes(routes).WithAddressTranslator(translator),
+			"TranslatorFirst": New(ScyllaV4, "h").WithAddressTranslator(translator).WithClientRoutes(routes),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
@@ -257,7 +258,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("InvalidLastValueReplacesPreviousValue", func(t *testing.T) {
-		b := New("h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
+		b := New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
 		if got := b.settings.Pool.ConnectionsPerShard; got != -1 {
 			t.Fatalf("ConnectionsPerShard = %d, want the last value -1", got)
 		}
@@ -269,7 +270,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
-		b := New().WithContactPoints("h").
+		b := New(ScyllaV4).WithContactPoints("h").
 			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
 			WithIgnoreEvents(event.Overflow).WithIgnoreEvents(event.Status).
 			WithTLSSource(staticTLS{}).WithTLS(nil).
@@ -301,7 +302,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("TLSCopiedOnSet", func(t *testing.T) {
 		config := &tls.Config{ServerName: "before"}
-		b := New("h").WithTLS(config)
+		b := New(ScyllaV4, "h").WithTLS(config)
 		config.ServerName = "after"
 		if got := mustBuildConfig(t, b).settings.TLS.ServerName; got != "before" {
 			t.Fatalf("ServerName = %q, want the value at WithTLS()", got)
@@ -310,11 +311,11 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("TLS", func(t *testing.T) {
 		source := staticTLS{config: &tls.Config{ServerName: "node"}}
-		c := mustBuildConfig(t, New("h").WithTLS(&tls.Config{ServerName: "first"}).WithTLSSource(source)).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithTLS(&tls.Config{ServerName: "first"}).WithTLSSource(source)).settings
 		if c.TLSSource != source || c.TLS == nil || c.TLS.ServerName != "node" {
 			t.Fatal("the last WithTLSSource did not win or its config was not validated")
 		}
-		c = mustBuildConfig(t, New("h").WithTLSSource(source).WithTLS(&tls.Config{ServerName: "last"})).settings
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithTLSSource(source).WithTLS(&tls.Config{ServerName: "last"})).settings
 		if c.TLS == nil || c.TLS.ServerName != "last" {
 			t.Fatal("WithTLS did not replace WithTLSSource")
 		}
@@ -322,8 +323,8 @@ func TestConfigBuilder(t *testing.T) {
 			b    *ConfigBuilder
 			want string
 		}{
-			"NoConfig":   {New("h").WithTLSSource(staticTLS{}), "returned no config"},
-			"UnixSocket": {New("/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
+			"NoConfig":   {New(ScyllaV4, "h").WithTLSSource(staticTLS{}), "returned no config"},
+			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -334,11 +335,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("UnixSocketInfersNoDiscovery", func(t *testing.T) {
-		c := mustBuildConfig(t, New("/var/lib/scylla/cql.m")).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "/var/lib/scylla/cql.m")).settings
 		if c.Metadata.InitialDiscovery {
 			t.Fatal("a Unix socket kept host discovery")
 		}
-		if _, err := New("/var/lib/scylla/cql.m").WithTLS(&tls.Config{}).Build(); err == nil {
+		if _, err := New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLS(&tls.Config{}).Build(); err == nil {
 			t.Fatal("TLS on a Unix socket was accepted")
 		}
 	})
@@ -355,7 +356,7 @@ func TestConfigBuilder(t *testing.T) {
 		if routes.Routes()[0].Hostname != "a" {
 			t.Fatal("Routes() exposed the internal slice")
 		}
-		r := mustBuildConfig(t, New("h").WithClientRoutes(routes)).settings.ClientRoutes
+		r := mustBuildConfig(t, New(ScyllaV4, "h").WithClientRoutes(routes)).settings.ClientRoutes
 		if !reflect.DeepEqual(r.ConnectionIDs, []string{"c1", "c2"}) || !reflect.DeepEqual(r.HostnameOverrides, map[string]string{"c1": "a"}) {
 			t.Fatalf("client routes settings = %+v", *r)
 		}
@@ -378,27 +379,27 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ClientRoutesAdvancedShardAwareness", func(t *testing.T) {
 		routes := mustRoutes(NewClientRoutes().WithRoute("c1", ""))
-		if c := mustBuildConfig(t, New("h").WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("advanced shard awareness stayed on under client routes")
 		}
-		c := mustBuildConfig(t, New("h").WithAdvancedShardAwareness(50000, 60000).WithClientRoutes(routes)).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(50000, 60000).WithClientRoutes(routes)).settings
 		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 50000 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 60000 {
 			t.Fatalf("explicit advanced shard awareness under client routes: %+v", c.Pool)
 		}
-		if c := mustBuildConfig(t, New("h").WithDefaultAdvancedShardAwareness().WithClientRoutes(routes)).settings; !c.Pool.AdvancedShardAwareness.Enabled {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultAdvancedShardAwareness().WithClientRoutes(routes)).settings; !c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("WithDefaultAdvancedShardAwareness did not turn it on under client routes")
 		}
-		if c := mustBuildConfig(t, New("h").WithDefaultAdvancedShardAwareness().NoAdvancedShardAwareness().WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultAdvancedShardAwareness().NoAdvancedShardAwareness().WithClientRoutes(routes)).settings; c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("NoAdvancedShardAwareness did not win")
 		}
 	})
 
 	t.Run("DefaultAdvancedShardAwareness", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithAdvancedShardAwareness(50000, 60000).WithDefaultAdvancedShardAwareness()).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(50000, 60000).WithDefaultAdvancedShardAwareness()).settings
 		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 49152 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 65535 {
 			t.Fatalf("WithDefaultAdvancedShardAwareness: %+v", c.Pool)
 		}
-		if c := mustBuildConfig(t, New("h").NoAdvancedShardAwareness().WithDefaultAdvancedShardAwareness()).settings; !c.Pool.AdvancedShardAwareness.Enabled {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").NoAdvancedShardAwareness().WithDefaultAdvancedShardAwareness()).settings; !c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("WithDefaultAdvancedShardAwareness did not replace NoAdvancedShardAwareness")
 		}
 	})
@@ -406,17 +407,17 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("OnlyHost", func(t *testing.T) {
 		id := cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")
 		other := cql.MustParseUUID("10112233-4455-4677-8899-aabbccddeeff")
-		keep := mustBuildConfig(t, New("h").WithOnlyHost(id)).settings.HostFilter
+		keep := mustBuildConfig(t, New(ScyllaV4, "h").WithOnlyHost(id)).settings.HostFilter
 		if keep == nil || !keep(metadata.HostSnapshot{ID: id}) || keep(metadata.HostSnapshot{ID: other}) {
 			t.Fatal("WithOnlyHost did not keep exactly its host")
 		}
-		keep = mustBuildConfig(t, New("h").WithOnlyHost(id).
+		keep = mustBuildConfig(t, New(ScyllaV4, "h").WithOnlyHost(id).
 			WithHostFilter(func(h metadata.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
 		if !keep(metadata.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(metadata.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
 			keep(metadata.HostSnapshot{ID: other, Datacenter: "dc1"}) {
 			t.Fatal("WithOnlyHost and WithHostFilter must both pass")
 		}
-		if _, err := New("h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
 			t.Fatal("Build accepted an empty host ID")
 		} else if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 			t.Fatalf("Build = %v, want a ValidationError", err)
@@ -424,23 +425,23 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("PoolSize", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithConnectionsPerHost(3)).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3)).settings
 		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatalf("WithConnectionsPerHost(3) pool = %+v, want 3 per host without the shard-aware port", c.Pool)
 		}
-		c = mustBuildConfig(t, New("h").WithConnectionsPerHost(3).NoAdvancedShardAwareness()).settings
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3).NoAdvancedShardAwareness()).settings
 		if c.Pool.ConnectionsPerHost != 3 || c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatalf("PerHost with NoAdvancedShardAwareness: %+v", c.Pool)
 		}
-		c = mustBuildConfig(t, New("h").WithConnectionsPerHost(3).WithConnectionsPerShard(2).
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3).WithConnectionsPerShard(2).
 			WithAdvancedShardAwareness(50000, 60000).WithMaxExcessPerShard(1)).settings
 		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 1 {
 			t.Fatalf("PerShard after PerHost: %+v", c.Pool)
 		}
 		for name, b := range map[string]*ConfigBuilder{
-			"AdvancedShardAwareness": New("h").WithAdvancedShardAwareness(50000, 60000).WithConnectionsPerHost(2),
-			"MaxExcessPerShard":      New("h").WithConnectionsPerHost(2).WithMaxExcessPerShard(2),
-			"Zero":                   New("h").WithConnectionsPerHost(0),
+			"AdvancedShardAwareness": New(ScyllaV4, "h").WithAdvancedShardAwareness(50000, 60000).WithConnectionsPerHost(2),
+			"MaxExcessPerShard":      New(ScyllaV4, "h").WithConnectionsPerHost(2).WithMaxExcessPerShard(2),
+			"Zero":                   New(ScyllaV4, "h").WithConnectionsPerHost(0),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
@@ -453,7 +454,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildSnapshotsBuilder", func(t *testing.T) {
-		b := New("h").WithMetadataKeyspaces("a")
+		b := New(ScyllaV4, "h").WithMetadataKeyspaces("a")
 		first := mustBuildConfig(t, b)
 		b.WithMetadataKeyspaces("b", "c").WithPartitioner("X", routing.Murmur3TokenPartitioner)
 		second := mustBuildConfig(t, b)
@@ -466,11 +467,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DefaultProfileMustBeBuilt", func(t *testing.T) {
-		_, err := New("h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
+		_, err := New(ScyllaV4, "h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
 		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
 			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 		}
-		_, err = New("h").WithDefaultProfile(Profile{PageSize: 1000}).
+		_, err = New(ScyllaV4, "h").WithDefaultProfile(Profile{PageSize: 1000}).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).Build()
 		if err == nil {
 			t.Fatal("ConfigureDefaultProfile made a Profile literal acceptable")
@@ -478,7 +479,7 @@ func TestConfigBuilder(t *testing.T) {
 		built := codecTestMust(NewProfile().Build())
 		edited := built
 		edited.PageSize = 1000
-		c := mustBuildConfig(t, New("h").WithDefaultProfile(edited).
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(edited).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) })).settings
 		if c.DefaultProfile.PageSize != 1000 || c.DefaultProfile.Consistency != cql.One || c.DefaultProfile.Retry == nil {
 			t.Fatalf("edited copy of a built profile: %+v", *c.DefaultProfile)
@@ -487,8 +488,8 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DefaultProfileSnapshotsAndReplaces", func(t *testing.T) {
 		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).NoTimeout().Build())
-		b := New("h").WithDefaultProfile(profile)
-		other := New("h").WithDefaultProfile(profile)
+		b := New(ScyllaV4, "h").WithDefaultProfile(profile)
+		other := New(ScyllaV4, "h").WithDefaultProfile(profile)
 		profile.PageSize = 99
 		first := mustBuildConfig(t, b).settings
 		if first.DefaultProfile.PageSize != 7 || first.DefaultProfile.Timeout != 0 {
@@ -515,49 +516,49 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DefaultProfileChoicesAccumulate", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").
+		c := mustBuildConfig(t, New(ScyllaV4, "h").
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.Quorum) }).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(7) })).settings
 		if c.DefaultProfile.Consistency != cql.Quorum || c.DefaultProfile.PageSize != 7 {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
-		_, err := New("h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
+		_, err := New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
 		if err == nil || !strings.Contains(err.Error(), "page size") {
 			t.Fatalf("invalid profile error = %v", err)
 		}
 	})
 
 	t.Run("PartitionerAddsToBuiltins", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithPartitioner("Custom", routing.Murmur3TokenPartitioner)).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithPartitioner("Custom", routing.Murmur3TokenPartitioner)).settings
 		if c.Partitioners["Custom"] == nil || c.Partitioners["Murmur3Partitioner"] == nil {
 			t.Fatalf("partitioners = %v", c.Partitioners)
 		}
 	})
 
 	t.Run("IgnoreEvents", func(t *testing.T) {
-		m := mustBuildConfig(t, New("h").WithIgnoreEvents(event.Schema, event.Status)).settings.Metadata
+		m := mustBuildConfig(t, New(ScyllaV4, "h").WithIgnoreEvents(event.Schema, event.Status)).settings.Metadata
 		if m.SchemaEvents || m.StatusEvents || !m.TopologyEvents || !m.ClientRouteEvents {
 			t.Fatalf("events = %+v", m)
 		}
-		if _, err := New("h").WithIgnoreEvents(event.Overflow).Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithIgnoreEvents(event.Overflow).Build(); err == nil {
 			t.Fatal("IgnoreEvents accepted a client-side event")
 		}
 	})
 
 	t.Run("DisableMethods", func(t *testing.T) {
-		c := mustBuildConfig(t, New("h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
 			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).NoAdvancedShardAwareness().WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
 		}
-		if c := mustBuildConfig(t, New("h").WithNagle(true).WithNagle(false)).settings; !c.NoDelay {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithNagle(true).WithNagle(false)).settings; !c.NoDelay {
 			t.Fatal("WithNagle(false) did not set TCP_NODELAY")
 		}
 	})
 
 	t.Run("StringHidesCredentials", func(t *testing.T) {
-		s := mustBuildConfig(t, New("h").WithAuth(auth.Password("user", "secret-password"))).String()
+		s := mustBuildConfig(t, New(ScyllaV4, "h").WithAuth(auth.Password("user", "secret-password"))).String()
 		if strings.Contains(s, "secret-password") || !strings.Contains(s, "auth=true") {
 			t.Fatalf("String() = %q", s)
 		}
@@ -565,11 +566,11 @@ func TestConfigBuilder(t *testing.T) {
 		tlsConfig := &tls.Config{ServerName: "secret-server-name", Certificates: []tls.Certificate{{Certificate: [][]byte{[]byte("secret-cert-bytes")}, PrivateKey: "secret-key"}}}
 		dialer := secretDialer{token: "secret-dialer-token"}
 		for name, b := range map[string]*ConfigBuilder{
-			"TLS":       New("h").WithTLS(tlsConfig),
-			"TLSSource": New("h").WithTLSSource(staticTLS{config: tlsConfig}),
-			"Everything": New("h").WithAuth(auth.Password("secret-user", "secret-password")).WithTLS(tlsConfig).WithDialer(dialer).
+			"TLS":       New(ScyllaV4, "h").WithTLS(tlsConfig),
+			"TLSSource": New(ScyllaV4, "h").WithTLSSource(staticTLS{config: tlsConfig}),
+			"Everything": New(ScyllaV4, "h").WithAuth(auth.Password("secret-user", "secret-password")).WithTLS(tlsConfig).WithDialer(dialer).
 				WithClientRoutes(mustRoutes(NewClientRoutes().WithRoute("secret-route-id", "secret-proxy"))).WithApplication("app", "1"),
-			"Translator": New("h").WithDialer(dialer).WithAddressTranslator(secretTranslator("secret-translator")),
+			"Translator": New(ScyllaV4, "h").WithDialer(dialer).WithAddressTranslator(secretTranslator("secret-translator")),
 		} {
 			t.Run(name, func(t *testing.T) {
 				c := mustBuildConfig(t, b)
@@ -593,7 +594,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("SettersStoreValues", func(t *testing.T) {
 		lifecycle := &lifecycleRecorder{}
 		addr := netip.MustParseAddr("192.0.2.7")
-		c := mustBuildConfig(t, New("h").
+		c := mustBuildConfig(t, New(ScyllaV4, "h").
 			WithMaxFrameSize(1<<20).
 			WithMaxDecompressedSize(2<<20).
 			WithMaxMetadataDepth(32).
@@ -626,30 +627,30 @@ func TestConfigBuilder(t *testing.T) {
 				t.Errorf("%s: the built configuration does not carry the chosen value", name)
 			}
 		}
-		if c := mustBuildConfig(t, New("h").WithLinger(0)).settings; c.Linger != cql.Some(time.Duration(0)) {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLinger(0)).settings; c.Linger != cql.Some(time.Duration(0)) {
 			t.Errorf("WithLinger(0) = %+v, want a chosen zero linger", c.Linger)
 		}
 	})
 
 	t.Run("SettersRejectInvalidValues", func(t *testing.T) {
 		for name, b := range map[string]*ConfigBuilder{
-			"MaxFrameSizeZero":                 New("h").WithMaxFrameSize(0),
-			"MaxFrameSizeOver2GiB":             New("h").WithMaxFrameSize(1 << 31),
-			"MaxDecompressedSizeNegative":      New("h").WithMaxDecompressedSize(-1),
-			"MaxDecompressedSizeOver2GiB":      New("h").WithMaxDecompressedSize(1 << 31),
-			"MaxMetadataDepthZero":             New("h").WithMaxMetadataDepth(0),
-			"MaxMetadataDepthOver128":          New("h").WithMaxMetadataDepth(129),
-			"MaxPagingStatesZero":              New("h").WithMaxPagingStates(0),
-			"MaxPagingStateSizeZero":           New("h").WithMaxPagingStateSize(0),
-			"DNSTimeoutNegative":               New("h").WithDNSTimeout(-time.Second),
-			"TCPKeepaliveNegative":             New("h").WithTCPKeepalive(-time.Second),
-			"SocketBuffersNegativeReceive":     New("h").WithSocketBuffers(-1, 0),
-			"SocketBuffersNegativeSend":        New("h").WithSocketBuffers(0, -1),
-			"LingerNegative":                   New("h").WithLinger(-time.Second),
-			"LingerFractionalSeconds":          New("h").WithLinger(1500 * time.Millisecond),
-			"MaxRequestsPerConnectionZero":     New("h").WithMaxRequestsPerConnection(0),
-			"MaxRequestsPerConnectionOver32Ki": New("h").WithMaxRequestsPerConnection(32769),
-			"MaxOrphanedStreamsNegative":       New("h").WithMaxOrphanedStreams(-1),
+			"MaxFrameSizeZero":                 New(ScyllaV4, "h").WithMaxFrameSize(0),
+			"MaxFrameSizeOver2GiB":             New(ScyllaV4, "h").WithMaxFrameSize(1 << 31),
+			"MaxDecompressedSizeNegative":      New(ScyllaV4, "h").WithMaxDecompressedSize(-1),
+			"MaxDecompressedSizeOver2GiB":      New(ScyllaV4, "h").WithMaxDecompressedSize(1 << 31),
+			"MaxMetadataDepthZero":             New(ScyllaV4, "h").WithMaxMetadataDepth(0),
+			"MaxMetadataDepthOver128":          New(ScyllaV4, "h").WithMaxMetadataDepth(129),
+			"MaxPagingStatesZero":              New(ScyllaV4, "h").WithMaxPagingStates(0),
+			"MaxPagingStateSizeZero":           New(ScyllaV4, "h").WithMaxPagingStateSize(0),
+			"DNSTimeoutNegative":               New(ScyllaV4, "h").WithDNSTimeout(-time.Second),
+			"TCPKeepaliveNegative":             New(ScyllaV4, "h").WithTCPKeepalive(-time.Second),
+			"SocketBuffersNegativeReceive":     New(ScyllaV4, "h").WithSocketBuffers(-1, 0),
+			"SocketBuffersNegativeSend":        New(ScyllaV4, "h").WithSocketBuffers(0, -1),
+			"LingerNegative":                   New(ScyllaV4, "h").WithLinger(-time.Second),
+			"LingerFractionalSeconds":          New(ScyllaV4, "h").WithLinger(1500 * time.Millisecond),
+			"MaxRequestsPerConnectionZero":     New(ScyllaV4, "h").WithMaxRequestsPerConnection(0),
+			"MaxRequestsPerConnectionOver32Ki": New(ScyllaV4, "h").WithMaxRequestsPerConnection(32769),
+			"MaxOrphanedStreamsNegative":       New(ScyllaV4, "h").WithMaxOrphanedStreams(-1),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
@@ -659,7 +660,7 @@ func TestConfigBuilder(t *testing.T) {
 				}
 			})
 		}
-		mustBuildConfig(t, New("h").WithMaxFrameSize(1<<31-1).WithMaxDecompressedSize(1<<31-1).WithMaxMetadataDepth(128).WithMaxRequestsPerConnection(32768))
+		mustBuildConfig(t, New(ScyllaV4, "h").WithMaxFrameSize(1<<31-1).WithMaxDecompressedSize(1<<31-1).WithMaxMetadataDepth(128).WithMaxRequestsPerConnection(32768))
 	})
 
 	t.Run("ProfileSettersStoreValues", func(t *testing.T) {
@@ -677,7 +678,7 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := NewProfile().WithPageTimeout(-time.Second).Build(); err == nil {
 			t.Fatal("negative page timeout accepted")
 		}
-		c := mustBuildConfig(t, New("h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageTimeout(time.Second) })).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageTimeout(time.Second) })).settings
 		if c.DefaultProfile.PageTimeout != time.Second {
 			t.Fatalf("default profile PageTimeout = %v", c.DefaultProfile.PageTimeout)
 		}

@@ -4,15 +4,15 @@
 // Package config builds the configuration of a gocql session and the
 // execution profiles of its requests.
 //
-// New starts a ConfigBuilder for a set of contact points; its With methods
-// choose settings and Build validates them into an immutable Config, which
-// gocql.Connect opens a session with:
+// New starts a ConfigBuilder for a Dialect and a set of contact points; its
+// With methods choose settings and Build validates them, against the dialect
+// too, into an immutable Config, which gocql.Connect opens a session with:
 //
-//	cfg, err := config.New("10.0.0.1", "10.0.0.2").
+//	cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 //		WithKeyspace("app").
 //		WithConnectionsPerShard(2).
 //		Build()
-//	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+//	session, err := gocql.Connect(ctx, cfg)
 //
 // NewProfile starts a ProfileBuilder for execution defaults: the session's
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one

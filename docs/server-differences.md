@@ -14,10 +14,11 @@ checked.
 
 ## Dialects
 
-A session is opened for one dialect, a value the caller passes to `Connect`
-(`dialect.go`): `ScyllaV4`, `CassandraV4` or
-`CassandraV5`. A dialect sets two things in the session's settings, at
-`Connect` and never again:
+A session is opened for one dialect, a value the caller passes to
+`config.New` (`config/dialect.go`): `ScyllaV4`, `CassandraV4` or
+`CassandraV5`. A dialect sets two things in the settings, at
+`ConfigBuilder.Build` and never again (`settings.DialectSpec` maps each
+dialect to them):
 
 - **Protocol version** (`settings.Config.Protocol`). Every connection speaks
   it. There is no negotiation and no fallback: a server that refuses it fails
@@ -35,11 +36,14 @@ The dialect is not a type parameter: no signature names it, so one
 `*Session` type serves every dialect and `Session.Dialect` reports which one a
 session speaks (derived from the two settings above). API that only one
 dialect supports checks the session's settings and returns an error on
-another dialect, before anything is sent.
+another dialect, before anything is sent. The dialect is part of the
+configuration, not a `Connect` argument, so it travels with the rest of the
+deployment's settings, `Config.String` reports it, and `Build` rejects a
+setting the dialect does not support where it was written.
 
 A method called on a type parameter goes through Go's instantiation
 dictionary, which measured 2.5 times slower than the version branch it would
-replace. The dialect is only read at `Connect`, and hot paths read the plain
+replace. The dialect is only read at `Build`, and hot paths read the plain
 values it set.
 
 ### Dialect-only features
@@ -63,8 +67,8 @@ when the server reports it, is a documented no-op on the other dialect.
 
 | Feature | Supported by | On another dialect | Where |
 |---|---|---|---|
-| `config.ConfigBuilder.WithClientRoutes` | ScyllaV4 | `Connect` fails before dialing | `settings.Config.Validate` |
-| `config.ConfigBuilder.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `Connect` fails before dialing; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
+| `config.ConfigBuilder.WithClientRoutes` | ScyllaV4 | `ConfigBuilder.Build` fails | `settings.Config.Validate` |
+| `config.ConfigBuilder.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `ConfigBuilder.Build` fails; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
 | `exec.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
 | `exec.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
 | `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |

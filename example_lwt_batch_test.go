@@ -39,11 +39,11 @@ func ExampleSession_RunBatch_conditional() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
-	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
+	cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+	session, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -105,11 +105,11 @@ func ExampleSession_RunConditionalBatch() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with rows (pk1,ck1) and (pk1,ck2) at version 2.
 	ctx := context.Background()
-	cfg, err := config.New("localhost:9042").WithKeyspace("example").Build()
+	cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithKeyspace("example").Build()
 	if err != nil {
 		log.Fatal(err)
 	}
-	session, err := gocql.Connect(ctx, cfg, gocql.ScyllaV4)
+	session, err := gocql.Connect(ctx, cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
