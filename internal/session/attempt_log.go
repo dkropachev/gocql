@@ -83,7 +83,7 @@ func (l *attemptLog) record(failure AttemptFailure, conn *transport.Conn) {
 		failure.Address = conn.Address()
 		failure.HostID = conn.InternalHostID()
 		if implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0 {
-			failure.Shard = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
+			failure.ShardID = cql.Option[uint32]{Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard), Set: true}
 		}
 	}
 	l.failures = append(l.failures, failure)

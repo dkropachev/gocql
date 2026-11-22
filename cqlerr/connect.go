@@ -14,7 +14,9 @@ import (
 type HostError struct {
 	// Err is the reason the connection failed.
 	Err error
-	// Address is the host:port that was dialed.
+	// Address is the host:port that was dialed, as configured or resolved.
+	// It is text, not a netip.AddrPort, because a contact point that failed
+	// to resolve has no IP address and a Unix socket has a path.
 	Address string
 }
 

@@ -4,9 +4,11 @@
 package cluster_test
 
 import (
+	"slices"
 	"sync"
 	"testing"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/event"
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
@@ -46,6 +48,38 @@ func TestSessionAPI(t *testing.T) {
 			}
 		})
 
+		t.Run("ClientRouteIDs", func(t *testing.T) {
+			s := new(implCluster.Core)
+			defer s.CloseV2Peripheral()
+			sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.ClientRoute}, Capacity: 4})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer sub.Close()
+			host := cql.RandomUUID()
+			// A connection ID that looks like a UUID stays a connection ID,
+			// and a host ID that does not parse is dropped.
+			conn := cql.RandomUUID().String()
+			s.PublishV2Event(&oldevents.ClientRoutesChangedEvent{
+				ChangeType:    "UPDATED",
+				ConnectionIDs: []string{"c1", conn},
+				HostIDs:       []string{host.String(), "not-a-uuid"},
+			})
+			got := <-sub.Events()
+			if got.Kind != event.ClientRoute || got.Change != event.ChangeUpdated {
+				t.Fatalf("event %+v", got)
+			}
+			if !slices.Equal(got.ConnectionIDs, []string{"c1", conn}) {
+				t.Errorf("ConnectionIDs %v", got.ConnectionIDs)
+			}
+			if !slices.Equal(got.HostIDs, []cql.UUID{host}) {
+				t.Errorf("HostIDs %v, want [%v]", got.HostIDs, host)
+			}
+			if got.ArgumentTypes != nil {
+				t.Errorf("ArgumentTypes %v, want nil", got.ArgumentTypes)
+			}
+		})
+
 		t.Run("FilterOverflowAndClose", func(t *testing.T) {
 			s := func() *implCluster.Core {
 				opaqueStorageValue := new(implCluster.Core)
@@ -67,7 +101,7 @@ func TestSessionAPI(t *testing.T) {
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "a"})
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "b"})
 			got := <-sub.Events()
-			if got.Kind != event.Overflow || got.Change != "RESYNC" || got.Generation != s.Metadata().Generation() {
+			if got.Kind != event.Overflow || got.Change != event.ChangeResync || got.Generation != s.Metadata().Generation() {
 				t.Fatal(got)
 			}
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})

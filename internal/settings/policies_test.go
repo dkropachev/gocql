@@ -19,7 +19,7 @@ func TestSimpleConvictionPolicy(t *testing.T) {
 			t.Fatal("whole-host failure not convicted", source)
 		}
 	}
-	if p.AddFailure(endpoint.ConvictionEvent{Err: cause, Shard: cql.Some(uint32(3)), Source: endpoint.ConvictionPool}) {
+	if p.AddFailure(endpoint.ConvictionEvent{Err: cause, ShardID: cql.Some(uint32(3)), Source: endpoint.ConvictionPool}) {
 		t.Fatal("single-shard failure convicted the host")
 	}
 }

@@ -91,6 +91,8 @@ func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 		return
 	}
 	e.ArgumentTypes = append([]string(nil), e.ArgumentTypes...)
+	e.ConnectionIDs = append([]string(nil), e.ConnectionIDs...)
+	e.HostIDs = append([]cql.UUID(nil), e.HostIDs...)
 	if e.Kind != event.Overflow {
 		select {
 		case s.privateStorage.events <- e:
@@ -106,7 +108,7 @@ func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 				highest = discarded.Generation
 			}
 		default:
-			change := "RESYNC"
+			change := event.ChangeResync
 			if e.Kind == event.Overflow && e.Change != "" {
 				change = e.Change
 			}
@@ -170,7 +172,7 @@ func (s *Core) CloseV2Peripheral() {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "session", Stage: "closed", At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleSession, Stage: observe.StageClosed, At: time.Now()})
 }
 func eventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)
@@ -193,50 +195,51 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	switch v := source.(type) {
 	case *oldevents.TopologyChangeEvent:
 		e.Kind = event.Topology
-		e.Change = v.Change
+		e.Change = event.Change(v.Change)
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.StatusChangeEvent:
 		e.Kind = event.Status
-		e.Change = v.Change
+		e.Change = event.Change(v.Change)
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.SchemaChangeKeyspaceEvent:
 		e.Kind = event.Schema
-		e.Target = "KEYSPACE"
-		e.Change = v.Change
+		e.Target = event.TargetKeyspace
+		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 	case *oldevents.SchemaChangeTableEvent:
 		e.Kind = event.Schema
-		e.Target = "TABLE"
-		e.Change = v.Change
+		e.Target = event.TargetTable
+		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Table
 	case *oldevents.SchemaChangeTypeEvent:
 		e.Kind = event.Schema
-		e.Target = "TYPE"
-		e.Change = v.Change
+		e.Target = event.TargetType
+		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.TypeName
 	case *oldevents.SchemaChangeFunctionEvent:
 		e.Kind = event.Schema
-		e.Target = "FUNCTION"
-		e.Change = v.Change
+		e.Target = event.TargetFunction
+		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Function
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.SchemaChangeAggregateEvent:
 		e.Kind = event.Schema
-		e.Target = "AGGREGATE"
-		e.Change = v.Change
+		e.Target = event.TargetAggregate
+		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Aggregate
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.ClientRoutesChangedEvent:
 		e.Kind = event.ClientRoute
-		e.Change = v.ChangeType
-		e.ArgumentTypes = append(append([]string(nil), v.ConnectionIDs...), v.HostIDs...)
+		e.Change = event.Change(v.ChangeType)
+		e.ConnectionIDs = append([]string(nil), v.ConnectionIDs...)
+		e.HostIDs = s.clientRouteHostIDs(v.HostIDs)
 	case *oldevents.ControlConnectionRecreatedEvent:
 		e.Kind = event.Control
-		e.Change = "RECONNECTED"
+		e.Change = event.ChangeReconnected
 		e.Address = eventV2Address(v.NewHost.Host, v.NewHost.Port)
 		e.HostID, _ = cql.ParseUUID(v.NewHost.HostID)
 	default:
@@ -248,7 +251,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		p.InternalPublicationRevision++
 		p.bumpSchemaEpochLocked(e.Keyspace)
 		p.schemaGeneration.Add(1)
-		if e.Target == "KEYSPACE" {
+		if e.Target == event.TargetKeyspace {
 			if e.Change == "DROPPED" {
 				p.schemaDropped[e.Keyspace] = true
 			}
@@ -258,7 +261,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		}
 		if e.Change == "DROPPED" && s.privateStorage.InternalMetadataDescriber != nil {
 			md := s.privateStorage.InternalMetadataDescriber.InternalMetadata
-			if e.Target == "KEYSPACE" {
+			if e.Target == event.TargetKeyspace {
 				md.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(e.Keyspace)
 			} else {
 				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *metadata.Keyspace) {
@@ -286,7 +289,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		p.InternalMu.Unlock()
 		if deliver || e.Change == "DROPPED" {
 			if !s.PublishV2Metadata() {
-				s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "PUBLICATION_RESYNC"})
+				s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 				return
 			}
 			e.Generation = s.Metadata().Generation()
@@ -344,4 +347,22 @@ func (s *Core) PublishV2LocalEvent(event event.Event) {
 			p.InternalMu.Unlock()
 		}
 	}
+}
+
+// clientRouteHostIDs parses the host IDs of a CLIENT_ROUTES_CHANGE event. The
+// server sends UUID text; an ID that does not parse is logged and dropped.
+func (s *Core) clientRouteHostIDs(ids []string) []cql.UUID {
+	if len(ids) == 0 {
+		return nil
+	}
+	out := make([]cql.UUID, 0, len(ids))
+	for _, id := range ids {
+		u, err := cql.ParseUUID(id)
+		if err != nil {
+			s.logger().Debug("dropping invalid host ID of a client routes event", "host_id", id, "err", err)
+			continue
+		}
+		out = append(out, u)
+	}
+	return out
 }

@@ -15,7 +15,7 @@ import (
 func TestSimpleConvictionPolicy(t *testing.T) {
 	var p SimpleConvictionPolicy
 	hostWide := ConvictionEvent{Err: errors.New("refused")}
-	oneShard := ConvictionEvent{Err: errors.New("refused"), Shard: cql.Some[uint32](3)}
+	oneShard := ConvictionEvent{Err: errors.New("refused"), ShardID: cql.Some[uint32](3)}
 	if !p.AddFailure(hostWide) {
 		t.Fatal("a host-wide failure did not convict")
 	}
@@ -25,7 +25,7 @@ func TestSimpleConvictionPolicy(t *testing.T) {
 	// Reset keeps no state: the next host-wide failure still convicts and a
 	// shard failure still does not.
 	p.Reset(ConvictionEvent{})
-	p.Reset(ConvictionEvent{Shard: cql.Some[uint32](3)})
+	p.Reset(ConvictionEvent{ShardID: cql.Some[uint32](3)})
 	if !p.AddFailure(hostWide) || p.AddFailure(oneShard) {
 		t.Fatal("Reset changed the policy's decisions")
 	}

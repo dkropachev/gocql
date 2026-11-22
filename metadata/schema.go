@@ -56,9 +56,9 @@ type Keyspace struct {
 	DurableWrites bool
 }
 
-// Clone returns a shallow copy of the keyspace metadata with
-// cloned Tables, Indexes, Views, and tablesInvalidated maps so that mutations
-// do not race with concurrent readers of the original.
+// Clone returns a shallow copy of the keyspace metadata with cloned Tables,
+// Indexes and Views maps, so that adding or removing entries does not race
+// with concurrent readers of the original.
 func (ks *Keyspace) Clone() *Keyspace {
 	cloned := &Keyspace{
 		TabletBased: ks.TabletBased, InitialTablets: ks.InitialTablets, ConsistencyMode: ks.ConsistencyMode,
@@ -482,7 +482,7 @@ func (o ColumnOrder) String() string {
 // ColumnKind is the role of a column in its table. The zero ColumnKind is
 // ColumnKindUnknown. Later releases may add values, so a switch over them needs
 // a default case.
-type ColumnKind int
+type ColumnKind uint8
 
 // The kinds of columns.
 const (
@@ -511,7 +511,7 @@ func (c ColumnKind) String() string {
 	case ColumnStatic:
 		return "static"
 	default:
-		return fmt.Sprintf("ColumnKind(%d)", int(c))
+		return fmt.Sprintf("ColumnKind(%d)", uint8(c))
 	}
 }
 

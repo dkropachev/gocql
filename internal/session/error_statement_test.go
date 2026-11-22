@@ -47,8 +47,8 @@ func TestErrorStatementBatch(t *testing.T) {
 		t.Fatalf("ExecBatch = %v, want an ExecutionError", err)
 	}
 	const want = `batch of 3 statements, first "INSERT INTO ks.t(v) VALUES(?)"`
-	if failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchStatements != 3 || !strings.Contains(err.Error(), want) {
-		t.Errorf("message %q, Statement %q, BatchStatements %d: want %s", err, failure.Statement, failure.BatchStatements, want)
+	if failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 3 || !strings.Contains(err.Error(), want) {
+		t.Errorf("message %q, Statement %q, BatchSize %d: want %s", err, failure.Statement, failure.BatchSize, want)
 	}
 	if text := errorText(err); strings.Contains(text, redactionSecret) {
 		t.Errorf("error leaks the bound value: %s", text)
@@ -187,7 +187,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		}
 		_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows(cql.EmptyRowDecoder), CompiledOptions{})
 		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
-		if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchStatements != 1 {
+		if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {
 			t.Fatalf("RunConditionalBatch of an ordinary batch = %v", err)
 		}
 		if text := errorText(err); strings.Contains(text, redactionSecret) {
@@ -264,7 +264,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		_, runErr := session.RunBatch(ctx, &batch, cql.EmptyRowDecoder, CompiledOptions{})
 		for name, err := range map[string]error{"ExecBatch": execErr, "RunBatch": runErr} {
 			failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
-			if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchStatements != 1 {
+			if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {
 				t.Errorf("%s on a closed session = %v", name, err)
 			}
 			if text := errorText(err); strings.Contains(text, redactionSecret) {

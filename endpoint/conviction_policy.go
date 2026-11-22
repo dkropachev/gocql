@@ -12,7 +12,7 @@ type SimpleConvictionPolicy struct{}
 
 // AddFailure returns true unless the event concerns a single shard.
 func (e *SimpleConvictionPolicy) AddFailure(ev ConvictionEvent) bool {
-	return !ev.Shard.Set
+	return !ev.ShardID.Set
 }
 
 // Reset does nothing: the policy keeps no state.

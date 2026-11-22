@@ -135,7 +135,7 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		}
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "session", Stage: "ready", At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleSession, Stage: observe.StageReady, At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })

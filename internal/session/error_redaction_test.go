@@ -170,7 +170,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					if statementBytes == 0 && (failure.Statement != "" || strings.Contains(err.Error(), "statement")) {
 						t.Errorf("statement reported while off: %q in %v", failure.Statement, err)
 					}
-					if statementBytes > 0 && (failure.Statement != "SELECT value FROM ks.tbl WHERE k = ?" || failure.BatchStatements != 0 || !strings.Contains(err.Error(), named)) {
+					if statementBytes > 0 && (failure.Statement != "SELECT value FROM ks.tbl WHERE k = ?" || failure.BatchSize != 0 || !strings.Contains(err.Error(), named)) {
 						t.Errorf("message %q, Statement %q: want %s", err, failure.Statement, named)
 					}
 					for _, a := range failure.Attempts {

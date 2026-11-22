@@ -113,7 +113,7 @@ func columnKindFromSchema(kind string) (metadata2.ColumnKind, error) {
 	case "static":
 		return metadata2.ColumnStatic, nil
 	default:
-		return -1, fmt.Errorf("unknown column kind: %q", kind)
+		return metadata2.ColumnKindUnknown, fmt.Errorf("unknown column kind: %q", kind)
 	}
 }
 

@@ -66,8 +66,8 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 	log.Printf("stopped: %v (%s)", failure.Err, failure.ExecutionStatus())
 	for _, a := range failure.Attempts {
 		shard := "-"
-		if a.Shard.Set {
-			shard = strconv.FormatUint(uint64(a.Shard.Value), 10)
+		if a.ShardID.Set {
+			shard = strconv.FormatUint(uint64(a.ShardID.Value), 10)
 		}
 		log.Printf("attempt %d: host %s (%s) shard %s at %s: %s: %v",
 			a.Number, a.HostID, a.Address, shard, a.Consistency, a.Status, a.Err)
@@ -90,7 +90,7 @@ gocql: request: #1 10.0.0.1:9042/shard3: invalid query: unconfigured table t; st
 ```
 
 A prepared statement reports the CQL text it was prepared from. A batch
-reports its statement count in `failure.BatchStatements` and its first
+reports its statement count in `failure.BatchSize` and its first
 statement in `failure.Statement`, rendered as
 `batch of 3 statements, first "INSERT ..."`. Bound values are left out in
 every mode; only literals written into the CQL text itself appear.

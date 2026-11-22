@@ -213,7 +213,7 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 	p.InternalMu.Unlock()
 	p.publishMu.Unlock()
 	if resync {
-		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: routing.SnapshotData(next).InternalGeneration, Change: "TABLET_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: routing.SnapshotData(next).InternalGeneration, Change: event.ChangeTabletResync})
 	}
 }
 func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {

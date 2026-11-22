@@ -137,7 +137,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	timeout := newQueryError(queryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	attempts := []AttemptFailure{
 		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, Status: NotExecuted},
-		{Err: timeout, Address: "10.0.0.2:9042", Shard: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, Status: MaybeExecuted},
+		{Err: timeout, Address: "10.0.0.2:9042", ShardID: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, Status: MaybeExecuted},
 	}
 
 	t.Run("LastAttemptIsCause", func(t *testing.T) {
@@ -169,7 +169,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		if !strings.Contains(got, `(maybe executed); statement "SELECT \"v\"\nFROM t"; earlier attempts: #1`) {
 			t.Fatalf("message %q", got)
 		}
-		err.BatchStatements = 2
+		err.BatchSize = 2
 		if got := err.Error(); !strings.Contains(got, `; batch of 2 statements, first "SELECT`) {
 			t.Fatalf("message %q", got)
 		}

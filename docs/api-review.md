@@ -168,6 +168,22 @@ changing a public symbol.
 | `metadata.Column.Type` is a schema string, not a `cql.DataType` | Deferred to a compatible addition; see `docs/post-release-improvements.md`. |
 | A `config.Profile` written as a literal is rejected only at run time | Kept. Its fields are exported for `exec.Options.Profile` readers, and the rejection is loud: `WithDefaultProfile`, the query constructors and `CompileOptions` return a validation error, and the type's doc says to use `NewProfile`. |
 
+## Third review pass (2026-11-22)
+
+A third pass found these. Each changes a public symbol, so it lands before
+`v2.0.0-rc.1`.
+
+| Finding | Outcome |
+|---|---|
+| `event.Event.ArgumentTypes` held a ClientRoute event's connection IDs followed by its host IDs, with no boundary between them | `event.Event.ConnectionIDs` and `HostIDs` (`[]cql.UUID`); `ArgumentTypes` is for functions and aggregates only. A host ID the server sends that does not parse is logged and dropped. |
+| `event.Event.Change` and `Target`, and `observe.LifecycleEvent.Kind` and `Stage`, were plain strings documented by example | Typed strings with constants: `event.Change` (`ChangeNewNode` ... `ChangeTabletResync`, including the driver's `ChangeResync` and `ChangeRefreshed`), `event.Target`, `observe.LifecycleKind` and `observe.LifecycleStage`. A server's text the driver does not name still arrives unchanged. |
+| `observe.LifecycleEvent.Err` and `Stream` were never set, and `LifecycleObserver` promised connecting, startup and authentication events the driver does not send | Both fields removed; the doc lists the events sent. They can come back in v2.1 when the driver fills them. |
+| `cqlerr.AttemptFailure.Shard` and `endpoint.ConvictionEvent.Shard` beside `ShardID` everywhere else | Renamed `ShardID`. |
+| `cqlerr.ExecutionError.BatchStatements` was a count, while `observe.RequestStart.BatchStatements` and `RequestEvent.BatchStatements` are the statement texts | The count is `ExecutionError.BatchSize`. |
+| `cql.Text.String` panicked on an expired view, so formatting or logging one did | Returns `"<released>"`; `Copy` stays the checked form. |
+| `metadata.ColumnKind` was the only `int` enum | `uint8`, like the others. |
+| `metadata.Keyspace.Clone` named an unexported field; `cqlerr.AttemptFailure.Address` and `HostError.Address` did not say why they are text | Docs fixed: an unresolved contact point has no IP and a Unix socket has a path. |
+
 ## Decisions
 
 These changed names or removed symbols that users of the earlier v2 code may

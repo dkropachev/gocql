@@ -1075,7 +1075,7 @@ func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	host := e.Host
-	if e.Shard.Set || e.Source != endpoint.ConvictionPool {
+	if e.ShardID.Set || e.Source != endpoint.ConvictionPool {
 		panic("conviction event is not a whole-host pool failure")
 	}
 	if !errors.Is(e.Err, p.cause) {

@@ -1524,11 +1524,12 @@ type RequestEvent struct {
     Err error
 }
 type LifecycleObserver interface { ObserveLifecycle(LifecycleEvent) }
+type LifecycleKind string   // LifecycleSession, LifecycleHost
+type LifecycleStage string  // StageReady, StageConnected, StageDown, StageClosed
 type LifecycleEvent struct {
     At time.Time
-    Err error
-    Kind, Stage string
-    Stream int16
+    Kind LifecycleKind
+    Stage LifecycleStage
     HostID cql.UUID
 }
 ```
@@ -1733,8 +1734,12 @@ type Event struct {
     Generation uint64
     Address netip.AddrPort
     HostID cql.UUID
-    Change, Target, Keyspace, Object string
-    ArgumentTypes []string
+    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ...
+    Target Target // typed string: TargetKeyspace, TargetTable, ...
+    Keyspace, Object string
+    ArgumentTypes []string  // function/aggregate argument types
+    ConnectionIDs []string  // ClientRoute
+    HostIDs []cql.UUID      // ClientRoute
 }
 func (s *Subscription) Events() <-chan Event
 func (s *Subscription) Close()

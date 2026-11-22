@@ -53,8 +53,10 @@ func TestViewCopyExpired(t *testing.T) {
 	if s, err := textView(b).Copy(); !errors.Is(err, ErrReleased) || s != "" {
 		t.Fatalf("Text.Copy = %q, %v; want ErrReleased", s, err)
 	}
+	if s := textView(b).String(); s != "<released>" {
+		t.Fatalf("Text.String = %q; want <released>", s)
+	}
 	for name, f := range map[string]func(){
-		"Text.String":      func() { _ = textView(b).String() },
 		"Bytes.OwnedBytes": func() { _ = b.OwnedBytes() },
 		"Bytes.Clone":      func() { _ = b.Clone() },
 	} {
