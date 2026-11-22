@@ -90,6 +90,11 @@ jobs:
           GOGC: "50"
         run: make check
 
+      # Fails on an incompatible change to a public package against the
+      # v2.0.0 baseline in testdata/apidiff; see RELEASING.md.
+      - name: Check API compatibility
+        run: make check-api-compat
+
       - name: Run unit tests
         run: make test-unit
 
