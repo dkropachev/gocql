@@ -34,6 +34,15 @@ rate-limit errors and client route events. `WithConnectionsPerShard` and
 `WithMaxExcessPerShard` count a Cassandra node as one shard, so there they
 apply per node.
 
+## Partitioners
+
+The driver routes by `int64` tokens: Murmur3 (the default on Cassandra and the
+only partitioner on ScyllaDB) and ScyllaDB's CDC partitioner, plus any
+`int64` partitioner added with `config.ConfigBuilder.WithPartitioner`. A
+Cassandra cluster that uses `RandomPartitioner` or `ByteOrderedPartitioner`
+has wider tokens, and `gocql.Connect` to it fails with an error that names the
+invalid token.
+
 ## Lightweight transactions
 
 Decode conditional results with `cql.CASRows(decoder)` into

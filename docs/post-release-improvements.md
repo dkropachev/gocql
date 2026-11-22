@@ -25,3 +25,15 @@ session now speaks one version, fixed by its dialect, so options compiled for
 a session could encode only that version's templates, halving the memory and
 work of `Session.CompileOptions`. Options compiled on one session stay usable
 on another, so the other version's templates would be built on first use.
+
+## A typed column type in schema metadata
+
+`metadata.Column.Type` is the column's CQL type as the schema spells it, a
+string such as `frozen<map<text, int>>`. A `DataType cql.DataType` field next
+to it would let callers inspect the type (element types, UDT fields, vector
+dimension) the way result metadata already allows, without parsing the string.
+
+Deferred because it needs a parser for schema type strings that produces
+exactly the `cql.DataType` that result metadata decodes for the same column,
+custom types and frozen markers included, and adding the field later is a
+compatible change. Reconsider when a user needs typed schema inspection.

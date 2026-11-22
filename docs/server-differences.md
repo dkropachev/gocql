@@ -230,6 +230,7 @@ negotiation or metadata does not drop one.
 
 | Difference | Driver |
 |---|---|
+| Partitioner: ScyllaDB only Murmur3; Cassandra Murmur3 by default, `RandomPartitioner` or `ByteOrderedPartitioner` if configured | Tokens are `int64` (`metadata.HostSnapshot.Tokens`, `routing.TokenPartitioner`); a host token that does not parse fails opening the session (`internal/endpoint/snapshot.go`, `TestRandomPartitionerClusterIsRejected`) |
 | Highest protocol version: Cassandra v5, ScyllaDB v4 plus extensions | The dialect fixes the version (`CassandraV5`, `ScyllaV4`); nothing is negotiated |
 | Result metadata ID: v5 on Cassandra, v4 via `SCYLLA_USE_METADATA_ID` on ScyllaDB | `internal/transport/conn.go`, `internal/protocol/framer.go` |
 | Shard information in SUPPORTED (`SCYLLA_SHARD`, `SCYLLA_NR_SHARDS`, `SCYLLA_SHARD_AWARE_PORT` and others): ScyllaDB only | `internal/transport/supported.go` |

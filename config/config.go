@@ -234,6 +234,16 @@ func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
 
 // WithDialer opens raw connections; TLS is applied afterward. Use
 // endpoint.DialerFunc to adapt a function. Default net.Dialer.
+//
+// The other connection settings still apply to a custom dialer. The dial
+// context carries the WithConnectTimeout deadline. The source address chosen
+// by WithLocalAddress or advanced shard awareness is in
+// endpoint.DialTarget.LocalAddress, and a connection from another source is
+// rejected. WithNagle, WithTCPKeepalive, WithSocketBuffers and WithLinger are
+// set on the returned TCP connection afterwards; a wrapper that hides those
+// controls fails the connection with a cqlerr.UnsupportedSettingError.
+// A custom dialer may wrap endpoint.DefaultDialer, the dialer used without
+// WithDialer; set its fields to the same connect timeout and keepalive.
 func (b *ConfigBuilder) WithDialer(dialer endpoint.Dialer) *ConfigBuilder {
 	b.settings.Dialer = dialer
 	return b

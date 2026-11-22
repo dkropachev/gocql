@@ -19,7 +19,10 @@ type HostSnapshot struct {
 	Address netip.AddrPort
 	// Datacenter and Rack are the host's location, as it advertises it.
 	Datacenter, Rack string
-	// Tokens lists the host's vnode tokens.
+	// Tokens lists the host's vnode tokens. Tokens are int64, as the
+	// Murmur3 partitioner makes them: the driver does not open sessions to
+	// clusters whose partitioner has wider tokens (RandomPartitioner,
+	// ByteOrderedPartitioner).
 	Tokens []int64
 	// Shards is the host's ScyllaDB shard count, or zero when it is not known
 	// or the host is not sharded.

@@ -79,7 +79,9 @@ func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, erro
 // Each value is encoded as the column's schema type, exactly as a prepared
 // statement's routing key is, and hashed with the table's partitioner. It
 // needs loaded schema metadata; a key of the wrong arity or type, or a null
-// component, is a validation error.
+// component, is a validation error. Tokens are int64: the built-in
+// partitioners are Murmur3 and ScyllaDB's CDC partitioner, and
+// config.ConfigBuilder.WithPartitioner adds others with int64 tokens.
 func (s *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
 	if s.empty() {
 		return 0, errNoSnapshot
