@@ -16,8 +16,8 @@ APIDIFF_VERSION="${APIDIFF_VERSION:?set APIDIFF_VERSION, as the Makefile does}"
 BASELINE_DIR="${APIDIFF_BASELINE_DIR:?set APIDIFF_BASELINE_DIR, as the Makefile does}"
 # One directory per release, such as testdata/apidiff/v2.0.0; write removes it
 # first, so anything else is refused.
-if [[ ! "$BASELINE_DIR" =~ ^testdata/apidiff/[^/]+$ ]]; then
-	echo "APIDIFF_BASELINE_DIR must be testdata/apidiff/<release>, not ${BASELINE_DIR}" >&2
+if [[ ! "$BASELINE_DIR" =~ ^testdata/apidiff/v[0-9][0-9.a-z-]*$ ]]; then
+	echo "APIDIFF_BASELINE_DIR must be testdata/apidiff/v<release>, not ${BASELINE_DIR}" >&2
 	exit 2
 fi
 
