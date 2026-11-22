@@ -22,7 +22,10 @@ var (
 	// ErrPagingNoProgress reports that the server returned a paging state
 	// the query had already seen, so paging would loop.
 	ErrPagingNoProgress = errors.New("gocql: paging made no progress")
-	// ErrNoRows reports that a query expected to return a row returned none.
+	// ErrNoRows reports that there is no current row: Clone or Retain on
+	// Rows, Page or CASBatchRows was called before NextInto returned true,
+	// after it returned false, or after Close. An execution that finds no
+	// row does not return it: One reports found == false.
 	ErrNoRows = errors.New("gocql: no rows")
 )
 

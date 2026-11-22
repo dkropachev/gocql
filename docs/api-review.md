@@ -153,6 +153,19 @@ v2.1; it can only be removed in v3.
 | `HostRoutes`, `ReplicaRoutes` | Keep. A custom policy builds on them (`docs/source/load-balancing.md`). |
 | `TokenPartitioner`, `PartitionKey`, `Murmur3TokenPartitioner`, `CDCTokenPartitioner` | Keep. `config.WithPartitioner` takes them. |
 
+## Second review pass (2026-11-22)
+
+A later pass over the whole surface found these. Each is resolved without
+changing a public symbol.
+
+| Finding | Outcome |
+|---|---|
+| `cqlerr.ErrNoRows` was documented as "a query expected to return a row returned none", but `Clone` and `Retain` on `Rows`, `Page` and `CASBatchRows` return it when there is no current row, and `One` reports a missing row as `found == false` | Documented as "no current row", on the sentinel and on each `Clone` and `Retain`. |
+| `metadata.HostSnapshot.Tokens`, `Snapshot.Token` and `routing.TokenPartitioner` are `int64` | Kept: ScyllaDB only uses Murmur3, and it is Cassandra's default. A `RandomPartitioner` or `ByteOrderedPartitioner` cluster fails to connect, naming the invalid token (`TestRandomPartitionerClusterIsRejected`); `docs/source/server-differences.md` says so. |
+| Unclear which connection settings apply to a custom `endpoint.Dialer` | All of them: the connect timeout through the dial context, the source address through `DialTarget.LocalAddress` (checked), and the socket options set on the returned connection. Documented on `ConfigBuilder.WithDialer`. |
+| `metadata.Column.Type` is a schema string, not a `cql.DataType` | Deferred to a compatible addition; see `docs/post-release-improvements.md`. |
+| A `config.Profile` written as a literal is rejected only at run time | Kept. Its fields are exported for `exec.Options.Profile` readers, and the rejection is loud: `WithDefaultProfile`, the query constructors and `CompileOptions` return a validation error, and the type's doc says to use `NewProfile`. |
+
 ## Decisions
 
 These changed names or removed symbols that users of the earlier v2 code may
