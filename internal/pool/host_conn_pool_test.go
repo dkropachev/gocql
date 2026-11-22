@@ -38,7 +38,7 @@ func TestHostConnPool(t *testing.T) {
 						if !p.InternalFilling {
 							t.Fatal("fill ended before the policy saw its failure")
 						}
-						if e.Shard.Set || e.Source != endpoint2.ConvictionPool {
+						if e.ShardID.Set || e.Source != endpoint2.ConvictionPool {
 							t.Fatalf("whole-host pool failure reported as %+v", e)
 						}
 						if !p.InternalMu.TryLock() {
@@ -119,12 +119,12 @@ func TestHostConnPool(t *testing.T) {
 				var events []endpoint2.ConvictionEvent
 				policy := &convictionRecorder{callback: func(e endpoint2.ConvictionEvent) bool {
 					events = append(events, e)
-					return e.Shard.Set
+					return e.ShardID.Set
 				}}
 				downs := 0
 				p := newPool(policy, &downs)
 				p.shardFailed(cause, 3, 8)
-				if len(events) != 1 || !events[0].Shard.Set || events[0].Shard.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.ID != id || events[0].Source != endpoint2.ConvictionPool {
+				if len(events) != 1 || !events[0].ShardID.Set || events[0].ShardID.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.ID != id || events[0].Source != endpoint2.ConvictionPool {
 					t.Fatalf("shard failure reported as %+v", events)
 				}
 				if downs != 0 {
@@ -185,7 +185,7 @@ func TestHostConnPool(t *testing.T) {
 							}
 							return
 						}
-						if len(events) != 1 || !events[0].Shard.Set || events[0].Shard.Value != uint32(tc.shard) || !errors.Is(events[0].Err, cause) {
+						if len(events) != 1 || !events[0].ShardID.Set || events[0].ShardID.Value != uint32(tc.shard) || !errors.Is(events[0].Err, cause) {
 							t.Fatalf("chosen shard failure reported as %+v", events)
 						}
 					})
@@ -210,12 +210,12 @@ func TestHostConnPool(t *testing.T) {
 				p.shardFailed(cause, 2, 8)
 				p.shardConnected(2, 8)
 				p.shardConnected(2, 8)
-				if len(policy.resets) != 1 || !policy.resets[0].Shard.Set || policy.resets[0].Shard.Value != 2 || policy.resets[0].Err != nil {
+				if len(policy.resets) != 1 || !policy.resets[0].ShardID.Set || policy.resets[0].ShardID.Value != 2 || policy.resets[0].Err != nil {
 					t.Fatalf("shard reset reported as %+v", policy.resets)
 				}
 				p.shardFailed(cause, 5, 8)
 				p.resetConviction()
-				if len(policy.resets) != 2 || policy.resets[1].Shard.Set || policy.resets[1].Host.ID != id {
+				if len(policy.resets) != 2 || policy.resets[1].ShardID.Set || policy.resets[1].Host.ID != id {
 					t.Fatalf("host reset reported as %+v", policy.resets)
 				}
 				p.shardConnected(5, 8)

@@ -69,11 +69,11 @@ type ConvictionEvent struct {
 	Err error
 	// Host is detached, read-only host metadata that may be retained.
 	Host metadata.HostSnapshot
-	// Shard is set when the event concerns a connection the pool opened to
+	// ShardID is set when the event concerns a connection the pool opened to
 	// one shard: a failed attempt to open it or, in Reset, the connection
 	// to it opened again. It is the shard the pool asked for; a dialer that
 	// cannot target shards connects wherever the server places it.
-	Shard cql.Option[uint32]
+	ShardID cql.Option[uint32]
 	// Source names what failed to connect.
 	Source ConvictionSource
 }

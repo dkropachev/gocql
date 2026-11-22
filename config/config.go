@@ -645,7 +645,7 @@ func (b *ConfigBuilder) WithConfigReport(on bool) *ConfigBuilder {
 }
 
 // WithErrorStatementText makes request errors carry the statement they ran:
-// cqlerr.ExecutionError's Statement and BatchStatements, and its message. A
+// cqlerr.ExecutionError's Statement and BatchSize, and its message. A
 // batch is described by its statement count and its first statement; a
 // prepared statement by the CQL text it was prepared from. Text longer than
 // maxBytes is cut at a character boundary to at most maxBytes bytes and "..."

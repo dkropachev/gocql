@@ -57,7 +57,7 @@ func (rt *InternalSessionRuntime) describe(err error, statement string, entries 
 		return
 	}
 	failure.Statement = truncateStatement(statement, limit)
-	failure.BatchStatements = count
+	failure.BatchSize = count
 }
 
 // truncateStatement returns statement cut to at most limit bytes at a

@@ -602,7 +602,7 @@ func (pool *InternalHostConnPool) shardFailed(err error, shard, shards int) {
 		return
 	}
 	snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-	convict := policy.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, Shard: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
+	convict := policy.AddFailure(endpoint.ConvictionEvent{Err: err, Host: snapshot, ShardID: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
 	pool.InternalMu.Lock()
 	if pool.failedShards == nil {
 		pool.failedShards = make(map[uint32]struct{})
@@ -625,7 +625,7 @@ func (pool *InternalHostConnPool) shardConnected(shard, shards int) {
 	pool.InternalMu.Unlock()
 	if failed {
 		snapshot, _ := implEndpoint.SnapshotHost(pool.InternalHost)
-		policy.Reset(endpoint.ConvictionEvent{Host: snapshot, Shard: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
+		policy.Reset(endpoint.ConvictionEvent{Host: snapshot, ShardID: cql.Some(uint32(shard)), Source: endpoint.ConvictionPool})
 	}
 }
 

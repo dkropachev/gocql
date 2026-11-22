@@ -164,11 +164,13 @@ func (t Text) Bytes() Bytes { return t.bytes }
 // once the view has expired.
 func (t Text) Clone() Text { return Text{bytes: t.bytes.Clone()} }
 
-// String is Copy, panicking with Copy's error.
+// String returns the text, or "<released>" once the view has expired, so
+// that formatting and logging an expired view never panics. Copy is the
+// checked form.
 func (t Text) String() string {
 	s, err := t.Copy()
 	if err != nil {
-		panic(err)
+		return "<released>"
 	}
 	return s
 }

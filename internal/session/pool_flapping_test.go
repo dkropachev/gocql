@@ -48,7 +48,7 @@ func (l *convictionLog) AddFailure(ev endpoint.ConvictionEvent) bool {
 	l.mu.Lock()
 	l.failures = append(l.failures, ev)
 	l.mu.Unlock()
-	return !ev.Shard.Set
+	return !ev.ShardID.Set
 }
 
 func (l *convictionLog) Reset(endpoint.ConvictionEvent) {}
@@ -193,9 +193,9 @@ func testNodeFlapping(t *testing.T, broadcast net.IP) {
 			// Not a dial: the node closed a connection during its setup.
 			continue
 		}
-		k := key{ev.Source, ev.Shard.Set, failure.seq}
+		k := key{ev.Source, ev.ShardID.Set, failure.seq}
 		if seen[k] {
-			t.Errorf("policy told twice of %v (source %v, shard event %v)", failure, ev.Source, ev.Shard.Set)
+			t.Errorf("policy told twice of %v (source %v, shard event %v)", failure, ev.Source, ev.ShardID.Set)
 		}
 		seen[k] = true
 		if src, ok := sources[failure.seq]; ok && src != ev.Source {

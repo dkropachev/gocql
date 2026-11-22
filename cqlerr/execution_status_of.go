@@ -87,14 +87,15 @@ func ExecutionStatusOf(err error) ExecutionStatus {
 type AttemptFailure struct {
 	// Err is the attempt's error.
 	Err error
-	// Address is the host:port the attempt was sent to.
+	// Address is the host:port the attempt was sent to, or the socket path
+	// of a Unix socket connection, which is why it is text.
 	Address string
 	// HostID is the host ID of the host the attempt was sent to.
 	HostID cql.UUID
 	// Number is the 1-based attempt number.
 	Number int
-	// Shard is the shard of the connection, when the host is shard-aware.
-	Shard cql.Option[uint32]
+	// ShardID is the shard of the connection, when the host is shard-aware.
+	ShardID cql.Option[uint32]
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
 	// Status reports what the attempt may have done on the cluster.
@@ -122,8 +123,8 @@ func (a AttemptFailure) writeTarget(b *strings.Builder) {
 		target = a.HostID.String()
 	}
 	fmt.Fprintf(b, "#%d %s", a.Number, target)
-	if a.Shard.Set {
-		fmt.Fprintf(b, "/shard%d", a.Shard.Value)
+	if a.ShardID.Set {
+		fmt.Fprintf(b, "/shard%d", a.ShardID.Value)
 	}
 }
 
@@ -153,10 +154,10 @@ type ExecutionError struct {
 	// Result holds what the responses carried before the request failed:
 	// warnings, CQL trace IDs and custom payload.
 	Result cql.Result
-	// BatchStatements is the number of statements of a batch whose first
+	// BatchSize is the number of statements of a batch whose first
 	// statement Statement holds, and zero otherwise.
-	BatchStatements int
-	status          ExecutionStatus
+	BatchSize int
+	status    ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request whose attempts reached
@@ -214,8 +215,8 @@ func (e *ExecutionError) writeStatement(b *strings.Builder) {
 	if e.Statement == "" {
 		return
 	}
-	if e.BatchStatements > 0 {
-		fmt.Fprintf(b, "; batch of %d statements, first %q", e.BatchStatements, e.Statement)
+	if e.BatchSize > 0 {
+		fmt.Fprintf(b, "; batch of %d statements, first %q", e.BatchSize, e.Statement)
 		return
 	}
 	fmt.Fprintf(b, "; statement %q", e.Statement)

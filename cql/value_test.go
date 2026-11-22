@@ -339,7 +339,12 @@ func TestValue(t *testing.T) {
 			}
 			clone := text.Clone()
 			lease.Release()
-			foundationPanicReleased(t, func() { _ = text.String() })
+			if got := text.String(); got != "<released>" {
+				t.Fatalf("String of a released view: %q", got)
+			}
+			if _, err := text.Copy(); !errors.Is(err, ErrReleased) {
+				t.Fatalf("Copy of a released view: %v", err)
+			}
 			foundationPanicReleased(t, func() { text.Clone() })
 			if clone.String() != string(data) {
 				t.Fatal("text clone did not detach")

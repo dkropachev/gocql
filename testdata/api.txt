@@ -818,7 +818,7 @@ package cqlerr
 		cqlerr.AttemptFailure field Address string
 		cqlerr.AttemptFailure field HostID cql.UUID
 		cqlerr.AttemptFailure field Number int
-		cqlerr.AttemptFailure field Shard cql.Option[uint32]
+		cqlerr.AttemptFailure field ShardID cql.Option[uint32]
 		cqlerr.AttemptFailure field Consistency cql.Consistency
 		cqlerr.AttemptFailure field Status cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
@@ -895,7 +895,7 @@ package cqlerr
 		cqlerr.ExecutionError field Attempts []cqlerr.AttemptFailure
 		cqlerr.ExecutionError field Statement string
 		cqlerr.ExecutionError field Result cql.Result
-		cqlerr.ExecutionError field BatchStatements int
+		cqlerr.ExecutionError field BatchSize int
 		cqlerr.ExecutionError method (*T) Error() string
 		cqlerr.ExecutionError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
 		cqlerr.ExecutionError method (*T) Unwrap() []error
@@ -1107,7 +1107,7 @@ package endpoint
 	type endpoint.ConvictionEvent struct
 		endpoint.ConvictionEvent field Err error
 		endpoint.ConvictionEvent field Host metadata.HostSnapshot
-		endpoint.ConvictionEvent field Shard cql.Option[uint32]
+		endpoint.ConvictionEvent field ShardID cql.Option[uint32]
 		endpoint.ConvictionEvent field Source endpoint.ConvictionSource
 	type endpoint.ConvictionPolicy interface
 		endpoint.ConvictionPolicy method AddFailure(endpoint.ConvictionEvent) bool
@@ -1155,15 +1155,31 @@ package endpoint
 		endpoint.TranslatorFunc method (T) Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort) (net/netip.AddrPort, error)
 
 package event
+	type event.Change string
+	const event.ChangeCreated event.Change = "CREATED"
+	const event.ChangeDown event.Change = "DOWN"
+	const event.ChangeDropped event.Change = "DROPPED"
+	const event.ChangeMovedNode event.Change = "MOVED_NODE"
+	const event.ChangeNewNode event.Change = "NEW_NODE"
+	const event.ChangePublicationResync event.Change = "PUBLICATION_RESYNC"
+	const event.ChangeReconnected event.Change = "RECONNECTED"
+	const event.ChangeRefreshed event.Change = "REFRESHED"
+	const event.ChangeRemovedNode event.Change = "REMOVED_NODE"
+	const event.ChangeResync event.Change = "RESYNC"
+	const event.ChangeTabletResync event.Change = "TABLET_RESYNC"
+	const event.ChangeUp event.Change = "UP"
+	const event.ChangeUpdated event.Change = "UPDATED"
 	const event.ClientRoute event.Kind = 5
 	const event.Control event.Kind = 4
 	type event.Event struct
 		event.Event field Address net/netip.AddrPort
-		event.Event field Change string
-		event.Event field Target string
+		event.Event field Change event.Change
+		event.Event field Target event.Target
 		event.Event field Keyspace string
 		event.Event field Object string
 		event.Event field ArgumentTypes []string
+		event.Event field ConnectionIDs []string
+		event.Event field HostIDs []cql.UUID
 		event.Event field Generation uint64
 		event.Event field HostID cql.UUID
 		event.Event field Kind event.Kind
@@ -1179,6 +1195,12 @@ package event
 	type event.Subscription struct
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
+	type event.Target string
+	const event.TargetAggregate event.Target = "AGGREGATE"
+	const event.TargetFunction event.Target = "FUNCTION"
+	const event.TargetKeyspace event.Target = "KEYSPACE"
+	const event.TargetTable event.Target = "TABLE"
+	const event.TargetType event.Target = "TYPE"
 	const event.Topology event.Kind = 1
 	const event.Unknown event.Kind = 0
 
@@ -1245,7 +1267,7 @@ package metadata
 		metadata.Column method (*T) Equal(other *metadata.Column) bool
 	const metadata.ColumnClusteringKey metadata.ColumnKind = 2
 	const metadata.ColumnCompact metadata.ColumnKind = 4
-	type metadata.ColumnKind int
+	type metadata.ColumnKind uint8
 		metadata.ColumnKind method (T) String() string
 	const metadata.ColumnKindUnknown metadata.ColumnKind = 0
 	type metadata.ColumnOrder uint8
@@ -1405,13 +1427,15 @@ package observe
 		observe.AttemptObserver method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
 	type observe.LifecycleEvent struct
 		observe.LifecycleEvent field At time.Time
-		observe.LifecycleEvent field Err error
-		observe.LifecycleEvent field Kind string
-		observe.LifecycleEvent field Stage string
-		observe.LifecycleEvent field Stream int16
+		observe.LifecycleEvent field Kind observe.LifecycleKind
+		observe.LifecycleEvent field Stage observe.LifecycleStage
 		observe.LifecycleEvent field HostID cql.UUID
+	const observe.LifecycleHost observe.LifecycleKind = "host"
+	type observe.LifecycleKind string
 	type observe.LifecycleObserver interface
 		observe.LifecycleObserver method ObserveLifecycle(observe.LifecycleEvent)
+	const observe.LifecycleSession observe.LifecycleKind = "session"
+	type observe.LifecycleStage string
 	type observe.Observer interface
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
@@ -1431,6 +1455,10 @@ package observe
 		observe.RequestStart field Routing routing.Info
 		observe.RequestStart field ID uint64
 		observe.RequestStart field CQLTrace bool
+	const observe.StageClosed observe.LifecycleStage = "closed"
+	const observe.StageConnected observe.LifecycleStage = "connected"
+	const observe.StageDown observe.LifecycleStage = "down"
+	const observe.StageReady observe.LifecycleStage = "ready"
 
 package retry
 	type retry.Action uint8
