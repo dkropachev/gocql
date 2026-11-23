@@ -357,7 +357,12 @@ type OutputField[R any] interface {
 type outputField[R, V any] struct {
 	codec Decoder[V]
 	field func(*R) *V
-	loc   fieldLocation
+	// Set by compile: the codec's optional decode paths, resolved once
+	// instead of by a type assertion per cell.
+	rowInto  rowValueIntoDecoder[V]
+	into     valueIntoDecoder[V]
+	loc      fieldLocation
+	resolved bool
 }
 
 // Column maps the named result column through valueCodec into the address returned by field.
@@ -380,6 +385,9 @@ func (f outputField[R, V]) compile(typ DataType) (OutputField[R], error) {
 		return nil, err
 	}
 	f.codec = codec
+	f.rowInto, _ = codec.(rowValueIntoDecoder[V])
+	f.into, _ = codec.(valueIntoDecoder[V])
+	f.resolved = true
 	return f, nil
 }
 func (f outputField[R, V]) decode(reader *RowReader, row *R) error {
@@ -387,7 +395,17 @@ func (f outputField[R, V]) decode(reader *RowReader, row *R) error {
 	if field == nil {
 		return fmt.Errorf("gocql: output field accessor returned nil")
 	}
-	return readColumnInto(reader, f.codec, field)
+	if !f.resolved {
+		return readColumnInto(reader, f.codec, field)
+	}
+	if f.rowInto != nil {
+		return f.rowInto.decodeColumnInto(reader, field)
+	}
+	value, err := reader.nextValue()
+	if err != nil {
+		return err
+	}
+	return decodeResolved(f.codec, f.into, value, field)
 }
 func (f outputField[R, V]) clone(dst, source *R) {
 	*f.field(dst) = f.codec.Clone(*f.field(source))
@@ -957,6 +975,19 @@ func decodeValueInto[T any](decoder Decoder[T], reader ValueReader, dst *T) erro
 	}
 	if direct, ok := decoder.(valueIntoDecoder[T]); ok {
 		return direct.DecodeInto(reader, dst)
+	}
+	value, err := decoder.Decode(reader)
+	if err == nil {
+		*dst = value
+	}
+	return err
+}
+
+// decodeResolved is decodeValueInto for a non-nil dst, with the decoder's
+// DecodeInto already resolved into into (nil when it has none).
+func decodeResolved[T any](decoder Decoder[T], into valueIntoDecoder[T], reader ValueReader, dst *T) error {
+	if into != nil {
+		return into.DecodeInto(reader, dst)
 	}
 	value, err := decoder.Decode(reader)
 	if err == nil {
