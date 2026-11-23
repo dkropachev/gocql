@@ -137,7 +137,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					if tc.timeout > 0 {
 						opts.Timeout = cql.Some(tc.timeout)
 					}
-					page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(opts))
+					page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(opts))
 					if err == nil {
 						var row cql.Bytes
 						for page.NextInto(&row) {

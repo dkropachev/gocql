@@ -110,7 +110,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		}()
 		bound := runtimeQuery(t)
 		defer bound.Close()
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}
@@ -242,7 +242,7 @@ func TestExecutionStatusBeforeAttempt(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: new(profile)}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: new(profile)}))
 		if page != nil {
 			page.Close()
 		}
@@ -270,7 +270,7 @@ func TestExecutionStatusRefused(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 1)
 			bound := runtimeQuery(t)
 			defer bound.Close()
-			_, err := RunPage(ctx, s, bound, cql.StartPage, -1, CompiledOptions{})
+			_, err := RunPage(ctx, s, bound, cql.StartPage(), -1, CompiledOptions{})
 			return err
 		}, nil},
 		{"CompletedPage", func(t *testing.T) error {

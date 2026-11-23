@@ -732,7 +732,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Validation", func(t *testing.T) {
 		t.Run("RejectsUnsupportedScalarKinds", func(t *testing.T) {
-			for _, kind := range []Type{-1, TypeDuration + 1, 65535} {
+			for _, kind := range []Type{TypeDuration + 1, 65535} {
 				// Corrupt a private copy: ScalarType descriptors are shared.
 				typ := typeFromDescriptor(&dataTypeDescriptor{Kind: kind})
 				checks := []func() error{

@@ -184,8 +184,7 @@ package config
 		config.ConfigBuilder method (*T) WithReconnect(policy endpoint.ReconnectPolicy) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithRefreshAfterAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithResolver(resolver endpoint.Resolver) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithSchemaAgreement(timeout time.Duration, poll time.Duration) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithServerTimestamps() *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithSchemaAgreement(poll time.Duration, timeout time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSocketBuffers(receive int, send int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLS(config *crypto/tls.Config) *config.ConfigBuilder
@@ -210,9 +209,7 @@ package config
 		config.Profile field Consistency cql.Consistency
 	type config.ProfileBuilder struct
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
-		config.ProfileBuilder method (*T) NoPrefetch() *config.ProfileBuilder
 		config.ProfileBuilder method (*T) NoSerialConsistency() *config.ProfileBuilder
-		config.ProfileBuilder method (*T) NoTimeout() *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithConsistency(c cql.Consistency) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageSize(rows int32) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageTimeout(d time.Duration) *config.ProfileBuilder
@@ -287,10 +284,16 @@ package cql
 		cql.CodecError field Err error
 		cql.CodecError field Column string
 		cql.CodecError field Path string
-		cql.CodecError field Stage string
+		cql.CodecError field Stage cql.CodecStage
 		cql.CodecError field Index int
 		cql.CodecError method (*T) Error() string
 		cql.CodecError method (*T) Unwrap() error
+	type cql.CodecStage string
+	const cql.CodecStageCompile cql.CodecStage = "compile"
+	const cql.CodecStageDecode cql.CodecStage = "decode"
+	const cql.CodecStageEncode cql.CodecStage = "encode"
+	const cql.CodecStageStreamCompile cql.CodecStage = "stream compile"
+	const cql.CodecStageStreamDecode cql.CodecStage = "stream decode"
 	func cql.Column[R, V any](name string, codec cql.Decoder[V], field func(*R) *V) cql.OutputField[R]
 	func cql.ColumnAt[R, V any](index int, codec cql.Decoder[V], field func(*R) *V) cql.OutputField[R]
 	type cql.ColumnSpec struct
@@ -528,7 +531,7 @@ package cql
 	func cql.SmallIntValue(n int16) cql.Value
 	const cql.SnappyCompression cql.Compression = 2
 	func cql.Some[T any](v T) cql.Option[T]
-	var cql.StartPage cql.PageState
+	func cql.StartPage() cql.PageState
 	type cql.Statement[P any, R any] struct
 		cql.Statement field CQL string
 		cql.Statement field Params cql.ParamEncoder[P]
@@ -634,11 +637,11 @@ package cql
 	var cql.TimeType cql.DataType
 	type cql.TimeUUID [16]byte
 		cql.TimeUUID method (T) Bytes() []byte
-		cql.TimeUUID method (T) Clock() uint32
+		cql.TimeUUID method (T) Clock() uint16
 		cql.TimeUUID method (T) IsEmpty() bool
 		cql.TimeUUID method (T) MarshalJSON() ([]byte, error)
 		cql.TimeUUID method (T) MarshalText() ([]byte, error)
-		cql.TimeUUID method (T) Node() []byte
+		cql.TimeUUID method (T) Node() [6]byte
 		cql.TimeUUID method (T) String() string
 		cql.TimeUUID method (T) Time() time.Time
 		cql.TimeUUID method (T) Timestamp() int64
@@ -666,7 +669,7 @@ package cql
 	func cql.TupleType(fields ...cql.DataType) (cql.DataType, error)
 	func cql.TupleValue(t cql.DataType, v []cql.Value) (cql.Value, error)
 	const cql.Two cql.Consistency = 2
-	type cql.Type int
+	type cql.Type uint16
 		cql.Type method (T) String() string
 	const cql.TypeASCII cql.Type = 1
 	const cql.TypeBigInt cql.Type = 2
@@ -905,7 +908,7 @@ package cqlerr
 	type cqlerr.FunctionFailureError struct
 		cqlerr.FunctionFailureError field Keyspace string
 		cqlerr.FunctionFailureError field Function string
-		cqlerr.FunctionFailureError field ArgTypes []string
+		cqlerr.FunctionFailureError field ArgumentTypes []string
 		cqlerr.FunctionFailureError method (*T) Code() cqlerr.ErrorCode
 		cqlerr.FunctionFailureError method (*T) Error() string
 		cqlerr.FunctionFailureError method (*T) Is(target error) bool
@@ -1117,7 +1120,7 @@ package endpoint
 		endpoint.ConvictionSource method (T) String() string
 	type endpoint.DefaultDialer struct
 		endpoint.DefaultDialer field ConnectTimeout time.Duration
-		endpoint.DefaultDialer field SocketKeepalive time.Duration
+		endpoint.DefaultDialer field TCPKeepalive time.Duration
 		endpoint.DefaultDialer method (T) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error)
 	type endpoint.DialTarget struct
 		endpoint.DialTarget field LocalAddress net/netip.AddrPort
@@ -1332,11 +1335,11 @@ package metadata
 		metadata.Mode method (T) String() string
 	type metadata.Route struct
 		metadata.Route method (T) HostID() cql.UUID
-		metadata.Route method (T) Shard() cql.Option[uint32]
+		metadata.Route method (T) ShardID() cql.Option[uint32]
 		metadata.Route method (T) ShardOf(token int64) cql.Option[uint32]
 		metadata.Route method (T) Target() metadata.Target
 		metadata.Route method (T) Usable() bool
-		metadata.Route method (T) WithShard(shard cql.Option[uint32]) metadata.Route
+		metadata.Route method (T) WithShardID(shard cql.Option[uint32]) metadata.Route
 	const metadata.SchemaFull metadata.Mode = 2
 	const metadata.SchemaKeyspaces metadata.Mode = 1
 	const metadata.SchemaNone metadata.Mode = 0
@@ -1413,7 +1416,7 @@ package metrics
 		metrics.Snapshot field Requests uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
-		metrics.Snapshot field Cancelled uint64
+		metrics.Snapshot field Canceled uint64
 		metrics.Snapshot field Retries uint64
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
@@ -1425,16 +1428,16 @@ package metrics
 package observe
 	type observe.AttemptObserver interface
 		observe.AttemptObserver method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
+	const observe.KindHost observe.LifecycleKind = "host"
+	const observe.KindSession observe.LifecycleKind = "session"
 	type observe.LifecycleEvent struct
 		observe.LifecycleEvent field At time.Time
 		observe.LifecycleEvent field Kind observe.LifecycleKind
 		observe.LifecycleEvent field Stage observe.LifecycleStage
 		observe.LifecycleEvent field HostID cql.UUID
-	const observe.LifecycleHost observe.LifecycleKind = "host"
 	type observe.LifecycleKind string
 	type observe.LifecycleObserver interface
 		observe.LifecycleObserver method ObserveLifecycle(observe.LifecycleEvent)
-	const observe.LifecycleSession observe.LifecycleKind = "session"
 	type observe.LifecycleStage string
 	type observe.Observer interface
 	type observe.RequestEvent struct
@@ -1500,7 +1503,7 @@ package routing
 		routing.AttemptEvent field Latency time.Duration
 		routing.AttemptEvent field Target metadata.Target
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
-		routing.AttemptEvent field Cancelled bool
+		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field Speculative bool
 	type routing.AttemptStart struct
 		routing.AttemptStart field Started time.Time

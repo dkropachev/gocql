@@ -52,7 +52,7 @@ func TestCursorColumns(t *testing.T) {
 		wantColumns(t, "Rows.Columns", rows.Columns(), gridValueColumn)
 	})
 	t.Run("Page", func(t *testing.T) {
-		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage, 2, f.options)
+		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage(), 2, f.options)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -14,7 +14,7 @@ import (
 
 // wantColumnError fails t unless err is a CodecError for column index at
 // stage.
-func wantColumnError(t *testing.T, err error, stage string, index int, column string) {
+func wantColumnError(t *testing.T, err error, stage CodecStage, index int, column string) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("no error, want a %s error for column %s", stage, column)

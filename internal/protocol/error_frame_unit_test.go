@@ -219,7 +219,7 @@ func errorFrameCases() []errorFrameCase {
 				f.WriteString("fn")
 				f.WriteStringList([]string{"int", "text"})
 			}),
-			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.FunctionFailureError{Keyspace: "ks", Function: "fn", ArgTypes: []string{"int", "text"}}, "ff")),
+			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.FunctionFailureError{Keyspace: "ks", Function: "fn", ArgumentTypes: []string{"int", "text"}}, "ff")),
 		},
 		errorFrameCase{
 			name: "CDCWriteFailure", proto: ProtoVersion4,

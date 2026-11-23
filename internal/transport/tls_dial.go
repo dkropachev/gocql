@@ -64,7 +64,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
-		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, SocketKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, TCPKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {

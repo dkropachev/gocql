@@ -1056,7 +1056,7 @@ type namedDynamicParamsPlan struct {
 func checkDynamicColumns(columns Columns) error {
 	for i, c := range columnSlice(columns) {
 		if err := DynamicCodec.CheckType(c.Type); err != nil {
-			return &CodecError{Column: c.Name, Index: i, Stage: "compile", Err: err}
+			return &CodecError{Column: c.Name, Index: i, Stage: CodecStageCompile, Err: err}
 		}
 	}
 	return nil
@@ -1225,7 +1225,7 @@ func (r DynamicRow) buildPhysicalIndex() {
 			}
 			value, e := readFramedValue(cursor, col.Type, bytesLease(r.body), false, false)
 			if e != nil {
-				r.physical.err = &CodecError{Column: col.Name, Index: i, Stage: "decode", Err: e}
+				r.physical.err = &CodecError{Column: col.Name, Index: i, Stage: CodecStageDecode, Err: e}
 				return
 			}
 			cells[i] = dynamicRowCell{offset: chain.Len() - cursor.Remaining() - value.body.Len(), length: value.body.Len(), state: value.state}
@@ -1264,7 +1264,7 @@ func (r DynamicRow) At(index int) (Value, error) {
 	value := newValueReader(col.Type, cell.state, body, bytesLease(r.body))
 	decoded, e := decodeDynamicWithPlan(value, r.shapes[index])
 	if e != nil {
-		return Value{}, &CodecError{Column: col.Name, Index: index, Stage: "decode", Err: e}
+		return Value{}, &CodecError{Column: col.Name, Index: index, Stage: CodecStageDecode, Err: e}
 	}
 	return decoded, nil
 }
@@ -1292,7 +1292,7 @@ func (dynamicRowsCodec) Compile(columns Columns) (CompiledRow[DynamicRow], error
 	for i, col := range columnSlice(columns) {
 		shape, err := compileStreamValidation(col.Type, 0)
 		if err != nil {
-			return nil, &CodecError{Column: col.Name, Index: i, Stage: "compile", Err: err}
+			return nil, &CodecError{Column: col.Name, Index: i, Stage: CodecStageCompile, Err: err}
 		}
 		p.shapes[i] = shape
 		if _, exists := p.lookup[col.Name]; exists {
@@ -1445,7 +1445,7 @@ func compileDynamicColumnShapes(columns Columns) ([]*streamValidationPlan, error
 	for i, c := range columnSlice(columns) {
 		p, err := compileStreamValidationMemo(c.Type, 0, memo)
 		if err != nil {
-			return nil, &CodecError{Column: c.Name, Index: i, Stage: "compile", Err: err}
+			return nil, &CodecError{Column: c.Name, Index: i, Stage: CodecStageCompile, Err: err}
 		}
 		plans[i] = p
 	}

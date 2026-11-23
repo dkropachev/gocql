@@ -81,7 +81,7 @@ v2.1; it can only be removed in v3.
 | Dynamic values (`Value`, `*Value` constructors, `ValueEntry`, `ValueField`, `ValueIterator`, `DynamicRow`, `DynamicRows`, `DynamicCodec`, `DynamicParams`, `NamedDynamicParams`, `EncodedValue`, `NewEncodedValue`, `EncodeValue`, `DecodeValue`, `CellState` and its values) | Keep. |
 | `DataType` and its methods, `Type` and `Type*` values, `*Type` variables and constructors, `ScalarType`, `ColumnSpec`, `Columns`, `NewColumns`, `UDTOptions`, `UDTOptionsFor` | Keep. `DataType.FrozenKnown` stays: result metadata carries no frozen flag, so a caller needs to tell "not frozen" from "unknown". |
 | Scalar types (`UUID`, `TimeUUID`, `Date`, `Timestamp`, `TimeOfDay`, `Duration`, `Decimal`, `DecimalParts`, `Varint`, `Counter`) and their helpers, the `Variant*` constants that `Variant` returns | Keep, less `UUID`'s time methods (decision 6). `TypeAscii` is `TypeASCII` (decision 3). |
-| `Result`, `CQLTraceRef`, `PayloadEntry`, `PageState`, `PageStateFromToken`, `StartPage`, `Unpaged` | Keep. |
+| `Result`, `CQLTraceRef`, `PayloadEntry`, `PageState`, `PageStateFromToken`, `StartPage`, `Unpaged` | Keep; `StartPage` is a function (fourth pass). |
 | `ValidationError`, `CodecError`, `ProtocolError`, `StreamCapabilityError`, `StreamCapacityError` | Keep. |
 
 ## `cqlerr`
@@ -183,6 +183,29 @@ A third pass found these. Each changes a public symbol, so it lands before
 | `cql.Text.String` panicked on an expired view, so formatting or logging one did | Returns `"<released>"`; `Copy` stays the checked form. |
 | `metadata.ColumnKind` was the only `int` enum | `uint8`, like the others. |
 | `metadata.Keyspace.Clone` named an unexported field; `cqlerr.AttemptFailure.Address` and `HostError.Address` did not say why they are text | Docs fixed: an unresolved contact point has no IP and a Unix socket has a path. |
+
+## Fourth review pass (2026-11-23)
+
+A fourth pass found these. Each changes a public symbol, so it lands before
+`v2.0.0-rc.1`.
+
+| Finding | Outcome |
+|---|---|
+| `metrics.Snapshot.Cancelled` and `routing.AttemptEvent.Cancelled` beside `cqlerr.KindCanceled` and Go's `context.Canceled` | Renamed `Canceled`. |
+| `cqlerr.FunctionFailureError.ArgTypes`, while `metadata.Function`, `metadata.Aggregate` and `event.Event` say `ArgumentTypes` | Renamed `ArgumentTypes`. |
+| `metadata.Route.Shard` and `WithShard`, missed by the third pass's `ShardID` rename; `metadata.Target.ShardID` is in the same package | Renamed `ShardID` and `WithShardID`. `ShardOf` stays: it computes a shard, not the route's. |
+| `endpoint.DefaultDialer.SocketKeepalive`, which the `WithDialer` doc tells users to set to the value of `config.ConfigBuilder.WithTCPKeepalive` | Renamed `TCPKeepalive`. |
+| `cql.TimeUUID.Clock` returned a `uint32` and `Node` a `[]byte`, while `cql.TimeUUIDWith` takes a `uint16` clock and a `[6]byte` node | `Clock` returns `uint16` and `Node` `[6]byte`, the zero array for a UUID that is not version 1, so the values round-trip. |
+| `ConfigBuilder.WithHeartbeat(interval, timeout)` and `WithSchemaAgreement(timeout, poll)` order their two durations oppositely, and swapping them compiles | `WithSchemaAgreement(poll, timeout)`, the period first in both. |
+| `ProfileBuilder.NoTimeout` and `NoPrefetch` were `WithTimeout(0)` and `WithPrefetch(0)`, and `ConfigBuilder.WithServerTimestamps` was `WithTimestampGenerator(nil)`, against the builder rule that zero or nil turns a setting off with no `No*` twin | Removed; the remaining setters document their zero or nil. `NoSerialConsistency` and `NoAdvancedShardAwareness` stay, since zero cannot express them. |
+| `cql.Type` was an `int` | `uint16`, the width of the protocol's type ID, so a type ID the driver does not name cannot alias a known one. |
+| `cql.StartPage` was a variable the driver itself reads, so assigning it broke paging | `cql.StartPage()`, a function returning the zero `PageState`. |
+| `cql.CodecError.Stage` was a string with five documented values | `cql.CodecStage` with constants `CodecStageCompile` ... `CodecStageStreamDecode`; the values and messages are unchanged. `ProtocolError.Stage`, `ConnectError.Stage` and `NoHostsError.Operation` stay strings: they are open-ended diagnostics. |
+| `observe` named its kinds `LifecycleSession` and `LifecycleHost` but its stages `StageReady` ... | `KindSession` and `KindHost`. |
+| `docs/server-differences.md` and `docs/source/connecting/index.md` still named `AttemptFailure.Shard` and `ConvictionEvent.Shard` | Docs updated to `ShardID`. |
+
+Built-in `retry.SpeculationPolicy` and `endpoint.ReconnectPolicy`
+implementations are additions, left for v2.1.
 
 ## Decisions
 

@@ -202,7 +202,7 @@ func TestPage(t *testing.T) {
 					defer b.Close()
 					var dst cql.Bytes
 					if manual {
-						p := codecTestMust(RunPage(context.Background(), s, b, cql.StartPage, 0, CompiledOptions{}))
+						p := codecTestMust(RunPage(context.Background(), s, b, cql.StartPage(), 0, CompiledOptions{}))
 						defer p.Close()
 						if !p.NextInto(&dst) {
 							t.Fatal(p.Err())
@@ -261,7 +261,7 @@ func TestPage(t *testing.T) {
 						closeRows = r.Close
 						retain = r.Retain
 					} else {
-						p, err := RunPage(context.Background(), s, b, cql.StartPage, 0, CompiledOptions{})
+						p, err := RunPage(context.Background(), s, b, cql.StartPage(), 0, CompiledOptions{})
 						if err != nil {
 							t.Fatal(err)
 						}

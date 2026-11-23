@@ -78,7 +78,7 @@ func TestHandleLifetimes(t *testing.T) {
 			t.Fatal(rows.Err())
 		}
 		closeTwice(t, "Rows", rows.Close, nil)
-		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage, 2, f.options)
+		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage(), 2, f.options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -144,11 +144,11 @@ func TestHandleLifetimes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage, 2, f.options)
+		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage(), 2, f.options)
 		if err != nil {
 			t.Fatal(err)
 		}
-		qpage, err := q.RunPage(f.ctx, gridKey, cql.StartPage, 2)
+		qpage, err := q.RunPage(f.ctx, gridKey, cql.StartPage(), 2)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -314,7 +314,7 @@ func TestHandleLifetimes(t *testing.T) {
 					}
 					next, errOf, closeOf = rows.NextInto, rows.Err, rows.Close
 				default:
-					page, err := q.RunPage(f.ctx, gridKey, cql.StartPage, 2)
+					page, err := q.RunPage(f.ctx, gridKey, cql.StartPage(), 2)
 					if err != nil {
 						t.Fatal(err)
 					}

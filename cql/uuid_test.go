@@ -25,7 +25,6 @@
 package cql
 
 import (
-	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -162,8 +161,8 @@ func TestUUID(t *testing.T) {
 				t.Fatalf("unexpected error %v", err)
 			}
 
-			if node := TimeUUID(uuid).Node(); node != nil {
-				t.Fatalf("expected nil, got %v", node)
+			if node := TimeUUID(uuid).Node(); node != [6]byte{} {
+				t.Fatalf("expected the zero node, got %v", node)
 			}
 
 			if stamp := TimeUUID(uuid).Timestamp(); stamp != 0 {
@@ -205,10 +204,10 @@ func TestUUID(t *testing.T) {
 		if got := uuid.Timestamp(); got != int64(ts) {
 			t.Errorf("wrong timestamp. Expected %v got %v", ts, got)
 		}
-		if got := uuid.Clock(); got != uint32(clockSeq) {
+		if got := uuid.Clock(); got != clockSeq {
 			t.Errorf("wrong clock. expected %v got %v", clockSeq, got)
 		}
-		if got, want := uuid.Node(), node[:]; !bytes.Equal(got, want) {
+		if got, want := uuid.Node(), node; got != want {
 			t.Errorf("wrong node. expected %x, bot %x", want, got)
 		}
 	})
@@ -227,7 +226,7 @@ func TestUUID(t *testing.T) {
 	t.Run("NewTimeUUID", func(t *testing.T) {
 		t.Parallel()
 
-		var node []byte
+		var node [6]byte
 		timestamp := int64(0)
 		for i := 0; i < 20; i++ {
 			uuid := newTimeUUID()
@@ -239,7 +238,7 @@ func TestUUID(t *testing.T) {
 				t.Errorf("wrong version. expected %d got %d", 1, version)
 			}
 
-			if n := TimeUUID(uuid).Node(); !bytes.Equal(n, node) && i > 0 {
+			if n := TimeUUID(uuid).Node(); n != node && i > 0 {
 				t.Errorf("wrong node. expected %x, got %x", node, n)
 			} else if i == 0 {
 				node = n
@@ -317,7 +316,7 @@ func TestUUID(t *testing.T) {
 		}
 
 		nodeFromUUID := TimeUUID(minTimeUUID).Node()
-		if !bytes.Equal(minNode[:], nodeFromUUID) {
+		if minNode != nodeFromUUID {
 			t.Errorf("nodes are not equal: expected %08b, got %08b", minNode, nodeFromUUID)
 		}
 	})
@@ -340,7 +339,7 @@ func TestUUID(t *testing.T) {
 		}
 
 		nodeFromUUID := TimeUUID(maxTimeUUID).Node()
-		if !bytes.Equal(maxNode[:], nodeFromUUID) {
+		if maxNode != nodeFromUUID {
 			t.Errorf("nodes are not equal:  expected %08b, got %08b", maxNode, nodeFromUUID)
 		}
 	})

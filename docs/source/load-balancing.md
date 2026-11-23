@@ -26,13 +26,13 @@ path, where the first route serves the request:
 The session combines Pick and Fallback into the plan a request follows.
 `Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
 perform I/O or mutate inputs. A Route is a host and, optionally, a shard
-(`Route.Shard`, a `cql.Option[uint32]`), resolved by the plan: a request takes a
+(`Route.ShardID`, a `cql.Option[uint32]`), resolved by the plan: a request takes a
 connection for exactly that shard of that host, or any connection of the host
 when the route has no shard, and does not move to another shard or host on its own;
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
 `routing.ReplicaRoutes` (the replicas of a request's token), and narrows them
-with `WithShard` and `ShardOf`.
+with `WithShardID` and `ShardOf`.
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
 and leaders. Its Pick routes to one random replica when that replica is up and in the
@@ -175,7 +175,7 @@ func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Rou
 
 func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	switch {
-	case e.Cancelled:
+	case e.Canceled:
 	case e.Err != nil:
 		p.failed.Store(e.Target.HostID, struct{}{})
 	default:

@@ -98,7 +98,7 @@ func TestPaging(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
 					var result []cql.DynamicRow
-					state := cql.StartPage
+					state := cql.StartPage()
 					for {
 						page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}, PageSize: cql.Option[int32]{Value: pageSize, Set: true}}))
 						require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestPaging(t *testing.T) {
 		}
 		// Manual paging needs a page cursor, which only prepared statements return.
 		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
-		state := cql.StartPage
+		state := cql.StartPage()
 		fetched := 0
 		for {
 			page, err := prepared.RunPage(context.Background(), cql.EmptyParams{}, state, 0, bindOptions(session, exec.Options{PageSize: cql.Option[int32]{Value: 2, Set: true}}))

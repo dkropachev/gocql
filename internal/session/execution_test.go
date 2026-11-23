@@ -646,7 +646,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{Profile: handle}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -680,7 +680,7 @@ func TestExecution(t *testing.T) {
 			bound := runtimeQuery(t)
 			finished := make(chan error, 1)
 			go func() {
-				page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle}))
+				page, err := RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{Profile: handle}))
 				if page != nil {
 					page.Close()
 				}
@@ -776,7 +776,7 @@ func TestExecution(t *testing.T) {
 					defer b.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
-					page, err := RunPage(ctx, s, b, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, Consistency: tc.consistency}))
+					page, err := RunPage(ctx, s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, Consistency: tc.consistency}))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -811,7 +811,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -857,7 +857,7 @@ func TestExecution(t *testing.T) {
 					BoundData(b).InternalRequest.routing.Conditional = kind != implCql.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, implCql.StartPage, 0, testOptions(Options{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))
 						if page != nil {
 							page.Close()
 						}

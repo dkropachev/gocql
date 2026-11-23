@@ -172,7 +172,7 @@ type PageState struct {
 func startPage() PageState { return PageState{} }
 
 // PageStateFromToken copies token into a continuation state. Nil and empty
-// inputs both represent an empty continuation. Use StartPage to begin paging;
+// inputs both represent an empty continuation. Use StartPage() to begin paging;
 // use PageState.More and PageState.Complete to distinguish continuation and completion.
 func PageStateFromToken(token []byte) PageState {
 	return PageState{token: append([]byte{}, token...), kind: 1}

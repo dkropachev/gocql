@@ -1176,7 +1176,7 @@ func TestStream(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 			defer cancel()
-			page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{}))
+			page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{}))
 			if page != nil {
 				page.Close()
 			}

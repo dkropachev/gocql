@@ -34,7 +34,7 @@ func hostsSession(t *testing.T, n int) (*cluster.Core, *runtimePolicy, func(*Opt
 		defer bound.Close()
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(*o))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(*o))
 		if page != nil {
 			page.Close()
 		}

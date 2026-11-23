@@ -151,7 +151,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 		}
 		compiled, err := c.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, columnError("stream compile", index, columnSlice(columns)[index].Name, err)
+			return nil, columnError(CodecStageStreamCompile, index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 		plan.resets[field] = compiled.reset
@@ -203,7 +203,7 @@ func (c streamOneColumn[T]) Compile(columns Columns) (CompiledStreamRow[T], erro
 	}
 	p, e := compileStreamValue(c.decoder, columnSlice(columns)[0].Type)
 	if e != nil {
-		return nil, columnError("stream compile", 0, columnSlice(columns)[0].Name, e)
+		return nil, columnError(CodecStageStreamCompile, 0, columnSlice(columns)[0].Name, e)
 	}
 	return streamOneColumnPlan[T]{p, columns}, nil
 }

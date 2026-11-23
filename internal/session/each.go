@@ -85,7 +85,7 @@ func (rt *InternalSessionRuntime) eachPage[R any](ctx context.Context, b *Bound[
 	var result cql.Result
 	var history paging.InternalPagingHistory
 	var inline [paging.InternalInlineHistory]cql.PageState // the history's first tokens
-	state := cql.StartPage
+	state := cql.StartPage()
 	for first := true; ; first = false {
 		if !first && request.query != nil {
 			// The previous page was released before this request, so the

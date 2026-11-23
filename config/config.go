@@ -243,7 +243,7 @@ func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
 // set on the returned TCP connection afterwards; a wrapper that hides those
 // controls fails the connection with a cqlerr.UnsupportedSettingError.
 // A custom dialer may wrap endpoint.DefaultDialer, the dialer used without
-// WithDialer; set its fields to the same connect timeout and keepalive.
+// WithDialer; set its fields to the same connect timeout and TCP keepalive.
 func (b *ConfigBuilder) WithDialer(dialer endpoint.Dialer) *ConfigBuilder {
 	b.settings.Dialer = dialer
 	return b
@@ -522,9 +522,10 @@ func (b *ConfigBuilder) WithIgnoreEvents(kinds ...event.Kind) *ConfigBuilder {
 	return b
 }
 
-// WithSchemaAgreement waits up to timeout, polling every poll, for nodes to agree
-// on the schema. Default 60s and 200ms.
-func (b *ConfigBuilder) WithSchemaAgreement(timeout, poll time.Duration) *ConfigBuilder {
+// WithSchemaAgreement polls every poll, for up to timeout, for nodes to agree
+// on the schema. The period comes first, as in WithHeartbeat. Default 200ms
+// and 60s.
+func (b *ConfigBuilder) WithSchemaAgreement(poll, timeout time.Duration) *ConfigBuilder {
 	b.settings.Metadata.AgreementTimeout = timeout
 	b.settings.Metadata.AgreementPoll = poll
 	return b
@@ -578,18 +579,12 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 	return b
 }
 
-// WithTimestampGenerator supplies client timestamps in microseconds; a nil next
-// sends none. It replaces WithServerTimestamps. By default the driver stamps
-// each request with the time it was admitted, strictly increasing per session.
+// WithTimestampGenerator supplies client timestamps in microseconds. A nil
+// next sends no client timestamp, so the server assigns one. By default the
+// driver stamps each request with the time it was admitted, strictly
+// increasing per session.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
 	b.settings.Timestamps = implSettings.GeneratedTimestamps(next)
-	return b
-}
-
-// WithServerTimestamps sends no client timestamp, so the server assigns one. It
-// replaces WithTimestampGenerator.
-func (b *ConfigBuilder) WithServerTimestamps() *ConfigBuilder {
-	b.settings.Timestamps = implSettings.ClientTimestamps{}
 	return b
 }
 
@@ -734,16 +729,10 @@ func (p *ProfileBuilder) NoSerialConsistency() *ProfileBuilder {
 }
 
 // WithTimeout bounds one execution, including retries. The context and
-// exec.Options.Timeout can only shorten it. It replaces NoTimeout. Default 30s.
+// exec.Options.Timeout can only shorten it. Zero leaves executions bounded
+// only by their context and exec.Options.Timeout. Default 30s.
 func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.Timeout = d
-	return p
-}
-
-// NoTimeout leaves executions bounded only by their context and
-// exec.Options.Timeout. It replaces WithTimeout.
-func (p *ProfileBuilder) NoTimeout() *ProfileBuilder {
-	p.profile.Timeout = 0
 	return p
 }
 
@@ -760,13 +749,9 @@ func (p *ProfileBuilder) WithPageSize(rows int32) *ProfileBuilder {
 	return p
 }
 
-// NoPrefetch fetches the next page only when the current one is consumed.
-func (p *ProfileBuilder) NoPrefetch() *ProfileBuilder {
-	return p.WithPrefetch(0)
-}
-
 // WithPrefetch sets how many continuation pages to prefetch: zero or one.
-// It replaces NoPrefetch. Default one. With one, Rows request the next page as
+// With zero, the next page is fetched only when the current one is consumed.
+// Default one. With one, Rows request the next page as
 // soon as a page arrives, so they hold at most two response pages; Each, All,
 // One, RunPage and streams never prefetch.
 func (p *ProfileBuilder) WithPrefetch(pages int) *ProfileBuilder {

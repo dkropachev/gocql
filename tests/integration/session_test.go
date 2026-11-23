@@ -867,7 +867,7 @@ func TestSession(t *testing.T) {
 			// copies only the fixture's settings that apply to the socket.
 			c := config.New(testDialect, "unix:"+socketFiles[0]).
 				WithCQLVersion(*flagCQL).
-				WithSchemaAgreement(2*time.Minute, 200*time.Millisecond).
+				WithSchemaAgreement(200*time.Millisecond, 2*time.Minute).
 				ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
 					p.WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
 				}).
@@ -1247,7 +1247,7 @@ func TestSession(t *testing.T) {
 			t.Parallel()
 
 			const agreementTimeout = 2 * time.Minute
-			cluster := createV2ClusterWithout(fixtureAgreement).WithSchemaAgreement(agreementTimeout, 200*time.Millisecond)
+			cluster := createV2ClusterWithout(fixtureAgreement).WithSchemaAgreement(200*time.Millisecond, agreementTimeout)
 			s, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
 				t.Fatalf("failed to connect to the cluster: %s", err)

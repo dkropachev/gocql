@@ -12,7 +12,7 @@ the next advancement or Close unless a retained `PageLease` pins that page.
 Clone explicitly detaches a value. A retained page survives Session.Close and
 does not retain query input storage.
 
-For explicit paging use `RunPage(ctx, parameters, cql.StartPage, pageSize)` and
+For explicit paging use `RunPage(ctx, parameters, cql.StartPage(), pageSize)` and
 carry the returned page state to the next call. `prepared.RunPage` serves
 concurrent handlers, such as a paginated endpoint: keep `page.State()`, not the
 page. The page size is an argument so it can come from each request; zero

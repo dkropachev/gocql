@@ -40,7 +40,7 @@ func TestRunPageSize(t *testing.T) {
 				got <- r.pageSize
 				_, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "a")))
 			}()
-			page, err := q.RunPage(ctx, 1, cql.StartPage, tc.size)
+			page, err := q.RunPage(ctx, 1, cql.StartPage(), tc.size)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -53,7 +53,7 @@ func TestRunPageSize(t *testing.T) {
 		})
 	}
 	t.Run("Negative", func(t *testing.T) {
-		if _, err := q.RunPage(ctx, 1, cql.StartPage, -1); err == nil {
+		if _, err := q.RunPage(ctx, 1, cql.StartPage(), -1); err == nil {
 			t.Fatal("negative page size accepted")
 		}
 		select {
@@ -66,7 +66,7 @@ func TestRunPageSize(t *testing.T) {
 			r := <-requests
 			_, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, runtimeRowsBody(nil, "a")))
 		}()
-		page, err := q.RunPage(ctx, 1, cql.StartPage, 0)
+		page, err := q.RunPage(ctx, 1, cql.StartPage(), 0)
 		if err != nil {
 			t.Fatal(err)
 		}

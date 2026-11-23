@@ -161,7 +161,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 1)
 		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
 		s.Close()
-		_, err := RunPage(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StartPage, 0, CompiledOptions{})
+		_, err := RunPage(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StartPage(), 0, CompiledOptions{})
 		if !errors.Is(err, cqlerr.ErrClosed) {
 			t.Fatalf("RunPage on a closed session = %v", err)
 		}
@@ -237,13 +237,13 @@ func TestErrorStatementPaths(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 1)
 		defer s.Close()
 		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
-		_, err := RunPage(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StartPage, -1, CompiledOptions{})
+		_, err := RunPage(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StartPage(), -1, CompiledOptions{})
 		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 			t.Fatalf("RunPage with a negative page size = %v", err)
 		}
 		checkNamed(t, err)
 		// A reusable query's RunPage refuses the same way.
-		_, err = batchTestQuery(t, s).RunPage(ctx, []byte(redactionSecret), cql.StartPage, -1)
+		_, err = batchTestQuery(t, s).RunPage(ctx, []byte(redactionSecret), cql.StartPage(), -1)
 		if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" {
 			t.Errorf("Query.RunPage with a negative page size = %v", err)
 		}

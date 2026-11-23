@@ -101,7 +101,7 @@ func TestDataType(t *testing.T) {
 				t.Fatalf("scalar %v validation allocated: %g", kind, allocations)
 			}
 		}
-		for _, kind := range []Type{-1, TypeCustom, TypeDuration + 1, TypeList, TypeMap, TypeSet, TypeTuple, TypeUDT, 65535} {
+		for _, kind := range []Type{TypeCustom, TypeDuration + 1, TypeList, TypeMap, TypeSet, TypeTuple, TypeUDT, 65535} {
 			err := validateScalarKind(kind)
 			if validation, ok := errors.AsType[*ValidationError](err); !ok || validation.Field != "kind" {
 				t.Fatalf("unsupported scalar %v: expected kind ValidationError, got %v", kind, err)

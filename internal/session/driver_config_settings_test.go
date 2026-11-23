@@ -154,7 +154,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			// WithNagle(true), WithTCPKeepalive, WithSocketBuffers, WithLinger,
 			// WithConnectionsPerHost, WithMaxRequestsPerConnection,
 			// WithMaxOrphanedStreams, WithReconnect(nil), WithMetadataTimeout,
-			// WithSchemaAgreement and WithServerTimestamps set, and a default
+			// WithSchemaAgreement and WithTimestampGenerator(nil) set, and a default
 			// profile with consistency ONE, no serial consistency, 10-row pages,
 			// no timeout, no retry policy and a speculation policy.
 			edit: func(c *settings.Config) {

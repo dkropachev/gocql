@@ -406,7 +406,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.Co
 		b.WithCQLVersion(*flagCQL)
 	}
 	if skip&fixtureAgreement == 0 {
-		b.WithSchemaAgreement(2*time.Minute, 200*time.Millisecond)
+		b.WithSchemaAgreement(200*time.Millisecond, 2*time.Minute)
 	}
 	b.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { fixtureProfileExcept(p, skip) })
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {

@@ -61,16 +61,16 @@ type DefaultDialer struct {
 	// ConnectTimeout bounds each dial; zero leaves it bounded only by its
 	// context.
 	ConnectTimeout time.Duration
-	// SocketKeepalive is the TCP keepalive period; zero turns keepalive off.
-	SocketKeepalive time.Duration
+	// TCPKeepalive is the TCP keepalive period; zero turns keepalive off.
+	TCPKeepalive time.Duration
 }
 
 // DialContext dials the target with a net.Dialer bounded by ConnectTimeout,
-// with TCP keepalive every SocketKeepalive, or off when it is zero. A source
+// with TCP keepalive every TCPKeepalive, or off when it is zero. A source
 // address requires a TCP network; any other network with one fails with a
 // ValidationError.
 func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {
-	keepalive := d.SocketKeepalive
+	keepalive := d.TCPKeepalive
 	if keepalive == 0 {
 		keepalive = -1
 	}

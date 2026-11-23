@@ -276,7 +276,7 @@ func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn,
 //
 //go:noinline
 func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
-	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Canceled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

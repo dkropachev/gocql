@@ -78,7 +78,7 @@ func planRoutes(policy routing.Policy, info routing.Info, m *implRouting.Metadat
 // routePair is r's host and shard, the shard -1 for any shard.
 func routePair(r metadata.Route) [2]int {
 	shard := -1
-	if s := r.Shard(); s.Set {
+	if s := r.ShardID(); s.Set {
 		shard = int(s.Value)
 	}
 	return [2]int{int(r.HostID()[15]), shard}

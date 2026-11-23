@@ -28,6 +28,24 @@ func (e *ValidationError) Error() string { return fmt.Sprintf("gocql: invalid %s
 // Unwrap returns Err.
 func (e *ValidationError) Unwrap() error { return e.Err }
 
+// CodecStage is the step a CodecError failed in. Later releases may add
+// values, so a switch over them needs a default case.
+type CodecStage string
+
+const (
+	// CodecStageCompile: the codec rejected the column's type.
+	CodecStageCompile CodecStage = "compile"
+	// CodecStageEncode: a parameter value did not encode.
+	CodecStageEncode CodecStage = "encode"
+	// CodecStageDecode: a column value did not decode.
+	CodecStageDecode CodecStage = "decode"
+	// CodecStageStreamCompile: a streaming decoder rejected the column's
+	// type.
+	CodecStageStreamCompile CodecStage = "stream compile"
+	// CodecStageStreamDecode: a streaming decoder failed on a column value.
+	CodecStageStreamDecode CodecStage = "stream decode"
+)
+
 // CodecError records the physical column and nested path of a codec failure.
 // Every codec failure of a parameter or result column is one: typed and
 // struct row decoders, parameter encoders, dynamic rows and streams.
@@ -45,10 +63,8 @@ type CodecError struct {
 	// and when the member is inside a collection element or decoded by a
 	// streaming decoder; the message still names the member then.
 	Path string
-	// Stage is where the failure happened: "compile" when the codec rejects
-	// the column's type, "encode" or "decode" for a value, and "stream
-	// compile" or "stream decode" for a streaming decoder.
-	Stage string
+	// Stage is where the failure happened.
+	Stage CodecStage
 	// Index is the zero-based position of the column, or of the parameter.
 	// DynamicRow.At reports the position in the DynamicRow, which is the
 	// right-hand part of the row when it is decoded by PairRows.
@@ -96,7 +112,7 @@ func (e *ProtocolError) Unwrap() error { return e.Err }
 //
 // A memberError, the failure of a tuple or UDT member inside the column, is
 // reported as the column's CodecError with the member's path.
-func columnError(stage string, index int, name string, err error) error {
+func columnError(stage CodecStage, index int, name string, err error) error {
 	switch e := err.(type) { //nolint:errorlint // only the outermost error names the column or a member path
 	case *CodecError:
 		return err
@@ -115,7 +131,7 @@ func columnError(stage string, index int, name string, err error) error {
 type memberError struct {
 	err   error
 	path  string
-	stage string // the member's stage, such as "compile" for a lazily compiled codec
+	stage CodecStage // the member's stage, such as "compile" for a lazily compiled codec
 }
 
 func (e *memberError) Error() string { return fmt.Sprintf("gocql: member %s: %v", e.path, e.err) }
