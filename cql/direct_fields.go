@@ -292,11 +292,11 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		if op.ascii {
 			for i := 0; i < len(s); i++ {
 				if s[i] >= utf8.RuneSelf {
-					return columnError("encode", w.index, column.Name, errors.New("gocql: invalid ASCII"))
+					return columnError(CodecStageEncode, w.index, column.Name, errors.New("gocql: invalid ASCII"))
 				}
 			}
 		} else if !utf8.ValidString(s) {
-			return columnError("encode", w.index, column.Name, errors.New("gocql: invalid UTF-8"))
+			return columnError(CodecStageEncode, w.index, column.Name, errors.New("gocql: invalid UTF-8"))
 		}
 		if err := op.writeBody(w, nil, s); err != nil {
 			return err
@@ -318,7 +318,7 @@ func (op *paramOp[P]) writeBody(w *ParamWriter, b []byte, s string) error {
 	}
 	if int64(n) > math.MaxInt32 {
 		column, _ := w.columns.At(w.index)
-		return columnError("encode", w.index, column.Name, typeValidation("value", "cell length %d is outside signed 32-bit range", n))
+		return columnError(CodecStageEncode, w.index, column.Name, typeValidation("value", "cell length %d is outside signed 32-bit range", n))
 	}
 	mark := w.builder.Mark()
 	if err := w.builder.Uint32(uint32(n)); err != nil {
@@ -345,5 +345,5 @@ func (op *paramOp[P]) writeBody(w *ParamWriter, b []byte, s string) error {
 
 func (op *paramOp[P]) wrap(w *ParamWriter, err error) error {
 	column, _ := w.columns.At(w.index)
-	return columnError("encode", w.index, column.Name, err)
+	return columnError(CodecStageEncode, w.index, column.Name, err)
 }

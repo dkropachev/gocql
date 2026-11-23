@@ -863,7 +863,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 	}
 }
 func (p *InternalRoutingPolicy) Observe(e routing2.AttemptEvent) {
-	if !p.InternalOptions.Latency.Enabled || e.Cancelled || !InternalRoutingLatencySample(e.Err) || e.Latency <= 0 {
+	if !p.InternalOptions.Latency.Enabled || e.Canceled || !InternalRoutingLatencySample(e.Err) || e.Latency <= 0 {
 		return
 	}
 	v, found := p.InternalLatencies.Load(e.Target.HostID)

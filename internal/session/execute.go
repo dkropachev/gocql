@@ -165,7 +165,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	return metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Cancelled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
+	return metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 }
 
 // requestCount reports the admitted requests: every request id taken, minus
@@ -831,7 +831,7 @@ func (rt *InternalSessionRuntime) run[R any](ctx context.Context, b *Bound[R], o
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	response, err := rt.executePage(runctx, request, cql.StartPage)
+	response, err := rt.executePage(runctx, request, cql.StartPage())
 	if err != nil {
 		cancel()
 		request.InternalLogical.InternalFinish(InternalExecutionErrorResult(err), err)
@@ -1001,7 +1001,7 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	response, err := rt.executePage(runctx, request, cql.StartPage)
+	response, err := rt.executePage(runctx, request, cql.StartPage())
 	if err != nil {
 		cancel()
 		result := InternalExecutionErrorResult(err)
@@ -1074,7 +1074,7 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Canceled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

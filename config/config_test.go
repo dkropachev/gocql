@@ -131,7 +131,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithAdvancedShardAwareness(50000, 60000).NoAdvancedShardAwareness().
 			WithMetadataRefresh(time.Second).WithMetadataRefresh(0).
 			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
-			WithTimestampGenerator(func() int64 { return 1 }).WithServerTimestamps()).settings
+			WithTimestampGenerator(func() int64 { return 1 }).WithTimestampGenerator(nil)).settings
 		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.AdvancedShardAwareness.Enabled ||
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
@@ -198,7 +198,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithMetadataTimeout 31s":                   c.Metadata.RequestTimeout == 31*time.Second,
 			"WithMetadataServerTimeout not chosen (30s on ScyllaDB, none on Cassandra)": !c.Metadata.ServerTimeout.Set,
 			"WithIgnoreEvents none ignored":                                             c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
-			"WithSchemaAgreement 60s and 200ms":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
+			"WithSchemaAgreement 200ms and 60s":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
 			"WithAutomaticSchemaAgreement true":                                         c.Metadata.AutomaticAgreement,
 			"WithRefreshAfterAgreement true":                                            c.Metadata.RefreshAfterAgreement,
 			"WithPreparedCacheSize 1000":                                                c.PreparedCacheSize == 1000,
@@ -227,13 +227,13 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ProfileExclusiveOptionsReplace", func(t *testing.T) {
-		p := codecTestMust(NewProfile().NoSerialConsistency().WithSerialConsistency(cql.Serial).NoTimeout().WithTimeout(time.Second).NoPrefetch().WithPrefetch(1).Build())
+		p := codecTestMust(NewProfile().NoSerialConsistency().WithSerialConsistency(cql.Serial).WithTimeout(0).WithTimeout(time.Second).WithPrefetch(0).WithPrefetch(1).Build())
 		if p.SerialConsistency != cql.Some(cql.Serial) || p.Timeout != time.Second || p.Prefetch != 1 {
-			t.Fatalf("a later With call did not replace a No call: %+v", p)
+			t.Fatalf("a later call did not replace an earlier one: %+v", p)
 		}
-		p = codecTestMust(NewProfile().WithSerialConsistency(cql.Serial).NoSerialConsistency().WithTimeout(time.Second).NoTimeout().WithPrefetch(1).NoPrefetch().Build())
+		p = codecTestMust(NewProfile().WithSerialConsistency(cql.Serial).NoSerialConsistency().WithTimeout(time.Second).WithTimeout(0).WithPrefetch(1).WithPrefetch(0).Build())
 		if p.SerialConsistency.Set || p.Timeout != 0 || p.Prefetch != 0 {
-			t.Fatalf("a later No call did not replace a With call: %+v", p)
+			t.Fatalf("a later clearing call did not replace an earlier one: %+v", p)
 		}
 	})
 
@@ -281,7 +281,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithAutomaticSchemaAgreement(false).WithAutomaticSchemaAgreement(true).
 			WithRefreshAfterAgreement(false).WithRefreshAfterAgreement(true).
 			ConfigureDefaultProfile(func(p *ProfileBuilder) {
-				p.WithPageSize(0).WithPageSize(42).NoPrefetch().WithPrefetch(1)
+				p.WithPageSize(0).WithPageSize(42).WithPrefetch(0).WithPrefetch(1)
 			})
 		c := mustBuildConfig(t, b).settings
 		if c.TLS != nil || c.ClientRoutes != nil || !c.Metadata.InitialDiscovery || !c.ReportConfiguration ||
@@ -487,7 +487,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DefaultProfileSnapshotsAndReplaces", func(t *testing.T) {
-		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).NoTimeout().Build())
+		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithTimeout(0).Build())
 		b := New(ScyllaV4, "h").WithDefaultProfile(profile)
 		other := New(ScyllaV4, "h").WithDefaultProfile(profile)
 		profile.PageSize = 99
@@ -546,7 +546,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DisableMethods", func(t *testing.T) {
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithServerTimestamps().
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithTimestampGenerator(nil).
 			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).NoAdvancedShardAwareness().WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
@@ -685,7 +685,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ProfileBuild", func(t *testing.T) {
-		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().NoPrefetch().Build()
+		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().WithPrefetch(0).Build()
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -485,8 +485,8 @@ type FunctionFailureError struct {
 	Keyspace string
 	// Function is the function's name.
 	Function string
-	// ArgTypes lists the CQL types of the function's arguments.
-	ArgTypes []string
+	// ArgumentTypes lists the CQL types of the function's arguments.
+	ArgumentTypes []string
 }
 
 // Code returns CodeFunctionFailure.
@@ -726,7 +726,7 @@ func decodeServerError(r errorBody, warnings []string, failureReasonMap bool, ra
 			e.WriteType = parseWriteType(r.Str())
 			return e
 		case CodeFunctionFailure:
-			return &FunctionFailureError{serverError: base, Keyspace: r.Str(), Function: r.Str(), ArgTypes: r.Strings()}
+			return &FunctionFailureError{serverError: base, Keyspace: r.Str(), Function: r.Str(), ArgumentTypes: r.Strings()}
 		case CodeCDCWriteFailure:
 			return &CDCWriteFailureError{serverError: base}
 		case CodeCASWriteUnknown:

@@ -22,11 +22,11 @@ type LifecycleObserver interface {
 type LifecycleKind string
 
 const (
-	// LifecycleSession is an event of the session itself.
-	LifecycleSession LifecycleKind = "session"
-	// LifecycleHost is an event of one host, which LifecycleEvent.HostID
+	// KindSession is an event of the session itself.
+	KindSession LifecycleKind = "session"
+	// KindHost is an event of one host, which LifecycleEvent.HostID
 	// names.
-	LifecycleHost LifecycleKind = "host"
+	KindHost LifecycleKind = "host"
 )
 
 // LifecycleStage is the step a LifecycleEvent reports. The zero
@@ -56,7 +56,7 @@ type LifecycleEvent struct {
 	Kind LifecycleKind
 	// Stage names the step.
 	Stage LifecycleStage
-	// HostID is the host of a LifecycleHost event, and the zero UUID for a
-	// LifecycleSession event.
+	// HostID is the host of a KindHost event, and the zero UUID for a
+	// KindSession event.
 	HostID cql.UUID
 }

@@ -70,7 +70,7 @@ type AttemptEvent struct {
 	// CQLTraceID is the CQL trace session the attempt's response named, when
 	// the execution ran with CQL tracing and a response arrived.
 	CQLTraceID cql.Option[cql.UUID]
-	// Cancelled reports an attempt that ended with its context, and
+	// Canceled reports an attempt that ended with its context, and
 	// Speculative a speculative attempt.
-	Cancelled, Speculative bool
+	Canceled, Speculative bool
 }

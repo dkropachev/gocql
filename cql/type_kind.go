@@ -10,7 +10,7 @@ import (
 // Type is the kind of a CQL data type, as the native protocol numbers it, so
 // the zero Type is TypeCustom. Later releases may add values, so a switch over
 // them needs a default case.
-type Type int
+type Type uint16
 
 // The kinds of CQL data types.
 const (

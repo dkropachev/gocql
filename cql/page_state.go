@@ -3,6 +3,6 @@
 
 package cql
 
-// StartPage is the state that starts paging from the first page. It is the
-// zero PageState.
-var StartPage PageState
+// StartPage returns the state that starts paging from the first page. It is
+// the zero PageState.
+func StartPage() PageState { return PageState{} }

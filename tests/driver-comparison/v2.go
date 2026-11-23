@@ -57,7 +57,7 @@ func connect(hosts []string) (adapter, error) {
 				WithTimeout(10 * time.Second).
 				WithPageTimeout(10 * time.Second).
 				WithPageSize(32).
-				NoPrefetch().
+				WithPrefetch(0).
 				WithRetry(retry.Safe{MaxAttempts: 1}).
 				WithRouting(policy) // no speculation: the default
 		})

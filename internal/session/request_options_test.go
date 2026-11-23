@@ -67,7 +67,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 	}
 
 	t.Run("Pooled", func(t *testing.T) {
-		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage, 7, CompiledOptions{}) })
+		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage(), 7, CompiledOptions{}) })
 		waitIdle(t, p, 1)
 		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, CompiledOptions{}) })
 	})
@@ -77,7 +77,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer q.Close()
-		runPage(t, func() (*Page[[]byte], error) { return q.RunPage(ctx, 1, cql.StartPage, 7) })
+		runPage(t, func() (*Page[[]byte], error) { return q.RunPage(ctx, 1, cql.StartPage(), 7) })
 		exec(t, func() (cql.Result, error) { return q.Exec(ctx, 1) })
 	})
 	t.Run("CompiledOptions", func(t *testing.T) {
@@ -86,7 +86,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage, 7, options) })
+		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage(), 7, options) })
 		waitIdle(t, p, 1)
 		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, options) })
 		if size := options.p.resolved.InternalProfile.PageSize; size != want {

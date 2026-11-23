@@ -51,7 +51,7 @@ func dropPreparedHandle(t *testing.T, p *Prepared[int32, []byte], page bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if page {
-		if _, err := p.RunPage(ctx, 1, cql.StartPage, 0, CompiledOptions{}); err != nil {
+		if _, err := p.RunPage(ctx, 1, cql.StartPage(), 0, CompiledOptions{}); err != nil {
 			t.Fatal(err)
 		}
 		return
@@ -122,7 +122,7 @@ func TestPreparedHandles(t *testing.T) {
 			t.Fatal(err)
 		}
 		answerOneShot(t, peer, requests, "b")
-		second, err := p.RunPage(ctx, 2, cql.StartPage, 0, CompiledOptions{})
+		second, err := p.RunPage(ctx, 2, cql.StartPage(), 0, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -140,7 +140,7 @@ func TestPreparedHandles(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		sizes := answerOneShot(t, peer, requests, "a")
-		page, err := p.RunPage(ctx, 1, cql.StartPage, 9, CompiledOptions{})
+		page, err := p.RunPage(ctx, 1, cql.StartPage(), 9, CompiledOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

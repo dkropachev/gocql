@@ -43,7 +43,7 @@ func TestPageStateResumesOnAnotherSession(t *testing.T) {
 		}
 		return rows, page.State(), srv.sent()
 	}
-	rows, state, _ := run(cql.StartPage)
+	rows, state, _ := run(cql.StartPage())
 	if rows != "ab" || !state.More() {
 		t.Fatalf("first page %q, more %v", rows, state.More())
 	}

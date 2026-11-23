@@ -181,7 +181,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, seq uint64) error {
 			k := c.key(paged, seq)
 			c.check.reset(paged, k, 0)
-			page, err := q.RunPage(ctx, k, cql.StartPage, 0)
+			page, err := q.RunPage(ctx, k, cql.StartPage(), 0)
 			if err != nil {
 				return err
 			}
@@ -206,7 +206,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		return func(ctx context.Context, _ uint64) error {
 			c.check.reset(true, cursor.k, cursor.next)
 			want := cursor.expect()
-			state := cql.StartPage
+			state := cql.StartPage()
 			if len(cursor.state) > 0 {
 				state = cql.PageStateFromToken(cursor.state)
 			}

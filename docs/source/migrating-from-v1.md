@@ -110,7 +110,7 @@ defer session.Close()
 | `cluster.Logger` | `WithLogger(*slog.Logger)` |
 | `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Observer)` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |
-| `cluster.DefaultTimestamp = false` | `WithServerTimestamps()` |
+| `cluster.DefaultTimestamp = false` | `WithTimestampGenerator(nil)` |
 
 Settings v1 spread over `ClusterConfig` fields are all builder methods in
 v2; `go doc github.com/scylladb/gocql/v2/config.ConfigBuilder` lists them with
@@ -243,7 +243,7 @@ conditional statements in prepared metadata: set
 | --- | --- |
 | `gocql.UUID`, `gocql.ParseUUID` | `cql.UUID`, `cql.ParseUUID` |
 | `gocql.TimeUUID()`, `gocql.UUIDFromTime` | `cql.NewTimeUUID()`, `cql.TimeUUIDFromTime` (type `cql.TimeUUID`) |
-| `gocql.UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
+| `gocql.UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`, with `Clock` returning `uint16` and `Node` `[6]byte`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
 | `gocql.UnsetValue` | the `Unset` binding state; see [data types](data-types.md) |

@@ -34,7 +34,7 @@ func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) 
 		return nil, typeValidation("CAS result", "first column must be [applied]")
 	}
 	if err := BoolCodec.CheckType(first.Type); err != nil {
-		return nil, columnError("compile", 0, first.Name, err)
+		return nil, columnError(CodecStageCompile, 0, first.Name, err)
 	}
 	_, previous, err := splitColumns(columns, 1)
 	if err != nil {
@@ -74,7 +74,7 @@ func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) erro
 	at := reader.index
 	if err := readColumnInto(reader, BoolCodec, &dst.Applied); err != nil {
 		column, _ := reader.columns.At(at)
-		return columnError("decode", at, column.Name, err)
+		return columnError(CodecStageDecode, at, column.Name, err)
 	}
 	if p.previous == nil {
 		return nil

@@ -84,11 +84,11 @@ func TestSpeculationSafety(t *testing.T) {
 		for _, e := range events {
 			switch e.Attempt {
 			case 1:
-				if e.Speculative || !e.Cancelled || e.Err == nil {
+				if e.Speculative || !e.Canceled || e.Err == nil {
 					t.Fatalf("loser event %+v, want a cancelled primary", e)
 				}
 			case 2:
-				if !e.Speculative || e.Cancelled || e.Err != nil {
+				if !e.Speculative || e.Canceled || e.Err != nil {
 					t.Fatalf("winner event %+v, want a successful speculative attempt", e)
 				}
 			default:
@@ -160,7 +160,7 @@ func TestSpeculationSafety(t *testing.T) {
 		ctx, cancel := context.WithCancel(bounded)
 		defer cancel()
 		go func() { wg.Wait(); cancel() }()
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true}))
 		if page != nil {
 			page.Close()
 		}
@@ -228,7 +228,7 @@ func TestSpeculationSafety(t *testing.T) {
 		}
 		first, spec, retried := byAttempt[1], byAttempt[2], byAttempt[3]
 		if len(byAttempt) != 3 || first.Target.HostID != routes.targets[0].HostID || first.Err == nil ||
-			!spec.Speculative || spec.Target.HostID != routes.targets[1].HostID || !spec.Cancelled ||
+			!spec.Speculative || spec.Target.HostID != routes.targets[1].HostID || !spec.Canceled ||
 			retried.Speculative || retried.Target.HostID != routes.targets[2].HostID || retried.Err != nil {
 			t.Fatalf("attempt events %+v", byAttempt)
 		}

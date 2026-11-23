@@ -83,7 +83,7 @@ func TestInlineSpeculation(t *testing.T) {
 			_, _ = peers[fast.peer].Write(frame)
 		}()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -134,7 +134,7 @@ func TestInlineSpeculation(t *testing.T) {
 		defer cancel()
 		for range 50 {
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+			page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -205,7 +205,7 @@ func TestInlineSpeculation(t *testing.T) {
 			served <- second.at.Sub(first.at)
 		}()
 		bound := runtimeQuery(t)
-		page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{Profile: &profile, Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: true}))
 		if err != nil {
 			t.Fatal(err)
 		}

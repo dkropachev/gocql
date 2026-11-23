@@ -239,7 +239,7 @@ func validateRecordBody(r ValueReader, columns Columns) error {
 			break
 		}
 		if _, err := cursor.Child(column.Type); err != nil {
-			return columnError("decode", index, column.Name, &ProtocolError{Stage: "cell", Err: err})
+			return columnError(CodecStageDecode, index, column.Name, &ProtocolError{Stage: "cell", Err: err})
 		}
 	}
 	if err := cursor.RequireEnd(); err != nil {
@@ -329,7 +329,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 		}
 		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, columnError("compile", index, columnSlice(columns)[index].Name, err)
+			return nil, columnError(CodecStageCompile, index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -356,7 +356,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 		}
 		compiled, err := codec.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
-			return nil, columnError("compile", index, columnSlice(columns)[index].Name, err)
+			return nil, columnError(CodecStageCompile, index, columnSlice(columns)[index].Name, err)
 		}
 		plan.ordered[index] = compiled
 	}

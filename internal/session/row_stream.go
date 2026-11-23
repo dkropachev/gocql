@@ -101,7 +101,7 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 		opaqueStorageValue.privateStorage.request = request
 		opaqueStorageValue.privateStorage.limits = limits
 		opaqueStorageValue.privateStorage.decoder = decoder
-		opaqueStorageValue.state = cql.StartPage
+		opaqueStorageValue.state = cql.StartPage()
 		opaqueStorageValue.privateStorage.history = paging.InternalPagingHistory{InternalMaxCount: rt.config.Limits.MaxPagingStates, InternalMaxBytes: rt.config.Limits.MaxPagingStateBytes}
 		opaqueStorageValue.privateStorage.pageBuffered = !incremental
 		opaqueStorageValue.privateStorage.bufferedPlans = plans
@@ -626,7 +626,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			traces = response.InternalInfo.CQLTraces()
 		}
-		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Cancelled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Canceled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
 		if len(traces) > 0 {
 			event.CQLTraceID = cql.Option[cql.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}

@@ -44,7 +44,7 @@ func TestNewPolicyValidates(t *testing.T) {
 		t.Error("NewPolicy accepted an exclusion threshold below 1")
 	}
 	var zero metadata.Route
-	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1).Set || zero.Shard().Set {
+	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1).Set || zero.ShardID().Set {
 		t.Error("the zero Route has a host")
 	}
 }
@@ -53,7 +53,7 @@ func TestPlanOf(t *testing.T) {
 	if _, ok := routing.PlanOf().Next(); ok {
 		t.Fatal("an empty plan returned a route")
 	}
-	a := metadata.Route{}.WithShard(cql.Option[uint32]{})
+	a := metadata.Route{}.WithShardID(cql.Option[uint32]{})
 	plan := routing.PlanOf(a, a, a)
 	for i := range 3 {
 		if _, ok := plan.Next(); !ok {

@@ -662,7 +662,7 @@ owns its type:
 | `config.NewTLSFiles(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
-Package `cql` also exports `var StartPage PageState` (the zero `PageState`);
+Package `cql` also exports `func StartPage() PageState` (the zero `PageState`);
 the root package exports `var StopIteration` (see below).
 
 ## Statements, preparation, queries and execution
@@ -876,7 +876,7 @@ func (l *PageLease) Close()
 
 // package cql
 type PageState struct { /* start / more / complete, opaque owned token */ }
-var StartPage PageState // the zero PageState
+func StartPage() PageState // the zero PageState
 func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
@@ -982,7 +982,7 @@ cross-call history. RunPage returns an empty page and its continuation as-is.
 PageState distinguishes an absent start token, present empty continuation, and
 completion. Tokens returned by State/Token remain available after page closure;
 Token returns an explicit owned copy of the server token, not a serialized state
-tag. The zero PageState and StartPage mean start. PageStateFromToken always
+tag. The zero PageState and StartPage() mean start. PageStateFromToken always
 constructs a continuation, including for nil and empty input, and copies its
 argument. Token is nil for start and complete; use More/Complete to distinguish
 them. A continuation with zero token bytes still has More()==true. Complete is
@@ -1355,8 +1355,8 @@ func NewProfile() *ProfileBuilder
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
-// WithSpeculation; NoTimeout, NoPrefetch and NoSerialConsistency clear
-// the corresponding setting.
+// WithSpeculation; zero turns WithTimeout and WithPrefetch off, and
+// NoSerialConsistency clears the serial consistency.
 
 // package cql
 type BatchKind byte
@@ -1488,7 +1488,7 @@ type AttemptEvent struct {
     Latency time.Duration
     Err error
     CQLTraceID cql.Option[cql.UUID]
-    Cancelled, Speculative bool
+    Canceled, Speculative bool
 }
 type AttemptStart struct {
     RequestID uint64
@@ -1524,7 +1524,7 @@ type RequestEvent struct {
     Err error
 }
 type LifecycleObserver interface { ObserveLifecycle(LifecycleEvent) }
-type LifecycleKind string   // LifecycleSession, LifecycleHost
+type LifecycleKind string   // KindSession, KindHost
 type LifecycleStage string  // StageReady, StageConnected, StageDown, StageClosed
 type LifecycleEvent struct {
     At time.Time
@@ -1763,7 +1763,7 @@ type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
     Requests, Attempts uint64
-    Errors, Cancelled uint64
+    Errors, Canceled uint64
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64
@@ -1849,8 +1849,11 @@ and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Buil
 `ConfigureDefaultProfile` and `NoAdvancedShardAwareness`. An on/off setting
 takes a bool (`WithDiscovery(false)`), and a size or interval whose zero has no
 other meaning turns its feature off at zero (`WithHeartbeat(0, 0)`,
-`WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`), so no setting has a
-separate `No*` twin; settings not chosen keep the driver's behavior, and when a setting is chosen
+`WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`, and on a
+`ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`), and a nil provider
+removes it (`WithTimestampGenerator(nil)`), so no setting has a separate
+`No*` twin; the exceptions clear a setting zero cannot
+(`NoAdvancedShardAwareness`, `ProfileBuilder.NoSerialConsistency`); settings not chosen keep the driver's behavior, and when a setting is chosen
 again the last call wins. Setters store the latest value without validation or
 call history.
 `Build` validates only the final configuration and returns its first typed error.
@@ -1982,7 +1985,7 @@ type DialTarget struct {
 }
 type Dialer interface { DialContext(context.Context, DialTarget) (net.Conn, error) }
 type DialerFunc func(context.Context, DialTarget) (net.Conn, error)
-type DefaultDialer struct { ConnectTimeout, SocketKeepalive time.Duration }
+type DefaultDialer struct { ConnectTimeout, TCPKeepalive time.Duration }
 type Resolver interface {
     LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
 }

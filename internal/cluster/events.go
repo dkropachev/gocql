@@ -425,7 +425,7 @@ func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	p.InternalMu.Unlock()
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	if s.privateStorage.InternalPool != nil {
@@ -437,7 +437,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	defer s.PublishV2Metadata()
 	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 }
 
 // HandleNodeDown marks down the host whose node-to-node address is ip, as a
@@ -489,7 +489,7 @@ func (s *Core) markHostDown(host *implEndpoint.HostInfo, current bool) bool {
 		s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(host))
 	}
 	p.hostMu.Unlock()
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleHost, Stage: observe.StageDown, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageDown, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 	return true
 }
 

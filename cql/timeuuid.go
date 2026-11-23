@@ -51,23 +51,24 @@ func (u TimeUUID) Variant() int { return UUID(u).Variant() }
 // Version returns the UUID's version, 1 for a valid TimeUUID.
 func (u TimeUUID) Version() int { return UUID(u).Version() }
 
-// Node returns the node (MAC address) field of the UUID, or nil if u is not
-// version 1, as the zero TimeUUID is not.
-func (u TimeUUID) Node() []byte {
+// Node returns the node (MAC address) field of the UUID, as TimeUUIDWith
+// takes it, or the zero array if u is not version 1, as the zero TimeUUID is
+// not.
+func (u TimeUUID) Node() [6]byte {
 	if u.Version() != 1 {
-		return nil
+		return [6]byte{}
 	}
-	return u[10:]
+	return [6]byte(u[10:])
 }
 
-// Clock returns the clock sequence of the UUID, or zero if u is not version
-// 1.
-func (u TimeUUID) Clock() uint32 {
+// Clock returns the 14-bit clock sequence of the UUID, as TimeUUIDWith takes
+// it, or zero if u is not version 1.
+func (u TimeUUID) Clock() uint16 {
 	if u.Version() != 1 {
 		return 0
 	}
 	// The clock sequence is the lower 14 bits of u[8:10].
-	return uint32(u[8]&0x3F)<<8 | uint32(u[9])
+	return uint16(u[8]&0x3F)<<8 | uint16(u[9])
 }
 
 // Timestamp returns the 100-nanosecond intervals since 15 October 1582 the

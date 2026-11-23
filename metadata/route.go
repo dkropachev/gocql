@@ -52,9 +52,9 @@ func (r Route) Usable() bool {
 	return usable
 }
 
-// Shard returns the route's shard, unset when any connection of its host
+// ShardID returns the route's shard, unset when any connection of its host
 // will do or the route has no host.
-func (r Route) Shard() cql.Option[uint32] {
+func (r Route) ShardID() cql.Option[uint32] {
 	if r.host == nil {
 		return cql.Option[uint32]{}
 	}
@@ -70,10 +70,10 @@ func (r Route) ShardOf(token int64) cql.Option[uint32] {
 	return shardOption(link.Get[func(unsafe.Pointer, int64) int32](link.RouteShardOf)(r.host, token))
 }
 
-// WithShard returns the route to shard of the same host. An unset shard, or
+// WithShardID returns the route to shard of the same host. An unset shard, or
 // one above math.MaxInt32, which no server has, routes to any connection of
 // the host. ShardOf's result is a valid argument.
-func (r Route) WithShard(shard cql.Option[uint32]) Route {
+func (r Route) WithShardID(shard cql.Option[uint32]) Route {
 	s := anyShard
 	if shard.Set && shard.Value <= math.MaxInt32 {
 		s = int32(shard.Value)
@@ -83,7 +83,7 @@ func (r Route) WithShard(shard cql.Option[uint32]) Route {
 
 // Target describes the route.
 func (r Route) Target() Target {
-	return Target{HostID: r.HostID(), ShardID: r.Shard()}
+	return Target{HostID: r.HostID(), ShardID: r.ShardID()}
 }
 
 func shardOption(shard int32) cql.Option[uint32] {

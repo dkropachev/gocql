@@ -23,12 +23,12 @@ func TestMirrorLayouts(t *testing.T) {
 	// A public route without a shard is the engine's AnyShard route, and a
 	// shard the engine cannot hold degrades to it too.
 	for _, shard := range []cql.Option[uint32]{{}, {Value: 1 << 31, Set: true}} {
-		r := metadata.Route{}.WithShard(shard)
+		r := metadata.Route{}.WithShardID(shard)
 		if got := link.Mirror[Route](&r).shard; got != AnyShard {
 			t.Errorf("WithShard(%v) holds shard %d, want AnyShard %d", shard, got, AnyShard)
 		}
 	}
-	r := metadata.Route{}.WithShard(cql.Option[uint32]{Value: 7, Set: true})
+	r := metadata.Route{}.WithShardID(cql.Option[uint32]{Value: 7, Set: true})
 	if got := link.Mirror[Route](&r).shard; got != 7 {
 		t.Errorf("WithShard(7) holds shard %d", got)
 	}
@@ -93,18 +93,18 @@ func TestPublicRouteShard(t *testing.T) {
 		t.Fatal("no host routes")
 	}
 	r := routes[0]
-	if r.Shard().Set || r.Target().ShardID.Set {
-		t.Fatalf("a host route has shard %v", r.Shard())
+	if r.ShardID().Set || r.Target().ShardID.Set {
+		t.Fatalf("a host route has shard %v", r.ShardID())
 	}
 	three := cql.Option[uint32]{Value: 3, Set: true}
-	r3 := r.WithShard(three)
-	if r3.Shard() != three || r3.Target().ShardID != three || r3.HostID() != r.HostID() {
-		t.Fatalf("WithShard(3): shard %v, target %+v", r3.Shard(), r3.Target())
+	r3 := r.WithShardID(three)
+	if r3.ShardID() != three || r3.Target().ShardID != three || r3.HostID() != r.HostID() {
+		t.Fatalf("WithShardID(3): shard %v, target %+v", r3.ShardID(), r3.Target())
 	}
-	if back := r3.WithShard(cql.Option[uint32]{}); back.Shard().Set {
-		t.Fatalf("WithShard(unset) kept shard %v", back.Shard())
+	if back := r3.WithShardID(cql.Option[uint32]{}); back.ShardID().Set {
+		t.Fatalf("WithShardID(unset) kept shard %v", back.ShardID())
 	}
-	if owner := r.ShardOf(42); r.WithShard(owner).Shard() != owner {
-		t.Fatalf("WithShard(ShardOf(42)) = %v, want %v", r.WithShard(owner).Shard(), owner)
+	if owner := r.ShardOf(42); r.WithShardID(owner).ShardID() != owner {
+		t.Fatalf("WithShardID(ShardOf(42)) = %v, want %v", r.WithShardID(owner).ShardID(), owner)
 	}
 }

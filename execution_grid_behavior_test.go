@@ -667,7 +667,7 @@ var gridCases = []gridCase{
 			}
 			var o gridOutcome
 			var got []string
-			state := cql.StartPage
+			state := cql.StartPage()
 			for range 3 {
 				page, done, err := m.runPage(ctx, s, gridSelect(), state, gridOptions)
 				if err != nil {
@@ -802,7 +802,7 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 		"Prepared.Each":          gridErr2(p.Each(ctx, gridKey, &dst, nop, c, c)),
 		"Prepared.All":           firstErr(p.All(ctx, gridKey, &dst, c, c)),
 		"Prepared.Run":           gridErr2(p.Run(ctx, gridKey, c, c)),
-		"Prepared.RunPage":       gridErr2(p.RunPage(ctx, gridKey, cql.StartPage, 0, c, c)),
+		"Prepared.RunPage":       gridErr2(p.RunPage(ctx, gridKey, cql.StartPage(), 0, c, c)),
 	} {
 		var validation *cql.ValidationError
 		if !errors.As(err, &validation) {

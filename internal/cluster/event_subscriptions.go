@@ -172,7 +172,7 @@ func (s *Core) CloseV2Peripheral() {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.LifecycleSession, Stage: observe.StageClosed, At: time.Now()})
+	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindSession, Stage: observe.StageClosed, At: time.Now()})
 }
 func eventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)

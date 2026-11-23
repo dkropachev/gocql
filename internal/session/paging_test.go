@@ -524,7 +524,7 @@ func TestPaging(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, cql.StartPage, 0, testOptions(Options{
+			page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{
 				PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond},
 			}))
 			if page != nil {

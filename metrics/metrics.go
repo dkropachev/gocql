@@ -28,10 +28,10 @@ type Snapshot struct {
 	// admission is being refused, Requests may briefly include it, so a
 	// later snapshot can report one fewer.
 	Requests, Attempts uint64
-	// Errors counts executions that ended with an error, and Cancelled
-	// those of them that ended because their context was cancelled or its
+	// Errors counts executions that ended with an error, and Canceled
+	// those of them that ended because their context was canceled or its
 	// deadline passed.
-	Errors, Cancelled uint64
+	Errors, Canceled uint64
 	// Retries counts attempts the retry policy asked for, and Speculations
 	// the speculative attempts the speculation policy started.
 	Retries, Speculations uint64

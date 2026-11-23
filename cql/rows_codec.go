@@ -101,11 +101,11 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 	cell.ownBorrowed = w.ownBorrowed
 	if err := encoder.Encode(cell, value); err != nil {
 		abortValueWriter(cell)
-		return columnError("encode", w.index, column.Name, err)
+		return columnError(CodecStageEncode, w.index, column.Name, err)
 	}
 	if err := finishValueWriter(cell); err != nil {
 		abortValueWriter(cell)
-		return columnError("encode", w.index, column.Name, err)
+		return columnError(CodecStageEncode, w.index, column.Name, err)
 	}
 	if w.capture != nil {
 		if w.index >= len(w.capture) {
@@ -158,7 +158,7 @@ func (r *RowReader) nextValue() (ValueReader, error) {
 	}
 	v, err := readFramedValue(r.cursor, column.Type, r.lease, false, false)
 	if err != nil {
-		return ValueReader{}, columnError("decode", r.index, column.Name, err)
+		return ValueReader{}, columnError(CodecStageDecode, r.index, column.Name, err)
 	}
 	r.index++
 	return v, nil
@@ -177,7 +177,7 @@ func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error) {
 	result, err := decoder.Decode(value)
 	if err != nil {
 		column, _ := r.columns.At(r.index - 1)
-		return zero, columnError("decode", r.index-1, column.Name, err)
+		return zero, columnError(CodecStageDecode, r.index-1, column.Name, err)
 	}
 	return result, nil
 }
@@ -276,7 +276,7 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 				continue
 			}
 			if ordered[j] != -1 {
-				return nil, columnError("compile", j, column.Name, errors.New("multiple accessors for the column"))
+				return nil, columnError(CodecStageCompile, j, column.Name, errors.New("multiple accessors for the column"))
 			}
 			ordered[j] = i
 			matches++
@@ -294,7 +294,7 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 	for i, field := range ordered {
 		if field < 0 && !extra {
 			column, _ := columns.At(i)
-			return nil, columnError("compile", i, column.Name, errors.New("no accessor for the column"))
+			return nil, columnError(CodecStageCompile, i, column.Name, errors.New("no accessor for the column"))
 		}
 	}
 	return ordered, nil
@@ -317,7 +317,7 @@ func (c paramsCodec[P]) Compile(columns Columns) (CompiledParams[P], error) {
 		column, _ := columns.At(index)
 		compiled, err := c.fields[field].compile(column.Type)
 		if err != nil {
-			return nil, columnError("compile", index, column.Name, err)
+			return nil, columnError(CodecStageCompile, index, column.Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -495,7 +495,7 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow
 		}
 		compiled, err := c.fields[field].compile(column.Type)
 		if err != nil {
-			return nil, columnError("compile", index, column.Name, err)
+			return nil, columnError(CodecStageCompile, index, column.Name, err)
 		}
 		plan.ordered[index] = compiled
 	}
@@ -535,7 +535,7 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 		}
 		if err != nil {
 			column, _ := reader.columns.At(at)
-			return columnError("decode", at, column.Name, err)
+			return columnError(CodecStageDecode, at, column.Name, err)
 		}
 	}
 	return nil
@@ -568,7 +568,7 @@ func (c singleColumnRows[T]) Compile(columns Columns) (CompiledRow[T], error) {
 	column, _ := columns.At(0)
 	decoder, err := compileValueDecoder(c.decoder, column.Type)
 	if err != nil {
-		return nil, columnError("compile", 0, column.Name, err)
+		return nil, columnError(CodecStageCompile, 0, column.Name, err)
 	}
 	return singleColumnPlan[T]{decoder: decoder}, nil
 }
@@ -585,7 +585,7 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	at := reader.index
 	if err := readColumnInto(reader, p.decoder, dst); err != nil {
 		column, _ := reader.columns.At(at)
-		return columnError("decode", at, column.Name, err)
+		return columnError(CodecStageDecode, at, column.Name, err)
 	}
 	return nil
 }

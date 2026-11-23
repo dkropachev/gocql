@@ -74,7 +74,7 @@ func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 	return Rows[R](rows), err
 }
 
-// RunPage executes one page, resuming from state. cql.StartPage begins the first
+// RunPage executes one page, resuming from state. cql.StartPage() begins the first
 // page. Page.State remains available after Close; close the page before reusing q.
 // pageSize is this page's size: zero uses the query's resolved page size, so
 // a page size that changes per request needs no new options. With
