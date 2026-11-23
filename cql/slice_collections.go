@@ -126,10 +126,10 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 		if dec.kind == TypeCustom {
 			child, err = readVectorElement(&cursor, element, dec.width)
 		} else {
-			child, err = cursor.Child(element)
+			child, err = validatedChild(&cursor, element)
 		}
 		if err == nil {
-			err = decodeValueInto(dec.element, child, &out[i])
+			err = decodeResolved(dec.element, dec.elementInto, child, &out[i])
 		}
 		if err != nil {
 			return fmt.Errorf("gocql: element %d: %w", i, err)
@@ -243,16 +243,16 @@ func (c mapDecoder[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
 	}
 	cursor := ValueReader{body: bytesChain(body), lease: bytesLease(body)}.cursorValue()
 	for i := range out {
-		kr, err := cursor.Child(kt)
+		kr, err := validatedChild(&cursor, kt)
 		if err == nil {
-			err = decodeValueInto(dec.key, kr, &out[i].Key)
+			err = decodeResolved(dec.key, dec.keyInto, kr, &out[i].Key)
 		}
 		if err != nil {
 			return fmt.Errorf("gocql: map key %d: %w", i, err)
 		}
-		vr, err := cursor.Child(vt)
+		vr, err := validatedChild(&cursor, vt)
 		if err == nil {
-			err = decodeValueInto(dec.value, vr, &out[i].Value)
+			err = decodeResolved(dec.value, dec.valueInto, vr, &out[i].Value)
 		}
 		if err != nil {
 			return fmt.Errorf("gocql: map value %d: %w", i, err)

@@ -231,10 +231,11 @@ func writeCollectionElement[T any](w *ValueWriter, typ DataType, encoder Encoder
 }
 
 type sequenceDecoder[T any] struct {
-	element Decoder[T]
-	typ     DataType
-	kind    Type
-	width   int64
+	element     Decoder[T]
+	elementInto valueIntoDecoder[T] // resolved by compileValueDecoder
+	typ         DataType
+	kind        Type
+	width       int64
 }
 
 // ListDecoder eagerly decodes every element into a []T. Elements may borrow
@@ -270,6 +271,7 @@ func (c sequenceDecoder[T]) compileValueDecoder(typ DataType) (Decoder[[]T], err
 		return nil, fmt.Errorf("gocql: element type: %w", err)
 	}
 	c.typ, c.element, c.width = typ, decoder, width
+	c.elementInto, _ = decoder.(valueIntoDecoder[T])
 	return c, nil
 }
 
@@ -335,9 +337,11 @@ func (c mapEncoder[K, V]) Encode(w *ValueWriter, entries []Entry[K, V]) error {
 }
 
 type mapDecoder[K, V any] struct {
-	key   Decoder[K]
-	value Decoder[V]
-	typ   DataType
+	key       Decoder[K]
+	value     Decoder[V]
+	keyInto   valueIntoDecoder[K] // resolved by compileValueDecoder
+	valueInto valueIntoDecoder[V]
+	typ       DataType
 }
 
 // MapDecoder eagerly decodes ordered entries; keys need not be Go-comparable.
@@ -365,7 +369,23 @@ func (c mapDecoder[K, V]) compileValueDecoder(typ DataType) (Decoder[[]Entry[K, 
 		return nil, fmt.Errorf("gocql: map value type: %w", err)
 	}
 	c.typ, c.key, c.value = typ, key, value
+	c.keyInto, _ = key.(valueIntoDecoder[K])
+	c.valueInto, _ = value.(valueIntoDecoder[V])
 	return c, nil
+}
+
+// validatedChild reads the next element of a collection whose layout
+// validateSequenceLayout or validateMapBody already checked: every element
+// is framed within the body and present, and typ is the compiled element
+// type, so neither read can fail. It still refuses a released lease, as
+// ValueCursor.Child does.
+func validatedChild(cursor *ValueCursor, typ DataType) (ValueReader, error) {
+	if !cursor.lease.IsZero() && !cursor.lease.Alive() {
+		return ValueReader{}, ErrReleased
+	}
+	prefix, _ := cursor.cursor.Uint32()
+	body, _ := cursor.cursor.TakeNested(int64(int32(prefix)))
+	return ValueReader{typ: typ, state: Present, body: body, lease: cursor.lease}, nil
 }
 
 // Collection framing is checked before allocating and decoding elements.
