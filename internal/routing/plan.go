@@ -4,19 +4,24 @@
 package routing
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
 // NewPlan returns the plan a request follows under policy: the route
 // policy.Pick gives, then the routes of policy.Fallback except that one.
 // Fallback is called only when the plan needs a second route, or a first
-// one when Pick returns false.
+// one when Pick returns false. A request pinned to a host follows
+// PinnedPlan, whatever the policy.
 func NewPlan(policy RoutingPolicy, info routing.Info, m *MetadataSnapshot) QueryPlan {
-	switch p := policy.(type) {
-	case *InternalRoutingPolicy:
+	if p, ok := policy.(*InternalRoutingPolicy); ok {
 		// Built-in routing picks and falls back within one cursor.
 		return p.InternalPlanInto(info, m, new(InternalLazyRoutingPlan))
-	case *singleTargetRouting:
+	}
+	if info.HostID.Set {
+		return PinnedPlan(info, m, new(InternalLazyRoutingPlan))
+	}
+	if p, ok := policy.(*singleTargetRouting); ok {
 		// A single target has nothing cheaper to pick than its plan.
 		return p.Fallback(info, m)
 	}
@@ -58,4 +63,20 @@ func (p *pickPlan) Next() (Route, bool) {
 		}
 		return r, true
 	}
+}
+
+// PinnedPlan initializes plan as the plan of a request pinned to the host
+// info.HostID, and to the shard info.ShardID when set: that one route, when
+// the host is known and enabled, and no other. info must name a host.
+func PinnedPlan(info routing.Info, m *MetadataSnapshot, plan *InternalLazyRoutingPlan) QueryPlan {
+	if m == nil {
+		return &InternalTargetPlan{}
+	}
+	// A pinned plan follows no policy: it is never skipped for latency and
+	// never traverses replicas or leaders. Only the captured destination
+	// is kept, in the leader slot.
+	*plan = InternalLazyRoutingPlan{metadata: m, index: m.routingIndex(), pinned: true}
+	plan.init(info)
+	plan.leader = cql.Option[Target]{Value: Target{HostID: info.HostID.Value}, Set: true}
+	return plan
 }

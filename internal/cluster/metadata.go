@@ -135,6 +135,9 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		}
 	}
+	if dcs := unsetLocality(config, s.Metadata()); len(dcs) > 1 {
+		s.logger().Warn("the cluster has more than one datacenter and the session has no local one, so requests go to every datacenter and LOCAL_* consistency is local to whichever coordinator serves them; set config.ConfigBuilder.WithLocalDatacenter", "datacenters", dcs)
+	}
 	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindSession, Stage: observe.StageReady, At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
@@ -143,6 +146,27 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 	}
 	return nil
 }
+
+// unsetLocality returns the datacenters of m's enabled hosts when config
+// sets no locality: no local datacenter, and a default routing policy that
+// is built in and names none either. It returns nil otherwise.
+func unsetLocality(config settings.Config, m *routing.MetadataSnapshot) []string {
+	if config.LocalDatacenter != "" || config.DefaultProfile == nil {
+		return nil
+	}
+	if p, ok := config.DefaultProfile.Routing.(*routing.InternalRoutingPolicy); !ok || p.InternalOptions.Datacenter != "" {
+		return nil
+	}
+	var dcs []string
+	for _, h := range routing.SnapshotData(m).InternalHosts {
+		if h.Enabled && !slices.Contains(dcs, h.Datacenter) {
+			dcs = append(dcs, h.Datacenter)
+		}
+	}
+	slices.Sort(dcs)
+	return dcs
+}
+
 func (s *Core) ConfigureV2Peripheral(config settings.Config) {
 	p := s.Peripheral()
 	p.InternalMu.Lock()
@@ -372,6 +396,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
+	routing.SnapshotData(m).InternalHostIndex.InternalSetLocal(config.LocalDatacenter, config.LocalRack)
 	if config.Metadata.Mode != metadata.ModeFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}

@@ -17,7 +17,7 @@ func BenchmarkLatency(b *testing.B) {
 	b.Run("PublicationClaims", func(b *testing.B) {
 		for _, kind := range []string{"warm", "boundary", "competing-boundary"} {
 			b.Run(kind, func(b *testing.B) {
-				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{UpdateInterval: time.Minute}}}
+				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{UpdateInterval: time.Minute}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}}
 				now := time.Now()
 				policy.claimLatencyUpdate(now)
 				b.ReportAllocs()
@@ -61,7 +61,7 @@ func BenchmarkLatency(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/claim-and-reset", test.name), func(b *testing.B) {
 				host := cql.UUID{15: 1}
 				sample := &InternalRoutingLatency{}
-				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{RetryPeriod: test.period}}}
+				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{RetryPeriod: test.period}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}}
 				policy.InternalLatencies.Store(host, sample)
 				plan := &InternalLazyRoutingPlan{policy: policy, InternalSlow: &InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{host: test.now.Add(-time.Second)}}, InternalNow: test.now}
 				b.ReportAllocs()

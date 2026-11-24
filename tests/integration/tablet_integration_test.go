@@ -28,7 +28,7 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {

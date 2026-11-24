@@ -101,6 +101,21 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("LocalDatacenter", func(t *testing.T) {
+		if _, err := New(ScyllaV4, "h").WithLocalDatacenter("", "r1").Build(); err == nil {
+			t.Fatal("Build accepted a local rack without a datacenter")
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "local datacenter" {
+			t.Fatalf("Build = %v, want a local datacenter ValidationError", err)
+		}
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1")).settings
+		if c.LocalDatacenter != "dc1" || c.LocalRack != "r1" {
+			t.Fatalf("locality %q/%q", c.LocalDatacenter, c.LocalRack)
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1").WithLocalDatacenter("", "")).settings; c.LocalDatacenter != "" || c.LocalRack != "" {
+			t.Fatalf("cleared locality %q/%q", c.LocalDatacenter, c.LocalRack)
+		}
+	})
+
 	t.Run("NoContactPoints", func(t *testing.T) {
 		if _, err := New(ScyllaV4).Build(); err == nil || !strings.Contains(err.Error(), "contact points") {
 			t.Fatalf("Build without contact points = %v", err)

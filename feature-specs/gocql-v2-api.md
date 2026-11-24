@@ -1470,14 +1470,12 @@ func (r Route) ShardOf(token int64) cql.Option[uint32]
 func (r Route) WithShard(shard cql.Option[uint32]) Route
 type Plan interface { Next() (Route, bool) }
 type Policy interface {
-    Validate(*metadata.Snapshot) error
     Pick(Info, *metadata.Snapshot) (Route, bool)     // cheap first route; false: start with Fallback
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
-    Observe(config.AttemptEvent)
 }
+type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
+type AttemptObserver interface { Observe(AttemptEvent) }        // optional
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
-
-// package config
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
@@ -1488,6 +1486,8 @@ type AttemptEvent struct {
     CQLTraceID cql.Option[cql.UUID]
     Canceled, Speculative bool
 }
+
+// package observe
 type AttemptStart struct {
     RequestID uint64
     Attempt int
@@ -1501,7 +1501,7 @@ type RequestObserver interface {
     StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
 }
 type AttemptObserver interface {
-    StartAttempt(context.Context, AttemptStart) func(AttemptEvent)
+    StartAttempt(context.Context, AttemptStart) func(routing.AttemptEvent)
 }
 type RequestStart struct {
     ID uint64
@@ -1573,15 +1573,21 @@ when needed. Public defensive metadata accessors are inspection APIs, not the
 built-in routing path. A plan captures a placement/topology snapshot; pool
 acquisition still rechecks current availability and target strictness. Custom
 policies implement Pick and Fallback themselves and account for their own work.
+A request pinned with exec.Options.HostID follows the pinned plan without
+consulting any policy. The session validates a policy that implements
+routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter sets
+the session's locality, which every built-in policy without a Datacenter of
+its own takes; Connect logs a warning for a multi-datacenter cluster without
+one.
 
 ```go
 // package routing
-type Options struct {
-    TokenAware bool
-    Datacenter, Rack string
+type Options struct { // the zero Options is the default policy
+    Datacenter, Rack string // empty: the session's local datacenter and rack
+    NoTokenAware bool
     AllowRemote bool
-    ShuffleReplicas bool
-    LeaderAware bool
+    FixedReplicaOrder bool
+    NoLeaderAware bool
     Latency LatencyOptions
 }
 type LatencyOptions struct {
@@ -1596,8 +1602,21 @@ type PartitionKey struct { /* logical canonical encoded component stream */ }
 func (k PartitionKey) Len() int64
 func (k PartitionKey) ForEach(func(cql.Bytes) error) error
 type TokenPartitioner interface { Token(PartitionKey) (int64, error) }
+type TokenPartitionerFunc func(PartitionKey) (int64, error)
 var Murmur3TokenPartitioner TokenPartitioner
 var CDCTokenPartitioner TokenPartitioner
+
+// package routing/routingtest
+type Cluster struct {
+    Keyspaces map[string]*metadata.Keyspace
+    TokenRanges map[string][]metadata.TokenRange
+    Tablets map[Table][]metadata.TokenRange
+    LocalDatacenter, LocalRack string
+    Hosts []metadata.HostSnapshot
+    Generation uint64
+}
+type Table struct { Keyspace, Name string }
+func NewSnapshot(Cluster) *metadata.Snapshot // links the built-in policies' engine
 ```
 
 Tablet v2 takes precedence over v1 when both are negotiated. Every EXECUTE on a
@@ -1623,7 +1642,7 @@ locality-eligible. An unresolved original leader never promotes the first
 resolved follower. Unknown/ineligible leaders use ordinary replica/nonreplica
 fallback. LWT replica ordering remains deterministic; ordinary replica shuffling
 and configured latency ordering apply without admitting excluded hosts.
-routing.Options.LeaderAware enables this leader path.
+routing.Options.NoLeaderAware disables this leader path.
 
 ConfigBuilder.WithPartitioner(name, routing.TokenPartitioner) maps a server
 partitioner class name to a TokenPartitioner. Built-in Murmur3 and CDC
@@ -1868,6 +1887,7 @@ func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
+func (*ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder

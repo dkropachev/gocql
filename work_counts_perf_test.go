@@ -268,7 +268,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						root, _ := updateTabletRange(nil, hint)
 						storage.InternalPlacements = storage.InternalPlacements.Put(metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root})
 						info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
-						opts := routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", LeaderAware: kind == "leader"}
+						opts := routing.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: kind != "leader", FixedReplicaOrder: true}
 						if kind == "pinned" {
 							info.HostID = cql.Option[cql.UUID]{Set: true, Value: storage.InternalHosts[0].ID}
 						}
@@ -420,7 +420,7 @@ func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) 
 func (o *testObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *testObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

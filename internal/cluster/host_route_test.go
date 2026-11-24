@@ -164,7 +164,7 @@ func TestHostRoute(t *testing.T) {
 	t.Run("Plan", func(t *testing.T) {
 		s := hostRoutingSession(t, false)
 		m := s.Metadata()
-		p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})).(*routing.InternalRoutingPolicy)
+		p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{FixedReplicaOrder: true, NoLeaderAware: true})).(*routing.InternalRoutingPolicy)
 		info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 42, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 		var storage routing.InternalLazyRoutingPlan
 		plan := p.InternalPlanWith(info, m, &storage, nil)

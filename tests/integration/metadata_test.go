@@ -374,7 +374,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster()
 
-			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
+			v2ConfigureRouting(t, cluster, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()

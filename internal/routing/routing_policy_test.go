@@ -16,7 +16,7 @@ func TestRoutingPolicy(t *testing.T) {
 	t.Run("Plan", func(t *testing.T) {
 		t.Run("OrderAndIndependence", func(t *testing.T) {
 			m := v2TestMetadata()
-			policy, err := NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true})
+			policy, err := NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, NoLeaderAware: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -43,7 +43,7 @@ func TestRoutingPolicy(t *testing.T) {
 			if got := v2PlanIDs(NewPlan(policy, info, m)); bytes.Contains(got, []byte{1}) {
 				t.Fatal("disabled host in plan")
 			}
-			bad, _ := NewRoutingPolicy(routing.Options{Datacenter: "missing"})
+			bad, _ := NewRoutingPolicy(routing.Options{Datacenter: "missing", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			if err := bad.Validate(m); err == nil {
 				t.Fatal("missing DC validated")
 			}
@@ -76,7 +76,7 @@ func TestRoutingPolicy(t *testing.T) {
 			SnapshotData(m).InternalHosts[1].Enabled = false
 			SnapshotData(m).InternalHosts[2].Up = false
 			SnapshotData(m).InternalHosts[2].Connected = false
-			policy := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, LeaderAware: true, Datacenter: "a"}))
+			policy := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", FixedReplicaOrder: true}))
 			tests := []struct {
 				host  byte
 				shard cql.Option[uint32]
@@ -116,7 +116,7 @@ func TestRoutingPolicy(t *testing.T) {
 			m := v2TestMetadata()
 			info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 			t.Run("rack replica first", func(t *testing.T) {
-				p := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true})).(*InternalRoutingPolicy)
+				p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, NoLeaderAware: true})).(*InternalRoutingPolicy)
 				var storage InternalLazyRoutingPlan
 				for range 200 {
 					hosts := planHosts(p.InternalPlanInto(info, m, &storage))
@@ -126,7 +126,7 @@ func TestRoutingPolicy(t *testing.T) {
 				}
 			})
 			t.Run("uniform in datacenter", func(t *testing.T) {
-				p := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "a", ShuffleReplicas: true})).(*InternalRoutingPolicy)
+				p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", NoLeaderAware: true})).(*InternalRoutingPolicy)
 				var storage InternalLazyRoutingPlan
 				var first [5]int
 				const plans = 4000
@@ -144,7 +144,7 @@ func TestRoutingPolicy(t *testing.T) {
 			t.Run("down replica is skipped", func(t *testing.T) {
 				m := v2TestMetadata()
 				SnapshotData(m).InternalHosts[0].Up = false
-				p := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true})).(*InternalRoutingPolicy)
+				p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: true})).(*InternalRoutingPolicy)
 				var storage InternalLazyRoutingPlan
 				for range 200 {
 					hosts := planHosts(p.InternalPlanInto(info, m, &storage))
@@ -194,7 +194,7 @@ func TestRoutingPolicy(t *testing.T) {
 		t.Run("BuiltinFallback", func(t *testing.T) {
 			m := v2TestMetadata()
 			info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
-			p := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true}))
+			p := codecTestMust(NewRoutingPolicy(routing.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: true}))
 			picked := 0
 			for range 200 {
 				if r, ok := p.Pick(info, m); ok {

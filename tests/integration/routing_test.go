@@ -72,15 +72,15 @@ func TestRouting(t *testing.T) {
 		}
 		dc, rack := hosts[0].Datacenter, hosts[0].Rack
 		policies := []routing.Options{
-			{Datacenter: dc, AllowRemote: true},
-			{Datacenter: dc},
-			{TokenAware: true, Datacenter: dc, AllowRemote: true},
-			{TokenAware: true, Datacenter: dc},
-			{Datacenter: dc, Rack: rack, AllowRemote: true},
-			{Datacenter: dc, Rack: rack},
-			{TokenAware: true, Datacenter: dc, Rack: rack, AllowRemote: true},
-			{TokenAware: true, Datacenter: dc, Rack: rack},
-			{},
+			{Datacenter: dc, AllowRemote: true, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, Rack: rack, AllowRemote: true, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, Rack: rack, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, Rack: rack, AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true},
+			{Datacenter: dc, Rack: rack, FixedReplicaOrder: true, NoLeaderAware: true},
+			{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
 		}
 		hostIDStatement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
 		for i, options := range policies {
@@ -245,15 +245,15 @@ func TestRouting(t *testing.T) {
 
 		t.Run("DCAware", func(t *testing.T) {
 			t.Parallel()
-			testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC"})
+			testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC", NoTokenAware: true})
 		})
 		t.Run("RackAware", func(t *testing.T) {
 			t.Parallel()
-			testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC", Rack: "RACK"})
+			testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC", Rack: "RACK", NoTokenAware: true})
 		})
 		t.Run("TokenAware", func(t *testing.T) {
 			t.Parallel()
-			testV2InvalidDatacenter(t, routing.Options{TokenAware: true, Datacenter: "WRONG_DC"})
+			testV2InvalidDatacenter(t, routing.Options{Datacenter: "WRONG_DC"})
 		})
 	})
 
@@ -269,7 +269,7 @@ func TestRouting(t *testing.T) {
 				t.Skip("skipping because we don't have 2 or more hosts")
 			}
 			cluster := newFixtureConfig(clusterHosts[:1], 0)
-			rr, err := routing.NewPolicy(routing.Options{})
+			rr, err := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -305,7 +305,7 @@ func TestRouting(t *testing.T) {
 				t.Skip("skipping because we don't have 2 or more hosts")
 			}
 			cluster := createV2Cluster()
-			rr, err := routing.NewPolicy(routing.Options{})
+			rr, err := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -437,7 +437,7 @@ func TestRouting(t *testing.T) {
 			t.Parallel()
 			ctx := context.Background()
 			cluster := createV2ClusterWithout(fixtureConsistency)
-			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
+			v2ConfigureRouting(t, cluster, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
 			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
@@ -600,7 +600,7 @@ func TestRouting(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
 			cfg := createV2Cluster()
-			v2ConfigureRouting(t, cfg, routing.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true})
+			v2ConfigureRouting(t, cfg, routing.Options{})
 			s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 			if err != nil {
 				t.Fatal(err)
@@ -821,7 +821,7 @@ func TestRouting(t *testing.T) {
 					v2CreateRoutingKeyspace(t, bootstrap, keyspace, 1)
 					defer cleanup(t, bootstrap, keyspace)
 					cluster := createV2Cluster()
-					v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
+					v2ConfigureRouting(t, cluster, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 					if configuredKeyspace {
 						cluster.WithKeyspace(keyspace)
 					}

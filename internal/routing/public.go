@@ -4,6 +4,7 @@
 package routing
 
 import (
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -49,7 +50,10 @@ func EngineOf(p routing.Policy) RoutingPolicy {
 	if v, ok := p.(publicPolicy); ok {
 		return v.p
 	}
-	return applicationPolicy{p}
+	a := &applicationPolicy{p: p}
+	a.validator, _ = p.(routing.Validator)
+	a.observer, _ = p.(routing.AttemptObserver)
+	return a
 }
 
 // PlanFor returns the plan a request described by info follows under the
@@ -111,17 +115,35 @@ func (v publicPolicy) Fallback(info routing.Info, m *metadata.Snapshot) routing.
 func (v publicPolicy) Observe(e routing.AttemptEvent) { v.p.Observe(e) }
 
 // applicationPolicy is an application's routing.Policy seen as an engine
-// policy.
-type applicationPolicy struct{ p routing.Policy }
+// policy, with the optional interfaces it implements.
+type applicationPolicy struct {
+	p         routing.Policy
+	validator routing.Validator
+	observer  routing.AttemptObserver
+	// validated is the last snapshot the policy validated without error.
+	validated atomic.Pointer[MetadataSnapshot]
+}
 
-func (a applicationPolicy) Validate(m *MetadataSnapshot) error { return a.p.Validate(m.Public()) }
+// Validate calls the policy's Validate once per snapshot, until it passes.
+func (a *applicationPolicy) Validate(m *MetadataSnapshot) error {
+	if a.validator == nil || m != nil && a.validated.Load() == m {
+		return nil
+	}
+	if err := a.validator.Validate(m.Public()); err != nil {
+		return err
+	}
+	if m != nil {
+		a.validated.Store(m)
+	}
+	return nil
+}
 
-func (a applicationPolicy) Pick(info routing.Info, m *MetadataSnapshot) (Route, bool) {
+func (a *applicationPolicy) Pick(info routing.Info, m *MetadataSnapshot) (Route, bool) {
 	r, ok := a.p.Pick(info, m.Public())
 	return EngineRoute(r), ok
 }
 
-func (a applicationPolicy) Fallback(info routing.Info, m *MetadataSnapshot) QueryPlan {
+func (a *applicationPolicy) Fallback(info routing.Info, m *MetadataSnapshot) QueryPlan {
 	plan := a.p.Fallback(info, m.Public())
 	if v, ok := plan.(publicPlan); ok {
 		return v.p
@@ -132,7 +154,11 @@ func (a applicationPolicy) Fallback(info routing.Info, m *MetadataSnapshot) Quer
 	return applicationPlan{plan}
 }
 
-func (a applicationPolicy) Observe(e routing.AttemptEvent) { a.p.Observe(e) }
+func (a *applicationPolicy) Observe(e routing.AttemptEvent) {
+	if a.observer != nil {
+		a.observer.Observe(e)
+	}
+}
 
 // publicPlan is an engine plan seen as a routing.Plan.
 type publicPlan struct{ p QueryPlan }
@@ -158,7 +184,7 @@ func PublicPolicy(p RoutingPolicy) routing.Policy {
 	switch v := p.(type) {
 	case nil:
 		return nil
-	case applicationPolicy:
+	case *applicationPolicy:
 		return v.p
 	}
 	return publicPolicy{p}

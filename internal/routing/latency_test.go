@@ -19,7 +19,7 @@ func TestLatency(t *testing.T) {
 		t.Run("Range", func(t *testing.T) {
 			for _, test := range deadlineCases() {
 				t.Run(test.name, func(t *testing.T) {
-					policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, Scale: time.Millisecond, RetryPeriod: test.period, UpdateInterval: time.Hour}}}
+					policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, Scale: time.Millisecond, RetryPeriod: test.period, UpdateInterval: time.Hour}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}}
 					host := cql.UUID{15: 1}
 					sample := &InternalRoutingLatency{nextProbe: test.now.Add(-time.Nanosecond)}
 					policy.InternalLatencies.Store(host, sample)
@@ -80,7 +80,7 @@ func TestLatency(t *testing.T) {
 		t.Run("Range", func(t *testing.T) {
 			for _, test := range deadlineCases() {
 				t.Run(test.name, func(t *testing.T) {
-					policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{UpdateInterval: test.period}}}
+					policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{UpdateInterval: test.period}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}}
 					start := make(chan struct{})
 					var group sync.WaitGroup
 					var claims atomic.Int32
@@ -126,7 +126,7 @@ func TestLatency(t *testing.T) {
 	t.Run("ClaimLatencyUpdate", func(t *testing.T) {
 		t.Run("WarmAllocations", func(t *testing.T) {
 			now := time.Now()
-			policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{RetryPeriod: time.Minute, UpdateInterval: time.Hour}}}
+			policy := &InternalRoutingPolicy{InternalOptions: routing.Options{Latency: routing.LatencyOptions{RetryPeriod: time.Minute, UpdateInterval: time.Hour}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}}
 			if !policy.claimLatencyUpdate(now) {
 				t.Fatal("initial publication claim")
 			}
@@ -163,7 +163,7 @@ func TestLatency(t *testing.T) {
 
 	t.Run("Probe", func(t *testing.T) {
 		t.Run("Reservation", func(t *testing.T) {
-			policy := codecTestMust(NewRoutingPolicy(routing.Options{TokenAware: true, Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Minute, UpdateInterval: time.Hour}})).(*InternalRoutingPolicy)
+			policy := codecTestMust(NewRoutingPolicy(routing.Options{Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Minute, UpdateInterval: time.Hour}, FixedReplicaOrder: true, NoLeaderAware: true})).(*InternalRoutingPolicy)
 			snapshot := v2TestMetadata()
 			slow := cql.UUID{15: 1}
 			healthy := cql.UUID{15: 2}
@@ -224,7 +224,7 @@ func TestLatency(t *testing.T) {
 
 	t.Run("Plan", func(t *testing.T) {
 		t.Run("DeprioritizesAndRetries", func(t *testing.T) {
-			policy, _ := NewRoutingPolicy(routing.Options{Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Hour}})
+			policy, _ := NewRoutingPolicy(routing.Options{Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Hour}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			p := policy.(*InternalRoutingPolicy)
 			m := v2TestMetadata()
 			for i, h := range SnapshotData(m).InternalHosts {

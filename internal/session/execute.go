@@ -608,7 +608,7 @@ func (l *logicalExecution) observesAttempts() bool {
 
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
-func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing2.AttemptEvent) {
 	if l == nil || l.hooks == nil || l.hooks.Attempt == nil {
 		return nil
 	}
@@ -1062,7 +1062,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
@@ -1141,17 +1141,28 @@ func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, met
 	if policy == nil {
 		return nil, nil
 	}
-	if err := policy.Validate(metadata); err != nil {
+	storage := new(routing.InternalLazyRoutingPlan)
+	if direct && request.query != nil { // the plan lives in the query's storage
+		storage = &request.query.routing
+	}
+	return routePlan(policy, request.routing, metadata, storage, tablet)
+}
+
+// routePlan returns the plan of the request info describes under policy,
+// in m. A request pinned to a host follows the pinned plan without
+// consulting the policy; any other first has the policy validated against
+// m. A built-in policy's plan uses storage and the request's tablet.
+func routePlan(policy routing.RoutingPolicy, info routing2.Info, m *routing.MetadataSnapshot, storage *routing.InternalLazyRoutingPlan, tablet *routing.InternalTabletLookup) (routing.QueryPlan, error) {
+	if info.HostID.Set {
+		return routing.PinnedPlan(info, m, storage), nil
+	}
+	if err := policy.Validate(m); err != nil {
 		return nil, err
 	}
 	if builtin, ok := policy.(*routing.InternalRoutingPolicy); ok {
-		storage := new(routing.InternalLazyRoutingPlan)
-		if direct && request.query != nil { // the plan lives in the query's storage
-			storage = &request.query.routing
-		}
-		return builtin.InternalPlanWith(request.routing, metadata, storage, tablet), nil
+		return builtin.InternalPlanWith(info, m, storage, tablet), nil
 	}
-	return routing.NewPlan(policy, request.routing, metadata), nil
+	return routing.NewPlan(policy, info, m), nil
 }
 
 // pinnedUsable reports whether a continuation page may reuse conn.

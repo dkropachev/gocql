@@ -234,7 +234,7 @@ func TestConfig(t *testing.T) {
 		t.Run("CurrentTypedProfile", func(t *testing.T) {
 			config := settings.DefaultConfig("127.0.0.1")
 			profile := *config.DefaultProfile
-			routing, err := implRouting.NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}})
+			routing, err := implRouting.NewRoutingPolicy(routing.Options{Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}, FixedReplicaOrder: true, NoLeaderAware: true})
 			if err != nil {
 				t.Fatal(err)
 			}

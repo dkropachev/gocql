@@ -159,6 +159,7 @@ package config
 		config.ConfigBuilder method (*T) WithLifecycleObserver(observer observe.LifecycleObserver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLinger(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string, rack string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxDecompressedSize(bytes int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
@@ -1426,7 +1427,13 @@ package metrics
 
 package observe
 	type observe.AttemptObserver interface
-		observe.AttemptObserver method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
+		observe.AttemptObserver method StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+	type observe.AttemptStart struct
+		observe.AttemptStart field Started time.Time
+		observe.AttemptStart field RequestID uint64
+		observe.AttemptStart field Attempt int
+		observe.AttemptStart field Target metadata.Target
+		observe.AttemptStart field Speculative bool
 	const observe.KindHost observe.LifecycleKind = "host"
 	const observe.KindSession observe.LifecycleKind = "session"
 	type observe.LifecycleEvent struct
@@ -1504,12 +1511,8 @@ package routing
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field Speculative bool
-	type routing.AttemptStart struct
-		routing.AttemptStart field Started time.Time
-		routing.AttemptStart field RequestID uint64
-		routing.AttemptStart field Attempt int
-		routing.AttemptStart field Target metadata.Target
-		routing.AttemptStart field Speculative bool
+	type routing.AttemptObserver interface
+		routing.AttemptObserver method Observe(routing.AttemptEvent)
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
@@ -1533,10 +1536,10 @@ package routing
 		routing.Options field Datacenter string
 		routing.Options field Rack string
 		routing.Options field Latency routing.LatencyOptions
-		routing.Options field TokenAware bool
+		routing.Options field NoTokenAware bool
 		routing.Options field AllowRemote bool
-		routing.Options field ShuffleReplicas bool
-		routing.Options field LeaderAware bool
+		routing.Options field FixedReplicaOrder bool
+		routing.Options field NoLeaderAware bool
 	type routing.PartitionKey struct
 		routing.PartitionKey method (T) ForEach(fn func(cql.Bytes) error) error
 		routing.PartitionKey method (T) Len() int64
@@ -1545,11 +1548,27 @@ package routing
 	func routing.PlanOf(routes ...metadata.Route) routing.Plan
 	type routing.Policy interface
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
-		routing.Policy method Observe(routing.AttemptEvent)
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
-		routing.Policy method Validate(*metadata.Snapshot) error
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
 	func routing.SingleTarget(target metadata.Target) routing.Policy
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
+	type routing.TokenPartitionerFunc func(routing.PartitionKey) (int64, error)
+		routing.TokenPartitionerFunc method (T) Token(key routing.PartitionKey) (int64, error)
+	type routing.Validator interface
+		routing.Validator method Validate(*metadata.Snapshot) error
+
+package routing/routingtest
+	type routing/routingtest.Cluster struct
+		routing/routingtest.Cluster field Keyspaces map[string]*metadata.Keyspace
+		routing/routingtest.Cluster field TokenRanges map[string][]metadata.TokenRange
+		routing/routingtest.Cluster field Tablets map[routing/routingtest.Table][]metadata.TokenRange
+		routing/routingtest.Cluster field LocalDatacenter string
+		routing/routingtest.Cluster field LocalRack string
+		routing/routingtest.Cluster field Hosts []metadata.HostSnapshot
+		routing/routingtest.Cluster field Generation uint64
+	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) *metadata.Snapshot
+	type routing/routingtest.Table struct
+		routing/routingtest.Table field Keyspace string
+		routing/routingtest.Table field Name string
 

@@ -6,12 +6,36 @@ Set `Profile.Routing` to a typed `routing.Policy` with
 the `exec.Options.Profile` of an execution. The default is token-aware and
 leader-aware with shuffled replicas; nil routes without a request-specific plan.
 `routing.NewPolicy(routing.Options{...})` configures
-token awareness, datacenter/rack preference, remote fallback, replica shuffling,
-leader-aware routing and latency ordering. Missing required locality is an
-explicit validation error. `routing.SingleTarget` pins a typed host/shard target.
+datacenter/rack preference, remote fallback, latency ordering, and turns off
+token awareness (`NoTokenAware`), replica shuffling (`FixedReplicaOrder`) or
+leader-aware routing (`NoLeaderAware`). The zero `routing.Options` is the
+default policy. `routing.SingleTarget` pins a typed host/shard target.
 
-A custom `routing.Policy` implements Validate, Pick, Fallback and Observe against
-immutable `metadata.Snapshot` and `routing.Info` values. The split serves the happy
+## Local datacenter
+
+`config.ConfigBuilder.WithLocalDatacenter(dc, rack)` sets the session's local
+datacenter, and optionally rack. Every built-in policy whose `routing.Options`
+name no `Datacenter` of their own takes it: the default profile's, and those
+of every profile built with `config.NewProfile`. Such a policy prefers
+replicas in that datacenter and, unless `AllowRemote` is set, routes only
+there. The default consistency, `LOCAL_QUORUM`, is local to the datacenter of
+the coordinator, so set it on a cluster with more than one datacenter.
+Without it every datacenter is local, and Connect logs a warning when the
+cluster has more than one. Connect fails when the local datacenter, or rack,
+has no eligible host; `Build` rejects a rack without a datacenter.
+
+```go
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
+	WithLocalDatacenter("dc1", "").
+	Build()
+```
+
+## Custom policies
+
+A custom `routing.Policy` implements Pick and Fallback against
+immutable `metadata.Snapshot` and `routing.Info` values. A request pinned to a
+host with `exec.Options.HostID` goes there, to `ShardID` when set, without
+consulting the policy. The split serves the happy
 path, where the first route serves the request:
 
 - `Pick` returns the first route without building a plan or allocating, or
@@ -21,7 +45,17 @@ path, where the first route serves the request:
   returned false, and skips the picked route if the plan returns it again.
   A plan returns its routes lazily; `routing.PlanOf(routes...)` makes one
   from routes already in a slice.
-- `Observe` receives every attempt's outcome.
+
+A policy may also implement two optional interfaces:
+
+- `routing.Validator`: `Validate` checks the policy against a snapshot. The
+  session calls it once per snapshot before routing with the policy; while it
+  fails, so do the requests the policy would route, and Connect fails when it
+  fails for the default profile's policy.
+- `routing.AttemptObserver`: `Observe` receives every attempt's outcome.
+
+Package `routing/routingtest` builds snapshots from hosts, schema, token
+ranges and tablets, so a policy can be tested without a cluster.
 
 The session combines Pick and Fallback into the plan a request follows.
 `Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
@@ -44,20 +78,20 @@ choose its first target.
 ## Built-in plan order
 
 A plan of `routing.NewPolicy` tries, in order: the tablet's leader when
-`LeaderAware` applies, the replicas in the local rack (`Rack`), the other
-replicas in the local datacenter (`Datacenter`, or every datacenter without
-one), the replicas in other datacenters when `AllowRemote` is set, then the
+leader-aware routing applies, the replicas in the local rack (`Rack`), the other
+replicas in the local datacenter (`Datacenter`, else the session's local
+datacenter, or every datacenter without one), the replicas in other datacenters when `AllowRemote` is set, then the
 hosts that are no replicas in the same tiers: local rack, local datacenter,
 other datacenters. So with `AllowRemote` a remote replica comes before a local
 host that is no replica. Hosts that are down or have no connection come after
 every reachable host that latency-aware routing does not hold back.
-`ShuffleReplicas` orders the replicas of a tier at random per request, and
-otherwise in an order fixed for each replica set; the hosts that are no
+The replicas of a tier come in an order random per request, or with
+`FixedReplicaOrder` in an order fixed for each replica set; the hosts that are no
 replicas take turns. A conditional request (LWT), one whose statement is not
 known to be ordinary, and one whose consistency is `SERIAL` or `LOCAL_SERIAL`
 keep the replicas' order and do not rotate the hosts.
 
-- Without `TokenAware`, or without a token, a plan has no replicas and starts
+- With `NoTokenAware`, or without a token, a plan has no replicas and starts
   with the hosts.
 - A host the host filter (`config.ConfigBuilder.WithHostFilter`) skips is in
   no plan, a `SingleTarget` one included, and does not count for `Validate`.
@@ -95,7 +129,7 @@ immutable snapshots; retained snapshots remain valid after refresh.
 A ScyllaDB keyspace created with `consistency = 'global'` keeps each tablet
 strongly consistent: one replica, the tablet's Raft leader, coordinates its
 writes and its linearizable reads, and any other replica only forwards them
-there. With `LeaderAware`, which the default policy sets, the built-in policy
+there. Unless `NoLeaderAware` is set, the built-in policy
 tries the leader first, ahead of nearer replicas:
 
 - Each connection negotiates `TABLETS_ROUTING_V2_EXPERIMENTAL` when the server
@@ -117,7 +151,7 @@ tries the leader first, ahead of nearer replicas:
   such a read, and so do eventually consistent keyspaces and tablets learned
   over V1, which report no leader.
 - The leader is not preferred when the policy would not otherwise use it: a
-  host the host filter skips, one outside `Datacenter` without
+  host the host filter skips, one outside the local datacenter without
   `AllowRemote`, or one that is down or has no connection. With
   `Latency.Enabled`, a leader measured slow is tried last, like any slow
   host. The plan then
@@ -156,7 +190,9 @@ Each stage of a request has its own answer:
 `routing.Policy` is a public interface, so a health-weighted or pool-based
 policy, such as an adapter for a host-pool library, can live outside the
 driver. Embed the built-in policy to keep token awareness and override what
-you need; `Observe` sees each attempt's outcome:
+you need. The embedded `routing.Policy` has only Pick and Fallback, so forward
+`Validate` and `Observe` to the built-in policy when the wrapper should keep
+its validation and latency tracking:
 
 ```go
 // skipFailed avoids, for its first route, a host whose last attempt failed.
@@ -181,7 +217,16 @@ func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	default:
 		p.failed.Delete(e.Target.HostID)
 	}
-	p.Policy.Observe(e)
+	if o, ok := p.Policy.(routing.AttemptObserver); ok {
+		o.Observe(e)
+	}
+}
+
+func (p *skipFailed) Validate(m *metadata.Snapshot) error {
+	if v, ok := p.Policy.(routing.Validator); ok {
+		return v.Validate(m)
+	}
+	return nil
 }
 ```
 

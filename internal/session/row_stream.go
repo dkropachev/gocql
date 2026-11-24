@@ -40,6 +40,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -559,13 +560,9 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		if err := policy.Validate(snapshot); err != nil {
+		var err error
+		if plan, err = routePlan(policy, request.routing, snapshot, new(implRouting.InternalLazyRoutingPlan), &tablet); err != nil {
 			return err
-		}
-		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
-			plan = builtin.InternalPlanWith(request.routing, snapshot, new(implRouting.InternalLazyRoutingPlan), &tablet)
-		} else {
-			plan = implRouting.NewPlan(policy, request.routing, snapshot)
 		}
 	}
 	pagectx := s.privateStorage.ctx
@@ -618,7 +615,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		started := time.Now()
 		var end func(routing.AttemptEvent)
 		if request.InternalLogical.observesAttempts() {
-			end = request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
 		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()

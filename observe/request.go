@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -45,7 +46,23 @@ type AttemptObserver interface {
 	// returns, if not nil, is called once with the completed attempt;
 	// routing.AttemptEvent.CQLTraceID links it to the server-side CQL trace
 	// session when the request runs with exec.Options.CQLTrace.
-	StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent)
+	StartAttempt(context.Context, AttemptStart) func(routing2.AttemptEvent)
+}
+
+// AttemptStart describes an attempt as it is sent to its target.
+//
+// The driver fills it; its zero value is empty.
+type AttemptStart struct {
+	// Started is when the attempt was sent.
+	Started time.Time
+	// RequestID is the ID of the attempt's request.
+	RequestID uint64
+	// Attempt is the 1-based number of the attempt within its request.
+	Attempt int
+	// Target is the host, and shard, the attempt was sent to.
+	Target metadata.Target
+	// Speculative reports a speculative attempt.
+	Speculative bool
 }
 
 // RequestStart describes a request as it is admitted, before its first attempt.

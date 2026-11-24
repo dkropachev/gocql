@@ -203,7 +203,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			name: "Locality",
 			edit: func(c *settings.Config) {
 				p := *c.DefaultProfile
-				p.Routing = implRouting.EngineOf(newReportRoutingWith(t, routing.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}}))
+				p.Routing = implRouting.EngineOf(newReportRoutingWith(t, routing.Options{Datacenter: "dc1", Rack: "rack1", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}, FixedReplicaOrder: true, NoLeaderAware: true}))
 				c.DefaultProfile = &p
 			},
 			want: map[string]any{
@@ -341,7 +341,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 
 func newReportRouting(t *testing.T) routing.Policy {
 	t.Helper()
-	return newReportRoutingWith(t, routing.Options{TokenAware: true})
+	return newReportRoutingWith(t, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 }
 
 func newReportRoutingWith(t *testing.T, options routing.Options) routing.Policy {

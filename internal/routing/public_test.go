@@ -4,6 +4,7 @@
 package routing
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -106,5 +107,103 @@ func TestPublicRouteShard(t *testing.T) {
 	}
 	if owner := r.ShardOf(42); r.WithShardID(owner).ShardID() != owner {
 		t.Fatalf("WithShardID(ShardOf(42)) = %v, want %v", r.WithShardID(owner).ShardID(), owner)
+	}
+}
+
+// appPolicy is an application policy that routes nowhere and counts its
+// calls, with optional Validate and Observe.
+type appPolicy struct {
+	picks, fallbacks int
+}
+
+func (p *appPolicy) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
+	p.picks++
+	return metadata.Route{}, false
+}
+
+func (p *appPolicy) Fallback(routing.Info, *metadata.Snapshot) routing.Plan {
+	p.fallbacks++
+	return routing.PlanOf()
+}
+
+type validatingPolicy struct {
+	appPolicy
+	err       error
+	validates int
+	observed  int
+}
+
+func (p *validatingPolicy) Validate(*metadata.Snapshot) error { p.validates++; return p.err }
+func (p *validatingPolicy) Observe(routing.AttemptEvent)      { p.observed++ }
+
+// TestPinnedBeforePolicy checks that a request pinned to a host follows the
+// pinned plan without consulting an application's policy.
+func TestPinnedBeforePolicy(t *testing.T) {
+	m := v2TestMetadata()
+	host := SnapshotData(m).InternalHosts[2].ID
+	app := &appPolicy{}
+	for _, policy := range []RoutingPolicy{EngineOf(app), SingleTargetRouting(Target{HostID: SnapshotData(m).InternalHosts[0].ID})} {
+		plan := NewPlan(policy, routing.Info{HostID: cql.Some(host), ShardID: cql.Some[uint32](1)}, m)
+		target, ok := nextTarget(plan)
+		if !ok || target.HostID != host || target.ShardID != cql.Some[uint32](1) {
+			t.Fatalf("%T: pinned plan routed to %+v, %v", policy, target, ok)
+		}
+		if _, ok := nextTarget(plan); ok {
+			t.Fatalf("%T: a pinned plan has a second route", policy)
+		}
+	}
+	if app.picks != 0 || app.fallbacks != 0 {
+		t.Fatalf("the policy was consulted: %d picks, %d fallbacks", app.picks, app.fallbacks)
+	}
+	if _, ok := nextTarget(NewPlan(EngineOf(app), routing.Info{}, m)); ok || app.picks != 1 || app.fallbacks != 1 {
+		t.Fatalf("an unpinned request: %d picks, %d fallbacks", app.picks, app.fallbacks)
+	}
+}
+
+// TestApplicationPolicyInterfaces checks that Validate and Observe are
+// optional, and that Validate runs once per snapshot until it passes.
+func TestApplicationPolicyInterfaces(t *testing.T) {
+	m, next := v2TestMetadata(), v2TestMetadata()
+	plain := EngineOf(&appPolicy{})
+	if err := plain.Validate(m); err != nil {
+		t.Fatal(err)
+	}
+	plain.Observe(routing.AttemptEvent{})
+
+	v := &validatingPolicy{err: errors.New("not yet")}
+	p := EngineOf(v)
+	for range 2 {
+		if err := p.Validate(m); err == nil {
+			t.Fatal("a failing Validate passed")
+		}
+	}
+	v.err = nil
+	for range 3 {
+		if err := p.Validate(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if v.validates != 3 {
+		t.Fatalf("Validate ran %d times, want 3: twice failing, once passing", v.validates)
+	}
+	if err := p.Validate(next); err != nil || v.validates != 4 {
+		t.Fatalf("a new snapshot: %v, %d validations", err, v.validates)
+	}
+	p.Observe(routing.AttemptEvent{})
+	if v.observed != 1 {
+		t.Fatalf("Observe ran %d times", v.observed)
+	}
+	if PublicPolicy(p) != routing.Policy(v) {
+		t.Fatal("PublicPolicy does not return the application's policy")
+	}
+}
+
+func TestTokenPartitionerFunc(t *testing.T) {
+	cells := []model.EncodedCell{routingCell(t, cql.IntType, cql.Int32Codec, int32(7))}
+	var got int64
+	f := routing.TokenPartitionerFunc(func(k routing.PartitionKey) (int64, error) { got = k.Len(); return 9, nil })
+	token, err := InternalComputeRoutingToken(cells, []int{0}, f)
+	if err != nil || token != cql.Some[int64](9) || got != 4 {
+		t.Fatalf("token %v, %v, key length %d", token, err, got)
 	}
 }

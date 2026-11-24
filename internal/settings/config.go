@@ -49,16 +49,19 @@ type Config struct {
 	Partitioners   map[string]routing2.TokenPartitioner
 	// Timestamps is the source of client timestamps. Its zero value sends
 	// none, so the server assigns them; DefaultConfig sets DriverTimestamps.
-	Timestamps                ClientTimestamps
-	Identity                  IdentityOptions
-	Keyspace, CQLVersion      string
-	ContactPoints             []string
-	Metadata                  MetadataOptions
-	Pool                      PoolOptions
-	Limits                    ProtocolLimits
-	ReceiveBuffer, SendBuffer cql.Option[int]
-	Linger                    cql.Option[time.Duration]
-	ReadTimeout               time.Duration
+	Timestamps           ClientTimestamps
+	Identity             IdentityOptions
+	Keyspace, CQLVersion string
+	// LocalDatacenter and LocalRack are the session's locality, which every
+	// built-in routing policy without a datacenter of its own prefers.
+	LocalDatacenter, LocalRack string
+	ContactPoints              []string
+	Metadata                   MetadataOptions
+	Pool                       PoolOptions
+	Limits                     ProtocolLimits
+	ReceiveBuffer, SendBuffer  cql.Option[int]
+	Linger                     cql.Option[time.Duration]
+	ReadTimeout                time.Duration
 	// Protocol is the native protocol version, 4 or 5, and Server the
 	// database the session expects. Connect sets both from its dialect.
 	Protocol                                          int
@@ -98,7 +101,7 @@ type TLSSource = endpoint.TLSSource
 
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
-	profile.Routing, _ = routing.NewRoutingPolicy(routing2.Options{TokenAware: true, ShuffleReplicas: true, LeaderAware: true})
+	profile.Routing, _ = routing.NewRoutingPolicy(routing2.Options{})
 	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: metadata.ModeFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing2.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing2.CDCTokenPartitioner, "CDCPartitioner": routing2.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps()}
 }
 
@@ -165,6 +168,9 @@ func (config Config) Validate() error {
 		if err := ScyllaOnly(&config, "metadata server timeout"); err != nil {
 			return err
 		}
+	}
+	if config.LocalRack != "" && config.LocalDatacenter == "" {
+		return cqltype.TypeValidation("local datacenter", "a rack requires a datacenter")
 	}
 	if config.Port == 0 {
 		return cqltype.TypeValidation("port", "must not be zero")

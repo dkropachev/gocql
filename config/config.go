@@ -413,6 +413,21 @@ func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 	return b
 }
 
+// WithLocalDatacenter sets the session's local datacenter and, when rack is
+// not empty, its local rack. Every built-in routing policy whose
+// routing.Options name no datacenter of their own, the default profile's and
+// every other profile's alike, prefers replicas there and, unless AllowRemote
+// is set, routes only there. Connect fails when the cluster has no eligible
+// host in dc, or in rack; Build rejects a rack without a datacenter. Set it
+// on a cluster with more than one datacenter: the default LOCAL_QUORUM
+// consistency is local to the coordinator's datacenter. Default none: every
+// datacenter is local, and Connect logs a warning when the cluster has more
+// than one.
+func (b *ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder {
+	b.settings.LocalDatacenter, b.settings.LocalRack = dc, rack
+	return b
+}
+
 // WithHostFilter skips nodes for which keep returns false. Default all nodes.
 func (b *ConfigBuilder) WithHostFilter(keep func(metadata.HostSnapshot) bool) *ConfigBuilder {
 	b.settings.HostFilter = keep

@@ -257,7 +257,7 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {

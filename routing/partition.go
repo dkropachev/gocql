@@ -43,6 +43,12 @@ type TokenPartitioner interface {
 	Token(PartitionKey) (int64, error)
 }
 
+// TokenPartitionerFunc adapts a function to TokenPartitioner.
+type TokenPartitionerFunc func(PartitionKey) (int64, error)
+
+// Token calls f.
+func (f TokenPartitionerFunc) Token(key PartitionKey) (int64, error) { return f(key) }
+
 // Murmur3TokenPartitioner is the partitioner of Murmur3Partitioner tables,
 // the default.
 var Murmur3TokenPartitioner TokenPartitioner = murmur3Partitioner{}

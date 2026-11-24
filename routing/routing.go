@@ -7,9 +7,11 @@
 // NewPolicy builds the default token- and tablet-aware policy and
 // SingleTarget one that always routes to a single host; both are implemented
 // by the session. An application can implement Policy itself, often by
-// wrapping a built-in one. In a program that links no session, such as the
-// tests of a policy library, the built-in policies find no route and
-// Validate fails, and HostRoutes and ReplicaRoutes return no routes.
+// wrapping a built-in one, and test it on snapshots from package
+// routing/routingtest. In a program that links no session, such as the tests
+// of a policy library that do not import routingtest, the built-in policies
+// find no route and fail validation, and HostRoutes and ReplicaRoutes return
+// no routes.
 package routing
 
 import (
@@ -31,12 +33,12 @@ type Plan interface {
 // Policy chooses the routes of a request in two steps, optimized for the
 // happy path where the first route serves it: Pick returns the first route
 // cheaply, and Fallback every route the request may take. The session
-// combines them into the plan a request follows. Methods may be called
-// concurrently.
+// combines them into the plan a request follows. A request pinned to a host
+// (exec.Options.HostID) goes there without consulting the policy. Methods
+// may be called concurrently.
+//
+// A Policy may also implement Validator and AttemptObserver.
 type Policy interface {
-	// Validate checks the policy against a snapshot before the session uses
-	// it.
-	Validate(*metadata.Snapshot) error
 	// Pick returns the first route, cheaply: without building a plan and
 	// without allocating. It returns false when it has no cheap answer, and
 	// the request then starts with Fallback's routes.
@@ -45,13 +47,30 @@ type Policy interface {
 	// driver calls it only when the picked route fails or Pick returned
 	// false, and skips the picked route if Fallback returns it again.
 	Fallback(Info, *metadata.Snapshot) Plan
-	// Observe receives the outcome of every attempt.
+}
+
+// Validator is implemented by a Policy that checks itself against the
+// cluster. The session calls Validate once per snapshot before it routes a
+// request with the policy, and again for the next snapshot; while Validate
+// fails, so do the requests the policy would route. Connect fails when it
+// fails for the default profile's policy.
+type Validator interface {
+	// Validate checks the policy against a snapshot.
+	Validate(*metadata.Snapshot) error
+}
+
+// AttemptObserver is implemented by a Policy that learns from attempts, such
+// as one that tracks latency. The session calls Observe with the outcome of
+// every attempt of the requests of the profiles that use the policy.
+type AttemptObserver interface {
+	// Observe receives the outcome of an attempt.
 	Observe(AttemptEvent)
 }
 
 // NewPolicy builds the default token- and tablet-aware policy with options.
 // It reports invalid options at once; the session builds the policy itself
-// when it first uses it.
+// when it first uses it. The policy implements Validator, which checks that
+// its local datacenter and rack have eligible hosts, and AttemptObserver.
 func NewPolicy(options Options) (Policy, error) {
 	options, err := options.normalized()
 	if err != nil {
@@ -61,7 +80,8 @@ func NewPolicy(options Options) (Policy, error) {
 }
 
 // SingleTarget routes every request to target. When target.StrictShard is
-// set, a request goes to target's shard only.
+// set, a request goes to target's shard only. The policy implements
+// Validator, which checks that target is an eligible host.
 func SingleTarget(target metadata.Target) Policy {
 	return &builtinPolicy{single: true, target: target}
 }
@@ -149,7 +169,7 @@ func (b *builtinPolicy) Validate(m *metadata.Snapshot) error {
 	if p == nil {
 		return errNoSession
 	}
-	return p.Validate(m)
+	return p.(Validator).Validate(m)
 }
 
 func (b *builtinPolicy) Pick(info Info, m *metadata.Snapshot) (metadata.Route, bool) {
@@ -170,6 +190,6 @@ func (b *builtinPolicy) Fallback(info Info, m *metadata.Snapshot) Plan {
 
 func (b *builtinPolicy) Observe(e AttemptEvent) {
 	if p := b.policy(); p != nil {
-		p.Observe(e)
+		p.(AttemptObserver).Observe(e)
 	}
 }

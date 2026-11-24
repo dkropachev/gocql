@@ -25,7 +25,7 @@ func (nopObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (co
 	return ctx, func(observe.RequestEvent) {}
 }
 
-func (nopObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (nopObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
 	return func(routing2.AttemptEvent) {}
 }
 

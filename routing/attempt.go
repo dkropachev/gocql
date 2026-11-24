@@ -33,22 +33,6 @@ type Info struct {
 	ShardID cql.Option[uint32]
 }
 
-// AttemptStart describes an attempt as it is sent to its target.
-//
-// The driver fills it; its zero value is empty.
-type AttemptStart struct {
-	// Started is when the attempt was sent.
-	Started time.Time
-	// RequestID is the ID of the attempt's request.
-	RequestID uint64
-	// Attempt is the 1-based number of the attempt within its request.
-	Attempt int
-	// Target is the host, and shard, the attempt was sent to.
-	Target metadata.Target
-	// Speculative reports a speculative attempt.
-	Speculative bool
-}
-
 // AttemptEvent describes how an attempt ended.
 //
 // The driver fills it; its zero value is empty.
