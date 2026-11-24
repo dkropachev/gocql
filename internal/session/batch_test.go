@@ -141,7 +141,7 @@ func TestBatch(t *testing.T) {
 			if err := batch.admit(s, &members[i]); err != nil {
 				t.Fatalf("member %d: %v", i, err)
 			}
-			batch.appendEntry(s, cqlText{}, "UPDATE", &members[i], model.EncodedValues{}, 0)
+			batch.appendEntry(s, cqlText{}, "UPDATE", &members[i], false, model.EncodedValues{}, 0)
 			if i == 0 && batch.routing.Keyspace != "a" {
 				t.Fatalf("keyspace before a routable member = %q, want a", batch.routing.Keyspace)
 			}
