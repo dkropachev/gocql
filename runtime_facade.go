@@ -48,6 +48,14 @@ var StopIteration = implSession.StopIteration
 // Len returns the number of statements in the batch.
 func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
 
+// Size returns the bytes of the encoded values of the batch's statements,
+// each value's length prefix included. Statement texts and prepared IDs are
+// not counted. The server's batch_size_warn_threshold and
+// batch_size_fail_threshold measure the mutations the batch makes, which
+// these bytes bound, so Size lets a caller split a batch before the server
+// rejects it.
+func (b *Batch) Size() int { return (*implSession.Batch)(b).Size() }
+
 // Reset clears statements while preserving the batch's reusable capacity and
 // its Kind.
 func (b *Batch) Reset() { (*implSession.Batch)(b).Reset() }

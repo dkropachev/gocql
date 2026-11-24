@@ -142,7 +142,9 @@ and no options.
   statement, which compiles its parameters on every call like the other
   throwaway methods. `AddToBatch` encodes the value straight into storage
   the `Batch` owns and touches no execution state. The zero `Batch` is ready,
-  and `Reset` keeps the storage and the kind for the next batch.
+  and `Reset` keeps the storage and the kind for the next batch. `Len` and
+  `Size` report the statements and the encoded value bytes held, so a caller
+  can split a batch under the server's batch size thresholds.
 - **Kind.** The batch kind is batch state: the exported field `Batch.Kind`
   (`cql.LoggedBatch`, the zero value, `UnloggedBatch` or `CounterBatch`), set
   once while building. The batch's contents decide the kind (a counter batch

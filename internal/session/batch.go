@@ -94,6 +94,15 @@ func (b *Batch) Len() int {
 	return len(b.entries)
 }
 
+// Size returns the bytes of the batch's encoded values, length prefixes
+// included.
+func (b *Batch) Size() int {
+	if b == nil {
+		return 0
+	}
+	return len(b.values)
+}
+
 // Reset empties the batch, keeping its storage and Kind for the next
 // statements. If
 // an execution of the batch may still be writing it, which happens after its

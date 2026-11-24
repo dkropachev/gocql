@@ -156,6 +156,29 @@ func TestBatch(t *testing.T) {
 	})
 
 	t.Run("AddToBatch", func(t *testing.T) {
+		// Size counts each value with its 4-byte length prefix.
+		t.Run("Size", func(t *testing.T) {
+			q := testOwnedQuery(t)
+			var batch Batch
+			if batch.Size() != 0 || (*Batch)(nil).Size() != 0 {
+				t.Fatal("empty batch has a size")
+			}
+			want := 0
+			for _, value := range [][]byte{[]byte("a"), []byte("batch entry"), nil} {
+				if err := q.AddToBatch(&batch, value); err != nil {
+					t.Fatal(err)
+				}
+				want += 4 + len(value)
+				if got := batch.Size(); got != want {
+					t.Fatalf("Size() = %d, want %d", got, want)
+				}
+			}
+			batch.Reset()
+			if batch.Size() != 0 {
+				t.Fatalf("Size() = %d after Reset", batch.Size())
+			}
+		})
+
 		t.Run("DoesNotAllocate", func(t *testing.T) {
 			q := testOwnedQuery(t)
 			var batch Batch

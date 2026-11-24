@@ -48,7 +48,7 @@ v2.1; it can only be removed in v3.
 | `Session` and its methods | Keep. `ID` correlates with `system.clients`; `Closed`, `Metadata`, `Metrics`, `Subscribe`, `RefreshMetadata` and `AwaitSchemaAgreement` are the session-level operations. |
 | `Prepared`, `PreparedStream`, `Query`, `StreamQuery`, `PreparedInfo`, `StreamInfo` | Keep. `Query.Routing` lets a caller see the route a value takes without executing. |
 | `Rows`, `Page`, `CASBatchRows`, `RowStream`, `PageLease` | Keep. |
-| `Batch`, `MaxBatchStatements` | Keep. |
+| `Batch`, `MaxBatchStatements` | Keep. `Batch.Size` reports the encoded value bytes, which the server's `batch_size_fail_threshold` limits, while `MaxBatchStatements` is only the protocol's count limit. |
 | `StopIteration` | Keep. Named like `filepath.SkipDir`: a signal, not a failure. |
 
 ## `auth`

@@ -3,6 +3,7 @@ package gocql
 		gocql.Batch field Kind cql.BatchKind
 		gocql.Batch method (*T) Len() int
 		gocql.Batch method (*T) Reset()
+		gocql.Batch method (*T) Size() int
 	type gocql.CASBatchRows[X any] struct
 		gocql.CASBatchRows method (T) Applied() (bool, error)
 		gocql.CASBatchRows method (T) Clone() (cql.CASResult[X], error)

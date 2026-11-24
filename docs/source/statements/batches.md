@@ -42,7 +42,10 @@ idempotent, err := session.CompileOptions(exec.Options{Idempotent: true})
 _, err = session.ExecBatch(ctx, &batch, idempotent)
 ```
 
-A batch
+`batch.Len()` and `batch.Size()` report the statements and the bytes of
+encoded values the batch holds; the server's `batch_size_warn_threshold` and
+`batch_size_fail_threshold` limit the mutations they make, so check `Size` to
+split a large batch before sending it. A batch
 may be sent again unchanged. `Reset` empties it and keeps its storage and its
 `Kind`, so a reused batch appends without allocating; if a cancelled execution may still be
 writing the batch, `Reset` leaves that storage to it. A `Batch` is not safe for
