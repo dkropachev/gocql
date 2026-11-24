@@ -23,8 +23,9 @@ import (
 //
 // Every member must come from the session that sends the batch; members may
 // write tables of different keyspaces. The batch routes by its first member
-// whose partition key is known, so put a prepared member first to route a
-// batch to a replica. A batch holds at most MaxBatchStatements statements.
+// whose partition key is known, which needs a prepared member; a batch of
+// unprepared members only has no replica to route to. A batch holds at most
+// MaxBatchStatements statements.
 //
 // The exported field Kind cql.BatchKind selects the batch's kind and is sent
 // with every execution: cql.LoggedBatch (the zero value),
@@ -52,8 +53,9 @@ func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
 // each value's length prefix included. Statement texts and prepared IDs are
 // not counted. The server's batch_size_warn_threshold and
 // batch_size_fail_threshold measure the mutations the batch makes, which
-// these bytes bound, so Size lets a caller split a batch before the server
-// rejects it.
+// follow from these values but also count per-cell overhead and values
+// written as CQL literals, so Size is an estimate a caller can use to split a
+// batch well below the threshold.
 func (b *Batch) Size() int { return (*implSession.Batch)(b).Size() }
 
 // Reset clears statements while preserving the batch's reusable capacity and
