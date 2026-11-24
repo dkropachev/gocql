@@ -34,7 +34,7 @@ import (
 var (
 	// ErrTimeoutNoResponse reports that a request got no response within
 	// its timeout.
-	ErrTimeoutNoResponse = errors.New("gocql: no response received from cassandra within timeout period")
+	ErrTimeoutNoResponse = errors.New("gocql: no response from server within timeout")
 	// ErrConnectionClosed reports that the connection closed before the
 	// request was sent or its response arrived.
 	ErrConnectionClosed = errors.New("gocql: connection closed waiting for response")
@@ -43,15 +43,16 @@ var (
 	ErrNoStreams = errors.New("gocql: no streams available on connection")
 )
 
-// QueryError is the failure of a single attempt on one connection.
-//
-// The driver returns it filled in; its zero value is an error without detail.
-type QueryError struct {
+// queryError is the failure of a single attempt on one connection. The
+// engine builds it through internal/runtimeerrors; callers see the error it
+// wraps, through errors.Is and errors.As, and its ExecutionStatus through
+// ExecutionStatusOf.
+type queryError struct {
 	state queryErrorState
 }
 
 // ExecutionStatus reports what this attempt may have done on the cluster.
-func (e *QueryError) ExecutionStatus() ExecutionStatus {
+func (e *queryError) ExecutionStatus() ExecutionStatus {
 	d := &e.state
 	if !d.InternalPotentiallyExecuted {
 		return NotExecuted
@@ -64,9 +65,9 @@ func (e *QueryError) ExecutionStatus() ExecutionStatus {
 
 // Error returns the attempt's error, with its timeout and in-flight count
 // when it timed out and its execution status when it may have executed.
-func (e *QueryError) Error() string {
+func (e *queryError) Error() string {
 	d := &e.state
-	msg := "unknown failure" // a zero QueryError
+	msg := "unknown failure" // a zero queryError
 	if d.InternalErr != nil {
 		msg = d.InternalErr.Error()
 	}
@@ -84,13 +85,13 @@ func executionSuffix(x ExecutionStatus) string {
 	return " (" + x.String() + ")"
 }
 
-// Unwrap returns the attempt's error, or nil for a zero QueryError.
-func (e *QueryError) Unwrap() error {
+// Unwrap returns the attempt's error, or nil for a zero queryError.
+func (e *queryError) Unwrap() error {
 	return e.state.InternalErr
 }
 
 // queryErrorState is what the engine records about a failed attempt. The
-// engine builds it through the mirror in internal/runtimeerrors.
+// engine builds it through internal/runtimeerrors.
 type queryErrorState struct {
 	InternalErr                 error
 	InternalTimeout             time.Duration

@@ -62,7 +62,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 			target = implEndpoint.InternalHostInfoHostUUID(host)
 		}
 	}
-	if target.IsEmpty() {
+	if target.IsZero() {
 		t.Fatal("no host for", node.IP())
 	}
 	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
@@ -75,7 +75,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 	decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
-	streamOptions.PageSize = cql.Option[int32]{Set: true, Value: 1}
+	streamOptions.PageSize = 1
 	streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
 	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: streamOptions})
 	if err != nil {

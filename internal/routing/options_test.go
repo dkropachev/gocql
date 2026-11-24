@@ -23,7 +23,7 @@ import (
 // Table ks.tt is placed by tablets: (0, 100] on 4 shard 2 and 5 shard 1.
 
 func optionsHost(id byte, dc, rack string) metadata.HostSnapshot {
-	return metadata.HostSnapshot{ID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
+	return metadata.HostSnapshot{HostID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
 }
 
 func optionsTarget(id byte, shard uint32) metadata.Target {
@@ -144,24 +144,24 @@ func TestPolicyOptions(t *testing.T) {
 		info    routing.Info
 		tiers   [][]byte
 	}{
-		{"none", routing.Options{}, vnode, [][]byte{{1, 2, 3, 4, 5}}},
-		{"token aware", routing.Options{TokenAware: true}, vnode, [][]byte{{1, 2, 3}, {4, 5}}},
-		{"token aware without token", routing.Options{TokenAware: true}, noToken, [][]byte{{1, 2, 3, 4, 5}}},
-		{"datacenter", routing.Options{Datacenter: "a"}, vnode, [][]byte{{1, 2, 4}}},
-		{"datacenter token aware", routing.Options{Datacenter: "a", TokenAware: true}, vnode, [][]byte{{1, 2}, {4}}},
-		{"rack", routing.Options{Datacenter: "a", Rack: "r1"}, vnode, [][]byte{{1, 4}, {2}}},
-		{"rack token aware", routing.Options{Datacenter: "a", Rack: "r1", TokenAware: true}, vnode, [][]byte{{1}, {2}, {4}}},
-		{"remote", routing.Options{Datacenter: "a", AllowRemote: true}, vnode, [][]byte{{1, 2, 4}, {3, 5}}},
+		{"none", routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2, 3, 4, 5}}},
+		{"token aware", routing.Options{FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2, 3}, {4, 5}}},
+		{"token aware without token", routing.Options{FixedReplicaOrder: true, NoLeaderAware: true}, noToken, [][]byte{{1, 2, 3, 4, 5}}},
+		{"datacenter", routing.Options{Datacenter: "a", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2, 4}}},
+		{"datacenter token aware", routing.Options{Datacenter: "a", FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2}, {4}}},
+		{"rack", routing.Options{Datacenter: "a", Rack: "r1", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 4}, {2}}},
+		{"rack token aware", routing.Options{Datacenter: "a", Rack: "r1", FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1}, {2}, {4}}},
+		{"remote", routing.Options{Datacenter: "a", AllowRemote: true, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2, 4}, {3, 5}}},
 		// A remote replica comes before a local host that is no replica.
-		{"remote token aware", routing.Options{Datacenter: "a", AllowRemote: true, TokenAware: true}, vnode, [][]byte{{1, 2}, {3}, {4}, {5}}},
-		{"rack remote token aware", routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, TokenAware: true}, vnode, [][]byte{{1}, {2}, {3}, {4}, {5}}},
+		{"remote token aware", routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1, 2}, {3}, {4}, {5}}},
+		{"rack remote token aware", routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true}, vnode, [][]byte{{1}, {2}, {3}, {4}, {5}}},
 		// Tablets place ks.tt, not the vnode ring, whose replicas are 1, 2 and 3.
-		{"tablet", routing.Options{Datacenter: "a", AllowRemote: true, TokenAware: true}, tablet, [][]byte{{4}, {5}, {1, 2}, {3}}},
-		{"tablet rack", routing.Options{Datacenter: "a", Rack: "r1", TokenAware: true}, tablet, [][]byte{{4}, {1}, {2}}},
-		{"tablet not token aware", routing.Options{Datacenter: "a", AllowRemote: true}, tablet, [][]byte{{1, 2, 4}, {3, 5}}},
+		{"tablet", routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true}, tablet, [][]byte{{4}, {5}, {1, 2}, {3}}},
+		{"tablet rack", routing.Options{Datacenter: "a", Rack: "r1", FixedReplicaOrder: true, NoLeaderAware: true}, tablet, [][]byte{{4}, {1}, {2}}},
+		{"tablet not token aware", routing.Options{Datacenter: "a", AllowRemote: true, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, tablet, [][]byte{{1, 2, 4}, {3, 5}}},
 		// A token no known tablet holds has no replicas: it does not fall
 		// back to the vnode ring.
-		{"tablet unknown", routing.Options{Datacenter: "a", AllowRemote: true, TokenAware: true}, outside, [][]byte{{1, 2, 4}, {3, 5}}},
+		{"tablet unknown", routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true}, outside, [][]byte{{1, 2, 4}, {3, 5}}},
 	} {
 		for _, variant := range []struct {
 			name  string
@@ -180,7 +180,7 @@ func TestPolicyOptions(t *testing.T) {
 				}
 				t.Run(name, func(t *testing.T) {
 					options := test.options
-					options.ShuffleReplicas = shuffle
+					options.FixedReplicaOrder = !shuffle
 					if variant.slow {
 						options.Latency = routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Hour, UpdateInterval: time.Hour}
 					}
@@ -189,15 +189,15 @@ func TestPolicyOptions(t *testing.T) {
 						t.Fatal(err)
 					}
 					m := optionsSnapshot(t, variant.hosts)
-					if err := policy.Validate(m.Public()); err != nil {
+					if err := policy.(routing.Validator).Validate(m.Public()); err != nil {
 						t.Fatal(err)
 					}
 					if variant.slow {
 						// Host 1 is measured first; the faster host 2 then
 						// publishes the decision that host 1 is slow.
 						start := time.Now()
-						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
-						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
+						policy.(routing.AttemptObserver).Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
+						policy.(routing.AttemptObserver).Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
 					}
 					for range 20 {
 						if hosts := policyHosts(policy, test.info, m); !inTiers(hosts, variant.tiers) {
@@ -212,7 +212,7 @@ func TestPolicyOptions(t *testing.T) {
 	t.Run("ReplicaShards", func(t *testing.T) {
 		// A tablet replica's route goes to the tablet's shard, then to any
 		// shard of the host; a vnode replica's to the shard owning the token.
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, TokenAware: true})
+		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, nil)
 		routes := planRoutes(policy, tablet, m)
 		if len(routes) < 4 || routes[0] != [2]int{4, 2} || routes[1] != [2]int{4, -1} || routes[2] != [2]int{5, 1} || routes[3] != [2]int{5, -1} {
@@ -236,21 +236,21 @@ func TestPolicyOptions(t *testing.T) {
 			hosts   func([]metadata.HostSnapshot)
 			valid   bool
 		}{
-			{"no datacenter", routing.Options{}, nil, true},
-			{"local datacenter", routing.Options{Datacenter: "b"}, nil, true},
-			{"unknown datacenter", routing.Options{Datacenter: "x"}, nil, false},
-			{"unknown rack", routing.Options{Datacenter: "a", Rack: "r3"}, nil, false},
-			{"datacenter filtered out", routing.Options{Datacenter: "b"}, func(h []metadata.HostSnapshot) { h[2].Enabled, h[4].Enabled = false, false }, false},
-			{"rack filtered out", routing.Options{Datacenter: "a", Rack: "r2"}, func(h []metadata.HostSnapshot) { h[1].Enabled = false }, false},
+			{"no datacenter", routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, nil, true},
+			{"local datacenter", routing.Options{Datacenter: "b", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, nil, true},
+			{"unknown datacenter", routing.Options{Datacenter: "x", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, nil, false},
+			{"unknown rack", routing.Options{Datacenter: "a", Rack: "r3", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, nil, false},
+			{"datacenter filtered out", routing.Options{Datacenter: "b", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, func(h []metadata.HostSnapshot) { h[2].Enabled, h[4].Enabled = false, false }, false},
+			{"rack filtered out", routing.Options{Datacenter: "a", Rack: "r2", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, func(h []metadata.HostSnapshot) { h[1].Enabled = false }, false},
 			// Hosts that are down still count: they may come back.
-			{"datacenter down", routing.Options{Datacenter: "b"}, func(h []metadata.HostSnapshot) { h[2].Up, h[4].Up = false, false }, true},
+			{"datacenter down", routing.Options{Datacenter: "b", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, func(h []metadata.HostSnapshot) { h[2].Up, h[4].Up = false, false }, true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
 				policy, err := routing.NewPolicy(test.options)
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := policy.Validate(optionsSnapshot(t, test.hosts).Public()); (err == nil) != test.valid {
+				if err := policy.(routing.Validator).Validate(optionsSnapshot(t, test.hosts).Public()); (err == nil) != test.valid {
 					t.Fatalf("Validate = %v, want valid %v", err, test.valid)
 				}
 			})
@@ -263,7 +263,7 @@ func TestPolicyOptions(t *testing.T) {
 	t.Run("Unreachable", func(t *testing.T) {
 		// Hosts that are down or not connected come after every reachable
 		// host of the plan's tiers, replicas among them.
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, TokenAware: true})
+		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, func(h []metadata.HostSnapshot) { h[0].Connected, h[1].Up = false, false })
 		if hosts := policyHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{3}, {4}, {5}, {1, 2}}) {
 			t.Fatalf("plan %v, want reachable 3, 4, 5, then 1 and 2", hosts)
@@ -302,7 +302,7 @@ func TestSingleTarget(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			policy := routing.SingleTarget(test.target)
 			m := optionsSnapshot(t, test.hosts)
-			if err := policy.Validate(m.Public()); (err == nil) != test.valid {
+			if err := policy.(routing.Validator).Validate(m.Public()); (err == nil) != test.valid {
 				t.Fatalf("Validate = %v, want valid %v", err, test.valid)
 			}
 			if routes := planRoutes(policy, info, m); !slices.Equal(routes, test.routes) {
@@ -317,7 +317,7 @@ func TestSingleTarget(t *testing.T) {
 // each hint replaces every tablet it overlaps, and later plans route by it,
 // while plans of the snapshot before it keep the replicas they had.
 func TestTabletMigration(t *testing.T) {
-	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true})
+	policy, _ := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 	m := optionsSnapshot(t, nil)
 	for _, step := range []struct {
 		name string

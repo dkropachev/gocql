@@ -25,7 +25,7 @@ func (nopObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (co
 	return ctx, func(observe.RequestEvent) {}
 }
 
-func (nopObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (nopObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
 	return func(routing2.AttemptEvent) {}
 }
 
@@ -63,7 +63,7 @@ func BenchmarkGoroutines(b *testing.B) {
 					profile := settings.InternalDefaultProfile()
 					profile.Speculation = constantSpeculation{delay: 50 * time.Millisecond}
 					values.Profile = &profile
-					values.Idempotent = true
+					values.Idempotent = cql.Some(true)
 				case "retrydelay":
 					// Delayed retries wait in the general execution loop.
 					values.Profile = generalPathProfile()

@@ -38,7 +38,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	runtimeerrors "github.com/scylladb/gocql/v2/internal/runtimeerrors"
 	"github.com/scylladb/gocql/v2/internal/segment"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
@@ -870,7 +869,7 @@ func TestTypedConn(t *testing.T) {
 				owner.Release()
 				err := <-result
 				if partial {
-					if query, ok := errors.AsType[*cqlerr.QueryError](err); err == nil || !ok || !runtimeerrors.QueryErrorData(query).InternalPotentiallyExecuted || !c.Closed() {
+					if err == nil || cqlerr.ExecutionStatusOf(err) != cqlerr.MaybeExecuted || !c.Closed() {
 						t.Fatal("partial TLS write not poisoned", err)
 					}
 				} else if err != nil || recorder.borrowed != len(payload) {

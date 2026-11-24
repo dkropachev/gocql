@@ -42,7 +42,7 @@ func leaderTestMetadata(t *testing.T, mode string, versioned bool, replicas ...b
 func TestLeaderAwarePlanOrder(t *testing.T) {
 	strong := []cql.Consistency{cql.Any, cql.Two, cql.Three, cql.Quorum, cql.All, cql.LocalQuorum, cql.EachQuorum, cql.Serial, cql.LocalSerial}
 	weak := []cql.Consistency{cql.One, cql.LocalOne}
-	local := routing2.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true, Datacenter: "a", Rack: "r1"}
+	local := routing2.Options{Datacenter: "a", Rack: "r1"}
 	info := func(c cql.Consistency) routing2.Info {
 		return routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 50, Set: true}, Consistency: c, Kind: cql.OrdinaryStatement}
 	}
@@ -64,13 +64,13 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 		{name: "GlobalWeakRead", options: local, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: weak, first: 1},
 		{name: "Eventual", options: local, mode: "", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1},
 		{name: "TabletWithoutVersion", options: local, mode: "global", versioned: false, replicas: []byte{2, 1, 3}, consistency: strong, first: 1},
-		{name: "LeaderAwareOff", options: routing2.Options{TokenAware: true, ShuffleReplicas: true, Datacenter: "a", Rack: "r1"}, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1},
+		{name: "LeaderAwareOff", options: routing2.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: true}, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1},
 		{name: "LeaderFiltered", options: local, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1, absent: 2,
 			edit: func(m *implRouting.MetadataSnapshot) { routing.SnapshotData(m).InternalHosts[1].Enabled = false }},
 		{name: "LeaderDown", options: local, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1,
 			edit: func(m *implRouting.MetadataSnapshot) { routing.SnapshotData(m).InternalHosts[1].Up = false }},
 		{name: "RemoteLeaderNotAllowed", options: local, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 1, absent: 3},
-		{name: "RemoteLeaderAllowed", options: routing2.Options{TokenAware: true, LeaderAware: true, ShuffleReplicas: true, Datacenter: "a", Rack: "r1", AllowRemote: true}, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 3},
+		{name: "RemoteLeaderAllowed", options: routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true}, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 3},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestDefaultRoutingIsLeaderAware(t *testing.T) {
 	if !ok {
 		t.Fatalf("default routing policy %T", settings.DefaultConfig().DefaultProfile.Routing)
 	}
-	if !policy.InternalOptions.LeaderAware || !policy.InternalOptions.TokenAware {
+	if policy.InternalOptions != (routing2.Options{}) {
 		t.Fatalf("default routing options %+v", policy.InternalOptions)
 	}
 }

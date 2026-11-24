@@ -147,7 +147,7 @@ func TestStrongConsistency(t *testing.T) {
 				continue
 			}
 			leader := leaders[ks]
-			if leader.IsEmpty() {
+			if leader.IsZero() {
 				continue // the random first version block matched
 			}
 			if r.HostID != leader {

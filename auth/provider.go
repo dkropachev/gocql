@@ -12,10 +12,10 @@ import (
 
 // Provider authenticates connections, starting an Exchange for each.
 type Provider interface {
-	// Start begins the exchange for a connection to the host, whose server
-	// named the authenticator class in the string, and returns the exchange and
+	// Start begins the exchange for a connection to host, whose server named
+	// its authenticator class in authenticator, and returns the exchange and
 	// the initial response, null when there is none.
-	Start(context.Context, metadata.HostSnapshot, string) (Exchange, cql.Nullable[[]byte], error)
+	Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error)
 }
 
 // Exchange is one connection's authentication.

@@ -59,17 +59,14 @@ func (e *StreamCapabilityError) Error() string {
 	return fmt.Sprintf("gocql: streaming protocol %d/compression %v: %s", e.Protocol, e.Compression, e.Reason)
 }
 
-// StreamResetter resets a field absent from metadata while preserving buffer capacity.
-type StreamResetter[T any] interface {
-	// Reset clears the field at the pointer, keeping its buffer capacity.
-	Reset(*T)
-}
-
 // StreamDecoder compiles a value decoder that writes into seeded caller storage.
 type StreamDecoder[T any] interface {
 	// Compile checks the decoder against the column type and returns the plan
 	// that decodes values of it.
 	Compile(DataType) (CompiledStreamValue[T], error)
+	// Reset clears the value at the pointer, keeping its buffer capacity,
+	// without a column type: it resets a field the result does not select.
+	Reset(*T)
 }
 
 // CompiledStreamValue decodes one value of a compiled column type into caller
@@ -282,6 +279,9 @@ func (r *StreamValueReader) RequireEnd() error {
 func (r *StreamValueReader) present() error {
 	if err := r.check(); err != nil {
 		return err
+	}
+	if r.state == Null {
+		return r.fail(typeValidation("stream value", "nonnullable %s has state null: %w", r.typ, ErrNull))
 	}
 	if r.state != Present {
 		return r.fail(typeValidation("stream value", "nonnullable %s has state %v", r.typ, r.state))
@@ -693,18 +693,10 @@ func compileStreamRow[R any](decoder StreamRowDecoder[R], columns Columns) (Comp
 	return plan, err
 }
 
-type streamResetCapability interface{ streamCanReset() bool }
-
-func streamDeclarationCanReset[T any](decoder StreamDecoder[T]) bool {
-	if decoder == nil {
-		return false
+// resetStream resets dst with decoder, which a composite decoder may hold
+// nil until its Compile rejects it.
+func resetStream[T any](decoder StreamDecoder[T], dst *T) {
+	if decoder != nil {
+		decoder.Reset(dst)
 	}
-	if c, ok := decoder.(streamResetCapability); ok && !c.streamCanReset() {
-		return false
-	}
-	_, ok := decoder.(StreamResetter[T])
-	return ok
-}
-func resetStreamDeclaration[T any](decoder StreamDecoder[T], dst *T) {
-	decoder.(StreamResetter[T]).Reset(dst)
 }

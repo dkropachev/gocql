@@ -114,7 +114,7 @@ func TestCodecPerf(t *testing.T) {
 			Dynamic  Value
 		}
 		cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "text", Type: text}, ColumnSpec{Name: "blob", Type: blob}, ColumnSpec{Name: "list", Type: list}, ColumnSpec{Name: "nullable", Type: integer}, ColumnSpec{Name: "empty", Type: integer}, ColumnSpec{Name: "dynamic", Type: integer})
-		body := encodeTestParams(t, cols, DynamicParams, []Value{IntValue(3), CodecTestMust(TextValue("safe-🙂")), BlobValue([]byte("borrowed")), CodecTestMust(ListValue(list, []Value{IntValue(7)})), IntValue(4), IntValue(5), IntValue(6)})
+		body := encodeTestParams(t, cols, DynamicParams, []Value{IntValue(3), TextValue("safe-🙂"), BlobValue([]byte("borrowed")), CodecTestMust(ListValue(list, []Value{IntValue(7)})), IntValue(4), IntValue(5), IntValue(6)})
 		decoder := Row(Column("n", Int32Codec, func(r *result) *int32 { return &r.N }), Column("text", TextCodec, func(r *result) *Text { return &r.Text }), Column("blob", BlobCodec, func(r *result) *Bytes { return &r.Blob }), Column("list", ListDecoder(Int32Codec), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32Codec), func(r *result) *Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32Codec), func(r *result) *MaybeEmpty[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		lease := wire.NewLease(body, nil)
@@ -136,7 +136,7 @@ func TestCodecPerf(t *testing.T) {
 		t.Log("10000 compiled scalar/text/blob/container/nullable/empty/dynamic rows Compile=0 CheckType=0 name_maps=0")
 		changed := NewColumns(ColumnSpec{Name: "n", Type: text})
 		direct := CodecTestMust(OneColumn(Int32Codec).Compile(NewColumns(ColumnSpec{Name: "n", Type: integer})))
-		if _, e := direct.Decode(newRowReader(changed, CodecTestMust(wire.NewChain(wire.Borrow([]byte{0, 0, 0, 4, 0, 0, 0, 3}))), nil)); e == nil {
+		if _, e := decodeRow(direct, newRowReader(changed, CodecTestMust(wire.NewChain(wire.Borrow([]byte{0, 0, 0, 4, 0, 0, 0, 3}))), nil)); e == nil {
 			t.Fatal("mismatched reader accepted")
 		}
 		lease.Release()
@@ -164,7 +164,7 @@ func TestCodecPerf(t *testing.T) {
 						}
 						chain := CodecTestMust(wire.NewChain(spans...))
 						plan := CodecTestMust(DynamicRows.Compile(cols))
-						row := CodecTestMust(plan.Decode(newRowReader(cols, chain, nil)))
+						row := CodecTestMust(decodeRow(plan, newRowReader(cols, chain, nil)))
 						ResetPerfCounters()
 						wire.ResetPerfCounters()
 						CodecTestMust(row.At(n - 1))
@@ -200,7 +200,7 @@ func TestCodecPerf(t *testing.T) {
 			wire.ResetPerfCounters()
 			for page := 0; page < 4; page++ {
 				reader := newRowReader(cols, source, nil)
-				row := CodecTestMust(plan.Decode(reader))
+				row := CodecTestMust(decodeRow(plan, reader))
 				v := CodecTestMust(row.Get("list"))
 				it := CodecTestMust(v.Elements())
 				n := 0

@@ -8,8 +8,9 @@ import (
 )
 
 // Type is the kind of a CQL data type, as the native protocol numbers it, so
-// the zero Type is TypeCustom. Later releases may add values, so a switch over
-// them needs a default case.
+// the zero Type is TypeCustom. TypeVector is the driver's own: the protocol
+// sends a vector as a custom type. Later releases may add values, so a switch
+// over them needs a default case.
 type Type uint16
 
 // The kinds of CQL data types.
@@ -41,6 +42,10 @@ const (
 	TypeSet       Type = 0x0022
 	TypeUDT       Type = 0x0030
 	TypeTuple     Type = 0x0031
+
+	// TypeVector is the kind of a vector<element, dimension>. It is not a
+	// native protocol type ID.
+	TypeVector Type = 0x0100
 )
 
 // String returns the kind's CQL name, such as "bigint", or Type(n) for a
@@ -101,6 +106,8 @@ func (t Type) String() string {
 		return "tuple"
 	case TypeUDT:
 		return "udt"
+	case TypeVector:
+		return "vector"
 	default:
 		return fmt.Sprintf("Type(%d)", int(t))
 	}

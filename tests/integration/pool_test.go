@@ -64,7 +64,7 @@ func TestPool(t *testing.T) {
 				cfg := newFixtureConfig(getClusterHosts()[:1], 0, func(c *config.ConfigBuilder) {
 					c.WithDiscovery(false).
 						WithConnectionsPerHost(1).
-						NoAdvancedShardAwareness().
+						WithAdvancedShardAwareness(false).
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
 						WithHeartbeat(0, 0).
@@ -100,7 +100,7 @@ func TestPool(t *testing.T) {
 					if !reflect.DeepEqual(host, targets[0]) {
 						t.Fatalf("conviction lost dial host context: got=%+v want=%+v", host, targets[0])
 					}
-					if host.ID.IsEmpty() || host.Address.Addr().String() != getClusterHosts()[0] || host.Datacenter == "" || host.Rack == "" || !host.Enabled || host.Connected {
+					if host.HostID.IsZero() || host.Address.Addr().String() != getClusterHosts()[0] || host.Datacenter == "" || host.Rack == "" || !host.Enabled || host.Connected {
 						t.Fatalf("incomplete host context: %+v", host)
 					}
 				}
@@ -114,7 +114,7 @@ func TestPool(t *testing.T) {
 				if resets != 1 {
 					t.Fatal("public reset callback not usable")
 				}
-				t.Log("PUBLIC CONVICTION CALLBACK", verdict, hosts[0].ID, hosts[0].Address, len(hosts[0].Tokens))
+				t.Log("PUBLIC CONVICTION CALLBACK", verdict, hosts[0].HostID, hosts[0].Address, len(hosts[0].Tokens))
 			})
 		}
 	})

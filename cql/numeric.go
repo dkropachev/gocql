@@ -5,7 +5,9 @@ package cql
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
@@ -126,3 +128,44 @@ func (v Varint) BigInt() *big.Int {
 
 func varintBytes(v Varint) Bytes { return v.bytes }
 func varintView(b Bytes) Varint  { return Varint{bytes: b} }
+
+// String returns the integer in base 10, or "<released>" once the view has
+// expired.
+func (v Varint) String() string {
+	if checkBytesAlive(v.bytes) != nil {
+		return "<released>"
+	}
+	return v.BigInt().String()
+}
+
+// String returns the decimal as Java's BigDecimal.toString, which Cassandra
+// uses: plain notation such as "12.30", or scientific notation such as
+// "1.23E+5" for a negative scale or a value below 1e-6. It returns
+// "<released>" once the view has expired.
+func (d Decimal) String() string {
+	if checkBytesAlive(d.Unscaled.bytes) != nil {
+		return "<released>"
+	}
+	digits := d.Unscaled.BigInt().String()
+	sign := ""
+	if digits[0] == '-' {
+		sign, digits = "-", digits[1:]
+	}
+	scale := int64(d.Scale)
+	adjusted := int64(len(digits)) - 1 - scale
+	if scale >= 0 && adjusted >= -6 {
+		if scale == 0 {
+			return sign + digits
+		}
+		if pad := scale - int64(len(digits)) + 1; pad > 0 {
+			digits = strings.Repeat("0", int(pad)) + digits
+		}
+		point := len(digits) - int(scale)
+		return sign + digits[:point] + "." + digits[point:]
+	}
+	mantissa := digits[:1]
+	if len(digits) > 1 {
+		mantissa += "." + digits[1:]
+	}
+	return fmt.Sprintf("%s%sE%+d", sign, mantissa, adjusted)
+}

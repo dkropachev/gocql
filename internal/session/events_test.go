@@ -203,17 +203,17 @@ func TestEvents(t *testing.T) {
 			fast, _ := s.Subscribe(event.Filter{Capacity: 8})
 			defer fast.Close()
 			for _, generation := range []uint64{40, 99, 41} {
-				s.PublishV2LocalEvent(event.Event{Kind: event.Status, Generation: generation})
+				s.PublishV2LocalEvent(event.Event{Kind: event.KindStatus, Generation: generation})
 			}
 			marker, ok := <-slow.Events()
-			if !ok || marker.Kind != event.Overflow || marker.Generation != 99 {
+			if !ok || marker.Kind != event.KindOverflow || marker.Generation != 99 {
 				t.Fatal(marker, ok)
 			}
 			if _, ok := <-slow.Events(); ok {
 				t.Fatal("overflow marker was not terminal")
 			}
 			for _, generation := range []uint64{40, 99, 41} {
-				if e := <-fast.Events(); e.Kind != event.Status || e.Generation != generation {
+				if e := <-fast.Events(); e.Kind != event.KindStatus || e.Generation != generation {
 					t.Fatal("one slow subscriber affected another", e)
 				}
 			}

@@ -120,7 +120,7 @@ func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, 
 	if !ok || !errors.Is(err, code) || failure.ExecutionStatus() != cqlerr.MaybeExecuted || cqlerr.ExecutionStatusOf(err) != cqlerr.MaybeExecuted {
 		t.Fatalf("ExecBatch = %v; want an ExecutionError of %v reporting MaybeExecuted", err, code)
 	}
-	if len(failure.Attempts) != 1 || failure.Attempts[0].Status != cqlerr.MaybeExecuted {
+	if len(failure.Attempts) != 1 || failure.Attempts[0].ExecutionStatus != cqlerr.MaybeExecuted {
 		t.Errorf("attempts %+v; want one, MaybeExecuted", failure.Attempts)
 	}
 }

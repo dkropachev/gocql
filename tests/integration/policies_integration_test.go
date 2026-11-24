@@ -109,9 +109,9 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		t.Fatalf("missing routing token replicas: %v", err)
 	}
 	for _, options := range []routing.Options{
-		{TokenAware: true},
-		{TokenAware: true, Datacenter: hosts[0].Datacenter},
-		{TokenAware: true, Datacenter: hosts[0].Datacenter, Rack: hosts[0].Rack},
+		{FixedReplicaOrder: true, NoLeaderAware: true},
+		{Datacenter: hosts[0].Datacenter, FixedReplicaOrder: true, NoLeaderAware: true},
+		{Datacenter: hosts[0].Datacenter, Rack: hosts[0].Rack, FixedReplicaOrder: true, NoLeaderAware: true},
 	} {
 		policy, err := routing.NewPolicy(options)
 		if err != nil {
@@ -153,7 +153,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 			t.Fatalf("coordinator %s is not a token replica: %v", coordinator, replicas)
 		}
 		for _, host := range session.Metadata().Hosts() {
-			if host.ID == coordinator && options.Datacenter != "" && host.Datacenter != options.Datacenter {
+			if host.HostID == coordinator && options.Datacenter != "" && host.Datacenter != options.Datacenter {
 				t.Fatalf("coordinator is outside configured datacenter: %+v", host)
 			}
 		}

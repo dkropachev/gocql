@@ -252,10 +252,10 @@ func TestToCQLHelpers(t *testing.T) {
 				tm: &Table{
 					OrderedColumns: []string{"id", "v"},
 					Columns: map[string]*Column{
-						"id": col("id", "int", ColumnPartitionKey),
-						"v":  col("v", "text", ColumnRegular),
+						"id": col("id", "int", ColumnKindPartitionKey),
+						"v":  col("v", "text", ColumnKindRegular),
 					},
-					PartitionKey: []*Column{col("id", "int", ColumnPartitionKey)},
+					PartitionKey: []*Column{col("id", "int", ColumnKindPartitionKey)},
 				},
 				want: "id int PRIMARY KEY,\n    v text",
 			},
@@ -264,12 +264,12 @@ func TestToCQLHelpers(t *testing.T) {
 				tm: &Table{
 					OrderedColumns: []string{"id", "c", "s"},
 					Columns: map[string]*Column{
-						"id": col("id", "int", ColumnPartitionKey),
-						"c":  col("c", "int", ColumnClusteringKey),
-						"s":  col("s", "text", ColumnStatic),
+						"id": col("id", "int", ColumnKindPartitionKey),
+						"c":  col("c", "int", ColumnKindClusteringKey),
+						"s":  col("s", "text", ColumnKindStatic),
 					},
-					PartitionKey:      []*Column{col("id", "int", ColumnPartitionKey)},
-					ClusteringColumns: []*Column{col("c", "int", ColumnClusteringKey)},
+					PartitionKey:      []*Column{col("id", "int", ColumnKindPartitionKey)},
+					ClusteringColumns: []*Column{col("c", "int", ColumnKindClusteringKey)},
 				},
 				want: "s text static",
 			},
@@ -278,13 +278,13 @@ func TestToCQLHelpers(t *testing.T) {
 				tm: &Table{
 					OrderedColumns: []string{"a", "b", "v"},
 					Columns: map[string]*Column{
-						"a": col("a", "int", ColumnPartitionKey),
-						"b": col("b", "int", ColumnPartitionKey),
-						"v": col("v", "text", ColumnRegular),
+						"a": col("a", "int", ColumnKindPartitionKey),
+						"b": col("b", "int", ColumnKindPartitionKey),
+						"v": col("v", "text", ColumnKindRegular),
 					},
 					PartitionKey: []*Column{
-						col("a", "int", ColumnPartitionKey),
-						col("b", "int", ColumnPartitionKey),
+						col("a", "int", ColumnKindPartitionKey),
+						col("b", "int", ColumnKindPartitionKey),
 					},
 				},
 				want: "PRIMARY KEY ((a, b))",
@@ -294,17 +294,17 @@ func TestToCQLHelpers(t *testing.T) {
 				tm: &Table{
 					OrderedColumns: []string{"a", "c", "d", "v"},
 					Columns: map[string]*Column{
-						"a": col("a", "int", ColumnPartitionKey),
-						"c": col("c", "int", ColumnClusteringKey),
-						"d": col("d", "int", ColumnClusteringKey),
-						"v": col("v", "text", ColumnRegular),
+						"a": col("a", "int", ColumnKindPartitionKey),
+						"c": col("c", "int", ColumnKindClusteringKey),
+						"d": col("d", "int", ColumnKindClusteringKey),
+						"v": col("v", "text", ColumnKindRegular),
 					},
-					PartitionKey: []*Column{col("a", "int", ColumnPartitionKey)},
+					PartitionKey: []*Column{col("a", "int", ColumnKindPartitionKey)},
 					// Two clustering columns, so the separator arm of
 					// partitionKeyString runs as well as the first-column arm.
 					ClusteringColumns: []*Column{
-						col("c", "int", ColumnClusteringKey),
-						col("d", "int", ColumnClusteringKey),
+						col("c", "int", ColumnKindClusteringKey),
+						col("d", "int", ColumnKindClusteringKey),
 					},
 				},
 				want: "PRIMARY KEY (a, c, d)",

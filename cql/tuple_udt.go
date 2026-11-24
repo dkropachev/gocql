@@ -8,13 +8,16 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// UDTOptions names the UDT a UDTEncoder or UDTDecoder expects and explicitly
-// relaxes field matching. AllowMissingFields concerns fields absent from
-// metadata, not null or absent serialized field values. The zero UDTOptions
-// names no UDT, which those codecs reject with a ValidationError.
+// UDTOptions names the UDT a UDTEncoder, UDTDecoder or UDTCodecOf expects and
+// explicitly relaxes field matching. AllowMissingFields concerns fields
+// absent from metadata, not null or absent serialized field values. The zero
+// UDTOptions names no UDT, which those codecs reject with a ValidationError.
 type UDTOptions struct {
-	// Keyspace and Name name the UDT.
-	Keyspace, Name string
+	// Keyspace is the UDT's keyspace, or empty to match the UDT in any
+	// keyspace.
+	Keyspace string
+	// Name is the UDT's name. It is required.
+	Name string
 	// AllowExtraDatabaseFields accepts UDT fields that no application field
 	// maps.
 	AllowExtraDatabaseFields bool
@@ -136,7 +139,7 @@ func TupleDecoder[T any](codec RowDecoder[T]) Decoder[T] {
 	return recordDecoder[T]{kind: TypeTuple, codec: codec}
 }
 
-// UDTDecoder decodes UDT fields with valueCodec and explicit identity and matching options.
+// UDTDecoder decodes UDT fields with codec and explicit identity and matching options.
 func UDTDecoder[T any](codec RowDecoder[T], options UDTOptions) Decoder[T] {
 	return recordDecoder[T]{kind: TypeUDT, codec: codec, options: options}
 }
@@ -348,7 +351,7 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 	if err != nil {
 		return nil, err
 	}
-	plan := compiledRow[T]{ordered: make([]OutputField[T], len(mapping)), scratch: syncx.NewPool(func() *T { return new(T) })}
+	plan := compiledRow[T]{ordered: make([]OutputField[T], len(mapping))}
 	for index, field := range mapping {
 		if field == -1 {
 			plan.ordered[index] = ignoredField[T]{}
@@ -452,16 +455,43 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (Compi
 	if err != nil {
 		return nil, rebaseColumnError(err, left.Len())
 	}
-	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
+	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b, decoders: c}, nil
 }
 
 func checkUDTIdentity(typ DataType, options UDTOptions) error {
 	ks, name, ok := typ.UDTName()
-	if !ok || options.Keyspace == "" || options.Name == "" {
-		return typeValidation("UDT identity", "expected keyspace and name are required")
+	if !ok || options.Name == "" {
+		return typeValidation("UDT identity", "expected name is required")
 	}
-	if ks != options.Keyspace || name != options.Name {
-		return typeValidation("UDT identity", "expected %s.%s, got %s.%s", options.Keyspace, options.Name, ks, name)
+	if name != options.Name || options.Keyspace != "" && ks != options.Keyspace {
+		want := options.Name
+		if options.Keyspace != "" {
+			want = options.Keyspace + "." + want
+		}
+		return typeValidation("UDT identity", "expected %s, got %s.%s", want, ks, name)
 	}
 	return nil
+}
+
+// recordCodec is a tuple or UDT encoder and decoder of the same T.
+type recordCodec[T any] struct {
+	recordEncoder[T]
+	recordDecoder[T]
+}
+
+// TupleCodec encodes a tuple's members with enc and decodes them with dec,
+// as TupleEncoder and TupleDecoder do, so that one codec serves a tuple
+// field of a struct mapping (see WithCodec).
+func TupleCodec[T any](enc ParamEncoder[T], dec RowDecoder[T]) Codec[T] {
+	return recordCodec[T]{
+		recordEncoder: recordEncoder[T]{kind: TypeTuple, codec: enc},
+		recordDecoder: recordDecoder[T]{kind: TypeTuple, codec: dec},
+	}
+}
+
+func (c recordCodec[T]) CheckType(typ DataType) error {
+	if err := c.recordEncoder.CheckType(typ); err != nil {
+		return err
+	}
+	return c.recordDecoder.CheckType(typ)
 }

@@ -18,9 +18,10 @@ type ReconnectPolicy interface {
 	// and counted since the node last had all its connections open, or false
 	// to give up until the node is reported up again. A negative delay also
 	// gives up, and is logged. The driver calls Delay from several goroutines,
-	// at each reconnection, and with attempt 1 when the session connects: a
-	// negative delay there fails Connect with a validation error, and false
-	// means down nodes are not reconnected at all.
+	// at each reconnection, and config.ConfigBuilder.Build calls it once with
+	// attempt 1: a negative delay there fails Build with a validation error,
+	// and false means down nodes are not reconnected at all. A policy that
+	// always returns false turns reconnection off.
 	Delay(attempt int) (time.Duration, bool)
 }
 

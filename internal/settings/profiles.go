@@ -37,24 +37,30 @@ func (p *Profile) InternalBuilt() bool { return !p.unbuilt }
 func InternalDefaultProfile() Profile {
 	return Profile{Consistency: cql.LocalQuorum, SerialConsistency: cql.Option[cql.Consistency]{Value: cql.LocalSerial, Set: true}, Timeout: 30 * time.Second, PageSize: 5000, Prefetch: 1, Retry: retry.Safe{MaxAttempts: 3}}
 }
+
+// ValidateProfile checks the profile. A cql.ValidationError names, in its
+// Field, the config.ProfileBuilder setter that chose the invalid value.
 func (p Profile) ValidateProfile() error {
 	if p.unbuilt {
-		return cqltype.TypeValidation("profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
+		return cqltype.TypeValidation("Profile", "not built: a Profile literal leaves unset fields zero instead of the driver's defaults; build it with config.NewProfile")
 	}
 	if !InternalValidConsistency(p.Consistency) {
-		return cqltype.TypeValidation("consistency", "invalid consistency")
+		return cqltype.TypeValidation("WithConsistency", "unknown consistency %v", p.Consistency)
 	}
 	if p.SerialConsistency.Set && p.SerialConsistency.Value != cql.Serial && p.SerialConsistency.Value != cql.LocalSerial {
-		return cqltype.TypeValidation("serial consistency", "must be SERIAL or LOCAL_SERIAL")
+		return cqltype.TypeValidation("WithSerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", p.SerialConsistency.Value)
 	}
-	if p.Timeout < 0 || p.PageTimeout < 0 {
-		return cqltype.TypeValidation("timeout", "must not be negative")
+	if p.Timeout < 0 {
+		return cqltype.TypeValidation("WithTimeout", "must not be negative, got %v", p.Timeout)
+	}
+	if p.PageTimeout < 0 {
+		return cqltype.TypeValidation("WithPageTimeout", "must not be negative, got %v", p.PageTimeout)
 	}
 	if p.PageSize <= 0 {
-		return cqltype.TypeValidation("page size", "must be positive")
+		return cqltype.TypeValidation("WithPageSize", "must be positive, got %d", p.PageSize)
 	}
 	if p.Prefetch < 0 || p.Prefetch > 1 {
-		return cqltype.TypeValidation("prefetch", "must be zero or one")
+		return cqltype.TypeValidation("WithPrefetch", "must be zero or one, got %d", p.Prefetch)
 	}
 	return nil
 }

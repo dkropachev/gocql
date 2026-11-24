@@ -19,7 +19,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -153,10 +152,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimestamp {
 				t.Fatal("timestamp metadata expected")
 			}
-			got, err := cql.Timestamp(noFromInt(t, row, 0)).Time()
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := cql.Timestamp(noFromInt(t, row, 0)).Time()
 			if got.Before(before.Add(-time.Hour)) || got.After(after.Add(time.Hour)) {
 				t.Fatalf("timestamp outside tolerance: %v", got)
 			}
@@ -287,7 +283,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err := rows.Err(); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := v2ReadOne(context.Background(), session, filtered); !errors.Is(err, cqlerr.ErrNoRows) {
+				if _, err := v2ReadOne(context.Background(), session, filtered); !errors.Is(err, errNoRows) {
 					t.Fatalf("empty single-row result=%v", err)
 				}
 			})
@@ -481,7 +477,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		t.Parallel()
 		skipUnlessSelectWithoutFrom(t)
 		config := createV2Cluster()
-		v2ConfigureRouting(t, config, routing.Options{TokenAware: true, ShuffleReplicas: true})
+		v2ConfigureRouting(t, config, routing.Options{NoLeaderAware: true})
 		session, err := gocql.Connect(context.Background(), mustBuild(t, config))
 		if err != nil {
 			t.Fatal(err)

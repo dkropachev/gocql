@@ -25,7 +25,7 @@ Packages fall into four layers. A package imports only from its own layer
 | 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap`, `internal/cqlproto`, `internal/debounce`, `internal/eventbus`, `internal/streams`, `internal/cqlperf` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, the link registry, and measurement-build counters. Knows nothing about CQL types or the public API. |
 | 1. Vocabulary (public) | `cql`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
 | 2. Engine (internal) | every other `internal/` package, such as `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata` and `internal/session` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
-| 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
+| 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, `routing/routingtest`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
 
 Layer-1 packages depend on each other in this order, lowest first: `cql`;
 `cqlerr`; `retry`; `metadata`; `routing`;
@@ -121,7 +121,7 @@ documented methods.
 - **Enum-like types** keep the protocol's values when the protocol numbers
   them (the zero `cql.Consistency` is ANY, the zero `cql.BatchKind` is
   LOGGED); the others start at a safe zero (`retry.Stop`,
-  `cqlerr.MaybeExecuted`, `event.Unknown`, `cqlerr.WriteTypeUnknown`,
+  `cqlerr.MaybeExecuted`, `event.KindUnknown`, `cqlerr.WriteTypeUnknown`,
   `metadata.ColumnOrderNone`, an invalid `config.Dialect`). A
   setting that may be left unset is a `cql.Option`, never a zero enum. Each
   integer enum has a `String` method that prints `Type(n)` for a value it
@@ -246,9 +246,10 @@ documented methods.
 
 ### `routing` (layer 1)
 
-- **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces,
-  `Options`, `LatencyOptions`, `Info`, `PartitionKey`, `AttemptStart` and
-  `AttemptEvent` (which `Policy.Observe` consumes), the built-in policy
+- **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces, the
+  optional `Validator` and `AttemptObserver` interfaces of a policy,
+  `TokenPartitionerFunc`, `Options`, `LatencyOptions`, `Info`, `PartitionKey`
+  and `AttemptEvent` (which `AttemptObserver.Observe` consumes), the built-in policy
   constructors (`NewPolicy`, `SingleTarget`), and the functions a custom
   policy picks with (`PlanOf`, `HostRoutes`, `ReplicaRoutes`). The built-in
   policies are the session's: `NewPolicy` validates its options and returns
@@ -277,10 +278,11 @@ documented methods.
 ### `observe` (layer 1)
 
 - **Contains:** `Observer`, any value implementing one or more of the hook
-  interfaces `RequestObserver` and `AttemptObserver`; `LifecycleObserver`;
-  and their event payloads (`RequestStart`, `RequestEvent`,
-  `LifecycleEvent`). `AttemptObserver.StartAttempt` uses
-  `routing.AttemptStart` and `routing.AttemptEvent`, and
+  interfaces `RequestObserver` and `AttemptObserver`; their function
+  adapters `RequestObserverFunc` and `AttemptObserverFunc`; `Join`, which
+  combines observers; and their event payloads (`RequestStart`,
+  `RequestEvent`, `AttemptStart`). `AttemptObserver.StartAttempt` ends with
+  `routing.AttemptEvent`, which routing policies also observe, and
   `endpoint.ConvictionEvent` stays with the conviction policy.
 - **Must not contain:** exporters. OpenTelemetry and Prometheus integrations
   are `contrib/` modules that implement these interfaces.
@@ -321,6 +323,14 @@ documented methods.
 
 - **Contains:** reading CQL trace sessions through a `Session`.
 - **Must not contain:** tracing of the client itself, which is `observe`.
+
+### `routing/routingtest` (layer 3)
+
+- **Contains:** `NewSnapshot`, which builds a `metadata.Snapshot` from hosts,
+  schema, token ranges and tablets for the tests of a routing policy. It is
+  layer 3 because it builds the engine's snapshot, and importing it links the
+  engine, so the built-in policies route over its snapshots.
+- **Must not contain:** a session or anything that dials.
 
 ### Engine packages that share the node and connection work
 

@@ -157,7 +157,7 @@ func (o *inputOwner) InternalWait(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return transport.ContextError(ctx)
 	}
 }
 func (o *inputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {
@@ -210,6 +210,32 @@ type InternalExecutionRequest struct {
 	// values.
 	hasCounter   bool
 	hasTimestamp bool
+	// idempotent is the statement's cql.Statement.Idempotent, or for a
+	// batch whether every member is; Options.Idempotent overrides it.
+	idempotent bool
+	// kindInferred reports that routing.Kind is OrdinaryStatement only
+	// because executionKind inferred it: as a batch member the statement
+	// stays UnknownStatement.
+	kindInferred bool
+}
+
+// memberRouting returns the routing r's statement joins a batch with.
+func (r *InternalExecutionRequest) memberRouting() *routing2.Info {
+	if !r.kindInferred {
+		return &r.routing
+	}
+	info := r.routing
+	info.Kind = cql.UnknownStatement
+	return &info
+}
+
+// isIdempotent reports whether r may run more than once: its options'
+// Idempotent when set, else its statement's.
+func (r *InternalExecutionRequest) isIdempotent() bool {
+	if o := r.options.InternalOptions.Idempotent; o.Set {
+		return o.Value
+	}
+	return r.idempotent
 }
 
 // batchKind returns the kind of batch r sends, unset when r is not a batch.

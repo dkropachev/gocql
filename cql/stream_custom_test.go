@@ -49,7 +49,8 @@ func (c customStreamDecoder) Compile(t DataType) (CompiledStreamValue[customStre
 	}
 	return customStreamPlan{integer, blob, a.Type, b.Type}, nil
 }
-func (p customStreamPlan) Reset(dst *customStreamPair) { p.integer.Reset(&dst.A); p.blob.Reset(&dst.B) }
+func (customStreamDecoder) Reset(dst *customStreamPair) { *dst = customStreamPair{B: dst.B[:0]} }
+func (p customStreamPlan) Reset(dst *customStreamPair)  { p.integer.Reset(&dst.A); p.blob.Reset(&dst.B) }
 func (p customStreamPlan) DecodeInto(r *StreamValueReader, dst *customStreamPair) error {
 	if r.Context() == nil {
 		return errors.New("missing context")
@@ -63,6 +64,7 @@ func (p customStreamPlan) DecodeInto(r *StreamValueReader, dst *customStreamPair
 type nilStreamValue struct{}
 
 func (nilStreamValue) Compile(DataType) (CompiledStreamValue[int32], error) { return nil, nil }
+func (nilStreamValue) Reset(*int32)                                         {}
 
 type nilStreamRows struct{}
 
@@ -77,14 +79,11 @@ type nilBufferedParams struct{}
 
 func (nilBufferedParams) Compile(Columns) (CompiledParams[int32], error) { return nil, nil }
 
-type customStreamNoReset struct{}
+type customStreamResettable struct{}
 
-func (customStreamNoReset) Compile(t DataType) (CompiledStreamValue[int32], error) {
+func (customStreamResettable) Compile(t DataType) (CompiledStreamValue[int32], error) {
 	return StreamInt32.Compile(t)
 }
-
-type customStreamResettable struct{ customStreamNoReset }
-
 func (customStreamResettable) Reset(dst *int32) { *dst = 0 }
 
 // streamWords records the reader's view of a cell: its type and state and,

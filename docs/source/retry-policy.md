@@ -3,28 +3,30 @@
 `Profile.Retry` is a `retry.Policy`: `Decide(retry.Attempt) retry.Decision`.
 The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
 `ProfileBuilder.WithRetry`. `retry.Attempt` carries the failed attempt's error,
-1-based number, idempotence (`exec.Options.Idempotent`), consistency, whether
+1-based number, idempotence (`Statement.Idempotent`, or
+`exec.Options.Idempotent` when set), consistency, whether
 it is conditional, the kind of batch it sends (`Batch`, unset for a single
 statement), and `ExecutionStatus`, which reports whether the attempt
 may have changed data (see [Errors](errors.md)). A `retry.Decision` selects
-`retry.Stop` (the zero value), `retry.Same` (the same host), `retry.Next` (the
-next host of the plan) or `retry.IgnoreWrite` (treat the failed write as
-successful), with an optional `Consistency` for the next attempt and a
+`retry.Stop` (the zero value), `retry.Same` (the same host) or `retry.Next`
+(the next host of the plan), with an optional `Consistency` for the next attempt and a
 `Delay` before it; `Result.AchievedConsistency` reports the consistency that
 succeeded. `Decide` runs on the request goroutine and must not block.
 
 `exec.Options.Retry == nil` inherits the selected profile's retry policy. Use
 `exec.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
-replacing other profile settings. `Profile.Retry == nil` disables retries in a
-complete profile; `retry.Never{}` can express that choice there too.
+replacing other profile settings. In a profile, `ProfileBuilder.WithRetry(nil)`
+and a nil `Profile.Retry` mean the default, `retry.Safe{MaxAttempts: 3}`;
+`WithRetry(retry.Never{})` disables retries.
 
 `retry.Safe` bounds attempts (`MaxAttempts`, the first included; zero means
 three) and retries only when replay is safe. Among server errors, it moves to
 the next host on Unavailable, Overloaded and Bootstrapping, which it treats as
 not executed, except for a non-idempotent unlogged or counter batch (below);
-retries in place a read timeout that had enough replicas but no data; and moves
-an idempotent request on after a coordinator server error
-(`cqlerr.CodeServer`). Every other server error stops, idempotent or not: write
+retries in place a read timeout that had enough replicas but no data, and an
+idempotent logged batch whose batch log write timed out
+(`cqlerr.WriteTypeBatchLog`); and moves an idempotent request on after a
+coordinator server error (`cqlerr.CodeServer`). Every other server error stops, idempotent or not: write
 timeouts, read timeouts with data or too few replicas, read and write failures,
 and deterministic errors. A failure that is not a server error, such as a lost
 connection, is replayed on the next host only for an idempotent request or an
@@ -49,8 +51,9 @@ to ScyllaDB as well: the driver does not rely on the order in which a server
 checks a batch's partitions, and it covers conditional batches too, since a
 batch whose statements the driver did not classify counts as conditional. A
 logged batch is checked whole before its batch log is written, so it is
-retried as other requests are. Mark a batch idempotent
-(`exec.Options.Idempotent`) when replaying all of it is safe.
+retried as other requests are. A batch is idempotent when every member's
+statement is (`Statement.Idempotent`); `exec.Options.Idempotent` overrides
+that for one execution when replaying all of it is safe.
 
 Retries reuse encoded binding inputs and compiled result plans. They do not
 invoke application encoders again. Streaming may retry only before any

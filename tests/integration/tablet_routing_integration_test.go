@@ -45,12 +45,12 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *cql.DynamicRow) error {
 			rows = append(rows, r.Clone())
 			return nil
-		}, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.ID}, PageSize: cql.Some(cql.Unpaged)})
+		}, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.HostID}, PageSize: cql.Unpaged})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if info.HostID != host.ID {
-			t.Fatal("authoritative read lost exact host pin", info.HostID, host.ID)
+		if info.HostID != host.HostID {
+			t.Fatal("authoritative read lost exact host pin", info.HostID, host.HostID)
 		}
 		observation.readNodes = append(observation.readNodes, info.HostID)
 		if len(rows) == 0 {

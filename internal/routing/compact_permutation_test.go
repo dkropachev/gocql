@@ -23,14 +23,14 @@ import (
 func compactFixture(n int) (*MetadataSnapshot, routing.Info) {
 	hosts := make([]HostSnapshot, n+320)
 	for i := range hosts {
-		binary.BigEndian.PutUint64(hosts[i].ID[8:], uint64(i+1000))
+		binary.BigEndian.PutUint64(hosts[i].HostID[8:], uint64(i+1000))
 		hosts[i].Datacenter, hosts[i].Rack = "local", "rack"
 		hosts[i].Enabled, hosts[i].Connected, hosts[i].Up, hosts[i].Shards = true, true, true, 4
 	}
 	replicas := make([]Target, n)
 	for i := range replicas {
 		// Even small replica sets refer to global host positions above 255.
-		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].ID, ShardID: cql.Option[uint32]{Value: uint32(i % 4), Set: true}}
+		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].HostID, ShardID: cql.Option[uint32]{Value: uint32(i % 4), Set: true}}
 	}
 	m := NewMetadataSnapshot(SnapshotState{
 		InternalHosts: hosts, InternalHostIndex: InternalBuildRoutingHostIndex(hosts),
@@ -94,7 +94,7 @@ func TestCompactPermutation(t *testing.T) {
 						t.Run(fmt.Sprintf("replicas%d/seed%d/consistency%d", n, seed, consistency), func(t *testing.T) {
 							m, info := compactFixture(n)
 							info.Consistency = consistency
-							policy := &InternalRoutingPolicy{InternalOptions: routing.Options{TokenAware: true}, seed: seed}
+							policy := &InternalRoutingPolicy{InternalOptions: routing.Options{FixedReplicaOrder: true, NoLeaderAware: true}, seed: seed}
 							replicas := slices.Clone(SnapshotData(m).InternalRanges["ks"][0].Replicas)
 							plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
 							if (plan.permutation != nil) != (n > 16) {
@@ -143,7 +143,7 @@ func TestCompactPermutation(t *testing.T) {
 								SnapshotData(m).InternalHosts = hosts
 								SnapshotData(m).InternalHostIndex = InternalBuildRoutingHostIndex(hosts)
 								target := func(i int, shard uint32) Target {
-									return Target{HostID: hosts[i].ID, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
+									return Target{HostID: hosts[i].HostID, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 								}
 								replicas := []Target{target(2, 0), target(1, 1), target(0, 0), target(0, 1), target(6, 0), target(4, 0), target(7, 0)}
 								for len(replicas) < n {
@@ -154,9 +154,9 @@ func TestCompactPermutation(t *testing.T) {
 								root = root.Put(1, &InternalTabletRange{InternalSpan: metadata2.TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cql.Option[uint64]{Set: true}})
 								var placements *tabletPlacementTree
 								SnapshotData(m).InternalPlacements = placements.Put(InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root})
-								policy := &InternalRoutingPolicy{InternalOptions: routing.Options{TokenAware: true, LeaderAware: leader, Datacenter: "local", Rack: "rack", AllowRemote: remote}}
+								policy := &InternalRoutingPolicy{InternalOptions: routing.Options{NoLeaderAware: !leader, Datacenter: "local", Rack: "rack", AllowRemote: remote, FixedReplicaOrder: true}}
 								if slow {
-									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
+									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{hosts[2].HostID: time.Now().Add(time.Hour)}})
 								}
 								info.Kind = cql.ConditionalStatement
 								got := compactDrain(t, NewPlan(policy, info, m), len(hosts)+n)
@@ -165,10 +165,10 @@ func TestCompactPermutation(t *testing.T) {
 									want = append(want, target(2, 0))
 								}
 								for _, i := range []int{3, 4, 7} {
-									want = append(want, Target{HostID: hosts[i].ID})
+									want = append(want, Target{HostID: hosts[i].HostID})
 								}
 								if remote {
-									want = append(want, Target{HostID: hosts[5].ID})
+									want = append(want, Target{HostID: hosts[5].HostID})
 								}
 								if remote && leader && !slow {
 									first := target(2, 0)
@@ -201,9 +201,9 @@ func TestCompactPermutation(t *testing.T) {
 						m, info := compactFixture(n)
 						signal := new(atomic.Uint64)
 						SnapshotData(m).InternalPlacementSignal = signal
-						policy := &InternalRoutingPolicy{InternalOptions: routing.Options{TokenAware: true}}
+						policy := &InternalRoutingPolicy{InternalOptions: routing.Options{FixedReplicaOrder: true, NoLeaderAware: true}}
 						// A second pass must also remain clear of stale inline and int indexes.
-						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{SnapshotData(m).InternalHosts[0].ID: time.Now().Add(time.Hour)}})
+						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{SnapshotData(m).InternalHosts[0].HostID: time.Now().Add(time.Hour)}})
 						plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
 						seen := make(map[cql.UUID]bool)
 						if consumed != 0 {
@@ -237,7 +237,7 @@ func TestCompactPermutation(t *testing.T) {
 		t.Run("ConcurrentIndependent", func(t *testing.T) {
 			for _, n := range []int{16, 17, 257} {
 				m, info := compactFixture(n)
-				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{TokenAware: true, ShuffleReplicas: true}}
+				policy := &InternalRoutingPolicy{InternalOptions: routing.Options{NoLeaderAware: true}}
 				var wg sync.WaitGroup
 				for range 16 {
 					wg.Add(1)
@@ -274,7 +274,7 @@ func TestCompactPermutation(t *testing.T) {
 		// A policy that does not shuffle per request applies, for each replica
 		// count, the permutation it computed once when it was made.
 		t.Run("FixedMatchesShuffle", func(t *testing.T) {
-			p := codecMust(NewRoutingPolicy(routing.Options{TokenAware: true})).(*InternalRoutingPolicy)
+			p := codecMust(NewRoutingPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})).(*InternalRoutingPolicy)
 			for n := 0; n <= 16; n++ {
 				want := originalPermutation(n, p.seed, false)
 				for i, v := range want {
@@ -283,7 +283,7 @@ func TestCompactPermutation(t *testing.T) {
 					}
 				}
 			}
-			if shuffled := codecMust(NewRoutingPolicy(routing.Options{TokenAware: true, ShuffleReplicas: true})).(*InternalRoutingPolicy); shuffled.fixed != nil {
+			if shuffled := codecMust(NewRoutingPolicy(routing.Options{NoLeaderAware: true})).(*InternalRoutingPolicy); shuffled.fixed != nil {
 				t.Fatal("per-request shuffle kept a fixed permutation")
 			}
 		})

@@ -30,6 +30,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -46,7 +47,7 @@ func TestTablets(t *testing.T) {
 		t.Run("ConcurrentPlans", func(t *testing.T) {
 			s := testSession(t)
 			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Kind: cql.ConditionalStatement}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, ShuffleReplicas: true}))
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{NoLeaderAware: true}))
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
 				wg.Add(1)
@@ -91,7 +92,7 @@ func TestTablets(t *testing.T) {
 			// routed by, unknown or stale; the next request goes to the
 			// hinted replica's shard first.
 			s := testSession(t)
-			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true}))
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{FixedReplicaOrder: true, NoLeaderAware: true}))
 			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 50, Set: true}, Kind: cql.OrdinaryStatement}
 			for _, replica := range []metadata.Target{hTarget(1, 2), hTarget(2, 3)} {
 				stamp := s.CaptureTabletFeedback(info, s.Metadata())
@@ -262,7 +263,7 @@ func TestTablets(t *testing.T) {
 			info := routing2.Info{Keyspace: "ks", Table: "table"}
 			first := s.Metadata()
 			stamp := s.CaptureTabletFeedback(info, first)
-			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Set: true}})
+			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[0].HostID, ShardID: cql.Option[uint32]{Set: true}})
 			s.QueueTabletFeedback(h, stamp)
 			testDrain(s)
 			a := s.Metadata()
@@ -279,7 +280,7 @@ func TestTablets(t *testing.T) {
 			}
 			// A numerically smaller opaque version is a valid update. The stale request
 			// captured before the first update cannot overwrite its overlapping range.
-			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
+			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[1].HostID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
 			s.QueueTabletFeedback(moved, stamp)
 			testDrain(s)
 			if s.Metadata() != a {
@@ -311,7 +312,7 @@ func TestTablets(t *testing.T) {
 			}
 			beforeEpoch := s.Metadata()
 			oldStamp := s.CaptureTabletFeedback(info, beforeEpoch)
-			lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})), routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
+			lazy := implRouting.NewPlan(codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{FixedReplicaOrder: true, NoLeaderAware: true})), routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 20, Set: true}}, beforeEpoch)
 
 			p.InternalMu.Lock()
 			p.InternalBumpTableRevisionLocked(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"})
@@ -324,7 +325,8 @@ func TestTablets(t *testing.T) {
 			// Even before snapshot publication, a source drop/recreate rejects old replies.
 			before := s.Metadata()
 			sourceStamp := s.CaptureTabletFeedback(info, before)
-			dropped := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"].Clone()
+			dropped := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"]
+			dropped = implMetadata.InternalCloneV2Keyspace(dropped)
 			delete(dropped.Tables, "table")
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", dropped)
 			s.QueueTabletFeedback(h, sourceStamp)
@@ -334,7 +336,7 @@ func TestTablets(t *testing.T) {
 			}
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(before).InternalKeyspaces["ks"])
 			ks := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"]
-			ks = ks.Clone()
+			ks = implMetadata.InternalCloneV2Keyspace(ks)
 			table := *ks.Tables["table"]
 			table.ID = cql.UUID{2}
 			ks.Tables["table"] = &table
@@ -388,11 +390,11 @@ func TestTablets(t *testing.T) {
 			}
 			set(hTarget(3, 1), hTarget(2, 2), hTarget(1, 3))
 			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Kind: cql.ConditionalStatement}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true}))
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)
 				first, ok := implRouting.InternalNextTarget(plan)
-				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].ID || !first.StrictShard || first.ShardID.Value != 1 {
+				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].HostID || !first.StrictShard || first.ShardID.Value != 1 {
 					t.Fatal("eligible remote leader was not strict first", first)
 				}
 				if got := v2PlanIDs(plan); !bytes.Equal(got, []byte{1, 2, 4}) {
@@ -421,13 +423,13 @@ func TestTablets(t *testing.T) {
 					}
 				})
 			}
-			local := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1"}))
+			local := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "a", Rack: "r1", FixedReplicaOrder: true}))
 			if ids := v2PlanIDs(implRouting.NewPlan(local, info, m)); bytes.Contains(ids, []byte{3}) {
 				t.Fatal("excluded remote leader admitted", ids)
 			}
 			// Explicit latency penalties apply to leaders and LWT without admitting hosts.
 			p := policy.(*implRouting.InternalRoutingPolicy)
-			p.InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+			p.InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 			if got := v2PlanIDs(implRouting.NewPlan(p, info, m)); !bytes.Equal(got, []byte{1, 2, 4, 3}) {
 				t.Fatal("penalized leader order", got)
 			}

@@ -26,7 +26,8 @@ import (
 // batch is checked whole before its batch log is written, so it is retried.
 //
 // It retries in place a read timeout that had enough replicas but no data,
-// and moves an idempotent request on after a coordinator server error. Every
+// and an idempotent logged batch whose batch log write timed out. It moves an
+// idempotent request on after a coordinator server error. Every
 // other server error stops. Any other failure moves on only for an idempotent
 // request or an attempt whose status is cqlerr.NotExecuted. The caller's
 // cancellation or deadline never retries.
@@ -54,6 +55,9 @@ func (p Safe) Decide(a Attempt) Decision {
 		return Decision{Action: Next}
 	}
 	if read, ok := errors.AsType[*cqlerr.ReadTimeoutError](a.Err); ok && read.Received >= read.BlockFor && !read.DataPresent {
+		return Decision{Action: Same}
+	}
+	if write, ok := errors.AsType[*cqlerr.WriteTimeoutError](a.Err); ok && a.Idempotent && write.WriteType == cqlerr.WriteTypeBatchLog {
 		return Decision{Action: Same}
 	}
 	if server, ok := errors.AsType[cqlerr.ServerError](a.Err); ok {

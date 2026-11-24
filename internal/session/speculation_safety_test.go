@@ -70,7 +70,7 @@ func TestSpeculationSafety(t *testing.T) {
 			}
 			_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
-		if err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true}); err != nil {
+		if err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)}); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(5 * time.Second)
@@ -121,7 +121,7 @@ func TestSpeculationSafety(t *testing.T) {
 			_, _ = peers[1].Write(serverError(t, stream, cqlerr.CodeOverloaded, nil))
 			close(release)
 		}()
-		err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true})
+		err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)})
 		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 		if !ok {
 			t.Fatalf("not an ExecutionError: %v", err)
@@ -132,7 +132,7 @@ func TestSpeculationSafety(t *testing.T) {
 		hosts := map[cql.UUID]int{}
 		for _, a := range failure.Attempts {
 			hosts[a.HostID] = a.Number
-			if a.Status != cqlerr.NotExecuted {
+			if a.ExecutionStatus != cqlerr.NotExecuted {
 				t.Fatalf("attempt %+v", a)
 			}
 		}
@@ -160,7 +160,7 @@ func TestSpeculationSafety(t *testing.T) {
 		ctx, cancel := context.WithCancel(bounded)
 		defer cancel()
 		go func() { wg.Wait(); cancel() }()
-		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: profileFor(routes, retry.Never{}), Idempotent: true}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)}))
 		if page != nil {
 			page.Close()
 		}
@@ -175,7 +175,7 @@ func TestSpeculationSafety(t *testing.T) {
 			t.Fatalf("status %v, result %d attempts, error lists %+v; want 2 possibly applied", failure.ExecutionStatus(), failure.Result.Attempts, failure.Attempts)
 		}
 		for i, a := range failure.Attempts {
-			if a.Number != i+1 || a.HostID != routes.targets[i].HostID || a.Status != cqlerr.MaybeExecuted || !errors.Is(a.Err, context.Canceled) {
+			if a.Number != i+1 || a.HostID != routes.targets[i].HostID || a.ExecutionStatus != cqlerr.MaybeExecuted || !errors.Is(a.Err, context.Canceled) {
 				t.Fatalf("attempt %d: %+v", i+1, a)
 			}
 		}
@@ -215,7 +215,7 @@ func TestSpeculationSafety(t *testing.T) {
 			}
 			_, _ = peers[2].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
-		if err := run(&Options{Profile: profileFor(routes, retry.Safe{}), Idempotent: true}); err != nil {
+		if err := run(&Options{Profile: profileFor(routes, retry.Safe{}), Idempotent: cql.Some(true)}); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(5 * time.Second)

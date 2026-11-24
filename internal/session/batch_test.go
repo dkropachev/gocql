@@ -141,7 +141,7 @@ func TestBatch(t *testing.T) {
 			if err := batch.admit(s, &members[i]); err != nil {
 				t.Fatalf("member %d: %v", i, err)
 			}
-			batch.appendEntry(s, cqlText{}, "UPDATE", &members[i], model.EncodedValues{}, 0)
+			batch.appendEntry(s, cqlText{}, "UPDATE", &members[i], false, model.EncodedValues{}, 0)
 			if i == 0 && batch.routing.Keyspace != "a" {
 				t.Fatalf("keyspace before a routable member = %q, want a", batch.routing.Keyspace)
 			}
@@ -525,11 +525,11 @@ func TestBatch(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		var batch Batch
 		for i := range implCluster.MaxBatchStatements {
-			if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, model.EncodedValues{}); err != nil {
+			if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, false, model.EncodedValues{}); err != nil {
 				t.Fatalf("statement %d: %v", i+1, err)
 			}
 		}
-		err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, model.EncodedValues{})
+		err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: cql.OrdinaryStatement}, false, model.EncodedValues{})
 		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 			t.Fatalf("statement %d: %v, want a cql.ValidationError", implCluster.MaxBatchStatements+1, err)
 		}
@@ -579,7 +579,7 @@ func TestBatch(t *testing.T) {
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, false, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}

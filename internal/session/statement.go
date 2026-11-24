@@ -85,10 +85,11 @@ type Bound[R any] struct {
 // preparedStatement contains the transport preparation and parameter plan shared
 // by buffered and streaming preparation. Result decoding is selected separately.
 type preparedStatement[P any] struct {
-	state   *InternalPreparedState
-	params  cql.CompiledParams[P]
-	columns cql.Columns
-	kind    cql.StatementKind
+	state      *InternalPreparedState
+	params     cql.CompiledParams[P]
+	columns    cql.Columns
+	kind       cql.StatementKind
+	idempotent bool
 }
 
 func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statement *binding.Statement[P, R], options PrepareOptions) (preparedStatement[P], error) {
@@ -96,13 +97,13 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if ctx == nil || s == nil {
 		return empty, cqltype.TypeValidation("prepare", "nil context or session")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return empty, err
 	}
 	if s.Closed() {
 		return empty, cqlerr.ErrClosed
 	}
-	if options.HostID.Set && options.HostID.Value.IsEmpty() {
+	if options.HostID.Set && options.HostID.Value.IsZero() {
 		return empty, cqltype.TypeValidation("prepare host", "empty UUID")
 	}
 	if options.privateStorage.InternalConnection != nil && !implCluster.InternalConnectionOwnedBy(options.privateStorage.InternalConnection, s) {
@@ -131,7 +132,22 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if confirmedKind == cql.ConditionalStatement || kind == cql.UnknownStatement {
 		kind = confirmedKind
 	}
-	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind}, nil
+	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind, idempotent: statement.Idempotent}, nil
+}
+
+// executionKind returns the kind a statement of kind whose rows decode into R
+// executes as, and whether it was inferred. A statement left
+// UnknownStatement whose R is cql.EmptyRow executes as an OrdinaryStatement:
+// it reads no rows, so it could not read a condition's [applied] column
+// either. As a batch member it stays unclassified, since a conditional
+// batch's members rarely decode rows of their own.
+func executionKind[R any](kind cql.StatementKind) (cql.StatementKind, bool) {
+	if kind == cql.UnknownStatement {
+		if _, ok := any((*R)(nil)).(*cql.EmptyRow); ok {
+			return cql.OrdinaryStatement, true
+		}
+	}
+	return kind, false
 }
 
 func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement binding.Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
@@ -139,7 +155,8 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	if err != nil {
 		return nil, err
 	}
-	state, plan, columns, kind := prepared.state, prepared.params, prepared.columns, prepared.kind
+	state, plan, columns := prepared.state, prepared.params, prepared.columns
+	kind, inferred := executionKind[R](prepared.kind)
 	var rows cql.CompiledRow[R]
 	// Cassandra omits conditional result metadata from PREPARE. Unknown and
 	// conditional statements therefore defer absent result shapes until EXECUTE;
@@ -158,6 +175,8 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	return func() *Prepared[P, R] {
 		opaqueStorageValue := new(Prepared[P, R])
 		opaqueStorageValue.privateStorage.kind = kind
+		opaqueStorageValue.privateStorage.kindInferred = inferred
+		opaqueStorageValue.privateStorage.idempotent = prepared.idempotent
 		opaqueStorageValue.privateStorage.InternalState = state
 		opaqueStorageValue.privateStorage.params = plan
 		opaqueStorageValue.privateStorage.rows = statement.Rows
@@ -219,7 +238,7 @@ func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], 
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuex := new(Bound[R])
-		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind}, hasCounter: p.privateStorage.InternalState.hasCounter}
+		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind}, hasCounter: p.privateStorage.InternalState.hasCounter, idempotent: p.privateStorage.idempotent, kindInferred: p.privateStorage.kindInferred}
 		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.rows
 		opaqueStorageValuex.privateStorage.plans = p.privateStorage.plans
 		return opaqueStorageValuex
@@ -243,9 +262,10 @@ func bindUnprepared[P, R any](s binding.Statement[P, R], columns cql.Columns, va
 	if err != nil {
 		return nil, err
 	}
+	kind, inferred := executionKind[R](s.Kind)
 	return func() *Bound[R] {
 		opaqueStorageValuexx := new(Bound[R])
-		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Kind: s.Kind}, hasCounter: hasCounterColumn(columns)}
+		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Kind: kind}, hasCounter: hasCounterColumn(columns), idempotent: s.Idempotent, kindInferred: inferred}
 		opaqueStorageValuexx.privateStorage.InternalRows = s.Rows
 		opaqueStorageValuexx.privateStorage.plans = &InternalResultPlanCache[R]{}
 		return opaqueStorageValuexx
@@ -285,7 +305,13 @@ type PreparedStorage[P, R any] struct {
 	plans         *InternalResultPlanCache[R]
 	pool          *queryPool[P, R]
 	poolOnce      sync.Once
-	kind          cql.StatementKind
+	// kind is the kind executions run as; kindInferred reports that
+	// executionKind made it ordinary, so that a batch member stays
+	// unclassified.
+	kind         cql.StatementKind
+	kindInferred bool
+	// idempotent is the statement's cql.Statement.Idempotent.
+	idempotent bool
 }
 
 type BoundStorage[R any] struct {

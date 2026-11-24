@@ -64,7 +64,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
-		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, TCPKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = endpoint.DefaultDialer{}.DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {
@@ -129,21 +129,21 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 			}
 		}
 	}
-	if config.ReceiveBuffer.Set {
+	if config.ReceiveBuffer > 0 {
 		setter, ok := c.(interface{ SetReadBuffer(int) error })
 		if !ok {
 			return unsupported("receive buffer")
 		}
-		if err := setter.SetReadBuffer(config.ReceiveBuffer.Value); err != nil {
+		if err := setter.SetReadBuffer(config.ReceiveBuffer); err != nil {
 			return err
 		}
 	}
-	if config.SendBuffer.Set {
+	if config.SendBuffer > 0 {
 		setter, ok := c.(interface{ SetWriteBuffer(int) error })
 		if !ok {
 			return unsupported("send buffer")
 		}
-		if err := setter.SetWriteBuffer(config.SendBuffer.Value); err != nil {
+		if err := setter.SetWriteBuffer(config.SendBuffer); err != nil {
 			return err
 		}
 	}
@@ -180,7 +180,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	} else if path != "" {
 		snapshot.Address = netip.AddrPort{}
 		if d.InternalUnixHostID != nil {
-			if local := d.InternalUnixHostID(); !local.IsEmpty() && !snapshot.ID.IsEmpty() && local != snapshot.ID {
+			if local := d.InternalUnixHostID(); !local.IsZero() && !snapshot.HostID.IsZero() && local != snapshot.HostID {
 				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
 			}
 		}
@@ -277,7 +277,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 		if err != nil {
 			return err
 		}
-		if current.ID != snapshot.ID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || logicalV2TLSAddress(host) != logicalAddress {
+		if current.HostID != snapshot.HostID || current.Address != snapshot.Address || current.Datacenter != snapshot.Datacenter || current.Rack != snapshot.Rack || logicalV2TLSAddress(host) != logicalAddress {
 			return cqltype.TypeValidation("dial target generation", "host identity/endpoint changed during opening")
 		}
 		return nil

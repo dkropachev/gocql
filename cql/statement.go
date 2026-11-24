@@ -10,7 +10,8 @@ import (
 // Statement pairs CQL text with a typed parameter encoder and row decoder.
 // Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
 // BindMarkers supplies parameter metadata for unprepared execution; Prepare
-// takes that metadata from the server. Kind classifies conditional statements.
+// takes that metadata from the server. Kind classifies conditional statements,
+// and Idempotent marks a statement safe to run more than once.
 //
 // The zero Statement has no CQL, which preparation and execution reject with a
 // ValidationError.
@@ -21,11 +22,23 @@ type Statement[P, R any] struct {
 	Params ParamEncoder[P]
 	// Rows decodes R. It may be nil when R is EmptyRow.
 	Rows RowDecoder[R]
-	// BindMarkers supplies parameter metadata for unprepared execution.
-	// Preparation obtains this metadata from the server instead.
+	// BindMarkers supplies parameter metadata for unprepared execution, which
+	// rejects a statement with parameters (P other than EmptyParams) that has
+	// none, unless Params is DynamicParams: its markers then take the types
+	// of the values. Preparation obtains this metadata from the server
+	// instead.
 	BindMarkers Columns
 	// Kind classifies ordinary and conditional statements for safe execution.
+	// A statement left UnknownStatement whose R is EmptyRow executes as an
+	// OrdinaryStatement, since it reads no rows; see UnknownStatement.
 	Kind StatementKind
+	// Idempotent marks the statement safe to run more than once: speculative
+	// execution requires it, and retry.Safe moves a request that may have
+	// executed to another host only when it is set. Prepared statements,
+	// their queries and batch members carry it; a batch is idempotent when
+	// every member is. exec.Options.Idempotent overrides it for one
+	// execution.
+	Idempotent bool
 }
 
 // ParseConsistency parses a consistency name, ignoring case.

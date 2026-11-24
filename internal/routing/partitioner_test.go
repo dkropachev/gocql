@@ -41,7 +41,7 @@ func blobCell(b []byte) model.EncodedCell {
 func partitionerSnapshot(cluster string) *implRouting.MetadataSnapshot {
 	registry := settings.DefaultConfig().Partitioners
 	registry["my.Partitioner"] = constPartitioner(42)
-	key := []*metadata.Column{{Keyspace: "ks", Name: "k", Type: "blob", Kind: metadata.ColumnPartitionKey}}
+	key := []*metadata.Column{{Keyspace: "ks", Name: "k", Type: "blob", Kind: metadata.ColumnKindPartitionKey}}
 	table := func(partitioner string) *metadata.Table {
 		return &metadata.Table{Keyspace: "ks", PartitionKey: key, Options: metadata.TableOptions{Partitioner: partitioner}}
 	}

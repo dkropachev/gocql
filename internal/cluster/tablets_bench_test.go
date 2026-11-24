@@ -90,7 +90,7 @@ func BenchmarkTablets(b *testing.B) {
 						other := implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: fmt.Sprintf("other%d", i)}
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(other, routing.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalRanges: root}))
 					}
-					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})).(*routing.InternalRoutingPolicy)
+					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{FixedReplicaOrder: true, NoLeaderAware: true})).(*routing.InternalRoutingPolicy)
 					var plan routing.InternalLazyRoutingPlan
 					// The request is a prepared statement's, whose placement cache
 					// finds its table.

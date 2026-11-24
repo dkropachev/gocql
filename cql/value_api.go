@@ -104,7 +104,8 @@ func encodeValue[T any](typ DataType, encoder Encoder[T], value T, owned bool) (
 }
 
 // DecodeValue checks the requested type before invoking the decoder. Unset is
-// an input-binding state and is never admitted as a result value.
+// an input-binding state and is never admitted as a result value. The decoder
+// sees an EmptyCell value as a response holds it: Present, with an empty body.
 func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
 	var zero T
 	if err := validateDataType(value.typ); err != nil {
@@ -123,5 +124,9 @@ func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
 	if value.state == Unset {
 		return zero, typeValidation("state", "unset cannot be decoded as a result")
 	}
-	return compiled.Decode(newValueReader(value.typ, value.state, bytesChain(value.body), bytesLease(value.body)))
+	state := value.state
+	if state == EmptyCell {
+		state = Present
+	}
+	return compiled.Decode(newValueReader(value.typ, state, bytesChain(value.body), bytesLease(value.body)))
 }

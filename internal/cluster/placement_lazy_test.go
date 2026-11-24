@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/routing"
@@ -56,7 +57,7 @@ func TestTabletIdentityCapturedSource(t *testing.T) {
 	ks, _ := md.InternalKeyspaceMetadata.InternalGetKeyspace("ks")
 
 	// The source changed before the request was sent: the stamp sees it.
-	recreated := ks.Clone()
+	recreated := implMetadata.InternalCloneV2Keyspace(ks)
 	table := *recreated.Tables["table"]
 	table.ID = cql.UUID{2}
 	recreated.Tables["table"] = &table

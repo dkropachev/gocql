@@ -158,7 +158,7 @@ func populatedColumnMetadata() *metadata.Column {
 		Type:            "text",
 		ClusteringOrder: metadata.ColumnOrderAsc,
 		ComponentIndex:  1,
-		Kind:            metadata.ColumnRegular,
+		Kind:            metadata.ColumnKindRegular,
 	}
 }
 

@@ -25,6 +25,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/pool"
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
+	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/retry"
@@ -271,37 +272,50 @@ func TestDriverConfigReport(t *testing.T) {
 		for _, tt := range []struct {
 			name   string
 			policy implRouting.RoutingPolicy
+			config settings.Config
 			want   queryLoadBalancingReport
 		}{
 			{
 				name:   "not token-aware",
-				policy: builtin(publicRouting.Options{}),
+				policy: builtin(publicRouting.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}},
 			},
 			{
 				name:   "token-aware, fixed replica order",
-				policy: builtin(publicRouting.Options{TokenAware: true}),
+				policy: builtin(publicRouting.Options{FixedReplicaOrder: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false)},
 			},
 			{
 				name:   "token-aware, shuffled, remote allowed",
-				policy: builtin(publicRouting.Options{TokenAware: true, ShuffleReplicas: true, AllowRemote: true}),
+				policy: builtin(publicRouting.Options{AllowRemote: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: tokenAware("shuffle", true)},
 			},
 			{
 				name:   "latency-aware",
-				policy: builtin(publicRouting.Options{TokenAware: true, Latency: publicRouting.LatencyOptions{Enabled: true}}),
+				policy: builtin(publicRouting.Options{Latency: publicRouting.LatencyOptions{Enabled: true}, FixedReplicaOrder: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: latency},
 			},
 			{
 				name:   "local datacenter",
-				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1"}),
+				policy: builtin(publicRouting.Options{Datacenter: "dc1", FixedReplicaOrder: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: nodeLocationDCReport{Type: "dc", LocalDC: "dc1"}},
 			},
 			{
 				name:   "local rack",
-				policy: builtin(publicRouting.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1"}),
+				policy: builtin(publicRouting.Options{Datacenter: "dc1", Rack: "rack1", FixedReplicaOrder: true, NoLeaderAware: true}),
 				want:   queryLoadBalancingReport{Policy: tokenAware("replica-set", false), NodePreference: InternalNodeLocationRackReport{Type: "rack", LocalDC: "dc1", LocalRack: "rack1"}},
+			},
+			{
+				name:   "session locality",
+				policy: builtin(publicRouting.Options{}),
+				config: settings.Config{LocalDatacenter: "dc2", LocalRack: "rack2"},
+				want:   queryLoadBalancingReport{Policy: tokenAware("shuffle", false), NodePreference: InternalNodeLocationRackReport{Type: "rack", LocalDC: "dc2", LocalRack: "rack2"}},
+			},
+			{
+				name:   "own datacenter over session locality",
+				policy: builtin(publicRouting.Options{Datacenter: "dc1"}),
+				config: settings.Config{LocalDatacenter: "dc2", LocalRack: "rack2"},
+				want:   queryLoadBalancingReport{Policy: tokenAware("shuffle", false), NodePreference: nodeLocationDCReport{Type: "dc", LocalDC: "dc1"}},
 			},
 			{
 				name:   "application policy",
@@ -310,7 +324,7 @@ func TestDriverConfigReport(t *testing.T) {
 			},
 		} {
 			t.Run(tt.name, func(t *testing.T) {
-				got := buildTypedLoadBalancingReport(tt.policy)
+				got := buildTypedLoadBalancingReport(tt.policy, tt.config)
 				if diff := cmp.Diff(tt.want, got); diff != "" {
 					t.Fatalf("buildTypedLoadBalancingReport() mismatch:\n%s", diff)
 				}

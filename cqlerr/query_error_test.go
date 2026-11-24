@@ -38,7 +38,7 @@ func TestQueryError(t *testing.T) {
 				potentiallyExecuted: true,
 				timeout:             11 * time.Second,
 				inFlight:            42,
-				expected:            "gocql: no response received from cassandra within timeout period (timeout: 11s, in-flight: 42) (maybe executed)",
+				expected:            "gocql: no response from server within timeout (timeout: 11s, in-flight: 42) (maybe executed)",
 			},
 			{
 				name:                "with zero timeout omits timeout",

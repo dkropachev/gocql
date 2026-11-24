@@ -96,10 +96,11 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 		done <- nil
 	}()
 	resets := 0
-	decoder := cql.StreamRowInto(func(*[]byte) { resets++ }, cql.StreamColumn("value", cql.StreamBlob, func(v *[]byte) *[]byte { return v }))
+	// The continuation adds a column, which the mapping skips.
+	decoder := valueStreamRows{reset: func(*[]byte) { resets++ }}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	cursor, err := RunStream(ctx, s, bound, decoder, StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+	cursor, err := RunStream(ctx, s, bound, decoder, StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,4 +147,18 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+}
+
+// valueStreamRows decodes the "value" column and skips any other, so a
+// result that gains a column keeps decoding.
+type valueStreamRows struct{ reset func(*[]byte) }
+
+func (d valueStreamRows) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
+	fields := []cql.StreamOutputField[[]byte]{cql.StreamColumn("value", cql.StreamBlob, func(v *[]byte) *[]byte { return v })}
+	for i := range columns.Len() {
+		if column, _ := columns.At(i); column.Name != "value" {
+			fields = append(fields, cql.StreamIgnoreColumn[[]byte](column.Name))
+		}
+	}
+	return cql.StreamRowInto(d.reset, fields...).Compile(columns)
 }

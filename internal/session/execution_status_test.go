@@ -164,7 +164,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 			t.Fatalf("last server error lost: %v", err)
 		}
 		failure := requestError(t, err)
-		if len(failure.Attempts) != 2 || failure.Attempts[0].Status != cqlerr.MaybeExecuted || failure.Attempts[1].Status != cqlerr.NotExecuted || failure.Attempts[0].HostID == (cqlerr.AttemptFailure{}).HostID {
+		if len(failure.Attempts) != 2 || failure.Attempts[0].ExecutionStatus != cqlerr.MaybeExecuted || failure.Attempts[1].ExecutionStatus != cqlerr.NotExecuted || failure.Attempts[0].HostID == (cqlerr.AttemptFailure{}).HostID {
 			t.Fatalf("attempt history %+v", failure.Attempts)
 		}
 	})
@@ -226,8 +226,14 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancellation lost: %v", err)
 		}
-		if server, ok := errors.AsType[cqlerr.ServerError](err); !ok || server.Code() != cqlerr.CodeOverloaded {
+		// The earlier server error is in Attempts, not in the error's
+		// tree: KindOf and errors.As agree on the cause.
+		failure := requestError(t, err)
+		if len(failure.Attempts) == 0 || !errors.Is(failure.Attempts[0].Err, cqlerr.CodeOverloaded) {
 			t.Fatalf("earlier server error lost: %v", err)
+		}
+		if _, ok := errors.AsType[cqlerr.ServerError](err); ok {
+			t.Fatalf("errors.As found an earlier attempt's server error: %v", err)
 		}
 	})
 }
@@ -280,13 +286,6 @@ func TestExecutionStatusRefused(t *testing.T) {
 			_, err := RunPage(ctx, s, bound, cqltype.CompletePageState(), 0, CompiledOptions{})
 			return err
 		}, cqlerr.ErrPagingComplete},
-		{"NilDestination", func(t *testing.T) error {
-			s, _, _ := runtimeTestSession(t, 1)
-			bound := runtimeQuery(t)
-			defer bound.Close()
-			_, _, err := RunOne(ctx, s, bound, CompiledOptions{}, nil)
-			return err
-		}, nil},
 		{"EmptyBatch", func(t *testing.T) error {
 			s, _, _ := runtimeTestSession(t, 1)
 			_, err := InternalWrapSession(s).ExecBatch(ctx, &Batch{}, CompiledOptions{})

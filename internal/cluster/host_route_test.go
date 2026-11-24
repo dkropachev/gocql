@@ -56,11 +56,11 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 	SessionData(s).InternalConnCfg = &transport.ConnConfig{TypedConfig: config.ConnectivityPointer()}
 	for _, snapshot := range routing.SnapshotData(m).InternalHosts {
 		host := new(endpoint.HostInfo)
-		implEndpoint.HostInfoData(host).InternalHostId = snapshot.ID
+		implEndpoint.HostInfoData(host).InternalHostId = snapshot.HostID
 		implEndpoint.HostInfoData(host).InternalDataCenter = snapshot.Datacenter
 		implEndpoint.HostInfoData(host).InternalRack = snapshot.Rack
 		implEndpoint.HostInfoData(host).InternalState.Store(endpoint.NodeUp)
-		SessionData(s).InternalHostSource.InternalHosts[snapshot.ID.String()] = host
+		SessionData(s).InternalHostSource.InternalHosts[snapshot.HostID.String()] = host
 		pool := &implPool.InternalHostConnPool{InternalHost: host}
 		pool.InternalServices = s.NewPoolServices()
 		pool.InternalStarted = true
@@ -84,7 +84,7 @@ func hostRoutingSession(b testing.TB, tablets bool) *Core {
 				b.Fatal(err)
 			}
 		}
-		SessionData(s).InternalPool.InternalHostConnPools[snapshot.ID] = pool
+		SessionData(s).InternalPool.InternalHostConnPools[snapshot.HostID] = pool
 	}
 	// As a published snapshot does, index the hosts with the session's routes.
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
@@ -99,7 +99,7 @@ func TestHostRoute(t *testing.T) {
 		t.Run("ShardAndFollowsPool", func(t *testing.T) {
 			s := hostRoutingSession(t, false)
 			pools := SessionData(s).InternalPool
-			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].ID
+			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].HostID
 			route := routing.InternalNewRoute(pools.InternalRoute(id), 2)
 			conn := sessionPickRoute(s, route, routing2.Info{})
 			if conn == nil || implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard != 2 {
@@ -133,7 +133,7 @@ func TestHostRoute(t *testing.T) {
 		t.Run("WhilePoolChanges", func(t *testing.T) {
 			s := hostRoutingSession(t, false)
 			pools := SessionData(s).InternalPool
-			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].ID
+			id := routing.SnapshotData(s.Metadata()).InternalHosts[0].HostID
 			host := pools.InternalRoute(id)
 			pool := host.Pool()
 			ctx, cancel := context.WithCancel(context.Background())
@@ -164,7 +164,7 @@ func TestHostRoute(t *testing.T) {
 	t.Run("Plan", func(t *testing.T) {
 		s := hostRoutingSession(t, false)
 		m := s.Metadata()
-		p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true})).(*routing.InternalRoutingPolicy)
+		p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{FixedReplicaOrder: true, NoLeaderAware: true})).(*routing.InternalRoutingPolicy)
 		info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 42, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 		var storage routing.InternalLazyRoutingPlan
 		plan := p.InternalPlanWith(info, m, &storage, nil)

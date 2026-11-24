@@ -21,7 +21,7 @@ type attemptHookOnly struct {
 	sawCtx   atomic.Bool
 }
 
-func (o *attemptHookOnly) StartAttempt(ctx context.Context, _ routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (o *attemptHookOnly) StartAttempt(ctx context.Context, _ observe.AttemptStart) func(routing2.AttemptEvent) {
 	o.attempts.Add(1)
 	o.sawCtx.Store(ctx.Value(observerCtxKey{}) == "caller")
 	return nil

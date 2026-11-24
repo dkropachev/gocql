@@ -29,7 +29,7 @@ func BenchmarkRouting(b *testing.B) {
 						routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 						for i := range routing.SnapshotData(m).InternalHosts {
 							h := v2TestHost(0, "a", fmt.Sprintf("r%d", i%3+1))
-							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+							binary.BigEndian.PutUint64(h.HostID[8:], uint64(i+1))
 							routing.SnapshotData(m).InternalHosts[i] = h
 						}
 						routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
@@ -37,7 +37,7 @@ func BenchmarkRouting(b *testing.B) {
 						root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 						routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
 						info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
-						p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Datacenter: "a", Rack: rack, ShuffleReplicas: shuffle})).(*implRouting.InternalRoutingPolicy)
+						p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "a", Rack: rack, FixedReplicaOrder: !shuffle, NoLeaderAware: true})).(*implRouting.InternalRoutingPolicy)
 						var storage routing.InternalLazyRoutingPlan
 						b.ReportAllocs()
 						b.ResetTimer()
@@ -62,7 +62,7 @@ func BenchmarkRouting(b *testing.B) {
 					routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 					for i := range routing.SnapshotData(m).InternalHosts {
 						h := v2TestHost(0, "a", "r1")
-						binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+						binary.BigEndian.PutUint64(h.HostID[8:], uint64(i+1))
 						routing.SnapshotData(m).InternalHosts[i] = h
 					}
 					routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
@@ -70,7 +70,7 @@ func BenchmarkRouting(b *testing.B) {
 					root, _ := implRouting.InternalUpdateTabletRange(nil, h)
 					routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, implRouting.InternalTabletPlacement{InternalRanges: root})
 					info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
-					options := routing2.Options{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
+					options := routing2.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: kind != "leader"}
 					if kind == "lwt" {
 						info.Kind = cql.ConditionalStatement
 					}
@@ -81,11 +81,11 @@ func BenchmarkRouting(b *testing.B) {
 						options.Latency.Enabled = true
 					}
 					if kind == "pinned" {
-						info.HostID = cql.Option[cql.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
+						info.HostID = cql.Option[cql.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].HostID, Set: true}
 					}
 					p := codecTestMust(implRouting.NewRoutingPolicy(options))
 					if kind == "latency" {
-						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 					}
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -117,7 +117,7 @@ func BenchmarkRouting(b *testing.B) {
 				}
 				b.Run(name, func(b *testing.B) {
 					s := hostRoutingSession(b, placement == "tablets")
-					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, Datacenter: dc})).(*routing.InternalRoutingPolicy)
+					p := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: dc, FixedReplicaOrder: true, NoLeaderAware: true})).(*routing.InternalRoutingPolicy)
 					tokens := make([]int64, 4096)
 					for i := range tokens {
 						tokens[i] = int64(uint64(i) * 0x9e3779b97f4a7c15)

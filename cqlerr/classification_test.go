@@ -9,8 +9,6 @@ import (
 	"os"
 	"regexp"
 	"testing"
-
-	"github.com/scylladb/gocql/v2/cql"
 )
 
 // sentinels maps every exported sentinel to the message it has always had.
@@ -23,21 +21,22 @@ var sentinels = map[string]struct {
 	"ErrClosed":                       {ErrClosed, "gocql: closed"},
 	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use One, Each, All or Run, or RunConditionalBatch for a batch"},
 	"ErrConnectionClosed":             {ErrConnectionClosed, "gocql: connection closed waiting for response"},
-	"ErrFrameTooBig":                  {ErrFrameTooBig, "frame length is bigger than the maximum allowed"},
+	"ErrFrameTooBig":                  {ErrFrameTooBig, "gocql: frame length is bigger than the maximum allowed"},
 	"ErrNoConnections":                {ErrNoConnections, "gocql: no hosts available in the pool"},
 	"ErrNoConnectionsStarted":         {ErrNoConnectionsStarted, "gocql: no connections were made when creating the session"},
 	"ErrNoControl":                    {ErrNoControl, "gocql: no control connection available"},
-	"ErrNoKeyspace":                   {ErrNoKeyspace, "gocql: no keyspace provided"},
-	"ErrNoRows":                       {ErrNoRows, "gocql: no rows"},
+	"ErrNoKeyspace":                   {ErrNoKeyspace, "gocql: keyspace not found or not set"},
+	"ErrNoCurrentRow":                 {ErrNoCurrentRow, "gocql: no current row"},
 	"ErrNoStreams":                    {ErrNoStreams, "gocql: no streams available on connection"},
-	"ErrNoTable":                      {ErrNoTable, "gocql: no table name provided"},
+	"ErrNoTable":                      {ErrNoTable, "gocql: table not found or not set"},
 	"ErrPagingComplete":               {ErrPagingComplete, "gocql: completed page cannot be resumed"},
 	"ErrPagingNoProgress":             {ErrPagingNoProgress, "gocql: paging made no progress"},
 	"ErrPagingStateLimit":             {ErrPagingStateLimit, "gocql: paging state history limit exceeded"},
-	"ErrReadHeaderTimeout":            {ErrReadHeaderTimeout, "unable to read frame header"},
-	"ErrScyllaSourcePortAlreadyInUse": {ErrScyllaSourcePortAlreadyInUse, "scylla: source port is already in use"},
+	"ErrRequestTimeout":               {ErrRequestTimeout, "gocql: request timeout exceeded"},
+	"ErrReadHeaderTimeout":            {ErrReadHeaderTimeout, "gocql: unable to read frame header"},
+	"ErrScyllaSourcePortAlreadyInUse": {ErrScyllaSourcePortAlreadyInUse, "gocql: shard-aware source port is already in use"},
 	"ErrStaleRows":                    {ErrStaleRows, "gocql: rows belong to an earlier execution of the query"},
-	"ErrTimeoutNoResponse":            {ErrTimeoutNoResponse, "gocql: no response received from cassandra within timeout period"},
+	"ErrTimeoutNoResponse":            {ErrTimeoutNoResponse, "gocql: no response from server within timeout"},
 	"ErrUseStmt":                      {ErrUseStmt, "gocql: USE statements are not supported: set the session keyspace in the cluster config, or qualify table names"},
 }
 
@@ -46,14 +45,12 @@ func errorTypes() map[string]error {
 	return map[string]error{
 		"AlreadyExistsError":      &AlreadyExistsError{Keyspace: "ks", Table: "t"},
 		"CASWriteUnknownError":    &CASWriteUnknownError{Received: 1, BlockFor: 2},
-		"CDCWriteFailureError":    &CDCWriteFailureError{},
 		"ConnectError":            &ConnectError{Stage: "dial"},
-		"ExecutionError":          newExecutionError(ErrTimeoutNoResponse, cql.Result{}, MaybeExecuted, nil),
+		"ExecutionError":          NewExecutionError(ErrTimeoutNoResponse, MaybeExecuted),
 		"FunctionFailureError":    &FunctionFailureError{Keyspace: "ks", Function: "f"},
 		"NoHostsError":            &NoHostsError{Operation: "schema agreement"},
 		"OtherServerError":        NewOtherServerError(CodeOverloaded, "overloaded"),
 		"PartialRefreshError":     &PartialRefreshError{Topology: ErrNoControl},
-		"QueryError":              newQueryError(queryErrorState{InternalErr: ErrConnectionClosed, InternalPotentiallyExecuted: true}),
 		"RateLimitReachedError":   &RateLimitReachedError{OpType: OpTypeWrite},
 		"ReadFailureError":        &ReadFailureError{Received: 1, BlockFor: 2},
 		"ReadTimeoutError":        &ReadTimeoutError{Received: 1, BlockFor: 2},
@@ -126,7 +123,7 @@ func TestErrorTypesClassified(t *testing.T) {
 		}
 	}
 	// Wrappers: their Kind is that of the error they carry.
-	wrappers := map[string]bool{"ExecutionError": true, "QueryError": true, "PartialRefreshError": true}
+	wrappers := map[string]bool{"ExecutionError": true, "PartialRefreshError": true}
 	for name, err := range types {
 		if !listed[name] {
 			t.Errorf("%s is not an exported error type", name)

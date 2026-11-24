@@ -13,7 +13,7 @@ most one `exec.CompiledOptions` for that call: compile `exec.Options` for the se
 session default. They return once the execution has finished. `One` detaches borrowed fields
 before returning, so the row remains usable. `Each` lends borrowed fields only
 during the callback; copy or clone fields that escape it. Every row is decoded
-into the same `dst`; with `cql.ReuseBuffers`, or a `RowInto` reset that keeps
+into the same `dst`, and a nil `dst` decodes each into a new value instead; with `cql.ReuseBuffers`, or a `RowInto` reset that keeps
 slices, `[]byte` fields reuse their capacity, so a slice kept from one row
 aliases the next row's data: keep `bytes.Clone(row.Field)`. Return
 `gocql.StopIteration` from the callback to finish successfully after enough rows.
@@ -28,10 +28,11 @@ Each handle holds one of the statement's pooled queries until it is closed.
 
 For manual cursor lifetimes, explicit paging, or a worker that runs one
 statement repeatedly and benefits from skipping the pool hand-off, create one query per worker
-with `prepared.Query(options)`; it has the same `Exec`, `One`, `Each`, `All`,
+with `prepared.Query()`, or `prepared.Query(options)` to fix its options; it has the same `Exec`, `One`, `Each`, `All`,
 `Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
-parameter columns from `Statement.BindMarkers`. To decode into caller storage,
+parameter columns from `Statement.BindMarkers`; with `cql.DynamicParams` and
+no markers, the markers take the types of the values. To decode into caller storage,
 use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
 `prepared.Query(streamOptions)`; this checks the streaming decoder directly
 without requiring a buffered row mapping. It buffers pages by default; set
@@ -44,8 +45,14 @@ captured parameters through drain. `query.Close()` stops a query at once, and
 `exec.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
 custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies known
-ordinary/conditional statements; unknown or conditional requests cannot
-speculate. Server-confirmed conditional metadata takes precedence.
+ordinary/conditional statements; unknown or conditional requests send no
+client timestamp, keep a fixed replica order and cannot speculate. A
+statement left `cql.UnknownStatement` whose row type is `cql.EmptyRow` reads
+no rows, so it executes as ordinary; as a batch member it stays unknown.
+Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
+marks a statement safe to run more than once, for speculation and
+`retry.Safe`; prepared statements, their queries and batch members carry it,
+and a set `exec.Options.Idempotent` overrides it for one execution.
 
 ```{toctree}
 :maxdepth: 1
@@ -59,7 +66,8 @@ request-timeouts
 
 For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
-be described by `Statement.BindMarkers`. They take at most one plain `exec.Options`,
+be described by `Statement.BindMarkers`: a statement with parameters and no
+markers fails before it is sent, unless it binds `cql.DynamicParams`. They take at most one plain `exec.Options`,
 validated during the call. Frequent statements should be prepared
 once and shared. Create reusable queries once per worker, rather than once per
 HTTP request, and close each one. A query dropped without `Close` is closed

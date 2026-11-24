@@ -42,7 +42,6 @@ func TestServerErrorCodes(t *testing.T) {
 		{&cqlerr.UnavailableError{}, cqlerr.CodeUnavailable},
 		{&cqlerr.WriteTimeoutError{}, cqlerr.CodeWriteTimeout},
 		{&cqlerr.WriteFailureError{}, cqlerr.CodeWriteFailure},
-		{&cqlerr.CDCWriteFailureError{}, cqlerr.CodeCDCWriteFailure},
 		{&cqlerr.ReadTimeoutError{}, cqlerr.CodeReadTimeout},
 		{&cqlerr.ReadFailureError{}, cqlerr.CodeReadFailure},
 		{&cqlerr.AlreadyExistsError{}, cqlerr.CodeAlreadyExists},

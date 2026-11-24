@@ -3,7 +3,11 @@
 
 package cqlerr
 
-import "github.com/scylladb/gocql/v2/internal/link"
+import (
+	"time"
+
+	"github.com/scylladb/gocql/v2/internal/link"
+)
 
 // The engine decodes server errors through internal/link; see
 // internal/protocol.
@@ -13,6 +17,9 @@ func init() {
 	})
 	link.Set(link.ServerErrorMessage, func(err ServerError, message string, warnings []string) {
 		err.setBase(message, warnings)
+	})
+	link.Set(link.NewAttemptError, func(err error, timeout time.Duration, inFlight int, executed bool) error {
+		return &queryError{state: queryErrorState{InternalErr: err, InternalTimeout: timeout, InternalInFlight: inFlight, InternalPotentiallyExecuted: executed}}
 	})
 }
 

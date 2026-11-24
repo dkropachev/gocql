@@ -31,13 +31,12 @@ type RowDecoder[R any] interface {
     Clone(R) R
 }
 type CompiledRow[R any] interface {
-    Decode(*RowReader) (R, error)
     DecodeInto(*RowReader, *R) error
-    Clone(R) R
 }
 
 type StreamDecoder[T any] interface {
     Compile(DataType) (CompiledStreamValue[T], error)
+    Reset(*T)
 }
 type CompiledStreamValue[T any] interface {
     Reset(*T)
@@ -49,9 +48,6 @@ type StreamRowDecoder[R any] interface {
 type CompiledStreamRow[R any] interface {
     Reset(*R)
     DecodeInto(*StreamRowReader, *R) error
-}
-type StreamResetter[T any] interface {
-    Reset(*T)
 }
 ```
 
@@ -70,14 +66,15 @@ owns length framing and rolls back failed encodes. `ValueReader` is a value
 snapshot; its cursors are independent. Width, state and payload validation
 still runs for each value after metadata compilation.
 
-`CompiledRow.DecodeInto` replaces a non-nil destination, including clearing
-unmapped application fields. Return a validation error for a nil destination.
-It may partially update a destination on error. `Decode` provides the same
-logical decoding as a returned value. Avoid retaining the destination or
-building field mappings repeatedly inside the row loop.
+The driver clears a non-nil destination to the zero `R` before it calls a
+custom `CompiledRow.DecodeInto`, which then writes the row's fields. Return a
+validation error for a nil destination. It may partially update a destination
+on error. Avoid retaining the destination or building field mappings
+repeatedly inside the row loop.
 
-`Decoder.Clone`, `RowDecoder.Clone`, and `CompiledRow.Clone` recursively detach
-borrowed storage, including nested collection elements. `RowDecoder.Clone`
+`Decoder.Clone` and `RowDecoder.Clone` recursively detach borrowed storage,
+including nested collection elements; the driver detaches a custom plan's rows
+with the `RowDecoder.Clone` of the decoder that compiled it. `RowDecoder.Clone`
 must work before any successful `Compile`; do not implement it by remembering
 the last compiled plan. `One` detaches borrowed fields before returning.
 `Each` callback fields expire when the callback returns; a cursor's borrowed
@@ -86,10 +83,9 @@ Clone retained values explicitly.
 
 Streaming plans write into seeded caller storage. `Reset` clears logical
 values while preserving mapped buffers and nested capacity. It runs before
-decoding each row or value. An optional declaration-level `cql.StreamResetter`
-also resets fields absent from actual metadata without needing a compiled
-database type. Custom streaming declarations mapping such absent fields must
-provide it. Use `cql.StreamRowReader.ReadColumn` with a checked child plan. Do not adapt a
+decoding each row or value. `StreamDecoder.Reset` resets a field the result
+does not select, such as a struct field of a UDT field the server lacks,
+without a compiled database type. Use `cql.StreamRowReader.ReadColumn` with a checked child plan. Do not adapt a
 buffered decoder by accumulating an entire streamed cell.
 
 Streaming decoders must report `cql.StreamCapacityError` when caller

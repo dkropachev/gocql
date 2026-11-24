@@ -39,7 +39,7 @@ func TestServerErrorExecutionStatus(t *testing.T) {
 		{"read timeout", &ReadTimeoutError{}, MaybeExecuted},
 		{"read failure", &ReadFailureError{}, MaybeExecuted},
 		{"cas write unknown", &CASWriteUnknownError{Received: 1}, MaybeExecuted},
-		{"cdc write failure", &CDCWriteFailureError{}, MaybeExecuted},
+		{"cdc write failure", NewOtherServerError(CodeCDCWriteFailure, ""), MaybeExecuted},
 		{"unknown", NewOtherServerError(0x7777, "m"), MaybeExecuted},
 		{"write timeout no acks", &WriteTimeoutError{WriteType: WriteTypeSimple}, MaybeExecuted},
 		{"write timeout simple acked", &WriteTimeoutError{WriteType: WriteTypeSimple, Received: 1}, PartiallyExecuted},
@@ -91,7 +91,7 @@ func TestExecutionStatus(t *testing.T) {
 
 	t.Run("ExecutionStatusOf", func(t *testing.T) {
 		attempt := newQueryError(queryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
-		request := newExecutionError(attempt, cql.Result{}, PartiallyExecuted, nil)
+		request := NewExecutionError(attempt, PartiallyExecuted)
 		for _, test := range []struct {
 			name string
 			err  error
@@ -116,15 +116,15 @@ func TestExecutionStatus(t *testing.T) {
 
 	t.Run("ExecutionErrorMessage", func(t *testing.T) {
 		attempt := newQueryError(queryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
-		same := newExecutionError(attempt, cql.Result{}, MaybeExecuted, nil)
+		same := NewExecutionError(attempt, MaybeExecuted)
 		if got := same.Error(); strings.Count(got, "(maybe executed)") != 1 {
 			t.Fatalf("status repeated or missing: %q", got)
 		}
-		worse := newExecutionError(attempt, cql.Result{}, PartiallyExecuted, nil)
+		worse := NewExecutionError(attempt, PartiallyExecuted)
 		if got := worse.Error(); !strings.HasSuffix(got, "(maybe executed) (partially executed)") {
 			t.Fatalf("aggregate status missing: %q", got)
 		}
-		clean := newExecutionError(&cql.ValidationError{Field: "x", Err: errors.New("bad")}, cql.Result{}, NotExecuted, nil)
+		clean := NewExecutionError(&cql.ValidationError{Field: "x", Err: errors.New("bad")}, NotExecuted)
 		if strings.Contains(clean.Error(), "executed") {
 			t.Fatalf("not-executed status rendered: %q", clean.Error())
 		}
@@ -136,34 +136,35 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	overloaded := newQueryError(queryErrorState{InternalErr: NewOtherServerError(CodeOverloaded, "overloaded"), InternalPotentiallyExecuted: true})
 	timeout := newQueryError(queryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	attempts := []AttemptFailure{
-		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, Status: NotExecuted},
-		{Err: timeout, Address: "10.0.0.2:9042", ShardID: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, Status: MaybeExecuted},
+		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, ExecutionStatus: NotExecuted},
+		{Err: timeout, Address: "10.0.0.2:9042", ShardID: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, ExecutionStatus: MaybeExecuted},
 	}
 
 	t.Run("LastAttemptIsCause", func(t *testing.T) {
-		err := newExecutionError(timeout, cql.Result{}, MaybeExecuted, attempts)
+		err := NewExecutionError(timeout, MaybeExecuted, attempts...)
 		got := err.Error()
-		if !strings.HasPrefix(got, "gocql: request: #2 10.0.0.2:9042/shard3: gocql: no response received") || strings.Count(got, "no response received") != 1 || !strings.Contains(got, "earlier attempts: #1 10.0.0.1:9042: overloaded") {
+		if !strings.HasPrefix(got, "gocql: request: #2 10.0.0.2:9042/shard3: gocql: no response from server") || strings.Count(got, "no response from server") != 1 || !strings.Contains(got, "earlier attempts: #1 10.0.0.1:9042: overloaded") {
 			t.Fatalf("message %q", got)
 		}
 	})
 
 	t.Run("Cancelled", func(t *testing.T) {
-		err := newExecutionError(context.Canceled, cql.Result{}, MaybeExecuted, attempts)
+		err := NewExecutionError(context.Canceled, MaybeExecuted, attempts...)
 		got := err.Error()
 		if !strings.HasPrefix(got, "gocql: request: context canceled (maybe executed); earlier attempts: #1") || !strings.Contains(got, "#2 10.0.0.2:9042/shard3:") {
 			t.Fatalf("message %q", got)
 		}
-		if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrTimeoutNoResponse) {
+		if !errors.Is(err, context.Canceled) {
 			t.Fatal("cause not reachable")
 		}
-		if server, ok := errors.AsType[ServerError](err); !ok || server.Code() != CodeOverloaded {
-			t.Fatal("earlier server error not reachable")
+		// Earlier attempts are in Attempts only.
+		if errors.Is(err, ErrTimeoutNoResponse) || errors.Is(err, CodeOverloaded) {
+			t.Fatal("an earlier attempt's error is reachable")
 		}
 	})
 
 	t.Run("Statement", func(t *testing.T) {
-		err := newExecutionError(timeout, cql.Result{}, MaybeExecuted, attempts)
+		err := NewExecutionError(timeout, MaybeExecuted, attempts...)
 		err.Statement = "SELECT \"v\"\nFROM t"
 		got := err.Error()
 		if !strings.Contains(got, `(maybe executed); statement "SELECT \"v\"\nFROM t"; earlier attempts: #1`) {
@@ -188,7 +189,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 		for i := range many {
 			many[i] = AttemptFailure{Err: overloaded, Address: "h", Number: i + 1}
 		}
-		got := newExecutionError(context.Canceled, cql.Result{}, NotExecuted, many).Error()
+		got := NewExecutionError(context.Canceled, NotExecuted, many...).Error()
 		if !strings.Contains(got, "(7 not shown)") || strings.Count(got, "overloaded: overloaded") != 3 || !strings.Contains(got, "#10 h") {
 			t.Fatalf("message %q", got)
 		}

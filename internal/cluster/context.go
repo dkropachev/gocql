@@ -6,11 +6,16 @@ package cluster
 import (
 	"context"
 	"time"
+
+	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
+// InternalExecutionContext returns parent bounded by the driver's timeout.
+// When the timeout runs out, context.Cause reports cqlerr.ErrRequestTimeout,
+// which tells the driver's budget apart from parent's own deadline.
 func InternalExecutionContext(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
 	if timeout > 0 {
-		return context.WithTimeout(parent, timeout)
+		return context.WithTimeoutCause(parent, timeout, cqlerr.ErrRequestTimeout)
 	}
 	return context.WithCancel(parent)
 }

@@ -828,7 +828,7 @@ func (h toCQLHelpers) tableColumnToCQL(tm *Table) string {
 	for _, cn := range tm.OrderedColumns {
 		cm := tm.Columns[cn]
 		column := fmt.Sprintf("%s %s", h.ident(cn), cm.Type)
-		if cm.Kind == ColumnStatic {
+		if cm.Kind == ColumnKindStatic {
 			column += " static"
 		}
 		columns = append(columns, column)

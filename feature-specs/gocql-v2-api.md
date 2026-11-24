@@ -95,9 +95,7 @@ type RowDecoder[R any] interface {
     Clone(R) R
 }
 type CompiledRow[R any] interface {
-    Decode(*RowReader) (R, error)
     DecodeInto(*RowReader, *R) error
-    Clone(R) R
 }
 ```
 
@@ -117,11 +115,11 @@ state, text and framing validation still runs on every value. Standalone public
 encode/decode calls validate their supplied descriptor on each call; arbitrary
 custom codec work is accounted for separately.
 
-CompiledRow.DecodeInto is required for built-in and custom row plans. It fills a
-non-nil caller-supplied destination using the checked metadata without retaining
-the destination in the shared plan. It replaces the previous value, including
-zeroing unmapped Go fields; custom plans must honor the same rule. Decode is
-the value-returning convenience over the same decoding implementation. Built-in
+CompiledRow.DecodeInto is the only method of a row plan. It fills a non-nil
+caller-supplied destination using the checked metadata without retaining the
+destination in the shared plan. Built-in plans replace the previous value,
+including zeroing unmapped Go fields; the driver clears the destination to the
+zero R before it calls a custom plan, which then writes the row's fields. Built-in
 Row field plans decode directly into destination fields: implementing DecodeInto
 as Decode followed by assignment of an entire temporary R is not sufficient.
 Compositions propagate destination fields to child plans where their semantics
@@ -135,8 +133,8 @@ RowDecoder.Clone is required independently of Compile: it recursively detaches
 the logical Go value using its declared field codecs, without needing actual
 server metadata, a prior successful plan, or retained decode state. This makes
 TupleDecoder/UDTDecoder.Clone correct after standalone DecodeValue as well as
-normal row execution. CompiledRow.Clone remains available for an already compiled
-plan and must provide the same ownership guarantee. Row, OneColumn, PairRows,
+normal row execution. The driver detaches a custom plan's rows with the Clone
+of the RowDecoder that compiled it; a plan has no Clone of its own. Row, OneColumn, PairRows,
 ConvertRows, CASRows, dynamic.Rows and every custom RowDecoder implement the
 schema-independent method; custom decoders must supply explicit clone logic.
 Caching the first successful plan to implement Clone or panicking because no
@@ -182,7 +180,9 @@ func (r *RowReader) SkipColumn() error
 
 Native cells have three framing states: present, null (-1), and unset (-2).
 EmptyCell is a logical supported-type state over present zero-length wire
-bytes, never a fourth negative sentinel. Empty() checks type support, writes no
+bytes, never a fourth negative sentinel. A decoder sees one shape for it:
+DecodeValue passes an EncodedValue in EmptyCell as Present with an empty body,
+as a response holds it. Empty() checks type support, writes no
 body, and cannot coexist with payload/Null/Unset writes. Unknown CellState
 values fail validation. Null/Unset cannot follow or precede payload writes in a
 cell. A value encoder writes the body; the enclosing writer owns the length.
@@ -255,10 +255,16 @@ type Statement[P, R any] struct {
     Params ParamEncoder[P]   // nil when P is EmptyParams
     Rows RowDecoder[R]       // nil when R is EmptyRow
     BindMarkers Columns      // parameter metadata for unprepared execution
-    Kind StatementKind
+    Kind StatementKind       // Unknown with R == EmptyRow executes as Ordinary
+    Idempotent bool          // carried into Prepared, Query and batch members
 }
 type StatementKind uint8
 const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
+// UnknownStatement sends no client timestamp, keeps a fixed replica order and
+// a strict shard pin, and never speculates. A statement left Unknown whose R is
+// EmptyRow executes as Ordinary, prepared or not; as a batch member it stays
+// Unknown. A batch is idempotent when every member is; exec.Options.Idempotent,
+// when set, overrides the statement's flag.
 func Command(text string) Statement[EmptyParams, EmptyRow]
 
 type EmptyParams = EmptyRecord   // EmptyRecord is struct{}
@@ -272,6 +278,7 @@ func Params[P any](fields ...InputField[P]) ParamEncoder[P]
 func Column[R, V any](name string, codec Decoder[V], field func(*R) *V) OutputField[R]
 func ColumnAt[R, V any](index int, codec Decoder[V], field func(*R) *V) OutputField[R]
 func IgnoreColumn[R any](name string) OutputField[R]
+func StreamIgnoreColumn[R any](name string) StreamOutputField[R]
 func Row[R any](fields ...OutputField[R]) RowDecoder[R]
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
 func OneParam[T any](Encoder[T]) ParamEncoder[T]
@@ -285,21 +292,32 @@ var EmptyRowDecoder RowDecoder[EmptyRow]
 
 // Struct mapping.
 type StructFields[P any] struct { Params []InputField[P]; Columns []OutputField[P] }
-type StructOption[P any] /* opaque */
-func ParamsOf[P any](...StructOption[P]) (ParamEncoder[P], error)
-func MustParamsOf[P any](...StructOption[P]) ParamEncoder[P]
-func RowOf[R any](...StructOption[R]) (RowDecoder[R], error)
-func MustRowOf[R any](...StructOption[R]) RowDecoder[R]
-func WithCodec[P, V any](Codec[V]) StructOption[P]
-func ReuseBuffers[P any]() StructOption[P]
+type StructOption /* opaque */
+func ParamsOf[P any](...StructOption) (ParamEncoder[P], error)
+func MustParamsOf[P any](...StructOption) ParamEncoder[P]
+func RowOf[R any](...StructOption) (RowDecoder[R], error)
+func MustRowOf[R any](...StructOption) RowDecoder[R]
+func UDTCodecOf[T any](UDTOptions, ...StructOption) (Codec[T], error)
+func MustUDTCodecOf[T any](UDTOptions, ...StructOption) Codec[T]
+func WithCodec[V any](Codec[V]) StructOption
+func WithEncoder[V any](Encoder[V]) StructOption
+func ReuseBuffers() StructOption
+func IgnoreExtraColumns() StructOption
 ```
 
 `RowInto` calls its reset callback before decoding each row; the callback
 clears application state and may keep owned slices for reuse. `ParamsOf` and
-`RowOf` map exported fields by column name: the `cql:"name"` tag or the
-lowercased field name, `cql:"-"` to skip, `cql:"name,codec=..."` to pick a
-built-in codec. `ParamsOf` skips fields without a matching marker but requires
-a field for every marker; `RowOf` leaves fields of unselected columns zero.
+`RowOf` map exported fields by column name: the `cql:"name"` tag or the field
+name in snake_case as gocqlx maps it (`CreatedAt` is `created_at`, `UserID`
+`user_id`), `cql:"-"` to skip, `cql:"name,codec=..."` to pick a built-in
+codec. `ParamsOf` skips fields without a matching marker but requires a field
+for every marker; `RowOf` leaves fields of unselected columns zero and
+requires a field for every column unless given `IgnoreExtraColumns`. A
+`time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
+parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
+gives. `UDTCodecOf` maps a UDT's fields to struct T the same way. Options are
+not generic, so `WithCodec(c)` infers V from c; a constructor rejects an
+option it does not apply with a ValidationError.
 
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a
@@ -324,6 +342,8 @@ const (Present CellState = iota; Null; Unset; EmptyCell)
 type Option[T any] struct { Value T; Set bool }
 func Some[T any](T) Option[T]
 type Nullable[T any] struct { Value T; Valid bool }
+func NonNull[T any](T) Nullable[T]
+var ErrNull error
 type BindValue[T any] struct { Value T; State CellState }
 func NullableCodec[T any](Codec[T]) Codec[Nullable[T]]
 func NullableEncoder[T any](Encoder[T]) Encoder[Nullable[T]]
@@ -334,7 +354,6 @@ func EmptyCodec[T any](Codec[T]) Codec[MaybeEmpty[T]]
 
 type UUID [16]byte
 type Duration struct { Months, Days int32; Nanoseconds int64 }
-type Counter int64
 type Date int32                  // days relative to Unix epoch
 type TimeOfDay int64             // nanoseconds since midnight
 type Timestamp int64             // milliseconds relative to Unix epoch
@@ -346,13 +365,13 @@ var BoolCodec Codec[bool]
 var Int8Codec Codec[int8]
 var Int16Codec Codec[int16]
 var Int32Codec Codec[int32]
-var Int64Codec Codec[int64]
+var Int64Codec Codec[int64]              // bigint and counter
 var Float32Codec Codec[float32]
 var Float64Codec Codec[float64]
-var CounterCodec Codec[Counter]
 var DateCodec Codec[Date]
 var TimeCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
+var TimestampTimeCodec Codec[time.Time] // UTC on decode; millisecond instant on encode
 var DurationCodec Codec[Duration]
 var UUIDCodec Codec[UUID]
 var TimeUUIDCodec Codec[TimeUUID]
@@ -370,9 +389,11 @@ func VarintFromBigInt(*big.Int) Varint
 func (v Varint) BigInt() *big.Int
 func VarintFromBytes([]byte) (Varint, error)
 func DateFromTime(time.Time) (Date, error)
-func (d Date) Time() (time.Time, error)
+func (d Date) Time() time.Time
 func TimestampFromTime(time.Time) (Timestamp, error)
-func (t Timestamp) Time() (time.Time, error)
+func (t Timestamp) Time() time.Time
+// String on Varint, Decimal, Date, TimeOfDay, Timestamp and Duration
+func (u UUID) IsZero() bool
 func ParseUUID(string) (UUID, error)
 func MustParseUUID(string) UUID
 func UUIDFromBytes([]byte) (UUID, error)
@@ -394,12 +415,17 @@ not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
-VectorType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
-rejects an incomplete custom descriptor.
+VectorType has Kind TypeVector, a driver-defined kind that is not a native
+protocol type ID, plus Dimension. The zero DataType has Kind TypeCustom;
+ScalarType(TypeCustom) rejects an incomplete custom descriptor.
+
+A counter is a bigint the server only adds to: Int64Codec, StreamInt64 and
+BigIntValue accept it, and there is no separate counter Go type.
 
 Nil `[]byte` passed to ByteSliceCodec is present empty blob. Null is always
 explicit; nil collections likewise encode a zero count. Nonnullable scalar and vector decoders
-reject null. List/set/map decoders, buffered and streaming, interpret NULL as
+reject null with an error matching `ErrNull`, buffered, streaming and in a
+Value accessor alike. List/set/map decoders, buffered and streaming, interpret NULL as
 empty while preserving destination capacity; Nullable preserves null independently
 of empty. Unset is only an outer bound parameter on v4+; reject unset in results
 and nested values. Empty is distinct from zero-byte text/blob. EmptyCodec
@@ -424,7 +450,7 @@ ParseConsistency and ParseUUID return errors; MustParseConsistency and
 MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
 EncodeValueBorrowed preserves borrowed inputs.
 
-The wrapper roles are separate: Option is for inherited settings; Nullable is
+The wrapper roles are separate: Option is for inherited settings and for result values that may be unknown; Nullable is
 for nullable application data and decoded results; BindValue controls binding
 with Present, Null or Unset; MaybeEmpty represents supported empty CQL values.
 Their zero values mean inherited, NULL, present zero value and ordinary zero
@@ -469,8 +495,10 @@ func VectorEncoder[T any](Encoder[T]) Encoder[[]T]
 func VectorDecoder[T any](Decoder[T]) Decoder[[]T]
 func TupleEncoder[T any](ParamEncoder[T]) Encoder[T]
 func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
+func TupleCodec[T any](ParamEncoder[T], RowDecoder[T]) Codec[T]
 type UDTOptions struct {
-    Keyspace, Name string // required expected UDT identity, exact metadata names
+    Keyspace string // empty matches the UDT in any keyspace
+    Name     string // required, exact metadata name
     AllowExtraDatabaseFields, AllowMissingFields bool
 }
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
@@ -516,9 +544,10 @@ partial slice. Dynamic traversal does not imply typed lazy collection decoders.
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
 protocol permits; a nonnullable destination rejects them. UDT matching defaults
-to exact field names and full identity/type validation. UDTOptions.Keyspace/Name
-must supply the expected identity; missing names fail CheckType/Compile with a
-validation error, and equal layouts under a different identity are incompatible.
+to exact field names and full identity/type validation. UDTOptions.Name must
+supply the expected name, and a non-empty Keyspace the expected keyspace; a
+missing name fails CheckType/Compile with a validation error, and equal layouts
+under a different identity are incompatible.
 Explicit options permit extra database fields (encode explicit null; decode
 checked skips) or application fields absent from the database (encode ignores
 those fields; decode sets explicit zero defaults only when allowed).
@@ -568,10 +597,17 @@ func (v Value) Float() (float64, error)
 func (v Value) Text() (Text, error)
 func (v Value) Bytes() (Bytes, error)
 func (v Value) UUID() (UUID, error)
+func (v Value) TimeUUID() (TimeUUID, error)
 func (v Value) Inet() (netip.Addr, error)
+func (v Value) Time() (time.Time, error)        // timestamp, or date at midnight UTC
+func (v Value) TimeOfDay() (TimeOfDay, error)
 func (v Value) Duration() (Duration, error)
 func (v Value) Varint() (Varint, error)
 func (v Value) Decimal() (Decimal, error)
+func (v Value) Len() int
+func (v Value) At(int) (Value, error)           // list, set, vector, tuple or UDT member
+func (v Value) Field(string) (Value, error)     // UDT field
+func (v Value) String() string                  // CQL literal, for logs
 func (v Value) Elements() (*Iterator[Value], error)
 func (v Value) Entries() (*Iterator[Entry], error)
 func (v Value) Fields() (*Iterator[Field], error)
@@ -579,6 +615,7 @@ type Iterator[T any] struct { /* bounded cursor for Value traversal */ }
 func (i *Iterator[T]) Next() bool
 func (i *Iterator[T]) Value() T
 func (i *Iterator[T]) Err() error
+func (i *Iterator[T]) All() iter.Seq2[T, error]
 func (i *Iterator[T]) Collect() ([]T, error)
 func Null(DataType) Value
 func Unset(DataType) Value
@@ -587,20 +624,19 @@ func Bool(bool) Value
 func TinyInt(int8) Value
 func SmallInt(int16) Value
 func Int(int32) Value
-func BigInt(int64) Value
-func Counter(Counter) Value
+func BigInt(int64) Value                        // also binds a counter
 func Float(float32) Value
 func Double(float64) Value
-func Text(string) (Value, error)
-func ASCII(string) (Value, error)
+func Text(string) Value                         // payloads are checked at bind
+func ASCII(string) Value
 func Blob([]byte) Value
 func UUID(UUID) Value
-func TimeUUID(TimeUUID) (Value, error)
-func Inet(netip.Addr) (Value, error)
+func TimeUUID(TimeUUID) Value
+func Inet(netip.Addr) Value
 func Date(Date) Value
-func Time(TimeOfDay) (Value, error)
+func Time(TimeOfDay) Value
 func Timestamp(Timestamp) Value
-func Duration(Duration) (Value, error)
+func Duration(Duration) Value
 func Varint(Varint) Value
 func Decimal(Decimal) Value
 func List(DataType, []Value) (Value, error)
@@ -642,10 +678,11 @@ methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
 `Session.RunConditionalBatch`, `Session.Unprepared*`, `Prepared.Query`,
 `PreparedStream.Query`). Settings that only refine a builder are methods of
 the builder, not values made by a function: pool size and a fixed TLS
-configuration are `ConfigBuilder` methods. Client routes are one read-only
-`config.ClientRoutes`, built with `config.NewClientRoutes().WithRoute(id,
-hostname)...Build()` and passed to `WithClientRoutes`, so a hostname override
-belongs to its route and one call replaces the whole setting. Routed
+configuration are `ConfigBuilder` methods. Client routes are plain
+`config.ClientRoute{ConnectionID, Hostname}` records passed together to
+`WithClientRoutes(routes...)`, so a hostname override belongs to its route and
+one call replaces the whole setting; `Build` rejects an empty or repeated
+connection ID. Routed
 connections dial the route's `tls_port` exactly when TLS is configured.
 
 The root package has one function, `Connect(context.Context, config.Config)
@@ -658,7 +695,6 @@ owns its type:
 |---|---|
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
-| `config.NewClientRoutes() *config.ClientRoutesBuilder` | starts a client routes setting |
 | `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
@@ -728,7 +764,7 @@ func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...ex
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
-func (p *Prepared[P, R]) Query(exec.Options) (*Query[P, R], error)
+func (p *Prepared[P, R]) Query(...exec.Options) (*Query[P, R], error) // at most one
 func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
@@ -761,7 +797,9 @@ statement repeatedly.
 
 All is the range-over-func form of Each: it yields dst for every row across
 all pages, valid until the next iteration, then any error once as (nil, err);
-breaking out of the loop releases the execution. It returns no Result. RunPage
+breaking out of the loop releases the execution. All, Each and One, and their
+Unprepared forms, accept a nil dst: each row is then decoded into a new R the
+caller may keep, and One only reports whether a row exists. It returns no Result. RunPage
 takes the page size as an argument rather than an option, so a paginated
 endpoint can take it from each request without compiling options: zero uses
 the resolved page size and cql.Unpaged requests the whole result. Both forms report results the same way. One detaches borrowed fields before
@@ -778,7 +816,9 @@ Input is copied during execution admission,
 including custom codec borrowed spans. Encoding records cell boundaries and
 computes routing from the same owned bytes; encoders are not called again for
 routing, retries, reprepare or paging. The Unprepared calls take parameter
-Columns from Statement.BindMarkers. Query options are captured at construction, including owned
+Columns from Statement.BindMarkers. A statement with parameters (P other than
+EmptyParams) and no BindMarkers fails with a ValidationError before it is
+sent, except with cql.DynamicParams, whose markers take the values' types. Query options are captured at construction, including owned
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
@@ -853,6 +893,7 @@ No unsafe cache-metadata opt-in bypasses these rules.
 ```go
 type Rows[R any] struct { /* value handle: iterator storage + generation */ }
 func (r Rows[R]) NextInto(dst *R) bool
+func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] // closes the rows when the loop ends
 func (r Rows[R]) Err() error
 func (r Rows[R]) Close() error
 func (r Rows[R]) Retain() (*PageLease, error)
@@ -862,6 +903,7 @@ func (r Rows[R]) Columns() cql.Columns
 
 type Page[R any] struct { /* exactly one response page */ }
 func (p *Page[R]) NextInto(dst *R) bool
+func (p *Page[R]) All(dst *R) iter.Seq2[*R, error] // closes the page; State stays readable
 func (p *Page[R]) Err() error
 func (p *Page[R]) Close() error
 func (p *Page[R]) Retain() (*PageLease, error)
@@ -880,18 +922,25 @@ func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
 func (p PageState) Token() []byte
+func (p PageState) MarshalBinary() ([]byte, error)  // kind byte, then a continuation's token
+func (p *PageState) UnmarshalBinary([]byte) error
+func (p PageState) MarshalText() ([]byte, error)    // unpadded URL-safe base64 of the binary form
+func (p *PageState) UnmarshalText([]byte) error
 
 // package cql
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
 ```
 
-NextInto is the only row iterator. Views it decodes into the destination
+NextInto is the row iterator; All on Rows, Page and CASBatchRows ranges over
+it, decoding into dst (a new R per row when dst is nil), and yields the
+handle's error once. The Marshal methods of PageState encode the whole state,
+start and completion included, so a cursor round-trips through text. Views it decodes into the destination
 remain valid until the **next** NextInto call or Close, whichever comes first. Retain pins the
 current physical page before advancing; its owner has stable identity independent
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
-the row the last NextInto decoded, using CompiledRow.Clone. Copying a Go row struct does not detach it.
+the row the last NextInto decoded, using RowDecoder.Clone. Copying a Go row struct does not detach it.
 Access through a released view reports cqlerr.ErrReleased where a method returns error;
 methods without error results panic with cqlerr.ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
@@ -1014,7 +1063,7 @@ func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R
 func (p *PreparedStream[P, R]) Parameters() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
-func (p *PreparedStream[P, R]) Query(exec.StreamOptions) (*StreamQuery[P, R], error)
+func (p *PreparedStream[P, R]) Query(...exec.StreamOptions) (*StreamQuery[P, R], error) // at most one
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (q *StreamQuery[P, R]) Close()
 func (q *StreamQuery[P, R]) Wait(context.Context) error
@@ -1047,11 +1096,12 @@ type StreamInfo struct {
 }
 
 // package stream
-type Statement[P, R any] struct {
-    CQL string
+type Statement[P, R any] struct { // fields in memory-layout order
     Params cql.ParamEncoder[P] // nil when P is cql.EmptyParams
     Rows RowDecoder[R]         // must not be nil
+    CQL string
     Kind cql.StatementKind
+    Idempotent bool
 }
 type RowDecoder[R any] interface {
     Compile(Columns) (CompiledStreamRow[R], error)
@@ -1062,9 +1112,8 @@ type CompiledStreamRow[R any] interface {
 }
 type Decoder[T any] interface {
     Compile(DataType) (CompiledStreamValue[T], error)
+    Reset(*T) // no server DataType is needed
 }
-// Optional declaration capability; no server DataType is needed.
-type Resetter[T any] interface { Reset(*T) }
 type CompiledStreamValue[T any] interface {
     Reset(*T)
     DecodeInto(*ValueReader, *T) error
@@ -1072,11 +1121,12 @@ type CompiledStreamValue[T any] interface {
 type OutputField[R any] struct { /* immutable checked field declaration */ }
 func Column[R, V any](string, Decoder[V], func(*R) *V) OutputField[R]
 func ColumnAt[R, V any](int, Decoder[V], func(*R) *V) OutputField[R]
-func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
+func IgnoreColumn[R any](string) OutputField[R]
+func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] // reset may be nil
 func OneColumn[T any](Decoder[T]) RowDecoder[T]
-func RowOf[R any](...cql.StructOption[R]) (RowDecoder[R], error)
-func MustRowOf[R any](...cql.StructOption[R]) RowDecoder[R]
-func WithCodec[P, V any](Decoder[V]) cql.StructOption[P]
+func RowOf[R any](...cql.StructOption) (RowDecoder[R], error)
+func MustRowOf[R any](...cql.StructOption) RowDecoder[R]
+func WithCodec[V any](Decoder[V]) cql.StructOption
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type RowReader struct { /* checked count and column cursor */ }
@@ -1106,7 +1156,6 @@ var Int32 Decoder[int32]
 var Int64 Decoder[int64]
 var Float32 Decoder[float32]
 var Float64 Decoder[float64]
-var Counter Decoder[Counter]
 var Date Decoder[Date]
 var Time Decoder[TimeOfDay]
 var Timestamp Decoder[Timestamp]
@@ -1159,7 +1208,7 @@ Actual streaming response metadata selects this query's stream.CompiledStreamRow
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
-stream.RowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
+stream.RowDecoder, Kind, Idempotent) and returns an immutable PreparedStream[P,R]. Its
 Query(exec.StreamOptions) creates a worker-owned StreamQuery. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Query-local caches revalidate
@@ -1184,32 +1233,19 @@ construction returns normally through the query Run method's error result.
 Reset is called on a non-nil destination before each active NextInto attempt;
 terminal/exhausted calls return false without touching it. Built-in value Reset
 clears logical values while preserving byte/element slice capacity and nested
-storage. stream.RowInto requires a non-nil application reset callback for unmapped
-Go state, then resets mapped fields through child plans. The callback must
+storage. stream.RowInto calls its application reset callback, when not nil, for
+unmapped Go state, then resets mapped fields through child plans. Like RowInto,
+it requires a field for every column and a column for every field;
+IgnoreColumn skips a column. The callback must
 preserve mapped storage. A custom plan has the same explicit responsibility;
 there is no promise to zero an arbitrary R while preserving its unknown storage.
 An application UDT field absent from database metadata has no DataType with
-which to compile its value plan. stream.Resetter[T]
-is an optional capability on decoder declarations (including row declarations),
-providing metadata-independent Reset while preserving caller-seeded byte and
-nested storage. Built-in scalar, text/blob/numeric payload, nullable/empty,
-collection/map/vector, tuple/UDT, encoded-value and row compositions provide this
-reset behavior recursively. For compositions with custom descendants, the
-required declaration reset capability must be available for every absent
-application mapping; it cannot be inferred from the custom Go representation.
-
-With UDTOptions.AllowMissingFields, compilation permits an application field
-missing from database metadata only when its decoder declaration supports
-stream.Resetter for that destination. Missing custom-field capability produces a
-clear ValidationError during Compile, before row decoding; implementing
-stream.Resetter allows that custom field to participate. The declaration Reset
-clears its logical value while preserving seeded storage, just like built-in
-reset. This also applies recursively to missing fields inside compositions.
-Mapped custom fields continue to use their successfully compiled
-stream.CompiledStreamValue.Reset and need not implement declaration stream.Resetter.
-Custom row declarations used as tuple/UDT compositions follow the same rule
-when metadata-independent reset is required. No synthetic DataType, reflection,
-whole-row temporary or zero-assignment of arbitrary V supplies a substitute.
+which to compile its value plan. stream.Decoder.Reset resets it without one,
+preserving caller-seeded byte and nested storage; every decoder has it, so
+UDTOptions.AllowMissingFields accepts any absent field. Mapped fields use
+their compiled stream.CompiledStreamValue.Reset. A custom row declaration used
+as a tuple/UDT composition resets through its own Reset(*R) method, when it
+has one, or is zeroed.
 stream.RowInto's application callback retains responsibility for unmapped Go state
 and must preserve mapped storage; this optional capability does not shift that
 responsibility or relax the complete streaming type-support requirements.
@@ -1315,11 +1351,11 @@ type Options struct {
     Profile *config.Profile                       // copied when resolved
     Consistency cql.Option[cql.Consistency]
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
-    Timeout cql.Option[time.Duration]             // tightens the profile timeout; 0 adds no limit
-    PageTimeout cql.Option[time.Duration]
-    PageSize cql.Option[int32]                    // cql.Unpaged: whole result
+    Timeout cql.Option[time.Duration]             // replaces the profile timeout; Some(0): no limit
+    PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
+    PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
-    Idempotent bool
+    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
     Timestamp cql.Option[int64]                   // microseconds
     NowInSeconds cql.Option[int32]
     Keyspace string
@@ -1355,7 +1391,9 @@ func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
 // WithSpeculation; zero turns WithTimeout and WithPrefetch off, and
-// NoSerialConsistency clears the serial consistency.
+// NoSerialConsistency clears the serial consistency. A nil WithRetry or
+// WithRouting, or a nil Retry or Routing field, is the default policy;
+// retry.Never{} disables retries.
 
 // package cql
 type BatchKind byte
@@ -1470,14 +1508,12 @@ func (r Route) ShardOf(token int64) cql.Option[uint32]
 func (r Route) WithShard(shard cql.Option[uint32]) Route
 type Plan interface { Next() (Route, bool) }
 type Policy interface {
-    Validate(*metadata.Snapshot) error
     Pick(Info, *metadata.Snapshot) (Route, bool)     // cheap first route; false: start with Fallback
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
-    Observe(config.AttemptEvent)
 }
+type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
+type AttemptObserver interface { Observe(AttemptEvent) }        // optional
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
-
-// package config
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
@@ -1488,6 +1524,8 @@ type AttemptEvent struct {
     CQLTraceID cql.Option[cql.UUID]
     Canceled, Speculative bool
 }
+
+// package observe
 type AttemptStart struct {
     RequestID uint64
     Attempt int
@@ -1495,13 +1533,13 @@ type AttemptStart struct {
     Started time.Time
     Speculative bool
 }
-type SpeculationPolicy interface { Delay(attempt int) (time.Duration, bool) }
+type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
 type Observer any // one or more of the hook interfaces below; hooks are found once at install
 type RequestObserver interface {
     StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
 }
 type AttemptObserver interface {
-    StartAttempt(context.Context, AttemptStart) func(AttemptEvent)
+    StartAttempt(context.Context, AttemptStart) func(routing.AttemptEvent)
 }
 type RequestStart struct {
     ID uint64
@@ -1521,15 +1559,12 @@ type RequestEvent struct {
     Result Result
     Err error
 }
-type LifecycleObserver interface { ObserveLifecycle(LifecycleEvent) }
-type LifecycleKind string   // KindSession, KindHost
-type LifecycleStage string  // StageReady, StageConnected, StageDown, StageClosed
-type LifecycleEvent struct {
-    At time.Time
-    Kind LifecycleKind
-    Stage LifecycleStage
-    HostID cql.UUID
-}
+type RequestObserverFunc func(context.Context, RequestStart) (context.Context, func(RequestEvent))
+type AttemptObserverFunc func(context.Context, AttemptStart) func(routing.AttemptEvent)
+// Join calls every observer's hooks in order; it implements the union of
+// their hooks. A pool connecting or a host marked down is an event.KindPool
+// event, not an observer hook.
+func Join(observers ...Observer) Observer
 ```
 
 Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
@@ -1540,7 +1575,7 @@ package:
 package retry
 
 type Action uint8
-const (Stop Action = iota; Same; Next; IgnoreWrite)
+const (Stop Action = iota; Same; Next)
 type Attempt struct {
     Err error
     Number int // 1-based
@@ -1573,15 +1608,21 @@ when needed. Public defensive metadata accessors are inspection APIs, not the
 built-in routing path. A plan captures a placement/topology snapshot; pool
 acquisition still rechecks current availability and target strictness. Custom
 policies implement Pick and Fallback themselves and account for their own work.
+A request pinned with exec.Options.HostID follows the pinned plan without
+consulting any policy. The session validates a policy that implements
+routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter sets
+the session's locality, which every built-in policy without a Datacenter of
+its own takes; Connect logs a warning for a multi-datacenter cluster without
+one.
 
 ```go
 // package routing
-type Options struct {
-    TokenAware bool
-    Datacenter, Rack string
+type Options struct { // the zero Options is the default policy
+    Datacenter, Rack string // empty: the session's local datacenter and rack
+    NoTokenAware bool
     AllowRemote bool
-    ShuffleReplicas bool
-    LeaderAware bool
+    FixedReplicaOrder bool
+    NoLeaderAware bool
     Latency LatencyOptions
 }
 type LatencyOptions struct {
@@ -1596,8 +1637,21 @@ type PartitionKey struct { /* logical canonical encoded component stream */ }
 func (k PartitionKey) Len() int64
 func (k PartitionKey) ForEach(func(cql.Bytes) error) error
 type TokenPartitioner interface { Token(PartitionKey) (int64, error) }
+type TokenPartitionerFunc func(PartitionKey) (int64, error)
 var Murmur3TokenPartitioner TokenPartitioner
 var CDCTokenPartitioner TokenPartitioner
+
+// package routing/routingtest
+type Cluster struct {
+    Keyspaces map[string]*metadata.Keyspace
+    TokenRanges map[string][]metadata.TokenRange
+    Tablets map[Table][]metadata.TokenRange
+    LocalDatacenter, LocalRack string
+    Hosts []metadata.HostSnapshot
+    Generation uint64
+}
+type Table struct { Keyspace, Name string }
+func NewSnapshot(Cluster) *metadata.Snapshot // links the built-in policies' engine
 ```
 
 Tablet v2 takes precedence over v1 when both are negotiated. Every EXECUTE on a
@@ -1623,7 +1677,7 @@ locality-eligible. An unresolved original leader never promotes the first
 resolved follower. Unknown/ineligible leaders use ordinary replica/nonreplica
 fallback. LWT replica ordering remains deterministic; ordinary replica shuffling
 and configured latency ordering apply without admitting excluded hosts.
-routing.Options.LeaderAware enables this leader path.
+routing.Options.NoLeaderAware disables this leader path.
 
 ConfigBuilder.WithPartitioner(name, routing.TokenPartitioner) maps a server
 partitioner class name to a TokenPartitioner. Built-in Murmur3 and CDC
@@ -1725,15 +1779,15 @@ func (s *Session) Closed() bool
 
 // package event
 type Kind uint8
-const (Unknown Kind = iota; Topology; Status; Schema; Control; ClientRoute; Overflow)
+const (KindUnknown Kind = iota; KindTopology; KindStatus; KindSchema; KindControl; KindClientRoute; KindPool; KindOverflow)
 type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
     Kind Kind
     Generation uint64
     Address netip.AddrPort
-    HostID cql.UUID
-    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ...
-    Target Target // typed string: TargetKeyspace, TargetTable, ...
+    HostID cql.UUID // Topology, Status, Pool and Control; REMOVED_NODE from the previous snapshot
+    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ChangeConnected (Pool), ...
+    ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ...
     Keyspace, Object string
     ArgumentTypes []string  // function/aggregate argument types
     ConnectionIDs []string  // ClientRoute
@@ -1745,7 +1799,10 @@ func (s *Subscription) Close()
 // package metadata
 type Snapshot struct { /* immutable */ }
 func (m *Snapshot) Hosts() []routing.HostSnapshot
+func (m *Snapshot) Host(cql.UUID) (routing.HostSnapshot, bool)
+func (m *Snapshot) Keyspaces() []string // sorted names
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
+func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
 func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
 func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
 func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
@@ -1753,14 +1810,18 @@ func (m *Snapshot) HostRoutes() []routing.Route
 func (m *Snapshot) ReplicaRoutes(routing.Info) []routing.Route
 func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
-// Schema types: Keyspace, Table, TableOptions, Column, ColumnKind, ColumnOrder
-// (ASC, DESC), Index, IndexKind, View, Type, Function, Aggregate.
+// Schema types: Keyspace, Table, TableOptions, Column, ColumnKind
+// (ColumnKindPartitionKey, ...), ColumnOrder (ASC, DESC), Index, IndexKind,
+// View, Type, Function, Aggregate.
+// Keyspace.Functions and Aggregates are keyed by signature, "name(int,text)";
+// Keyspace.Function(name, args...), FunctionsNamed(name), Aggregate and
+// AggregatesNamed look them up.
 type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 
 // package metrics
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
-    Requests, Attempts uint64
+    Requests, Attempts uint64 // never decrease
     Errors, Canceled uint64
     Retries, Speculations uint64
     Orphans uint64
@@ -1775,7 +1836,7 @@ type HostSnapshot struct {
     Tokens []int64
     Shards uint32
     ShardingIgnoreMSB uint8
-    ID cql.UUID
+    HostID cql.UUID
     Enabled, Connected, Up bool
 }
 type TokenRange struct { Start, End int64; Replicas []Target }
@@ -1796,7 +1857,7 @@ topology/status/schema/control/client-route variants and carry a generation.
 Publication events are emitted only after the corresponding snapshot is visible.
 A subscription has a bounded queue (positive Capacity; zero selects 64, negative
 is invalid). On overflow the dispatcher discards queued deltas, guarantees one
-event.Overflow carrying the highest discarded generation, then closes that
+event.KindOverflow carrying the highest discarded generation, then closes that
 subscription after the marker; it never waits on control I/O. Resynchronize by
 subscribing again first, then reading Metadata (or completing an explicit
 refresh if freshness is required), and ignoring queued publication events at or
@@ -1843,20 +1904,29 @@ drains all admissions made by this session.
 Package `config` holds the configuration API. A `config.Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
-and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`,
-`ConfigureDefaultProfile` and `NoAdvancedShardAwareness`. An on/off setting
-takes a bool (`WithDiscovery(false)`), and a size or interval whose zero has no
-other meaning turns its feature off at zero (`WithHeartbeat(0, 0)`,
-`WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`, and on a
-`ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`), and a nil provider
-removes it (`WithTimestampGenerator(nil)`), so no setting has a separate
-`No*` twin; the exceptions clear a setting zero cannot
-(`NoAdvancedShardAwareness`, `ProfileBuilder.NoSerialConsistency`); settings not chosen keep the driver's behavior, and when a setting is chosen
-again the last call wins. Setters store the latest value without validation or
-call history.
-`Build` validates only the final configuration and returns its first typed error.
-Correcting a setting clears the error on the next Build. Optional zero durations
-disable their budget, and nil optional providers remove overrides. `WithIgnoreEvents` replaces its complete
+and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`
+and `ConfigureDefaultProfile`. An on/off setting takes a bool
+(`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
+interval whose zero has no other meaning turns its feature off at zero
+(`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
+and on a `ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`) or keeps the
+OS's value (`WithReceiveBuffer(0)`, `WithSendBuffer(0)`), so no setting has a
+separate `No*` twin; the one exception clears a setting zero cannot
+(`ProfileBuilder.NoSerialConsistency`). A nil provider or policy restores the
+driver's default in every setter (`WithReconnect(nil)`, `WithRetry(nil)`,
+`WithRouting(nil)`, `WithTLS(nil)`, `WithDialer(nil)`); "off" is an explicit
+value (`retry.Never{}`, a reconnect policy that declines). The exception is
+`WithTimestampGenerator(nil)`, which sends no client timestamp. Settings not
+chosen keep the driver's behavior, and when a setting is chosen again the last
+call wins. Setters store the latest value without validation or call history.
+`Build` validates only the final configuration and returns its first typed
+error; a `cql.ValidationError`'s `Field` names the setter to fix and its
+message the limit. Correcting a setting clears the error on the next Build.
+Optional zero durations disable their budget. `Build` parses the contact
+points and asks the reconnect policy for `Delay(1)` once, rejecting a negative
+delay. `WithPort` is also the port of discovered nodes whose metadata reports
+none, so `Build` rejects contact points that all name one other port, unless
+discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
@@ -1868,26 +1938,26 @@ func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
+func (*ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
-func (*ConfigBuilder) WithClientRoutes(ClientRoutes) *ConfigBuilder // replaces all; ClientRoutes{} removes
+func (*ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder // replaces all; none removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
 func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
 func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
 func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
 func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
-func (*ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder
-func (*ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder // ports 49152-65535
+func (*ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder
+func (*ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder // default 49152-65535
+func (*ConfigBuilder) WithReceiveBuffer(bytes int) *ConfigBuilder // 0 keeps the OS's
+func (*ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder    // 0 keeps the OS's
 func NewProfile() *ProfileBuilder
-func NewClientRoutes() *ClientRoutesBuilder
-func (*ClientRoutesBuilder) WithRoute(connectionID, hostname string) *ClientRoutesBuilder
-func (*ClientRoutesBuilder) Build() (ClientRoutes, error)
-func (ClientRoutes) Routes() []ClientRoute // copy; ClientRoute{ConnectionID, Hostname}
+type ClientRoute struct { ConnectionID, Hostname string }
 
 // package gocql
 func Connect(context.Context, config.Config) (*Session, error)
@@ -1916,24 +1986,27 @@ files when a check fails. Context-taking hooks honor cancellation; synchronous c
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks, unless `WithAdvancedShardAwareness` or
-`WithDefaultAdvancedShardAwareness` is called. `WithConnectionsPerShard(n)` (default 1) and
+their proxy breaks, unless `WithAdvancedShardAwareness(true)` is called. `WithConnectionsPerShard(n)` (default 1) and
 `WithConnectionsPerHost(n)` size the pool, the later call winning;
 `WithConnectionsPerHost` dials the regular port only and keeps no per-shard
-excess, so Build rejects it with `WithAdvancedShardAwareness` or
+excess, so Build rejects it with `WithAdvancedShardAwareness(true)` or
 `WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
 Errors live in package `cqlerr` and preserve `errors.Is`/`errors.As` and
 server error codes/details. A failed request returns an `*ExecutionError`,
-which unwraps the server/context error, lists every failed attempt
-(`AttemptFailure`) and reports an `ExecutionStatus` (`NotExecuted`,
-`MaybeExecuted`, `PartiallyExecuted`; `ExecutionStatusOf(err)`). `KindOf(err)`
+which unwraps only the error the request stopped with, lists every failed
+attempt (`AttemptFailure`, whose `ExecutionStatus` is the attempt's) and
+reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
+`PartiallyExecuted`; `ExecutionStatusOf(err)`; compare with `==`, as the
+numeric order is not the severity order). `NewExecutionError(err, status,
+attempts...)` builds one for tests. The driver's own timeout ends a request
+with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
-`ErrNoTable`, `ErrNoRows`, `ErrNoConnections`,
+`ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
 `ErrConditionalExec`, `ErrPagingNoProgress`, `ErrPagingComplete` and
 `ErrPagingStateLimit`. Typed driver errors include `ValidationError`,
 `UnsupportedSettingError`, `CodecError` (column/index/nested path and stage),
@@ -1983,7 +2056,7 @@ type DialTarget struct {
 }
 type Dialer interface { DialContext(context.Context, DialTarget) (net.Conn, error) }
 type DialerFunc func(context.Context, DialTarget) (net.Conn, error)
-type DefaultDialer struct { ConnectTimeout, TCPKeepalive time.Duration }
+type DefaultDialer struct{} // dial bounded by its context; options set afterwards
 type Resolver interface {
     LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
 }
@@ -2000,7 +2073,7 @@ type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (n
 
 // package auth
 type Provider interface {
-    Start(context.Context, routing.HostSnapshot, string) (Exchange, cql.Nullable[[]byte], error)
+    Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error)
 }
 type Exchange interface {
     Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
@@ -2045,8 +2118,10 @@ Recognized built-in tags take precedence over type overrides; overrides replace
 untagged and custom-expression defaults of the matching Go type. Unaffected
 custom-expression defaults retain their generated implementations. Each mapping
 is independent and generated defaults are never mutated. Option scopes:
-WithCodec affects ParamsOf and RowOf, stream.WithCodec only stream.RowOf, and
-ReuseBuffers only RowOf; the other functions ignore them. No per-row override resolution is permitted.
+WithCodec applies to ParamsOf, RowOf and UDTCodecOf, WithEncoder to ParamsOf,
+ReuseBuffers to RowOf, IgnoreExtraColumns to RowOf and stream.RowOf, and
+stream.WithCodec to stream.RowOf; the other functions reject them with a
+ValidationError. No per-row override resolution is permitted.
 
 All Each callbacks may return gocql.StopIteration or a chain of single-error
 wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:

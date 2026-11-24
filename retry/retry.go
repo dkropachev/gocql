@@ -24,8 +24,6 @@ const (
 	Same
 	// Next retries on the next host of the query plan.
 	Next
-	// IgnoreWrite treats the failed write as successful.
-	IgnoreWrite
 )
 
 // String returns the retry action name, or Action(n) for a value it does not
@@ -38,8 +36,6 @@ func (a Action) String() string {
 		return "same"
 	case Next:
 		return "next"
-	case IgnoreWrite:
-		return "ignore write"
 	default:
 		return fmt.Sprintf("Action(%d)", uint8(a))
 	}

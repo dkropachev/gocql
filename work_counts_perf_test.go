@@ -152,7 +152,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						profile.Speculation = speculation{}
 					}
 					handle := new(profile)
-					options := exec.Options{Profile: handle, Idempotent: true}
+					options := exec.Options{Profile: handle, Idempotent: cql.Some(true)}
 					if mode == "default" {
 						options = exec.Options{}
 					}
@@ -204,7 +204,7 @@ func TestWorkCountsPerf(t *testing.T) {
 			cols := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: cql.BlobType})
 			hp := testHostPrepared(t, s, cols)
 			for i := 0; i < 1000; i++ {
-				(*implSession.Session)(s).Core().InvalidatePreparedSchema(event.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), Target: "TABLE"})
+				(*implSession.Session)(s).Core().InvalidatePreparedSchema(event.Event{Keyspace: "unrelated", Object: fmt.Sprint(i), ObjectKind: event.ObjectTable})
 			}
 			if !hp.InternalEpoch.InternalCurrent() {
 				t.Fatal("unrelated invalidation")
@@ -260,7 +260,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						storage.InternalHosts = make([]metadata.HostSnapshot, hosts)
 						for i := range storage.InternalHosts {
 							h := v2TestHost(0, "a", "r1")
-							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+							binary.BigEndian.PutUint64(h.HostID[8:], uint64(i+1))
 							storage.InternalHosts[i] = h
 						}
 						storage.InternalHostIndex = buildRoutingHostIndex(storage.InternalHosts)
@@ -268,9 +268,9 @@ func TestWorkCountsPerf(t *testing.T) {
 						root, _ := updateTabletRange(nil, hint)
 						storage.InternalPlacements = storage.InternalPlacements.Put(metadataTable{InternalKeyspace: "ks", InternalTable: "table"}, tabletPlacement{InternalRanges: root})
 						info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
-						opts := routing.Options{TokenAware: true, Datacenter: "a", Rack: "r1", LeaderAware: kind == "leader"}
+						opts := routing.Options{Datacenter: "a", Rack: "r1", NoLeaderAware: kind != "leader", FixedReplicaOrder: true}
 						if kind == "pinned" {
-							info.HostID = cql.Option[cql.UUID]{Set: true, Value: storage.InternalHosts[0].ID}
+							info.HostID = cql.Option[cql.UUID]{Set: true, Value: storage.InternalHosts[0].HostID}
 						}
 						if kind == "conditional" {
 							info.Kind = cql.ConditionalStatement
@@ -288,7 +288,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						}
 						policy := codecTestMust(routing.NewPolicy(opts))
 						if kind == "latency" {
-							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 						}
 						implRouting.ResetPerfCounters()
 						plan := implRouting.PlanFor(policy, info, m)
@@ -420,7 +420,7 @@ func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) 
 func (o *testObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *testObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

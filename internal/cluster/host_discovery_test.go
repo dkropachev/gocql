@@ -447,7 +447,7 @@ func TestHostDiscovery(t *testing.T) {
 				t.Fatalf("after refresh ring = %v, want %v", got, want)
 			}
 			for _, host := range s.Metadata().Hosts() {
-				if host.ID == otherDC.hostID && host.Enabled {
+				if host.HostID == otherDC.hostID && host.Enabled {
 					t.Fatal("filtered host must remain disabled")
 				}
 			}

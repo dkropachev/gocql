@@ -84,7 +84,7 @@ func (s *Core) v2ContactIdentities(ctx context.Context, contacts []*implEndpoint
 		if err != nil {
 			return nil, err
 		}
-		if len(rows) != 1 || implEndpoint.InternalHostInfoHostUUID(rows[0]).IsEmpty() {
+		if len(rows) != 1 || implEndpoint.InternalHostInfoHostUUID(rows[0]).IsZero() {
 			return nil, cqltype.TypeValidation("contact identity", "expected one actual local UUID")
 		}
 		implEndpoint.InternalHostInfoUpdate(contact, rows[0])

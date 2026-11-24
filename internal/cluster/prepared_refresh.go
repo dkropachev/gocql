@@ -118,7 +118,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 	delete(p.schemaStale, keyspace)
 	p.InternalMu.Unlock()
 	if absent {
-		s.InvalidatePreparedSchema(event.Event{Keyspace: keyspace, Target: event.TargetKeyspace})
+		s.InvalidatePreparedSchema(event.Event{Keyspace: keyspace, ObjectKind: event.ObjectKeyspace})
 	}
 	if publish {
 		s.PublishV2Metadata()

@@ -67,11 +67,11 @@ func TestOptions(t *testing.T) {
 			if err != nil || zero.p != nil {
 				t.Fatalf("empty values bound to %+v, %v; want the zero CompiledOptions", zero.p, err)
 			}
-			set, err := InternalCompileOptions(s, Options{Idempotent: true})
+			set, err := InternalCompileOptions(s, Options{Idempotent: cql.Some(true)})
 			if err != nil || set.p == nil || !set.p.bound {
 				t.Fatalf("values not bound to the session: %+v, %v", set.p, err)
 			}
-			if _, err := InternalCompileOptions(nil, Options{Idempotent: true}); err == nil {
+			if _, err := InternalCompileOptions(nil, Options{Idempotent: cql.Some(true)}); err == nil {
 				t.Fatal("values bound without a session")
 			}
 		})
@@ -105,7 +105,7 @@ func TestOptions(t *testing.T) {
 				"consistency":  {Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Consistency(0xff)}},
 				"serial":       {SerialConsistency: SerialOmit + 1},
 				"timeout":      {Timeout: cql.Option[time.Duration]{Set: true, Value: -1}},
-				"page size":    {PageSize: cql.Option[int32]{Set: true}},
+				"page size":    {PageSize: -1},
 				"prefetch":     {Prefetch: cql.Option[int]{Set: true, Value: 2}},
 				"host":         {HostID: cql.Option[cql.UUID]{Set: true}},
 				"shard":        {ShardID: cql.Option[uint32]{Set: true}},

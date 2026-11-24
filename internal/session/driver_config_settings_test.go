@@ -151,9 +151,10 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			name: "Tuned",
 			// The fields the ConfigBuilder setters WithAuth, WithDialer,
 			// WithConnectTimeout, WithReadTimeout, WithWriteTimeout,
-			// WithNagle(true), WithTCPKeepalive, WithSocketBuffers, WithLinger,
-			// WithConnectionsPerHost, WithMaxRequestsPerConnection,
-			// WithMaxOrphanedStreams, WithReconnect(nil), WithMetadataTimeout,
+			// WithNagle(true), WithTCPKeepalive, WithReceiveBuffer,
+			// WithSendBuffer, WithLinger, WithConnectionsPerHost,
+			// WithMaxRequestsPerConnection, WithMaxOrphanedStreams, no reconnect
+			// policy (internal settings only), WithMetadataTimeout,
 			// WithSchemaAgreement and WithTimestampGenerator(nil) set, and a default
 			// profile with consistency ONE, no serial consistency, 10-row pages,
 			// no timeout, no retry policy and a speculation policy.
@@ -162,7 +163,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 				c.Dialer = secretDialer{token: dialerToken}
 				c.ConnectTimeout, c.ReadTimeout, c.WriteTimeout = 2*time.Second, 3*time.Second, 4*time.Second
 				c.NoDelay, c.SocketKeepalive = false, time.Minute
-				c.ReceiveBuffer, c.SendBuffer, c.Linger = cql.Some(65536), cql.Some(32768), cql.Some(2*time.Second)
+				c.ReceiveBuffer, c.SendBuffer, c.Linger = 65536, 32768, cql.Some(2*time.Second)
 				c.Pool.ConnectionsPerHost, c.Pool.ConnectionsPerShard, c.Pool.AdvancedShardAwareness.Enabled = 2, 0, false
 				c.Pool.MaxRequestsPerConnection, c.Pool.MaxOrphanedStreams = 100, 5
 				c.Reconnect = nil
@@ -203,7 +204,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			name: "Locality",
 			edit: func(c *settings.Config) {
 				p := *c.DefaultProfile
-				p.Routing = implRouting.EngineOf(newReportRoutingWith(t, routing.Options{TokenAware: true, Datacenter: "dc1", Rack: "rack1", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}}))
+				p.Routing = implRouting.EngineOf(newReportRoutingWith(t, routing.Options{Datacenter: "dc1", Rack: "rack1", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}, FixedReplicaOrder: true, NoLeaderAware: true}))
 				c.DefaultProfile = &p
 			},
 			want: map[string]any{
@@ -341,7 +342,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 
 func newReportRouting(t *testing.T) routing.Policy {
 	t.Helper()
-	return newReportRoutingWith(t, routing.Options{TokenAware: true})
+	return newReportRoutingWith(t, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 }
 
 func newReportRoutingWith(t *testing.T, options routing.Options) routing.Policy {

@@ -47,7 +47,6 @@ import (
 	implProtocol "github.com/scylladb/gocql/v2/internal/protocol"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/observe"
 )
 
 func TestSession(t *testing.T) {
@@ -448,18 +447,6 @@ func TestSession(t *testing.T) {
 		if id1 == id2 {
 			t.Errorf("expected distinct session ids, got %q twice", id1)
 		}
-	})
-
-	t.Run("ObserveLifecycle", func(t *testing.T) {
-		s := func() *Core {
-			opaqueStorageValuex := new(Core)
-			return opaqueStorageValuex
-		}()
-
-		p := s.Peripheral()
-		p.InternalConfig.LifecycleObserver = panicLifecycle{}
-		sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: "test", At: time.Now()})
-		s.CloseV2Peripheral()
 	})
 
 	// TestSession/PseudoRandomUUID covers the fallback newSessionID uses if RandomUUID

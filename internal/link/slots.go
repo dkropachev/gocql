@@ -88,6 +88,10 @@ var (
 	// ServerErrorMessage holds func(cqlerr.ServerError, string, []string): it
 	// sets a server error's message and warnings, for engine tests.
 	ServerErrorMessage = NewSlot("cqlerr.serverErrorMessage")
+	// NewAttemptError holds func(err error, timeout time.Duration, inFlight
+	// int, executed bool) error: the failure of one attempt on one
+	// connection.
+	NewAttemptError = NewSlot("cqlerr.newQueryError")
 )
 
 // Package metadata's Snapshot, a handle on the engine's snapshot.

@@ -58,14 +58,6 @@ func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) 
 	}
 	return p, nil
 }
-func (p compiledCASRow[R]) Decode(reader *RowReader) (CASResult[R], error) {
-	var result CASResult[R]
-	err := p.DecodeInto(reader, &result)
-	if err != nil {
-		return CASResult[R]{}, err
-	}
-	return result, nil
-}
 func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) error {
 	if dst == nil {
 		return typeValidation("destination", "nil CAS destination")
@@ -96,13 +88,6 @@ func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) erro
 	dst.Previous.Set = true
 	return nil
 }
-func (p compiledCASRow[R]) Clone(value CASResult[R]) CASResult[R] {
-	if value.Previous.Set {
-		value.Previous.Value = p.previous.Clone(value.Previous.Value)
-	}
-	return value
-}
-
 func (c casRows[R]) Clone(value CASResult[R]) CASResult[R] {
 	if value.Previous.Set {
 		value.Previous.Value = c.decoder.Clone(value.Previous.Value)

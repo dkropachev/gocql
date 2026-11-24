@@ -25,7 +25,7 @@ type structFixture struct {
 	ID        UUID `cql:"id"`
 	TimeID    TimeUUID
 	Addr      netip.Addr
-	Hits      Counter
+	Hits      int64
 	Day       Date
 	Clock     TimeOfDay
 	At        Timestamp
@@ -54,15 +54,15 @@ func structFixtureColumns(t testing.TB) Columns {
 		spec("double", TypeDouble),
 		spec("ascii", TypeASCII),
 		spec("blob", TypeBlob),
-		spec("timeid", TypeTimeUUID),
+		spec("time_id", TypeTimeUUID),
 		spec("addr", TypeInet),
 		spec("hits", TypeCounter),
 		spec("day", TypeDate),
 		spec("clock", TypeTime),
 		spec("at", TypeTimestamp),
 		spec("span", TypeDuration),
-		spec("maybeint", TypeInt),
-		spec("maybetext", TypeText),
+		spec("maybe_int", TypeInt),
+		spec("maybe_text", TypeText),
 	)
 }
 
@@ -92,15 +92,15 @@ func handWrittenFixture() (ParamEncoder[structFixture], RowDecoder[structFixture
 		Param("ascii", ASCIIStringCodec, func(v structFixture) string { return v.ASCII }),
 		Param("blob", ByteSliceCodec, func(v structFixture) []byte { return v.Blob }),
 		Param("id", UUIDCodec, func(v structFixture) UUID { return v.ID }),
-		Param("timeid", TimeUUIDCodec, func(v structFixture) TimeUUID { return v.TimeID }),
+		Param("time_id", TimeUUIDCodec, func(v structFixture) TimeUUID { return v.TimeID }),
 		Param("addr", InetCodec, func(v structFixture) netip.Addr { return v.Addr }),
-		Param("hits", CounterCodec, func(v structFixture) Counter { return v.Hits }),
+		Param("hits", Int64Codec, func(v structFixture) int64 { return v.Hits }),
 		Param("day", DateCodec, func(v structFixture) Date { return v.Day }),
 		Param("clock", TimeCodec, func(v structFixture) TimeOfDay { return v.Clock }),
 		Param("at", TimestampCodec, func(v structFixture) Timestamp { return v.At }),
 		Param("span", DurationCodec, func(v structFixture) Duration { return v.Span }),
-		Param("maybeint", NullableEncoder(Int32Codec), func(v structFixture) Nullable[int32] { return v.MaybeInt }),
-		Param("maybetext", NullableEncoder(StringCodec), func(v structFixture) Nullable[string] { return v.MaybeText }),
+		Param("maybe_int", NullableEncoder(Int32Codec), func(v structFixture) Nullable[int32] { return v.MaybeInt }),
+		Param("maybe_text", NullableEncoder(StringCodec), func(v structFixture) Nullable[string] { return v.MaybeText }),
 	)
 	rows := Row(
 		Column("bool", BoolCodec, func(v *structFixture) *bool { return &v.Bool }),
@@ -114,15 +114,15 @@ func handWrittenFixture() (ParamEncoder[structFixture], RowDecoder[structFixture
 		Column("ascii", ASCIIStringCodec, func(v *structFixture) *string { return &v.ASCII }),
 		Column("blob", ByteSliceCodec, func(v *structFixture) *[]byte { return &v.Blob }),
 		Column("id", UUIDCodec, func(v *structFixture) *UUID { return &v.ID }),
-		Column("timeid", TimeUUIDCodec, func(v *structFixture) *TimeUUID { return &v.TimeID }),
+		Column("time_id", TimeUUIDCodec, func(v *structFixture) *TimeUUID { return &v.TimeID }),
 		Column("addr", InetCodec, func(v *structFixture) *netip.Addr { return &v.Addr }),
-		Column("hits", CounterCodec, func(v *structFixture) *Counter { return &v.Hits }),
+		Column("hits", Int64Codec, func(v *structFixture) *int64 { return &v.Hits }),
 		Column("day", DateCodec, func(v *structFixture) *Date { return &v.Day }),
 		Column("clock", TimeCodec, func(v *structFixture) *TimeOfDay { return &v.Clock }),
 		Column("at", TimestampCodec, func(v *structFixture) *Timestamp { return &v.At }),
 		Column("span", DurationCodec, func(v *structFixture) *Duration { return &v.Span }),
-		Column("maybeint", NullableDecoder(Int32Codec), func(v *structFixture) *Nullable[int32] { return &v.MaybeInt }),
-		Column("maybetext", NullableDecoder(StringCodec), func(v *structFixture) *Nullable[string] { return &v.MaybeText }),
+		Column("maybe_int", NullableDecoder(Int32Codec), func(v *structFixture) *Nullable[int32] { return &v.MaybeInt }),
+		Column("maybe_text", NullableDecoder(StringCodec), func(v *structFixture) *Nullable[string] { return &v.MaybeText }),
 	)
 	return params, rows
 }
@@ -143,7 +143,7 @@ func decodeTestRow[R any](t testing.TB, columns Columns, rows RowDecoder[R], cha
 		t.Fatal(err)
 	}
 	reader := newRowReader(columns, chain, wire.NewLease(chain, nil))
-	row, err := plan.Decode(reader)
+	row, err := decodeRow(plan, reader)
 	if err != nil {
 		t.Fatal(err)
 	}

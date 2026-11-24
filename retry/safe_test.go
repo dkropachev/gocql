@@ -49,6 +49,9 @@ func TestSafe(t *testing.T) {
 		// replay cannot fix.
 		{"WriteTimeout", &cqlerr.WriteTimeoutError{WriteType: cqlerr.WriteTypeSimple}, true, want{retry.Stop, retry.Stop}},
 		{"WriteTimeoutCAS", &cqlerr.WriteTimeoutError{WriteType: cqlerr.WriteTypeCAS}, true, want{retry.Stop, retry.Stop}},
+		// A logged batch whose batch log write timed out: only an idempotent
+		// one is replayed, in place.
+		{"WriteTimeoutBatchLog", &cqlerr.WriteTimeoutError{WriteType: cqlerr.WriteTypeBatchLog}, true, want{retry.Same, retry.Stop}},
 		{"CASWriteUnknown", &cqlerr.CASWriteUnknownError{}, true, want{retry.Stop, retry.Stop}},
 		{"WriteFailure", &cqlerr.WriteFailureError{WriteType: cqlerr.WriteTypeSimple}, true, want{retry.Stop, retry.Stop}},
 		{"ReadFailure", &cqlerr.ReadFailureError{}, true, want{retry.Stop, retry.Stop}},

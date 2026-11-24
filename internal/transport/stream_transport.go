@@ -225,7 +225,7 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 		}
 		return cqlerr.ErrClosed
 	}
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return err
 	}
 	err := fn()
@@ -235,7 +235,7 @@ func (r *InternalExclusiveConn) InternalWithIO(ctx context.Context, fn func() er
 		}
 	}
 	if err == nil {
-		err = ctx.Err()
+		err = ContextError(ctx)
 	}
 	if err == nil {
 		err = r.InternalCtx.Err()

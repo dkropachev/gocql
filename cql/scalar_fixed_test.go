@@ -52,8 +52,8 @@ func TestFixedWidthSplitBodies(t *testing.T) {
 			{body: []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf9}, want: int64(-7)},
 			{body: []byte{1, 2, 3, 4}, err: "gocql: bigint requires 8 bytes, got 4"},
 		}},
-		{TypeCounter, decodeAny(CounterCodec), []fixedWidthCase{
-			{body: []byte{0, 0, 0, 0, 0, 0, 1, 0}, want: Counter(256)},
+		{TypeCounter, decodeAny(Int64Codec), []fixedWidthCase{
+			{body: []byte{0, 0, 0, 0, 0, 0, 1, 0}, want: int64(256)},
 			{body: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9}, err: "gocql: counter requires 8 bytes, got 9"},
 		}},
 		{TypeTimestamp, decodeAny(TimestampCodec), []fixedWidthCase{

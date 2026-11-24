@@ -77,11 +77,6 @@ type InternalSessionRuntime struct {
 	closingOnce          sync.Once
 	prepareWorkersMu     sync.Mutex
 	InternalMu           sync.Mutex
-	// refusedRegistrations counts admissions that took a request id but
-	// that registerExecution refused: the session was closing or closed, or
-	// the reusable query was closed. Requests is requestID minus this, so
-	// admission writes no separate request counter.
-	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
 	// collectedFinal is set once Session.Close wrote the last queued
 	// reports; later collections queue none.
@@ -97,8 +92,11 @@ type InternalSessionRuntime struct {
 	timestamps startTimestamps
 	_          cacheLinePad
 	// attempts..inflight feed Metrics only.
-	attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                           atomic.Int64
+	// requests counts the registered executions. It is written next to
+	// inflight, after registerExecution accepted the execution, so it never
+	// counts an admission that is then refused and never decreases.
+	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
+	inflight                                                     atomic.Int64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
@@ -165,16 +163,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	return metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
-}
-
-// requestCount reports the admitted requests: every request id taken, minus
-// the admissions registerExecution refused. The refusals are read first, so a
-// refusal racing with this read cannot outnumber the ids it read. The count
-// may briefly include an admission that has its id but is about to be refused.
-func (rt *InternalSessionRuntime) requestCount() uint64 {
-	refused := rt.refusedRegistrations.Load()
-	return rt.requestID.Load() - refused
+	return metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 }
 
 // prepareTyped prepares statement for Session.Prepare, bounded by ctx and the
@@ -227,7 +216,7 @@ func (s *InternalSessionRuntime) prepareTypedOnce(ctx context.Context, statement
 		rt.InternalMu.Unlock()
 		select {
 		case <-ctx.Done():
-			return nil, true, ctx.Err()
+			return nil, true, transport.ContextError(ctx)
 		case <-flight.done:
 			return flight.state, true, flight.err
 		}
@@ -310,7 +299,7 @@ func (s *InternalSessionRuntime) prepareOnConn(ctx context.Context, conn *transp
 	return s.prepareOnConnExpected(ctx, conn, state, values, force, nil)
 }
 func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn *transport.Conn, state *InternalPreparedState, values model.EncodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error) {
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, err
 	}
 	if s.Core.Closed() {
@@ -364,7 +353,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 	state.InternalMu.Unlock()
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, transport.ContextError(ctx)
 	case <-flight.done:
 		return flight.result, flight.err
 	}
@@ -608,7 +597,7 @@ func (l *logicalExecution) observesAttempts() bool {
 
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
-func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing2.AttemptEvent) {
 	if l == nil || l.hooks == nil || l.hooks.Attempt == nil {
 		return nil
 	}
@@ -678,7 +667,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	if ctx == nil || rt == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, nil, nil, err
 	}
 	s := rt.Core
@@ -794,11 +783,11 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		// registerExecution refuses a closing or closed session or a closed
 		// query; either way this id is not a request.
-		rt.refusedRegistrations.Add(1)
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
 	}
+	rt.requests.Add(1)
 	rt.inflight.Add(1)
 	if hooks != nil {
 		if hooks.Request != nil {
@@ -1062,7 +1051,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
@@ -1122,7 +1111,7 @@ func speculationOnly(request *InternalExecutionRequest) bool {
 // speculationDelay returns the delay before the speculative attempt that
 // follows started attempts, if request speculates.
 func speculationDelay(request *InternalExecutionRequest, started int) (time.Duration, bool) {
-	if !request.options.InternalOptions.Idempotent || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
+	if !request.isIdempotent() || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
 		return 0, false
 	}
 	perfAdd(2, 1)
@@ -1141,17 +1130,28 @@ func (s *InternalSessionRuntime) pagePlan(request *InternalExecutionRequest, met
 	if policy == nil {
 		return nil, nil
 	}
-	if err := policy.Validate(metadata); err != nil {
+	storage := new(routing.InternalLazyRoutingPlan)
+	if direct && request.query != nil { // the plan lives in the query's storage
+		storage = &request.query.routing
+	}
+	return routePlan(policy, request.routing, metadata, storage, tablet)
+}
+
+// routePlan returns the plan of the request info describes under policy,
+// in m. A request pinned to a host follows the pinned plan without
+// consulting the policy; any other first has the policy validated against
+// m. A built-in policy's plan uses storage and the request's tablet.
+func routePlan(policy routing.RoutingPolicy, info routing2.Info, m *routing.MetadataSnapshot, storage *routing.InternalLazyRoutingPlan, tablet *routing.InternalTabletLookup) (routing.QueryPlan, error) {
+	if info.HostID.Set {
+		return routing.PinnedPlan(info, m, storage), nil
+	}
+	if err := policy.Validate(m); err != nil {
 		return nil, err
 	}
 	if builtin, ok := policy.(*routing.InternalRoutingPolicy); ok {
-		storage := new(routing.InternalLazyRoutingPlan)
-		if direct && request.query != nil { // the plan lives in the query's storage
-			storage = &request.query.routing
-		}
-		return builtin.InternalPlanWith(request.routing, metadata, storage, tablet), nil
+		return builtin.InternalPlanWith(info, m, storage, tablet), nil
 	}
-	return routing.NewPlan(policy, request.routing, metadata), nil
+	return routing.NewPlan(policy, info, m), nil
 }
 
 // pinnedUsable reports whether a continuation page may reuse conn.
@@ -1423,7 +1423,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 	// contextEnded ends the execution with the context's error.
 	contextEnded := func() (*transport.InternalResponsePage, error) {
 		aggregate.Attempts = startedCount
-		failure := ctx.Err()
+		failure := transport.ContextError(ctx)
 		// An abandoned in-flight attempt may have been applied.
 		for _, a := range inflight {
 			log.abandon(failure, a.conn, a.number, a.consistency)
@@ -1538,10 +1538,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
-			}
-			if decision.Action == retry.IgnoreWrite {
-				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {

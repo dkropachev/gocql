@@ -3,12 +3,15 @@
 
 package cql
 
-// Option distinguishes an explicit zero value from an inherited setting.
-// Its zero value inherits the setting; Set=true applies Value.
+// Option is a value that may be absent: Set reports whether Value holds one.
+// In a setting, such as an exec.Options field, it tells an explicit zero
+// apart from the inherited default: the zero Option inherits, Some(v)
+// applies v. In a result, such as cqlerr.AttemptFailure.ShardID, an unset Option means
+// the value is not known. Nullable is the type for a CQL NULL.
 type Option[T any] struct {
-	// Value is the setting's value when Set is true.
+	// Value is the value when Set is true.
 	Value T
-	// Set reports that Value applies instead of the inherited setting.
+	// Set reports that Value holds a value.
 	Set bool
 }
 

@@ -67,16 +67,13 @@ func TestDialectString(t *testing.T) {
 // an UnsupportedSettingError naming the setting and the dialect, and builds
 // with ScyllaV4.
 func TestScyllaOnlySettings(t *testing.T) {
-	routes, err := NewClientRoutes().WithRoute("c1", "a.example").Build()
-	if err != nil {
-		t.Fatal(err)
-	}
+	route := ClientRoute{ConnectionID: "c1", Hostname: "a.example"}
 	for name, tc := range map[string]struct {
 		setting string
 		choose  func(*ConfigBuilder) *ConfigBuilder
 	}{
-		"ClientRoutes": {"client routes", func(b *ConfigBuilder) *ConfigBuilder { return b.WithClientRoutes(routes) }},
-		"MetadataServerTimeout": {"metadata server timeout", func(b *ConfigBuilder) *ConfigBuilder {
+		"ClientRoutes": {"WithClientRoutes", func(b *ConfigBuilder) *ConfigBuilder { return b.WithClientRoutes(route) }},
+		"MetadataServerTimeout": {"WithMetadataServerTimeout", func(b *ConfigBuilder) *ConfigBuilder {
 			return b.WithMetadataServerTimeout(time.Second)
 		}},
 	} {

@@ -136,6 +136,7 @@ func newControlTestServer(t *testing.T, configure func(srv *controlTestServer)) 
 
 func (srv *controlTestServer) cluster() *InternalClusterSettings {
 	cfg := InternalNewClusterSettings(srv.Address)
+	cfg.Port = addressesPort(srv.Address)
 	cfg.ProtoVersion = protocol.ProtoVersion4
 	cfg.Logger = logging.Nop()
 	return cfg

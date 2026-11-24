@@ -192,7 +192,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}, hasCounter: state.hasCounter}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}, hasCounter: state.hasCounter, idempotent: p.privateStorage.idempotent, kindInferred: p.privateStorage.kindInferred}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -214,7 +214,8 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: statement.Kind}, hasCounter: hasCounterColumn(columns)}
+	kind, inferred := executionKind[R](statement.Kind)
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: kind}, hasCounter: hasCounterColumn(columns), idempotent: statement.Idempotent, kindInferred: inferred}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
@@ -257,7 +258,7 @@ func (s *queryState) begin(ctx context.Context) error {
 	if ctx == nil {
 		return cqltype.TypeValidation("context", "nil context")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -279,7 +280,7 @@ func (s *queryState) begin(ctx context.Context) error {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			return ctx.Err()
+			return transport.ContextError(ctx)
 		}
 		s.mu.Lock()
 	}
@@ -434,7 +435,7 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 		return cqlerr.ErrClosed
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	return batch.addValue(s, request.InternalSource, request.statement, &request.routing, q.params, q.columns, value, q.allowUnset)
+	return batch.addValue(s, request.InternalSource, request.statement, request.memberRouting(), request.idempotent, q.params, q.columns, value, q.allowUnset)
 }
 
 func (s *queryState) close() {
@@ -492,7 +493,7 @@ func (s *queryState) wait(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return transport.ContextError(ctx)
 	}
 }
 
@@ -511,7 +512,7 @@ func (q *Query[P, R]) Close() {
 
 // Wait waits until the query's last execution has drained: accepted
 // transport writes, attempts in flight and their observer callbacks. It
-// returns ctx.Err() if ctx ends first. After Close, a nil result means
+// returns transport.ContextError(ctx) if ctx ends first. After Close, a nil result means
 // nothing of the query remains in flight.
 func (q *Query[P, R]) Wait(ctx context.Context) error {
 	if q == nil {

@@ -4,7 +4,7 @@ Speculation starts another attempt of a request on the next host of its plan
 when the first one is slow, and returns whichever answers first. It is off by
 default. Set `Profile.Speculation`, with `ProfileBuilder.WithSpeculation`, to a
 `retry.SpeculationPolicy`; nil disables it. The driver ships no policy:
-`Delay(attempt)` receives the number of attempts started so far and returns how
+`Delay(started)` receives the number of attempts started so far and returns how
 long to wait before starting another and whether to start one at all.
 
 ```go
@@ -25,10 +25,14 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	Build()
 ```
 
-A request speculates only when it is idempotent (`exec.Options.Idempotent`)
-and known to be ordinary. ScyllaDB marks conditional statements in prepared
-metadata, so its prepared statements are classified; on Cassandra, and for
-unprepared statements, set `Statement.Kind` to `cql.OrdinaryStatement`.
+A request speculates only when it is idempotent and known to be ordinary.
+Mark a statement idempotent with `Statement.Idempotent`, which its prepared
+statement, queries and batch members carry; `exec.Options.Idempotent`, when
+set, overrides it for one execution. ScyllaDB marks conditional statements in
+prepared metadata, so its prepared statements are classified. Elsewhere a
+statement whose row type is `cql.EmptyRow` is ordinary unless its `Kind` says
+otherwise; for any other, on Cassandra or unprepared, set `Statement.Kind` to
+`cql.OrdinaryStatement`.
 Unknown and conditional statements, requests with SERIAL or LOCAL_SERIAL
 consistency, and batches that hold an unknown or conditional member never
 speculate; an idempotent batch of ordinary members can. Streams never

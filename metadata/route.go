@@ -22,7 +22,7 @@ const anyShard int32 = -1
 // moving on is the plan's next Route. Policies take routes from a Snapshot
 // through routing.HostRoutes, whose routes have no shard, and
 // routing.ReplicaRoutes, whose routes have a shard when tablet placement
-// names one, and narrow them with WithShard and ShardOf. The zero Route has
+// names one, and narrow them with WithShardID and ShardOf. The zero Route has
 // no host.
 type Route struct {
 	// host is the session's handle of the host. The engine reads it

@@ -6,9 +6,11 @@ package cqlerr
 import "fmt"
 
 // ExecutionStatus reports what a failed request may have done on the cluster.
-// By severity, NotExecuted < MaybeExecuted < PartiallyExecuted. The zero
-// ExecutionStatus is MaybeExecuted, the safe assumption. Later releases may
-// add values, so a switch over them needs a default case.
+// Compare a status with == or a switch, never with < or >: the numeric order
+// of the values is not their severity, which is NotExecuted, then
+// MaybeExecuted, then PartiallyExecuted. The zero ExecutionStatus is
+// MaybeExecuted, the safe assumption. Later releases may add values, so a
+// switch over them needs a default case.
 type ExecutionStatus uint8
 
 const (

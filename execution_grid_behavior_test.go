@@ -359,7 +359,7 @@ func gridUpdate(kind cql.StatementKind) cql.Statement[int32, cql.EmptyRow] {
 // gridOptions are the options every grid call runs with, so the requests
 // show whether each row applies them the same way. Prefetch is off so that
 // the requests a call sends do not depend on timing.
-var gridOptions = exec.Options{Consistency: cql.Some(cql.Three), PageSize: cql.Some[int32](2), Prefetch: cql.Some(0)}
+var gridOptions = exec.Options{Consistency: cql.Some(cql.Three), PageSize: 2, Prefetch: cql.Some(0)}
 
 // gridPages answers the first page with a and b and a page state, and the
 // page resumed from that state with c.

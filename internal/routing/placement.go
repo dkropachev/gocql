@@ -491,7 +491,7 @@ func InternalReconcileTabletPlacement(old, current *MetadataSnapshot) *tabletPla
 	}
 	known := make(map[cql.UUID]bool, len(SnapshotData(current).InternalHosts))
 	for _, h := range SnapshotData(current).InternalHosts {
-		known[h.ID] = true
+		known[h.HostID] = true
 	}
 	for k, t := range root.All() {
 		if _, _, err := InternalMetadataSnapshotLookupRanges(current, k.InternalKeyspace, k.InternalTable); err != nil || InternalMetadataSnapshotTableIdentity(current, k) != t.InternalIdentity {

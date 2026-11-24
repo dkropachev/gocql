@@ -22,3 +22,11 @@ func hasErrorType[E error](err error) bool {
 	_, ok := errors.AsType[E](err)
 	return ok
 }
+
+// decodeRow decodes one row with plan into a new R, as the engine does for a
+// nil destination.
+func decodeRow[R any](plan CompiledRow[R], reader *RowReader) (R, error) {
+	var row R
+	err := plan.DecodeInto(reader, &row)
+	return row, err
+}

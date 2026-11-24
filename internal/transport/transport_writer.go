@@ -67,18 +67,18 @@ func (w *InternalDeadlineContextWriter) InternalWriteSpanSlice(ctx context.Conte
 
 // writeSpans writes chain, or slice when chain is empty.
 func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wire.Chain, slice []wire.Span, total int64) (int64, error) {
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return 0, err
 	}
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return 0, ContextError(ctx)
 	case <-w.InternalQuit:
 		return 0, cqlerr.ErrConnectionClosed
 	case w.InternalSemaphore <- struct{}{}:
 	}
 	defer func() { <-w.InternalSemaphore }()
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return 0, err
 	}
 	if err := setWriteDeadline(w.InternalW, &w.lastDeadlineZero, w.InternalTimeout.Load()); err != nil {
@@ -115,7 +115,7 @@ func (w *InternalDeadlineContextWriter) writeSpans(ctx context.Context, chain wi
 }
 
 func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain wire.Chain) (int64, error) {
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return 0, err
 	}
 	resultChan := writeResultChanPool.Get()
@@ -123,7 +123,7 @@ func (w *InternalWriteCoalescer) InternalWriteSpans(ctx context.Context, chain w
 	select {
 	case <-ctx.Done():
 		writeResultChanPool.Put(resultChan)
-		return 0, ctx.Err()
+		return 0, ContextError(ctx)
 	case <-w.InternalQuit:
 		writeResultChanPool.Put(resultChan)
 		return 0, cqlerr.ErrConnectionClosed

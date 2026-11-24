@@ -363,7 +363,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 	if ctx == nil {
 		return nil, cqltype.TypeValidation("stream context", "nil context")
 	}
-	if (!target.HostID.IsEmpty() && target.HostID != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)) || routing.HostID.Set && routing.HostID.Value != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) {
+	if (!target.HostID.IsZero() && target.HostID != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost)) || routing.HostID.Set && routing.HostID.Value != implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) {
 		return nil, cqlerr.ErrNoConnections
 	}
 	for {

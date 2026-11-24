@@ -86,17 +86,27 @@ func TestQueryAll(t *testing.T) {
 		}
 	})
 
+	// A nil destination decodes each row into a new value, which the loop
+	// may keep.
 	t.Run("NilDestination", func(t *testing.T) {
-		q, _ := eachTestQuery(t)
-		yields := 0
+		q, serve := eachTestQuery(t)
+		served := serve(runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c"))
+		var kept []*[]byte
 		for row, err := range q.All(ctx, cql.EmptyRow{}, nil) {
-			yields++
-			if row != nil || err == nil {
-				t.Fatalf("nil destination yielded %v, %v", row, err)
+			if err != nil {
+				t.Fatal(err)
 			}
+			kept = append(kept, row)
 		}
-		if yields != 1 {
-			t.Fatalf("yields %d", yields)
+		<-served
+		if len(kept) != 3 || kept[0] == kept[1] || kept[1] == kept[2] || string(*kept[0]) != "a" || string(*kept[1]) != "b" || string(*kept[2]) != "c" {
+			t.Fatalf("kept rows %v", kept)
+		}
+		served = serve(runtimeRowsBody(nil, "d"))
+		found, _, err := q.One(ctx, cql.EmptyRow{}, nil)
+		<-served
+		if !found || err != nil {
+			t.Fatalf("One with a nil destination: %v, %v", found, err)
 		}
 	})
 }
@@ -181,4 +191,88 @@ func TestUnpreparedAll(t *testing.T) {
 	if open != 0 {
 		t.Fatalf("open queries after UnpreparedAll: %d", open)
 	}
+}
+
+// TestHandleAll checks that Rows.All and Page.All yield the remaining rows,
+// across pages for Rows, and close the handle when the loop ends.
+func TestHandleAll(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	t.Run("Rows", func(t *testing.T) {
+		q, serve := eachTestQuery(t)
+		served := serve(runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c"))
+		rows, err := q.Run(ctx, cql.EmptyRow{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dst []byte
+		var got []string
+		for row, err := range rows.All(&dst) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row != &dst {
+				t.Fatal("All yielded a row other than dst")
+			}
+			got = append(got, string(*row))
+		}
+		<-served
+		if len(got) != 3 || got[0] != "a" || got[2] != "c" {
+			t.Fatalf("rows %q", got)
+		}
+		// The loop closed the rows, so the query is free again.
+		served = serve(runtimeRowsBody(nil, "d"))
+		if found, _, err := q.One(ctx, cql.EmptyRow{}, nil); !found || err != nil {
+			t.Fatalf("query after All: %v, %v", found, err)
+		}
+		<-served
+	})
+
+	t.Run("RowsBreak", func(t *testing.T) {
+		q, serve := eachTestQuery(t)
+		served := serve(runtimeRowsBody(nil, "a", "b"))
+		rows, err := q.Run(ctx, cql.EmptyRow{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for range rows.All(nil) {
+			break
+		}
+		<-served
+		if err := rows.Err(); err != nil {
+			t.Fatal(err)
+		}
+		served = serve(runtimeRowsBody(nil, "c"))
+		if found, _, err := q.One(ctx, cql.EmptyRow{}, nil); !found || err != nil {
+			t.Fatalf("query after break: %v, %v", found, err)
+		}
+		<-served
+	})
+
+	t.Run("Page", func(t *testing.T) {
+		q, serve := eachTestQuery(t)
+		served := serve(runtimeRowsBody([]byte{1}, "a", "b"))
+		page, err := q.RunPage(ctx, cql.EmptyRow{}, cql.StartPage(), 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []*[]byte
+		for row, err := range page.All(nil) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			got = append(got, row)
+		}
+		<-served
+		if len(got) != 2 || got[0] == got[1] || string(*got[1]) != "b" {
+			t.Fatalf("rows %v", got)
+		}
+		if state := page.State(); !state.More() || string(state.Token()) != "\x01" {
+			t.Fatalf("state after All: %+v", state)
+		}
+		if page.NextInto(new([]byte)) {
+			t.Fatal("page still open after All")
+		}
+	})
 }

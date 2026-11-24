@@ -47,7 +47,7 @@ var streamDecoder = cql.StreamRowInto(func(*row) {}, cql.StreamColumn("k", cql.S
 var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.ByteSliceCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
-	policy, _ := routing.NewPolicy(routing.Options{TokenAware: true, Datacenter: "datacenter1"})
+	policy, _ := routing.NewPolicy(routing.Options{Datacenter: "datacenter1", FixedReplicaOrder: true, NoLeaderAware: true})
 	builder := config.New(config.ScyllaV4, hosts...).
 		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).

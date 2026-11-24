@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -20,7 +21,7 @@ import (
 
 func tokenTestSnapshot() *MetadataSnapshot {
 	column := func(name, typ string) *metadata.Column {
-		return &metadata.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnPartitionKey}
+		return &metadata.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnKindPartitionKey}
 	}
 	ks := &metadata.Keyspace{
 		Name: "ks",
@@ -73,10 +74,7 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("MatchesPreparedRouting", func(t *testing.T) {
-		text, err := cql.TextValue("key")
-		if err != nil {
-			t.Fatal(err)
-		}
+		text := cql.TextValue("key")
 		got, err := m.Token("ks", "composite", cql.IntValue(7), text)
 		if err != nil {
 			t.Fatal(err)
@@ -95,7 +93,7 @@ func TestSnapshotToken(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text, _ := cql.TextValue("x")
+		text := cql.TextValue("x")
 		tuple, err := cql.TupleValue(tupleType.WithFrozen(true), []cql.Value{cql.IntValue(1), text})
 		if err != nil {
 			t.Fatal(err)
@@ -105,7 +103,7 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("Errors", func(t *testing.T) {
-		text, _ := cql.TextValue("x")
+		text := cql.TextValue("x")
 		for name, call := range map[string]func() error{
 			"arity":       func() error { _, err := m.Token("ks", "composite", cql.IntValue(1)); return err },
 			"type":        func() error { _, err := m.Token("ks", "single", text); return err },
@@ -122,6 +120,19 @@ func TestSnapshotToken(t *testing.T) {
 		}
 		if _, err := m.Token("nope", "single", cql.IntValue(1)); !errors.Is(err, cqlerr.ErrNoKeyspace) {
 			t.Errorf("missing keyspace: %v", err)
+		}
+		// A keyspace or table the snapshot does not hold may exist but not
+		// be loaded: the error is a validation error that says so.
+		for name, call := range map[string]func() error{
+			"Token keyspace":    func() error { _, err := m.Token("nope", "single", cql.IntValue(1)); return err },
+			"Token table":       func() error { _, err := m.Token("ks", "missing", cql.IntValue(1)); return err },
+			"Replicas keyspace": func() error { _, err := m.Replicas("nope", "single", 0); return err },
+			"Replicas table":    func() error { _, err := m.Replicas("ks", "missing", 0); return err },
+		} {
+			err := call()
+			if _, ok := errors.AsType[*cql.ValidationError](err); !ok || !strings.Contains(err.Error(), "not loaded") || cqlerr.KindOf(err) != cqlerr.KindInvalid {
+				t.Errorf("%s: %v; want a validation error saying it is not loaded", name, err)
+			}
 		}
 	})
 }

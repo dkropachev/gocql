@@ -54,7 +54,7 @@ func TestMetadata(t *testing.T) {
 		defer cancel()
 		contactPoints := getClusterHosts()
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
-			c.WithDiscovery(false).WithConnectionsPerHost(1).NoAdvancedShardAwareness()
+			c.WithDiscovery(false).WithConnectionsPerHost(1).WithAdvancedShardAwareness(false)
 		})
 		s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 		if err != nil {
@@ -63,10 +63,10 @@ func TestMetadata(t *testing.T) {
 		defer s.Close()
 		identities := map[cql.UUID]bool{}
 		for _, host := range s.Metadata().Hosts() {
-			if host.ID.IsEmpty() || identities[host.ID] {
+			if host.HostID.IsZero() || identities[host.HostID] {
 				t.Fatal("invalid configured contact identities", s.Metadata().Hosts())
 			}
-			identities[host.ID] = true
+			identities[host.HostID] = true
 		}
 		if len(identities) != len(contactPoints) {
 			t.Fatal("configured contacts collapsed", s.Metadata().Hosts())
@@ -75,7 +75,7 @@ func TestMetadata(t *testing.T) {
 			t.Fatal(err)
 		}
 		keyspace := fmt.Sprintf("metadata_control_%x", time.Now().UnixNano())
-		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: keyspace, Capacity: 64})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: keyspace, Capacity: 64})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +143,7 @@ func TestMetadata(t *testing.T) {
 				if event.Generation <= before.Generation() {
 					continue
 				}
-				if event.Target == "TABLE" && event.Object == "records" && event.Change == "CREATED" {
+				if event.ObjectKind == "TABLE" && event.Object == "records" && event.Change == "CREATED" {
 					current, ok := s.Metadata().Keyspace(keyspace)
 					if !ok || current.Tables["records"] == nil {
 						t.Fatal("event preceded snapshot publication", event)
@@ -170,7 +170,7 @@ func TestMetadata(t *testing.T) {
 		t.Run("ControlReconnect", func(t *testing.T) {
 			t.Parallel()
 
-			cluster := createV2Cluster().WithIgnoreEvents(event.Topology, event.Status)
+			cluster := createV2Cluster().WithIgnoreEvents(event.KindTopology, event.KindStatus)
 
 			sess, err := gocql.Connect(context.Background(), mustBuild(t, cluster))
 			if err != nil {
@@ -178,7 +178,7 @@ func TestMetadata(t *testing.T) {
 			}
 			defer sess.Close()
 
-			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.Control}, Capacity: 10})
+			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.KindControl}, Capacity: 10})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -190,7 +190,7 @@ func TestMetadata(t *testing.T) {
 
 			select {
 			case ev := <-sub.Events():
-				if ev.Kind != event.Control || ev.Change != "RECONNECTED" || ev.HostID.IsEmpty() || !ev.Address.IsValid() {
+				if ev.Kind != event.KindControl || ev.Change != "RECONNECTED" || ev.HostID.IsZero() || !ev.Address.IsValid() {
 					t.Fatalf("unexpected reconnect event: %+v", ev)
 				}
 			case <-time.After(30 * time.Second):
@@ -214,7 +214,7 @@ func TestMetadata(t *testing.T) {
 
 			// Filter events to the specific keyspace this test creates, so that
 			// concurrent DDL from parallel tests does not cause spurious matches.
-			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: keyspace, Capacity: 10})
+			sub, err := sess.Subscribe(event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: keyspace, Capacity: 10})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -232,7 +232,7 @@ func TestMetadata(t *testing.T) {
 
 			select {
 			case ev := <-sub.Events():
-				if ev.Kind != event.Schema || ev.Target != "KEYSPACE" || ev.Keyspace != keyspace || ev.Change != "CREATED" {
+				if ev.Kind != event.KindSchema || ev.ObjectKind != "KEYSPACE" || ev.Keyspace != keyspace || ev.Change != "CREATED" {
 					t.Fatalf("unexpected schema event: %+v", ev)
 				}
 			case <-time.After(30 * time.Second):
@@ -290,7 +290,7 @@ func TestMetadata(t *testing.T) {
 			hosts := session.Metadata().Hosts()
 			require.Len(t, hosts, *clusterSize)
 			for _, host := range hosts {
-				require.NotEqual(t, "35c0ec48-5109-40fd-9281-9e9d4add2f1e", host.ID.String())
+				require.NotEqual(t, "35c0ec48-5109-40fd-9281-9e9d4add2f1e", host.HostID.String())
 			}
 			require.Equal(t, "local", cassandraText(t, cassandraRead(t, session, "SELECT key FROM system.local"), "key"))
 		})
@@ -374,7 +374,7 @@ func TestMetadata(t *testing.T) {
 
 			cluster := createV2Cluster()
 
-			v2ConfigureRouting(t, cluster, routing.Options{TokenAware: true})
+			v2ConfigureRouting(t, cluster, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()

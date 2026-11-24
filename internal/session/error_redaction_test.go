@@ -37,7 +37,7 @@ type panickingObserver struct{}
 func (panickingObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, func(e observe.RequestEvent) { panic(e) }
 }
-func (panickingObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (panickingObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
 	return func(e routing2.AttemptEvent) { panic(e) }
 }
 
@@ -133,7 +133,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					defer bound.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
-					opts := Options{Profile: new(profile), Idempotent: true, Observer: panickingObserver{}}
+					opts := Options{Profile: new(profile), Idempotent: cql.Some(true), Observer: panickingObserver{}}
 					if tc.timeout > 0 {
 						opts.Timeout = cql.Some(tc.timeout)
 					}

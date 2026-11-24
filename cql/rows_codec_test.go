@@ -70,14 +70,12 @@ func (failingRowEncoder) Encode(w *ValueWriter, value int32) error {
 }
 
 func TestRowsCodec(t *testing.T) {
-	t.Run("CompiledClone", func(t *testing.T) {
-		text, blob := FoundationScalar(t, TypeText), FoundationScalar(t, TypeBlob)
+	t.Run("Clone", func(t *testing.T) {
 		t.Run("PairRows", func(t *testing.T) {
-			cols := NewColumns(ColumnSpec{Name: "t", Type: text}, ColumnSpec{Name: "b", Type: blob})
-			plan := CodecTestMust(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec)).Compile(cols))
+			rows := PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))
 			name, payload := []byte("name"), []byte("payload")
 			value := Pair[Text, Bytes]{First: Text{bytes: BorrowBytes(name)}, Second: BorrowBytes(payload)}
-			cloned := plan.Clone(value)
+			cloned := rows.Clone(value)
 			name[0], payload[0] = 'N', 'P'
 			if value.First.String() != "Name" || string(value.Second.OwnedBytes()) != "Payload" {
 				t.Fatal("the original pair does not borrow its inputs")
@@ -87,11 +85,9 @@ func TestRowsCodec(t *testing.T) {
 			}
 		})
 		t.Run("ConvertRows", func(t *testing.T) {
-			cols := NewColumns(ColumnSpec{Name: "t", Type: text})
 			clones := 0
 			mapped := ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, func(s string) string { clones++; return "clone of " + s })
-			plan := CodecTestMust(mapped.Compile(cols))
-			if got := plan.Clone("x"); got != "clone of x" || clones != 1 {
+			if got := mapped.Clone("x"); got != "clone of x" || clones != 1 {
 				t.Fatalf("Clone = %q after %d calls, want the caller's clone function", got, clones)
 			}
 		})
@@ -126,7 +122,7 @@ func TestRowsCodec(t *testing.T) {
 				go func() {
 					defer wg.Done()
 					for j := 0; j < 100; j++ {
-						value, err := plan.Decode(newRowReader(columns, chain, nil))
+						value, err := decodeRow(plan, newRowReader(columns, chain, nil))
 						if err != nil || value != 123 {
 							t.Errorf("value=%d err=%v", value, err)
 							return
@@ -146,7 +142,7 @@ func TestRowsCodec(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			result, err := plan.Decode(newRowReader(columns, chain, nil))
+			result, err := decodeRow(plan, newRowReader(columns, chain, nil))
 			if err != nil || result.First != 9 || result.Second != 9 {
 				t.Fatalf("result=%+v err=%v", result, err)
 			}
@@ -179,7 +175,7 @@ func TestRowsCodec(t *testing.T) {
 					body := encodeTestParams(t, columns, PairParams(Params(paramAt(0), paramAt(1)), PairParams(OneParam(Int32Codec), OneParam(Int32Codec))),
 						Pair[[2]int32, Pair[int32, int32]]{[2]int32{1, 2}, Pair[int32, int32]{3, 4}})
 					plan := CodecTestMust(rows.Compile(columns))
-					got, err := plan.Decode(newRowReader(columns, body, nil))
+					got, err := decodeRow(plan, newRowReader(columns, body, nil))
 					if err != nil || got.First != [2]int32{1, 2} || got.Second.First != 3 || got.Second.Second != 4 {
 						t.Fatalf("got %+v, %v", got, err)
 					}
@@ -504,7 +500,7 @@ func TestRowsCodec(t *testing.T) {
 			checkRowScalarEquivalent(t, TypeTinyInt, Int8Codec, rowScalarFrame(1, []byte{0x80}), false, false)
 			checkRowScalarEquivalent(t, TypeSmallInt, Int16Codec, rowScalarFrame(2, []byte{0x80, 0}), false, false)
 			checkRowScalarEquivalent(t, TypeBigInt, Int64Codec, rowScalarFrame(8, []byte{0x80, 0, 0, 0, 0, 0, 0, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeCounter, CounterCodec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
+			checkRowScalarEquivalent(t, TypeCounter, Int64Codec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
 		})
 	})
 	t.Run("Params", func(t *testing.T) {
@@ -560,7 +556,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 			for _, malformed := range [][]byte{{0, 0, 0}, {0, 0, 0, 8, 1}, {255, 255, 255, 254}} {
 				chain, _ := wire.NewChain(wire.Borrow(malformed))
-				if _, err := plan.Decode(newRowReader(columns, chain, nil)); err == nil {
+				if _, err := decodeRow(plan, newRowReader(columns, chain, nil)); err == nil {
 					t.Fatalf("accepted malformed ignored cell: %x", malformed)
 				}
 			}
@@ -594,7 +590,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatal(err)
 			}
 			reader := newRowReader(columns, chain, lease)
-			row, err := plan.Decode(reader)
+			row, err := decodeRow(plan, reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -607,7 +603,7 @@ func TestRowsCodec(t *testing.T) {
 			if row.Key != 42 || !bytes.Equal(row.Body.OwnedBytes(), payload) {
 				t.Fatalf("wrong row: %+v", row)
 			}
-			clone := plan.Clone(row)
+			clone := rows.Clone(row)
 			lease.Release()
 			if _, err := row.Body.At(0); !errors.Is(err, ErrReleased) {
 				t.Fatalf("expired row: %v", err)

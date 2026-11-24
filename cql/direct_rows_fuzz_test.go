@@ -43,7 +43,7 @@ func FuzzDirectRowsMatchCodecs(f *testing.F) {
 		Column("i16", Decoder[int16](genericRowScalar[int16]{Int16Codec}), func(r *directRow) *int16 { return &r.I16 }),
 		Column("i32", Decoder[int32](genericRowScalar[int32]{Int32Codec}), func(r *directRow) *int32 { return &r.I32 }),
 		Column("i64", Decoder[int64](genericRowScalar[int64]{Int64Codec}), func(r *directRow) *int64 { return &r.I64 }),
-		Column("count", Decoder[Counter](genericRowScalar[Counter]{CounterCodec}), func(r *directRow) *Counter { return &r.Count }),
+		Column("count", Decoder[int64](genericRowScalar[int64]{Int64Codec}), func(r *directRow) *int64 { return &r.Count }),
 		Column("view", Decoder[Bytes](genericRowScalar[Bytes]{BlobCodec}), func(r *directRow) *Bytes { return &r.View }),
 		Column("owned", Decoder[[]byte](genericRowScalar[[]byte]{ByteSliceCodec}), func(r *directRow) *[]byte { return &r.Owned }),
 		IgnoreColumn[directRow]("text"),

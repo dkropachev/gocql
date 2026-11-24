@@ -41,7 +41,7 @@ func TestAttemptLog(t *testing.T) {
 	t.Run("MergeHandOff", func(t *testing.T) {
 		var log attemptLog
 		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{}, false)
-		later := newExecutionError(overloaded, cql.Result{Attempts: 1}, cqlerr.NotExecuted, []AttemptFailure{{Err: overloaded, Number: 1, Status: cqlerr.NotExecuted}})
+		later := newExecutionError(overloaded, cql.Result{Attempts: 1}, cqlerr.NotExecuted, []AttemptFailure{{Err: overloaded, Number: 1, ExecutionStatus: cqlerr.NotExecuted}})
 		err := log.merge(later, cql.Result{})
 		merged, ok := errors.AsType[*ExecutionError](err)
 		if !ok {
@@ -50,7 +50,7 @@ func TestAttemptLog(t *testing.T) {
 		if merged.ExecutionStatus() != cqlerr.MaybeExecuted || len(merged.Attempts) != 2 || merged.Result.Attempts != 2 {
 			t.Fatalf("status %v attempts %d result %d", merged.ExecutionStatus(), len(merged.Attempts), merged.Result.Attempts)
 		}
-		if !errors.Is(err, cqlerr.ErrTimeoutNoResponse) {
+		if !errors.Is(merged.Attempts[0].Err, cqlerr.ErrTimeoutNoResponse) {
 			t.Fatal("earlier attempt lost")
 		}
 	})
@@ -59,7 +59,8 @@ func TestAttemptLog(t *testing.T) {
 		var log attemptLog
 		log.fail(timeout, nil, 1, 0, cql.Option[cql.UUID]{}, false)
 		err := log.merge(errors.New("hand-off failed"), cql.Result{})
-		if cqlerr.ExecutionStatusOf(err) != cqlerr.MaybeExecuted || !errors.Is(err, cqlerr.ErrTimeoutNoResponse) {
+		merged, ok := errors.AsType[*ExecutionError](err)
+		if !ok || cqlerr.ExecutionStatusOf(err) != cqlerr.MaybeExecuted || len(merged.Attempts) != 1 || !errors.Is(merged.Attempts[0].Err, cqlerr.ErrTimeoutNoResponse) {
 			t.Fatal(err)
 		}
 	})

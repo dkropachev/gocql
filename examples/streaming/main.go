@@ -66,7 +66,7 @@ func run() (resultErr error) {
 	}
 	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
-		NoAdvancedShardAwareness().
+		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
 	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {
@@ -237,7 +237,7 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned := exec.Options{PageSize: cql.Some[int32](2), HostID: cql.Some(hostsSnapshot[0].ID)}
+	pinned := exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)}
 	options := exec.StreamOptions{Incremental: incremental, Options: pinned}
 	query, err := prepared.Query(options)
 	if err != nil {

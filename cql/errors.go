@@ -12,6 +12,21 @@ import (
 // response storage it borrows was released.
 var ErrReleased = errors.New("gocql: borrowed value has been released")
 
+// ErrNull reports a CQL NULL read into a destination that cannot hold one,
+// such as an int64 field or a Value accessor. Decode a nullable column into
+// Nullable[T] instead. v1 decoded NULL as the zero value.
+var ErrNull = errors.New("gocql: value is null")
+
+// nullCellError is the failure of decoding NULL into a non-nullable value.
+type nullCellError struct{ kind Type }
+
+func (e nullCellError) Error() string {
+	return fmt.Sprintf("gocql: nonnullable %s cannot decode cell state null", e.kind)
+}
+
+// Unwrap returns ErrNull.
+func (nullCellError) Unwrap() error { return ErrNull }
+
 // ValidationError describes an invalid API argument or type descriptor.
 //
 // The driver returns it filled in; its zero value is an error without detail.

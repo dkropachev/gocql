@@ -40,7 +40,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			reader := newRowReader(columns, chain, wire.NewLease(chain, nil))
-			result, err := plan.Decode(reader)
+			result, err := decodeRow(plan, reader)
 			if err == nil {
 				err = finishRowReader(reader)
 			}
@@ -98,7 +98,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 			reader := newRowReader(columns, chain, wire.NewLease(chain, nil))
-			got, err := plan.Decode(reader)
+			got, err := decodeRow(plan, reader)
 			if err == nil {
 				err = finishRowReader(reader)
 			}
@@ -120,7 +120,7 @@ func TestStructMapping(t *testing.T) {
 					return Nullable[[]Entry[string, int64]]{}
 				}),
 			)
-			row := decodeTestRow(t, columns, MustRowOf(attrsCodec), encodeTestParams(t, columns, nulls, collectionRow{}))
+			row := decodeTestRow(t, columns, MustRowOf[collectionRow](attrsCodec), encodeTestParams(t, columns, nulls, collectionRow{}))
 			if len(row.Names) != 0 || len(row.Scores) != 0 || len(row.Blobs) != 0 || len(row.Attrs) != 0 {
 				t.Fatalf("null collections: %+v", row)
 			}
@@ -152,7 +152,7 @@ func TestStructMapping(t *testing.T) {
 				return n, dst
 			}
 			fresh, _ := allocs(MustRowOf[blobsRow]())
-			reused, row := allocs(MustRowOf(ReuseBuffers[blobsRow]()))
+			reused, row := allocs(MustRowOf[blobsRow](ReuseBuffers()))
 			// Without reuse: the outer slice and both elements.
 			if fresh-reused != 3 {
 				t.Fatalf("allocations: default %.1f, ReuseBuffers %.1f", fresh, reused)
@@ -167,7 +167,7 @@ func TestStructMapping(t *testing.T) {
 				ID: 1, Names: []string{"a", "bc"}, Scores: []int32{3, 1},
 				Blobs: [][]byte{{1}, {2, 3}}, Attrs: []Entry[string, int64]{{"x", 1}, {"y", 2}},
 			}
-			chain := encodeTestParams(t, columns, MustParamsOf(attrsCodec), value)
+			chain := encodeTestParams(t, columns, MustParamsOf[collectionRow](attrsCodec), value)
 			// The bytes match the existing slice encoders.
 			hand := Params(
 				Param("id", Int64Codec, func(v collectionRow) int64 { return v.ID }),
@@ -179,7 +179,7 @@ func TestStructMapping(t *testing.T) {
 			if got, want := chainBytes(t, chain), chainBytes(t, encodeTestParams(t, columns, hand, value)); !reflect.DeepEqual(got, want) {
 				t.Fatalf("collection encoding:\ngot  %x\nwant %x", got, want)
 			}
-			rows := MustRowOf(attrsCodec)
+			rows := MustRowOf[collectionRow](attrsCodec)
 			row := decodeTestRow(t, columns, rows, chain)
 			if !reflect.DeepEqual(row, value) {
 				t.Fatalf("round trip:\nwant %+v\ngot  %+v", value, row)
@@ -259,8 +259,8 @@ func TestStructMapping(t *testing.T) {
 		t.Run("Embedded", func(t *testing.T) {
 			columns := NewColumns(
 				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "createdat", Type: rowTestType(t, TypeTimestamp)},
-				ColumnSpec{Name: "updatedat", Type: rowTestType(t, TypeTimestamp)},
+				ColumnSpec{Name: "created_at", Type: rowTestType(t, TypeTimestamp)},
+				ColumnSpec{Name: "updated_at", Type: rowTestType(t, TypeTimestamp)},
 				ColumnSpec{Name: "owner", Type: rowTestType(t, TypeText)},
 				ColumnSpec{Name: "text", Type: rowTestType(t, TypeText)},
 			)
@@ -275,13 +275,13 @@ func TestStructMapping(t *testing.T) {
 				auditFields
 				Inner
 			}
-			if _, err := reflectRow[ambiguous](); err == nil || !strings.Contains(err.Error(), "both map column \"createdat\"") {
+			if _, err := RowOf[ambiguous](); err == nil || !strings.Contains(err.Error(), "both map column \"created_at\"") {
 				t.Fatalf("same-depth conflict: %v", err)
 			}
 			type tagged struct {
 				EmbeddedOwner `cql:"owner"`
 			}
-			if _, err := reflectRow[tagged](); err == nil || !strings.Contains(err.Error(), "only the tag") {
+			if _, err := RowOf[tagged](); err == nil || !strings.Contains(err.Error(), "only the tag") {
 				t.Fatalf("tagged embedded field: %v", err)
 			}
 		})
@@ -298,11 +298,11 @@ func TestStructMapping(t *testing.T) {
 				A string `cql:"a,codec=Int32Codec"`
 			}
 			for name, err := range map[string]error{
-				"not a struct":     func() error { _, err := reflectParams[int](); return err }(),
-				"embedded pointer": func() error { _, err := reflectParams[embedded](); return err }(),
-				"both map":         func() error { _, err := reflectParams[duplicate](); return err }(),
-				"omitempty":        func() error { _, err := reflectRow[badOption](); return err }(),
-				"\"Int32Codec\"":   func() error { _, err := reflectRow[badCodec](); return err }(),
+				"not a struct":     func() error { _, err := ParamsOf[int](); return err }(),
+				"embedded pointer": func() error { _, err := ParamsOf[embedded](); return err }(),
+				"both map":         func() error { _, err := ParamsOf[duplicate](); return err }(),
+				"omitempty":        func() error { _, err := RowOf[badOption](); return err }(),
+				"\"Int32Codec\"":   func() error { _, err := RowOf[badCodec](); return err }(),
 			} {
 				if err == nil || !strings.Contains(err.Error(), name) {
 					t.Errorf("%s: got %v", name, err)
@@ -313,7 +313,7 @@ func TestStructMapping(t *testing.T) {
 		// still compile to direct ops.
 		t.Run("KeepsDirectOps", func(t *testing.T) {
 			columns := structFixtureColumns(t)
-			params, _ := reflectParams[structFixture]()
+			params, _ := ParamsOf[structFixture]()
 			plan, err := params.Compile(columns)
 			if err != nil {
 				t.Fatal(err)
@@ -327,7 +327,7 @@ func TestStructMapping(t *testing.T) {
 			if direct == 0 {
 				t.Fatal("no reflected parameter compiled to a direct op")
 			}
-			rows, _ := reflectRow[structFixture]()
+			rows, _ := RowOf[structFixture]()
 			compiledRowValue, err := rows.Compile(columns)
 			if err != nil {
 				t.Fatal(err)
@@ -346,11 +346,11 @@ func TestStructMapping(t *testing.T) {
 			columns := structFixtureColumns(t)
 			value := structFixtureValue()
 			wantParams, wantRows := handWrittenFixture()
-			gotParams, err := reflectParams[structFixture]()
+			gotParams, err := ParamsOf[structFixture]()
 			if err != nil {
 				t.Fatal(err)
 			}
-			gotRows, err := reflectRow[structFixture]()
+			gotRows, err := RowOf[structFixture]()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -396,7 +396,7 @@ func TestStructMapping(t *testing.T) {
 				return allocs, dst
 			}
 			fresh, _ := decodeAllocs(MustRowOf[blobRow]())
-			reused, row := decodeAllocs(MustRowOf(ReuseBuffers[blobRow]()))
+			reused, row := decodeAllocs(MustRowOf[blobRow](ReuseBuffers()))
 			// The reader in this harness allocates on its own; the blob is the difference.
 			if reused != fresh-1 {
 				t.Fatalf("blob decode allocations: default %.1f, ReuseBuffers %.1f", fresh, reused)
@@ -441,7 +441,7 @@ func TestStructMapping(t *testing.T) {
 				Origin structPoint
 				Corner Nullable[structPoint]
 			}
-			if _, err := reflectParams[shape](); err == nil || !strings.Contains(err.Error(), "WithCodec") {
+			if _, err := ParamsOf[shape](); err == nil || !strings.Contains(err.Error(), "WithCodec") {
 				t.Fatalf("unsupported type: %v", err)
 			}
 			columns := NewColumns(
@@ -449,8 +449,8 @@ func TestStructMapping(t *testing.T) {
 				ColumnSpec{Name: "corner", Type: rowTestType(t, TypeBigInt)},
 			)
 			value := shape{Origin: structPoint{1, -2}, Corner: Nullable[structPoint]{Value: structPoint{3, 4}, Valid: true}}
-			chain := encodeTestParams(t, columns, MustParamsOf(WithCodec[shape](Codec[structPoint](pointCodec{}))), value)
-			row := decodeTestRow(t, columns, MustRowOf(WithCodec[shape](Codec[structPoint](pointCodec{}))), chain)
+			chain := encodeTestParams(t, columns, MustParamsOf[shape](WithCodec(Codec[structPoint](pointCodec{}))), value)
+			row := decodeTestRow(t, columns, MustRowOf[shape](WithCodec(Codec[structPoint](pointCodec{}))), chain)
 			if row != value {
 				t.Fatalf("round trip: %+v", row)
 			}
@@ -463,7 +463,7 @@ func TestStructMapping(t *testing.T) {
 			Params: []InputField[generated]{Param("id", Int64Codec, func(v generated) int64 { called = true; return v.ID })},
 		}
 		columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)})
-		params, err := generatedParams(fields)
+		params, err := generatedParams(fields, targetParams)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -478,7 +478,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal("GeneratedParams did not use the generated mapping")
 		}
 		// Columns is nil, so the rows reflect the struct.
-		rows, err := generatedRow(fields)
+		rows, err := generatedRow(fields, targetRows)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -557,13 +557,13 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal("unmapped streaming column accepted")
 			}
 			type text struct{ Name string }
-			if _, err := reflectStreamRow[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamCodec") {
+			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamCodec") {
 				t.Fatalf("string field: %v", err)
 			}
 			type badTag struct {
 				Name []byte `cql:"name,stream=Int32"`
 			}
-			if _, err := reflectStreamRow[badTag](); err == nil || !strings.Contains(err.Error(), "Int32") {
+			if _, err := StreamRowOf[badTag](); err == nil || !strings.Contains(err.Error(), "Int32") {
 				t.Fatalf("wrong stream tag: %v", err)
 			}
 		})
@@ -584,7 +584,7 @@ func TestStructMapping(t *testing.T) {
 			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42}))
 			hits := streamInteger[hitCount](TypeBigInt, 8)
 			var dst counted
-			streamDecodeRow(t, columns, MustStreamRowOf(WithStreamCodec[counted](hits)), data, &dst)
+			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamCodec(hits)), data, &dst)
 			if dst != (counted{ID: 1, Hits: 42}) {
 				t.Fatalf("custom stream codec: %+v", dst)
 			}

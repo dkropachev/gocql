@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"iter"
 	"sync"
 	"sync/atomic"
 
@@ -64,7 +65,7 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 		return nil, &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
 	page := new(Page[R])
-	page.initResponse(response, plan, release)
+	page.initResponse(response, decoder, plan, release)
 	return page, nil
 }
 
@@ -79,11 +80,12 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 		response.Owner.Release()
 		return &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
-	page.initResponse(response, plan, nil)
+	page.initResponse(response, decoder, plan, nil)
 	return nil
 }
 
-func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cql.CompiledRow[R], release func()) {
+func (p *Page[R]) initResponse(response *transport.InternalResponsePage, decoder cql.RowDecoder[R], plan cql.CompiledRow[R], release func()) {
+	p.privateStorage.decoder = decoder
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
 	p.privateStorage.rowDest = rowDestinationOf(plan)
@@ -92,6 +94,12 @@ func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cq
 }
 
 // NextInto decodes the next row into dst, reporting whether there was one.
+// All iterates the page's remaining rows as Rows.All does. State remains
+// available once the loop has closed the page.
+func (p *Page[R]) All(dst *R) iter.Seq2[*R, error] {
+	return allRows(dst, p.NextInto, p.Close)
+}
+
 func (p *Page[R]) NextInto(dst *R) bool {
 	if p == nil || p.privateStorage.response == nil {
 		clearDestination(dst)
@@ -117,7 +125,7 @@ func (p *Page[R]) cancelled() error {
 	if p.privateStorage.ctx == nil {
 		return nil
 	}
-	err := p.privateStorage.ctx.Err()
+	err := transport.ContextError(p.privateStorage.ctx)
 	if err != nil && p.privateStorage.cursor.stopped() {
 		err = cqlerr.ErrClosed
 	}
@@ -222,10 +230,10 @@ func (p *Page[R]) closeLocked() {
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
 	if p == nil || p.privateStorage.response == nil {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.response.Owner.Retain() {
 		return nil, cql.ErrReleased
@@ -239,13 +247,13 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 func (p *Page[R]) Clone() (R, error) {
 	if p == nil || p.privateStorage.response == nil {
 		var zero R
-		return zero, cqlerr.ErrNoRows
+		return zero, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		var zero R
-		return zero, cqlerr.ErrNoRows
+		return zero, cqlerr.ErrNoCurrentRow
 	}
-	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
+	return p.privateStorage.decoder.Clone(*p.privateStorage.destination), nil
 }
 func (p *Page[R]) State() cql.PageState {
 	if p == nil || p.privateStorage.response == nil {
@@ -307,7 +315,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			// Session.Close cancels the context of every open Rows, so
 			// one check after decoding catches both a cancelled caller and
 			// a closed session.
-			if err := r.privateStorage.ctx.Err(); err != nil {
+			if err := transport.ContextError(r.privateStorage.ctx); err != nil {
 				r.stop(err)
 				return false
 			}
@@ -319,7 +327,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			r.closeLocked()
 			return false
 		}
-		if err := r.privateStorage.ctx.Err(); err != nil {
+		if err := transport.ContextError(r.privateStorage.ctx); err != nil {
 			r.stop(err)
 			return false
 		}
@@ -434,25 +442,25 @@ func (r *rowsImpl[R]) closeLocked() {
 }
 func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if r == nil {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	return r.privateStorage.page.Retain()
 }
 func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
 		var z R
-		return z, cqlerr.ErrNoRows
+		return z, cqlerr.ErrNoCurrentRow
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
 		var z R
-		return z, cqlerr.ErrNoRows
+		return z, cqlerr.ErrNoCurrentRow
 	}
 	return r.privateStorage.page.Clone()
 }
@@ -579,7 +587,7 @@ func (f *InternalPageFuture) InternalTake(ctx context.Context) (*transport.Inter
 	select {
 	case <-ctx.Done():
 		f.InternalClose()
-		return nil, ctx.Err()
+		return nil, transport.ContextError(ctx)
 	case <-f.InternalDone:
 	}
 	f.mu.Lock()
@@ -736,6 +744,7 @@ type pageLeaseStorage struct {
 type pageStorage[R any] struct {
 	ctx            context.Context
 	plan           cql.CompiledRow[R]
+	decoder        cql.RowDecoder[R] // compiled plan; detaches its rows
 	err            error
 	pendingRelease func()
 	destination    *R

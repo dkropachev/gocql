@@ -155,7 +155,7 @@ func (c *Conn) enqueueTyped(ctx context.Context, t *writeTicket, packet wire.Cha
 		t.release()
 		return nil, err
 	}
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return reject(err)
 	}
 	if c.InternalCtx.Err() != nil {
@@ -234,7 +234,7 @@ func (w *submissionWriter) run() {
 					t.phase.CompareAndSwap(0, 2)
 				}
 				if !t.phase.CompareAndSwap(0, 1) {
-					err := t.ctx.Err()
+					err := ContextError(t.ctx)
 					if err == nil {
 						err = cqlerr.ErrConnectionClosed
 					}

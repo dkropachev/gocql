@@ -35,7 +35,7 @@ type ConnectError struct {
 // last three hosts tried.
 func (e *ConnectError) Error() string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "no host reachable during %s", e.Stage)
+	fmt.Fprintf(&b, "gocql: no host reachable during %s", e.Stage)
 	hosts := e.Hosts
 	if skipped := len(hosts) - maxRenderedAttempts; skipped > 0 {
 		fmt.Fprintf(&b, " (%d of %d hosts shown)", maxRenderedAttempts, len(hosts))

@@ -32,6 +32,6 @@ func (o *execVoidObserver) ObserveAttempt(event routing2.AttemptEvent) {
 func (o *execVoidObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *execVoidObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
+func (o *execVoidObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }

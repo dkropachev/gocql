@@ -12,8 +12,8 @@ import (
 )
 
 type ruleNames struct {
-	UserID   int32 // column "userid"
-	Renamed  int32 `cql:"user_id"` // column "user_id"
+	UserID   int32 // column "user_id"
+	Renamed  int32 `cql:"renamed_id"` // column "renamed_id"
 	Default  int32 `cql:",codec=Int32Codec"`
 	Skipped  int32 `cql:"-"`
 	internal int32 // unexported: never mapped
@@ -69,7 +69,7 @@ func TestStructMappingRules(t *testing.T) {
 	}
 
 	t.Run("Names", func(t *testing.T) {
-		columns := cols("userid", "user_id", "default")
+		columns := cols("user_id", "renamed_id", "default")
 		value := ruleNames{UserID: 1, Renamed: 2, Default: 3, Skipped: 4, internal: 5}
 		row := ruleDecode(t, columns, cql.MustRowOf[ruleNames](), ruleEncode(t, columns, cql.MustParamsOf[ruleNames](), value))
 		want := ruleNames{UserID: 1, Renamed: 2, Default: 3}
@@ -78,8 +78,8 @@ func TestStructMappingRules(t *testing.T) {
 		}
 		// The explicit form of the same mapping.
 		explicit := cql.Row(
-			cql.Column("userid", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.UserID }),
-			cql.Column("user_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.Renamed }),
+			cql.Column("user_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.UserID }),
+			cql.Column("renamed_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.Renamed }),
 			cql.Column("default", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.Default }),
 		)
 		if got := ruleDecode(t, columns, explicit, ruleEncode(t, columns, cql.MustParamsOf[ruleNames](), value)); got != want {
@@ -93,15 +93,15 @@ func TestStructMappingRules(t *testing.T) {
 		}
 	})
 	t.Run("EmbeddedNonStruct", func(t *testing.T) {
-		columns := cql.NewColumns(cql.ColumnSpec{Name: "ruletext", Type: text})
+		columns := cql.NewColumns(cql.ColumnSpec{Name: "rule_text", Type: text})
 		// A named type has no built-in codec, whatever its underlying type.
 		if _, err := cql.RowOf[ruleEmbeddedNonStruct](); err == nil || !strings.Contains(err.Error(), "no codec for type cql_test.RuleText") {
 			t.Fatalf("named type: %v", err)
 		}
-		opt := cql.WithCodec[ruleEmbeddedNonStruct](cql.NamedScalar(cql.StringCodec,
+		opt := cql.WithCodec(cql.NamedScalar(cql.StringCodec,
 			func(v RuleText) string { return string(v) }, func(v string) RuleText { return RuleText(v) }))
 		value := ruleEmbeddedNonStruct{ruleName: "hidden", RuleText: "shown"}
-		row := ruleDecode(t, columns, cql.MustRowOf(opt), ruleEncode(t, columns, cql.MustParamsOf(opt), value))
+		row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](opt), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](opt), value))
 		if row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
 			t.Fatalf("got %+v", row)
 		}
@@ -125,14 +125,14 @@ func TestStructMappingRules(t *testing.T) {
 	// A field without a column is skipped in both directions; a column
 	// without a field fails. Explicit Params and Row require both.
 	t.Run("Subsets", func(t *testing.T) {
-		subset := cols("userid")
+		subset := cols("user_id")
 		if _, err := cql.MustParamsOf[ruleNames]().Compile(subset); err != nil {
 			t.Fatalf("ParamsOf: %v", err)
 		}
 		if _, err := cql.MustRowOf[ruleNames]().Compile(subset); err != nil {
 			t.Fatalf("RowOf: %v", err)
 		}
-		extra := cols("userid", "other")
+		extra := cols("user_id", "other")
 		for name, compile := range map[string]func() error{
 			"ParamsOf": func() error { _, err := cql.MustParamsOf[ruleNames]().Compile(extra); return err },
 			"RowOf":    func() error { _, err := cql.MustRowOf[ruleNames]().Compile(extra); return err },
@@ -142,20 +142,20 @@ func TestStructMappingRules(t *testing.T) {
 			}
 		}
 		explicitRow := cql.Row(
-			cql.Column("userid", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.UserID }),
-			cql.Column("user_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.Renamed }),
+			cql.Column("user_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.UserID }),
+			cql.Column("renamed_id", cql.Int32Codec, func(r *ruleNames) *int32 { return &r.Renamed }),
 		)
 		if _, err := explicitRow.Compile(subset); err == nil {
 			t.Error("Row: a field without a column compiled")
 		}
 		explicitParams := cql.Params(
-			cql.Param("userid", cql.Int32Codec, func(r ruleNames) int32 { return r.UserID }),
-			cql.Param("user_id", cql.Int32Codec, func(r ruleNames) int32 { return r.Renamed }),
+			cql.Param("user_id", cql.Int32Codec, func(r ruleNames) int32 { return r.UserID }),
+			cql.Param("renamed_id", cql.Int32Codec, func(r ruleNames) int32 { return r.Renamed }),
 		)
 		if _, err := explicitParams.Compile(subset); err == nil {
 			t.Error("Params: a field without a column compiled")
 		}
-		wider := cols("userid", "user_id", "extra")
+		wider := cols("user_id", "renamed_id", "extra")
 		if _, err := explicitRow.Compile(wider); err == nil {
 			t.Error("Row: a column without a field compiled")
 		}
@@ -165,7 +165,7 @@ func TestStructMappingRules(t *testing.T) {
 	})
 	// A named marker repeated in the statement binds the same field.
 	t.Run("RepeatedMarker", func(t *testing.T) {
-		columns := cols("userid", "userid")
+		columns := cols("user_id", "user_id")
 		chain := ruleEncode(t, columns, cql.MustParamsOf[ruleNames](), ruleNames{UserID: 9})
 		pair := ruleDecode(t, columns, cql.PairRows(cql.OneColumn(cql.Int32Codec), cql.OneColumn(cql.Int32Codec)), chain)
 		if pair.First != 9 || pair.Second != 9 {

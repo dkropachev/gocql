@@ -15,7 +15,7 @@ type directRow struct {
 	I16     int16
 	I32     int32
 	I64     int64
-	Count   Counter
+	Count   int64
 	View    Bytes
 	Owned   []byte
 	Text    string
@@ -47,7 +47,7 @@ var directParams = Params(
 	Param("i16", Int16Codec, func(r directRow) int16 { return r.I16 }),
 	Param("i32", Int32Codec, func(r directRow) int32 { return r.I32 }),
 	Param("i64", Int64Codec, func(r directRow) int64 { return r.I64 }),
-	Param("count", CounterCodec, func(r directRow) Counter { return r.Count }),
+	Param("count", Int64Codec, func(r directRow) int64 { return r.Count }),
 	Param("view", BlobCodec, func(r directRow) Bytes { return r.View }),
 	Param("owned", ByteSliceCodec, func(r directRow) []byte { return r.Owned }),
 	Param("text", StringCodec, func(r directRow) string { return r.Text }),
@@ -63,7 +63,7 @@ var directRows = RowInto(func(r *directRow) { r.Owned = r.Owned[:0] },
 	Column("i16", Int16Codec, func(r *directRow) *int16 { return &r.I16 }),
 	Column("i32", Int32Codec, func(r *directRow) *int32 { return &r.I32 }),
 	Column("i64", Int64Codec, func(r *directRow) *int64 { return &r.I64 }),
-	Column("count", CounterCodec, func(r *directRow) *Counter { return &r.Count }),
+	Column("count", Int64Codec, func(r *directRow) *int64 { return &r.Count }),
 	Column("view", BlobCodec, func(r *directRow) *Bytes { return &r.View }),
 	Column("owned", ByteSliceCodec, func(r *directRow) *[]byte { return &r.Owned }),
 	IgnoreColumn[directRow]("text"),

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"math/bits"
+	"time"
 )
 
 const nanosecondsPerDay int64 = 24 * 60 * 60 * 1_000_000_000
@@ -55,6 +56,34 @@ var TimeCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 
 // TimestampCodec maps timestamp to Timestamp.
 var TimestampCodec Codec[Timestamp] = integerCodec[Timestamp](TypeTimestamp, 8)
+
+// TimestampTimeCodec maps timestamp to time.Time, the default codec of
+// time.Time struct fields. It decodes a UTC time and encodes the time's
+// instant truncated to the millisecond, rejecting one outside the int64
+// millisecond range. The zero time.Time is an instant like any other, the
+// year 1; bind a Nullable[time.Time] for NULL.
+var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: TypeTimestamp,
+	encode: func(w *ValueWriter, v time.Time) error {
+		ts, err := TimestampFromTime(v)
+		if err != nil {
+			return err
+		}
+		return w.Uint64(uint64(ts))
+	},
+	decode: func(r ValueReader) (time.Time, error) {
+		v, ok := fixedValue(r, 8)
+		if !ok {
+			c, e := fixedCursor(r, 8)
+			if e != nil {
+				return time.Time{}, e
+			}
+			if v, e = c.Uint64(); e != nil {
+				return time.Time{}, e
+			}
+		}
+		return time.UnixMilli(int64(v)).UTC(), nil
+	},
+}
 
 // DurationCodec maps duration to Duration.
 var DurationCodec Codec[Duration] = scalarCodec[Duration]{kind: TypeDuration, encode: encodeDuration, decode: decodeDuration}

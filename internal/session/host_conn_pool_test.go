@@ -32,6 +32,7 @@ import (
 	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cluster"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
@@ -44,7 +45,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/streams"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -66,7 +66,7 @@ func TestHostConnPool(t *testing.T) {
 			}
 		})
 
-		t.Run("PausedAcrossNewerDown", func(t *testing.T) {
+		t.Run("PoolEvents", func(t *testing.T) {
 			f := newNodeEventFixture(t)
 			host := f.addHost(t, "127.0.10.1")
 			conn, _ := typedTestConn(t, 4, nil)
@@ -75,21 +75,35 @@ func TestHostConnPool(t *testing.T) {
 			implCluster.SessionData(f.session).InternalPool.InternalMu.Lock()
 			implCluster.SessionData(f.session).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(host)] = pool
 			implCluster.SessionData(f.session).InternalPool.InternalMu.Unlock()
-			entered, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
-			p := f.session.Peripheral()
-			p.InternalConfig.LifecycleObserver = lifecycleFunc(func(e observe.LifecycleEvent) {
-				if e.Stage == "connected" {
-					close(entered)
-					<-release
-				}
-			})
-			go func() { defer close(done); f.session.HandlePoolConnected(pool) }()
-			<-entered
+			sub, err := f.session.Subscribe(event.Filter{Kinds: []event.Kind{event.KindPool}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer sub.Close()
+			f.session.HandlePoolConnected(pool)
+			if !host.IsUp() {
+				t.Fatal("a connected pool did not mark its host up")
+			}
 			f.session.HandleNodeDown(host.ConnectAddress(), host.Port())
-			close(release)
-			<-done
 			if host.IsUp() {
-				t.Fatal("delayed callback reintroduced host after DOWN")
+				t.Fatal("DOWN after a connected pool left the host up")
+			}
+			// Each change reaches subscribers as a Pool event naming the host,
+			// after the metadata publication that shows it.
+			addr := netip.AddrPortFrom(netip.MustParseAddr(host.ConnectAddress().String()), uint16(host.Port()))
+			for _, want := range []event.Change{event.ChangeConnected, event.ChangeDown} {
+				var e event.Event
+				select {
+				case e = <-sub.Events():
+				default:
+					t.Fatalf("no Pool %s event", want)
+				}
+				if e.Kind != event.KindPool || e.Change != want || e.HostID != implEndpoint.InternalHostInfoHostUUID(host) || e.Address != addr {
+					t.Fatalf("event %+v, want Pool %s of %s at %s", e, want, implEndpoint.InternalHostInfoHostUUID(host), addr)
+				}
+				if want == event.ChangeDown && e.Generation != f.session.Metadata().Generation() {
+					t.Fatalf("Pool DOWN at generation %d, metadata at %d", e.Generation, f.session.Metadata().Generation())
+				}
 			}
 		})
 	})

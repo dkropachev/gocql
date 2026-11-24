@@ -72,6 +72,38 @@ func cloneV2Function(f metadata.Function) metadata.Function {
 	f.ArgumentNames = append([]string(nil), f.ArgumentNames...)
 	return f
 }
+
+// InternalCloneV2Table returns a deep copy of t.
+func InternalCloneV2Table(t *metadata.Table) *metadata.Table {
+	if t == nil {
+		return nil
+	}
+	v := *t
+	v.Columns = cloneV2Columns(t.Columns)
+	v.Extensions = cloneV2Extensions(t.Extensions)
+	v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
+	v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
+	v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
+	v.Flags = append([]string(nil), t.Flags...)
+	v.Options = cloneV2TableOptions(t.Options)
+	return &v
+}
+
+// shallowCloneKeyspace copies k and its maps, but not the values in them, so
+// that adding or removing entries does not race with readers of k.
+func shallowCloneKeyspace(k *metadata.Keyspace) *metadata.Keyspace {
+	r := *k
+	r.StrategyOptions = maps.Clone(k.StrategyOptions)
+	r.Tables = maps.Clone(k.Tables)
+	r.Functions = maps.Clone(k.Functions)
+	r.Aggregates = maps.Clone(k.Aggregates)
+	r.Types = maps.Clone(k.Types)
+	r.Indexes = maps.Clone(k.Indexes)
+	r.Views = maps.Clone(k.Views)
+	KeyspaceData(&r).InternalTablesInvalidated = maps.Clone(KeyspaceData(k).InternalTablesInvalidated)
+	return &r
+}
+
 func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 	if k == nil {
 		return nil
@@ -85,15 +117,7 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 			r.Tables[n] = nil
 			continue
 		}
-		v := *t
-		v.Columns = cloneV2Columns(t.Columns)
-		v.Extensions = cloneV2Extensions(t.Extensions)
-		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
-		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-		v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
-		v.Flags = append([]string(nil), t.Flags...)
-		v.Options = cloneV2TableOptions(t.Options)
-		r.Tables[n] = &v
+		r.Tables[n] = InternalCloneV2Table(t)
 	}
 	r.Functions = make(map[string]*metadata.Function, len(k.Functions))
 	for n, f := range k.Functions {
@@ -712,7 +736,7 @@ func InternalValidateV2SchemaParts(ks *metadata.Keyspace, tables []metadata.Tabl
 		if _, err := validateV2CQLTypeLimit(ks.Name, v.Type, udts, maxDepth); err != nil {
 			return err
 		}
-		if v.Kind == metadata.ColumnPartitionKey || v.Kind == metadata.ColumnClusteringKey {
+		if v.Kind == metadata.ColumnKindPartitionKey || v.Kind == metadata.ColumnKindClusteringKey {
 			if v.ComponentIndex < 0 || v.ComponentIndex >= len(columns) {
 				return cqltype.TypeValidation("schema key order", "invalid position %d", v.ComponentIndex)
 			}
@@ -729,7 +753,7 @@ func InternalValidateV2SchemaParts(ks *metadata.Keyspace, tables []metadata.Tabl
 		}
 	}
 	for _, table := range tables {
-		if len(positions[table.Name][metadata.ColumnPartitionKey]) == 0 {
+		if len(positions[table.Name][metadata.ColumnKindPartitionKey]) == 0 {
 			return cqltype.TypeValidation("schema table", "missing partition key for %q", table.Name)
 		}
 	}
@@ -774,8 +798,27 @@ func InternalValidateV2SchemaParts(ks *metadata.Keyspace, tables []metadata.Tabl
 	}
 	return unique("aggregate", names)
 }
+
+// v2FunctionIdentity is the key of a function or aggregate in its
+// Keyspace map, the signature metadata.Keyspace.Function looks up.
 func v2FunctionIdentity(name string, args []string) string {
 	return name + "(" + strings.Join(args, ",") + ")"
+}
+
+// uniqueV2Function returns the only function named name, or nil when there
+// is none or more than one.
+func uniqueV2Function(functions []metadata.Function, name string) *metadata.Function {
+	var found *metadata.Function
+	for i := range functions {
+		if functions[i].Name != name {
+			continue
+		}
+		if found != nil {
+			return nil
+		}
+		found = &functions[i]
+	}
+	return found
 }
 func resolveV2Function(functions []metadata.Function, name string, args []string) *metadata.Function {
 	for i := range functions {

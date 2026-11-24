@@ -27,8 +27,8 @@ func (u HostUUID) String() string {
 	return string(buf[:])
 }
 
-// IsEmpty reports whether the UUID is all zeros.
-func (u HostUUID) IsEmpty() bool {
+// IsZero reports whether the UUID is all zeros.
+func (u HostUUID) IsZero() bool {
 	return u == HostUUID{}
 }
 

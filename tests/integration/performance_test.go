@@ -155,7 +155,7 @@ func TestPerformance(t *testing.T) {
 								return nil
 							}
 							run := func() error {
-								options := exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 128}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+								options := exec.Options{PageSize: 128, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 								if api == "stream" {
 									query, e := streamPrepared.Query(exec.StreamOptions{Incremental: true, Options: options})
 									if e != nil {
@@ -326,7 +326,7 @@ func TestPerformance(t *testing.T) {
 		}
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
 			c.WithConnectionsPerShard(1).
-				WithAdvancedShardAwareness(32768, 65535).
+				WithAdvancedShardAwareness(true).WithShardAwareSourcePorts(32768, 65535).
 				WithHeartbeat(30*time.Second, 30*time.Second).
 				WithMetadataRefresh(0)
 			c.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
@@ -400,7 +400,7 @@ func TestPerformance(t *testing.T) {
 					for i := range outputs {
 						outputs[i] = testOutput{Payload: make([]byte, 0, shape.Cell), Pieces: [][]byte{make([]byte, 0, 5), make([]byte, 0, 6)}}
 					}
-					options := exec.Options{PageSize: cql.Option[int32]{Set: true, Value: int32(shape.Page)}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+					options := exec.Options{PageSize: int32(shape.Page), Prefetch: cql.Option[int]{Set: true, Value: 0}}
 					run := func(worker int, sample func()) (int64, int64, error) {
 						dst := &outputs[worker]
 						backing := unsafe.SliceData(dst.Payload[:cap(dst.Payload)])

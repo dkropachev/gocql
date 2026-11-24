@@ -50,20 +50,32 @@ func TestOptionPrecedence(t *testing.T) {
 	if r.InternalProfile.Consistency != cql.Three || r.InternalProfile.Timeout != 2*time.Second {
 		t.Errorf("Options fields did not override the profile: %+v", r.InternalProfile)
 	}
+
+	// A zero PageSize keeps the profile's; any other replaces it.
+	session.PageSize = 7
+	if r, err = resolveOptionValues(&session, Options{}); err != nil || r.InternalProfile.PageSize != 7 {
+		t.Errorf("zero PageSize: page size %d, %v, want the profile's 7", r.InternalProfile.PageSize, err)
+	}
+	if r, err = resolveOptionValues(&session, Options{PageSize: 3}); err != nil || r.InternalProfile.PageSize != 3 {
+		t.Errorf("PageSize 3: page size %d, %v, want 3", r.InternalProfile.PageSize, err)
+	}
+	if _, err = resolveOptionValues(&session, Options{PageSize: -2}); err == nil {
+		t.Error("negative PageSize accepted")
+	}
 }
 
-// TestOptionTimeoutsTighten checks that Options.Timeout and
-// Options.PageTimeout add a limit to the profile's rather than replace it: the
-// earlier one applies, and a longer or zero option leaves the profile's.
-func TestOptionTimeoutsTighten(t *testing.T) {
+// TestOptionTimeoutsReplace checks that a set Options.Timeout or
+// Options.PageTimeout replaces the profile's limit, longer or shorter, and
+// that a set zero removes it.
+func TestOptionTimeoutsReplace(t *testing.T) {
 	for _, tc := range []struct {
 		name            string
 		profile, option time.Duration
 		want            time.Duration
 	}{
-		{name: "OptionEarlier", profile: time.Minute, option: time.Second, want: time.Second},
-		{name: "ProfileEarlier", profile: time.Second, option: time.Minute, want: time.Second},
-		{name: "ZeroOptionKeepsProfile", profile: time.Second, option: 0, want: time.Second},
+		{name: "OptionShorter", profile: time.Minute, option: time.Second, want: time.Second},
+		{name: "OptionLonger", profile: time.Second, option: 10 * time.Minute, want: 10 * time.Minute},
+		{name: "ZeroOptionRemovesLimit", profile: time.Second, option: 0, want: 0},
 		{name: "ZeroProfileTakesOption", profile: 0, option: time.Second, want: time.Second},
 		{name: "BothZero", profile: 0, option: 0, want: 0},
 	} {
@@ -89,6 +101,12 @@ func TestOptionTimeoutsTighten(t *testing.T) {
 				}
 			}
 		})
+	}
+	// An unset option keeps the profile's limit.
+	profile := settings.InternalDefaultProfile()
+	profile.Timeout, profile.PageTimeout = time.Second, 2*time.Second
+	if r, err := resolveOptionValues(&profile, Options{Consistency: cql.Some(cql.One)}); err != nil || r.InternalProfile.Timeout != time.Second || r.InternalProfile.PageTimeout != 2*time.Second {
+		t.Errorf("unset options changed the profile's limits: %+v, %v", r.InternalProfile, err)
 	}
 	for _, options := range []Options{{Timeout: cql.Some(-time.Second)}, {PageTimeout: cql.Some(-time.Second)}} {
 		if _, err := resolveOptionValues(nil, options); err == nil {

@@ -28,7 +28,7 @@ type Fixture struct { //nolint:govet // field order mirrors the column list, not
 	ID        Key `cql:"id"` // an alias maps like the type it names
 	TimeID    cql.TimeUUID
 	Addr      netip.Addr
-	Hits      cql.Counter
+	Hits      int64
 	Varint    cql.Varint
 	Decimal   cql.Decimal
 	Day       cql.Date

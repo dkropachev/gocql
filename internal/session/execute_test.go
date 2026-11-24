@@ -124,8 +124,8 @@ func (p *runtimePolicy) observed() []routing2.AttemptEvent {
 
 type runtimeSpeculation struct{}
 
-func (runtimeSpeculation) Delay(attempt int) (time.Duration, bool) {
-	return time.Millisecond, attempt == 1
+func (runtimeSpeculation) Delay(started int) (time.Duration, bool) {
+	return time.Millisecond, started == 1
 }
 func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Duration) {
 	s, conns, peers := runtimeTestSession(t, 2)
@@ -154,7 +154,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	bound := runtimeQuery(t)
-	page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CustomPayload: []cql.PayloadEntry{{Key: "borrowed", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte("per-call-payload"))}}}}))
+	page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: cql.Some(true), CustomPayload: []cql.PayloadEntry{{Key: "borrowed", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes([]byte("per-call-payload"))}}}}))
 	if err != nil {
 		t.Fatal(err)
 	}

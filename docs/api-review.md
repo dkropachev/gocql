@@ -216,13 +216,136 @@ contract, so it lands before `v2.0.0-rc.1`.
 | Finding | Outcome |
 |---|---|
 | `gocql.PreparedInfo.Conditional` was documented as the server's lightweight transaction flag but was `Kind == ConditionalStatement`, true for a statement only declared conditional; `routing.Info.Conditional` was `Kind != OrdinaryStatement`; `retry.Attempt.Conditional` copied the routing value but was documented as "a lightweight transaction". One name, two meanings, both derived from `Kind` | `PreparedInfo.Conditional` and `routing.Info.Conditional` removed; `PreparedInfo.Kind` documents how the server's flag folds into it. `retry.Attempt.Conditional` is `retry.Attempt.Kind`, a `cql.StatementKind`, so a policy can tell an unclassified statement from a conditional one. |
-| `endpoint.ReconnectPolicy.Delay(attempt)` did not say where `attempt` starts; the driver counted from 0 while every other attempt number in the API counts from 1. The session also called `Delay(0)` while connecting only to reject a negative delay, so a stateful or jittered policy saw an extra call | `attempt` counts from 1, from the node's last successful connection; the default backoff is unchanged. The probe is gone: a negative delay stops reconnection and is logged where it is used. The doc lists every call the driver makes. |
+| `endpoint.ReconnectPolicy.Delay(attempt)` did not say where `attempt` starts; the driver counted from 0 while every other attempt number in the API counts from 1. The session also called `Delay(0)` while connecting only to reject a negative delay, so a stateful or jittered policy saw an extra call | `attempt` counts from 1, from the node's last successful connection; the default backoff is unchanged. The sixth pass replaced this probe with one `Delay(1)` call in `Build`. The doc lists every call the driver makes. |
 | `cqlerr.HostError`'s doc called its zero value "an error", but the type has no `Error` method | Doc fixed. |
 | `metadata.Mode`'s values were `SchemaNone`, `SchemaKeyspaces` and `SchemaFull` | `ModeNone`, `ModeKeyspaces` and `ModeFull`, like the fourth pass's `observe.KindSession`. |
 | `config.NewTLSFiles` returned a `*config.TLSFileSource` | Renamed `NewTLSFileSource`. |
 | `cql.ValueWriter.BorrowString` beside `cql.BorrowText` | Renamed `BorrowText`. |
 | `cql.BatchKind` was declared `byte`; every other enum is `uint8` | `uint8`; the same type to the compiler. |
 | `cql.UUID.UnmarshalText(text []byte) (err error)` beside `cql.TimeUUID.UnmarshalText(data []byte) error` | Spelled as on `TimeUUID`; behaviour unchanged. |
+
+## Sixth review pass (2026-11-24)
+
+A sixth pass, with one reviewer per package group, found these. Each changes
+a public symbol or a documented contract, so it lands before `v2.0.0-rc.1`.
+Two findings were not taken: `gocql.Rows` and `CASBatchRows` stay values,
+since a pointer would cost an allocation per `Run` or lose stale-handle
+detection, and `cql.StreamStatement` keeps its field order, which the
+field-alignment lint requires.
+
+### routing / config locality
+
+| Finding | Outcome |
+|---|---|
+| The zero `routing.Options` turned off token awareness, replica shuffling and leader-aware routing, so `NewPolicy(Options{Datacenter: "dc1"})` silently lost token and shard awareness, and the migration guide's snippet lost shuffling and leader awareness | `TokenAware`, `ShuffleReplicas` and `LeaderAware` are `NoTokenAware`, `FixedReplicaOrder` and `NoLeaderAware`: the zero `Options` is the session's default policy. `NoLeaderAware == false` with `NoTokenAware` is accepted as is. |
+| The default policy had no local datacenter while the default consistency is LOCAL_QUORUM, and a profile from `NewProfile()` did not inherit the session's routing | `ConfigBuilder.WithLocalDatacenter(dc, rack)` sets the session's locality, which every built-in policy without a `Datacenter` of its own takes, in every profile. `Build` rejects a rack without a datacenter; Connect fails through the policy's validation when the datacenter or rack has no eligible host, and logs a warning for a multi-datacenter cluster with no locality set. The driver configuration report shows the effective locality. |
+| `exec.Options.HostID`/`ShardID` were ignored under a custom routing policy | A pinned request follows the built-in pinned plan before any policy is consulted or validated, `SingleTarget` included. |
+| `Policy.Validate` ran per page, not once per snapshot as documented | An application policy's `Validate` runs once per snapshot until it passes; the built-in policy already cached by host index. |
+| `routing.Policy` required `Validate` and `Observe` of every policy | `Policy` is `Pick` and `Fallback`; the optional `routing.Validator` and `routing.AttemptObserver` are found by type assertion. |
+| `routing.AttemptStart` lived in `routing` though only observers use it | Moved to `observe.AttemptStart`. |
+| No `*Func` adapter for `TokenPartitioner` | Added `routing.TokenPartitionerFunc`. |
+| A custom policy could not be tested without a session: the built-in policies found no route and no public snapshot constructor existed | New package `routing/routingtest` with `NewSnapshot(Cluster)`, from hosts, schema, token ranges, tablets and a session locality; it is layer 3 because it links the engine, so the built-in policies route over its snapshots. |
+
+### Execution semantics
+
+| Finding | Outcome |
+|---|---|
+| A statement left `UnknownStatement`, `cql.Command` included, sent no client timestamp, kept a fixed replica order and a strict shard pin, and never speculated on Cassandra and for every Unprepared call, while the `WithTimestampGenerator` doc said every request is stamped | A statement left `UnknownStatement` whose `R` is `cql.EmptyRow` executes as `OrdinaryStatement`, prepared or not; as a batch member it stays unknown, so a conditional batch of `EmptyRow` members still reaches `RunConditionalBatch`. `UnknownStatement` and `WithTimestampGenerator` document the effects. |
+| Idempotence was per call only, so speculation and `retry.Safe` needed options at every call site | Added `cql.Statement.Idempotent` (and `StreamStatement.Idempotent`), carried into prepared statements, their queries and batch members; a batch is idempotent when every member is. `exec.Options.Idempotent` is a `cql.Option[bool]` that overrides it. `retry.Safe` and the speculation gate read the effective value. |
+| `exec.Options.Timeout` could only shorten the profile's 30s limit, which covers every page, so a long `All` scan died at 30s | A set `Timeout` or `PageTimeout` replaces the profile's, longer or shorter; `cql.Some(time.Duration(0))` removes it. |
+| `exec.Options.PageSize` was a `cql.Option[int32]` although zero was never valid | `PageSize` is an `int32`; zero inherits the profile's, a negative value is rejected. |
+| Unprepared calls with parameters and no `BindMarkers` silently bound nothing (`ParamsOf`) or failed late (`DynamicParams`) | They fail with a `cql.ValidationError` before anything is sent. `cql.DynamicParams` without markers takes their types from the values. `NamedDynamicParams` still needs `BindMarkers`: deriving them from the fields' order would defeat its name-to-marker mapping. |
+| `All`/`Each`/`One` required `dst` and yielded the same pointer, so `append(out, row)` aliased every element | A nil `dst` decodes each row into a new `R` the caller may keep (`One` then only reports whether a row exists); the docs spell out that a non-nil `dst` is the reused pointer. |
+| `Rows`, `Page` and `CASBatchRows` had no range form | Added `All(dst) iter.Seq2[*R, error]` on each; the loop closes the handle, and a page's `State` stays readable. |
+| `Rows`/`CASBatchRows` are values while `Page`/`RowStream` are pointers | Kept as values. A `Rows` handle is a generation-checked value so that a stale copy reports `ErrStaleRows` while the query reuses its storage allocation-free; a pointer would cost an allocation per `Run`/`RunConditionalBatch` (breaking the documented allocation-free resend) or lose stale detection. `Page` is a pointer because each `RunPage` allocates one anyway. |
+| `Prepared.Query(exec.Options)` was the only method with required options | `Prepared.Query` and `PreparedStream.Query` take at most one options value, variadic. |
+| `PageState` had no full-state serialization, and `PageStateFromToken(nil)` is a continuation, not the start | `PageState` implements `encoding.BinaryMarshaler`/`TextMarshaler` and their unmarshalers: a kind byte then a continuation's token, and unpadded URL-safe base64 of it as text, so start and completion round-trip. |
+| `example_paging_test.go` used a worker query and `NextInto` | Rewritten around `Prepared.RunPage(ctx, v, state, 2)`, `page.All(nil)` and a text cursor. |
+
+### Errors and retry
+
+| Finding | Outcome |
+|---|---|
+| `ExecutionError.Unwrap` returned every attempt's error, so `errors.Is(err, CodeOverloaded)` could hold while `KindOf` said timeout, and `errors.As` could return an unrelated earlier attempt's error | `Unwrap() error` returns `Err` only; earlier attempts are read from `Attempts`. `IsCASWriteUnknown` checks every attempt, so an LWT timeout the caller's cancellation ended is still reported. |
+| `retry.IgnoreWrite` turned any failure into an empty success, reads included, so a read timeout became `One` reporting "no row" | Removed. Its old value fails the request as an unknown action, on every execution path. |
+| The caller's expired context was `KindTimeout` and Transient, indistinguishable from the driver's own budget, so a `for KindOf(err).Transient()` loop spun forever | The execution and page budgets use `context.WithTimeoutCause(…, cqlerr.ErrRequestTimeout)` and errors report the context's cause. `ErrRequestTimeout` matches `context.DeadlineExceeded` and is `KindTimeout`; the caller's own deadline does not match it. `Kind.Transient`'s doc says to check `ctx.Err()` in a retry loop. |
+| `ExecutionStatus`'s numeric order (Maybe=0, Not=1, Partial=2) differed from the documented severity order, so `s >= MaybeExecuted` was always true | The doc says to compare with `==` or a switch and that the numeric order is not the severity; the values keep MaybeExecuted as the safe zero. |
+| `ErrNoRows` reads as database/sql's "query found nothing" | Renamed `ErrNoCurrentRow` ("gocql: no current row"); integration helpers that used it for "no row found" have their own sentinel. |
+| `QueryError` had no exported fields | Unexported; the engine builds it through a `link` constructor slot. Its error and status stay reachable through `errors.Is`/`As` and `ExecutionStatusOf`. |
+| `CDCWriteFailureError` had no fields | Removed; the code decodes as `OtherServerError` with `CodeCDCWriteFailure`. |
+| `AttemptFailure.Status` | Renamed `ExecutionStatus`, as on `retry.Attempt`. |
+| No way to build an `ExecutionError` in a test | Added `NewExecutionError(err, status, attempts...)`. |
+| `retry.Safe` stopped on an idempotent logged batch's BATCH_LOG write timeout | It retries it in place (`Same`); a non-idempotent one still stops. |
+| Sentinel messages: `ErrNoKeyspace` "no keyspace provided" also meant not found; "from cassandra"; missing `gocql:` prefixes | `ErrNoKeyspace`/`ErrNoTable` say "… not found or not set"; `ErrTimeoutNoResponse` says "no response from server within timeout"; `ErrReadHeaderTimeout`, `ErrFrameTooBig`, `ErrScyllaSourcePortAlreadyInUse` and `ConnectError` start with `gocql:`. `Snapshot.Token`/`Replicas`/`TokenRanges` on a keyspace or table the snapshot does not hold return a `cql.ValidationError` saying it is not loaded, wrapping `ErrNoKeyspace`/`ErrNoTable`. |
+| `SpeculationPolicy.Delay(attempt)` named its argument as if it were an attempt number, and the eligibility rule was stated only in the guide | The parameter is `started`; `SpeculationPolicy` and `WithSpeculation` state that only idempotent executions of ordinary statements speculate. |
+
+### config / endpoint / auth
+
+| Finding | Outcome |
+|---|---|
+| nil meant "default" for some setters and "off" for others: `WithReconnect(nil)` disabled reconnection, `WithRetry(nil)` retries, `WithRouting(nil)` switched to plan-less pool selection | A nil provider or policy restores the driver's default in every setter: `WithReconnect(nil)` the jittered backoff, `ProfileBuilder.WithRetry(nil)` `retry.Safe{MaxAttempts: 3}`, `WithRouting(nil)` the default policy; a nil `Profile.Retry`/`Routing` converts to the same defaults. "Off" is explicit: `retry.Never{}`, or a reconnect policy whose `Delay` returns false (doc example). `WithTimestampGenerator(nil)` stays "server timestamps", documented as the one exception. |
+| `WithPort` also applies to discovered peers, so a contact point on :19042 made the driver dial peers on :9042, and `Build` accepted `"h:abc"` | `WithPort` documents that it is the port of discovered nodes whose metadata reports none. `Build` parses the contact points (host or host:port, port 1-65535) and rejects contact points that all name one port other than `WithPort`, unless discovery is off or client routes are set. The legacy `learnPortFromHosts` is deleted: the session always sets the port. |
+| Build errors named an internal group ("invalid pool limits") rather than the setter to fix | `cql.ValidationError.Field` names the `ConfigBuilder`/`ProfileBuilder` setter (`WithMaxRequestsPerConnection`, `WithPageSize`, ...) and the message gives the limit and the value (`must be 1 to 32768, got 0`). Build-time `UnsupportedSettingError.Setting` names the setter too. An unbuilt `Profile` literal is reported as `Profile`. |
+| `WithSocketBuffers(r, 0)` shrank the send buffer to the kernel minimum | Split into `WithReceiveBuffer(bytes)` and `WithSendBuffer(bytes)`; zero keeps the OS's size. |
+| Advanced shard awareness had three methods | `WithAdvancedShardAwareness(on bool)` and `WithShardAwareSourcePorts(first, last)`; the ports setter does not turn awareness on, and Build rejects a range that is empty or starts below 1024. |
+| Client routes needed their own builder with its own Build and error | `WithClientRoutes(routes ...ClientRoute)`; none removes them. `ClientRoutes`, `ClientRoutesBuilder` and `NewClientRoutes` are removed; `Build` rejects an empty or repeated connection ID. |
+| `DefaultDialer.ConnectTimeout`/`TCPKeepalive` had no effect, but `WithDialer`'s doc told users to set them | `endpoint.DefaultDialer` is `struct{}`: its dial is bounded by the context, which carries the connect timeout, and the session sets keepalive and the socket options afterwards. The `WithDialer` doc says so. |
+| The reconnect `Delay(1)` probe came back in fce465b7 and was called twice (Connect's validation and the reconnection loop), contradicting the fifth-pass row that said the probe was gone | `Build` calls `Delay(1)` once, rejects a negative delay with a `WithReconnect` validation error, and the session's reconnection loop uses that answer. The fifth-pass row is superseded: the probe stays, once, at Build. |
+| `SimpleConvictionPolicy` had pointer receivers | Value receivers, so `endpoint.SimpleConvictionPolicy{}` is a policy. |
+| `auth.Provider.Start` had unnamed parameters | Named `ctx`, `host`, `authenticator`. |
+
+### cql struct mapping and codecs
+
+| Finding | Outcome |
+|---|---|
+| The default column name was `strings.ToLower` (`CreatedAt` → `createdat`), unlike gocqlx | An untagged field maps its name in snake_case, as gocqlx's `CamelToSnakeASCII` does (`CreatedAt` → `created_at`, `UserID` → `user_id`, `HTTPServer` → `http_server`; `UserIDs` → `user_i_ds`, so tag it). cqlgen and reflection share `structmap.SnakeCase`; the migration guide says so. |
+| `time.Time` fields had no codec | Added `cql.TimestampTimeCodec` (UTC on decode, the millisecond instant on encode, an error outside the int64 range), the default for `time.Time`, `Nullable[time.Time]`, `[]time.Time` (list, set, vector) and `map[K]time.Time` values. Not a map key (`==` compares location and monotonic reading), and `StreamRowOf` has no `time.Time` decoder: streaming keeps `cql.Timestamp`. |
+| `BindValue[T]` fields failed in `ParamsOf`, and the suggested `WithCodec(BindEncoder(...))` did not compile | `BindValue[V]` is a built-in parameter field for every built-in V and for a V `WithCodec` or new `WithEncoder[V](Encoder[V])` maps. It binds parameters only: `RowOf` rejects it, and cqlgen generates `Params` with nil `Columns` for such a struct. |
+| UDT and tuple fields needed a hand-written five-method Codec, and `UDTOptions` required `Keyspace` | Added `UDTCodecOf[T](UDTOptions, ...StructOption)`/`MustUDTCodecOf`, which maps the UDT's fields to T as `RowOf` maps columns (generated `CQLFields` included), and `TupleCodec(enc ParamEncoder[T], dec RowDecoder[T]) Codec[T]`. An empty `UDTOptions.Keyspace` matches the UDT in any keyspace; `Name` stays required. |
+| `WithCodec[P, V]`, `ReuseBuffers[P]` and `WithStreamCodec[P, V]` could not infer P, and an option passed to the wrong constructor was silently ignored | `StructOption` is not generic: `WithCodec[V]`, `WithEncoder[V]`, `WithStreamCodec[V]`, `ReuseBuffers()`, `IgnoreExtraColumns()`. Options build their field accessors for a stand-in struct and are bound to P by the constructor; a parameter field of an option reads P through a pooled copy, so binding stays allocation-free. A constructor rejects an option it does not apply with a `ValidationError` whose `Field` is the option's name. |
+| `SELECT *` broke after `ALTER TABLE ADD` because RowOf is strict, while `StreamRowInto` silently skipped unmapped columns | Added `IgnoreExtraColumns()` for `RowOf` and `StreamRowOf`. `StreamRowInto` is exact, like `RowInto`: every column needs a field and every field a column; the new `StreamIgnoreColumn[R](name)` skips one, as `IgnoreColumn` does for `RowInto`. |
+| A nil `StreamRowInto` reset was rejected, and an absent field needed the optional `StreamResetter` | A nil reset is valid. `StreamResetter` is folded into `StreamDecoder` as a required `Reset(*T)`; the "needs StreamResetter" compile error is gone. A custom `StreamRowDecoder` used in `StreamTuple`/`StreamUDT` resets through its `Reset(*R)` method when it has one, or is zeroed. |
+| `CompiledRow` required `Decode` and `Clone` beside `DecodeInto` and `RowDecoder.Clone`, and custom-codecs.md said a plan clears the destination while `DecodeInto`'s doc said the driver does | `CompiledRow` is `DecodeInto` only. The driver detaches a custom plan's rows with the `Clone` of the `RowDecoder` that compiled it (`Page.Clone`, `Each`/`One`, pairs and records keep the decoder). custom-codecs.md says the driver clears the destination before a custom plan's `DecodeInto`. |
+| Docs named `valueCodec` and `convert`, which are not the parameters; `StreamStatement` fields were ordered unlike `Statement` | `Param`/`Column` docs say "with codec", `ConvertParams`/`ConvertRows` name `mapValue`. `StreamStatement` keeps its order (`Params`, `Rows`, `CQL`), which fieldalignment requires; its doc says the order is for memory layout, and the spec lists the fields in that order, with `Idempotent`. |
+
+### cql value types
+
+| Finding | Outcome |
+|---|---|
+| NULL into a non-nullable destination gave an error nothing could match (v1 gave the zero value) | Added `cql.ErrNull`. Buffered and row decoders keep their message and match it; a streaming decoder and a `Value` accessor on a NULL wrap it too. The migration guide and errors.md say to use `Nullable[T]`. |
+| `Date.Time()`/`Timestamp.Time()` returned an always-nil error | They return `time.Time`. |
+| `int64` could not map a counter column, which forced `cql.Counter` | `Int64Codec` and `StreamInt64` accept counter, and `BigIntValue` binds a counter parameter (a decoded counter `Value` keeps its type). `Counter`, `CounterCodec`, `StreamCounter` and `CounterValue` are removed. |
+| `TextValue` and the other checked scalar constructors returned errors, so a parameter list could not be written inline | `TextValue`, `ASCIIValue`, `InetValue`, `TimeUUIDValue`, `TimeValue` and `DurationValue` return `Value`; an invalid payload fails when it is bound (the codecs already checked it), and a text one also when `Text` reads it. |
+| No `String()` on `Value`, `Varint`, `Decimal`, `Timestamp` or `Date` | Added on those and on `TimeOfDay` and `Duration`: `Value` prints a CQL literal (`'a'`, `[1, 2]`, `{k: 1}`, `null`), `Decimal` as Java's `BigDecimal.toString`, `Duration` in CQL units (`1y2mo3d4h`), `Timestamp` in RFC 3339 with milliseconds. A released view prints `<released>` instead of panicking. |
+| `ValueIterator` was Next/Value/Err only, with no `Field(name)`/`At(i)` | Added `ValueIterator.All() iter.Seq2[T, error]` and `Value.Len`, `At(i)` (list, set, vector, tuple or UDT member) and `Field(name)` (UDT). |
+| An empty cell had two shapes for a decoder (Present with no body, or `EmptyCell`) | `DecodeValue` passes an `EmptyCell` value as Present with an empty body, as a response holds it; `ValueReader.State` is Present or Null. A dynamic `Value` still reports `EmptyCell`. |
+| No time accessors on `Value` | Added `Value.Time` (timestamp, or a date at midnight UTC), `TimeOfDay` and `TimeUUID`. |
+| A vector's `Kind()` was `TypeCustom`, the kind of the invalid zero `DataType` | Added the driver-defined `TypeVector` (0x0100, not a protocol ID), which a vector's `Kind()` returns. |
+| `UUID.IsEmpty`; no constructor for a present `Nullable` | Renamed `IsZero` on `UUID` and `TimeUUID`; added `cql.NonNull(v)`. |
+| The `Text` doc said `String` panics on a released view; the `Option` doc covered only inherited settings | `Text` says `String` returns `"<released>"`; `Option` covers both settings and result values that may be unknown, and points at `Nullable` for NULL. |
+
+### metadata / event
+
+| Finding | Outcome |
+|---|---|
+| `HostID` was missing from REMOVED_NODE events, and the `Event.HostID` doc named Control events only | A node event takes the ID from the snapshot before the ring refresh when the current one has dropped the node; the doc covers Topology, Status and Control events. |
+| No `Snapshot.Keyspaces()`; `Keyspace()` deep-copies a whole keyspace to read one table; no host lookup while `Hosts()` copies every token | Added `Snapshot.Keyspaces` (sorted), `Table(ks, name)` and `Host(id)`; the `Snapshot` doc says every returned value is a private copy. |
+| `Functions`/`Aggregates` keys changed from `name` to `name(types)` once an overload existed | Always keyed by signature (`"add(int,int)"`, `"now()"`); added `Keyspace.Function(name, args...)`, `FunctionsNamed`, `Aggregate` and `AggregatesNamed`. |
+| `Keyspace.Clone` was redundant: snapshot results are already private copies | Removed. |
+| `ColumnKind` and `event.Kind` constants lacked the type prefix | `ColumnKindPartitionKey` ... `ColumnKindStatic`; `event.KindUnknown` ... `event.KindOverflow`. |
+| `HostSnapshot.ID`; `event.Target` clashed with `metadata.Target` | `HostSnapshot.HostID`; `event.ObjectKind` with `ObjectKeyspace` ... `ObjectAggregate`, in the field `Event.ObjectKind`. |
+| `RefreshMetadata` doc said topology only; no `Subscribe` example; stale `WithShard` in the `Route` doc | `RefreshMetadata` documents that it reloads topology, client routes and schema, and its error shapes; added `ExampleSession_Subscribe` (Generation/Overflow loop, run by `TestClusterExamples`); the doc names `WithShardID`. |
+
+### observe / metrics
+
+| Finding | Outcome |
+|---|---|
+| `LifecycleObserver` overlapped `Subscribe`; its Ready and Closed events carried no information | Removed `LifecycleObserver`, `LifecycleEvent`, `LifecycleKind`, `LifecycleStage` and `ConfigBuilder.WithLifecycleObserver`. A pool connecting or a host marked down is an `event.KindPool` event with `ChangeConnected` or `ChangeDown`, delivered after the metadata publication that shows it. |
+| No `observe.Join`; `exec.Options.Observer` replaced the session observer with no way to add to it | Added `observe.Join`: it implements the union of its observers' hooks, chains `StartRequest` contexts, and keeps one observer's panic from skipping the others. The `exec.Options.Observer` doc shows `observe.Join(sessionObserver, extra)`. |
+| No function adapters for the observer hooks | Added `observe.RequestObserverFunc` and `AttemptObserverFunc`, with `ExampleJoin`. |
+| `metrics.Snapshot.Requests` could decrease while an admission was refused; `Attempts` was described as requests | `Requests` is counted once the execution is registered, so it never counts a refused admission and never decreases; the doc says attempts. |
+| `observe` doc named `config.Build` and a per-host lifecycle; `Routing` did not say what an unknown field holds | Names `ConfigBuilder.Build`, points at `Subscribe` for pool and cluster changes, and says an unknown `Routing` field is empty or unset. |
+| `go vet -tags gocql_perf` failed after the row plan change | The perf tests decode through `DecodeInto` (separate commit). |
 
 ## Decisions
 

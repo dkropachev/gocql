@@ -19,7 +19,6 @@ import (
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 
 	gocql "github.com/scylladb/gocql/v2"
-	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
 func TestFixture(t *testing.T) {
@@ -116,8 +115,8 @@ func TestFixture(t *testing.T) {
 		if !bytes.Equal(got.OwnedBytes(), payload) {
 			t.Fatal("single-row helper did not retain an owned payload")
 		}
-		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, cqlerr.ErrNoRows) {
-			t.Fatalf("empty result: got %v, want ErrNoRows", err)
+		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, errNoRows) {
+			t.Fatalf("empty result: got %v, want errNoRows", err)
 		}
 		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(1)); !errors.Is(err, errMultipleRows) {
 			t.Fatalf("multiple result pages: got %v, want errMultipleRows", err)

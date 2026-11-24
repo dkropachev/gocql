@@ -477,11 +477,11 @@ func buildTypedSocketReport(typed *connectivity.Config) socketReport {
 	if typed.Linger.Set {
 		report.Linger = &lingerReport{IntervalS: int64(typed.Linger.Value / time.Second)}
 	}
-	if typed.ReceiveBuffer.Set && typed.ReceiveBuffer.Value > 0 {
-		report.ReceiveBuffer = &bufferReport{SizeBytes: typed.ReceiveBuffer.Value}
+	if typed.ReceiveBuffer > 0 {
+		report.ReceiveBuffer = &bufferReport{SizeBytes: typed.ReceiveBuffer}
 	}
-	if typed.SendBuffer.Set && typed.SendBuffer.Value > 0 {
-		report.SendBuffer = &bufferReport{SizeBytes: typed.SendBuffer.Value}
+	if typed.SendBuffer > 0 {
+		report.SendBuffer = &bufferReport{SizeBytes: typed.SendBuffer}
 	}
 	return report
 }
@@ -790,7 +790,7 @@ func (s *Core) BuildQueryReport() queryReport {
 		cfg.DefaultTimestamp = runtime.ConfigSnapshot().Timestamps.Mode() != settings.ServerTimestampMode
 		report := queryReport{
 			Defaults:      buildQueryDefaultsReport(&cfg),
-			LoadBalancing: buildTypedLoadBalancingReport(profile.Routing),
+			LoadBalancing: buildTypedLoadBalancingReport(profile.Routing, runtime.ConfigSnapshot()),
 			// A nil retry policy in a profile disables retries.
 			Retry: queryRetryReport{Policy: InternalBuildRetryPolicyReport(profile.Retry)},
 		}
@@ -801,13 +801,19 @@ func (s *Core) BuildQueryReport() queryReport {
 	}
 	return queryReport{Defaults: buildQueryDefaultsReport(&cfg), Retry: buildQueryRetryReport(&cfg), LoadBalancing: legacyLoadBalancingReport()}
 }
-func buildTypedLoadBalancingReport(policy routing.RoutingPolicy) queryLoadBalancingReport {
+
+// buildTypedLoadBalancingReport reports policy as the session of config
+// runs it: a built-in policy without a datacenter takes the session's.
+func buildTypedLoadBalancingReport(policy routing.RoutingPolicy, config settings.Config) queryLoadBalancingReport {
 	builtin, ok := policy.(*routing.InternalRoutingPolicy)
 	if !ok || builtin == nil {
 		// Name the user's routing.Policy, not the adapter the engine holds.
 		return queryLoadBalancingReport{Policy: loadBalancingCustomReport{Type: "custom", Name: customPolicyName(routing.PublicPolicy(policy))}}
 	}
 	options := builtin.InternalOptions
+	if options.Datacenter == "" {
+		options.Datacenter, options.Rack = config.LocalDatacenter, config.LocalRack
+	}
 	result := queryLoadBalancingReport{}
 	if options.Datacenter != "" {
 		if options.Rack != "" {
@@ -816,12 +822,12 @@ func buildTypedLoadBalancingReport(policy routing.RoutingPolicy) queryLoadBalanc
 			result.NodePreference = nodeLocationDCReport{Type: "dc", LocalDC: options.Datacenter}
 		}
 	}
-	if !options.TokenAware {
+	if options.NoTokenAware {
 		result.Policy = loadBalancingCustomReport{Type: "custom", Name: "routingPolicy"}
 		return result
 	}
 	distribution := "replica-set"
-	if options.ShuffleReplicas {
+	if !options.FixedReplicaOrder {
 		distribution = "shuffle"
 	}
 	report := InternalLoadBalancingTokenAwareReport{Type: "token-aware", LoadDistribution: distribution, FallbackToNonPreferredNodes: options.AllowRemote}

@@ -16,6 +16,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // queryPoolBase is what the session runtime sees of a query pool: its idle
@@ -187,7 +188,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 	if ctx == nil {
 		return nil, notSent(cqltype.TypeValidation("context", "nil context"))
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, notSent(err)
 	}
 	q, err := p.get()
@@ -200,7 +201,7 @@ func (p *queryPool[P, R]) capture(ctx context.Context, value P) (*Query[P, R], e
 		// for a closed query, which is dropped, or for the context, which
 		// can end between the check above and the capture; that query is
 		// still idle and goes back.
-		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		if ctxErr := transport.ContextError(ctx); ctxErr != nil && errors.Is(err, ctxErr) {
 			p.put(q)
 		}
 		return nil, err
@@ -215,7 +216,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if ctx == nil {
 		return nil, notSent(cqltype.TypeValidation("context", "nil context"))
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, notSent(err)
 	}
 	q, err := p.get()
@@ -225,7 +226,7 @@ func (p *queryPool[P, R]) begin(ctx context.Context) (*Query[P, R], error) {
 	if err := q.state.begin(ctx); err != nil {
 		// begin fails before the query turned busy: for a closed query,
 		// which is dropped, or for the context, which leaves it idle.
-		if ctxErr := ctx.Err(); ctxErr != nil && errors.Is(err, ctxErr) {
+		if ctxErr := transport.ContextError(ctx); ctxErr != nil && errors.Is(err, ctxErr) {
 			p.put(q)
 		}
 		return nil, notSent(err)
@@ -320,8 +321,12 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	if s.Closed() {
 		return cqlerr.ErrClosed
 	}
-	routing := preparedRouting(state, p.privateStorage.kind)
-	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, true)
+	kind := p.privateStorage.kind
+	if p.privateStorage.kindInferred {
+		kind = cql.UnknownStatement
+	}
+	routing := preparedRouting(state, kind)
+	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.idempotent, p.privateStorage.params, state.InternalParameters, value, true)
 }
 
 // Exec binds value and executes the statement once. The statement must not

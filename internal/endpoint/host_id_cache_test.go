@@ -20,7 +20,7 @@ func TestHostInfo(t *testing.T) {
 	// An empty host ID must not be cached, so the ID filled in later is observed.
 	t.Run("InternalHostInfoHostUUID", func(t *testing.T) {
 		h := newHost()
-		if id := InternalHostInfoHostUUID(h); !id.IsEmpty() {
+		if id := InternalHostInfoHostUUID(h); !id.IsZero() {
 			t.Fatal("empty host reported an ID", id)
 		}
 		from := newHost()

@@ -19,7 +19,7 @@ func (requestOnly) StartRequest(ctx context.Context, _ observe.RequestStart) (co
 
 type attemptOnly struct{}
 
-func (attemptOnly) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (attemptOnly) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return nil
 }
 

@@ -4,6 +4,7 @@
 package cql
 
 import (
+	"encoding/base64"
 	"slices"
 	"time"
 )
@@ -194,3 +195,52 @@ func (p PageState) Token() []byte {
 	return append([]byte{}, p.token...)
 }
 func completePageState() PageState { return PageState{kind: 2} }
+
+// MarshalBinary encodes the whole state, start and completion included: one
+// byte for its kind, then a continuation's token. UnmarshalBinary reads it
+// back. The encoding carries the token, so it needs the same care before it
+// reaches an untrusted client.
+func (p PageState) MarshalBinary() ([]byte, error) {
+	b := make([]byte, 1, 1+len(p.token))
+	b[0] = p.kind
+	if p.kind == 1 {
+		b = append(b, p.token...)
+	}
+	return b, nil
+}
+
+// UnmarshalBinary decodes a state MarshalBinary encoded, copying its token.
+// Any other input is rejected with a ValidationError.
+func (p *PageState) UnmarshalBinary(data []byte) error {
+	if len(data) == 0 {
+		return typeValidation("page state", "empty encoding")
+	}
+	switch kind := data[0]; {
+	case kind == 1:
+		*p = PageStateFromToken(data[1:])
+	case kind > 2:
+		return typeValidation("page state", "unknown kind %d", kind)
+	case len(data) > 1:
+		return typeValidation("page state", "token after a start or complete state")
+	default:
+		*p = PageState{kind: kind}
+	}
+	return nil
+}
+
+// MarshalText encodes the state as the unpadded URL-safe base64 of its
+// MarshalBinary encoding, fit for a URL or JSON cursor.
+func (p PageState) MarshalText() ([]byte, error) {
+	b, _ := p.MarshalBinary()
+	return base64.RawURLEncoding.AppendEncode(nil, b), nil
+}
+
+// UnmarshalText decodes a state MarshalText encoded. Any other input is
+// rejected with a ValidationError.
+func (p *PageState) UnmarshalText(text []byte) error {
+	b, err := base64.RawURLEncoding.AppendDecode(nil, text)
+	if err != nil {
+		return &ValidationError{Field: "page state", Err: err}
+	}
+	return p.UnmarshalBinary(b)
+}

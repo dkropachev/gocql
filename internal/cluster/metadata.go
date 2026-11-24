@@ -31,7 +31,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
-	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -135,7 +134,9 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 			}
 		}
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindSession, Stage: observe.StageReady, At: time.Now()})
+	if dcs := unsetLocality(config, s.Metadata()); len(dcs) > 1 {
+		s.logger().Warn("the cluster has more than one datacenter and the session has no local one, so requests go to every datacenter and LOCAL_* consistency is local to whichever coordinator serves them; set config.ConfigBuilder.WithLocalDatacenter", "datacenters", dcs)
+	}
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
@@ -143,6 +144,27 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 	}
 	return nil
 }
+
+// unsetLocality returns the datacenters of m's enabled hosts when config
+// sets no locality: no local datacenter, and a default routing policy that
+// is built in and names none either. It returns nil otherwise.
+func unsetLocality(config settings.Config, m *routing.MetadataSnapshot) []string {
+	if config.LocalDatacenter != "" || config.DefaultProfile == nil {
+		return nil
+	}
+	if p, ok := config.DefaultProfile.Routing.(*routing.InternalRoutingPolicy); !ok || p.InternalOptions.Datacenter != "" {
+		return nil
+	}
+	var dcs []string
+	for _, h := range routing.SnapshotData(m).InternalHosts {
+		if h.Enabled && !slices.Contains(dcs, h.Datacenter) {
+			dcs = append(dcs, h.Datacenter)
+		}
+	}
+	slices.Sort(dcs)
+	return dcs
+}
+
 func (s *Core) ConfigureV2Peripheral(config settings.Config) {
 	p := s.Peripheral()
 	p.InternalMu.Lock()
@@ -260,7 +282,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		replicaHosts = append(replicaHosts, func() *implEndpoint.HostInfo {
 			opaqueStorageValue := new(implEndpoint.HostInfo)
-			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = snapshot.ID
+			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = snapshot.HostID
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalDataCenter = snapshot.Datacenter
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalRack = snapshot.Rack
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalTokens = append([]string(nil), h.Tokens()...)
@@ -268,7 +290,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}())
 	}
 	sort.Slice(routing.SnapshotData(m).InternalHosts, func(i, j int) bool {
-		return routing.SnapshotData(m).InternalHosts[i].ID.String() < routing.SnapshotData(m).InternalHosts[j].ID.String()
+		return routing.SnapshotData(m).InternalHosts[i].HostID.String() < routing.SnapshotData(m).InternalHosts[j].HostID.String()
 	})
 	if len(hosts) > 0 && len(routing.SnapshotData(m).InternalHosts) == 0 && old != nil {
 		return false
@@ -372,6 +394,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 	routing.SnapshotData(m).InternalPlacementSignal = &p.InternalPlacementEpoch
 	routing.SnapshotData(m).InternalPlacements = routing.InternalReconcileTabletPlacement(old, m)
 	routing.SnapshotData(m).InternalHostIndex = sessionRoutingHostIndex(s, routing.SnapshotData(m).InternalHosts)
+	routing.SnapshotData(m).InternalHostIndex.InternalSetLocal(config.LocalDatacenter, config.LocalRack)
 	if config.Metadata.Mode != metadata.ModeFull {
 		routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, cqltype.TypeValidation("partitioner", "table partitioners outside loaded metadata disable token routing"))
 	}
@@ -433,19 +456,6 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, e
 		}
 	}
 	return out, tokenErr
-}
-func sessionObserveV2Lifecycle(s *Core, event observe.LifecycleEvent) {
-	p := s.Peripheral()
-	if p == nil {
-		return
-	}
-	p.InternalMu.Lock()
-	observer := p.InternalConfig.LifecycleObserver
-	p.InternalMu.Unlock()
-	if observer == nil {
-		return
-	}
-	s.ObserveSafely(func() { observer.ObserveLifecycle(event) })
 }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's
@@ -570,7 +580,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		scope := make(map[cql.UUID][]*transport.Conn)
 		for _, h := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if h.Enabled {
-				scope[h.ID] = s.v2AgreementConnections(h.ID)
+				scope[h.HostID] = s.v2AgreementConnections(h.HostID)
 			}
 		}
 		if coordinator != nil {
@@ -656,7 +666,7 @@ func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Co
 			last = err
 			continue
 		}
-		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsEmpty() {
+		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsZero() {
 			return cql.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
 		}
 		return rows[0].version.Value, nil

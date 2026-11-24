@@ -113,7 +113,7 @@ func (x *typedExec) cleanup(req *model.AttemptRequest) {
 
 func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *InternalResponsePage) (*InternalResponsePage, error) {
 	c := x.conn
-	if err := ctx.Err(); err != nil {
+	if err := ContextError(ctx); err != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err})
 	}
 	if req == nil {
@@ -263,12 +263,12 @@ func (x *typedExec) run(ctx context.Context, req *model.AttemptRequest, dest *In
 				x.releaseStream = true
 				x.recycleCall = true
 			}
-			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err()})
+			return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ContextError(ctx)})
 		}
 		if c.markOrphan(call) {
 			x.closeErr = errOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ContextError(ctx), InternalPotentiallyExecuted: true, InternalTimeout: req.Timeout, InternalInFlight: c.InternalStreams.InUse()})
 	}
 	received := func(resp InternalCallResp) (*InternalResponsePage, error) {
 		if ticket != nil {
@@ -403,7 +403,7 @@ func (c *Conn) InternalHostID() cql.UUID {
 		return *id
 	}
 	id := implEndpoint.InternalHostInfoHostUUID(c.InternalHost)
-	if !id.IsEmpty() {
+	if !id.IsZero() {
 		c.hostID.Store(&id)
 	}
 	return id
@@ -441,4 +441,14 @@ func (c *Conn) buildNativeProtocol(reuse *protocol.MetadataReuse) *protocol.Sett
 		p.Compression = c.InternalCompressor.Name()
 	}
 	return &p
+}
+
+// ContextError returns why ctx ended, or nil while it has not: its cause,
+// such as cqlerr.ErrRequestTimeout for the driver's own timeout, or its
+// error. It checks Err first, so a live context costs no cause lookup.
+func ContextError(ctx context.Context) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	return context.Cause(ctx)
 }

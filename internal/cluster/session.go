@@ -145,7 +145,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	resync := func() {
 		s.debounceRingRefresh()
 		s.scheduleV2SchemaRetry()
-		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
+		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: "CONTROL_RESYNC"})
 	}
 	s.privateStorage.InternalSchemaEvents.InternalResync = resync
 	s.privateStorage.InternalNodeEvents.InternalResync = resync
@@ -319,7 +319,7 @@ func (s *Core) init() error {
 	} else {
 		// For testing purposes we populate host ids
 		for _, host := range hosts {
-			if implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() {
+			if implEndpoint.HostInfoData(host).InternalHostId.IsZero() {
 				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}

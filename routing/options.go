@@ -13,34 +13,38 @@ import (
 
 // Options configures NewPolicy.
 //
-// The zero Options leaves every option off.
+// The zero Options is the session's default policy: token-aware, with
+// replicas shuffled per request and leader-aware for strongly consistent
+// tables, in the session's local datacenter (config.ConfigBuilder's
+// WithLocalDatacenter) or, without one, over every datacenter.
 type Options struct {
 	// Datacenter and Rack name the local datacenter and rack. Replicas there
-	// are tried first. A rack requires a datacenter.
+	// are tried first. A rack requires a datacenter. Empty takes the
+	// session's local datacenter and rack.
 	Datacenter, Rack string
 	// Latency configures latency-aware routing.
 	Latency LatencyOptions
-	// TokenAware routes a request to the replicas of its partition.
-	TokenAware bool
-	// AllowRemote lets requests fall back to hosts outside Datacenter. With
-	// TokenAware, replicas there are tried before local hosts that are not
-	// replicas.
+	// NoTokenAware routes a request without regard to the replicas of its
+	// partition. It also turns leader-aware routing off.
+	NoTokenAware bool
+	// AllowRemote lets requests fall back to hosts outside the local
+	// datacenter. Unless NoTokenAware is set, replicas there are tried before
+	// local hosts that are not replicas.
 	AllowRemote bool
-	// ShuffleReplicas spreads requests over replicas at random rather than in
-	// a fixed order per token.
-	ShuffleReplicas bool
-	// LeaderAware routes requests of strongly consistent tables (a ScyllaDB
-	// keyspace created with consistency = 'global') to the tablet's leader
-	// first, ahead of nearer replicas. It needs TokenAware and applies only
-	// once a response has reported the tablet over the
-	// TABLETS_ROUTING_V2_EXPERIMENTAL extension; requests at ONE or
-	// LOCAL_ONE and eventually consistent keyspaces keep normal replica
-	// order. A leader the policy would not otherwise use (host filter,
-	// another datacenter without AllowRemote, down or unconnected) is not
-	// preferred, and latency-aware routing tries a slow leader last. The
-	// session's default policy sets it. Only ScyllaDB has
-	// tablets; on Cassandra it has no effect.
-	LeaderAware bool
+	// FixedReplicaOrder tries a token's replicas in a fixed order per token
+	// rather than shuffling them per request.
+	FixedReplicaOrder bool
+	// NoLeaderAware turns off leader-aware routing, which routes requests of
+	// strongly consistent tables (a ScyllaDB keyspace created with
+	// consistency = 'global') to the tablet's leader first, ahead of nearer
+	// replicas. Leader-aware routing applies only once a response has
+	// reported the tablet over the TABLETS_ROUTING_V2_EXPERIMENTAL extension;
+	// requests at ONE or LOCAL_ONE and eventually consistent keyspaces keep
+	// normal replica order. A leader the policy would not otherwise use (host
+	// filter, another datacenter without AllowRemote, down or unconnected) is
+	// not preferred, and latency-aware routing tries a slow leader last. Only
+	// ScyllaDB has tablets; on Cassandra it has no effect.
+	NoLeaderAware bool
 }
 
 // LatencyOptions configures latency-aware routing: hosts much slower than

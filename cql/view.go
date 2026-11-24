@@ -25,13 +25,13 @@ type Bytes struct {
 	chain wire.Chain
 }
 
-// Text is a validated text view with the same lifetime as Bytes. String materializes
-// an owned string; cursor callers must do so before the view expires.
+// Text is a validated text view with the same lifetime as Bytes. String and
+// Copy materialize an owned string; cursor callers must do so before the view
+// expires.
 //
-// String and Clone panic with ErrReleased on an expired view; Copy is the
-// checked form and returns that error instead. Detection is best-effort, as for
-// Bytes. fmt recovers panics from String, so printing an expired Text shows
-// %!v(PANIC=String method: ...) rather than failing.
+// On an expired view Clone panics with ErrReleased, Copy returns that error,
+// and String returns "<released>", so printing or logging one never fails.
+// Detection is best-effort, as for Bytes.
 //
 // The zero Text is empty.
 type Text struct{ bytes Bytes }

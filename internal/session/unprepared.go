@@ -14,7 +14,7 @@ import (
 
 // UnpreparedExec executes one CQL text command and owns its query's cleanup.
 func (s *Session) UnpreparedExec[P any](ctx context.Context, statement binding.Statement[P, cql.EmptyRow], value P, options ...Options) (cql.Result, error) {
-	q, err := unpreparedCall(s, statement, options)
+	q, err := unpreparedCall(s, statement, value, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -24,7 +24,7 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement binding.S
 
 // UnpreparedOne reads one owned row and owns its query's cleanup.
 func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement binding.Statement[P, R], value P, dst *R, options ...Options) (bool, cql.Result, error) {
-	q, err := unpreparedCall(s, statement, options)
+	q, err := unpreparedCall(s, statement, value, options)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
@@ -37,7 +37,7 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement bindin
 	if fn == nil {
 		return nilEachCallback()
 	}
-	q, err := unpreparedCall(s, statement, options)
+	q, err := unpreparedCall(s, statement, value, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
@@ -49,7 +49,7 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement bindin
 // the query is closed when the iteration ends.
 func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement binding.Statement[P, R], value P, dst *R, options ...Options) iter.Seq2[*R, error] {
 	return func(yield func(*R, error) bool) {
-		q, err := unpreparedCall(s, statement, options)
+		q, err := unpreparedCall(s, statement, value, options)
 		if err != nil {
 			yield(nil, err)
 			return
@@ -63,7 +63,10 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement binding
 
 // unpreparedCall validates and resolves the call's options, a throwaway call
 // having no setup step to do it in, and builds the query that runs it.
-func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], options []Options) (*Query[P, R], error) {
+func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], value P, options []Options) (*Query[P, R], error) {
+	if err := unpreparedMarkers(&statement, value); err != nil {
+		return nil, notSent(err)
+	}
 	var values Options
 	switch len(options) {
 	case 0:
@@ -78,4 +81,28 @@ func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], opt
 	}
 	q, err := newUnpreparedQuery(s.Core(), statement, o)
 	return q, notSent(err)
+}
+
+// unpreparedMarkers completes statement's BindMarkers for an unprepared
+// execution with value. Without them, cql.DynamicParams takes its markers'
+// types from the values; any other statement with parameters, P other than
+// cql.EmptyParams, is rejected, since its encoder would bind nothing.
+func unpreparedMarkers[P, R any](statement *binding.Statement[P, R], value P) error {
+	if statement.BindMarkers.Len() != 0 {
+		return nil
+	}
+	switch v := any(value).(type) {
+	case cql.EmptyParams:
+		return nil
+	case []cql.Value:
+		if any(statement.Params) == any(cql.DynamicParams) {
+			specs := make([]cql.ColumnSpec, len(v))
+			for i := range v {
+				specs[i] = cql.ColumnSpec{Type: v[i].Type()}
+			}
+			statement.BindMarkers = cql.NewColumns(specs...)
+			return nil
+		}
+	}
+	return cqltype.TypeValidation("bind markers", "a statement with parameters executed without preparation needs BindMarkers")
 }

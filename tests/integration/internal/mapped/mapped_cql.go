@@ -19,8 +19,8 @@ func (Event) CQLFields() cql.StructFields[Event] {
 			cql.Param("maybe", cql.NullableEncoder(cql.Int32Codec), func(v Event) cql.Nullable[int32] { return v.Maybe }),
 			cql.Param("tags", cql.ListCodec(cql.StringCodec), func(v Event) []string { return v.Tags }),
 			cql.Param("scores", cql.SetCodec(cql.Int32Codec), func(v Event) []int32 { return v.Scores }),
-			cql.Param("createdat", cql.TimestampCodec, func(v Event) cql.Timestamp { return v.Audit.CreatedAt }),
-			cql.Param("updatedat", cql.TimestampCodec, func(v Event) cql.Timestamp { return v.Audit.UpdatedAt }),
+			cql.Param("created_at", cql.TimestampCodec, func(v Event) cql.Timestamp { return v.Audit.CreatedAt }),
+			cql.Param("updated_at", cql.TimestampCodec, func(v Event) cql.Timestamp { return v.Audit.UpdatedAt }),
 		},
 		Columns: []cql.OutputField[Event]{
 			cql.Column("bucket", cql.Int32Codec, func(v *Event) *int32 { return &v.Bucket }),
@@ -31,8 +31,8 @@ func (Event) CQLFields() cql.StructFields[Event] {
 			cql.Column("maybe", cql.NullableDecoder(cql.Int32Codec), func(v *Event) *cql.Nullable[int32] { return &v.Maybe }),
 			cql.Column("tags", cql.ListCodec(cql.StringCodec), func(v *Event) *[]string { return &v.Tags }),
 			cql.Column("scores", cql.SetCodec(cql.Int32Codec), func(v *Event) *[]int32 { return &v.Scores }),
-			cql.Column("createdat", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.CreatedAt }),
-			cql.Column("updatedat", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.UpdatedAt }),
+			cql.Column("created_at", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.CreatedAt }),
+			cql.Column("updated_at", cql.TimestampCodec, func(v *Event) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 		},
 	}
 }
@@ -49,8 +49,8 @@ func (StreamEvent) CQLFields() cql.StructFields[StreamEvent] {
 			cql.Param("big", cql.Int64Codec, func(v StreamEvent) int64 { return v.Big }),
 			cql.Param("maybe", cql.NullableEncoder(cql.Int32Codec), func(v StreamEvent) cql.Nullable[int32] { return v.Maybe }),
 			cql.Param("scores", cql.SetCodec(cql.Int32Codec), func(v StreamEvent) []int32 { return v.Scores }),
-			cql.Param("createdat", cql.TimestampCodec, func(v StreamEvent) cql.Timestamp { return v.Audit.CreatedAt }),
-			cql.Param("updatedat", cql.TimestampCodec, func(v StreamEvent) cql.Timestamp { return v.Audit.UpdatedAt }),
+			cql.Param("created_at", cql.TimestampCodec, func(v StreamEvent) cql.Timestamp { return v.Audit.CreatedAt }),
+			cql.Param("updated_at", cql.TimestampCodec, func(v StreamEvent) cql.Timestamp { return v.Audit.UpdatedAt }),
 		},
 		Columns: []cql.OutputField[StreamEvent]{
 			cql.Column("bucket", cql.Int32Codec, func(v *StreamEvent) *int32 { return &v.Bucket }),
@@ -60,8 +60,8 @@ func (StreamEvent) CQLFields() cql.StructFields[StreamEvent] {
 			cql.Column("big", cql.Int64Codec, func(v *StreamEvent) *int64 { return &v.Big }),
 			cql.Column("maybe", cql.NullableDecoder(cql.Int32Codec), func(v *StreamEvent) *cql.Nullable[int32] { return &v.Maybe }),
 			cql.Column("scores", cql.SetCodec(cql.Int32Codec), func(v *StreamEvent) *[]int32 { return &v.Scores }),
-			cql.Column("createdat", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
-			cql.Column("updatedat", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
+			cql.Column("created_at", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
+			cql.Column("updated_at", cql.TimestampCodec, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 		},
 	}
 }
@@ -77,7 +77,7 @@ func (StreamEvent) CQLStreamColumns() []cql.StreamOutputField[StreamEvent] {
 		cql.StreamColumn("big", cql.StreamInt64, func(v *StreamEvent) *int64 { return &v.Big }),
 		cql.StreamColumn("maybe", cql.StreamNullable(cql.StreamInt32), func(v *StreamEvent) *cql.Nullable[int32] { return &v.Maybe }),
 		cql.StreamColumn("scores", cql.StreamSet(cql.StreamInt32), func(v *StreamEvent) *[]int32 { return &v.Scores }),
-		cql.StreamColumn("createdat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
-		cql.StreamColumn("updatedat", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
+		cql.StreamColumn("created_at", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.CreatedAt }),
+		cql.StreamColumn("updated_at", cql.StreamTimestamp, func(v *StreamEvent) *cql.Timestamp { return &v.Audit.UpdatedAt }),
 	}
 }

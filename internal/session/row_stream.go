@@ -40,6 +40,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -122,7 +123,7 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 		// ErrClosed, as their stop below does, whichever runs first.
 		owner := executionCursor(request)
 		cursor.privateStorage.stop = context.AfterFunc(runctx, func() {
-			cause := runctx.Err()
+			cause := transport.ContextError(runctx)
 			if session.Closed() || owner.stopped() {
 				cause = cqlerr.ErrClosed
 			}
@@ -357,7 +358,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 	if terminal || s.privateStorage.closing.Load() {
 		return false
 	}
-	if err := s.privateStorage.ctx.Err(); err != nil {
+	if err := transport.ContextError(s.privateStorage.ctx); err != nil {
 		rowStreamFail(s, err)
 		rowStreamCleanup(s, false)
 		return false
@@ -458,7 +459,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 				break
 			}
 		}
-		if target.HostID.IsEmpty() {
+		if target.HostID.IsZero() {
 			return cqlerr.ErrNoConnections
 		}
 	}
@@ -559,22 +560,18 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request.tabletVersionBlock = tablet.VersionBlock(request.routing)
 	var plan implRouting.QueryPlan
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		if err := policy.Validate(snapshot); err != nil {
+		var err error
+		if plan, err = routePlan(policy, request.routing, snapshot, new(implRouting.InternalLazyRoutingPlan), &tablet); err != nil {
 			return err
-		}
-		if builtin, ok := policy.(*implRouting.InternalRoutingPolicy); ok {
-			plan = builtin.InternalPlanWith(request.routing, snapshot, new(implRouting.InternalLazyRoutingPlan), &tablet)
-		} else {
-			plan = implRouting.NewPlan(policy, request.routing, snapshot)
 		}
 	}
 	pagectx := s.privateStorage.ctx
 	if timeout := request.options.InternalProfile.PageTimeout; timeout > 0 {
-		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.ctx, timeout)
+		pagectx, s.privateStorage.pageCancel = context.WithTimeoutCause(s.privateStorage.ctx, timeout, cqlerr.ErrRequestTimeout)
 	}
 	consistency := request.options.InternalProfile.Consistency
 	for attempt := 1; ; attempt++ {
-		if err := pagectx.Err(); err != nil {
+		if err := transport.ContextError(pagectx); err != nil {
 			return err
 		}
 		if s.privateStorage.reservation == nil {
@@ -618,7 +615,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		started := time.Now()
 		var end func(routing.AttemptEvent)
 		if request.InternalLogical.observesAttempts() {
-			end = request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
 		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
@@ -736,13 +733,13 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err
 		}
 		if decision.Action != retry.Same && decision.Action != retry.Next {
-			return cqltype.TypeValidation("stream retry", "requires retry same, next or stop")
+			return cqltype.TypeValidation("retry", "unknown retry action")
 		}
 		if decision.Delay < 0 {
 			return cqltype.TypeValidation("retry delay", "negative delay")
@@ -766,7 +763,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			select {
 			case <-pagectx.Done():
 				timer.Stop()
-				return pagectx.Err()
+				return transport.ContextError(pagectx)
 			case <-timer.C:
 			}
 		}

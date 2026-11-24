@@ -26,11 +26,11 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 		Profile: &profile, Retry: retry.Safe{MaxAttempts: 7}, Keyspace: "ks",
 		CustomPayload: []cql.PayloadEntry{{Key: "key", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(payload)}}},
 		Timeout:       cql.Some(time.Second), PageTimeout: cql.Some(2 * time.Second),
-		Prefetch: cql.Some(0), Timestamp: cql.Some[int64](123), PageSize: cql.Some[int32](5),
+		Prefetch: cql.Some(0), Timestamp: cql.Some[int64](123), PageSize: 5,
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2),
 		SerialConsistency: exec.SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),
-		IncludeMetadata: true, Idempotent: true, CQLTrace: true,
+		IncludeMetadata: true, Idempotent: cql.Some(true), CQLTrace: true,
 	}
 	if got := roundTripOptions(t, want); !reflect.DeepEqual(got, want) {
 		t.Fatalf("public options lost settings:\n got %+v\nwant %+v", got, want)
@@ -70,7 +70,7 @@ func roundTripOptions(t *testing.T, o exec.Options) exec.Options {
 func TestOptionsProfileMustBeBuilt(t *testing.T) {
 	literal := config.Profile{PageSize: 1000}
 	_, err := implSession.NewCompiledOptions(nil, internalOptions(exec.Options{Profile: &literal}))
-	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "Profile" || !strings.Contains(err.Error(), "NewProfile") {
 		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 	}
 	built := codecTestMust(config.NewProfile().Build())

@@ -5,6 +5,7 @@ package gocql
 		gocql.Batch method (*T) Reset()
 		gocql.Batch method (*T) Size() int
 	type gocql.CASBatchRows[X any] struct
+		gocql.CASBatchRows method (T) All(dst *cql.CASResult[X]) iter.Seq2[*cql.CASResult[X], error]
 		gocql.CASBatchRows method (T) Applied() (bool, error)
 		gocql.CASBatchRows method (T) Clone() (cql.CASResult[X], error)
 		gocql.CASBatchRows method (T) Close() error
@@ -16,6 +17,7 @@ package gocql
 	func gocql.Connect(ctx context.Context, cfg config.Config) (*gocql.Session, error)
 	const gocql.MaxBatchStatements untyped int = 65535
 	type gocql.Page[R any] struct
+		gocql.Page method (*T) All(dst *R) iter.Seq2[*R, error]
 		gocql.Page method (*T) Clone() (R, error)
 		gocql.Page method (*T) Close() error
 		gocql.Page method (*T) Columns() cql.Columns
@@ -35,7 +37,7 @@ package gocql
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
 		gocql.Prepared method (*T) Parameters() cql.Columns
-		gocql.Prepared method (*T) Query(options exec.Options) (*gocql.Query[P, R], error)
+		gocql.Prepared method (*T) Query(options ...exec.Options) (*gocql.Query[P, R], error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
 	type gocql.PreparedInfo struct
@@ -48,7 +50,7 @@ package gocql
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
 		gocql.PreparedStream method (*T) Parameters() cql.Columns
-		gocql.PreparedStream method (*T) Query(options exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
+		gocql.PreparedStream method (*T) Query(options ...exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
 	type gocql.Query[P any, R any] struct
 		gocql.Query method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Query method (*T) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error]
@@ -67,6 +69,7 @@ package gocql
 		gocql.RowStream method (*T) Info() gocql.StreamInfo
 		gocql.RowStream method (*T) NextInto(dst *R) bool
 	type gocql.Rows[R any] struct
+		gocql.Rows method (T) All(dst *R) iter.Seq2[*R, error]
 		gocql.Rows method (T) Clone() (R, error)
 		gocql.Rows method (T) Close() error
 		gocql.Rows method (T) Columns() cql.Columns
@@ -112,7 +115,7 @@ package auth
 		auth.Exchange method Success(context.Context, cql.Nullable[cql.Bytes]) error
 	func auth.Password(username string, password string) auth.Provider
 	type auth.Provider interface
-		auth.Provider method Start(context.Context, metadata.HostSnapshot, string) (auth.Exchange, cql.Nullable[[]byte], error)
+		auth.Provider method Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (auth.Exchange, cql.Nullable[[]byte], error)
 
 package config
 	const config.CassandraV4 config.Dialect = 2
@@ -120,25 +123,19 @@ package config
 	type config.ClientRoute struct
 		config.ClientRoute field ConnectionID string
 		config.ClientRoute field Hostname string
-	type config.ClientRoutes struct
-		config.ClientRoutes method (T) Routes() []config.ClientRoute
-	type config.ClientRoutesBuilder struct
-		config.ClientRoutesBuilder method (*T) Build() (config.ClientRoutes, error)
-		config.ClientRoutesBuilder method (*T) WithRoute(connectionID string, hostname string) *config.ClientRoutesBuilder
 	type config.Config struct
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
 		config.ConfigBuilder method (*T) ConfigureDefaultProfile(choose func(*config.ProfileBuilder)) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) NoAdvancedShardAwareness() *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAddressTranslator(translator endpoint.Translator) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(first uint16, last uint16) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithApplication(name string, version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAuth(provider auth.Provider) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAutomaticSchemaAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCQLVersion(version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientID(id string) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithClientRoutes(routes config.ClientRoutes) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithClientRoutes(routes ...config.ClientRoute) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCompression(compression cql.Compression) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConfigReport(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConnectTimeout(d time.Duration) *config.ConfigBuilder
@@ -147,7 +144,6 @@ package config
 		config.ConfigBuilder method (*T) WithContactPoints(contactPoints ...string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConviction(policy endpoint.ConvictionPolicy) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithDNSTimeout(d time.Duration) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithDefaultAdvancedShardAwareness() *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithDefaultProfile(profile config.Profile) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithDialer(dialer endpoint.Dialer) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithDiscovery(on bool) *config.ConfigBuilder
@@ -156,9 +152,9 @@ package config
 		config.ConfigBuilder method (*T) WithHostFilter(keep func(metadata.HostSnapshot) bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithIgnoreEvents(kinds ...event.Kind) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithKeyspace(name string) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithLifecycleObserver(observer observe.LifecycleObserver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLinger(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string, rack string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxDecompressedSize(bytes int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
@@ -180,11 +176,13 @@ package config
 		config.ConfigBuilder method (*T) WithPort(port uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPreparedCacheSize(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReadTimeout(d time.Duration) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithReceiveBuffer(bytes int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReconnect(policy endpoint.ReconnectPolicy) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithRefreshAfterAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithResolver(resolver endpoint.Resolver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSchemaAgreement(poll time.Duration, timeout time.Duration) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithSocketBuffers(receive int, send int) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithSendBuffer(bytes int) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLS(config *crypto/tls.Config) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLSSource(source endpoint.TLSSource) *config.ConfigBuilder
@@ -193,7 +191,6 @@ package config
 	type config.Dialect uint8
 		config.Dialect method (T) String() string
 	func config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder
-	func config.NewClientRoutes() *config.ClientRoutesBuilder
 	func config.NewProfile() *config.ProfileBuilder
 	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
 	type config.Profile struct
@@ -233,7 +230,7 @@ package cql
 	var cql.ASCIICodec cql.Codec[cql.Text]
 	var cql.ASCIIStringCodec cql.Codec[string]
 	var cql.ASCIIType cql.DataType
-	func cql.ASCIIValue(s string) (cql.Value, error)
+	func cql.ASCIIValue(s string) cql.Value
 	const cql.All cql.Consistency = 5
 	const cql.Any cql.Consistency = 0
 	type cql.BatchKind uint8
@@ -308,8 +305,6 @@ package cql
 	type cql.CompiledParams[P any] interface
 		cql.CompiledParams method Encode(*cql.ParamWriter, P) error
 	type cql.CompiledRow[R any] interface
-		cql.CompiledRow method Clone(R) R
-		cql.CompiledRow method Decode(*cql.RowReader) (R, error)
 		cql.CompiledRow method DecodeInto(*cql.RowReader, *R) error
 	type cql.CompiledStreamRow[R any] interface
 		cql.CompiledStreamRow method DecodeInto(*cql.StreamRowReader, *R) error
@@ -327,11 +322,8 @@ package cql
 		cql.Consistency method (*T) UnmarshalText(text []byte) error
 	func cql.ConvertParams[A, B any](codec cql.ParamEncoder[B], mapValue func(A) B) cql.ParamEncoder[A]
 	func cql.ConvertRows[A, B any](codec cql.RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) cql.RowDecoder[B]
-	type cql.Counter int64
 	const cql.CounterBatch cql.BatchKind = 2
-	var cql.CounterCodec cql.Codec[cql.Counter]
 	var cql.CounterType cql.DataType
-	func cql.CounterValue(n cql.Counter) cql.Value
 	type cql.DataType struct
 		cql.DataType method (T) Dimension() (uint16, bool)
 		cql.DataType method (T) Element() (cql.DataType, bool)
@@ -345,7 +337,8 @@ package cql
 		cql.DataType method (T) UDTName() (keyspace string, name string, ok bool)
 		cql.DataType method (T) WithFrozen(frozen bool) cql.DataType
 	type cql.Date int32
-		cql.Date method (T) Time() (time.Time, error)
+		cql.Date method (T) String() string
+		cql.Date method (T) Time() time.Time
 	var cql.DateCodec cql.Codec[cql.Date]
 	func cql.DateFromTime(t time.Time) (cql.Date, error)
 	var cql.DateType cql.DataType
@@ -353,6 +346,7 @@ package cql
 	type cql.Decimal struct
 		cql.Decimal field Unscaled cql.Varint
 		cql.Decimal field Scale int32
+		cql.Decimal method (T) String() string
 	var cql.DecimalCodec cql.Codec[cql.Decimal]
 	type cql.DecimalParts struct
 		cql.DecimalParts field Unscaled []byte
@@ -370,9 +364,10 @@ package cql
 		cql.Duration field Months int32
 		cql.Duration field Days int32
 		cql.Duration field Nanoseconds int64
+		cql.Duration method (T) String() string
 	var cql.DurationCodec cql.Codec[cql.Duration]
 	var cql.DurationType cql.DataType
-	func cql.DurationValue(d cql.Duration) (cql.Value, error)
+	func cql.DurationValue(d cql.Duration) cql.Value
 	var cql.DynamicCodec cql.Codec[cql.Value]
 	var cql.DynamicParams cql.ParamEncoder[[]cql.Value]
 	type cql.DynamicRow struct
@@ -402,6 +397,7 @@ package cql
 	type cql.Entry[K any, V any] struct
 		cql.Entry field Key K
 		cql.Entry field Value V
+	var cql.ErrNull error
 	var cql.ErrReleased error
 	var cql.Float32Codec cql.Codec[float32]
 	var cql.Float64Codec cql.Codec[float64]
@@ -409,9 +405,10 @@ package cql
 	func cql.FloatValue(n float32) cql.Value
 	func cql.GoMapCodec[K comparable, V any](key cql.Codec[K], value cql.Codec[V]) cql.Codec[map[K]V]
 	func cql.IgnoreColumn[R any](name string) cql.OutputField[R]
+	func cql.IgnoreExtraColumns() cql.StructOption
 	var cql.InetCodec cql.Codec[net/netip.Addr]
 	var cql.InetType cql.DataType
-	func cql.InetValue(a net/netip.Addr) (cql.Value, error)
+	func cql.InetValue(a net/netip.Addr) cql.Value
 	type cql.InputField[P any] interface (sealed)
 	var cql.Int16Codec cql.Codec[int16]
 	var cql.Int32Codec cql.Codec[int32]
@@ -439,18 +436,20 @@ package cql
 		cql.MaybeEmpty field Value T
 		cql.MaybeEmpty field Empty bool
 	func cql.MinTimeUUID(t time.Time) cql.TimeUUID
-	func cql.MustParamsOf[P any](opts ...cql.StructOption[P]) cql.ParamEncoder[P]
+	func cql.MustParamsOf[P any](opts ...cql.StructOption) cql.ParamEncoder[P]
 	func cql.MustParseConsistency(s string) cql.Consistency
 	func cql.MustParseTimeUUID(input string) cql.TimeUUID
 	func cql.MustParseUUID(input string) cql.UUID
-	func cql.MustRowOf[R any](opts ...cql.StructOption[R]) cql.RowDecoder[R]
-	func cql.MustStreamRowOf[R any](opts ...cql.StructOption[R]) cql.StreamRowDecoder[R]
+	func cql.MustRowOf[R any](opts ...cql.StructOption) cql.RowDecoder[R]
+	func cql.MustStreamRowOf[R any](opts ...cql.StructOption) cql.StreamRowDecoder[R]
+	func cql.MustUDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) cql.Codec[T]
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NamedScalar[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body cql.Bytes) (cql.EncodedValue, error)
 	func cql.NewTimeUUID() cql.TimeUUID
 	const cql.NoCompression cql.Compression = 0
+	func cql.NonNull[T any](v T) cql.Nullable[T]
 	const cql.Null cql.CellState = 1
 	func cql.NullValue(t cql.DataType) cql.Value
 	type cql.Nullable[T any] struct
@@ -469,8 +468,12 @@ package cql
 	type cql.OutputField[R any] interface (sealed)
 	type cql.PageState struct
 		cql.PageState method (T) Complete() bool
+		cql.PageState method (T) MarshalBinary() ([]byte, error)
+		cql.PageState method (T) MarshalText() ([]byte, error)
 		cql.PageState method (T) More() bool
 		cql.PageState method (T) Token() []byte
+		cql.PageState method (*T) UnmarshalBinary(data []byte) error
+		cql.PageState method (*T) UnmarshalText(text []byte) error
 	func cql.PageStateFromToken(token []byte) cql.PageState
 	type cql.Pair[A any, B any] struct
 		cql.Pair field First A
@@ -484,7 +487,7 @@ package cql
 	type cql.ParamWriter struct
 		cql.ParamWriter method (*T) WriteParam[T any](encoder cql.Encoder[T], value T) error
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
-	func cql.ParamsOf[P any](opts ...cql.StructOption[P]) (cql.ParamEncoder[P], error)
+	func cql.ParamsOf[P any](opts ...cql.StructOption) (cql.ParamEncoder[P], error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
 	func cql.ParseTimeUUID(input string) (cql.TimeUUID, error)
 	func cql.ParseUUID(input string) (cql.UUID, error)
@@ -509,13 +512,13 @@ package cql
 		cql.Result method (T) CQLTraces() []cql.CQLTraceRef
 		cql.Result method (T) CustomPayload() []cql.PayloadEntry
 		cql.Result method (T) Warnings() []string
-	func cql.ReuseBuffers[P any]() cql.StructOption[P]
+	func cql.ReuseBuffers() cql.StructOption
 	func cql.Row[R any](fields ...cql.OutputField[R]) cql.RowDecoder[R]
 	type cql.RowDecoder[R any] interface
 		cql.RowDecoder method Clone(R) R
 		cql.RowDecoder method Compile(cql.Columns) (cql.CompiledRow[R], error)
 	func cql.RowInto[R any](reset func(*R), fields ...cql.OutputField[R]) cql.RowDecoder[R]
-	func cql.RowOf[R any](opts ...cql.StructOption[R]) (cql.RowDecoder[R], error)
+	func cql.RowOf[R any](opts ...cql.StructOption) (cql.RowDecoder[R], error)
 	type cql.RowReader struct
 		cql.RowReader method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		cql.RowReader method (*T) SkipColumn() error
@@ -537,6 +540,7 @@ package cql
 		cql.Statement field Rows cql.RowDecoder[R]
 		cql.Statement field BindMarkers cql.Columns
 		cql.Statement field Kind cql.StatementKind
+		cql.Statement field Idempotent bool
 	type cql.StatementKind uint8
 		cql.StatementKind method (T) String() string
 	var cql.StreamASCII cql.StreamDecoder[[]byte]
@@ -558,16 +562,17 @@ package cql
 		cql.StreamCell field State cql.CellState
 	func cql.StreamColumn[R, V any](name string, decoder cql.StreamDecoder[V], field func(*R) *V) cql.StreamOutputField[R]
 	func cql.StreamColumnAt[R, V any](index int, decoder cql.StreamDecoder[V], field func(*R) *V) cql.StreamOutputField[R]
-	var cql.StreamCounter cql.StreamDecoder[cql.Counter]
 	var cql.StreamDate cql.StreamDecoder[cql.Date]
 	var cql.StreamDecimal cql.StreamDecoder[cql.DecimalParts]
 	type cql.StreamDecoder[T any] interface
 		cql.StreamDecoder method Compile(cql.DataType) (cql.CompiledStreamValue[T], error)
+		cql.StreamDecoder method Reset(*T)
 	var cql.StreamDuration cql.StreamDecoder[cql.Duration]
 	func cql.StreamEmpty[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.MaybeEmpty[T]]
 	var cql.StreamEncoded cql.StreamDecoder[cql.StreamCell]
 	var cql.StreamFloat32 cql.StreamDecoder[float32]
 	var cql.StreamFloat64 cql.StreamDecoder[float64]
+	func cql.StreamIgnoreColumn[R any](name string) cql.StreamOutputField[R]
 	var cql.StreamInet cql.StreamDecoder[net/netip.Addr]
 	var cql.StreamInt16 cql.StreamDecoder[int16]
 	var cql.StreamInt32 cql.StreamDecoder[int32]
@@ -578,12 +583,10 @@ package cql
 	func cql.StreamNullable[T any](base cql.StreamDecoder[T]) cql.StreamDecoder[cql.Nullable[T]]
 	func cql.StreamOneColumn[T any](decoder cql.StreamDecoder[T]) cql.StreamRowDecoder[T]
 	type cql.StreamOutputField[R any] interface (sealed)
-	type cql.StreamResetter[T any] interface
-		cql.StreamResetter method Reset(*T)
 	type cql.StreamRowDecoder[R any] interface
 		cql.StreamRowDecoder method Compile(cql.Columns) (cql.CompiledStreamRow[R], error)
 	func cql.StreamRowInto[R any](reset func(*R), fields ...cql.StreamOutputField[R]) cql.StreamRowDecoder[R]
-	func cql.StreamRowOf[R any](opts ...cql.StructOption[R]) (cql.StreamRowDecoder[R], error)
+	func cql.StreamRowOf[R any](opts ...cql.StructOption) (cql.StreamRowDecoder[R], error)
 	type cql.StreamRowReader struct
 		cql.StreamRowReader method (*T) Context() context.Context
 		cql.StreamRowReader method (*T) ReadColumn[T any](plan cql.CompiledStreamValue[T], dst *T) error
@@ -595,6 +598,7 @@ package cql
 		cql.StreamStatement field Rows cql.StreamRowDecoder[R]
 		cql.StreamStatement field CQL string
 		cql.StreamStatement field Kind cql.StatementKind
+		cql.StreamStatement field Idempotent bool
 	var cql.StreamText cql.StreamDecoder[[]byte]
 	var cql.StreamTime cql.StreamDecoder[cql.TimeOfDay]
 	var cql.StreamTimeUUID cql.StreamDecoder[cql.TimeUUID]
@@ -621,7 +625,7 @@ package cql
 	type cql.StructFields[P any] struct
 		cql.StructFields field Params []cql.InputField[P]
 		cql.StructFields field Columns []cql.OutputField[P]
-	type cql.StructOption[P any] interface (sealed)
+	type cql.StructOption interface (sealed)
 	type cql.Text struct
 		cql.Text method (T) Bytes() cql.Bytes
 		cql.Text method (T) Clone() cql.Text
@@ -629,15 +633,16 @@ package cql
 		cql.Text method (T) String() string
 	var cql.TextCodec cql.Codec[cql.Text]
 	var cql.TextType cql.DataType
-	func cql.TextValue(s string) (cql.Value, error)
+	func cql.TextValue(s string) cql.Value
 	const cql.Three cql.Consistency = 3
 	var cql.TimeCodec cql.Codec[cql.TimeOfDay]
 	type cql.TimeOfDay int64
+		cql.TimeOfDay method (T) String() string
 	var cql.TimeType cql.DataType
 	type cql.TimeUUID [16]byte
 		cql.TimeUUID method (T) Bytes() []byte
 		cql.TimeUUID method (T) Clock() uint16
-		cql.TimeUUID method (T) IsEmpty() bool
+		cql.TimeUUID method (T) IsZero() bool
 		cql.TimeUUID method (T) MarshalJSON() ([]byte, error)
 		cql.TimeUUID method (T) MarshalText() ([]byte, error)
 		cql.TimeUUID method (T) Node() [6]byte
@@ -652,17 +657,20 @@ package cql
 	func cql.TimeUUIDFromTime(t time.Time) cql.TimeUUID
 	func cql.TimeUUIDFromUUID(u cql.UUID) (cql.TimeUUID, error)
 	var cql.TimeUUIDType cql.DataType
-	func cql.TimeUUIDValue(u cql.TimeUUID) (cql.Value, error)
+	func cql.TimeUUIDValue(u cql.TimeUUID) cql.Value
 	func cql.TimeUUIDWith(t time.Time, clock uint16, node [6]byte) cql.TimeUUID
-	func cql.TimeValue(n cql.TimeOfDay) (cql.Value, error)
+	func cql.TimeValue(n cql.TimeOfDay) cql.Value
 	type cql.Timestamp int64
-		cql.Timestamp method (T) Time() (time.Time, error)
+		cql.Timestamp method (T) String() string
+		cql.Timestamp method (T) Time() time.Time
 	var cql.TimestampCodec cql.Codec[cql.Timestamp]
 	func cql.TimestampFromTime(t time.Time) (cql.Timestamp, error)
+	var cql.TimestampTimeCodec cql.Codec[time.Time]
 	var cql.TimestampType cql.DataType
 	func cql.TimestampValue(n cql.Timestamp) cql.Value
 	var cql.TinyIntType cql.DataType
 	func cql.TinyIntValue(n int8) cql.Value
+	func cql.TupleCodec[T any](enc cql.ParamEncoder[T], dec cql.RowDecoder[T]) cql.Codec[T]
 	func cql.TupleDecoder[T any](codec cql.RowDecoder[T]) cql.Decoder[T]
 	func cql.TupleEncoder[T any](codec cql.ParamEncoder[T]) cql.Encoder[T]
 	func cql.TupleType(fields ...cql.DataType) (cql.DataType, error)
@@ -697,6 +705,8 @@ package cql
 	const cql.TypeUUID cql.Type = 12
 	const cql.TypeVarchar cql.Type = 13
 	const cql.TypeVarint cql.Type = 14
+	const cql.TypeVector cql.Type = 256
+	func cql.UDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) (cql.Codec[T], error)
 	func cql.UDTDecoder[T any](codec cql.RowDecoder[T], options cql.UDTOptions) cql.Decoder[T]
 	func cql.UDTEncoder[T any](codec cql.ParamEncoder[T], options cql.UDTOptions) cql.Encoder[T]
 	type cql.UDTOptions struct
@@ -709,7 +719,7 @@ package cql
 	func cql.UDTValue(t cql.DataType, fields []cql.ValueField) (cql.Value, error)
 	type cql.UUID [16]byte
 		cql.UUID method (T) Bytes() []byte
-		cql.UUID method (T) IsEmpty() bool
+		cql.UUID method (T) IsZero() bool
 		cql.UUID method (T) MarshalJSON() ([]byte, error)
 		cql.UUID method (T) MarshalText() ([]byte, error)
 		cql.UUID method (T) String() string
@@ -732,6 +742,7 @@ package cql
 		cql.ValidationError method (*T) Error() string
 		cql.ValidationError method (*T) Unwrap() error
 	type cql.Value struct
+		cql.Value method (T) At(index int) (cql.Value, error)
 		cql.Value method (T) Bool() (bool, error)
 		cql.Value method (T) Bytes() (cql.Bytes, error)
 		cql.Value method (T) Clone() cql.Value
@@ -739,12 +750,18 @@ package cql
 		cql.Value method (T) Duration() (cql.Duration, error)
 		cql.Value method (T) Elements() (*cql.ValueIterator[cql.Value], error)
 		cql.Value method (T) Entries() (*cql.ValueIterator[cql.ValueEntry], error)
+		cql.Value method (T) Field(name string) (cql.Value, error)
 		cql.Value method (T) Fields() (*cql.ValueIterator[cql.ValueField], error)
 		cql.Value method (T) Float() (float64, error)
 		cql.Value method (T) Inet() (net/netip.Addr, error)
+		cql.Value method (T) Len() int
 		cql.Value method (T) Signed() (int64, error)
 		cql.Value method (T) State() cql.CellState
+		cql.Value method (T) String() string
 		cql.Value method (T) Text() (cql.Text, error)
+		cql.Value method (T) Time() (time.Time, error)
+		cql.Value method (T) TimeOfDay() (cql.TimeOfDay, error)
+		cql.Value method (T) TimeUUID() (cql.TimeUUID, error)
 		cql.Value method (T) Type() cql.DataType
 		cql.Value method (T) UUID() (cql.UUID, error)
 		cql.Value method (T) Varint() (cql.Varint, error)
@@ -764,6 +781,7 @@ package cql
 		cql.ValueField field Name string
 		cql.ValueField field Value cql.Value
 	type cql.ValueIterator[T any] struct
+		cql.ValueIterator method (*T) All() iter.Seq2[T, error]
 		cql.ValueIterator method (*T) Collect() ([]T, error)
 		cql.ValueIterator method (*T) Err() error
 		cql.ValueIterator method (*T) Next() bool
@@ -792,6 +810,7 @@ package cql
 	const cql.VariantNCSCompat untyped int = 0
 	type cql.Varint struct
 		cql.Varint method (T) BigInt() *math/big.Int
+		cql.Varint method (T) String() string
 	var cql.VarintCodec cql.Codec[cql.Varint]
 	func cql.VarintFromBigInt(v *math/big.Int) cql.Varint
 	func cql.VarintFromBytes(b []byte) (cql.Varint, error)
@@ -802,8 +821,9 @@ package cql
 	func cql.VectorEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
 	func cql.VectorType(element cql.DataType, dimension uint16) (cql.DataType, error)
 	func cql.VectorValue(t cql.DataType, v []cql.Value) (cql.Value, error)
-	func cql.WithCodec[P, V any](codec cql.Codec[V]) cql.StructOption[P]
-	func cql.WithStreamCodec[P, V any](decoder cql.StreamDecoder[V]) cql.StructOption[P]
+	func cql.WithCodec[V any](codec cql.Codec[V]) cql.StructOption
+	func cql.WithEncoder[V any](encoder cql.Encoder[V]) cql.StructOption
+	func cql.WithStreamCodec[V any](decoder cql.StreamDecoder[V]) cql.StructOption
 
 package cqlerr
 	type cqlerr.AlreadyExistsError struct
@@ -822,7 +842,7 @@ package cqlerr
 		cqlerr.AttemptFailure field Number int
 		cqlerr.AttemptFailure field ShardID cql.Option[uint32]
 		cqlerr.AttemptFailure field Consistency cql.Consistency
-		cqlerr.AttemptFailure field Status cqlerr.ExecutionStatus
+		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
 		cqlerr.AttemptFailure method (T) String() string
 	type cqlerr.CASWriteUnknownError struct
@@ -835,13 +855,6 @@ package cqlerr
 		cqlerr.CASWriteUnknownError method (*T) Kind() cqlerr.Kind
 		cqlerr.CASWriteUnknownError method (*T) Message() string
 		cqlerr.CASWriteUnknownError method (*T) Warnings() []string
-	type cqlerr.CDCWriteFailureError struct
-		cqlerr.CDCWriteFailureError method (*T) Code() cqlerr.ErrorCode
-		cqlerr.CDCWriteFailureError method (*T) Error() string
-		cqlerr.CDCWriteFailureError method (*T) Is(target error) bool
-		cqlerr.CDCWriteFailureError method (*T) Kind() cqlerr.Kind
-		cqlerr.CDCWriteFailureError method (*T) Message() string
-		cqlerr.CDCWriteFailureError method (*T) Warnings() []string
 	const cqlerr.CodeAlreadyExists cqlerr.ErrorCode = 9216
 	const cqlerr.CodeBadCredentials cqlerr.ErrorCode = 256
 	const cqlerr.CodeBootstrapping cqlerr.ErrorCode = 4098
@@ -877,14 +890,15 @@ package cqlerr
 	var cqlerr.ErrNoConnections error
 	var cqlerr.ErrNoConnectionsStarted error
 	var cqlerr.ErrNoControl error
+	var cqlerr.ErrNoCurrentRow error
 	var cqlerr.ErrNoKeyspace error
-	var cqlerr.ErrNoRows error
 	var cqlerr.ErrNoStreams error
 	var cqlerr.ErrNoTable error
 	var cqlerr.ErrPagingComplete error
 	var cqlerr.ErrPagingNoProgress error
 	var cqlerr.ErrPagingStateLimit error
 	var cqlerr.ErrReadHeaderTimeout error
+	var cqlerr.ErrRequestTimeout error
 	var cqlerr.ErrScyllaSourcePortAlreadyInUse error
 	var cqlerr.ErrStaleRows error
 	var cqlerr.ErrTimeoutNoResponse error
@@ -900,7 +914,7 @@ package cqlerr
 		cqlerr.ExecutionError field BatchSize int
 		cqlerr.ExecutionError method (*T) Error() string
 		cqlerr.ExecutionError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
-		cqlerr.ExecutionError method (*T) Unwrap() []error
+		cqlerr.ExecutionError method (*T) Unwrap() error
 	type cqlerr.ExecutionStatus uint8
 		cqlerr.ExecutionStatus method (T) String() string
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
@@ -935,6 +949,7 @@ package cqlerr
 	const cqlerr.KindUnavailable cqlerr.Kind = 2
 	const cqlerr.KindUnknown cqlerr.Kind = 0
 	const cqlerr.MaybeExecuted cqlerr.ExecutionStatus = 0
+	func cqlerr.NewExecutionError(err error, status cqlerr.ExecutionStatus, attempts ...cqlerr.AttemptFailure) *cqlerr.ExecutionError
 	func cqlerr.NewOtherServerError(code cqlerr.ErrorCode, message string) *cqlerr.OtherServerError
 	type cqlerr.NoHostsError struct
 		cqlerr.NoHostsError field Operation string
@@ -962,10 +977,6 @@ package cqlerr
 		cqlerr.PartialRefreshError method (*T) Error() string
 		cqlerr.PartialRefreshError method (*T) Unwrap() []error
 	const cqlerr.PartiallyExecuted cqlerr.ExecutionStatus = 2
-	type cqlerr.QueryError struct
-		cqlerr.QueryError method (*T) Error() string
-		cqlerr.QueryError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
-		cqlerr.QueryError method (*T) Unwrap() error
 	type cqlerr.RateLimitReachedError struct
 		cqlerr.RateLimitReachedError field OpType cqlerr.OpType
 		cqlerr.RateLimitReachedError field RejectedByCoordinator bool
@@ -1118,8 +1129,6 @@ package endpoint
 	type endpoint.ConvictionSource uint8
 		endpoint.ConvictionSource method (T) String() string
 	type endpoint.DefaultDialer struct
-		endpoint.DefaultDialer field ConnectTimeout time.Duration
-		endpoint.DefaultDialer field TCPKeepalive time.Duration
 		endpoint.DefaultDialer method (T) DialContext(ctx context.Context, target endpoint.DialTarget) (net.Conn, error)
 	type endpoint.DialTarget struct
 		endpoint.DialTarget field LocalAddress net/netip.AddrPort
@@ -1147,8 +1156,8 @@ package endpoint
 	type endpoint.Resolver interface
 		endpoint.Resolver method LookupNetIP(ctx context.Context, network string, host string) ([]net/netip.Addr, error)
 	type endpoint.SimpleConvictionPolicy struct
-		endpoint.SimpleConvictionPolicy method (*T) AddFailure(ev endpoint.ConvictionEvent) bool
-		endpoint.SimpleConvictionPolicy method (*T) Reset(endpoint.ConvictionEvent)
+		endpoint.SimpleConvictionPolicy method (T) AddFailure(ev endpoint.ConvictionEvent) bool
+		endpoint.SimpleConvictionPolicy method (T) Reset(endpoint.ConvictionEvent)
 	type endpoint.TLSSource interface
 		endpoint.TLSSource method TLSConfig() *crypto/tls.Config
 	type endpoint.Translator interface
@@ -1158,6 +1167,7 @@ package endpoint
 
 package event
 	type event.Change string
+	const event.ChangeConnected event.Change = "CONNECTED"
 	const event.ChangeCreated event.Change = "CREATED"
 	const event.ChangeDown event.Change = "DOWN"
 	const event.ChangeDropped event.Change = "DROPPED"
@@ -1171,12 +1181,10 @@ package event
 	const event.ChangeTabletResync event.Change = "TABLET_RESYNC"
 	const event.ChangeUp event.Change = "UP"
 	const event.ChangeUpdated event.Change = "UPDATED"
-	const event.ClientRoute event.Kind = 5
-	const event.Control event.Kind = 4
 	type event.Event struct
 		event.Event field Address net/netip.AddrPort
 		event.Event field Change event.Change
-		event.Event field Target event.Target
+		event.Event field ObjectKind event.ObjectKind
 		event.Event field Keyspace string
 		event.Event field Object string
 		event.Event field ArgumentTypes []string
@@ -1191,20 +1199,23 @@ package event
 		event.Filter field Capacity int
 	type event.Kind uint8
 		event.Kind method (T) String() string
-	const event.Overflow event.Kind = 6
-	const event.Schema event.Kind = 3
-	const event.Status event.Kind = 2
+	const event.KindClientRoute event.Kind = 5
+	const event.KindControl event.Kind = 4
+	const event.KindOverflow event.Kind = 7
+	const event.KindPool event.Kind = 6
+	const event.KindSchema event.Kind = 3
+	const event.KindStatus event.Kind = 2
+	const event.KindTopology event.Kind = 1
+	const event.KindUnknown event.Kind = 0
+	const event.ObjectAggregate event.ObjectKind = "AGGREGATE"
+	const event.ObjectFunction event.ObjectKind = "FUNCTION"
+	const event.ObjectKeyspace event.ObjectKind = "KEYSPACE"
+	type event.ObjectKind string
+	const event.ObjectTable event.ObjectKind = "TABLE"
+	const event.ObjectType event.ObjectKind = "TYPE"
 	type event.Subscription struct
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
-	type event.Target string
-	const event.TargetAggregate event.Target = "AGGREGATE"
-	const event.TargetFunction event.Target = "FUNCTION"
-	const event.TargetKeyspace event.Target = "KEYSPACE"
-	const event.TargetTable event.Target = "TABLE"
-	const event.TargetType event.Target = "TYPE"
-	const event.Topology event.Kind = 1
-	const event.Unknown event.Kind = 0
 
 package exec
 	type exec.CompiledOptions struct
@@ -1219,14 +1230,14 @@ package exec
 		exec.Options field PageTimeout cql.Option[time.Duration]
 		exec.Options field Prefetch cql.Option[int]
 		exec.Options field Timestamp cql.Option[int64]
-		exec.Options field PageSize cql.Option[int32]
+		exec.Options field PageSize int32
 		exec.Options field NowInSeconds cql.Option[int32]
 		exec.Options field ShardID cql.Option[uint32]
 		exec.Options field Consistency cql.Option[cql.Consistency]
 		exec.Options field HostID cql.Option[cql.UUID]
 		exec.Options field SerialConsistency exec.SerialOverride
 		exec.Options field IncludeMetadata bool
-		exec.Options field Idempotent bool
+		exec.Options field Idempotent cql.Option[bool]
 		exec.Options field CQLTrace bool
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string
@@ -1267,19 +1278,19 @@ package metadata
 		metadata.Column field Kind metadata.ColumnKind
 		metadata.Column field ClusteringOrder metadata.ColumnOrder
 		metadata.Column method (*T) Equal(other *metadata.Column) bool
-	const metadata.ColumnClusteringKey metadata.ColumnKind = 2
-	const metadata.ColumnCompact metadata.ColumnKind = 4
 	type metadata.ColumnKind uint8
 		metadata.ColumnKind method (T) String() string
+	const metadata.ColumnKindClusteringKey metadata.ColumnKind = 2
+	const metadata.ColumnKindCompact metadata.ColumnKind = 4
+	const metadata.ColumnKindPartitionKey metadata.ColumnKind = 1
+	const metadata.ColumnKindRegular metadata.ColumnKind = 3
+	const metadata.ColumnKindStatic metadata.ColumnKind = 5
 	const metadata.ColumnKindUnknown metadata.ColumnKind = 0
 	type metadata.ColumnOrder uint8
 		metadata.ColumnOrder method (T) String() string
 	const metadata.ColumnOrderAsc metadata.ColumnOrder = 1
 	const metadata.ColumnOrderDesc metadata.ColumnOrder = 2
 	const metadata.ColumnOrderNone metadata.ColumnOrder = 0
-	const metadata.ColumnPartitionKey metadata.ColumnKind = 1
-	const metadata.ColumnRegular metadata.ColumnKind = 3
-	const metadata.ColumnStatic metadata.ColumnKind = 5
 	type metadata.Function struct
 		metadata.Function field Keyspace string
 		metadata.Function field Name string
@@ -1296,7 +1307,7 @@ package metadata
 		metadata.HostSnapshot field Tokens []int64
 		metadata.HostSnapshot field Shards uint32
 		metadata.HostSnapshot field ShardingIgnoreMSB uint8
-		metadata.HostSnapshot field ID cql.UUID
+		metadata.HostSnapshot field HostID cql.UUID
 		metadata.HostSnapshot field Enabled bool
 		metadata.HostSnapshot field Connected bool
 		metadata.HostSnapshot field Up bool
@@ -1328,7 +1339,10 @@ package metadata
 		metadata.Keyspace field InitialTablets int
 		metadata.Keyspace field TabletBased bool
 		metadata.Keyspace field DurableWrites bool
-		metadata.Keyspace method (*T) Clone() *metadata.Keyspace
+		metadata.Keyspace method (*T) Aggregate(name string, args ...string) (*metadata.Aggregate, bool)
+		metadata.Keyspace method (*T) AggregatesNamed(name string) []*metadata.Aggregate
+		metadata.Keyspace method (*T) Function(name string, args ...string) (*metadata.Function, bool)
+		metadata.Keyspace method (*T) FunctionsNamed(name string) []*metadata.Function
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
 		metadata.Mode method (T) String() string
@@ -1345,9 +1359,12 @@ package metadata
 	type metadata.Snapshot struct
 		metadata.Snapshot method (*T) Diagnostics() []error
 		metadata.Snapshot method (*T) Generation() uint64
+		metadata.Snapshot method (*T) Host(id cql.UUID) (metadata.HostSnapshot, bool)
 		metadata.Snapshot method (*T) Hosts() []metadata.HostSnapshot
 		metadata.Snapshot method (*T) Keyspace(name string) (*metadata.Keyspace, bool)
+		metadata.Snapshot method (*T) Keyspaces() []string
 		metadata.Snapshot method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Target, error)
+		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
 	type metadata.Table struct
@@ -1426,18 +1443,16 @@ package metrics
 
 package observe
 	type observe.AttemptObserver interface
-		observe.AttemptObserver method StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
-	const observe.KindHost observe.LifecycleKind = "host"
-	const observe.KindSession observe.LifecycleKind = "session"
-	type observe.LifecycleEvent struct
-		observe.LifecycleEvent field At time.Time
-		observe.LifecycleEvent field Kind observe.LifecycleKind
-		observe.LifecycleEvent field Stage observe.LifecycleStage
-		observe.LifecycleEvent field HostID cql.UUID
-	type observe.LifecycleKind string
-	type observe.LifecycleObserver interface
-		observe.LifecycleObserver method ObserveLifecycle(observe.LifecycleEvent)
-	type observe.LifecycleStage string
+		observe.AttemptObserver method StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+	type observe.AttemptObserverFunc func(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+		observe.AttemptObserverFunc method (T) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
+	type observe.AttemptStart struct
+		observe.AttemptStart field Started time.Time
+		observe.AttemptStart field RequestID uint64
+		observe.AttemptStart field Attempt int
+		observe.AttemptStart field Target metadata.Target
+		observe.AttemptStart field Speculative bool
+	func observe.Join(observers ...observe.Observer) observe.Observer
 	type observe.Observer interface
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
@@ -1449,6 +1464,8 @@ package observe
 		observe.RequestEvent field ID uint64
 	type observe.RequestObserver interface
 		observe.RequestObserver method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
+	type observe.RequestObserverFunc func(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
+		observe.RequestObserverFunc method (T) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
@@ -1457,10 +1474,6 @@ package observe
 		observe.RequestStart field Routing routing.Info
 		observe.RequestStart field ID uint64
 		observe.RequestStart field CQLTrace bool
-	const observe.StageClosed observe.LifecycleStage = "closed"
-	const observe.StageConnected observe.LifecycleStage = "connected"
-	const observe.StageDown observe.LifecycleStage = "down"
-	const observe.StageReady observe.LifecycleStage = "ready"
 
 package retry
 	type retry.Action uint8
@@ -1477,7 +1490,6 @@ package retry
 		retry.Decision field Action retry.Action
 		retry.Decision field Consistency cql.Option[cql.Consistency]
 		retry.Decision field Delay time.Duration
-	const retry.IgnoreWrite retry.Action = 3
 	type retry.Never struct
 		retry.Never method (T) Decide(retry.Attempt) retry.Decision
 	const retry.Next retry.Action = 2
@@ -1490,7 +1502,7 @@ package retry
 		retry.Safe method (T) Decide(a retry.Attempt) retry.Decision
 	const retry.Same retry.Action = 1
 	type retry.SpeculationPolicy interface
-		retry.SpeculationPolicy method Delay(attempt int) (time.Duration, bool)
+		retry.SpeculationPolicy method Delay(started int) (time.Duration, bool)
 	const retry.Stop retry.Action = 0
 
 package routing
@@ -1504,12 +1516,8 @@ package routing
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field Speculative bool
-	type routing.AttemptStart struct
-		routing.AttemptStart field Started time.Time
-		routing.AttemptStart field RequestID uint64
-		routing.AttemptStart field Attempt int
-		routing.AttemptStart field Target metadata.Target
-		routing.AttemptStart field Speculative bool
+	type routing.AttemptObserver interface
+		routing.AttemptObserver method Observe(routing.AttemptEvent)
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
@@ -1533,10 +1541,10 @@ package routing
 		routing.Options field Datacenter string
 		routing.Options field Rack string
 		routing.Options field Latency routing.LatencyOptions
-		routing.Options field TokenAware bool
+		routing.Options field NoTokenAware bool
 		routing.Options field AllowRemote bool
-		routing.Options field ShuffleReplicas bool
-		routing.Options field LeaderAware bool
+		routing.Options field FixedReplicaOrder bool
+		routing.Options field NoLeaderAware bool
 	type routing.PartitionKey struct
 		routing.PartitionKey method (T) ForEach(fn func(cql.Bytes) error) error
 		routing.PartitionKey method (T) Len() int64
@@ -1545,11 +1553,27 @@ package routing
 	func routing.PlanOf(routes ...metadata.Route) routing.Plan
 	type routing.Policy interface
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
-		routing.Policy method Observe(routing.AttemptEvent)
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
-		routing.Policy method Validate(*metadata.Snapshot) error
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
 	func routing.SingleTarget(target metadata.Target) routing.Policy
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
+	type routing.TokenPartitionerFunc func(routing.PartitionKey) (int64, error)
+		routing.TokenPartitionerFunc method (T) Token(key routing.PartitionKey) (int64, error)
+	type routing.Validator interface
+		routing.Validator method Validate(*metadata.Snapshot) error
+
+package routing/routingtest
+	type routing/routingtest.Cluster struct
+		routing/routingtest.Cluster field Keyspaces map[string]*metadata.Keyspace
+		routing/routingtest.Cluster field TokenRanges map[string][]metadata.TokenRange
+		routing/routingtest.Cluster field Tablets map[routing/routingtest.Table][]metadata.TokenRange
+		routing/routingtest.Cluster field LocalDatacenter string
+		routing/routingtest.Cluster field LocalRack string
+		routing/routingtest.Cluster field Hosts []metadata.HostSnapshot
+		routing/routingtest.Cluster field Generation uint64
+	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) *metadata.Snapshot
+	type routing/routingtest.Table struct
+		routing/routingtest.Table field Keyspace string
+		routing/routingtest.Table field Name string
 

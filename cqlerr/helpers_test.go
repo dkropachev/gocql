@@ -3,4 +3,4 @@
 
 package cqlerr
 
-func newQueryError(state queryErrorState) *QueryError { return &QueryError{state: state} }
+func newQueryError(state queryErrorState) *queryError { return &queryError{state: state} }

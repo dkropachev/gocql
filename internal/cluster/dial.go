@@ -69,7 +69,7 @@ func (s *Core) DialShard(ctx context.Context, host *implEndpoint.HostInfo, connC
 		}
 		ctx = context.WithValue(ctx, implTransport.InternalConnectionLifetimeKey{}, lifetimeCtx)
 	}
-	if s.privateStorage.InternalClientRoutesHandler != nil && connConfig.TypedConfig != nil && !implEndpoint.InternalHostInfoHostUUID(host).IsEmpty() {
+	if s.privateStorage.InternalClientRoutesHandler != nil && connConfig.TypedConfig != nil && !implEndpoint.InternalHostInfoHostUUID(host).IsZero() {
 		var observed ObservedConnect
 		if s.privateStorage.connectObserver != nil {
 			observed.Host = host

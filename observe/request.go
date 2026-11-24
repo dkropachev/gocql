@@ -8,16 +8,19 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // Observer instruments requests and their attempts from the client side; it
 // is the hook for client-side tracing such as OpenTelemetry. An Observer is
 // any value that implements one or more of the hook interfaces,
-// RequestObserver and AttemptObserver. config.Build and
-// gocql.Session.CompileOptions reject one that implements none. The driver
-// finds the hooks once, when the observer is installed, and skips the call
-// and the event of a hook the observer does not implement. A later release adds hooks as new interfaces, so existing
+// RequestObserver and AttemptObserver; RequestObserverFunc and
+// AttemptObserverFunc make one from a function, and Join combines several.
+// config.ConfigBuilder.Build and gocql.Session.CompileOptions reject one that
+// implements none. The driver finds the hooks once, when the observer is
+// installed, and skips the call and the event of a hook the observer does not
+// implement. A later release adds hooks as new interfaces, so existing
 // observers keep compiling.
 //
 // Implementations are shared between executions and must be safe for
@@ -45,7 +48,23 @@ type AttemptObserver interface {
 	// returns, if not nil, is called once with the completed attempt;
 	// routing.AttemptEvent.CQLTraceID links it to the server-side CQL trace
 	// session when the request runs with exec.Options.CQLTrace.
-	StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent)
+	StartAttempt(context.Context, AttemptStart) func(routing2.AttemptEvent)
+}
+
+// AttemptStart describes an attempt as it is sent to its target.
+//
+// The driver fills it; its zero value is empty.
+type AttemptStart struct {
+	// Started is when the attempt was sent.
+	Started time.Time
+	// RequestID is the ID of the attempt's request.
+	RequestID uint64
+	// Attempt is the 1-based number of the attempt within its request.
+	Attempt int
+	// Target is the host, and shard, the attempt was sent to.
+	Target metadata.Target
+	// Speculative reports a speculative attempt.
+	Speculative bool
 }
 
 // RequestStart describes a request as it is admitted, before its first attempt.
@@ -62,7 +81,9 @@ type RequestStart struct {
 	BatchStatements []string
 	// Parameters describes the statement's bind markers.
 	Parameters cql.Columns
-	// Routing describes the request for routing.
+	// Routing describes the request for routing. A field the driver does
+	// not know is empty or unset, such as Token when it cannot compute the
+	// request's partition key.
 	Routing routing2.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.
@@ -88,7 +109,8 @@ type RequestEvent struct {
 	Parameters cql.Columns
 	// Result describes the execution, also when it failed.
 	Result cql.Result
-	// Routing describes the request for routing.
+	// Routing describes the request for routing, as RequestStart.Routing
+	// does.
 	Routing routing2.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.

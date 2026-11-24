@@ -7,6 +7,8 @@ import (
 	"bytes"
 	"fmt"
 	"maps"
+	"slices"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
 )
@@ -22,10 +24,12 @@ type Keyspace struct {
 	StrategyOptions map[string]string
 	// Tables holds the keyspace's tables by name.
 	Tables map[string]*Table
-	// Functions holds the user-defined functions by name, or by
-	// name(argtype,...) for an overloaded name.
+	// Functions holds the user-defined functions by signature: the name
+	// and the argument types, comma-separated without spaces, such as
+	// "add(int,int)" or "now()". Function and FunctionsNamed look them up.
 	Functions map[string]*Function
-	// Aggregates holds the user-defined aggregates, keyed like Functions.
+	// Aggregates holds the user-defined aggregates by signature, keyed like
+	// Functions. Aggregate and AggregatesNamed look them up.
 	Aggregates map[string]*Aggregate
 	// Types holds the user-defined types by name.
 	Types map[string]*Type
@@ -56,29 +60,59 @@ type Keyspace struct {
 	DurableWrites bool
 }
 
-// Clone returns a shallow copy of the keyspace metadata with cloned Tables,
-// Indexes and Views maps, so that adding or removing entries does not race
-// with concurrent readers of the original.
-func (ks *Keyspace) Clone() *Keyspace {
-	cloned := &Keyspace{
-		TabletBased: ks.TabletBased, InitialTablets: ks.InitialTablets, ConsistencyMode: ks.ConsistencyMode,
-		Name:            ks.Name,
-		DurableWrites:   ks.DurableWrites,
-		StrategyClass:   ks.StrategyClass,
-		StrategyOptions: maps.Clone(ks.StrategyOptions),
-		Tables:          maps.Clone(ks.Tables),
-		Functions:       maps.Clone(ks.Functions),
-		Aggregates:      maps.Clone(ks.Aggregates),
-		Types:           maps.Clone(ks.Types),
-		Indexes:         maps.Clone(ks.Indexes),
-		Views:           maps.Clone(ks.Views),
+// Function returns the user-defined function name(args), where args are
+// the argument types as the server writes them, such as "int" or
+// "frozen<list<text>>".
+func (ks *Keyspace) Function(name string, args ...string) (*Function, bool) {
+	if ks == nil {
+		return nil, false
 	}
-	cloned.state.ServerCQL = ks.state.ServerCQL
-	cloned.state.TabletsOption = ks.state.TabletsOption
-	if ks.state.InternalTablesInvalidated != nil {
-		cloned.state.InternalTablesInvalidated = maps.Clone(ks.state.InternalTablesInvalidated)
+	f, ok := ks.Functions[signature(name, args)]
+	return f, ok && f != nil
+}
+
+// FunctionsNamed returns the overloads of the user-defined function name,
+// sorted by signature, or nil when there are none.
+func (ks *Keyspace) FunctionsNamed(name string) []*Function {
+	if ks == nil {
+		return nil
 	}
-	return cloned
+	return named(ks.Functions, name, func(f *Function) string { return f.Name })
+}
+
+// Aggregate returns the user-defined aggregate name(args), where args are
+// the argument types, as for Function.
+func (ks *Keyspace) Aggregate(name string, args ...string) (*Aggregate, bool) {
+	if ks == nil {
+		return nil, false
+	}
+	a, ok := ks.Aggregates[signature(name, args)]
+	return a, ok && a != nil
+}
+
+// AggregatesNamed returns the overloads of the user-defined aggregate name,
+// sorted by signature, or nil when there are none.
+func (ks *Keyspace) AggregatesNamed(name string) []*Aggregate {
+	if ks == nil {
+		return nil
+	}
+	return named(ks.Aggregates, name, func(a *Aggregate) string { return a.Name })
+}
+
+// signature is the key of a function or aggregate in its Keyspace map.
+func signature(name string, args []string) string {
+	return name + "(" + strings.Join(args, ",") + ")"
+}
+
+// named returns the values of m called name, sorted by key.
+func named[T any](m map[string]*T, name string, nameOf func(*T) string) []*T {
+	var out []*T
+	for _, k := range slices.Sorted(maps.Keys(m)) {
+		if v := m[k]; v != nil && nameOf(v) == name {
+			out = append(out, v)
+		}
+	}
+	return out
 }
 
 // Table is the schema of a table (a column family).
@@ -487,11 +521,11 @@ type ColumnKind uint8
 // The kinds of columns.
 const (
 	ColumnKindUnknown ColumnKind = iota
-	ColumnPartitionKey
-	ColumnClusteringKey
-	ColumnRegular
-	ColumnCompact
-	ColumnStatic
+	ColumnKindPartitionKey
+	ColumnKindClusteringKey
+	ColumnKindRegular
+	ColumnKindCompact
+	ColumnKindStatic
 )
 
 // String returns the kind name, or ColumnKind(n) for a value it does not
@@ -500,15 +534,15 @@ func (c ColumnKind) String() string {
 	switch c {
 	case ColumnKindUnknown:
 		return "unknown"
-	case ColumnPartitionKey:
+	case ColumnKindPartitionKey:
 		return "partition_key"
-	case ColumnClusteringKey:
+	case ColumnKindClusteringKey:
 		return "clustering_key"
-	case ColumnRegular:
+	case ColumnKindRegular:
 		return "regular"
-	case ColumnCompact:
+	case ColumnKindCompact:
 		return "compact"
-	case ColumnStatic:
+	case ColumnKindStatic:
 		return "static"
 	default:
 		return fmt.Sprintf("ColumnKind(%d)", uint8(c))

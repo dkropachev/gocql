@@ -14,11 +14,11 @@ import (
 	"github.com/scylladb/gocql/v2/internal/codec"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
-	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -64,7 +64,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 	pinned := false // the first attempt went to request.pinned
 	observe := request.InternalLogical.observesAttempts() || routingObservesLatency(request.options.InternalProfile.Routing)
 	for attempt := 1; ; attempt++ {
-		if err := ctx.Err(); err != nil {
+		if err := transport.ContextError(ctx); err != nil {
 			return failure(err)
 		}
 		if conn == nil {
@@ -158,7 +158,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			log = new(attemptLog)
 		}
 		attemptStatus := log.fail(err, conn, attempt, consistency, trace, request.partialBatch())
-		if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr := transport.ContextError(ctx); ctxErr != nil {
 			// The context ended before the attempt failed. A cancellation, such
 			// as Session.Close's, and the failure it causes (the closed
 			// connection) can reach the attempt in either order; the
@@ -167,11 +167,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
-		case retry.IgnoreWrite:
-			return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 		case retry.Stop:
 			return failure(err)
 		case retry.Same, retry.Next:
@@ -192,7 +190,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			select {
 			case <-ctx.Done():
 				timer.Stop()
-				return failure(ctx.Err())
+				return failure(transport.ContextError(ctx))
 			case <-s.sessionDone():
 				// No attempt is in flight during the delay, so a closing
 				// session ends the execution here.
@@ -268,7 +266,7 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) meta
 func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(routing2.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
+	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end

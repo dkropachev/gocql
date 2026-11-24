@@ -32,12 +32,12 @@ import (
 func (s *Core) InvalidatePreparedSchema(e event.Event) {
 	t := s.SchemaTracker()
 	keys := []schemafence.InternalPreparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
-	switch e.Target {
-	case event.TargetTable, "VIEW":
+	switch e.ObjectKind {
+	case event.ObjectTable, "VIEW":
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'b', InternalKeyspace: e.Keyspace, InternalName: e.Object})
-	case event.TargetType:
+	case event.ObjectType:
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: e.Keyspace, InternalName: e.Object})
-	case event.TargetFunction, event.TargetAggregate:
+	case event.ObjectFunction, event.ObjectAggregate:
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'f', InternalKeyspace: e.Keyspace, InternalName: ""})
 	default:
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: e.Keyspace, InternalName: ""})
@@ -66,7 +66,7 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 		}
 		if a == nil || b == nil {
 			if a != b {
-				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Target: event.TargetKeyspace})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, ObjectKind: event.ObjectKeyspace})
 			}
 			continue
 		}
@@ -79,7 +79,7 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 		}
 		for name := range tables {
 			if !a.Tables[name].Equal(b.Tables[name]) {
-				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, Target: event.TargetTable})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, ObjectKind: event.ObjectTable})
 			}
 		}
 		types := make(map[string]bool, len(a.Types)+len(b.Types))
@@ -93,13 +93,13 @@ func (s *Core) UpdatePreparedSchemaSnapshot(old, next *routing.MetadataSnapshot)
 			x, y := a.Types[name], b.Types[name]
 			same := x == y || x != nil && y != nil && x.Keyspace == y.Keyspace && x.Name == y.Name && slices.Equal(x.FieldNames, y.FieldNames) && slices.Equal(x.FieldTypes, y.FieldTypes)
 			if !same {
-				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, Target: event.TargetType})
+				s.InvalidatePreparedSchema(event.Event{Keyspace: n, Object: name, ObjectKind: event.ObjectType})
 			}
 		}
 		// Function dependencies are not exposed by PREPARED, so use their keyspace
 		// scope conservatively; unrelated table/type publications stay isolated.
 		if !equalPreparedFunctions(a.Functions, b.Functions) || !equalPreparedAggregates(a.Aggregates, b.Aggregates) {
-			s.InvalidatePreparedSchema(event.Event{Keyspace: n, Target: event.TargetFunction})
+			s.InvalidatePreparedSchema(event.Event{Keyspace: n, ObjectKind: event.ObjectFunction})
 		}
 	}
 }

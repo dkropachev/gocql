@@ -18,9 +18,8 @@
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one
 // (exec.Options.Profile). WithTLS encrypts connections with a fixed
 // tls.Config; WithTLSSource takes an endpoint.TLSSource such as NewTLSFileSource,
-// which reloads certificates while the session runs. WithObserver and
-// WithLifecycleObserver install an observe.Observer and an
-// observe.LifecycleObserver.
+// which reloads certificates while the session runs. WithObserver installs
+// an observe.Observer; observe.Join combines several.
 //
 // # Which setting wins
 //
@@ -32,18 +31,15 @@
 //  2. exec.Options.Profile, when set, replaces that profile whole. A field the
 //     profile did not choose keeps the driver's default, not the session's.
 //  3. Each exec.Options field that is set overrides the matching field of the
-//     profile: a cql.Option whose Set is true, a non-nil Retry, and a
-//     SerialConsistency other than exec.SerialInherit.
+//     profile: a cql.Option whose Set is true, a non-nil Retry, a non-zero
+//     PageSize, and a SerialConsistency other than exec.SerialInherit.
 //
-// Time limits combine rather than replace each other. The context passed to
-// the call, the profile's Timeout and exec.Options.Timeout all bound the whole
-// execution, retries and every page Rows fetches included, and whichever
-// expires first ends it. An option therefore only tightens the profile's
-// limit: a longer exec.Options.Timeout, or a zero one, leaves the profile's in
-// force, and a zero profile Timeout leaves the option's and the context's.
-// PageTimeout combines the same way, the earliest of the profile's and
-// exec.Options.PageTimeout bounding each page fetch on its own, within the
-// execution's deadline.
+// A set exec.Options.Timeout replaces the profile's Timeout, longer or
+// shorter, and a set zero removes it. The resulting limit and the context
+// passed to the call both bound the whole execution, retries and every page
+// Rows fetches included, and whichever expires first ends it.
+// exec.Options.PageTimeout replaces the profile's PageTimeout the same way;
+// it bounds each page fetch on its own, within the execution's deadline.
 //
 // Preparation takes no exec.Options. Session.Prepare and
 // Session.PrepareStream are bounded by their context and the session's

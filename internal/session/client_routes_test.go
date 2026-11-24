@@ -103,7 +103,7 @@ func TestClientRoutes(t *testing.T) {
 			var deadlines []time.Time
 			var targets []string
 			config.DialHost = func(ctx context.Context, target endpoint2.DialTarget) (net.Conn, error) {
-				if !target.Host.ID.IsEmpty() {
+				if !target.Host.HostID.IsZero() {
 					deadline, _ := ctx.Deadline()
 					mu.Lock()
 					deadlines = append(deadlines, deadline)

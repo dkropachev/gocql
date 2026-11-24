@@ -154,7 +154,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info
 	if consistency == cql.Any {
 		consistency = cql.One
 	}
-	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: true}
+	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: cql.Some(true)}
 	statement := sessionStatement(s.Dialect() == config.ScyllaV4)
 	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow

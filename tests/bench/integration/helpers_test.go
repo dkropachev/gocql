@@ -56,7 +56,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -100,6 +99,9 @@ var (
 
 // errMultipleRows reports that a helper expecting one row read several.
 var errMultipleRows = errors.New("integration: multiple rows")
+
+// errNoRows reports a read that found no row.
+var errNoRows = errors.New("integration: no rows")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -244,7 +246,7 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {
@@ -645,7 +647,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
-		return cql.DynamicRow{}, cqlerr.ErrNoRows
+		return cql.DynamicRow{}, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
@@ -661,7 +663,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, exec.Options{Idempotent: true, Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
+	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
@@ -1088,7 +1090,7 @@ func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
+	if e.Host.HostID.IsZero() || (len(p.hosts) > 0 && p.hosts[0].HostID != e.Host.HostID) {
 		panic("reset lost host identity")
 	}
 	p.resets++
@@ -1213,7 +1215,7 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
-		return zero, cqlerr.ErrNoRows
+		return zero, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
@@ -1381,7 +1383,7 @@ func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
@@ -1510,7 +1512,7 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {
@@ -1550,11 +1552,7 @@ var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Tim
 	}
 	return n
 }, func(v cql.Timestamp) time.Time {
-	n, e := v.Time()
-	if e != nil {
-		panic(e)
-	}
-	return n.UTC()
+	return v.Time()
 })
 
 var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {

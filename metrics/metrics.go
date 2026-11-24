@@ -23,10 +23,9 @@ import "time"
 //
 // The zero Snapshot counts nothing.
 type Snapshot struct {
-	// Requests counts executions started, and Attempts the requests they
-	// sent to nodes, including retries and speculative attempts. While an
-	// admission is being refused, Requests may briefly include it, so a
-	// later snapshot can report one fewer.
+	// Requests counts executions started, and Attempts the attempts they
+	// sent to nodes, including retries and speculative attempts. An
+	// execution refused because the session is closing is not counted.
 	Requests, Attempts uint64
 	// Errors counts executions that ended with an error, and Canceled
 	// those of them that ended because their context was canceled or its

@@ -27,15 +27,17 @@ package gocql_test
 import (
 	"context"
 	"fmt"
+	"log"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
-
-	"log"
 )
 
+// Example_paging fetches a table two rows at a time. Each RunPage call sends
+// one request; the page's State resumes the next call, here through the text
+// cursor a web API could hand to its client once it authenticates it (see
+// cql.PageState).
 func Example_paging() {
 	ctx := context.Background()
 	cfg, err := config.New(config.ScyllaV4, "localhost:9042").Build()
@@ -51,27 +53,30 @@ func Example_paging() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	b, err := p.Query(exec.Options{PageSize: cql.Some[int32](2)})
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer b.Close()
-	var state cql.PageState
-	var id int32
+	var cursor []byte // empty: the first page
 	for {
-		page, err := b.RunPage(ctx, cql.EmptyParams{}, state, 0)
+		var state cql.PageState
+		if len(cursor) > 0 {
+			if err := state.UnmarshalText(cursor); err != nil {
+				log.Fatal(err)
+			}
+		}
+		page, err := p.RunPage(ctx, cql.EmptyParams{}, state, 2)
 		if err != nil {
 			log.Fatal(err)
 		}
-		for page.NextInto(&id) {
-			fmt.Println(id)
+		// All closes the page when the loop ends; its State stays readable.
+		for id, err := range page.All(nil) {
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Println(*id)
 		}
-		state = page.State()
-		if err := page.Close(); err != nil {
-			log.Fatal(err)
-		}
-		if state.Complete() {
+		if page.State().Complete() {
 			break
+		}
+		if cursor, err = page.State().MarshalText(); err != nil {
+			log.Fatal(err)
 		}
 	}
 }

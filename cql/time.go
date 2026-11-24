@@ -5,6 +5,7 @@ package cql
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"time"
 )
@@ -32,8 +33,8 @@ func DateFromTime(t time.Time) (Date, error) {
 	return Date(days), nil
 }
 
-// Time returns midnight UTC of the date. Its error is always nil.
-func (d Date) Time() (time.Time, error) { return time.Unix(int64(d)*86400, 0).UTC(), nil }
+// Time returns midnight UTC of the date.
+func (d Date) Time() time.Time { return time.Unix(int64(d)*86400, 0).UTC() }
 
 // TimestampFromTime converts a time to a CQL millisecond timestamp, rejecting overflow.
 func TimestampFromTime(t time.Time) (Timestamp, error) {
@@ -54,7 +55,23 @@ func TimestampFromTime(t time.Time) (Timestamp, error) {
 	return Timestamp(seconds*1000 + fraction), nil
 }
 
-// Time returns the timestamp as a UTC time. Its error is always nil.
-func (t Timestamp) Time() (time.Time, error) {
-	return time.Unix(int64(t)/1000, (int64(t)%1000)*1_000_000).UTC(), nil
+// Time returns the timestamp as a UTC time.
+func (t Timestamp) Time() time.Time { return time.UnixMilli(int64(t)).UTC() }
+
+// String returns the date as YYYY-MM-DD, the form CQL accepts as a literal.
+func (d Date) String() string { return d.Time().Format("2006-01-02") }
+
+// String returns the timestamp in RFC 3339 form with milliseconds, in UTC,
+// such as 2026-01-02T15:04:05.123Z.
+func (t Timestamp) String() string { return t.Time().Format("2006-01-02T15:04:05.000Z07:00") }
+
+// String returns the time as HH:MM:SS.nnnnnnnnn, the form CQL accepts as a
+// literal, or TimeOfDay(n) for a value outside one day.
+func (t TimeOfDay) String() string {
+	n := int64(t)
+	if n < 0 || n >= nanosecondsPerDay {
+		return fmt.Sprintf("TimeOfDay(%d)", n)
+	}
+	const second = int64(time.Second)
+	return fmt.Sprintf("%02d:%02d:%02d.%09d", n/(3600*second), n/(60*second)%60, n/second%60, n%second)
 }

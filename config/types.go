@@ -4,6 +4,7 @@
 package config
 
 import (
+	"sync"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -25,10 +26,11 @@ import (
 //
 // The zero Profile is such a literal, and is rejected the same way.
 type Profile struct {
-	// Retry is the retry policy; nil disables retries.
+	// Retry is the retry policy; nil is the default, retry.Safe{MaxAttempts:
+	// 3}, as for ProfileBuilder.WithRetry. retry.Never{} disables retries.
 	Retry retry.Policy
-	// Routing is the routing policy; nil uses the pool's host selection
-	// without a request-specific plan.
+	// Routing is the routing policy; nil is the default policy, as for
+	// ProfileBuilder.WithRouting.
 	Routing routing.Policy
 	// Speculation is the speculative execution policy; nil disables it.
 	Speculation retry.SpeculationPolicy
@@ -49,15 +51,28 @@ type Profile struct {
 	built bool
 }
 
+// defaultRouting is the policy of a Profile whose Routing was set to nil
+// after Build, shared so that converting such a profile allocates none.
+var defaultRouting = sync.OnceValue(implSettings.DefaultRouting)
+
 func internalProfile(p Profile) implSettings.Profile {
 	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
+	if v.Retry == nil {
+		v.Retry = defaultRetry
+	}
+	if v.Routing == nil {
+		v.Routing = defaultRouting()
+	}
 	if !p.built {
 		v.InternalMarkUnbuilt()
 	}
 	return v
 }
+
+// defaultRetry is the retry policy of a Profile whose Retry is nil.
+var defaultRetry = implSettings.InternalDefaultProfile().Retry
 
 func publicProfile(p implSettings.Profile) Profile {
 	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,

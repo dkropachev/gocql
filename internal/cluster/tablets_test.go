@@ -47,7 +47,7 @@ func TestTablets(t *testing.T) {
 		MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", &metadata2.Keyspace{Name: "ks", Tables: map[string]*metadata2.Table{"t": {Name: "t"}}})
 		p := s.Peripheral()
 		p.InternalFeedbackOnce.Do(func() {}) // Hold the consumer while filling the bounded queue.
-		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Overflow}, Capacity: 1})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindOverflow}, Capacity: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -71,7 +71,7 @@ func TestTablets(t *testing.T) {
 		go sessionRunV2TabletFeedback(s, p)
 		select {
 		case ev := <-sub.Events():
-			if ev.Kind != event.Overflow || ev.Change != "TABLET_RESYNC" {
+			if ev.Kind != event.KindOverflow || ev.Change != "TABLET_RESYNC" {
 				t.Fatal(ev)
 			}
 		case <-time.After(time.Second):

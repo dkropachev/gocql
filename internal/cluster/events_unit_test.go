@@ -431,7 +431,7 @@ func populateKeyspace(s *Core, ksName string, tableNames ...string) {
 			Keyspace: ksName,
 			Name:     tbl,
 			Columns: map[string]*metadata2.Column{
-				"id": {Keyspace: ksName, Table: tbl, Name: "id", Kind: metadata2.ColumnPartitionKey},
+				"id": {Keyspace: ksName, Table: tbl, Name: "id", Kind: metadata2.ColumnKindPartitionKey},
 			},
 		}
 	}

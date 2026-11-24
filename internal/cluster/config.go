@@ -71,10 +71,10 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		legacy.ConvictionPolicy = config.Conviction
 	}
 	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
-	if config.Reconnect != nil {
-		if delay, _ := config.Reconnect.Delay(1); delay < 0 {
-			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
-		}
+	// config.Build asked the policy for its first delay; settings made
+	// without it are asked here, once.
+	if err := config.ProbeReconnect(); err != nil {
+		return nil, err
 	}
 	legacy.DriverName = config.Identity.DriverName
 	legacy.DriverVersion = config.Identity.DriverVersion
@@ -108,7 +108,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		}
 		previous := legacy.HostFilter
 		legacy.HostFilter = HostFilterFunc(func(host *implEndpoint.HostInfo) bool {
-			if local := hostDialer.InternalUnixHostID(); !local.IsEmpty() && !implEndpoint.InternalHostInfoHostUUID(host).IsEmpty() && implEndpoint.InternalHostInfoHostUUID(host) != local {
+			if local := hostDialer.InternalUnixHostID(); !local.IsZero() && !implEndpoint.InternalHostInfoHostUUID(host).IsZero() && implEndpoint.InternalHostInfoHostUUID(host) != local {
 				return false
 			}
 			return previous == nil || previous.Accept(host)

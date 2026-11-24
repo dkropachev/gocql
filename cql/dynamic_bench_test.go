@@ -38,7 +38,7 @@ func BenchmarkDynamic(b *testing.B) {
 					}
 					chain := CodecTestMust(wire.NewChain(parts...))
 					plan := CodecTestMust(DynamicRows.Compile(columns))
-					row := CodecTestMust(plan.Decode(newRowReader(columns, chain, nil)))
+					row := CodecTestMust(decodeRow(plan, newRowReader(columns, chain, nil)))
 					CodecTestMust(row.At(n - 1))
 					b.ReportAllocs()
 					b.ResetTimer()
@@ -102,7 +102,7 @@ func BenchmarkDynamic(b *testing.B) {
 					ColumnSpec{Name: "ascii", Type: ASCIIType},
 				)
 				payload := string(bytes.Repeat([]byte{'x'}, size))
-				values := []Value{CodecTestMust(TextValue(payload)), CodecTestMust(ASCIIValue(payload))}
+				values := []Value{TextValue(payload), ASCIIValue(payload)}
 				plan := CodecTestMust(DynamicParams.Compile(columns))
 				builder := wire.NewBuilder(256)
 				w := newParamWriter(builder, columns, true)

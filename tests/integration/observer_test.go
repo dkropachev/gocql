@@ -93,7 +93,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, i/10+1, len(attempts), "row %d", i)
 			i++
 			return nil
-		}, exec.Options{PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer})
+		}, exec.Options{PageSize: 10, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer})
 		require.NoError(t, err)
 		require.Equal(t, 50, i)
 		events, attempts := observer.snapshot()

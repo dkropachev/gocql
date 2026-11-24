@@ -21,7 +21,7 @@
 // Server errors are typed by their CQL error code (WriteTimeoutError,
 // UnavailableError, ...) and all implement ServerError; find them with
 // errors.As, or match a code with errors.Is(err, CodeOverloaded).
-// Driver conditions are sentinels (ErrNoRows, ErrNoConnections, ...); test
+// Driver conditions are sentinels (ErrNoCurrentRow, ErrNoConnections, ...); test
 // them with errors.Is.
 //
 // Package cql defines the errors of its own values and codecs:

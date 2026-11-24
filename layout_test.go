@@ -35,6 +35,8 @@ var surfacePackages = map[string]bool{
 	"config":   true,
 	"exec":     true,
 	"cqltrace": true,
+	// routingtest builds the engine's snapshots for policy tests.
+	"routing/routingtest": true,
 }
 
 // primitivePackages are the internal layer-0 packages; every other internal

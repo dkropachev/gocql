@@ -2,7 +2,7 @@
 
 `session.PrepareStream(ctx, cql.StreamStatement[P,R]{CQL: text, Params: params,
 Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
-`PreparedStream` handle can be shared; `prepared.Query(exec.StreamOptions{})` creates
+`PreparedStream` handle can be shared; `prepared.Query()` creates
 a query for one worker. Streaming is always prepared; `Rows` supplies the
 streaming decoder. The query's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
@@ -33,7 +33,7 @@ prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams,
     Rows: decoder,
 })
 if err != nil { return err }
-query, err := prepared.Query(exec.StreamOptions{})
+query, err := prepared.Query()
 if err != nil { return err }
 defer query.Close()
 stream, err := query.Run(ctx, cql.EmptyParams{})
@@ -63,8 +63,11 @@ value exceeding available capacity returns StreamCapacityError before writing
 that value body; earlier fields may already have changed. Provision capacity
 from the application's bounds, not from untrusted remote lengths. Reset clears
 logical values recursively while preserving mapped capacity. cql.StreamRowInto's
-explicit callback clears unmapped application state; it must preserve mapped
-buffers. Custom plans/resetters have the same responsibility.
+callback, which may be nil, clears unmapped application state; it must preserve
+mapped buffers. Custom decoders and plans have the same responsibility in
+their `Reset`. Like `RowInto`, `cql.StreamRowInto` needs a field for every
+result column and a column for every field; `cql.StreamIgnoreColumn` skips a
+column.
 
 Only a true NextInto return publishes a complete validated row. Truncation,
 capacity errors, cancellation, malformed text or integrity failure are terminal

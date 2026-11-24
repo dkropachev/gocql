@@ -191,7 +191,7 @@ func TestHotPathAllocs(t *testing.T) {
 	// goes into the next request.
 	t.Run("PagedScan", func(t *testing.T) {
 		session, ctx := hotPathSession(t), hotPathContext(t)
-		values := Options{PageSize: cql.Option[int32]{Set: true, Value: hotPathPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+		values := Options{PageSize: hotPathPageRows, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 		options := testOptions(values)
 		dst := make([]byte, 0, 16)
 		count := 0
@@ -238,7 +238,7 @@ func TestHotPathAllocs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					q, err := p.Query(StreamOptions{Options: Options{PageSize: cql.Option[int32]{Set: true, Value: hotPathPageRows}}, Incremental: tc.incremental})
+					q, err := p.Query(StreamOptions{Options: Options{PageSize: hotPathPageRows}, Incremental: tc.incremental})
 					if err != nil {
 						t.Fatal(err)
 					}

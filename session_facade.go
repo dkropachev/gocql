@@ -90,8 +90,12 @@ func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, er
 
 // UnpreparedExec executes an occasional statement without preparing it or
 // leaving a query to close. It must return no result columns. Parameters are
-// described by statement.BindMarkers. At most one exec.Options may be passed; the
-// call validates and resolves it, and omitting it uses the session defaults.
+// described by statement.BindMarkers, which a statement with parameters (P
+// other than cql.EmptyParams) must set: without them the call fails with a
+// cql.ValidationError before anything is sent. With cql.DynamicParams and no
+// BindMarkers, the markers take the types of the values. At most one
+// exec.Options may be passed; the call validates and resolves it, and
+// omitting it uses the session defaults.
 func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
@@ -99,7 +103,8 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // UnpreparedOne executes an occasional statement and decodes its first row.
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
 // are detached before return; there is no query or cursor to close. Parameters
-// are described by statement.BindMarkers. At most one exec.Options may be passed;
+// are described by statement.BindMarkers, as for UnpreparedExec. With a nil
+// dst it only reports whether a row exists. At most one exec.Options may be passed;
 // the call validates and resolves it, and omitting it uses the session defaults.
 func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error) {
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
@@ -108,11 +113,10 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // UnpreparedEach executes an occasional statement, calling fn for every row
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
-// described by statement.BindMarkers. At most one exec.Options may be passed; the
-// call validates and resolves it, and omitting it uses the session defaults.
-// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
-// that keeps slices, []byte fields reuse their capacity, so a slice kept from
-// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
+// described by statement.BindMarkers, as for UnpreparedExec. At most one
+// exec.Options may be passed; the call validates and resolves it, and omitting
+// it uses the session defaults. dst is decoded into as for Query.Each: the
+// same pointer for every row, or a new R for each row when dst is nil.
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
@@ -120,8 +124,9 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 // UnpreparedAll executes an occasional statement and iterates every row
 // across all pages, decoding each into dst, as Query.All does. The statement's
 // query is closed when the loop ends; there is nothing to close. Parameters are
-// described by statement.BindMarkers. At most one exec.Options may be passed; the
-// call validates and resolves it, and omitting it uses the session defaults.
+// described by statement.BindMarkers, as for UnpreparedExec. At most one
+// exec.Options may be passed; the call validates and resolves it, and
+// omitting it uses the session defaults.
 func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) iter.Seq2[*R, error] {
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
@@ -214,8 +219,20 @@ func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata()
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }
 
-// RefreshMetadata waits for a shared topology refresh under ctx. The queries
-// performing that refresh use the configured metadata timeout.
+// RefreshMetadata reloads the topology, the client routes, when the session
+// uses them, and the schema Mode loads, then publishes a new Snapshot. A
+// topology refresh already under way is shared rather than repeated. ctx
+// bounds the wait; the queries themselves use the configured metadata
+// timeout.
+//
+// A part that fails to reload keeps its previous metadata. A failed topology
+// or client routes reload is a *cqlerr.PartialRefreshError naming it, and so
+// is a keyspace whose schema failed to load. A failed schema listing returns
+// the query's error. When both happen, the errors are joined: errors.As
+// finds the PartialRefreshError.
+// RefreshMetadata also returns ctx's error, cqlerr.ErrClosed once the
+// session closes, and cqlerr.ErrNoControl when the session has no control
+// connection.
 func (s *Session) RefreshMetadata(ctx context.Context) error {
 	return s.internal().RefreshMetadata(ctx)
 }

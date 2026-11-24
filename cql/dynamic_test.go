@@ -80,7 +80,7 @@ func TestDynamic(t *testing.T) {
 			plan := dynamicTestMust(NamedDynamicParams.Compile(cols))
 			builder := wire.NewBuilder(0)
 			writer := newParamWriter(builder, cols, true)
-			if err := plan.Encode(writer, []ValueField{{Name: "b", Value: CodecTestMust(TextValue("x"))}, {Name: "a", Value: IntValue(9)}}); err != nil {
+			if err := plan.Encode(writer, []ValueField{{Name: "b", Value: TextValue("x")}, {Name: "a", Value: IntValue(9)}}); err != nil {
 				t.Fatal(err)
 			}
 			if err := finishParamWriter(writer); err != nil {
@@ -95,9 +95,9 @@ func TestDynamic(t *testing.T) {
 				fields  []ValueField
 				message string
 			}{
-				{"duplicate", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "a", Value: IntValue(2)}, {Name: "b", Value: CodecTestMust(TextValue("x"))}}, "duplicate"},
+				{"duplicate", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "a", Value: IntValue(2)}, {Name: "b", Value: TextValue("x")}}, "duplicate"},
 				{"missing", []ValueField{{Name: "a", Value: IntValue(1)}}, "missing"},
-				{"unused", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: CodecTestMust(TextValue("x"))}, {Name: "c", Value: IntValue(2)}}, "unused"},
+				{"unused", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: TextValue("x")}, {Name: "c", Value: IntValue(2)}}, "unused"},
 				{"wrong type after first write", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: IntValue(2)}}, "type"},
 			}
 			for _, test := range tests {
@@ -121,7 +121,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("wrong parameter count accepted")
 			}
 			mismatch := NewColumns(ColumnSpec{Name: "a", Type: text}, ColumnSpec{Name: "b", Type: text}, ColumnSpec{Name: "a", Type: integer})
-			if err := positional.Encode(newParamWriter(wire.NewBuilder(0), mismatch, true), []Value{IntValue(1), CodecTestMust(TextValue("x")), IntValue(1)}); err == nil {
+			if err := positional.Encode(newParamWriter(wire.NewBuilder(0), mismatch, true), []Value{IntValue(1), TextValue("x"), IntValue(1)}); err == nil {
 				t.Fatal("stale parameter metadata accepted")
 			}
 			if _, err := DynamicParams.Compile(NewColumns(ColumnSpec{Name: "x"})); err == nil {
@@ -155,7 +155,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("dynamic tuple row lost omitted trailing null")
 			}
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}))
-			encoded = dynamicTestMust(EncodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: CodecTestMust(TextValue("borrowed"))}, {Name: "n", Value: IntValue(2)}}))
+			encoded = dynamicTestMust(EncodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: TextValue("borrowed")}, {Name: "n", Value: IntValue(2)}}))
 			lease := wire.NewLease(bytesChain(encoded.Bytes()), nil)
 			encoded.body = bytesView(bytesChain(encoded.body), wire.RefOf(lease))
 			codec := UDTDecoder(DynamicRows, UDTOptions{Keyspace: "ks", Name: "record"})
@@ -170,9 +170,9 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("unbound record codec did not clone dynamic row")
 			}
 			cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text})
-			chain := dynamicTestRowBody(t, cols, []Value{IntValue(3), CodecTestMust(TextValue("right"))})
+			chain := dynamicTestRowBody(t, cols, []Value{IntValue(3), TextValue("right")})
 			paired := dynamicTestMust(PairRows(OneColumn(Int32Codec), DynamicRows).Compile(cols))
-			pair := dynamicTestMust(paired.Decode(newRowReader(cols, chain, nil)))
+			pair := dynamicTestMust(decodeRow(paired, newRowReader(cols, chain, nil)))
 			if pair.First != 3 || pair.Second.Columns().Len() != 1 {
 				t.Fatal("paired row did not retain physical subset")
 			}
@@ -184,13 +184,13 @@ func TestDynamic(t *testing.T) {
 		t.Run("ConcurrentPlansAndReaders", func(t *testing.T) {
 			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
 			cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}, ColumnSpec{Name: "n", Type: integer})
-			input := []ValueField{{Name: "s", Value: CodecTestMust(TextValue("shared"))}, {Name: "n", Value: IntValue(42)}}
+			input := []ValueField{{Name: "s", Value: TextValue("shared")}, {Name: "n", Value: IntValue(42)}}
 			params := dynamicTestMust(NamedDynamicParams.Compile(cols))
 			rows := dynamicTestMust(DynamicRows.Compile(cols))
-			chain := dynamicTestRowBody(t, cols, []Value{IntValue(42), CodecTestMust(TextValue("shared")), IntValue(42)})
+			chain := dynamicTestRowBody(t, cols, []Value{IntValue(42), TextValue("shared"), IntValue(42)})
 			lease := wire.NewLease(chain, nil)
 			defer lease.Release()
-			row := dynamicTestMust(rows.Decode(newRowReader(cols, chain, lease)))
+			row := dynamicTestMust(decodeRow(rows, newRowReader(cols, chain, lease)))
 			var wg sync.WaitGroup
 			for worker := 0; worker < 8; worker++ {
 				wg.Add(1)
@@ -221,7 +221,7 @@ func TestDynamic(t *testing.T) {
 								return
 							}
 						}
-						independent, err := rows.Decode(newRowReader(cols, chain, lease))
+						independent, err := decodeRow(rows, newRowReader(cols, chain, lease))
 						if err != nil {
 							t.Error(err)
 							return
@@ -247,7 +247,7 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestRowBody(t, cols, values)
 			lease := wire.NewLease(chain, nil)
 			plan := CodecTestMust(DynamicRows.Compile(cols))
-			row := CodecTestMust(plan.Decode(newRowReader(cols, chain, lease)))
+			row := CodecTestMust(decodeRow(plan, newRowReader(cols, chain, lease)))
 			copyRow := row
 			if row.physical == nil || row.physical != copyRow.physical || row.physical.cells != nil {
 				t.Fatal("eager or unshared physical index")
@@ -303,7 +303,7 @@ func TestDynamic(t *testing.T) {
 			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
 			tuple := dynamicTestMust(TupleType(integer, text))
 			cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
-			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), CodecTestMust(TextValue("hello")), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), CodecTestMust(TextValue("nested"))}))})
+			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), TextValue("hello"), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), TextValue("nested")}))})
 			data := (bytesView(source, wire.Ref{})).OwnedBytes()
 			spans := make([]wire.Span, len(data))
 			for i := range data {
@@ -313,7 +313,7 @@ func TestDynamic(t *testing.T) {
 			lease := wire.NewLease(chain, nil)
 			plan := dynamicTestMust(DynamicRows.Compile(cols))
 			reader := newRowReader(cols, chain, lease)
-			row, err := plan.Decode(reader)
+			row, err := decodeRow(plan, reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -383,17 +383,17 @@ func TestDynamic(t *testing.T) {
 			boolean := dynamicTestType(TypeBoolean)
 			badCols := NewColumns(ColumnSpec{Name: "b", Type: boolean})
 			badPlan := dynamicTestMust(DynamicRows.Compile(badCols))
-			badRow, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
+			badRow, err := decodeRow(badPlan, newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
 			if err != nil {
 				t.Fatal("valid cell framing rejected before access", err)
 			}
 			if _, err := badRow.At(0); err == nil {
 				t.Fatal("malformed scalar published on access")
 			}
-			if _, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
+			if _, err := decodeRow(badPlan, newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
 				t.Fatal("truncated physical row accepted")
 			}
-			if _, err := plan.Decode(newRowReader(badCols, chain, nil)); err == nil {
+			if _, err := decodeRow(plan, newRowReader(badCols, chain, nil)); err == nil {
 				t.Fatal("stale row metadata accepted")
 			}
 		})
@@ -416,12 +416,12 @@ func TestDynamic(t *testing.T) {
 				wire  string
 			}{
 				{"list", dynamicTestMust(ListValue(list, []Value{IntValue(1), IntValue(2)})), "0000000200000004000000010000000400000002"},
-				{"set", dynamicTestMust(SetValue(set, []Value{CodecTestMust(TextValue("a")), CodecTestMust(TextValue(""))})), "00000002000000016100000000"},
-				{"map", dynamicTestMust(MapValue(mapping, []ValueEntry{{Key: CodecTestMust(TextValue("k")), Value: IntValue(1)}})), "00000001000000016b0000000400000001"},
-				{"tuple", dynamicTestMust(TupleValue(tuple, []Value{CodecTestMust(TextValue("a")), IntValue(1)})), "00000001610000000400000001"},
-				{"UDT", dynamicTestMust(UDTValue(udt, []ValueField{{Name: "number", Value: IntValue(1)}, {Name: "name", Value: CodecTestMust(TextValue("a"))}})), "00000001610000000400000001"},
+				{"set", dynamicTestMust(SetValue(set, []Value{TextValue("a"), TextValue("")})), "00000002000000016100000000"},
+				{"map", dynamicTestMust(MapValue(mapping, []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}})), "00000001000000016b0000000400000001"},
+				{"tuple", dynamicTestMust(TupleValue(tuple, []Value{TextValue("a"), IntValue(1)})), "00000001610000000400000001"},
+				{"UDT", dynamicTestMust(UDTValue(udt, []ValueField{{Name: "number", Value: IntValue(1)}, {Name: "name", Value: TextValue("a")}})), "00000001610000000400000001"},
 				{"fixed vector", pair, "0000000100000002"},
-				{"variable vector", dynamicTestMust(VectorValue(variable, []Value{CodecTestMust(TextValue("a")), CodecTestMust(TextValue(""))})), "016100"},
+				{"variable vector", dynamicTestMust(VectorValue(variable, []Value{TextValue("a"), TextValue("")})), "016100"},
 				{"nested vector", dynamicTestMust(VectorValue(nested, []Value{pair, pair})), "00000001000000020000000100000002"},
 			}
 			for _, test := range tests {
@@ -454,19 +454,19 @@ func TestDynamic(t *testing.T) {
 			if _, err := ListValue(set, nil); err == nil {
 				t.Fatal("set accepted as list")
 			}
-			if _, err := ListValue(list, []Value{CodecTestMust(TextValue("x"))}); err == nil {
+			if _, err := ListValue(list, []Value{TextValue("x")}); err == nil {
 				t.Fatal("wrong list child type accepted")
 			}
-			if _, err := TupleValue(tuple, []Value{CodecTestMust(TextValue("x"))}); err == nil {
+			if _, err := TupleValue(tuple, []Value{TextValue("x")}); err == nil {
 				t.Fatal("short tuple accepted")
 			}
 			if _, err := VectorValue(fixed, []Value{IntValue(1)}); err == nil {
 				t.Fatal("short vector accepted")
 			}
-			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: CodecTestMust(TextValue("a"))}, {Name: "name", Value: CodecTestMust(TextValue("b"))}}); err == nil {
+			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: TextValue("a")}, {Name: "name", Value: TextValue("b")}}); err == nil {
 				t.Fatal("duplicate UDT input name accepted")
 			}
-			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: CodecTestMust(TextValue("a"))}, {Name: "unknown", Value: IntValue(1)}}); err == nil {
+			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: TextValue("a")}, {Name: "unknown", Value: IntValue(1)}}); err == nil {
 				t.Fatal("unknown UDT field accepted")
 			}
 			other := dynamicTestMust(UDTType("ks", "other", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "number", Type: integer}))
@@ -649,20 +649,19 @@ func TestDynamic(t *testing.T) {
 				{"smallint", SmallIntValue(-2), "fffe"},
 				{"int", IntValue(-3), "fffffffd"},
 				{"bigint", BigIntValue(-4), "fffffffffffffffc"},
-				{"counter", CounterValue(5), "0000000000000005"},
 				{"float", FloatValue(1.5), "3fc00000"},
 				{"double", DoubleValue(-1.5), "bff8000000000000"},
-				{"text", CodecTestMust(TextValue("€")), "e282ac"},
-				{"ascii", dynamicTestMust(ASCIIValue("az")), "617a"},
+				{"text", TextValue("€"), "e282ac"},
+				{"ascii", ASCIIValue("az"), "617a"},
 				{"blob", BlobValue([]byte{0, 1}), "0001"},
 				{"uuid", UUIDValue(uuid), "00112233445566778899aabbccddeeff"},
-				{"timeuuid", dynamicTestMust(TimeUUIDValue(timeuuid)), "00112233445516778899aabbccddeeff"},
-				{"inet4", dynamicTestMust(InetValue(netip.MustParseAddr("127.0.0.1"))), "7f000001"},
-				{"inet6", dynamicTestMust(InetValue(netip.MustParseAddr("::1"))), "00000000000000000000000000000001"},
+				{"timeuuid", TimeUUIDValue(timeuuid), "00112233445516778899aabbccddeeff"},
+				{"inet4", InetValue(netip.MustParseAddr("127.0.0.1")), "7f000001"},
+				{"inet6", InetValue(netip.MustParseAddr("::1")), "00000000000000000000000000000001"},
 				{"date", DateValue(-1), "7fffffff"},
-				{"time", dynamicTestMust(TimeValue(42)), "000000000000002a"},
+				{"time", TimeValue(42), "000000000000002a"},
 				{"timestamp", TimestampValue(-1), "ffffffffffffffff"},
-				{"duration", dynamicTestMust(DurationValue(Duration{Months: 1, Days: 2, Nanoseconds: 3})), "020406"},
+				{"duration", DurationValue(Duration{Months: 1, Days: 2, Nanoseconds: 3}), "020406"},
 				{"varint", VarintValue(integer), "ff7f"},
 				{"decimal", DecimalValue(Decimal{Scale: -2, Unscaled: integer}), "fffffffeff7f"},
 			}
@@ -731,7 +730,7 @@ func TestDynamic(t *testing.T) {
 				})
 			}
 			varchar := dynamicTestType(TypeVarchar)
-			encoded, err := EncodeValueBorrowed(varchar, DynamicCodec, CodecTestMust(TextValue("v")))
+			encoded, err := EncodeValueBorrowed(varchar, DynamicCodec, TextValue("v"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -745,20 +744,22 @@ func TestDynamic(t *testing.T) {
 			if _, err := NullValue(dynamicTestType(TypeBoolean)).Bool(); err == nil {
 				t.Fatal("null boolean accessor accepted")
 			}
-			if _, err := ASCIIValue("é"); err == nil {
-				t.Fatal("non-ASCII constructor accepted")
+			// The constructors do not fail; an invalid payload fails when
+			// it is bound, and a text one also when it is read.
+			for name, v := range map[string]Value{
+				"non-ASCII":            ASCIIValue("é"),
+				"invalid UTF-8":        TextValue(string([]byte{0xff})),
+				"wrong UUID version":   TimeUUIDValue(TimeUUID(uuid)),
+				"invalid inet":         InetValue(netip.Addr{}),
+				"time outside one day": TimeValue(TimeOfDay(nanosecondsPerDay)),
+				"mixed duration signs": DurationValue(Duration{Months: 1, Days: -1}),
+			} {
+				if _, err := EncodeValue(v.Type(), DynamicCodec, v); err == nil {
+					t.Fatalf("%s accepted at encode", name)
+				}
 			}
-			if _, err := TimeUUIDValue(TimeUUID(uuid)); err == nil {
-				t.Fatal("wrong UUID version accepted")
-			}
-			if _, err := InetValue(netip.Addr{}); err == nil {
-				t.Fatal("invalid inet accepted")
-			}
-			if _, err := TimeValue(TimeOfDay(nanosecondsPerDay)); err == nil {
-				t.Fatal("invalid time accepted")
-			}
-			if _, err := DurationValue(Duration{Months: 1, Days: -1}); err == nil {
-				t.Fatal("mixed duration signs accepted")
+			if _, err := ASCIIValue("é").Text(); err == nil {
+				t.Fatal("Text accepted a non-ASCII ascii value")
 			}
 		})
 		t.Run("StatesAndTrailingFields", func(t *testing.T) {
@@ -795,7 +796,7 @@ func TestDynamic(t *testing.T) {
 					t.Fatalf("unsupported Empty for %s accepted", kind)
 				}
 			}
-			for _, value := range []Value{CodecTestMust(TextValue("")), BlobValue(nil), dynamicTestMust(ASCIIValue(""))} {
+			for _, value := range []Value{TextValue(""), BlobValue(nil), ASCIIValue("")} {
 				dynamicTestRoundTrip(t, value, "")
 			}
 			dynamicTestRoundTrip(t, dynamicTestMust(ListValue(list, nil)), "00000000")

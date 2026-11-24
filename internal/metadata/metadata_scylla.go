@@ -91,7 +91,7 @@ func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName str
 		return false
 	}
 
-	cloned := ks.Clone()
+	cloned := shallowCloneKeyspace(ks)
 	fn(cloned)
 
 	newM := maps.Clone(m)
@@ -103,15 +103,15 @@ func (c *InternalCowKeyspaceMetadataMap) InternalUpdateKeyspace(keyspaceName str
 func columnKindFromSchema(kind string) (metadata2.ColumnKind, error) {
 	switch kind {
 	case "partition_key":
-		return metadata2.ColumnPartitionKey, nil
+		return metadata2.ColumnKindPartitionKey, nil
 	case "clustering_key", "clustering":
-		return metadata2.ColumnClusteringKey, nil
+		return metadata2.ColumnKindClusteringKey, nil
 	case "regular":
-		return metadata2.ColumnRegular, nil
+		return metadata2.ColumnKindRegular, nil
 	case "compact_value":
-		return metadata2.ColumnCompact, nil
+		return metadata2.ColumnKindCompact, nil
 	case "static":
-		return metadata2.ColumnStatic, nil
+		return metadata2.ColumnKindStatic, nil
 	default:
 		return metadata2.ColumnKindUnknown, fmt.Errorf("unknown column kind: %q", kind)
 	}
@@ -134,38 +134,22 @@ func compileMetadata(
 		keyspace.Tables[tables[i].Name] = &tables[i]
 	}
 	keyspace.Functions = make(map[string]*metadata2.Function, len(functions))
-	functionNames := make(map[string]int, len(functions))
-	for _, function := range functions {
-		functionNames[function.Name]++
-	}
 	for i := range functions {
-		key := functions[i].Name
-		if functionNames[key] > 1 {
-			key = v2FunctionIdentity(key, functions[i].ArgumentTypes)
-		}
-		keyspace.Functions[key] = &functions[i]
+		keyspace.Functions[v2FunctionIdentity(functions[i].Name, functions[i].ArgumentTypes)] = &functions[i]
 	}
 	keyspace.Aggregates = make(map[string]*metadata2.Aggregate, len(aggregates))
-	aggregateNames := make(map[string]int, len(aggregates))
-	for _, aggregate := range aggregates {
-		aggregateNames[aggregate.Name]++
-	}
 	for _, aggregate := range aggregates {
 		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalFinalFunc, []string{aggregate.StateType}); f != nil {
 			aggregate.FinalFunc = *f
-		} else if f := keyspace.Functions[AggregateMetadataData(&aggregate).InternalFinalFunc]; f != nil {
+		} else if f := uniqueV2Function(functions, AggregateMetadataData(&aggregate).InternalFinalFunc); f != nil {
 			aggregate.FinalFunc = *f
 		}
 		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
 			aggregate.StateFunc = *f
-		} else if f := keyspace.Functions[AggregateMetadataData(&aggregate).InternalStateFunc]; f != nil {
+		} else if f := uniqueV2Function(functions, AggregateMetadataData(&aggregate).InternalStateFunc); f != nil {
 			aggregate.StateFunc = *f
 		}
-		key := aggregate.Name
-		if aggregateNames[key] > 1 {
-			key = v2FunctionIdentity(key, aggregate.ArgumentTypes)
-		}
-		keyspace.Aggregates[key] = &aggregate
+		keyspace.Aggregates[v2FunctionIdentity(aggregate.Name, aggregate.ArgumentTypes)] = &aggregate
 	}
 	keyspace.Types = make(map[string]*metadata2.Type, len(types))
 	for i := range types {
@@ -327,18 +311,18 @@ func InternalCompileTableMetadata(
 
 func compileColumns(columns map[string]*metadata2.Column, orderedColumns []string) (
 	partitionKey, clusteringColumns []*metadata2.Column, sortedColumns []string) {
-	clusteringColumnCount := componentColumnCountOfType(columns, metadata2.ColumnClusteringKey)
+	clusteringColumnCount := componentColumnCountOfType(columns, metadata2.ColumnKindClusteringKey)
 	clusteringColumns = make([]*metadata2.Column, clusteringColumnCount)
 
-	partitionKeyCount := componentColumnCountOfType(columns, metadata2.ColumnPartitionKey)
+	partitionKeyCount := componentColumnCountOfType(columns, metadata2.ColumnKindPartitionKey)
 	partitionKey = make([]*metadata2.Column, partitionKeyCount)
 
 	var otherColumns []string
 	for _, columnName := range orderedColumns {
 		column := columns[columnName]
-		if column.Kind == metadata2.ColumnPartitionKey {
+		if column.Kind == metadata2.ColumnKindPartitionKey {
 			partitionKey[column.ComponentIndex] = column
-		} else if column.Kind == metadata2.ColumnClusteringKey {
+		} else if column.Kind == metadata2.ColumnKindClusteringKey {
 			clusteringColumns[column.ComponentIndex] = column
 		} else {
 			otherColumns = append(otherColumns, columnName)

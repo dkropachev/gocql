@@ -7,11 +7,12 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode"
 )
 
 // FieldTag is a struct field's parsed `cql` tag.
 type FieldTag struct {
-	Column string // column name; the lowercased field name when untagged
+	Column string // column name; the field name in snake_case when untagged
 	Codec  string // codec override: a built-in codec name, or (cqlgen only) a Go expression
 	Stream string // streaming decoder override, like Codec, for StreamRowOf
 }
@@ -34,7 +35,7 @@ func ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (Fiel
 	parts := splitTag(value)
 	result := FieldTag{Column: parts[0]}
 	if !tagged || result.Column == "" {
-		result.Column = strings.ToLower(fieldName)
+		result.Column = SnakeCase(fieldName)
 	}
 	for _, option := range parts[1:] {
 		key, val, _ := strings.Cut(option, "=")
@@ -48,6 +49,26 @@ func ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (Fiel
 		}
 	}
 	return result, true, nil
+}
+
+// SnakeCase returns a Go field name in snake_case, as gocqlx maps field
+// names: "CreatedAt" is created_at, "UserID" user_id and "HTTPServer"
+// http_server. An upper-case letter starts a new word after a lower-case
+// letter, or before one when it ends an acronym, and is lowered.
+func SnakeCase(name string) string {
+	runes := []rune(name)
+	var b strings.Builder
+	b.Grow(len(name) + 4)
+	for i, r := range runes {
+		if unicode.IsUpper(r) {
+			if i > 0 && runes[i-1] != '_' && (unicode.IsLower(runes[i-1]) || i+1 < len(runes) && unicode.IsLower(runes[i+1])) {
+				b.WriteByte('_')
+			}
+			r = unicode.ToLower(r)
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // splitTag splits a tag value at the commas outside brackets, so a codec

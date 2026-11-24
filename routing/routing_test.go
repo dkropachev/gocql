@@ -14,11 +14,11 @@ import (
 // TestWithoutSession runs where no session is linked: this package's test
 // binary leaves out the engine that implements the built-in policies.
 func TestWithoutSession(t *testing.T) {
-	p, err := routing.NewPolicy(routing.Options{TokenAware: true})
+	p, err := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.Validate(nil); err == nil {
+	if err := p.(routing.Validator).Validate(nil); err == nil {
 		t.Error("Validate succeeded without a session")
 	}
 	if _, ok := p.Pick(routing.Info{}, nil); ok {
@@ -27,7 +27,7 @@ func TestWithoutSession(t *testing.T) {
 	if _, ok := p.Fallback(routing.Info{}, nil).Next(); ok {
 		t.Error("Fallback found a route without a session")
 	}
-	p.Observe(routing.AttemptEvent{})
+	p.(routing.AttemptObserver).Observe(routing.AttemptEvent{})
 	if r := routing.HostRoutes(nil); r != nil {
 		t.Errorf("HostRoutes = %v", r)
 	}

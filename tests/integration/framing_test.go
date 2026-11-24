@@ -109,7 +109,7 @@ func TestFraming(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 			text := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890!@#$%^&*()_+"
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), cql.TextValue(text))
 			require.Equal(t, text, cassandraText(t, cassandraRead(t, session, fmt.Sprintf("SELECT text_col FROM %s WHERE id=?", table), cql.IntValue(1)), "text_col"))
 		})
 	})
@@ -189,7 +189,7 @@ func TestFraming(t *testing.T) {
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					session := createV2Session(t, func(c *config.ConfigBuilder) {
-						c.WithIgnoreEvents(event.Schema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
+						c.WithIgnoreEvents(event.KindSchema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 					})
 					defer session.Close()
 
@@ -221,7 +221,7 @@ func TestFraming(t *testing.T) {
 		// test_empty_sentinel_id_triggers_metadata_changed (scylladb/python-driver#770).
 		t.Run("ScyllaEmpty", func(t *testing.T) {
 			session := createV2Session(t, func(c *config.ConfigBuilder) {
-				c.WithIgnoreEvents(event.Schema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
+				c.WithIgnoreEvents(event.KindSchema).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false)
 			})
 			defer session.Close()
 			conn := getRandomConn(t, session)
@@ -280,7 +280,7 @@ func TestFraming(t *testing.T) {
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,text_col text)", table))
 		text := strings.Repeat("a", 500000)
-		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), codecTestMust(cql.TextValue(text)))
+		cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,text_col) VALUES(?,?)", table), cql.IntValue(1), cql.TextValue(text))
 		require.Equal(t, text, cassandraText(t, cassandraRead(t, session, "SELECT text_col FROM "+table), "text_col"))
 	})
 }

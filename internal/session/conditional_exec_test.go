@@ -56,7 +56,7 @@ func TestConditionalExecRejected(t *testing.T) {
 		} {
 			var batch Batch
 			for _, kind := range kinds {
-				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, model.EncodedValues{}); err != nil {
+				if err := batch.add(s, cqlText{}, "UPDATE t SET v=1", &routing.Info{Kind: kind}, false, model.EncodedValues{}); err != nil {
 					t.Fatal(err)
 				}
 			}

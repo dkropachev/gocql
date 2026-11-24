@@ -30,8 +30,8 @@ func assertPartitionKey(t *testing.T, keyspaceName, tableName string, actual, ex
 			if i != actual[i].ComponentIndex {
 				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].ComponentIndex to be %v but was %v", keyspaceName, tableName, i, i, actual[i].ComponentIndex)
 			}
-			if metadata.ColumnPartitionKey != actual[i].Kind {
-				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnPartitionKey, actual[i].Kind)
+			if metadata.ColumnKindPartitionKey != actual[i].Kind {
+				t.Errorf("Expected %s.Tables[%s].PartitionKey[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnKindPartitionKey, actual[i].Kind)
 			}
 		}
 	}
@@ -62,8 +62,8 @@ func assertClusteringColumns(t *testing.T, keyspaceName, tableName string, actua
 			if expected[i].ClusteringOrder != actual[i].ClusteringOrder {
 				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].ClusteringOrder to be %v but was %v", keyspaceName, tableName, i, expected[i].ClusteringOrder, actual[i].ClusteringOrder)
 			}
-			if metadata.ColumnClusteringKey != actual[i].Kind {
-				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnClusteringKey, actual[i].Kind)
+			if metadata.ColumnKindClusteringKey != actual[i].Kind {
+				t.Errorf("Expected %s.Tables[%s].ClusteringColumns[%d].Kind to be '%v' but was '%v'", keyspaceName, tableName, i, metadata.ColumnKindClusteringKey, actual[i].Kind)
 			}
 		}
 	}

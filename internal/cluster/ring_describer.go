@@ -60,7 +60,7 @@ func (r *InternalRingDescriber) getLocalHostInfo(ctx context.Context, conn trans
 	if err != nil {
 		return nil, fmt.Errorf("could not retrieve local host info: %w", err)
 	}
-	if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() || implEndpoint.InternalHostInfoInvalidConnectAddr(hosts[0]) {
+	if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsZero() || implEndpoint.InternalHostInfoInvalidConnectAddr(hosts[0]) {
 		return nil, cqltype.TypeValidation("local topology", "expected one valid local identity")
 	}
 	return hosts[0], nil
@@ -143,7 +143,7 @@ func getPeersFromQuerySystemPeers(querySystemPeerRows []map[string]any, defaultP
 // broadcast or preferred address) is not: HostInfo.ConnectAddress panics on
 // such a host.
 func isValidPeer(host *implEndpoint.HostInfo) bool {
-	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "" || implEndpoint.InternalHostInfoInvalidConnectAddr(host))
+	return !(len(host.RPCAddress()) == 0 || implEndpoint.HostInfoData(host).InternalHostId.IsZero() || implEndpoint.HostInfoData(host).InternalDataCenter == "" || implEndpoint.HostInfoData(host).InternalRack == "" || implEndpoint.InternalHostInfoInvalidConnectAddr(host))
 }
 
 func isZeroToken(host *implEndpoint.HostInfo) bool {

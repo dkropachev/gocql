@@ -22,7 +22,7 @@ func TestRunPageSize(t *testing.T) {
 	defer peers[0].Close()
 	requests := make(chan oneShotRequest, 4)
 	p := oneShotPrepare(t, s, peers[0], requests)
-	q := codecTestMust(p.Query(Options{PageSize: cql.Some[int32](25)}))
+	q := codecTestMust(p.Query(Options{PageSize: 25}))
 	defer q.Close()
 	for _, tc := range []struct {
 		name string

@@ -345,7 +345,7 @@ func (h *HostInfo) Rack() string {
 func (h *HostInfo) HostID() string {
 	h.privateStorage.InternalMu.RLock()
 	defer h.privateStorage.InternalMu.RUnlock()
-	if h.privateStorage.InternalHostId.IsEmpty() {
+	if h.privateStorage.InternalHostId.IsZero() {
 		return ""
 	}
 	return h.privateStorage.InternalHostId.String()
@@ -363,7 +363,7 @@ func InternalHostInfoHostUUID(h *HostInfo) cql.UUID {
 	h.privateStorage.InternalMu.RLock()
 	id := h.privateStorage.InternalHostId
 	h.privateStorage.InternalMu.RUnlock()
-	if !id.IsEmpty() {
+	if !id.IsZero() {
 		h.privateStorage.hostID.Store(&id)
 	}
 	return id
@@ -437,7 +437,7 @@ func InternalHostInfoUpdate(h *HostInfo, from *HostInfo) {
 			h.privateStorage.InternalTransportGeneration++
 		}
 	}()
-	if !h.privateStorage.InternalHostId.IsEmpty() && h.privateStorage.InternalHostId == from.privateStorage.InternalHostId {
+	if !h.privateStorage.InternalHostId.IsZero() && h.privateStorage.InternalHostId == from.privateStorage.InternalHostId {
 		h.privateStorage.InternalTokens = append([]string(nil), from.privateStorage.InternalTokens...)
 		h.privateStorage.InternalDataCenter, h.privateStorage.InternalRack = from.privateStorage.InternalDataCenter, from.privateStorage.InternalRack
 		h.privateStorage.InternalSchemaVersion = from.privateStorage.InternalSchemaVersion
@@ -479,7 +479,7 @@ func InternalHostInfoUpdate(h *HostInfo, from *HostInfo) {
 	if h.privateStorage.InternalRack == "" {
 		h.privateStorage.InternalRack = from.privateStorage.InternalRack
 	}
-	if h.privateStorage.InternalHostId.IsEmpty() {
+	if h.privateStorage.InternalHostId.IsZero() {
 		h.privateStorage.InternalHostId = from.privateStorage.InternalHostId
 	}
 	if h.privateStorage.InternalPartitioner == "" {

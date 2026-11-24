@@ -29,9 +29,9 @@ import (
 // into final caller storage. The largest fixed scalar scratch is 16 bytes.
 
 type streamScalarCodec[T any] struct {
-	decode           func(*StreamValueReader) (T, error)
-	kind             Type
-	minimum, maximum int64
+	decode            func(*StreamValueReader) (T, error)
+	kind, alternative Type
+	minimum, maximum  int64
 }
 type streamScalarPlan[T any] struct {
 	decode           func(*StreamValueReader) (T, error)
@@ -40,7 +40,7 @@ type streamScalarPlan[T any] struct {
 }
 
 func (c streamScalarCodec[T]) Compile(t DataType) (CompiledStreamValue[T], error) {
-	if err := checkScalarType(t, c.kind, 0); err != nil {
+	if err := checkScalarType(t, c.kind, c.alternative); err != nil {
 		return nil, err
 	}
 	return streamScalarPlan[T]{decode: c.decode, typ: t, minimum: c.minimum, maximum: c.maximum}, nil
@@ -84,6 +84,13 @@ func streamFixed[T any](kind Type, size int64, convert func([]byte) (T, error)) 
 		}
 		return convert(bytes)
 	}}
+}
+
+// streamCounter is StreamInt64, which also accepts counter.
+func streamCounter() StreamDecoder[int64] {
+	c := streamInteger[int64](TypeBigInt, 8).(streamScalarCodec[int64])
+	c.alternative = TypeCounter
+	return c
 }
 func streamInteger[T ~int8 | ~int16 | ~int32 | ~int64](kind Type, size int64) StreamDecoder[T] {
 	return streamFixed(kind, size, func(b []byte) (T, error) {
@@ -151,11 +158,8 @@ var (
 	// StreamInt32 decodes int into int32.
 	StreamInt32 = streamInteger[int32](TypeInt, 4)
 
-	// StreamInt64 decodes bigint into int64.
-	StreamInt64 = streamInteger[int64](TypeBigInt, 8)
-
-	// StreamCounter decodes counter into Counter.
-	StreamCounter = streamInteger[Counter](TypeCounter, 8)
+	// StreamInt64 decodes bigint and counter into int64.
+	StreamInt64 = streamCounter()
 
 	// StreamTimestamp decodes timestamp into Timestamp.
 	StreamTimestamp = streamInteger[Timestamp](TypeTimestamp, 8)
@@ -469,15 +473,13 @@ func (c streamDecimalCodec) Reset(dst *DecimalParts) {
 }
 func (c streamNullableCodec[T]) Reset(dst *Nullable[T]) {
 	if dst != nil {
-		resetStreamDeclaration(c.base, &dst.Value)
+		resetStream(c.base, &dst.Value)
 		dst.Valid = false
 	}
 }
-func (c streamNullableCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.base) }
 func (c streamEmptyCodec[T]) Reset(dst *MaybeEmpty[T]) {
 	if dst != nil {
-		resetStreamDeclaration(c.base, &dst.Value)
+		resetStream(c.base, &dst.Value)
 		dst.Empty = false
 	}
 }
-func (c streamEmptyCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.base) }

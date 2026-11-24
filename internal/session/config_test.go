@@ -120,8 +120,8 @@ func TestConfig(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			// A zero timeout option adds no limit, so the profile's stays.
-			if resolved.InternalProfile.Timeout != c.DefaultProfile.Timeout || resolved.InternalProfile.PageTimeout != 0 || resolved.InternalProfile.Prefetch != 0 || resolved.InternalProfile.SerialConsistency.Set || !resolved.InternalOptions.Timestamp.Set || !resolved.InternalOptions.NowInSeconds.Set {
+			// A set zero timeout option removes the profile's limit.
+			if resolved.InternalProfile.Timeout != 0 || resolved.InternalProfile.PageTimeout != 0 || resolved.InternalProfile.Prefetch != 0 || resolved.InternalProfile.SerialConsistency.Set || !resolved.InternalOptions.Timestamp.Set || !resolved.InternalOptions.NowInSeconds.Set {
 				t.Fatal(resolved)
 			}
 		})
@@ -186,7 +186,7 @@ func TestConfig(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			for _, include := range []bool{false, true, false} {
-				page := codecTestMust(RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{IncludeMetadata: include, PageSize: implCql.Some(implCql.Unpaged)})))
+				page := codecTestMust(RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{IncludeMetadata: include, PageSize: implCql.Unpaged})))
 				var row implCql.Bytes
 				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
 					t.Fatal(page.Err())
@@ -210,7 +210,7 @@ func TestConfig(t *testing.T) {
 			s, _, _ := runtimeTestSession(t, 0)
 			b := runtimeQuery(t)
 			defer b.Close()
-			if _, err := InternalCompileOptions(s, Options{PageSize: implCql.Some(implCql.Unpaged), Prefetch: implCql.Option[int]{Set: true, Value: 1}}); !hasErrorType[*settings.UnsupportedSettingError](err) {
+			if _, err := InternalCompileOptions(s, Options{PageSize: implCql.Unpaged, Prefetch: implCql.Option[int]{Set: true, Value: 1}}); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unpaged with prefetch", err)
 			}
 			_, err := RunPage(context.Background(), s, b, implCql.StartPage(), 0, testOptions(Options{Prefetch: implCql.Option[int]{Set: true, Value: 1}}))
@@ -223,7 +223,7 @@ func TestConfig(t *testing.T) {
 			}
 			// A BATCH response is a single page: paging options compiled for
 			// statements are ignored, so the batch fails only for lack of hosts.
-			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, implCql.EmptyRowDecoder, testOptions(Options{PageSize: implCql.Option[int32]{Set: true, Value: 1}}))
+			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, implCql.EmptyRowDecoder, testOptions(Options{PageSize: 1}))
 			if err == nil || hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("batch with a page size:", err)
 			}
@@ -234,7 +234,7 @@ func TestConfig(t *testing.T) {
 		t.Run("CurrentTypedProfile", func(t *testing.T) {
 			config := settings.DefaultConfig("127.0.0.1")
 			profile := *config.DefaultProfile
-			routing, err := implRouting.NewRoutingPolicy(routing.Options{TokenAware: true, Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}})
+			routing, err := implRouting.NewRoutingPolicy(routing.Options{Datacenter: "dc", Rack: "rack", AllowRemote: true, Latency: routing.LatencyOptions{Enabled: true}, FixedReplicaOrder: true, NoLeaderAware: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -325,8 +325,8 @@ func TestConfig(t *testing.T) {
 			defer peer.Close()
 			wrapped := &socketOptions{TCPConn: raw.(*net.TCPConn)}
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = implCql.Option[int]{Set: true, Value: 4096}
-			config.SendBuffer = implCql.Option[int]{Set: true, Value: 8192}
+			config.ReceiveBuffer = 4096
+			config.SendBuffer = 8192
 			config.Linger = implCql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 			config.SocketKeepalive = 7 * time.Second
 			if err := applyV2SocketOptions(wrapped, config, "tcp"); err != nil {
@@ -335,15 +335,15 @@ func TestConfig(t *testing.T) {
 			if wrapped.read != 4096 || wrapped.write != 8192 || wrapped.linger != 2 || wrapped.period != 7*time.Second {
 				t.Fatal("socket settings were not applied", wrapped)
 			}
+			// Zero buffers keep the OS's sizes; a chosen zero linger is set.
 			zero := config
-			zero.ReceiveBuffer = implCql.Option[int]{Set: true}
-			zero.SendBuffer = implCql.Option[int]{Set: true}
+			zero.ReceiveBuffer, zero.SendBuffer = 0, 0
 			zero.Linger = implCql.Option[time.Duration]{Set: true}
 			if err := applyV2SocketOptions(wrapped, zero, "tcp"); err != nil {
 				t.Fatal(err)
 			}
-			if wrapped.read != 0 || wrapped.write != 0 || wrapped.linger != 0 || wrapped.readCalls != 2 || wrapped.writeCalls != 2 || wrapped.lingerCalls != 2 {
-				t.Fatal("explicit zero socket settings were omitted", wrapped)
+			if wrapped.read != 4096 || wrapped.write != 8192 || wrapped.linger != 0 || wrapped.readCalls != 1 || wrapped.writeCalls != 1 || wrapped.lingerCalls != 2 {
+				t.Fatal("zero buffers were applied or the zero linger was omitted", wrapped)
 			}
 			// Pipe has no TCP preflight controls, so each requested option reaches its
 			// own unsupported-setting branch rather than failing earlier at NODELAY.
@@ -372,7 +372,7 @@ func TestConfig(t *testing.T) {
 			defer a.Close()
 			defer b.Close()
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = implCql.Option[int]{Value: 4096, Set: true}
+			config.ReceiveBuffer = 4096
 			if err := applyV2SocketOptions(a, config, "tcp"); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unsupported backend setting", err)
 			}
@@ -450,7 +450,7 @@ func TestConfig(t *testing.T) {
 			explicit := runtimeQuery(t)
 			values := options.Values()
 			values.Timestamp = implCql.Option[int64]{Set: true, Value: 0}
-			values.PageSize = implCql.Some(implCql.Unpaged)
+			values.PageSize = implCql.Unpaged
 			opts := testOptions(values)
 			page := codecTestMust(RunPage(ctx, s, explicit, implCql.StartPage(), 0, opts))
 			if err := page.Close(); err != nil {
@@ -462,7 +462,7 @@ func TestConfig(t *testing.T) {
 			}
 			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
 			unpaged := options.Values()
-			unpaged.PageSize = implCql.Some(implCql.Unpaged)
+			unpaged.PageSize = implCql.Unpaged
 			page = codecTestMust(RunPage(ctx, s, conditional, implCql.StartPage(), 0, testOptions(unpaged)))
 			if err := page.Close(); err != nil {
 				t.Fatal(err)

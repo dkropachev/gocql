@@ -4,6 +4,8 @@
 package cqlerr
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"testing"
 )
@@ -29,5 +31,21 @@ func TestIsCASWriteUnknown(t *testing.T) {
 		if tc.want && ExecutionStatusOf(tc.err) != MaybeExecuted {
 			t.Errorf("%v: status %v, want MaybeExecuted", tc.err, ExecutionStatusOf(tc.err))
 		}
+	}
+}
+
+// An ExecutionError wraps only its cause, so IsCASWriteUnknown looks at every
+// attempt: an LWT timeout the caller's cancellation ended is still reported.
+func TestIsCASWriteUnknownInAttempts(t *testing.T) {
+	timeout := &WriteTimeoutError{WriteType: WriteTypeCAS}
+	err := NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: timeout, Number: 1})
+	if errors.Is(err, CodeWriteTimeout) {
+		t.Fatal("ExecutionError unwraps an earlier attempt")
+	}
+	if !IsCASWriteUnknown(err) || !IsCASWriteUnknown(fmt.Errorf("wrapped: %w", err)) {
+		t.Fatal("CAS timeout of an earlier attempt not reported")
+	}
+	if IsCASWriteUnknown(NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: &WriteTimeoutError{WriteType: WriteTypeSimple}})) {
+		t.Fatal("a simple write timeout reported as CAS")
 	}
 }

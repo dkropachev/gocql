@@ -5,6 +5,7 @@ package session
 
 import (
 	"context"
+	"iter"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -51,6 +52,11 @@ func (b *Batch) casTallyFor[X any](r *batchRows[cql.CASResult[X]]) *casTally[X] 
 type CASBatchRows[X any] struct {
 	tally *casTally[X]
 	rows  Rows[cql.CASResult[X]]
+}
+
+// All iterates the remaining rows as Rows.All does.
+func (r CASBatchRows[X]) All(dst *cql.CASResult[X]) iter.Seq2[*cql.CASResult[X], error] {
+	return allRows(dst, r.NextInto, r.Close)
 }
 
 // NextInto decodes the next row into dst and reports whether there was one.

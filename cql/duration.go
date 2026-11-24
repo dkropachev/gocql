@@ -24,6 +24,12 @@
 
 package cql
 
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
+
 // Duration is a CQL duration: months, days and nanoseconds, which the server
 // keeps apart. The zero Duration has zero length.
 type Duration struct {
@@ -35,10 +41,42 @@ type Duration struct {
 	Nanoseconds int64
 }
 
-// Counter is a CQL counter, distinct from a bigint.
-type Counter int64
-
 // TimeUUID is a version 1 UUID with canonical string, JSON and text forms.
 // String can format zero for diagnostics; JSON/text serialization, checked
 // parsing and CQL binding reject zero and other non-v1 values.
 type TimeUUID UUID
+
+// String returns the duration in CQL's unit form, such as "1y2mo3d4h5m6s7ms",
+// with a leading "-" for a negative duration and "0s" for zero. Components
+// with mixed signs, which the server rejects, print as {months days ns}.
+func (d Duration) String() string {
+	if !durationSignsValid(d) {
+		return fmt.Sprintf("{%d %d %d}", d.Months, d.Days, d.Nanoseconds)
+	}
+	if d == (Duration{}) {
+		return "0s"
+	}
+	var b strings.Builder
+	months, days, nanos := uint64(d.Months), uint64(d.Days), uint64(d.Nanoseconds)
+	if d.Months < 0 || d.Days < 0 || d.Nanoseconds < 0 {
+		b.WriteByte('-')
+		months, days, nanos = uint64(-int64(d.Months)), uint64(-int64(d.Days)), -nanos
+	}
+	unit := func(n uint64, name string) {
+		if n != 0 {
+			b.WriteString(strconv.FormatUint(n, 10))
+			b.WriteString(name)
+		}
+	}
+	unit(months/12, "y")
+	unit(months%12, "mo")
+	unit(days, "d")
+	for _, u := range [...]struct {
+		name string
+		size uint64
+	}{{"h", 3600e9}, {"m", 60e9}, {"s", 1e9}, {"ms", 1e6}, {"us", 1e3}, {"ns", 1}} {
+		unit(nanos/u.size, u.name)
+		nanos %= u.size
+	}
+	return b.String()
+}

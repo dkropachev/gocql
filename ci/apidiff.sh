@@ -71,6 +71,7 @@ write)
 	rm -rf "$BASELINE_DIR"
 	mkdir -p "$BASELINE_DIR"
 	public_packages | while read -r name path; do
+		mkdir -p "$(dirname "${BASELINE_DIR}/${name}.api")"
 		(cd "$NEUTRAL_ROOT" && GOMODCACHE="$NEUTRAL_MODCACHE" \
 			apidiff -w "${ROOT}/${BASELINE_DIR}/${name}.api" "$path")
 	done
@@ -97,13 +98,14 @@ check)
 			failed=1
 		fi
 	done < <(public_packages)
-	for baseline in "$BASELINE_DIR"/*.api; do
-		name="$(basename "$baseline" .api)"
+	while read -r baseline; do
+		name="${baseline#"$BASELINE_DIR"/}"
+		name="${name%.api}"
 		if [[ "$listed" != *" ${name} "* ]]; then
 			echo "${name}: package removed from the public API"
 			failed=1
 		fi
-	done
+	done < <(find "$BASELINE_DIR" -name '*.api' | sort)
 	if [ "$failed" -ne 0 ]; then
 		exit 1
 	fi

@@ -35,11 +35,7 @@ func testNamespace(t *testing.T, cfg config.Config, namespace string, wantPresen
 	if err := s.AwaitSchemaAgreement(ctx); err != nil {
 		t.Fatal("namespace observation schema agreement", err)
 	}
-	value, err := cql.TextValue(namespace)
-	if err != nil {
-		t.Fatal(err)
-	}
-	rows, err := v2Query(ctx, s, "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", value)
+	rows, err := v2Query(ctx, s, "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", cql.TextValue(namespace))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -142,7 +138,7 @@ func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
+	if e.Host.HostID.IsZero() || (len(p.hosts) > 0 && p.hosts[0].HostID != e.Host.HostID) {
 		panic("reset lost host identity")
 	}
 	p.resets++

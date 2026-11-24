@@ -295,8 +295,9 @@ func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.R
 // Type returns the cell's type.
 func (r ValueReader) Type() DataType { return r.typ }
 
-// State returns the cell's state. A zero-length cell read from a response is
-// Present with an empty body.
+// State returns the cell's state: Present or Null. An empty value is
+// Present with an empty body, as the response holds it; a decoder never sees
+// EmptyCell.
 func (r ValueReader) State() CellState { return r.state }
 
 // Bytes returns the cell's body, a view with the lifetime of the response it

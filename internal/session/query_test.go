@@ -1056,10 +1056,10 @@ func TestQuery(t *testing.T) {
 			if !errors.Is(first.Err(), ErrStaleRows) {
 				t.Fatal("stale handle error", first.Err())
 			}
-			if _, err := first.Clone(); !errors.Is(err, cqlerr.ErrNoRows) {
+			if _, err := first.Clone(); !errors.Is(err, cqlerr.ErrNoCurrentRow) {
 				t.Fatal("stale handle cloned a row", err)
 			}
-			if _, err := first.Retain(); !errors.Is(err, cqlerr.ErrNoRows) {
+			if _, err := first.Retain(); !errors.Is(err, cqlerr.ErrNoCurrentRow) {
 				t.Fatal("stale handle retained a page", err)
 			}
 			if first.Columns().Len() != 0 || first.Info().Attempts != 0 {

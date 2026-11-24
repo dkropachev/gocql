@@ -171,11 +171,9 @@ func TestScalar(t *testing.T) {
 		if err != nil || len(frame) != 4 {
 			t.Fatal("empty encoding incorrect")
 		}
-		for _, state := range []CellState{Present, EmptyCell} {
-			v, err := wrapped.Decode(ScalarReader(t, TypeInt, state))
-			if err != nil || !v.Empty {
-				t.Fatal("empty decoding incorrect")
-			}
+		// A decoder sees an empty value as a response holds it.
+		if v, err := wrapped.Decode(ScalarReader(t, TypeInt, Present)); err != nil || !v.Empty {
+			t.Fatal("empty decoding incorrect")
 		}
 		for _, kind := range []Type{TypeText, TypeASCII, TypeVarchar, TypeBlob, TypeCounter, TypeDuration} {
 			if emptySupported(scalarType(t, kind)) {
@@ -191,11 +189,7 @@ func TestScalar(t *testing.T) {
 	})
 	t.Run("CalendarBoundaries", func(t *testing.T) {
 		for _, d := range []Date{math.MinInt32, -1, 0, 1, math.MaxInt32} {
-			calendar, err := d.Time()
-			if err != nil {
-				t.Fatal(err)
-			}
-			actual, err := DateFromTime(calendar)
+			actual, err := DateFromTime(d.Time())
 			if err != nil || actual != d {
 				t.Fatalf("date %d roundtrip: %d %v", d, actual, err)
 			}
@@ -209,11 +203,7 @@ func TestScalar(t *testing.T) {
 			t.Fatal("accepted out-of-range calendar date")
 		}
 		for _, ms := range []Timestamp{math.MinInt64, -1001, -1000, -1, 0, 1, math.MaxInt64} {
-			calendar, err := ms.Time()
-			if err != nil {
-				t.Fatal(err)
-			}
-			actual, err := TimestampFromTime(calendar)
+			actual, err := TimestampFromTime(ms.Time())
 			if err != nil || actual != ms {
 				t.Fatalf("timestamp %d roundtrip: %d %v", ms, actual, err)
 			}
@@ -227,8 +217,7 @@ func TestScalar(t *testing.T) {
 				t.Fatalf("timestamp floor: %d %v", actual, err)
 			}
 		}
-		minTime, _ := Timestamp(math.MinInt64).Time()
-		maxTime, _ := Timestamp(math.MaxInt64).Time()
+		minTime, maxTime := Timestamp(math.MinInt64).Time(), Timestamp(math.MaxInt64).Time()
 		for _, calendar := range []time.Time{minTime.Add(-time.Millisecond), maxTime.Add(time.Millisecond)} {
 			if _, err := TimestampFromTime(calendar); err == nil {
 				t.Fatal("timestamp overflow accepted")
@@ -360,7 +349,7 @@ func TestScalar(t *testing.T) {
 			scalarGolden(t, Int64Codec, TypeBigInt, int64(math.MinInt64), "8000000000000000")
 		})
 		t.Run("counter", func(t *testing.T) {
-			scalarGolden(t, CounterCodec, TypeCounter, Counter(-42), "ffffffffffffffd6")
+			scalarGolden(t, Int64Codec, TypeCounter, int64(-42), "ffffffffffffffd6")
 		})
 		t.Run("float", func(t *testing.T) { scalarGolden(t, Float32Codec, TypeFloat, float32(1.5), "3fc00000") })
 		t.Run("double", func(t *testing.T) { scalarGolden(t, Float64Codec, TypeDouble, -2.5, "c004000000000000") })
@@ -404,7 +393,7 @@ func TestScalar(t *testing.T) {
 		scalarRejectLengths(t, Int64Codec, TypeBigInt, 8)
 		scalarRejectLengths(t, Float32Codec, TypeFloat, 4)
 		scalarRejectLengths(t, Float64Codec, TypeDouble, 8)
-		scalarRejectLengths(t, CounterCodec, TypeCounter, 8)
+		scalarRejectLengths(t, Int64Codec, TypeCounter, 8)
 		scalarRejectLengths(t, DateCodec, TypeDate, 4)
 		scalarRejectLengths(t, TimeCodec, TypeTime, 8)
 		scalarRejectLengths(t, TimestampCodec, TypeTimestamp, 8)

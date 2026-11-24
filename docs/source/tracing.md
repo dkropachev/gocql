@@ -62,11 +62,19 @@ Each start returns the function the driver calls when that request or
 attempt finishes. The driver looks the hooks up once, when the observer is
 installed, and skips the call and its event for a hook the observer does
 not implement, so an observer that only needs attempts builds no request
-events. An observer
-that implements no hook is rejected. Later releases add hooks as new
-interfaces, so an existing observer keeps compiling. Set the observer for the
-session with `config.ConfigBuilder.WithObserver`, or per execution with
-`exec.Options.Observer`.
+events. An observer that implements no hook is rejected. Later releases add
+hooks as new interfaces, so an existing observer keeps compiling.
+`observe.RequestObserverFunc` and `observe.AttemptObserverFunc` make an
+observer from a function.
+
+Set the observer for the session with `config.ConfigBuilder.WithObserver`, or
+per execution with `exec.Options.Observer`, which replaces the session's. To
+run several observers, such as a tracer and a metrics exporter, combine them
+with `observe.Join`: it calls each observer's hooks in order, passes each
+`StartRequest` the context the one before returned, and keeps a panic in one
+from skipping the others. To add an observer to the session's for one
+execution, set `exec.Options.Observer` to `observe.Join(sessionObserver,
+extra)`.
 
 Attempt hooks usually run on the goroutine that called the execution, the
 start hook before each attempt and its end function after it, so an observer
