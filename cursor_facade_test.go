@@ -139,6 +139,9 @@ func TestCASBatchRows(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	if batch.Len() != 2 || batch.Size() == 0 {
+		t.Fatalf("batch of 2 members: Len %d, Size %d", batch.Len(), batch.Size())
+	}
 	rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BlobCodec)))
 	if err != nil {
 		t.Fatal(err)

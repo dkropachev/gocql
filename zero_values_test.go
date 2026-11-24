@@ -208,8 +208,8 @@ func TestZeroValuesRejected(t *testing.T) {
 // TestZeroValuesUsable checks the zero values documented as usable.
 func TestZeroValuesUsable(t *testing.T) {
 	var batch gocql.Batch
-	if batch.Kind != cql.LoggedBatch || batch.Len() != 0 {
-		t.Errorf("zero Batch: kind %v, %d statements", batch.Kind, batch.Len())
+	if batch.Kind != cql.LoggedBatch || batch.Len() != 0 || batch.Size() != 0 {
+		t.Errorf("zero Batch: kind %v, %d statements, %d bytes", batch.Kind, batch.Len(), batch.Size())
 	}
 	batch.Reset()
 	if zero := (cql.PageState{}); zero.Complete() || zero.More() || zero.Token() != nil {
