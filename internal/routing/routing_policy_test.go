@@ -23,7 +23,7 @@ func TestRoutingPolicy(t *testing.T) {
 			if err := policy.Validate(m); err != nil {
 				t.Fatal(err)
 			}
-			info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Conditional: true}
+			info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true, Value: 1}, Kind: cql.ConditionalStatement}
 			a, b := NewPlan(policy, info, m), NewPlan(policy, info, m)
 			want := []byte{1, 2, 3, 4}
 			if got := v2PlanIDs(a); !bytes.Equal(got, want) {
@@ -33,7 +33,7 @@ func TestRoutingPolicy(t *testing.T) {
 				t.Fatalf("second plan=%v", got)
 			}
 			for i := 0; i < 20; i++ {
-				info.Conditional = false
+				info.Kind = cql.OrdinaryStatement
 				info.Consistency = cql.Serial
 				if got := v2PlanIDs(NewPlan(policy, info, m)); !bytes.Equal(got, want) {
 					t.Fatal("SERIAL order changed", got)
@@ -214,7 +214,7 @@ func TestRoutingPolicy(t *testing.T) {
 				t.Fatalf("fallback %v, want [1 2 4]", hosts)
 			}
 			conditional := info
-			conditional.Conditional = true
+			conditional.Kind = cql.ConditionalStatement
 			if _, ok := p.Pick(conditional, m); ok {
 				t.Fatal("Pick routed a conditional request, which keeps replica order")
 			}

@@ -41,8 +41,8 @@ func (p *sameHostSafe) Decide(a retry.Attempt) retry.Decision {
 // TestBatchRejectedAfterPartialApply checks that an unlogged or counter
 // batch rejected as Unavailable or Overloaded reports MaybeExecuted and that
 // retry.Safe does not replay it, while a logged batch is replayed. The rule
-// does not depend on the members' kind: a member of unknown kind marks the
-// attempt conditional, and the outcome stays the same.
+// does not depend on the members' kind: a member of unknown kind makes the
+// attempt's Kind UnknownStatement, and the outcome stays the same.
 func TestBatchRejectedAfterPartialApply(t *testing.T) {
 	for _, kind := range []cql.BatchKind{cql.LoggedBatch, cql.UnloggedBatch, cql.CounterBatch} {
 		for _, code := range []cqlerr.ErrorCode{cqlerr.CodeUnavailable, cqlerr.CodeOverloaded} {
@@ -104,8 +104,8 @@ func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, 
 	if a.Batch != cql.Some(kind) {
 		t.Errorf("Attempt.Batch = %+v, want %v", a.Batch, kind)
 	}
-	if a.Conditional != (member != cql.OrdinaryStatement) {
-		t.Errorf("Attempt.Conditional = %t for a member of kind %v", a.Conditional, member)
+	if a.Kind != member {
+		t.Errorf("Attempt.Kind = %v for a member of kind %v", a.Kind, member)
 	}
 	if !partial {
 		if err != nil || len(policy.attempts) != 1 || a.ExecutionStatus != cqlerr.NotExecuted {

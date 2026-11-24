@@ -211,8 +211,8 @@ func TestHostConnPool(t *testing.T) {
 			// scheduling/backoff state machine active.
 			pool.InternalConnPicker = &implPool.InternalDefaultConnPicker{InternalSize: 0}
 			pool.InternalScheduleTypedRepair()
-			if attempt := <-policy.calls; attempt != 0 {
-				t.Fatal(attempt)
+			if attempt := <-policy.calls; attempt != 1 {
+				t.Fatal("first repair attempt", attempt)
 			}
 			deadline := time.After(time.Second)
 			for {
@@ -231,7 +231,7 @@ func TestHostConnPool(t *testing.T) {
 			}
 			policy.again = false
 			pool.InternalScheduleTypedRepair()
-			if attempt := <-policy.calls; attempt != 1 {
+			if attempt := <-policy.calls; attempt != 2 {
 				t.Fatal("repair attempt not advanced", attempt)
 			}
 			pool.Close()
@@ -337,13 +337,13 @@ func TestHostConnPool(t *testing.T) {
 			_ = p.Put(a)
 			_ = p.Put(b)
 			a.InternalSetExclusive(true)
-			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{}); got != b {
+			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != b {
 				t.Fatal("advisory hint could not use free capacity")
 			}
-			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{}); got != a {
+			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != a {
 				t.Fatal("strict target relaxed while reserved")
 			}
-			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: math.MaxUint32, Set: true}}, routing2.Info{}); got != nil {
+			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: math.MaxUint32, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != nil {
 				t.Fatal("invalid strict target relaxed")
 			}
 		})
@@ -366,7 +366,7 @@ func TestHostConnPool(t *testing.T) {
 			p.Put(first)
 			p.Put(second)
 			first.InternalSetExclusive(true)
-			routing := routing2.Info{Token: implCql.Option[int64]{Value: math.MinInt64, Set: true}}
+			routing := routing2.Info{Token: implCql.Option[int64]{Value: math.MinInt64, Set: true}, Kind: implCql.OrdinaryStatement}
 			if got := p.InternalPickTarget(metadata.Target{}, routing); got != second {
 				t.Fatal("non-strict selection waited despite idle eligible connection")
 			}

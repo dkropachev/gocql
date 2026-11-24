@@ -467,11 +467,11 @@ func TestValue(t *testing.T) {
 				encode func(*ValueWriter) error
 			}{
 				{"payload-null", func(w *ValueWriter) error { _ = w.BorrowBytes(nil); return w.Null() }},
-				{"null-payload", func(w *ValueWriter) error { _ = w.Null(); return w.BorrowString("") }},
+				{"null-payload", func(w *ValueWriter) error { _ = w.Null(); return w.BorrowText("") }},
 				{"double-null", func(w *ValueWriter) error { _ = w.Null(); return w.Null() }},
 				{"nested-unset", func(w *ValueWriter) error { return w.Child(typ, func(c *ValueWriter) error { return c.Unset() }) }},
 				{"child-error", func(w *ValueWriter) error {
-					return w.Child(typ, func(c *ValueWriter) error { _ = c.BorrowString("partial"); return fmt.Errorf("custom failure") })
+					return w.Child(typ, func(c *ValueWriter) error { _ = c.BorrowText("partial"); return fmt.Errorf("custom failure") })
 				}},
 			} {
 				t.Run(test.name, func(t *testing.T) {
@@ -515,7 +515,7 @@ func TestValue(t *testing.T) {
 			if err := w.Uint16(0x1234); err != nil {
 				t.Fatal(err)
 			}
-			if err := w.Child(typ, func(c *ValueWriter) error { return c.BorrowString("abc") }); err != nil {
+			if err := w.Child(typ, func(c *ValueWriter) error { return c.BorrowText("abc") }); err != nil {
 				t.Fatal(err)
 			}
 			if err := w.Uint64(0x123456789abcdef0); err != nil {

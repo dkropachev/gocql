@@ -64,7 +64,7 @@ v2.1; it can only be removed in v3.
 | `Dialect`, `ScyllaV4`, `CassandraV4`, `CassandraV5` | Moved here from `gocql` (decision 8). |
 | `NewProfile`, `ProfileBuilder`, `Profile` | Keep. `Profile` fields are read by `exec.Options.Profile`. |
 | `NewClientRoutes`, `ClientRoutesBuilder`, `ClientRoutes`, `ClientRoute` | Keep. |
-| `NewTLSFiles`, `TLSFiles`, `TLSFileSource` | Keep. |
+| `NewTLSFileSource`, `TLSFiles`, `TLSFileSource` | Keep. |
 
 ## `cql`
 
@@ -206,6 +206,22 @@ A fourth pass found these. Each changes a public symbol, so it lands before
 
 Built-in `retry.SpeculationPolicy` and `endpoint.ReconnectPolicy`
 implementations are additions, left for v2.1.
+
+## Fifth review pass (2026-11-24)
+
+A fifth pass found these. Each changes a public symbol or a documented
+contract, so it lands before `v2.0.0-rc.1`.
+
+| Finding | Outcome |
+|---|---|
+| `gocql.PreparedInfo.Conditional` was documented as the server's lightweight transaction flag but was `Kind == ConditionalStatement`, true for a statement only declared conditional; `routing.Info.Conditional` was `Kind != OrdinaryStatement`; `retry.Attempt.Conditional` copied the routing value but was documented as "a lightweight transaction". One name, two meanings, both derived from `Kind` | `PreparedInfo.Conditional` and `routing.Info.Conditional` removed; `PreparedInfo.Kind` documents how the server's flag folds into it. `retry.Attempt.Conditional` is `retry.Attempt.Kind`, a `cql.StatementKind`, so a policy can tell an unclassified statement from a conditional one. |
+| `endpoint.ReconnectPolicy.Delay(attempt)` did not say where `attempt` starts; the driver counted from 0 while every other attempt number in the API counts from 1. The session also called `Delay(0)` while connecting only to reject a negative delay, so a stateful or jittered policy saw an extra call | `attempt` counts from 1, from the node's last successful connection; the default backoff is unchanged. The probe is gone: a negative delay stops reconnection and is logged where it is used. The doc lists every call the driver makes. |
+| `cqlerr.HostError`'s doc called its zero value "an error", but the type has no `Error` method | Doc fixed. |
+| `metadata.Mode`'s values were `SchemaNone`, `SchemaKeyspaces` and `SchemaFull` | `ModeNone`, `ModeKeyspaces` and `ModeFull`, like the fourth pass's `observe.KindSession`. |
+| `config.NewTLSFiles` returned a `*config.TLSFileSource` | Renamed `NewTLSFileSource`. |
+| `cql.ValueWriter.BorrowString` beside `cql.BorrowText` | Renamed `BorrowText`. |
+| `cql.BatchKind` was declared `byte`; every other enum is `uint8` | `uint8`; the same type to the compiler. |
+| `cql.UUID.UnmarshalText(text []byte) (err error)` beside `cql.TimeUUID.UnmarshalText(data []byte) error` | Spelled as on `TimeUUID`; behaviour unchanged. |
 
 ## Decisions
 

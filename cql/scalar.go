@@ -472,7 +472,7 @@ func (c stringCodec) Encode(w *ValueWriter, v string) error {
 	} else if !utf8.ValidString(v) {
 		return errors.New("gocql: invalid UTF-8")
 	}
-	return w.BorrowString(v)
+	return w.BorrowText(v)
 }
 
 // Decode copies the text value into a new string.

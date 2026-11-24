@@ -16,8 +16,8 @@ import (
 )
 
 // Reload the client certificate and CA from files while sessions run.
-func ExampleNewTLSFiles() {
-	files, err := config.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
+func ExampleNewTLSFileSource() {
+	files, err := config.NewTLSFileSource(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
 		CertFile: "/etc/scylla-client/tls.crt",
 		KeyFile:  "/etc/scylla-client/tls.key",
 		CAFile:   "/etc/scylla-client/ca.crt",

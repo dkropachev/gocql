@@ -72,7 +72,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	}
 	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
 	if config.Reconnect != nil {
-		if delay, _ := config.Reconnect.Delay(0); delay < 0 {
+		if delay, _ := config.Reconnect.Delay(1); delay < 0 {
 			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
 		}
 	}

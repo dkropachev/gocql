@@ -81,7 +81,9 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 			policy := codecTestMust(implRouting.NewRoutingPolicy(test.options))
 			for _, c := range test.consistency {
 				i := info(c)
-				i.Conditional = test.conditional
+				if test.conditional {
+					i.Kind = cql.ConditionalStatement
+				}
 				// Repeat: shuffled replicas must not move the leader.
 				for range 32 {
 					plan := implRouting.NewPlan(policy, i, m)

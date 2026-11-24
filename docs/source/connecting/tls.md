@@ -35,7 +35,7 @@ instead of falling back to plaintext.
 `config.TLSFileSource` reloads the client certificate, key and CA from PEM files:
 
 ```go
-files, err := config.NewTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
+files, err := config.NewTLSFileSource(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
 	CertFile: "/etc/scylla-client/tls.crt",
 	KeyFile:  "/etc/scylla-client/tls.key",
 	CAFile:   "/etc/scylla-client/ca.crt",
@@ -44,7 +44,7 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLSSource(files).Build()
 ```
 
 The files replace `Certificates` and `RootCAs` of the base config, or of TLS
-1.2+ defaults when the base is nil. `NewTLSFiles` fails if they cannot be
+1.2+ defaults when the base is nil. `NewTLSFileSource` fails if they cannot be
 loaded. The source runs no goroutine: a dial checks the files when `Interval`
 (one minute by default) has passed since the last check, and compares their
 content, so Kubernetes secret volumes that swap a symlink are seen. A check that

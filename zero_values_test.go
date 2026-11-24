@@ -132,8 +132,8 @@ func TestZeroValuesRejected(t *testing.T) {
 	requireValidation(t, "zero ProfileBuilder.Build", err)
 	_, err = config.New(config.ScyllaV4, "127.0.0.1").WithDefaultProfile(config.Profile{}).Build()
 	requireValidation(t, "WithDefaultProfile(zero Profile)", err)
-	_, err = config.NewTLSFiles(nil, config.TLSFiles{})
-	requireValidation(t, "NewTLSFiles(zero TLSFiles)", err)
+	_, err = config.NewTLSFileSource(nil, config.TLSFiles{})
+	requireValidation(t, "NewTLSFileSource(zero TLSFiles)", err)
 
 	var source config.TLSFileSource
 	if source.TLSConfig() != nil {

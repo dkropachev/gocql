@@ -136,9 +136,7 @@ func (b *Batch) begin() *batchState {
 
 // request returns the batch's request routing.
 func (b *Batch) requestRouting() routing.Info {
-	routing := b.routing
-	routing.Conditional = routing.Kind != cql.OrdinaryStatement
-	return routing
+	return b.routing
 }
 
 // validate checks that batch can be sent on s. A BATCH response is one page

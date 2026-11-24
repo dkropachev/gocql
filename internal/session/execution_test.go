@@ -199,7 +199,7 @@ func TestExecution(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if b.Routing().Kind != kind || b.Routing().Conditional != (kind != implCql.OrdinaryStatement) {
+					if b.Routing().Kind != kind {
 						t.Fatal(cql, b.Routing())
 					}
 					b.Close()
@@ -854,7 +854,6 @@ func TestExecution(t *testing.T) {
 					}()
 					b := runtimeQuery(t)
 					BoundData(b).InternalRequest.routing.Kind = kind
-					BoundData(b).InternalRequest.routing.Conditional = kind != implCql.OrdinaryStatement
 					result := make(chan error, 1)
 					go func() {
 						page, err := RunPage(context.Background(), s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))

@@ -78,7 +78,7 @@ func connectReport(t *testing.T, edit func(*settings.Config)) string {
 	})
 	resolved := settings.DefaultConfig(srv.Address)
 	edit(&resolved)
-	resolved.Metadata.Mode = metadata.SchemaNone
+	resolved.Metadata.Mode = metadata.ModeNone
 	resolved.Metadata.InitialDiscovery = false
 	resolved.Logger = logging.Nop()
 	resolved.Protocol = 4

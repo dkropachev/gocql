@@ -23,7 +23,7 @@ import (
 func TestKeyspaceToCQLTablets(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	cfg := createV2Cluster(func(b *config.ConfigBuilder) { b.WithMetadataMode(metadata.SchemaKeyspaces) })
+	cfg := createV2Cluster(func(b *config.ConfigBuilder) { b.WithMetadataMode(metadata.ModeKeyspaces) })
 	s, err := gocql.Connect(ctx, mustBuild(t, cfg))
 	if err != nil {
 		t.Fatal(err)

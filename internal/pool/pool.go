@@ -284,10 +284,10 @@ func (p *InternalTypedConnPicker) Pick(t implEndpoint.Token) *transport.Conn {
 	if raw, ok := t.(implEndpoint.InternalInt64Token); ok {
 		return p.PickInt64(int64(raw))
 	}
-	return p.InternalPickTarget(metadata.Target{}, routing.Info{})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{Kind: cql.OrdinaryStatement})
 }
 func (p *InternalTypedConnPicker) PickInt64(t int64) *transport.Conn {
-	return p.InternalPickTarget(metadata.Target{}, routing.Info{Token: cql.Option[int64]{Value: t, Set: true}})
+	return p.InternalPickTarget(metadata.Target{}, routing.Info{Token: cql.Option[int64]{Value: t, Set: true}, Kind: cql.OrdinaryStatement})
 }
 func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, routing routing.Info) *transport.Conn {
 	p.InternalMu.RLock()
@@ -303,7 +303,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, rou
 	if requested.Set {
 		if uint64(requested.Value) < uint64(len(p.InternalConns)) {
 			shard = int(requested.Value)
-		} else if target.StrictShard || routing.ShardID.Set || routing.Conditional {
+		} else if target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement {
 			return nil
 		}
 	} else if routing.Token.Set {
@@ -322,7 +322,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, rou
 			return preferred
 		}
 	}
-	if (target.StrictShard || routing.ShardID.Set || routing.Conditional) && shard >= 0 {
+	if (target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement) && shard >= 0 {
 		return preferred
 	}
 
@@ -376,7 +376,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
 			p.InternalMu.RLock()
 			shard := -1
-			strict := target.StrictShard || routing.ShardID.Set || routing.Conditional
+			strict := target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement
 			requested := target.ShardID
 			if routing.ShardID.Set {
 				requested = routing.ShardID
@@ -533,7 +533,7 @@ func (pool *InternalHostConnPool) InternalScheduleTypedRepair() {
 		return
 	}
 	// User policy calls run outside all pool/picker locks.
-	delay, again := policy.Delay(attempt)
+	delay, again := policy.Delay(attempt + 1)
 	if delay < 0 {
 		again = false
 		pool.logger().Warn("reconnect policy returned a negative delay; stopping reconnection")

@@ -6,31 +6,31 @@ package metadata
 import "fmt"
 
 // Mode selects how much schema a session loads. Topology (hosts, tokens and
-// tablets) loads in every mode. The zero Mode is SchemaNone. Later releases may
+// tablets) loads in every mode. The zero Mode is ModeNone. Later releases may
 // add values, so a switch over them needs a default case.
 type Mode uint8
 
 // The metadata modes.
 const (
-	// SchemaNone loads no schema.
-	SchemaNone Mode = iota
-	// SchemaKeyspaces loads keyspaces (replication, durable writes and
+	// ModeNone loads no schema.
+	ModeNone Mode = iota
+	// ModeKeyspaces loads keyspaces (replication, durable writes and
 	// ScyllaDB keyspace options) without their tables, views, types,
 	// functions or aggregates.
-	SchemaKeyspaces
-	// SchemaFull loads keyspaces with everything in them. It is the default.
-	SchemaFull
+	ModeKeyspaces
+	// ModeFull loads keyspaces with everything in them. It is the default.
+	ModeFull
 )
 
 // String returns the metadata mode name, or Mode(n) for a value it does not
 // define.
 func (m Mode) String() string {
 	switch m {
-	case SchemaNone:
+	case ModeNone:
 		return "none"
-	case SchemaKeyspaces:
+	case ModeKeyspaces:
 		return "keyspaces"
-	case SchemaFull:
+	case ModeFull:
 		return "full"
 	default:
 		return fmt.Sprintf("Mode(%d)", uint8(m))

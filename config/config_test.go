@@ -191,7 +191,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithClientRoutes none":                     c.ClientRoutes == nil,
 			"WithReconnect jittered backoff":            c.Reconnect != nil,
 			"WithConviction SimpleConvictionPolicy":     c.Conviction == nil,
-			"WithMetadataMode SchemaFull":               c.Metadata.Mode == metadata.SchemaFull,
+			"WithMetadataMode ModeFull":                 c.Metadata.Mode == metadata.ModeFull,
 			"WithMetadataKeyspaces all":                 len(c.Metadata.Keyspaces) == 0,
 			"WithPartitioner built-ins only":            len(c.Partitioners) == 4,
 			"WithMetadataRefresh 60s":                   c.Metadata.PeriodicRefresh == 60*time.Second,

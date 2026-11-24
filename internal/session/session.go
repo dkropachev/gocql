@@ -132,7 +132,7 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err != nil {
 		return err
 	}
-	routing := routing2.Info{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}
+	routing := routing2.Info{Kind: statement.Kind}
 	return batch.addValue(core, cqlText{}, statement.CQL, &routing, plan, statement.BindMarkers, value, true)
 }
 

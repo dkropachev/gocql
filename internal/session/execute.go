@@ -248,7 +248,7 @@ func (s *InternalSessionRuntime) prepareTypedOnce(ctx context.Context, statement
 	}()
 	conn := options.privateStorage.InternalConnection
 	if conn == nil {
-		conn, err = s.Core.SelectTypedConn(ctx, routing2.Info{HostID: options.HostID}, nil)
+		conn, err = s.Core.SelectTypedConn(ctx, routing2.Info{HostID: options.HostID, Kind: cql.OrdinaryStatement}, nil)
 	}
 	if err != nil {
 		return nil, false, err
@@ -399,7 +399,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || info.Conditional != state.InternalInfo.Conditional || len(state.InternalInfo.PartitionKeyIndexes) > 0 && s.Core.PreparedPartitionerName(info.Keyspace, info.Table) != state.partitioner {
+	if !slices.Equal(info.PartitionKeyIndexes, state.InternalInfo.PartitionKeyIndexes) || info.Keyspace != state.InternalInfo.Keyspace || info.Table != state.InternalInfo.Table || info.Kind != state.InternalInfo.Kind || len(state.InternalInfo.PartitionKeyIndexes) > 0 && s.Core.PreparedPartitionerName(info.Keyspace, info.Table) != state.partitioner {
 		return nil, &cqlerr.SchemaChangedError{Statement: state.InternalStatement, Previous: state.InternalParameters, Current: page.BindColumns()}
 	}
 	revision := uint64(1)
@@ -434,7 +434,7 @@ func (s *InternalSessionRuntime) prepareHost(ctx context.Context, conn *transpor
 	return candidate, nil
 }
 func (s *InternalSessionRuntime) hostPreparedInfo(conn *transport.Conn, page *transport.InternalResponsePage, state *InternalPreparedState) (PreparedInfo, error) {
-	info := PreparedInfo{Keyspace: state.InternalKeyspace, PartitionKeyIndexes: page.PkIndexes(), Conditional: page.Lwt}
+	info := PreparedInfo{Keyspace: state.InternalKeyspace, PartitionKeyIndexes: page.PkIndexes()}
 	if conn.InternalFramers.InternalDefaults.InternalFlagLWT != 0 {
 		info.Kind = cql.OrdinaryStatement
 	}
@@ -746,7 +746,6 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	if resolved.InternalProfile.Consistency == cql.Serial || resolved.InternalProfile.Consistency == cql.LocalSerial {
 		request.routing.Kind = cql.ConditionalStatement
 	}
-	request.routing.Conditional = request.routing.Kind != cql.OrdinaryStatement
 	hooks := rt.observerHooks
 	if values.Observer != nil {
 		// NewCompiledOptions found the hooks; options resolved elsewhere
@@ -810,7 +809,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	}
 	if values.Timestamp.Set {
 		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
-	} else if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && !request.routing.Conditional && !request.hasCounter {
+	} else if mode := rt.config.Timestamps.Mode(); mode != settings.ServerTimestampMode && request.routing.Kind == cql.OrdinaryStatement && !request.hasCounter {
 		if mode == settings.DriverTimestampMode {
 			request.timestamp = rt.timestamps.next(started)
 		} else {
@@ -1539,7 +1538,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Conditional: request.routing.Conditional, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil

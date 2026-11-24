@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	logging "github.com/scylladb/gocql/v2/internal/logging"
@@ -186,7 +187,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	if shard.Set {
 		if uint64(shard.Value) < uint64(len(picker.InternalConns)) {
 			index = int(shard.Value)
-		} else if target.StrictShard || routing.ShardID.Set || routing.Conditional {
+		} else if target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement {
 			return nil
 		}
 	} else if routing.Token.Set {
@@ -194,12 +195,12 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	}
 	if index >= 0 && index < len(picker.InternalConns) && picker.InternalConns[index] != nil {
 		conn := picker.InternalConns[index]
-		if shard.Set || routing.Conditional {
+		if shard.Set || routing.Kind != cql.OrdinaryStatement {
 			return conn
 		}
 		return picker.InternalMaybeReplaceWithLessBusyConnection(conn)
 	}
-	if index >= 0 && (target.StrictShard || routing.ShardID.Set || routing.Conditional) {
+	if index >= 0 && (target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement) {
 		return nil
 	}
 	return picker.InternalLeastBusyConn()

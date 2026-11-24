@@ -207,7 +207,7 @@ func TestTLSFileSourceReloadReachesDials(t *testing.T) {
 		}
 	}
 	writeCA(oldCert)
-	source, err := config.NewTLSFiles(nil, config.TLSFiles{CAFile: caFile, Interval: time.Hour})
+	source, err := config.NewTLSFileSource(nil, config.TLSFiles{CAFile: caFile, Interval: time.Hour})
 	if err != nil {
 		t.Fatal(err)
 	}

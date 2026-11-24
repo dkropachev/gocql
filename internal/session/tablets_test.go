@@ -45,7 +45,7 @@ func TestTablets(t *testing.T) {
 	t.Run("Feedback", func(t *testing.T) {
 		t.Run("ConcurrentPlans", func(t *testing.T) {
 			s := testSession(t)
-			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Conditional: true}
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Kind: cql.ConditionalStatement}
 			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, ShuffleReplicas: true}))
 			var wg sync.WaitGroup
 			for i := 0; i < 4; i++ {
@@ -387,7 +387,7 @@ func TestTablets(t *testing.T) {
 				routing.SnapshotData(m).InternalPlacements = routing.SnapshotData(m).InternalPlacements.Put(k, implRouting.InternalTabletPlacement{InternalRanges: r})
 			}
 			set(hTarget(3, 1), hTarget(2, 2), hTarget(1, 3))
-			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Conditional: true}
+			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Kind: cql.ConditionalStatement}
 			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{TokenAware: true, LeaderAware: true, Datacenter: "a", Rack: "r1", AllowRemote: true, ShuffleReplicas: true}))
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)

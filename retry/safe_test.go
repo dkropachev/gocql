@@ -126,30 +126,31 @@ func TestSafe(t *testing.T) {
 		overloaded := cqlerr.NewOtherServerError(cqlerr.CodeOverloaded, "")
 		bootstrapping := cqlerr.NewOtherServerError(cqlerr.CodeBootstrapping, "")
 		for _, tc := range []struct {
-			name        string
-			err         error
-			batch       cql.Option[cql.BatchKind]
-			idempotent  bool
-			conditional bool
-			want        retry.Action
+			name       string
+			err        error
+			batch      cql.Option[cql.BatchKind]
+			idempotent bool
+			kind       cql.StatementKind
+			want       retry.Action
 		}{
-			{"NotBatch/Unavailable", unavailable, cql.Option[cql.BatchKind]{}, false, false, retry.Next},
-			{"Logged/Unavailable", unavailable, cql.Some(cql.LoggedBatch), false, false, retry.Next},
-			{"Logged/Overloaded", overloaded, cql.Some(cql.LoggedBatch), false, false, retry.Next},
-			{"Unlogged/Unavailable", unavailable, cql.Some(cql.UnloggedBatch), false, false, retry.Stop},
-			{"Unlogged/Overloaded", overloaded, cql.Some(cql.UnloggedBatch), false, false, retry.Stop},
-			{"Counter/Unavailable", unavailable, cql.Some(cql.CounterBatch), false, false, retry.Stop},
-			{"Counter/Overloaded", overloaded, cql.Some(cql.CounterBatch), false, false, retry.Stop},
-			{"UnknownKind/Unavailable", unavailable, cql.Some(cql.BatchKind(9)), false, false, retry.Stop},
-			{"Unlogged/Bootstrapping", bootstrapping, cql.Some(cql.UnloggedBatch), false, false, retry.Next},
-			{"Unlogged/Idempotent", unavailable, cql.Some(cql.UnloggedBatch), true, false, retry.Next},
-			{"Counter/IdempotentOverloaded", overloaded, cql.Some(cql.CounterBatch), true, false, retry.Next},
-			// Conditional is also set for a batch with a member of unknown
-			// kind, which may span partitions.
-			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, true, retry.Stop},
+			{"NotBatch/Unavailable", unavailable, cql.Option[cql.BatchKind]{}, false, cql.OrdinaryStatement, retry.Next},
+			{"Logged/Unavailable", unavailable, cql.Some(cql.LoggedBatch), false, cql.OrdinaryStatement, retry.Next},
+			{"Logged/Overloaded", overloaded, cql.Some(cql.LoggedBatch), false, cql.OrdinaryStatement, retry.Next},
+			{"Unlogged/Unavailable", unavailable, cql.Some(cql.UnloggedBatch), false, cql.OrdinaryStatement, retry.Stop},
+			{"Unlogged/Overloaded", overloaded, cql.Some(cql.UnloggedBatch), false, cql.OrdinaryStatement, retry.Stop},
+			{"Counter/Unavailable", unavailable, cql.Some(cql.CounterBatch), false, cql.OrdinaryStatement, retry.Stop},
+			{"Counter/Overloaded", overloaded, cql.Some(cql.CounterBatch), false, cql.OrdinaryStatement, retry.Stop},
+			{"UnknownKind/Unavailable", unavailable, cql.Some(cql.BatchKind(9)), false, cql.OrdinaryStatement, retry.Stop},
+			{"Unlogged/Bootstrapping", bootstrapping, cql.Some(cql.UnloggedBatch), false, cql.OrdinaryStatement, retry.Next},
+			{"Unlogged/Idempotent", unavailable, cql.Some(cql.UnloggedBatch), true, cql.OrdinaryStatement, retry.Next},
+			{"Counter/IdempotentOverloaded", overloaded, cql.Some(cql.CounterBatch), true, cql.OrdinaryStatement, retry.Next},
+			// A batch with a member of unknown kind may be conditional and
+			// span partitions.
+			{"Unlogged/UnknownMember", unavailable, cql.Some(cql.UnloggedBatch), false, cql.UnknownStatement, retry.Stop},
+			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, cql.ConditionalStatement, retry.Stop},
 		} {
 			a := attempt(tc.err, true, tc.idempotent)
-			a.Batch, a.Conditional = tc.batch, tc.conditional
+			a.Batch, a.Kind = tc.batch, tc.kind
 			if got := (retry.Safe{}).Decide(a); got.Action != tc.want {
 				t.Errorf("%s: %v, want %v", tc.name, got.Action, tc.want)
 			}

@@ -179,7 +179,7 @@ func TestHostRoute(t *testing.T) {
 		if third, ok := plan.Next(); !ok || third.HostID() == first.HostID() {
 			t.Fatal("host routed to again", third, ok)
 		}
-		info.Conditional = true
+		info.Kind = cql.ConditionalStatement
 		plan = p.InternalPlanWith(info, m, &storage, nil)
 		first, _ = plan.Next()
 		if second, ok := plan.Next(); !ok || second.HostID() == first.HostID() {

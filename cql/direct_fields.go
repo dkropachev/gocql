@@ -310,7 +310,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 }
 
 // writeBody writes a present cell holding b, or s when b is nil, borrowing
-// or copying it as ValueWriter.BorrowBytes and BorrowString do.
+// or copying it as ValueWriter.BorrowBytes and BorrowText do.
 func (op *paramOp[P]) writeBody(w *ParamWriter, b []byte, s string) error {
 	n := len(b)
 	if op.kind == directString {
