@@ -4,7 +4,7 @@ Speculation starts another attempt of a request on the next host of its plan
 when the first one is slow, and returns whichever answers first. It is off by
 default. Set `Profile.Speculation`, with `ProfileBuilder.WithSpeculation`, to a
 `retry.SpeculationPolicy`; nil disables it. The driver ships no policy:
-`Delay(attempt)` receives the number of attempts started so far and returns how
+`Delay(started)` receives the number of attempts started so far and returns how
 long to wait before starting another and whether to start one at all.
 
 ```go

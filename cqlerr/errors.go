@@ -348,26 +348,6 @@ func (e *WriteFailureError) Is(target error) bool { return target == CodeWriteFa
 // Kind returns KindServer.
 func (e *WriteFailureError) Kind() Kind { return KindServer }
 
-// CDCWriteFailureError reports that a write to a CDC-enabled table failed.
-//
-// The driver returns it filled in; its zero value is an error without detail.
-type CDCWriteFailureError struct {
-	serverError
-}
-
-// Code returns CodeCDCWriteFailure.
-func (e *CDCWriteFailureError) Code() ErrorCode { return CodeCDCWriteFailure }
-
-// Error returns the code's name, followed by the server's message when it
-// is not empty.
-func (e *CDCWriteFailureError) Error() string { return e.text(CodeCDCWriteFailure) }
-
-// Is reports whether target is CodeCDCWriteFailure.
-func (e *CDCWriteFailureError) Is(target error) bool { return target == CodeCDCWriteFailure }
-
-// Kind returns KindServer.
-func (e *CDCWriteFailureError) Kind() Kind { return KindServer }
-
 // ReadTimeoutError reports that replicas did not answer a read in time.
 //
 // The driver returns it filled in; its zero value is an error without detail.
@@ -585,8 +565,8 @@ func (e *RateLimitReachedError) Kind() Kind { return KindRateLimited }
 
 // OtherServerError is a server error whose code carries no fields of its
 // own: Server, Protocol, BadCredentials, Overloaded, Bootstrapping, Truncate,
-// Syntax, Unauthorized, Invalid and Config, and any code the driver does not
-// know.
+// CDCWriteFailure, Syntax, Unauthorized, Invalid and Config, and any code the
+// driver does not know.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type OtherServerError struct {
@@ -727,8 +707,6 @@ func decodeServerError(r errorBody, warnings []string, failureReasonMap bool, ra
 			return e
 		case CodeFunctionFailure:
 			return &FunctionFailureError{serverError: base, Keyspace: r.Str(), Function: r.Str(), ArgumentTypes: r.Strings()}
-		case CodeCDCWriteFailure:
-			return &CDCWriteFailureError{serverError: base}
 		case CodeCASWriteUnknown:
 			return &CASWriteUnknownError{serverError: base, Consistency: cql.Consistency(r.U16()), Received: r.I32(), BlockFor: r.I32()}
 		}

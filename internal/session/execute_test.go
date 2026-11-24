@@ -124,8 +124,8 @@ func (p *runtimePolicy) observed() []routing2.AttemptEvent {
 
 type runtimeSpeculation struct{}
 
-func (runtimeSpeculation) Delay(attempt int) (time.Duration, bool) {
-	return time.Millisecond, attempt == 1
+func (runtimeSpeculation) Delay(started int) (time.Duration, bool) {
+	return time.Millisecond, started == 1
 }
 func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Duration) {
 	s, conns, peers := runtimeTestSession(t, 2)

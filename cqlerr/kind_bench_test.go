@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"net"
 	"testing"
-
-	"github.com/scylladb/gocql/v2/cql"
 )
 
 type benchTimeoutError struct{}
@@ -28,7 +26,7 @@ func BenchmarkKindOf(b *testing.B) {
 		err  error
 	}{
 		{"server", fmt.Errorf("attempt: %w", unavailable)},
-		{"execution", newExecutionError(unavailable, cql.Result{}, 0, nil)},
+		{"execution", NewExecutionError(unavailable, 0)},
 		{"net_timeout", &net.OpError{Op: "read", Err: benchTimeoutError{}}},
 		{"unknown", fmt.Errorf("wrap: %w", errors.New("x"))},
 	} {

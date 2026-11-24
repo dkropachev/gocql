@@ -153,7 +153,7 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 		if err := codec.FinishRowReader(reader); err != nil {
 			return err
 		}
-		if err := ctx.Err(); err != nil {
+		if err := transport.ContextError(ctx); err != nil {
 			return err
 		}
 		if rt.Closed() {

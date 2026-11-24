@@ -224,7 +224,7 @@ func errorFrameCases() []errorFrameCase {
 		errorFrameCase{
 			name: "CDCWriteFailure", proto: ProtoVersion4,
 			body: errBody(ProtoVersion4, cqlerr.CodeCDCWriteFailure, "cdc", nil),
-			want: response(ProtoVersion4, runtimeerrors.WithMessage(&cqlerr.CDCWriteFailureError{}, "cdc")),
+			want: response(ProtoVersion4, cqlerr.NewOtherServerError(cqlerr.CodeCDCWriteFailure, "cdc")),
 		},
 		errorFrameCase{
 			name: "CASWriteUnknown", proto: ProtoVersion4,

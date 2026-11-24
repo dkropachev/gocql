@@ -261,10 +261,10 @@ func TestZeroValuesUsable(t *testing.T) {
 	}
 	// The driver's error types print without detail rather than panic.
 	for _, err := range []error{
-		new(cqlerr.ExecutionError), new(cqlerr.QueryError), new(cqlerr.ConnectError),
+		new(cqlerr.ExecutionError), new(cqlerr.ConnectError),
 		new(cqlerr.UnavailableError), new(cqlerr.OtherServerError), new(cqlerr.WriteTimeoutError),
 		new(cqlerr.ReadTimeoutError), new(cqlerr.WriteFailureError), new(cqlerr.ReadFailureError),
-		new(cqlerr.CDCWriteFailureError), new(cqlerr.AlreadyExistsError), new(cqlerr.UnpreparedError),
+		new(cqlerr.AlreadyExistsError), new(cqlerr.UnpreparedError),
 		new(cqlerr.FunctionFailureError), new(cqlerr.CASWriteUnknownError), new(cqlerr.RateLimitReachedError),
 		new(cqlerr.PartialRefreshError), new(cqlerr.NoHostsError), new(cqlerr.SchemaChangedError),
 		new(cqlerr.UnsupportedSettingError), new(cqlerr.ServerMismatchError), new(cql.ValidationError),

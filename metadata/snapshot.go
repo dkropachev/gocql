@@ -66,7 +66,9 @@ func (s *Snapshot) Keyspace(name string) (*Keyspace, bool) {
 }
 
 // Replicas returns the replicas of token in keyspace.table, from the token
-// ring or, for a tablet table, from its tablets.
+// ring or, for a tablet table, from its tablets. A keyspace or table the
+// snapshot does not hold, because it does not exist or is not loaded, is a
+// cql.ValidationError that wraps cqlerr.ErrNoKeyspace or cqlerr.ErrNoTable.
 func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
 	if s.empty() {
 		return nil, errNoSnapshot
@@ -78,8 +80,9 @@ func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, erro
 // key, in column order, for keyspace.table (a table or a materialized view).
 // Each value is encoded as the column's schema type, exactly as a prepared
 // statement's routing key is, and hashed with the table's partitioner. It
-// needs loaded schema metadata; a key of the wrong arity or type, or a null
-// component, is a validation error. Tokens are int64: the built-in
+// needs loaded schema metadata: a keyspace or table the snapshot does not
+// hold is a validation error, as for Replicas, and so is a key of the wrong
+// arity or type, or a null component. Tokens are int64: the built-in
 // partitioners are Murmur3 and ScyllaDB's CDC partitioner, and
 // config.ConfigBuilder.WithPartitioner adds others with int64 tokens.
 func (s *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error) {
@@ -90,6 +93,8 @@ func (s *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error
 }
 
 // TokenRanges returns the token ranges of keyspace.table with their replicas.
+// A keyspace or table the snapshot does not hold is an error, as for
+// Replicas.
 func (s *Snapshot) TokenRanges(keyspace, table string) ([]TokenRange, error) {
 	if s.empty() {
 		return nil, errNoSnapshot

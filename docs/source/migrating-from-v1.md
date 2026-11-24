@@ -264,6 +264,8 @@ conditional statements in prepared metadata: set
 | `*gocql.RequestErrWriteTimeout`, `RequestErrReadTimeout`, `RequestErrUnavailable` | `*cqlerr.WriteTimeoutError`, `*cqlerr.ReadTimeoutError`, `*cqlerr.UnavailableError` |
 | `gocql.RequestError` and its `Code()` | `cqlerr.ServerError`, or `errors.Is(err, cqlerr.CodeOverloaded)` |
 | `gocql.ErrTimeoutNoResponse`, `ErrNoConnections` | the same names in `cqlerr` |
+| `context.DeadlineExceeded` from the query's own `Timeout` | an error matching `cqlerr.ErrRequestTimeout`, which also matches `context.DeadlineExceeded`; the caller's own deadline matches only the latter |
+| `gocql.Ignore` from `RetryPolicy.GetRetryType` | removed: a policy returns `retry.Stop`, and the caller decides what an ignored failure means |
 | `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
 | `gocql.ErrKeyspaceDoesNotExist` | removed: a schema refresh treats a keyspace the server no longer has as dropped; a missing keyspace is `cqlerr.ErrNoKeyspace` |
 | `RequestErrWriteTimeout.WriteType`, `RequestErrWriteFailure.WriteType` (strings) | `cqlerr.WriteType` constants (`cqlerr.WriteTypeSimple`, `WriteTypeBatchLog`, `WriteTypeCAS`, ...); its `String` returns the server's name; a type the driver does not know is `WriteTypeUnknown` |

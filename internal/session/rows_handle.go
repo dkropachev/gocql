@@ -78,7 +78,7 @@ func (r Rows[R]) Retain() (*PageLease, error) {
 	if impl := r.live(); impl != nil {
 		return impl.Retain()
 	}
-	return nil, cqlerr.ErrNoRows
+	return nil, cqlerr.ErrNoCurrentRow
 }
 
 // Clone returns an owned copy of the row the last NextInto decoded.
@@ -87,7 +87,7 @@ func (r Rows[R]) Clone() (R, error) {
 		return impl.Clone()
 	}
 	var zero R
-	return zero, cqlerr.ErrNoRows
+	return zero, cqlerr.ErrNoCurrentRow
 }
 
 // Info returns the execution's result information so far.

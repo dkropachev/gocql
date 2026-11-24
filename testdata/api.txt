@@ -832,7 +832,7 @@ package cqlerr
 		cqlerr.AttemptFailure field Number int
 		cqlerr.AttemptFailure field ShardID cql.Option[uint32]
 		cqlerr.AttemptFailure field Consistency cql.Consistency
-		cqlerr.AttemptFailure field Status cqlerr.ExecutionStatus
+		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
 		cqlerr.AttemptFailure method (T) String() string
 	type cqlerr.CASWriteUnknownError struct
@@ -845,13 +845,6 @@ package cqlerr
 		cqlerr.CASWriteUnknownError method (*T) Kind() cqlerr.Kind
 		cqlerr.CASWriteUnknownError method (*T) Message() string
 		cqlerr.CASWriteUnknownError method (*T) Warnings() []string
-	type cqlerr.CDCWriteFailureError struct
-		cqlerr.CDCWriteFailureError method (*T) Code() cqlerr.ErrorCode
-		cqlerr.CDCWriteFailureError method (*T) Error() string
-		cqlerr.CDCWriteFailureError method (*T) Is(target error) bool
-		cqlerr.CDCWriteFailureError method (*T) Kind() cqlerr.Kind
-		cqlerr.CDCWriteFailureError method (*T) Message() string
-		cqlerr.CDCWriteFailureError method (*T) Warnings() []string
 	const cqlerr.CodeAlreadyExists cqlerr.ErrorCode = 9216
 	const cqlerr.CodeBadCredentials cqlerr.ErrorCode = 256
 	const cqlerr.CodeBootstrapping cqlerr.ErrorCode = 4098
@@ -887,14 +880,15 @@ package cqlerr
 	var cqlerr.ErrNoConnections error
 	var cqlerr.ErrNoConnectionsStarted error
 	var cqlerr.ErrNoControl error
+	var cqlerr.ErrNoCurrentRow error
 	var cqlerr.ErrNoKeyspace error
-	var cqlerr.ErrNoRows error
 	var cqlerr.ErrNoStreams error
 	var cqlerr.ErrNoTable error
 	var cqlerr.ErrPagingComplete error
 	var cqlerr.ErrPagingNoProgress error
 	var cqlerr.ErrPagingStateLimit error
 	var cqlerr.ErrReadHeaderTimeout error
+	var cqlerr.ErrRequestTimeout error
 	var cqlerr.ErrScyllaSourcePortAlreadyInUse error
 	var cqlerr.ErrStaleRows error
 	var cqlerr.ErrTimeoutNoResponse error
@@ -910,7 +904,7 @@ package cqlerr
 		cqlerr.ExecutionError field BatchSize int
 		cqlerr.ExecutionError method (*T) Error() string
 		cqlerr.ExecutionError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
-		cqlerr.ExecutionError method (*T) Unwrap() []error
+		cqlerr.ExecutionError method (*T) Unwrap() error
 	type cqlerr.ExecutionStatus uint8
 		cqlerr.ExecutionStatus method (T) String() string
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
@@ -945,6 +939,7 @@ package cqlerr
 	const cqlerr.KindUnavailable cqlerr.Kind = 2
 	const cqlerr.KindUnknown cqlerr.Kind = 0
 	const cqlerr.MaybeExecuted cqlerr.ExecutionStatus = 0
+	func cqlerr.NewExecutionError(err error, status cqlerr.ExecutionStatus, attempts ...cqlerr.AttemptFailure) *cqlerr.ExecutionError
 	func cqlerr.NewOtherServerError(code cqlerr.ErrorCode, message string) *cqlerr.OtherServerError
 	type cqlerr.NoHostsError struct
 		cqlerr.NoHostsError field Operation string
@@ -972,10 +967,6 @@ package cqlerr
 		cqlerr.PartialRefreshError method (*T) Error() string
 		cqlerr.PartialRefreshError method (*T) Unwrap() []error
 	const cqlerr.PartiallyExecuted cqlerr.ExecutionStatus = 2
-	type cqlerr.QueryError struct
-		cqlerr.QueryError method (*T) Error() string
-		cqlerr.QueryError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
-		cqlerr.QueryError method (*T) Unwrap() error
 	type cqlerr.RateLimitReachedError struct
 		cqlerr.RateLimitReachedError field OpType cqlerr.OpType
 		cqlerr.RateLimitReachedError field RejectedByCoordinator bool
@@ -1493,7 +1484,6 @@ package retry
 		retry.Decision field Action retry.Action
 		retry.Decision field Consistency cql.Option[cql.Consistency]
 		retry.Decision field Delay time.Duration
-	const retry.IgnoreWrite retry.Action = 3
 	type retry.Never struct
 		retry.Never method (T) Decide(retry.Attempt) retry.Decision
 	const retry.Next retry.Action = 2
@@ -1506,7 +1496,7 @@ package retry
 		retry.Safe method (T) Decide(a retry.Attempt) retry.Decision
 	const retry.Same retry.Action = 1
 	type retry.SpeculationPolicy interface
-		retry.SpeculationPolicy method Delay(attempt int) (time.Duration, bool)
+		retry.SpeculationPolicy method Delay(started int) (time.Duration, bool)
 	const retry.Stop retry.Action = 0
 
 package routing

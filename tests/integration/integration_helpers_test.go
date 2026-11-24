@@ -25,6 +25,9 @@ import (
 // errMultipleRows reports that a helper expecting one row read several.
 var errMultipleRows = errors.New("integration: multiple rows")
 
+// errNoRows reports a read that found no row.
+var errNoRows = errors.New("integration: no rows")
+
 // fixtureParts names the settings the shared fixture chooses from the
 // integration flags. A test that chooses one of them itself leaves that part
 // out, because a setting can be chosen only once.
@@ -332,7 +335,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 			return cql.DynamicRow{}, err
 		}
 		if count == 0 {
-			return cql.DynamicRow{}, cqlerr.ErrNoRows
+			return cql.DynamicRow{}, errNoRows
 		}
 		return row, nil
 	}
@@ -346,7 +349,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
-		return cql.DynamicRow{}, cqlerr.ErrNoRows
+		return cql.DynamicRow{}, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {

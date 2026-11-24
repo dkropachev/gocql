@@ -60,8 +60,8 @@ func TestKindOf(t *testing.T) {
 		{"closed over timeout", errors.Join(ErrTimeoutNoResponse, ErrClosed), KindClosed},
 		{"eof", io.ErrUnexpectedEOF, KindConnection},
 		{"dial", dial, KindConnection},
-		{"request stops on cancel", newExecutionError(context.Canceled, cql.Result{}, MaybeExecuted, []AttemptFailure{{Err: overloaded}}), KindCanceled},
-		{"request last attempt", newExecutionError(overloaded, cql.Result{}, NotExecuted, []AttemptFailure{{Err: overloaded}}), KindOverloaded},
+		{"request stops on cancel", NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: overloaded}), KindCanceled},
+		{"request last attempt", NewExecutionError(overloaded, NotExecuted, AttemptFailure{Err: overloaded}), KindOverloaded},
 		{"cas write unknown", &CASWriteUnknownError{}, KindTimeout},
 		{"cas write unknown code", server(CodeCASWriteUnknown), KindTimeout},
 		{"no control connection", ErrNoControl, KindConnection},
@@ -69,7 +69,7 @@ func TestKindOf(t *testing.T) {
 		{"no hosts", &NoHostsError{Operation: "o"}, KindConnection},
 		{"no hosts, server cause", &NoHostsError{Operation: "o", Causes: []error{server(CodeUnauthorized)}}, KindUnauthorized},
 		{"paging state limit", ErrPagingStateLimit, KindInvalid},
-		{"no rows", ErrNoRows, KindInvalid},
+		{"no rows", ErrNoCurrentRow, KindInvalid},
 		{"paging no progress", ErrPagingNoProgress, KindProtocol},
 	} {
 		if got := KindOf(test.err); got != test.want {

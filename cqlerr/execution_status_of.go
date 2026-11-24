@@ -51,7 +51,7 @@ func unsent(err error) bool {
 	switch err {
 	case ErrNoConnections, ErrBusy, ErrConditionalExec, //nolint:errorlint // one node of a tree walkErrors walks
 		ErrNoStreams, ErrNoConnectionsStarted, ErrUseStmt, ErrPagingComplete,
-		context.Canceled, context.DeadlineExceeded:
+		context.Canceled, context.DeadlineExceeded, ErrRequestTimeout:
 		return true
 	}
 	return false
@@ -98,8 +98,8 @@ type AttemptFailure struct {
 	ShardID cql.Option[uint32]
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
-	// Status reports what the attempt may have done on the cluster.
-	Status ExecutionStatus
+	// ExecutionStatus reports what the attempt may have done on the cluster.
+	ExecutionStatus ExecutionStatus
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
 	// error. Read it with package cqltrace.
@@ -132,8 +132,11 @@ func (a AttemptFailure) writeTarget(b *strings.Builder) {
 const maxRenderedAttempts = 3
 
 // ExecutionError is returned when a request fails after all its attempts.
+// It wraps Err only: errors.Is and errors.As see why the request stopped,
+// not what an earlier attempt failed with. Read Attempts for those.
 //
-// The driver returns it filled in; its zero value is an error without detail.
+// The driver returns it filled in; NewExecutionError builds one for tests.
+// Its zero value is an error without detail.
 type ExecutionError struct {
 	// Err is the reason the request stopped: the last attempt's error, the
 	// caller's cancellation, or a failure before any attempt.
@@ -160,10 +163,12 @@ type ExecutionError struct {
 	status    ExecutionStatus
 }
 
-// NewExecutionError returns the failure of a request whose attempts reached
-// status.
-func newExecutionError(err error, result cql.Result, status ExecutionStatus, attempts []AttemptFailure) *ExecutionError {
-	return &ExecutionError{Err: err, Result: result, status: status, Attempts: attempts}
+// NewExecutionError returns the failure of a request that stopped with err
+// after attempts, whose ExecutionStatus reports status. Tests of code that
+// handles the driver's errors, such as a retry.Policy or a caller's
+// fallback, can use it; set Statement, Result and BatchSize directly.
+func NewExecutionError(err error, status ExecutionStatus, attempts ...AttemptFailure) *ExecutionError {
+	return &ExecutionError{Err: err, status: status, Attempts: attempts}
 }
 
 // Error returns Err, prefixed with the last attempt's target when Err is that
@@ -222,15 +227,9 @@ func (e *ExecutionError) writeStatement(b *strings.Builder) {
 	fmt.Fprintf(b, "; statement %q", e.Statement)
 }
 
-// Unwrap returns Err followed by the error of every attempt.
-func (e *ExecutionError) Unwrap() []error {
-	out := make([]error, 0, 1+len(e.Attempts))
-	out = append(out, e.Err)
-	for _, a := range e.Attempts {
-		out = append(out, a.Err)
-	}
-	return out
-}
+// Unwrap returns Err. An earlier attempt's error is in Attempts only, so
+// errors.Is and errors.As agree with KindOf, which classifies Err.
+func (e *ExecutionError) Unwrap() error { return e.Err }
 
 // ExecutionStatus reports the most severe status among all attempts.
 func (e *ExecutionError) ExecutionStatus() ExecutionStatus { return e.status }
@@ -239,9 +238,27 @@ func (e *ExecutionError) ExecutionStatus() ExecutionStatus { return e.status }
 // timed out without knowing whether it applied. Cassandra reports this as
 // CAS_WRITE_UNKNOWN on protocol 5 and as a write timeout of write type CAS on
 // protocol 4; ScyllaDB reports the write timeout. ExecutionStatusOf reports
-// MaybeExecuted for all of them. Read the row back before retrying a write
-// that is not idempotent.
+// MaybeExecuted for all of them. For an ExecutionError it checks every
+// attempt, so a request the caller canceled after such a timeout is
+// reported too. Read the row back before retrying a write that is not
+// idempotent.
 func IsCASWriteUnknown(err error) bool {
+	if casWriteUnknown(err) {
+		return true
+	}
+	if request, ok := errors.AsType[*ExecutionError](err); ok {
+		for _, a := range request.Attempts {
+			if casWriteUnknown(a.Err) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// casWriteUnknown reports whether err wraps a conditional write's unknown
+// outcome.
+func casWriteUnknown(err error) bool {
 	if _, ok := errors.AsType[*CASWriteUnknownError](err); ok {
 		return true
 	}

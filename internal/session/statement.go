@@ -97,7 +97,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if ctx == nil || s == nil {
 		return empty, cqltype.TypeValidation("prepare", "nil context or session")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return empty, err
 	}
 	if s.Closed() {

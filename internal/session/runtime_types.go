@@ -157,7 +157,7 @@ func (o *inputOwner) InternalWait(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return transport.ContextError(ctx)
 	}
 }
 func (o *inputOwner) InternalWriterLease(chain wire.Chain) *wire.Lease {

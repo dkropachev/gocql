@@ -71,7 +71,7 @@ func referenceKindOf(err error) Kind {
 		hasType[*SchemaChangedError](err),
 		hasType[*UnsupportedSettingError](err), hasType[*ServerMismatchError](err),
 		has(ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
-			ErrPagingStateLimit, ErrNoRows):
+			ErrPagingStateLimit, ErrNoCurrentRow):
 		return KindInvalid
 	case hasType[*cql.ProtocolError](err), has(ErrFrameTooBig, ErrPagingNoProgress):
 		return KindProtocol
@@ -135,7 +135,7 @@ func classifiedLeaves() []error {
 		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,
 		ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
-		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNoRows, ErrPagingStateLimit,
+		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNoCurrentRow, ErrPagingStateLimit,
 		ErrPagingNoProgress, ErrNoControl, ErrScyllaSourcePortAlreadyInUse,
 		&NoHostsError{Operation: "o"}, &NoHostsError{Operation: "o", Causes: []error{ErrNoConnections}},
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
@@ -156,7 +156,7 @@ func classifiedLeaves() []error {
 		&WriteTimeoutError{WriteType: WriteTypeCAS, Received: 1},
 		&WriteFailureError{WriteType: WriteTypeBatch, Received: 1},
 		&ReadTimeoutError{}, &ReadFailureError{},
-		&CDCWriteFailureError{}, &CASWriteUnknownError{},
+		NewOtherServerError(CodeCDCWriteFailure, ""), &CASWriteUnknownError{},
 		&AlreadyExistsError{}, &UnpreparedError{}, &FunctionFailureError{},
 		&RateLimitReachedError{}, &RateLimitReachedError{RejectedByCoordinator: true},
 		NewOtherServerError(0x7777, ""),
@@ -186,7 +186,7 @@ func TestKindOfMatchesReference(t *testing.T) {
 			fmt.Errorf("wrapped: %w", a),
 			newQueryError(queryErrorState{InternalErr: a}),
 			newQueryError(queryErrorState{InternalErr: a, InternalPotentiallyExecuted: true}),
-			newExecutionError(a, cql.Result{}, PartiallyExecuted, nil),
+			NewExecutionError(a, PartiallyExecuted),
 			&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h", Err: a}}},
 		)
 		for _, b := range leaves {
@@ -194,7 +194,7 @@ func TestKindOfMatchesReference(t *testing.T) {
 				errors.Join(a, b),
 				fmt.Errorf("%w: %w", a, fmt.Errorf("inner: %w", b)),
 				&ConnectError{Stage: "s", Hosts: []HostError{{Address: "h1", Err: a}, {Address: "h2", Err: b}}},
-				newExecutionError(a, cql.Result{}, MaybeExecuted, []AttemptFailure{{Err: b}}),
+				NewExecutionError(a, MaybeExecuted, AttemptFailure{Err: b}),
 			)
 		}
 	}

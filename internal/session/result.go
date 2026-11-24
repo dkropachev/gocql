@@ -124,7 +124,7 @@ func (p *Page[R]) cancelled() error {
 	if p.privateStorage.ctx == nil {
 		return nil
 	}
-	err := p.privateStorage.ctx.Err()
+	err := transport.ContextError(p.privateStorage.ctx)
 	if err != nil && p.privateStorage.cursor.stopped() {
 		err = cqlerr.ErrClosed
 	}
@@ -229,10 +229,10 @@ func (p *Page[R]) closeLocked() {
 }
 func (p *Page[R]) Retain() (*PageLease, error) {
 	if p == nil || p.privateStorage.response == nil {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.response.Owner.Retain() {
 		return nil, cql.ErrReleased
@@ -246,11 +246,11 @@ func (p *Page[R]) Retain() (*PageLease, error) {
 func (p *Page[R]) Clone() (R, error) {
 	if p == nil || p.privateStorage.response == nil {
 		var zero R
-		return zero, cqlerr.ErrNoRows
+		return zero, cqlerr.ErrNoCurrentRow
 	}
 	if !p.privateStorage.valid || p.privateStorage.closed {
 		var zero R
-		return zero, cqlerr.ErrNoRows
+		return zero, cqlerr.ErrNoCurrentRow
 	}
 	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
 }
@@ -314,7 +314,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			// Session.Close cancels the context of every open Rows, so
 			// one check after decoding catches both a cancelled caller and
 			// a closed session.
-			if err := r.privateStorage.ctx.Err(); err != nil {
+			if err := transport.ContextError(r.privateStorage.ctx); err != nil {
 				r.stop(err)
 				return false
 			}
@@ -326,7 +326,7 @@ func (r *rowsImpl[R]) advance(dst *R) bool {
 			r.closeLocked()
 			return false
 		}
-		if err := r.privateStorage.ctx.Err(); err != nil {
+		if err := transport.ContextError(r.privateStorage.ctx); err != nil {
 			r.stop(err)
 			return false
 		}
@@ -441,25 +441,25 @@ func (r *rowsImpl[R]) closeLocked() {
 }
 func (r *rowsImpl[R]) Retain() (*PageLease, error) {
 	if r == nil {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
-		return nil, cqlerr.ErrNoRows
+		return nil, cqlerr.ErrNoCurrentRow
 	}
 	return r.privateStorage.page.Retain()
 }
 func (r *rowsImpl[R]) Clone() (R, error) {
 	if r == nil {
 		var z R
-		return z, cqlerr.ErrNoRows
+		return z, cqlerr.ErrNoCurrentRow
 	}
 	r.privateStorage.mu.Lock()
 	defer r.privateStorage.mu.Unlock()
 	if !r.privateStorage.valid || r.privateStorage.closed {
 		var z R
-		return z, cqlerr.ErrNoRows
+		return z, cqlerr.ErrNoCurrentRow
 	}
 	return r.privateStorage.page.Clone()
 }
@@ -586,7 +586,7 @@ func (f *InternalPageFuture) InternalTake(ctx context.Context) (*transport.Inter
 	select {
 	case <-ctx.Done():
 		f.InternalClose()
-		return nil, ctx.Err()
+		return nil, transport.ContextError(ctx)
 	case <-f.InternalDone:
 	}
 	f.mu.Lock()

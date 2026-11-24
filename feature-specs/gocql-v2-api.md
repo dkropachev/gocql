@@ -1514,7 +1514,7 @@ type AttemptStart struct {
     Started time.Time
     Speculative bool
 }
-type SpeculationPolicy interface { Delay(attempt int) (time.Duration, bool) }
+type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
 type Observer any // one or more of the hook interfaces below; hooks are found once at install
 type RequestObserver interface {
     StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
@@ -1559,7 +1559,7 @@ package:
 package retry
 
 type Action uint8
-const (Stop Action = iota; Same; Next; IgnoreWrite)
+const (Stop Action = iota; Same; Next)
 type Attempt struct {
     Err error
     Number int // 1-based
@@ -1965,14 +1965,18 @@ graceful close remain separate from user-request timeout.
 
 Errors live in package `cqlerr` and preserve `errors.Is`/`errors.As` and
 server error codes/details. A failed request returns an `*ExecutionError`,
-which unwraps the server/context error, lists every failed attempt
-(`AttemptFailure`) and reports an `ExecutionStatus` (`NotExecuted`,
-`MaybeExecuted`, `PartiallyExecuted`; `ExecutionStatusOf(err)`). `KindOf(err)`
+which unwraps only the error the request stopped with, lists every failed
+attempt (`AttemptFailure`, whose `ExecutionStatus` is the attempt's) and
+reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
+`PartiallyExecuted`; `ExecutionStatusOf(err)`; compare with `==`, as the
+numeric order is not the severity order). `NewExecutionError(err, status,
+attempts...)` builds one for tests. The driver's own timeout ends a request
+with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
-`ErrNoTable`, `ErrNoRows`, `ErrNoConnections`,
+`ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
 `ErrConditionalExec`, `ErrPagingNoProgress`, `ErrPagingComplete` and
 `ErrPagingStateLimit`. Typed driver errors include `ValidationError`,
 `UnsupportedSettingError`, `CodecError` (column/index/nested path and stage),

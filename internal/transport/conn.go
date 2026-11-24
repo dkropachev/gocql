@@ -1446,7 +1446,7 @@ func (c *Conn) execInternal(ctx context.Context, req protocol.FrameBuilder, trac
 }
 
 func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, tracer Tracer, requestTimeout time.Duration, startupCompleted bool) (*protocol.Framer, error) {
-	if ctxErr := ctx.Err(); ctxErr != nil {
+	if ctxErr := ContextError(ctx); ctxErr != nil {
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctxErr, InternalPotentiallyExecuted: false})
 	}
 
@@ -1607,7 +1607,7 @@ func (c *Conn) execAdmitted(ctx context.Context, req protocol.FrameBuilder, trac
 		if c.markOrphan(call) {
 			closeErr = errOrphanBudget
 		}
-		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ctx.Err(), InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
+		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: ContextError(ctx), InternalPotentiallyExecuted: true, InternalTimeout: requestTimeout, InternalInFlight: c.InternalStreams.InUse()})
 	case <-c.InternalCtx.Done():
 		stopWaiting = true
 		return nil, runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: cqlerr.ErrConnectionClosed, InternalPotentiallyExecuted: true})
@@ -2064,7 +2064,7 @@ type InternalContextWriter interface {
 	// writeContext writes p to the connection.
 	//
 	// If ctx is canceled before we start writing p (e.g. during waiting while another write is currently in progress),
-	// p is not written and ctx.Err() is returned. Context is ignored after we start writing p (i.e. we don't interrupt
+	// p is not written and ContextError(ctx) is returned. Context is ignored after we start writing p (i.e. we don't interrupt
 	// blocked writes that are in progress) so that we always either write the full frame or not write it at all.
 	//
 	// It returns the number of bytes written from p (0 <= n <= len(p)) and any error that caused the write to stop
@@ -2123,7 +2123,7 @@ func (c *InternalDeadlineContextWriter) InternalSetWriteTimeout(timeout time.Dur
 func (c *InternalDeadlineContextWriter) InternalWriteContext(ctx context.Context, p []byte) (int, error) {
 	select {
 	case <-ctx.Done():
-		return 0, ctx.Err()
+		return 0, ContextError(ctx)
 	case <-c.InternalQuit:
 		return 0, cqlerr.ErrConnectionClosed
 	case c.InternalSemaphore <- struct{}{}:
@@ -2204,7 +2204,7 @@ func (w *InternalWriteCoalescer) InternalWriteContext(ctx context.Context, p []b
 	select {
 	case <-ctx.Done():
 		writeResultChanPool.Put(resultChan)
-		return 0, ctx.Err()
+		return 0, ContextError(ctx)
 	case <-w.InternalQuit:
 		writeResultChanPool.Put(resultChan)
 		return 0, io.EOF
@@ -2262,7 +2262,7 @@ func (w *InternalWriteCoalescer) InternalWriteFlusherImpl(timerC <-chan time.Tim
 			var sizes []int64
 			for _, request := range requests {
 				if request.ctx != nil && request.ctx.Err() != nil {
-					request.resultChan <- InternalWriteResult{InternalErr: request.ctx.Err()}
+					request.resultChan <- InternalWriteResult{InternalErr: ContextError(request.ctx)}
 					continue
 				}
 				if request.data != nil {

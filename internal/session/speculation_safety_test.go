@@ -132,7 +132,7 @@ func TestSpeculationSafety(t *testing.T) {
 		hosts := map[cql.UUID]int{}
 		for _, a := range failure.Attempts {
 			hosts[a.HostID] = a.Number
-			if a.Status != cqlerr.NotExecuted {
+			if a.ExecutionStatus != cqlerr.NotExecuted {
 				t.Fatalf("attempt %+v", a)
 			}
 		}
@@ -175,7 +175,7 @@ func TestSpeculationSafety(t *testing.T) {
 			t.Fatalf("status %v, result %d attempts, error lists %+v; want 2 possibly applied", failure.ExecutionStatus(), failure.Result.Attempts, failure.Attempts)
 		}
 		for i, a := range failure.Attempts {
-			if a.Number != i+1 || a.HostID != routes.targets[i].HostID || a.Status != cqlerr.MaybeExecuted || !errors.Is(a.Err, context.Canceled) {
+			if a.Number != i+1 || a.HostID != routes.targets[i].HostID || a.ExecutionStatus != cqlerr.MaybeExecuted || !errors.Is(a.Err, context.Canceled) {
 				t.Fatalf("attempt %d: %+v", i+1, a)
 			}
 		}

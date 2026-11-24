@@ -614,8 +614,8 @@ func TestQuery(t *testing.T) {
 				})
 			}
 		})
-		// The old Ignore mode stopped retries but preserved errors. Its v2 equivalent
-		// is retry.Stop; retry.IgnoreWrite is a separate explicit error-suppression policy.
+		// The old Ignore mode stopped retries but preserved errors. Its v2
+		// equivalent is retry.Stop; v2 has no action that suppresses an error.
 		t.Run("IgnoreRethrow", func(t *testing.T) {
 			t.Parallel()
 			session := createV2Session(t)

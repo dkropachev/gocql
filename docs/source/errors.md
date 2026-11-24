@@ -16,7 +16,9 @@ safe:
 
 A request that ran several attempts reports the most severe status of all of
 them, including attempts still in flight when the context ended. A bare
-context error from the driver means the request was never sent.
+context error from the driver means the request was never sent. Compare a
+status with `==` or a `switch`: the constants' numeric order is not their
+severity.
 
 ## Can trying again help?
 
@@ -24,6 +26,19 @@ context error from the driver means the request was never sent.
 limited, invalid, unauthorized, connection, canceled, closed, protocol or
 server. `Kind.Transient` reports whether a later attempt can succeed. It does
 not say whether a retry is safe; combine it with the execution status.
+
+`KindTimeout` covers both the driver's own budget and the caller's expired
+context. When the profile's `Timeout` or `exec.Options.Timeout` (or
+`PageTimeout`) runs out, the error matches `cqlerr.ErrRequestTimeout`; it
+also matches `context.DeadlineExceeded`, as the caller's deadline does. A
+retry under a context that has ended cannot succeed, so a retry loop checks
+the context first:
+
+```go
+for attempt := 0; err != nil && cqlerr.KindOf(err).Transient() && ctx.Err() == nil && attempt < 3; attempt++ {
+	_, err = insert.Exec(ctx, row)
+}
+```
 
 When an error wraps several others, a cancellation decides first, then a
 deadline, then a server error, then the driver's own errors. A `Connect` that
@@ -57,8 +72,11 @@ A failed request returns `*cqlerr.ExecutionError`. `Err` is why it stopped: the
 last attempt's error, the caller's cancellation, or a failure before any
 attempt. `Attempts` lists every failed attempt with its host address, shard,
 consistency, execution status, error and, when the request ran with
-`exec.Options.CQLTrace`, the `CQLTraceID` of the server's trace session; `errors.As` searches all of them, so a
-server error from an earlier attempt is found even after a timeout.
+`exec.Options.CQLTrace`, the `CQLTraceID` of the server's trace session. The
+error wraps `Err` only, so `errors.Is` and `errors.As` see why the request
+stopped, the error `KindOf` classifies; read an earlier attempt's error from
+`Attempts`. `cqlerr.IsCASWriteUnknown` checks every attempt, so it still
+reports an LWT timeout that the caller's cancellation ended.
 
 ```go
 _, err := insert.Exec(ctx, row)
@@ -70,7 +88,7 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 			shard = strconv.FormatUint(uint64(a.ShardID.Value), 10)
 		}
 		log.Printf("attempt %d: host %s (%s) shard %s at %s: %s: %v",
-			a.Number, a.HostID, a.Address, shard, a.Consistency, a.Status, a.Err)
+			a.Number, a.HostID, a.Address, shard, a.Consistency, a.ExecutionStatus, a.Err)
 	}
 }
 ```
@@ -96,7 +114,12 @@ statement in `failure.Statement`, rendered as
 every mode; only literals written into the CQL text itself appear.
 
 `failure.Result` holds what the execution gathered before it failed, such as
-its attempt count and latency. A successful call names its coordinator host
+its attempt count and latency.
+
+To test code that handles these errors, such as a `retry.Policy` or a
+fallback path, build one with `cqlerr.NewExecutionError(err, status,
+attempts...)`, and a server error with its type or
+`cqlerr.NewOtherServerError(code, message)`. A successful call names its coordinator host
 in `Result.HostID`; an `Observer` sees the shard of every attempt in
 `AttemptEvent.Target`.
 

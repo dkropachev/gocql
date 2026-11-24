@@ -8,9 +8,8 @@ The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
 it is conditional, the kind of batch it sends (`Batch`, unset for a single
 statement), and `ExecutionStatus`, which reports whether the attempt
 may have changed data (see [Errors](errors.md)). A `retry.Decision` selects
-`retry.Stop` (the zero value), `retry.Same` (the same host), `retry.Next` (the
-next host of the plan) or `retry.IgnoreWrite` (treat the failed write as
-successful), with an optional `Consistency` for the next attempt and a
+`retry.Stop` (the zero value), `retry.Same` (the same host) or `retry.Next`
+(the next host of the plan), with an optional `Consistency` for the next attempt and a
 `Delay` before it; `Result.AchievedConsistency` reports the consistency that
 succeeded. `Decide` runs on the request goroutine and must not block.
 
@@ -23,9 +22,10 @@ complete profile; `retry.Never{}` can express that choice there too.
 three) and retries only when replay is safe. Among server errors, it moves to
 the next host on Unavailable, Overloaded and Bootstrapping, which it treats as
 not executed, except for a non-idempotent unlogged or counter batch (below);
-retries in place a read timeout that had enough replicas but no data; and moves
-an idempotent request on after a coordinator server error
-(`cqlerr.CodeServer`). Every other server error stops, idempotent or not: write
+retries in place a read timeout that had enough replicas but no data, and an
+idempotent logged batch whose batch log write timed out
+(`cqlerr.WriteTypeBatchLog`); and moves an idempotent request on after a
+coordinator server error (`cqlerr.CodeServer`). Every other server error stops, idempotent or not: write
 timeouts, read timeouts with data or too few replicas, read and write failures,
 and deterministic errors. A failure that is not a server error, such as a lost
 connection, is replayed on the next host only for an idempotent request or an

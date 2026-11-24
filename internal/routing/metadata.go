@@ -77,7 +77,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 	data := SnapshotData(m)
 	ks := data.InternalKeyspaces[keyspace]
 	if ks == nil {
-		return 0, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
+		return 0, keyspaceNotLoaded(keyspace)
 	}
 	var columns []*metadata.Column
 	partitioner := data.InternalPartitioner
@@ -92,7 +92,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 			partitioner = v.Options.Partitioner
 		}
 	} else {
-		return 0, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
+		return 0, tableNotLoaded(keyspace, table)
 	}
 	if len(columns) == 0 {
 		return 0, cqltype.TypeValidation("partition key", "%s.%s has no partition-key metadata", keyspace, table)
@@ -159,12 +159,12 @@ func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table s
 	}
 	ks, ok := SnapshotData(m).InternalKeyspaces[keyspace]
 	if !ok {
-		return nil, false, fmt.Errorf("%s: %w", keyspace, cqlerr.ErrNoKeyspace)
+		return nil, false, keyspaceNotLoaded(keyspace)
 	}
 	if table != "" {
 		if _, ok := ks.Tables[table]; !ok {
 			if _, ok := ks.Views[table]; !ok {
-				return nil, false, fmt.Errorf("%s.%s: %w", keyspace, table, cqlerr.ErrNoTable)
+				return nil, false, tableNotLoaded(keyspace, table)
 			}
 		}
 		if r, ok := SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}]; ok {
@@ -172,6 +172,19 @@ func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table s
 		}
 	}
 	return SnapshotData(m).InternalRanges[keyspace], false, nil
+}
+
+// keyspaceNotLoaded is the error for a keyspace the snapshot's metadata does
+// not hold: a cql.ValidationError that wraps cqlerr.ErrNoKeyspace. The
+// keyspace may exist on the cluster but be outside what the session loads.
+func keyspaceNotLoaded(keyspace string) error {
+	return cqltype.TypeValidation("keyspace", "%q is not loaded in this metadata snapshot: %w", keyspace, cqlerr.ErrNoKeyspace)
+}
+
+// tableNotLoaded is keyspaceNotLoaded for a table or materialized view of a
+// loaded keyspace; it wraps cqlerr.ErrNoTable.
+func tableNotLoaded(keyspace, table string) error {
+	return cqltype.TypeValidation("table", "%s.%s is not loaded in this metadata snapshot: %w", keyspace, table, cqlerr.ErrNoTable)
 }
 
 // Diagnostics reports routing/metadata omissions without substituting fabricated tokens.

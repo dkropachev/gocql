@@ -123,7 +123,7 @@ func (rt *InternalSessionRuntime) runStream[B, R any](ctx context.Context, bound
 		// ErrClosed, as their stop below does, whichever runs first.
 		owner := executionCursor(request)
 		cursor.privateStorage.stop = context.AfterFunc(runctx, func() {
-			cause := runctx.Err()
+			cause := transport.ContextError(runctx)
 			if session.Closed() || owner.stopped() {
 				cause = cqlerr.ErrClosed
 			}
@@ -358,7 +358,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 	if terminal || s.privateStorage.closing.Load() {
 		return false
 	}
-	if err := s.privateStorage.ctx.Err(); err != nil {
+	if err := transport.ContextError(s.privateStorage.ctx); err != nil {
 		rowStreamFail(s, err)
 		rowStreamCleanup(s, false)
 		return false
@@ -567,11 +567,11 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	}
 	pagectx := s.privateStorage.ctx
 	if timeout := request.options.InternalProfile.PageTimeout; timeout > 0 {
-		pagectx, s.privateStorage.pageCancel = context.WithTimeout(s.privateStorage.ctx, timeout)
+		pagectx, s.privateStorage.pageCancel = context.WithTimeoutCause(s.privateStorage.ctx, timeout, cqlerr.ErrRequestTimeout)
 	}
 	consistency := request.options.InternalProfile.Consistency
 	for attempt := 1; ; attempt++ {
-		if err := pagectx.Err(); err != nil {
+		if err := transport.ContextError(pagectx); err != nil {
 			return err
 		}
 		if s.privateStorage.reservation == nil {
@@ -739,7 +739,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			return err
 		}
 		if decision.Action != retry.Same && decision.Action != retry.Next {
-			return cqltype.TypeValidation("stream retry", "requires retry same, next or stop")
+			return cqltype.TypeValidation("retry", "unknown retry action")
 		}
 		if decision.Delay < 0 {
 			return cqltype.TypeValidation("retry delay", "negative delay")
@@ -763,7 +763,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			select {
 			case <-pagectx.Done():
 				timer.Stop()
-				return pagectx.Err()
+				return transport.ContextError(pagectx)
 			case <-timer.C:
 			}
 		}

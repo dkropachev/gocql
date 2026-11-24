@@ -19,7 +19,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -287,7 +286,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err := rows.Err(); err != nil {
 					t.Fatal(err)
 				}
-				if _, err := v2ReadOne(context.Background(), session, filtered); !errors.Is(err, cqlerr.ErrNoRows) {
+				if _, err := v2ReadOne(context.Background(), session, filtered); !errors.Is(err, errNoRows) {
 					t.Fatalf("empty single-row result=%v", err)
 				}
 			})

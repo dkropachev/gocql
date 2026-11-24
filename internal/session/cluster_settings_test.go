@@ -409,17 +409,17 @@ func TestClusterSettings(t *testing.T) {
 					NumRetries:               1,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: nil,
-					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
+					ExpectedErr:              "gocql: unable to create session: gocql: no host reachable during control connection: "},
 				{
 					NumRetries:               2,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: []int{1},
-					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
+					ExpectedErr:              "gocql: unable to create session: gocql: no host reachable during control connection: "},
 				{
 					NumRetries:               3,
 					ProtoVersion:             implProtocol.ProtoVersion4,
 					ExpectedGetIntervalCalls: []int{1, 2},
-					ExpectedErr:              "gocql: unable to create session: no host reachable during control connection: "},
+					ExpectedErr:              "gocql: unable to create session: gocql: no host reachable during control connection: "},
 			}
 
 			for id := range tcase {
@@ -550,7 +550,7 @@ func TestClusterSettings(t *testing.T) {
 				t.Fatalf("Expected to receive no connections error - got '%s'", err)
 			}
 
-			if !strings.Contains(logOut.String(), "no response to connection startup within timeout") && !strings.Contains(logOut.String(), "no response received from cassandra within timeout period") {
+			if !strings.Contains(logOut.String(), "no response to connection startup within timeout") && !strings.Contains(logOut.String(), "no response from server within timeout") {
 				t.Fatalf("Expected to receive timeout log message  - got '%s'", logOut.String())
 			}
 

@@ -25,6 +25,7 @@
 package cqlerr
 
 import (
+	"context"
 	"errors"
 )
 
@@ -38,8 +39,31 @@ var (
 	ErrNoConnections = errors.New("gocql: no hosts available in the pool")
 	// ErrNoKeyspace reports a missing keyspace: an empty keyspace name, or
 	// one the loaded metadata does not have.
-	ErrNoKeyspace = errors.New("gocql: no keyspace provided")
+	ErrNoKeyspace = errors.New("gocql: keyspace not found or not set")
 	// ErrNoTable reports a missing table: an empty table name, or one the
 	// loaded metadata does not have.
-	ErrNoTable = errors.New("gocql: no table name provided")
+	ErrNoTable = errors.New("gocql: table not found or not set")
 )
+
+// ErrRequestTimeout reports that a request used up the time its profile or
+// exec.Options gave it (Timeout, or PageTimeout for one page). It matches
+// context.DeadlineExceeded, so errors.Is(err, context.DeadlineExceeded)
+// holds for the driver's budget and for the caller's own deadline alike;
+// errors.Is(err, ErrRequestTimeout) holds only for the driver's. KindOf
+// reports KindTimeout.
+var ErrRequestTimeout error = requestTimeoutError{}
+
+// requestTimeoutError is ErrRequestTimeout's type: a comparable value, so
+// that the sentinel matches by identity.
+type requestTimeoutError struct{}
+
+func (requestTimeoutError) Error() string { return "gocql: request timeout exceeded" }
+
+// Is reports whether target is context.DeadlineExceeded.
+func (requestTimeoutError) Is(target error) bool { return target == context.DeadlineExceeded }
+
+// Timeout reports true, as context.DeadlineExceeded does.
+func (requestTimeoutError) Timeout() bool { return true }
+
+// Temporary reports true, as context.DeadlineExceeded does.
+func (requestTimeoutError) Temporary() bool { return true }

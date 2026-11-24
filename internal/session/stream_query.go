@@ -225,7 +225,7 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 					return fail(err)
 				}
 			}
-			if err := p.ctx.Err(); err != nil {
+			if err := transport.ContextError(p.ctx); err != nil {
 				return fail(err)
 			}
 			p.mu.Lock()

@@ -74,6 +74,15 @@ func (k Kind) String() string {
 // Transient reports whether the same request can succeed later, possibly on
 // another host. Whether replaying it is safe is a separate question; see
 // ExecutionStatusOf.
+//
+// KindTimeout is transient, and it also covers the caller's own expired
+// context deadline, which no retry under that context can outlive. A retry
+// loop checks its context first:
+//
+//	for cqlerr.KindOf(err).Transient() && ctx.Err() == nil { ... }
+//
+// errors.Is(err, ErrRequestTimeout) holds only when the driver's own Timeout
+// or PageTimeout ran out.
 func (k Kind) Transient() bool {
 	switch k {
 	case KindTimeout, KindUnavailable, KindOverloaded, KindRateLimited, KindConnection:

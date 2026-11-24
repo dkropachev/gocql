@@ -13,7 +13,6 @@ import (
 	inf "gopkg.in/inf.v0"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	fixtureDuration "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 
 	"math"
@@ -61,7 +60,7 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
-		return zero, cqlerr.ErrNoRows
+		return zero, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {

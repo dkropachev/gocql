@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math"
+	"strings"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -122,6 +123,19 @@ func TestSnapshotToken(t *testing.T) {
 		}
 		if _, err := m.Token("nope", "single", cql.IntValue(1)); !errors.Is(err, cqlerr.ErrNoKeyspace) {
 			t.Errorf("missing keyspace: %v", err)
+		}
+		// A keyspace or table the snapshot does not hold may exist but not
+		// be loaded: the error is a validation error that says so.
+		for name, call := range map[string]func() error{
+			"Token keyspace":    func() error { _, err := m.Token("nope", "single", cql.IntValue(1)); return err },
+			"Token table":       func() error { _, err := m.Token("ks", "missing", cql.IntValue(1)); return err },
+			"Replicas keyspace": func() error { _, err := m.Replicas("nope", "single", 0); return err },
+			"Replicas table":    func() error { _, err := m.Replicas("ks", "missing", 0); return err },
+		} {
+			err := call()
+			if _, ok := errors.AsType[*cql.ValidationError](err); !ok || !strings.Contains(err.Error(), "not loaded") || cqlerr.KindOf(err) != cqlerr.KindInvalid {
+				t.Errorf("%s: %v; want a validation error saying it is not loaded", name, err)
+			}
 		}
 	})
 }

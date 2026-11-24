@@ -12,9 +12,6 @@ import (
 )
 
 func TestMirrorLayouts(t *testing.T) {
-	if err := link.CheckLayout[cqlerr.QueryError, queryErrorRep](); err != nil {
-		t.Error(err)
-	}
 	if err := link.CheckLayout[cqlerr.ExecutionError, executionErrorRep](); err != nil {
 		t.Error(err)
 	}
@@ -23,8 +20,11 @@ func TestMirrorLayouts(t *testing.T) {
 func TestConstructors(t *testing.T) {
 	cause := errors.New("cause")
 	q := NewQueryError(QueryErrorState{InternalErr: cause, InternalPotentiallyExecuted: true})
-	if !errors.Is(q, cause) || q.ExecutionStatus() != cqlerr.MaybeExecuted {
-		t.Fatalf("NewQueryError = %v, status %v", q, q.ExecutionStatus())
+	if !errors.Is(q, cause) || cqlerr.ExecutionStatusOf(q) != cqlerr.MaybeExecuted {
+		t.Fatalf("NewQueryError = %v, status %v", q, cqlerr.ExecutionStatusOf(q))
+	}
+	if unsent := NewQueryError(QueryErrorState{InternalErr: cause}); cqlerr.ExecutionStatusOf(unsent) != cqlerr.NotExecuted {
+		t.Fatalf("unsent attempt: status %v", cqlerr.ExecutionStatusOf(unsent))
 	}
 	e := NewExecutionError(q, cqlerr.ExecutionError{}.Result, cqlerr.PartiallyExecuted, nil)
 	if e.ExecutionStatus() != cqlerr.PartiallyExecuted || !errors.Is(e, cause) {

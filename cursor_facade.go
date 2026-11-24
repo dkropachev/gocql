@@ -29,7 +29,7 @@ func (l *PageLease) Close() { (*implSession.PageLease)(l).Close() }
 type Rows[R any] implSession.Rows[R]
 
 // Retain keeps the current row's physical page alive until the lease closes.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r Rows[R]) Retain() (*PageLease, error) {
 	lease, err := (implSession.Rows[R])(r).Retain()
 	return (*PageLease)(lease), err
@@ -60,7 +60,7 @@ func (r Rows[R]) Close() error { return (implSession.Rows[R])(r).Close() }
 func (r Rows[R]) Columns() cql.Columns { return (implSession.Rows[R])(r).Columns() }
 
 // Clone returns an owned copy of the current row, recursively detaching views.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r Rows[R]) Clone() (R, error) { return (implSession.Rows[R])(r).Clone() }
 
 // Info returns execution information accumulated so far.
@@ -112,14 +112,14 @@ func (r CASBatchRows[X]) Close() error { return (implSession.CASBatchRows[X])(r)
 func (r CASBatchRows[X]) Columns() cql.Columns { return (implSession.CASBatchRows[X])(r).Columns() }
 
 // Retain keeps the current row's physical page alive until the lease closes.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r CASBatchRows[X]) Retain() (*PageLease, error) {
 	lease, err := (implSession.CASBatchRows[X])(r).Retain()
 	return (*PageLease)(lease), err
 }
 
 // Clone returns an owned copy of the current row, recursively detaching views.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r CASBatchRows[X]) Clone() (cql.CASResult[X], error) {
 	return (implSession.CASBatchRows[X])(r).Clone()
 }
@@ -135,7 +135,7 @@ func (r CASBatchRows[X]) Info() cql.Result { return (implSession.CASBatchRows[X]
 type Page[R any] implSession.Page[R]
 
 // Retain keeps the current row's physical page alive until the lease closes.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r *Page[R]) Retain() (*PageLease, error) {
 	lease, err := (*implSession.Page[R])(r).Retain()
 	return (*PageLease)(lease), err
@@ -163,7 +163,7 @@ func (r *Page[R]) Close() error { return (*implSession.Page[R])(r).Close() }
 func (r *Page[R]) Columns() cql.Columns { return (*implSession.Page[R])(r).Columns() }
 
 // Clone returns an owned copy of the current row, recursively detaching views.
-// With no current row it returns cqlerr.ErrNoRows.
+// With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r *Page[R]) Clone() (R, error) { return (*implSession.Page[R])(r).Clone() }
 
 // Info returns execution information accumulated so far.

@@ -224,14 +224,14 @@ func TestInlineSpeculation(t *testing.T) {
 // scheduleSpeculation starts one speculative attempt 50ms after the first.
 type scheduleSpeculation struct{}
 
-func (scheduleSpeculation) Delay(attempt int) (time.Duration, bool) {
-	return 50 * time.Millisecond, attempt == 1
+func (scheduleSpeculation) Delay(started int) (time.Duration, bool) {
+	return 50 * time.Millisecond, started == 1
 }
 
 // zeroSpeculation starts up to two speculative attempts at once.
 type zeroSpeculation struct{}
 
-func (zeroSpeculation) Delay(attempt int) (time.Duration, bool) { return 0, attempt <= 2 }
+func (zeroSpeculation) Delay(started int) (time.Duration, bool) { return 0, started <= 2 }
 
 // readRequestStream reads one request frame and returns its stream, or -1
 // once the peer is closed.

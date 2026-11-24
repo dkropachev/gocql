@@ -258,7 +258,7 @@ func (s *queryState) begin(ctx context.Context) error {
 	if ctx == nil {
 		return cqltype.TypeValidation("context", "nil context")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return err
 	}
 	s.mu.Lock()
@@ -280,7 +280,7 @@ func (s *queryState) begin(ctx context.Context) error {
 		select {
 		case <-done:
 		case <-ctx.Done():
-			return ctx.Err()
+			return transport.ContextError(ctx)
 		}
 		s.mu.Lock()
 	}
@@ -493,7 +493,7 @@ func (s *queryState) wait(ctx context.Context) error {
 	case <-done:
 		return nil
 	case <-ctx.Done():
-		return ctx.Err()
+		return transport.ContextError(ctx)
 	}
 }
 
@@ -512,7 +512,7 @@ func (q *Query[P, R]) Close() {
 
 // Wait waits until the query's last execution has drained: accepted
 // transport writes, attempts in flight and their observer callbacks. It
-// returns ctx.Err() if ctx ends first. After Close, a nil result means
+// returns transport.ContextError(ctx) if ctx ends first. After Close, a nil result means
 // nothing of the query remains in flight.
 func (q *Query[P, R]) Wait(ctx context.Context) error {
 	if q == nil {

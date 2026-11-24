@@ -39,7 +39,7 @@ func TestEnumStrings(t *testing.T) {
 		{event.Kind(99), "Kind(99)"},
 		{metadata.ModeFull, "full"},
 		{metadata.Mode(9), "Mode(9)"},
-		{retry.IgnoreWrite, "ignore write"},
+		{retry.Next, "next"},
 		{retry.Action(9), "Action(9)"},
 		{exec.SerialLocal, "local serial"},
 		{exec.SerialOverride(9), "SerialOverride(9)"},

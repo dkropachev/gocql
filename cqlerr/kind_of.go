@@ -72,7 +72,7 @@ func sentinelKind(err error) Kind {
 	case ErrClosed, ErrStaleRows, cql.ErrReleased: //nolint:errorlint // one node of a tree walkErrors walks
 		return KindClosed
 	case ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
-		ErrPagingStateLimit, ErrNoRows:
+		ErrPagingStateLimit, ErrNoCurrentRow:
 		return KindInvalid
 	case ErrFrameTooBig, ErrPagingNoProgress:
 		return KindProtocol
@@ -103,7 +103,7 @@ func (w *kindWalk) visit(err error) bool {
 	if w.rank <= rankDeadline {
 		return true // only a cancellation outranks a deadline
 	}
-	if err == context.DeadlineExceeded { //nolint:errorlint // one node of a tree walkErrors walks
+	if err == context.DeadlineExceeded || err == ErrRequestTimeout { //nolint:errorlint // one node of a tree walkErrors walks
 		w.kind, w.rank = KindTimeout, rankDeadline
 		return true
 	}

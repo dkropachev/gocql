@@ -56,7 +56,6 @@ import (
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -100,6 +99,9 @@ var (
 
 // errMultipleRows reports that a helper expecting one row read several.
 var errMultipleRows = errors.New("integration: multiple rows")
+
+// errNoRows reports a read that found no row.
+var errNoRows = errors.New("integration: no rows")
 
 func TestMain(m *testing.M) {
 	flag.Parse()
@@ -645,7 +647,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 		if err := rows.Err(); err != nil {
 			return cql.DynamicRow{}, err
 		}
-		return cql.DynamicRow{}, cqlerr.ErrNoRows
+		return cql.DynamicRow{}, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {
@@ -1213,7 +1215,7 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 		if err := rows.Err(); err != nil {
 			return zero, err
 		}
-		return zero, cqlerr.ErrNoRows
+		return zero, errNoRows
 	}
 	row, err := rows.Clone()
 	if err != nil {

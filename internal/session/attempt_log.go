@@ -52,7 +52,7 @@ func statusSeverity(s cqlerr.ExecutionStatus) int {
 //go:noinline
 func (l *attemptLog) fail(err error, conn *transport.Conn, number int, consistency cql.Consistency, trace cql.Option[cql.UUID], partial bool) cqlerr.ExecutionStatus {
 	status := attemptStatus(err, partial)
-	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: status, CQLTraceID: trace}, conn)
+	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, ExecutionStatus: status, CQLTraceID: trace}, conn)
 	return status
 }
 
@@ -87,7 +87,7 @@ func (l *attemptLog) record(failure AttemptFailure, conn *transport.Conn) {
 		}
 	}
 	l.failures = append(l.failures, failure)
-	l.raise(failure.Status)
+	l.raise(failure.ExecutionStatus)
 }
 
 // responseTraceID returns the CQL trace session a possibly nil response names.
@@ -162,5 +162,5 @@ func removeInflight(attempts []inflightAttempt, number int) []inflightAttempt {
 // the execution's context error, ended it. The attempt may have been sent,
 // so it may have been applied.
 func (l *attemptLog) abandon(err error, conn *transport.Conn, number int, consistency cql.Consistency) {
-	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, Status: cqlerr.MaybeExecuted}, conn)
+	l.record(AttemptFailure{Err: err, Number: number, Consistency: consistency, ExecutionStatus: cqlerr.MaybeExecuted}, conn)
 }

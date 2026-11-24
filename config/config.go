@@ -795,7 +795,8 @@ func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 }
 
 // WithSpeculation sets the speculative execution policy; nil disables it.
-// Default none.
+// Default none. Only an idempotent execution of ordinary statements
+// speculates; see retry.SpeculationPolicy.
 func (p *ProfileBuilder) WithSpeculation(policy retry.SpeculationPolicy) *ProfileBuilder {
 	p.profile.Speculation = policy
 	return p

@@ -2,8 +2,9 @@
 // Use of this source code is governed by a BSD-style license.
 
 // Package runtimeerrors builds the cqlerr errors whose state is unexported:
-// the engine's attempt and execution errors. It reaches their fields through
-// layout mirrors; TestMirrorLayouts checks them.
+// the engine's attempt and execution errors. It reaches them through
+// internal/link: a constructor slot for the unexported attempt error, and a
+// layout mirror of ExecutionError that TestMirrorLayouts checks.
 package runtimeerrors
 
 import (
@@ -22,9 +23,6 @@ type QueryErrorState struct {
 	InternalPotentiallyExecuted bool
 }
 
-// queryErrorRep mirrors cqlerr.QueryError.
-type queryErrorRep struct{ state QueryErrorState }
-
 // executionErrorRep mirrors cqlerr.ExecutionError.
 type executionErrorRep struct {
 	Err       error
@@ -35,18 +33,15 @@ type executionErrorRep struct {
 	status    cqlerr.ExecutionStatus
 }
 
-var serverErrorMessage = link.Get[func(cqlerr.ServerError, string, []string)](link.ServerErrorMessage)
+var (
+	serverErrorMessage = link.Get[func(cqlerr.ServerError, string, []string)](link.ServerErrorMessage)
+	newAttemptError    = link.Get[func(error, time.Duration, int, bool) error](link.NewAttemptError)
+)
 
-// NewQueryError returns the error of a failed attempt.
-func NewQueryError(state QueryErrorState) *cqlerr.QueryError {
-	e := new(cqlerr.QueryError)
-	link.Mirror[queryErrorRep](e).state = state
-	return e
-}
-
-// QueryErrorData returns the state of e.
-func QueryErrorData(e *cqlerr.QueryError) *QueryErrorState {
-	return &link.Mirror[queryErrorRep](e).state
+// NewQueryError returns the error of a failed attempt. It reports
+// cqlerr.NotExecuted unless state says the request may have been sent.
+func NewQueryError(state QueryErrorState) error {
+	return newAttemptError(state.InternalErr, state.InternalTimeout, state.InternalInFlight, state.InternalPotentiallyExecuted)
 }
 
 // NewExecutionError returns the error of a request that stopped with err

@@ -227,7 +227,7 @@ func (s *InternalSessionRuntime) prepareTypedOnce(ctx context.Context, statement
 		rt.InternalMu.Unlock()
 		select {
 		case <-ctx.Done():
-			return nil, true, ctx.Err()
+			return nil, true, transport.ContextError(ctx)
 		case <-flight.done:
 			return flight.state, true, flight.err
 		}
@@ -310,7 +310,7 @@ func (s *InternalSessionRuntime) prepareOnConn(ctx context.Context, conn *transp
 	return s.prepareOnConnExpected(ctx, conn, state, values, force, nil)
 }
 func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn *transport.Conn, state *InternalPreparedState, values model.EncodedValues, force bool, failed *InternalHostPrepared) (*InternalHostPrepared, error) {
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, err
 	}
 	if s.Core.Closed() {
@@ -364,7 +364,7 @@ func (s *InternalSessionRuntime) prepareOnConnExpected(ctx context.Context, conn
 	state.InternalMu.Unlock()
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, transport.ContextError(ctx)
 	case <-flight.done:
 		return flight.result, flight.err
 	}
@@ -678,7 +678,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	if ctx == nil || rt == nil || b == nil || b.privateStorage.InternalRequest.InternalOwner == nil {
 		return nil, nil, nil, cqltype.TypeValidation("execution", "nil context, session or binding")
 	}
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, nil, nil, err
 	}
 	s := rt.Core
@@ -1434,7 +1434,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 	// contextEnded ends the execution with the context's error.
 	contextEnded := func() (*transport.InternalResponsePage, error) {
 		aggregate.Attempts = startedCount
-		failure := ctx.Err()
+		failure := transport.ContextError(ctx)
 		// An abandoned in-flight attempt may have been applied.
 		for _, a := range inflight {
 			log.abandon(failure, a.conn, a.number, a.consistency)
@@ -1550,9 +1550,6 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
 				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
-			}
-			if decision.Action == retry.IgnoreWrite {
-				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {
