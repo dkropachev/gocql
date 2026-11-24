@@ -71,6 +71,11 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		legacy.ConvictionPolicy = config.Conviction
 	}
 	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
+	if config.Reconnect != nil {
+		if delay, _ := config.Reconnect.Delay(1); delay < 0 {
+			return nil, cqltype.TypeValidation("reconnect delay", "must not be negative")
+		}
+	}
 	legacy.DriverName = config.Identity.DriverName
 	legacy.DriverVersion = config.Identity.DriverVersion
 	legacy.ApplicationInfo = transport.NewStaticApplicationInfo(config.Identity.ApplicationName, config.Identity.ApplicationVersion, config.Identity.ClientID)

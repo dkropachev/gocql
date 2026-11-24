@@ -8,6 +8,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	logging "github.com/scylladb/gocql/v2/internal/logging"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -68,6 +69,9 @@ func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, in
 				s.privateStorage.InternalPool.InternalAddHost(host)
 				state.attempt++
 				delay, again := policy.Delay(state.attempt + 1)
+				if delay < 0 {
+					s.logger().Warn("reconnect policy returned a negative delay; not reconnecting host", logging.KeyHost, host.ConnectAddress().String())
+				}
 				state.stopped = !again || delay < 0
 				state.next = now.Add(max(delay, time.Millisecond))
 				retries[id] = state
