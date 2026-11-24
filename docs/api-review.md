@@ -38,6 +38,7 @@ v2.1; it can only be removed in v3.
 | `metadata.Column.Index`, `metadata.ColumnIndex` | Described the pre-3.0 `system.schema_columns` index columns. The driver reads only `system_schema`, so they were always empty. Indexes are in `metadata.Keyspace.Indexes`. |
 | `metadata.View.ReadRepairChance`, `DcLocalReadRepairChance` | Duplicated `View.Options`. The driver fills `View.Options.ReadRepairChance` and `DCLocalReadRepairChance`, as for a table. |
 | `metadata.Column.Order`, `metadata.ASC`, `metadata.DESC` | Duplicated `Column.ClusteringOrder`. Decision 4. |
+| `Session.RunBatch` | Duplicated `Session.RunConditionalBatch`: only a conditional batch returns rows, and `CASBatchRows[X]` has every method of `Rows[cql.CASResult[X]]` plus `Applied`. It also sent a batch known to have no condition, which `RunConditionalBatch` rejects. |
 
 ## `gocql`
 
@@ -47,7 +48,7 @@ v2.1; it can only be removed in v3.
 | `Session` and its methods | Keep. `ID` correlates with `system.clients`; `Closed`, `Metadata`, `Metrics`, `Subscribe`, `RefreshMetadata` and `AwaitSchemaAgreement` are the session-level operations. |
 | `Prepared`, `PreparedStream`, `Query`, `StreamQuery`, `PreparedInfo`, `StreamInfo` | Keep. `Query.Routing` lets a caller see the route a value takes without executing. |
 | `Rows`, `Page`, `CASBatchRows`, `RowStream`, `PageLease` | Keep. |
-| `Batch`, `MaxBatchStatements` | Keep. |
+| `Batch`, `MaxBatchStatements` | Keep. `Batch.Size` reports the encoded value bytes, which the server's `batch_size_fail_threshold` limits, while `MaxBatchStatements` is only the protocol's count limit. |
 | `StopIteration` | Keep. Named like `filepath.SkipDir`: a signal, not a failure. |
 
 ## `auth`

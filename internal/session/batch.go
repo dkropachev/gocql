@@ -22,9 +22,9 @@ import (
 
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request. Prepared.AddToBatch and Query.AddToBatch append a
-// statement; Session.ExecBatch and Session.RunBatch send the batch.
+// statement; Session.ExecBatch and Session.RunConditionalBatch send the batch.
 // Statements of several prepared statements and queries may share a batch
-// when they belong to one session.
+// when they belong to one session, and may write tables of several keyspaces.
 //
 // Appending copies the encoded values into storage the batch owns and reuses:
 // once a batch has grown to its working size, appending and Reset allocate
@@ -92,6 +92,15 @@ func (b *Batch) Len() int {
 		return 0
 	}
 	return len(b.entries)
+}
+
+// Size returns the bytes of the batch's encoded values, length prefixes
+// included.
+func (b *Batch) Size() int {
+	if b == nil {
+		return 0
+	}
+	return len(b.values)
 }
 
 // Reset empties the batch, keeping its storage and Kind for the next
@@ -208,9 +217,6 @@ func (b *Batch) admit(s *implCluster.Core, r *routing.Info) error {
 	if b.session != nil && b.session != s {
 		return cqltype.TypeValidation("batch session", "statements belong to different sessions")
 	}
-	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
-		return cqltype.TypeValidation("batch keyspace", "members use different keyspaces")
-	}
 	return nil
 }
 
@@ -229,11 +235,18 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		b.routing.Kind = cql.OrdinaryStatement
 	}
 	b.session = s
-	if r.Keyspace != "" {
-		b.routing.Keyspace = r.Keyspace
-	}
-	if !b.routing.Token.Set && r.Token.Set {
-		b.routing.Token, b.routing.Table = r.Token, r.Table
+	// Members may span keyspaces, as a logged batch may. The batch routes by
+	// its first member with a token, so its keyspace and table come from that
+	// member; until one joins, the first member's keyspace stands in.
+	if !b.routing.Token.Set {
+		if r.Token.Set {
+			b.routing.Token, b.routing.Table = r.Token, r.Table
+			if r.Keyspace != "" {
+				b.routing.Keyspace = r.Keyspace
+			}
+		} else if b.routing.Keyspace == "" {
+			b.routing.Keyspace = r.Keyspace
+		}
 	}
 	switch {
 	case r.Kind == cql.ConditionalStatement:

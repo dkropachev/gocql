@@ -3,6 +3,7 @@ package gocql
 		gocql.Batch field Kind cql.BatchKind
 		gocql.Batch method (*T) Len() int
 		gocql.Batch method (*T) Reset()
+		gocql.Batch method (*T) Size() int
 	type gocql.CASBatchRows[X any] struct
 		gocql.CASBatchRows method (T) Applied() (bool, error)
 		gocql.CASBatchRows method (T) Clone() (cql.CASResult[X], error)
@@ -86,7 +87,6 @@ package gocql
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
 		gocql.Session method (*T) RefreshMetadata(ctx context.Context) error
-		gocql.Session method (*T) RunBatch[R any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[R], options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error

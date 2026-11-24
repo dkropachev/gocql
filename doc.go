@@ -58,10 +58,9 @@
 //
 // Prepared.AddToBatch, Query.AddToBatch and Session.UnpreparedAddToBatch
 // append statements to a Batch; Session.ExecBatch sends it, and
-// Session.RunBatch sends it and returns the Rows of a conditional batch;
-// Session.RunConditionalBatch returns them as CASBatchRows, whose Applied
-// reports whether the batch applied, and rejects a batch known to have no
-// conditional member.
+// Session.RunConditionalBatch sends a conditional batch and returns its rows
+// as CASBatchRows, whose Applied reports whether the batch applied. It
+// rejects a batch known to have no conditional member.
 //
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamQuery per worker. A

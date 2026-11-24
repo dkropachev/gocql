@@ -128,10 +128,11 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Sta
 
 // ExecBatch sends batch as one CQL BATCH request of batch.Kind. A batch known to be
 // conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
-// read its result with RunBatch. At most one exec.CompiledOptions may be passed;
-// paging options are ignored, because a BATCH response is a single page. Do
-// not modify batch until the call returns. A reused batch sends without
-// allocating.
+// read its result with RunConditionalBatch. At most one exec.CompiledOptions
+// may be passed; paging options are ignored, because a BATCH response is a
+// single page. Options are compiled once with CompileOptions and reused, for a
+// one-off batch too, so that sending resolves nothing. Do not modify batch
+// until the call returns. A reused batch sends without allocating.
 func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
@@ -144,37 +145,20 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.C
 	return s.internal().ExecBatch(ctx, (*implSession.Batch)(batch), o)
 }
 
-// RunBatch sends batch as one CQL BATCH request of batch.Kind and returns its rows, decoded
-// with decoder: the rows of a conditional batch report whether it applied.
-// Which rows the server returns differs between Cassandra and ScyllaDB: on
-// ScyllaDB row i belongs to statement i, on Cassandra rows belong to rows of
-// the partition. The batch applied if and only if every row reports it. The
-// rows hold a pooled query until they are closed, as Prepared.Run's do.
-// exec.CompiledOptions and batch ownership are as for ExecBatch. Once its rows
-// are closed, a batch sent again with the same R and decoder reuses their
-// storage and allocates nothing.
-func (s *Session) RunBatch[R any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[R], options ...exec.CompiledOptions) (Rows[R], error) {
-	var o implSession.CompiledOptions
-	switch len(options) {
-	case 0:
-	case 1:
-		o = implSession.CompiledOptions(options[0])
-	default:
-		return Rows[R]{}, tooManyOptions()
-	}
-	rows, err := s.internal().RunBatch(ctx, (*implSession.Batch)(batch), decoder, o)
-	return Rows[R](rows), err
-}
-
-// RunConditionalBatch sends a conditional batch as RunBatch does and returns
-// its rows as CASBatchRows, whose Applied reports whether the batch applied.
-// decoder is a cql.CASRows decoder, typically the Rows of a member's
-// statement; it maps the previous values of the columns it names and skips
-// the rest. A batch whose members are all known not to be conditional is
-// rejected before it is sent: it has no [applied] to report, so send it with
-// ExecBatch. One of unknown kind, as on Cassandra without a declared Kind,
-// is sent, and fails on its result if it has no condition. Options,
-// ownership and reuse are as for RunBatch.
+// RunConditionalBatch sends a conditional batch as one CQL BATCH request of
+// batch.Kind and returns its rows as CASBatchRows, whose Applied reports
+// whether the batch applied. decoder is a cql.CASRows decoder, typically the
+// Rows of a member's statement; it maps the previous values of the columns it
+// names and skips the rest. Which rows the server returns differs between
+// Cassandra and ScyllaDB: on ScyllaDB row i belongs to statement i, on
+// Cassandra rows belong to rows of the partition. A batch whose members are
+// all known not to be conditional is rejected before it is sent: it has no
+// [applied] to report, so send it with ExecBatch. One of unknown kind, as on
+// Cassandra without a declared Kind, is sent, and fails on its result if it
+// has no condition. exec.CompiledOptions and batch ownership are as for
+// ExecBatch. The rows hold a pooled query until they are closed, as
+// Prepared.Run's do. Once they are closed, a batch sent again with the same X
+// and decoder reuses their storage and allocates nothing.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (CASBatchRows[X], error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
@@ -193,7 +177,8 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 // for UnpreparedExec. The statement is validated and its parameters compiled on
 // every call, so a statement added often is prepared once and added with
 // Prepared.AddToBatch. A member added this way gives the batch no routing
-// token; the batch routes by its first prepared member's token.
+// token; the batch routes by its first prepared member's token. Options for
+// sending the batch are compiled once with CompileOptions, as for ExecBatch.
 func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Statement[P, R], value P) error {
 	return s.internal().UnpreparedAddToBatch((*implSession.Batch)(batch), internalStatement(statement), value)
 }

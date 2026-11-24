@@ -14,10 +14,18 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request: Prepared.AddToBatch and Query.AddToBatch append a statement,
-// Session.ExecBatch and Session.RunBatch send the batch, and Reset empties it
-// for reuse. Once a batch has grown to its working size, appending allocates
-// nothing. A Batch is not safe for concurrent use and must not be copied.
+// BATCH request. Prepared.AddToBatch, Query.AddToBatch and
+// Session.UnpreparedAddToBatch append a statement; Session.ExecBatch sends
+// the batch, and Session.RunConditionalBatch sends a conditional one and
+// returns its rows. Reset empties it for reuse. Once a batch has grown to its
+// working size, appending allocates nothing. A Batch is not safe for
+// concurrent use and must not be copied.
+//
+// Every member must come from the session that sends the batch; members may
+// write tables of different keyspaces. The batch routes by its first member
+// whose partition key is known, which needs a prepared member; a batch of
+// unprepared members only has no replica to route to. A batch holds at most
+// MaxBatchStatements statements.
 //
 // The exported field Kind cql.BatchKind selects the batch's kind and is sent
 // with every execution: cql.LoggedBatch (the zero value),
@@ -40,6 +48,15 @@ var StopIteration = implSession.StopIteration
 
 // Len returns the number of statements in the batch.
 func (b *Batch) Len() int { return (*implSession.Batch)(b).Len() }
+
+// Size returns the bytes of the encoded values of the batch's statements,
+// each value's length prefix included. Statement texts and prepared IDs are
+// not counted. The server's batch_size_warn_threshold and
+// batch_size_fail_threshold measure the mutations the batch makes, which
+// follow from these values but also count per-cell overhead and values
+// written as CQL literals, so Size is an estimate a caller can use to split a
+// batch well below the threshold.
+func (b *Batch) Size() int { return (*implSession.Batch)(b).Size() }
 
 // Reset clears statements while preserving the batch's reusable capacity and
 // its Kind.

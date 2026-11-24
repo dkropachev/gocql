@@ -160,15 +160,15 @@ the partition.
 Driver handling:
 
 - The same `CASRows` path as a single statement, run through
-  `Session.RunBatch`, which returns `Rows`, or `Session.RunConditionalBatch`,
-  which returns `CASBatchRows` whose `Applied` applies the rule above
+  `Session.RunConditionalBatch`, which returns `CASBatchRows`: rows that
+  iterate like `Rows`, plus `Applied`, which applies the rule above
   (`internal/session/cas_batch.go`). `ExecBatch` rejects a batch known
   to be conditional before sending it (`cqlerr.ErrConditionalExec`), and
   `RunConditionalBatch` one known to have no conditional member, whose VOID
   result has no `[applied]`.
 - On ScyllaDB row i is member i, so the caller's row counter is the member
-  index; the driver adds no mapping API. The `CASBatchRows` and `RunBatch`
-  docs state the rule and that it does not hold on Cassandra. An all-NULL
+  index; the driver adds no mapping API. The `CASBatchRows` and
+  `RunConditionalBatch` docs state the rule and that it does not hold on Cassandra. An all-NULL
   previous row, which ScyllaDB sends when no row was found, decodes as no
   previous row. A found row carries at least its partition key, so it decodes
   as one, with NULL clustering columns when it is the static row.

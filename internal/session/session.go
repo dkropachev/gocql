@@ -67,7 +67,7 @@ func (s *Session) CompileOptions(options Options) (CompiledOptions, error) {
 }
 
 // ExecBatch sends batch as one CQL BATCH of batch.Kind on s. The batch's
-// statements must produce no result columns; RunBatch reads the rows of a
+// statements must produce no result columns; RunConditionalBatch reads the rows of a
 // conditional batch. The zero CompiledOptions uses the session's default
 // profile. ExecBatch is safe for concurrent use with other session calls, but
 // a Batch must not be changed while it is sent.

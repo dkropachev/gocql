@@ -127,7 +127,58 @@ func TestBatch(t *testing.T) {
 		})
 	})
 
+	// A batch may write tables of several keyspaces. It routes by its first
+	// member with a token, taking that member's keyspace and table.
+	t.Run("SpansKeyspaces", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 0)
+		var batch Batch
+		members := []routing.Info{
+			{Keyspace: "a", Table: "untokened", Kind: cql.OrdinaryStatement},
+			{Keyspace: "b", Table: "first", Token: cql.Some[int64](7), Kind: cql.OrdinaryStatement},
+			{Keyspace: "c", Table: "second", Token: cql.Some[int64](9), Kind: cql.OrdinaryStatement},
+		}
+		for i := range members {
+			if err := batch.admit(s, &members[i]); err != nil {
+				t.Fatalf("member %d: %v", i, err)
+			}
+			batch.appendEntry(s, cqlText{}, "UPDATE", &members[i], model.EncodedValues{}, 0)
+			if i == 0 && batch.routing.Keyspace != "a" {
+				t.Fatalf("keyspace before a routable member = %q, want a", batch.routing.Keyspace)
+			}
+		}
+		if got := batch.requestRouting(); got.Keyspace != "b" || got.Table != "first" || got.Token != cql.Some[int64](7) {
+			t.Fatalf("routing = %+v, want keyspace b, table first, token 7", got)
+		}
+		batch.Reset()
+		if batch.routing != (routing.Info{}) {
+			t.Fatalf("Reset kept routing %+v", batch.routing)
+		}
+	})
+
 	t.Run("AddToBatch", func(t *testing.T) {
+		// Size counts each value with its 4-byte length prefix.
+		t.Run("Size", func(t *testing.T) {
+			q := testOwnedQuery(t)
+			var batch Batch
+			if batch.Size() != 0 || (*Batch)(nil).Size() != 0 {
+				t.Fatal("empty batch has a size")
+			}
+			want := 0
+			for _, value := range [][]byte{[]byte("a"), []byte("batch entry"), nil} {
+				if err := q.AddToBatch(&batch, value); err != nil {
+					t.Fatal(err)
+				}
+				want += 4 + len(value)
+				if got := batch.Size(); got != want {
+					t.Fatalf("Size() = %d, want %d", got, want)
+				}
+			}
+			batch.Reset()
+			if batch.Size() != 0 {
+				t.Fatalf("Size() = %d after Reset", batch.Size())
+			}
+		})
+
 		t.Run("DoesNotAllocate", func(t *testing.T) {
 			q := testOwnedQuery(t)
 			var batch Batch

@@ -156,7 +156,9 @@ func (p *Prepared[P, R]) Query(options exec.Options) (*Query[P, R], error) {
 
 // AddToBatch encodes value straight into storage batch owns. Calls on p are
 // concurrency-safe and take no pooled query, but appending to one batch
-// requires exclusive ownership of it.
+// requires exclusive ownership of it. A batch that holds members of another
+// session, or already holds MaxBatchStatements, is rejected with a
+// *cql.ValidationError and left unchanged.
 func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	return p.internal().AddToBatch((*implSession.Batch)(batch), value)
 }

@@ -147,7 +147,7 @@ func TestClusterExamples(t *testing.T) {
 			logs: `(?s).*127\.0\.0\.1:9042: .*`,
 		},
 		{
-			name: "SessionRunBatchConditional", run: ExampleSession_RunBatch_conditional,
+			name: "CASBatchRows", run: ExampleCASBatchRows,
 			setup: []string{
 				"INSERT INTO example.my_lwt_batch_table (pk, ck, version, value) VALUES ('pk1', 'ck1', 1, 'a')",
 				"INSERT INTO example.my_lwt_batch_table (pk, ck, version, value) VALUES ('pk1', 'ck2', 1, 'A')",
