@@ -188,8 +188,9 @@ and no options.
   - A cancelled execution that may still read the batch keeps its storage,
     and `Reset` abandons the storage to that execution instead of copying it
     on every send.
-- **Routing.** The token is the first routable member's token. Members must
-  share one session and one keyspace, checked at `AddToBatch`.
+- **Routing.** The batch routes by its first routable member's keyspace,
+  table and token. Members must share one session, checked at `AddToBatch`;
+  they may span keyspaces, as a logged batch may.
 
 ## Current deviations
 

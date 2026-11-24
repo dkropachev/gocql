@@ -208,9 +208,6 @@ func (b *Batch) admit(s *implCluster.Core, r *routing.Info) error {
 	if b.session != nil && b.session != s {
 		return cqltype.TypeValidation("batch session", "statements belong to different sessions")
 	}
-	if r.Keyspace != "" && b.routing.Keyspace != "" && r.Keyspace != b.routing.Keyspace {
-		return cqltype.TypeValidation("batch keyspace", "members use different keyspaces")
-	}
 	return nil
 }
 
@@ -229,11 +226,18 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 		b.routing.Kind = cql.OrdinaryStatement
 	}
 	b.session = s
-	if r.Keyspace != "" {
-		b.routing.Keyspace = r.Keyspace
-	}
-	if !b.routing.Token.Set && r.Token.Set {
-		b.routing.Token, b.routing.Table = r.Token, r.Table
+	// Members may span keyspaces, as a logged batch may. The batch routes by
+	// its first member with a token, so its keyspace and table come from that
+	// member; until one joins, the first member's keyspace stands in.
+	if !b.routing.Token.Set {
+		if r.Token.Set {
+			b.routing.Token, b.routing.Table = r.Token, r.Table
+			if r.Keyspace != "" {
+				b.routing.Keyspace = r.Keyspace
+			}
+		} else if b.routing.Keyspace == "" {
+			b.routing.Keyspace = r.Keyspace
+		}
 	}
 	switch {
 	case r.Kind == cql.ConditionalStatement:
