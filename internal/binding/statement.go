@@ -73,6 +73,7 @@ type Statement[P, R any] struct {
 	CQL         string
 	BindMarkers cql.Columns
 	Kind        cql.StatementKind
+	Idempotent  bool
 }
 
 // statementDefaults fills a nil Params or Rows that has an empty

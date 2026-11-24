@@ -32,7 +32,6 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
 )
 
 // ExampleSession_ExecBatch builds a batch one statement at a time and sends it.
@@ -59,6 +58,9 @@ func ExampleSession_ExecBatch() {
 			cql.Param("ck", cql.Int32Codec, func(v item) int32 { return v.CK }),
 			cql.Param("description", cql.StringCodec, func(v item) string { return v.Description }),
 		),
+		// Writing the same values again is harmless, so the batch, all of
+		// whose members are idempotent, may be retried and speculated.
+		Idempotent: true,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -75,11 +77,7 @@ func ExampleSession_ExecBatch() {
 			log.Fatal(err)
 		}
 	}
-	idempotent, err := session.CompileOptions(exec.Options{Idempotent: true})
-	if err != nil {
-		log.Fatal(err)
-	}
-	if _, err := session.ExecBatch(ctx, &batch, idempotent); err != nil {
+	if _, err := session.ExecBatch(ctx, &batch); err != nil {
 		log.Fatal(err)
 	}
 	var row item

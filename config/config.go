@@ -598,7 +598,10 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 // WithTimestampGenerator supplies client timestamps in microseconds. A nil
 // next sends no client timestamp, so the server assigns one. By default the
 // driver stamps each request with the time it was admitted, strictly
-// increasing per session.
+// increasing per session. Only ordinary statements, and batches of them, are
+// stamped: a conditional or unclassified one (cql.UnknownStatement), a
+// counter write and a request with exec.Options.Timestamp set take no
+// generated timestamp.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
 	b.settings.Timestamps = implSettings.GeneratedTimestamps(next)
 	return b
@@ -744,16 +747,17 @@ func (p *ProfileBuilder) NoSerialConsistency() *ProfileBuilder {
 	return p
 }
 
-// WithTimeout bounds one execution, including retries. The context and
-// exec.Options.Timeout can only shorten it. Zero leaves executions bounded
-// only by their context and exec.Options.Timeout. Default 30s.
+// WithTimeout bounds one execution, including retries and every page Rows
+// fetches. A set exec.Options.Timeout replaces it for one execution, and the
+// call's context can end the execution sooner. Zero leaves executions bounded
+// only by their context. Default 30s.
 func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.Timeout = d
 	return p
 }
 
-// WithPageTimeout bounds fetching one page; exec.Options.PageTimeout can only
-// shorten it. Default none.
+// WithPageTimeout bounds fetching one page; a set exec.Options.PageTimeout
+// replaces it for one execution. Default none.
 func (p *ProfileBuilder) WithPageTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.PageTimeout = d
 	return p

@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"fmt"
+	"iter"
 	"sync"
 	"sync/atomic"
 
@@ -92,6 +93,12 @@ func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cq
 }
 
 // NextInto decodes the next row into dst, reporting whether there was one.
+// All iterates the page's remaining rows as Rows.All does. State remains
+// available once the loop has closed the page.
+func (p *Page[R]) All(dst *R) iter.Seq2[*R, error] {
+	return allRows(dst, p.NextInto, p.Close)
+}
+
 func (p *Page[R]) NextInto(dst *R) bool {
 	if p == nil || p.privateStorage.response == nil {
 		clearDestination(dst)

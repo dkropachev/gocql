@@ -162,13 +162,21 @@ if !found {
 | `query.WithContext(ctx)` | `ctx` is the first argument |
 | `query.Consistency(c)` | `exec.Options{Consistency: cql.Some(c)}` |
 | `query.SerialConsistency(gocql.LocalSerial)` | `exec.Options{SerialConsistency: exec.SerialLocal}` |
-| `query.PageSize(n)` | `exec.Options{PageSize: cql.Some[int32](n)}`, or the page size argument of `RunPage` |
-| `query.Idempotent(true)` | `exec.Options{Idempotent: true}` |
+| `query.PageSize(n)` | `exec.Options{PageSize: n}`, or the page size argument of `RunPage` |
+| `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
+| a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
 | `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(ts)}` |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Query(options)` is closed with `Close` |
+
+v1 sent a client timestamp with every request. v2 stamps only statements it
+knows to be ordinary: one whose `Kind` is `cql.OrdinaryStatement`, one
+ScyllaDB's prepared metadata marks as not conditional, and one left
+`cql.UnknownStatement` whose row type is `cql.EmptyRow`. On Cassandra, set
+`Kind: cql.OrdinaryStatement` on a statement that returns rows to get client
+timestamps, replica shuffling and speculation for it.
 
 One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
 `session.CompileOptions`; compile them once and reuse them. A worker that runs
@@ -205,18 +213,20 @@ page, err := listUsers.RunPage(ctx, cql.EmptyParams{}, state, 100)
 if err != nil {
 	return err
 }
-for page.NextInto(&user) {
+for user, err := range page.All(nil) { // closes the page when the loop ends
+	if err != nil {
+		return err
+	}
 	// use user
 }
-next := page.State() // next.Token() is the opaque cursor to hand out
-if err := page.Close(); err != nil {
-	return err
-}
+next := page.State()
+cursor, err := next.MarshalText() // the opaque cursor to hand out
 ```
 
-`cql.PageStateFromToken(token)` restores a state from a saved token. The token
-is server state: authenticate or encrypt it before giving it to an untrusted
-client. See [paging](statements/paging.md).
+`state.UnmarshalText(cursor)` restores the state, start and completion
+included; `cql.PageStateFromToken(token)` restores one from the server token
+alone. Either carries server state: authenticate or encrypt it before giving
+it to an untrusted client. See [paging](statements/paging.md).
 
 ## Batches and lightweight transactions
 

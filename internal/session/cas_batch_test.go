@@ -60,7 +60,7 @@ var casBatchDecoder = cql.CASRows(batchRowA)
 func newCASBatch(t testing.TB, body []byte) (*Session, *Batch) {
 	t.Helper()
 	return newServedBatchOf(t, body, func(s *implCluster.Core, batch *Batch) error {
-		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &routing.Info{Kind: cql.ConditionalStatement}, model.EncodedValues{})
+		return batch.add(s, cqlText{}, "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0", &routing.Info{Kind: cql.ConditionalStatement}, false, model.EncodedValues{})
 	})
 }
 
@@ -221,4 +221,24 @@ func TestRunConditionalBatch(t *testing.T) {
 			t.Fatal("zero rows reported Applied")
 		}
 	})
+}
+
+// TestCASBatchRowsAll checks that All yields every row, closes the rows, and
+// leaves Applied reporting the outcome.
+func TestCASBatchRowsAll(t *testing.T) {
+	session, batch := newCASBatch(t, casRowsBody(casBatchRow{true, "a"}, casBatchRow{false, "b"}))
+	rows := runCASBatch(t, session, batch)
+	var values []string
+	for row, err := range rows.All(nil) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		values = append(values, string(row.Previous.Value.A))
+	}
+	if len(values) != 2 || values[0] != "a" || values[1] != "b" {
+		t.Fatalf("rows %q", values)
+	}
+	if applied, err := rows.Applied(); err != nil || applied {
+		t.Fatalf("Applied = %v, %v; want false", applied, err)
+	}
 }

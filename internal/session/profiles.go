@@ -27,7 +27,7 @@ type Options struct {
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
 	Timestamp            cql.Option[int64]
-	PageSize             cql.Option[int32]
+	PageSize             int32
 	NowInSeconds         cql.Option[int32]
 	ShardID              cql.Option[uint32]
 	Consistency          cql.Option[cql.Consistency]
@@ -35,7 +35,7 @@ type Options struct {
 	// SerialConsistency overrides the profile's serial consistency.
 	SerialConsistency SerialOverride
 	IncludeMetadata   bool
-	Idempotent        bool
+	Idempotent        cql.Option[bool]
 	CQLTrace          bool
 }
 
@@ -53,15 +53,6 @@ const (
 	// SerialOmit sends no serial consistency.
 	SerialOmit
 )
-
-// earliestTimeout combines two timeouts, where zero means none: the shorter
-// positive one applies.
-func earliestTimeout(a, b time.Duration) time.Duration {
-	if a <= 0 || b > 0 && b < a {
-		return b
-	}
-	return a
-}
 
 type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
@@ -101,16 +92,15 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	default:
 		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}
-	// A timeout option adds a bound; it never loosens or removes the
-	// profile's, so the earlier of the two applies and zero adds none.
+	// A set timeout replaces the profile's, and a set zero removes it.
 	if options.Timeout.Set {
-		p.Timeout = earliestTimeout(p.Timeout, options.Timeout.Value)
+		p.Timeout = options.Timeout.Value
 	}
 	if options.PageTimeout.Set {
-		p.PageTimeout = earliestTimeout(p.PageTimeout, options.PageTimeout.Value)
+		p.PageTimeout = options.PageTimeout.Value
 	}
-	if options.PageSize.Set {
-		p.PageSize = options.PageSize.Value
+	if options.PageSize != 0 {
+		p.PageSize = options.PageSize
 	}
 	if options.Prefetch.Set {
 		p.Prefetch = options.Prefetch.Value
@@ -124,7 +114,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.Timeout.Set && options.Timeout.Value < 0 || options.PageTimeout.Set && options.PageTimeout.Value < 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")
 	}
-	if options.PageSize.Set && p.PageSize <= 0 {
+	if options.PageSize < 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive")
 	}
 	if p.PageSize == cql.Unpaged {

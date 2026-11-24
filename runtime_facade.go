@@ -95,6 +95,8 @@ type PreparedInfo struct {
 	// it is ConditionalStatement when the server flagged a lightweight
 	// transaction while preparing it, as ScyllaDB does, and an
 	// UnknownStatement takes the server's classification when there is one.
+	// An UnknownStatement left without one is OrdinaryStatement when the
+	// row type is cql.EmptyRow, as its executions run it.
 	Kind cql.StatementKind
 	// Generation counts the statement's re-preparations after schema changes.
 	Generation uint64

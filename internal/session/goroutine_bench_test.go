@@ -63,7 +63,7 @@ func BenchmarkGoroutines(b *testing.B) {
 					profile := settings.InternalDefaultProfile()
 					profile.Speculation = constantSpeculation{delay: 50 * time.Millisecond}
 					values.Profile = &profile
-					values.Idempotent = true
+					values.Idempotent = cql.Some(true)
 				case "retrydelay":
 					// Delayed retries wait in the general execution loop.
 					values.Profile = generalPathProfile()

@@ -122,7 +122,7 @@ func TestRetrySafety(t *testing.T) {
 					}
 					_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 				}()
-				if err := run(&Options{Profile: profileFor(routes), Idempotent: true}); err != nil {
+				if err := run(&Options{Profile: profileFor(routes), Idempotent: cql.Some(true)}); err != nil {
 					t.Fatal(err)
 				}
 			})

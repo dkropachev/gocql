@@ -128,12 +128,15 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 	if err := binding.ValidateStatement(&statement); err != nil {
 		return err
 	}
+	if err := unpreparedMarkers(&statement, value); err != nil {
+		return err
+	}
 	plan, err := codec.CompileParams(statement.Params, statement.BindMarkers)
 	if err != nil {
 		return err
 	}
 	routing := routing2.Info{Kind: statement.Kind}
-	return batch.addValue(core, cqlText{}, statement.CQL, &routing, plan, statement.BindMarkers, value, true)
+	return batch.addValue(core, cqlText{}, statement.CQL, &routing, statement.Idempotent, plan, statement.BindMarkers, value, true)
 }
 
 // ID returns the globally unique identifier of this session. The driver sends

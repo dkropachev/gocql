@@ -57,6 +57,9 @@ type Batch struct {
 	// shared reports that an execution no longer tracked may still read
 	// entries or values: Reset must abandon them instead of reusing them.
 	shared bool
+	// notIdempotent reports a member not marked idempotent, which makes
+	// the batch not idempotent.
+	notIdempotent bool
 	// Kind is the batch's kind, sent with every execution of the batch. The
 	// zero value is LoggedBatch.
 	Kind cql.BatchKind
@@ -114,7 +117,7 @@ func (b *Batch) Reset() {
 		clear(b.entries)
 		b.entries, b.values = b.entries[:0], b.values[:0]
 	}
-	b.session, b.routing, b.shared = nil, routing.Info{}, false
+	b.session, b.routing, b.shared, b.notIdempotent = nil, routing.Info{}, false, false
 }
 
 // drained reports whether the latest execution of the batch, if any, has
@@ -169,7 +172,7 @@ func validateBatch(s *implCluster.Core, batch *Batch) error {
 
 // add appends one statement whose encoded values are values, copying them
 // into the batch. r is the statement's routing.
-func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *routing.Info, values model.EncodedValues) error {
+func (b *Batch) add(s *implCluster.Core, source statementSource, statement string, r *routing.Info, idempotent bool, values model.EncodedValues) error {
 	if err := b.admit(s, r); err != nil {
 		return err
 	}
@@ -180,7 +183,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 		b.values = b.values[:start]
 		return err
 	}
-	b.appendEntry(s, source, statement, r, values, start)
+	b.appendEntry(s, source, statement, r, idempotent, values, start)
 	return nil
 }
 
@@ -188,7 +191,7 @@ func (b *Batch) add(s *implCluster.Core, source statementSource, statement strin
 // appends the statement. template is the statement's routing; the token is
 // computed from the encoded values. b.params keeps viewing the entry's bytes
 // until the next add; nothing reads them through it.
-func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *routing.Info, plan cql.CompiledParams[P], columns cql.Columns, value P, allowUnset bool) error {
+func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, statement string, template *routing.Info, idempotent bool, plan cql.CompiledParams[P], columns cql.Columns, value P, allowUnset bool) error {
 	if err := b.admit(s, template); err != nil {
 		return err
 	}
@@ -201,7 +204,7 @@ func (b *Batch) addValue[P any](s *implCluster.Core, source statementSource, sta
 	r.Token, err = source.token(values.Cells)
 	if err == nil {
 		b.values = storage
-		b.appendEntry(s, source, statement, &r, values, start)
+		b.appendEntry(s, source, statement, &r, idempotent, values, start)
 	}
 	return err
 }
@@ -221,7 +224,7 @@ func (b *Batch) admit(s *implCluster.Core, r *routing.Info) error {
 }
 
 // appendEntry records a statement whose values are b.values[start:].
-func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *routing.Info, values model.EncodedValues, start int) {
+func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, statement string, r *routing.Info, idempotent bool, values model.EncodedValues, start int) {
 	b.entries = append(b.entries, batchEntry{
 		source:    source,
 		statement: statement,
@@ -233,6 +236,9 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 	})
 	if len(b.entries) == 1 {
 		b.routing.Kind = cql.OrdinaryStatement
+	}
+	if !idempotent {
+		b.notIdempotent = true
 	}
 	b.session = s
 	// Members may span keyspaces, as a logged batch may. The batch routes by
@@ -269,7 +275,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 		return err
 	}
 	defer request.InternalOwner.InternalRelease()
-	return batch.add(s, request.InternalSource, request.statement, &request.routing, request.InternalValues)
+	return batch.add(s, request.InternalSource, request.statement, request.memberRouting(), request.idempotent, request.InternalValues)
 }
 
 // queryExec prepares the batch's request for an execution on query q,
@@ -278,7 +284,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 func (b *Batch) queryExec(dst *InternalExecutionRequest, q *queryState) {
 	state := b.begin()
 	b.lastQuery, b.lastGen = q, q.generation.Load()
-	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cql.CounterBatch}
+	*dst = InternalExecutionRequest{InternalOwner: q.owner, query: q, routing: b.requestRouting(), batch: state, hasCounter: b.Kind == cql.CounterBatch, idempotent: !b.notIdempotent}
 }
 
 // batchQueries returns the pool of queries that run rt's batches, created on

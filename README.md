@@ -109,7 +109,7 @@ the caller; and `RunPage` resumes from a saved `cql.PageState` for explicit pagi
 It also has `All`. `RunPage` takes the page size as an argument, so a size
 that changes per request needs no new options; zero uses the resolved page
 size. The page size `cql.Unpaged`, as that argument or as
-`exec.Options{PageSize: cql.Some(cql.Unpaged)}`, requests the whole result in one
+`exec.Options{PageSize: cql.Unpaged}`, requests the whole result in one
 response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
@@ -181,7 +181,7 @@ routing/retry/speculation through `WithDefaultProfile` or a per-query
 rejected).
 Per-execution settings are plain `exec.Options` values (package
 `github.com/scylladb/gocql/v2/exec`), for example
-`exec.Options{PageSize: cql.Some[int32](100)}`; the zero `exec.Options{}` uses the
+`exec.Options{PageSize: 100}`; the zero `exec.Options{}` uses the
 session default. Query constructors validate, resolve and encode them for their
 session once, so query executions do no per-call work. One-shot executions
 (`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunConditionalBatch`) take

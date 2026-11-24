@@ -17,7 +17,7 @@ import (
 // session profile, resolves to a request without a page size, and that it
 // rejects an explicit prefetch.
 func TestUnpagedPageSize(t *testing.T) {
-	unpaged := Options{PageSize: cql.Some(cql.Unpaged)}
+	unpaged := Options{PageSize: cql.Unpaged}
 	r, err := resolveOptionValues(nil, unpaged)
 	if err != nil || r.InternalProfile.PageSize != 0 {
 		t.Fatal("options", r.InternalProfile.PageSize, err)
@@ -30,7 +30,7 @@ func TestUnpagedPageSize(t *testing.T) {
 	if r, err = resolveOptionValues(&profile, Options{}); err != nil || r.InternalProfile.PageSize != 0 {
 		t.Fatal("session profile", r.InternalProfile.PageSize, err)
 	}
-	if r, err = resolveOptionValues(&profile, Options{PageSize: cql.Some[int32](100)}); err != nil || r.InternalProfile.PageSize != 100 {
+	if r, err = resolveOptionValues(&profile, Options{PageSize: 100}); err != nil || r.InternalProfile.PageSize != 100 {
 		t.Fatal("override", r.InternalProfile.PageSize, err)
 	}
 	if r, err = resolveOptionValues(nil, Options{Profile: &profile}); err != nil || r.InternalProfile.PageSize != 0 {

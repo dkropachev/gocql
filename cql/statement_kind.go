@@ -13,7 +13,13 @@ type StatementKind uint8
 // Statement kinds.
 const (
 	// UnknownStatement is a statement the application did not classify. The
-	// driver treats it as possibly conditional.
+	// driver treats it as possibly conditional: it sends no client
+	// timestamp, tries replicas in a fixed order without shuffling, keeps a
+	// strict shard pin, and never speculates. ScyllaDB reports whether a
+	// prepared statement is conditional, which replaces UnknownStatement;
+	// Cassandra does not. A statement whose row type is EmptyRow reads no
+	// rows, so it executes as an OrdinaryStatement, prepared or not; as a
+	// batch member it stays unclassified.
 	UnknownStatement StatementKind = iota
 
 	// OrdinaryStatement is a statement known not to be conditional.

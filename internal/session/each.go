@@ -57,13 +57,10 @@ func isStopIteration(err error) bool {
 }
 
 // each decodes every row into dst, calling fn after each, or stops after the
-// first row when fn is nil.
+// first row when fn is nil. A nil dst decodes each row into a new R.
 func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], options CompiledOptions, dst *R, fn func(*R) error, scratch *eachScratch) (bool, cql.Result, error) {
 	if b == nil {
 		return false, cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
-	}
-	if dst == nil {
-		return false, cql.Result{}, notSent(cqltype.TypeValidation("destination", "nil row destination"))
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
@@ -144,10 +141,13 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 	reader := &scratch.reader
 	for i := int32(0); i < response.RowCount; i++ {
 		*reader = codec.RowReaderFromCursor(response.Columns, &scratch.cursor, response.Owner)
-		if !manages {
-			clearDestination(dst)
+		row := dst
+		if row == nil {
+			row = new(R)
+		} else if !manages {
+			clearDestination(row)
 		}
-		if err := plan.DecodeInto(reader, dst); err != nil {
+		if err := plan.DecodeInto(reader, row); err != nil {
 			return err
 		}
 		if err := codec.FinishRowReader(reader); err != nil {
@@ -160,10 +160,10 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 			return cqlerr.ErrClosed
 		}
 		if fn == nil {
-			codec.DetachRow(plan, dst)
+			codec.DetachRow(plan, row)
 			return errStopEach
 		}
-		if err := fn(dst); err != nil {
+		if err := fn(row); err != nil {
 			if isStopIteration(err) {
 				return errStopEach
 			}

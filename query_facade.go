@@ -32,7 +32,8 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
 
 // One decodes the first row into dst, ignoring further rows. It reports whether
 // a row exists and clears dst when none exists. Borrowed fields are detached
-// before return; built-in owning fields keep their destination buffers.
+// before return; built-in owning fields keep their destination buffers. With
+// a nil dst, One only reports whether a row exists.
 func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error) {
 	return q.internal().One(ctx, value, dst)
 }
@@ -40,9 +41,11 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Resul
 // Each visits every row across all pages, decoding into dst and calling fn.
 // Borrowed fields expire when fn returns. Return StopIteration to stop
 // successfully; any other callback error stops iteration and is returned. There is no execution cursor to close.
-// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
-// that keeps slices, []byte fields reuse their capacity, so a slice kept from
-// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
+// dst is decoded into for every row and passed to fn, the same pointer each
+// time: copy a row to keep it. A nil dst decodes each row into a new R, which
+// fn may keep. With cql.ReuseBuffers, or a RowInto reset that keeps slices,
+// []byte fields reuse their capacity, so a slice kept from one call of fn
+// aliases the next row's data: keep bytes.Clone(row.Field).
 func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error) {
 	return q.internal().Each(ctx, value, dst, fn)
 }
@@ -57,11 +60,13 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 //	}
 //
 // Rows stream page by page; they are not loaded into memory. The yielded row
-// is dst and, borrowed fields included, is valid only until the next
-// iteration; copy what you keep. An error is yielded once as (nil, err) and
-// ends the loop. Breaking out of the loop releases the execution. There is no
-// cursor to close and no Result; use Each or Run when the Result matters.
-// dst is decoded into as for Each.
+// is dst, the same pointer every iteration, so append(rows, *row) keeps a
+// copy while append(ptrs, row) keeps one row many times. With a nil dst, each
+// row is decoded into a new R that the loop may keep. Borrowed fields are
+// valid only until the next iteration either way. An error is yielded once as
+// (nil, err) and ends the loop. Breaking out of the loop releases the
+// execution. There is no cursor to close and no Result; use Each or Run when
+// the Result matters. dst is decoded into as for Each.
 func (q *Query[P, R]) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error] {
 	return q.internal().All(ctx, value, dst)
 }

@@ -5,6 +5,7 @@ package gocql
 		gocql.Batch method (*T) Reset()
 		gocql.Batch method (*T) Size() int
 	type gocql.CASBatchRows[X any] struct
+		gocql.CASBatchRows method (T) All(dst *cql.CASResult[X]) iter.Seq2[*cql.CASResult[X], error]
 		gocql.CASBatchRows method (T) Applied() (bool, error)
 		gocql.CASBatchRows method (T) Clone() (cql.CASResult[X], error)
 		gocql.CASBatchRows method (T) Close() error
@@ -16,6 +17,7 @@ package gocql
 	func gocql.Connect(ctx context.Context, cfg config.Config) (*gocql.Session, error)
 	const gocql.MaxBatchStatements untyped int = 65535
 	type gocql.Page[R any] struct
+		gocql.Page method (*T) All(dst *R) iter.Seq2[*R, error]
 		gocql.Page method (*T) Clone() (R, error)
 		gocql.Page method (*T) Close() error
 		gocql.Page method (*T) Columns() cql.Columns
@@ -35,7 +37,7 @@ package gocql
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
 		gocql.Prepared method (*T) Parameters() cql.Columns
-		gocql.Prepared method (*T) Query(options exec.Options) (*gocql.Query[P, R], error)
+		gocql.Prepared method (*T) Query(options ...exec.Options) (*gocql.Query[P, R], error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
 	type gocql.PreparedInfo struct
@@ -48,7 +50,7 @@ package gocql
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
 		gocql.PreparedStream method (*T) Parameters() cql.Columns
-		gocql.PreparedStream method (*T) Query(options exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
+		gocql.PreparedStream method (*T) Query(options ...exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
 	type gocql.Query[P any, R any] struct
 		gocql.Query method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Query method (*T) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error]
@@ -67,6 +69,7 @@ package gocql
 		gocql.RowStream method (*T) Info() gocql.StreamInfo
 		gocql.RowStream method (*T) NextInto(dst *R) bool
 	type gocql.Rows[R any] struct
+		gocql.Rows method (T) All(dst *R) iter.Seq2[*R, error]
 		gocql.Rows method (T) Clone() (R, error)
 		gocql.Rows method (T) Close() error
 		gocql.Rows method (T) Columns() cql.Columns
@@ -470,8 +473,12 @@ package cql
 	type cql.OutputField[R any] interface (sealed)
 	type cql.PageState struct
 		cql.PageState method (T) Complete() bool
+		cql.PageState method (T) MarshalBinary() ([]byte, error)
+		cql.PageState method (T) MarshalText() ([]byte, error)
 		cql.PageState method (T) More() bool
 		cql.PageState method (T) Token() []byte
+		cql.PageState method (*T) UnmarshalBinary(data []byte) error
+		cql.PageState method (*T) UnmarshalText(text []byte) error
 	func cql.PageStateFromToken(token []byte) cql.PageState
 	type cql.Pair[A any, B any] struct
 		cql.Pair field First A
@@ -538,6 +545,7 @@ package cql
 		cql.Statement field Rows cql.RowDecoder[R]
 		cql.Statement field BindMarkers cql.Columns
 		cql.Statement field Kind cql.StatementKind
+		cql.Statement field Idempotent bool
 	type cql.StatementKind uint8
 		cql.StatementKind method (T) String() string
 	var cql.StreamASCII cql.StreamDecoder[[]byte]
@@ -596,6 +604,7 @@ package cql
 		cql.StreamStatement field Rows cql.StreamRowDecoder[R]
 		cql.StreamStatement field CQL string
 		cql.StreamStatement field Kind cql.StatementKind
+		cql.StreamStatement field Idempotent bool
 	var cql.StreamText cql.StreamDecoder[[]byte]
 	var cql.StreamTime cql.StreamDecoder[cql.TimeOfDay]
 	var cql.StreamTimeUUID cql.StreamDecoder[cql.TimeUUID]
@@ -1220,14 +1229,14 @@ package exec
 		exec.Options field PageTimeout cql.Option[time.Duration]
 		exec.Options field Prefetch cql.Option[int]
 		exec.Options field Timestamp cql.Option[int64]
-		exec.Options field PageSize cql.Option[int32]
+		exec.Options field PageSize int32
 		exec.Options field NowInSeconds cql.Option[int32]
 		exec.Options field ShardID cql.Option[uint32]
 		exec.Options field Consistency cql.Option[cql.Consistency]
 		exec.Options field HostID cql.Option[cql.UUID]
 		exec.Options field SerialConsistency exec.SerialOverride
 		exec.Options field IncludeMetadata bool
-		exec.Options field Idempotent bool
+		exec.Options field Idempotent cql.Option[bool]
 		exec.Options field CQLTrace bool
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string

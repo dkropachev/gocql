@@ -421,7 +421,7 @@ func TestQuery(t *testing.T) {
 			require.Zero(t, zero.Latency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: cql.Option[int32]{Value: 10, Set: true}, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
@@ -606,7 +606,7 @@ func TestQuery(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					observer := &cassandraObserver{}
 					insert := cql.Command("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')")
-					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, exec.Options{Idempotent: tc.idempotent, Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: observer})
+					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: observer})
 					require.Error(t, err)
 					events, attempts := observer.snapshot()
 					require.Len(t, attempts, tc.attempts)
@@ -627,7 +627,7 @@ func TestQuery(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 						observer := new(sessionTestObserver)
 						retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
-						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, exec.Options{Idempotent: true, Retry: retryPolicy, Observer: observer})
+						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retryPolicy, Observer: observer})
 						require.Error(t, err)
 						var server cqlerr.ServerError
 						require.ErrorAs(t, err, &server)
@@ -724,7 +724,7 @@ func TestQuery(t *testing.T) {
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
-		q := codecTestMust(read.Query(exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		q := codecTestMust(read.Query(exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
@@ -781,7 +781,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.Query(exec.Options{PageSize: cql.Some(cql.Unpaged), Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		unpaged := codecTestMust(read.Query(exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage(), 0))
 		n := 0
@@ -795,7 +795,7 @@ func TestQuery(t *testing.T) {
 		for _, incremental := range []bool{false, true} {
 			streamDecoder := cql.StreamRowInto(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
 			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
-			streamQuery := codecTestMust(readStream.Query(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: cql.Option[int32]{Set: true, Value: 2}}}))
+			streamQuery := codecTestMust(readStream.Query(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: 2}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
 				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {

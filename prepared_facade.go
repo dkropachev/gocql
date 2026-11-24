@@ -50,8 +50,9 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.Comp
 // One decodes the first row into dst, reporting whether a row exists. Further
 // rows are ignored; if none exists dst is cleared. Borrowed fields are detached
 // before return, while built-in owning fields retain reusable destination
-// buffers. The result stays valid after the call. One is safe for concurrent
-// use with independent destinations. At most one exec.CompiledOptions may be passed.
+// buffers. The result stays valid after the call. With a nil dst, One only
+// reports whether a row exists. One is safe for concurrent use with
+// independent destinations. At most one exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
@@ -68,9 +69,11 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...ex
 // fields are valid only until fn returns; clone any values kept beyond that
 // point. Returning StopIteration stops successfully; other callback errors stop iteration and are returned. Each is safe for concurrent
 // use with independent destinations. At most one exec.CompiledOptions may be passed.
-// dst is decoded into for every row. With cql.ReuseBuffers, or a RowInto reset
-// that keeps slices, []byte fields reuse their capacity, so a slice kept from
-// one call of fn aliases the next row's data: keep bytes.Clone(row.Field).
+// dst is decoded into for every row and passed to fn, the same pointer each
+// time: copy a row to keep it. A nil dst decodes each row into a new R, which
+// fn may keep. With cql.ReuseBuffers, or a RowInto reset that keeps slices,
+// []byte fields reuse their capacity, so a slice kept from one call of fn
+// aliases the next row's data: keep bytes.Clone(row.Field).
 func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
@@ -85,7 +88,9 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 
 // All iterates every row across all pages, decoding each into dst, as
 // Query.All does. Rows stream page by page; they are not loaded into memory.
-// The yielded row is valid only until the next iteration. An error is yielded
+// The yielded row is dst, reused for every row, or a new R for each row when
+// dst is nil; its borrowed fields are valid only until the next iteration. An
+// error is yielded
 // once as (nil, err); breaking out of the loop releases the execution. All is
 // safe for concurrent use with independent destinations. At most one
 // exec.CompiledOptions may be passed.
@@ -148,9 +153,19 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 }
 
 // Query creates a worker-owned reusable query with fixed options. It also
-// provides cursors and explicit paging. Close it when the worker is done.
-func (p *Prepared[P, R]) Query(options exec.Options) (*Query[P, R], error) {
-	q, err := p.internal().Query(internalOptions(options))
+// provides cursors and explicit paging. Close it when the worker is done. At
+// most one exec.Options may be passed; omitting it uses the session
+// defaults.
+func (p *Prepared[P, R]) Query(options ...exec.Options) (*Query[P, R], error) {
+	var o exec.Options
+	switch len(options) {
+	case 0:
+	case 1:
+		o = options[0]
+	default:
+		return nil, tooManyQueryOptions(false)
+	}
+	q, err := p.internal().Query(internalOptions(o))
 	return (*Query[P, R])(q), err
 }
 

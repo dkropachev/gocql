@@ -526,7 +526,7 @@ func TestStream(t *testing.T) {
 					defer bound.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 					defer cancel()
-					cursor, err := RunStream(ctx, s, bound, decoderError{cause}, StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+					cursor, err := RunStream(ctx, s, bound, decoderError{cause}, StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -622,7 +622,7 @@ func TestStream(t *testing.T) {
 			defer cancel()
 			b := runtimeQuery(t)
 			defer b.Close()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -713,7 +713,7 @@ func TestStream(t *testing.T) {
 			defer b.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: true}})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 			if err != nil {
 				t.Fatal(err)
 			}

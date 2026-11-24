@@ -95,7 +95,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		case "B5":
 			opts = exec.Options{Prefetch: cql.Some(1)}
 		case "B7":
-			opts = exec.Options{PageSize: cql.Some[int32](5000)}
+			opts = exec.Options{PageSize: 5000}
 		}
 		q, err := read.Query(opts)
 		if err != nil {
@@ -170,7 +170,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close()))
 		}, nil
 	case "A6", "B6":
-		q, err := read.Query(exec.Options{PageSize: cql.Some(cql.Unpaged)})
+		q, err := read.Query(exec.Options{PageSize: cql.Unpaged})
 		if err != nil {
 			return nil, err
 		}
@@ -235,7 +235,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "D3":
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			opts, err := a.options(exec.Options{IncludeMetadata: true, Idempotent: true, Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
+			opts, err := a.options(exec.Options{IncludeMetadata: true, Idempotent: cql.Some(true), Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
 			if err != nil {
 				return err
 			}

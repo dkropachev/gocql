@@ -255,10 +255,16 @@ type Statement[P, R any] struct {
     Params ParamEncoder[P]   // nil when P is EmptyParams
     Rows RowDecoder[R]       // nil when R is EmptyRow
     BindMarkers Columns      // parameter metadata for unprepared execution
-    Kind StatementKind
+    Kind StatementKind       // Unknown with R == EmptyRow executes as Ordinary
+    Idempotent bool          // carried into Prepared, Query and batch members
 }
 type StatementKind uint8
 const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
+// UnknownStatement sends no client timestamp, keeps a fixed replica order and
+// a strict shard pin, and never speculates. A statement left Unknown whose R is
+// EmptyRow executes as Ordinary, prepared or not; as a batch member it stays
+// Unknown. A batch is idempotent when every member is; exec.Options.Idempotent,
+// when set, overrides the statement's flag.
 func Command(text string) Statement[EmptyParams, EmptyRow]
 
 type EmptyParams = EmptyRecord   // EmptyRecord is struct{}
@@ -728,7 +734,7 @@ func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...ex
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
 // Worker-owned reusable queries.
-func (p *Prepared[P, R]) Query(exec.Options) (*Query[P, R], error)
+func (p *Prepared[P, R]) Query(...exec.Options) (*Query[P, R], error) // at most one
 func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
@@ -761,7 +767,9 @@ statement repeatedly.
 
 All is the range-over-func form of Each: it yields dst for every row across
 all pages, valid until the next iteration, then any error once as (nil, err);
-breaking out of the loop releases the execution. It returns no Result. RunPage
+breaking out of the loop releases the execution. All, Each and One, and their
+Unprepared forms, accept a nil dst: each row is then decoded into a new R the
+caller may keep, and One only reports whether a row exists. It returns no Result. RunPage
 takes the page size as an argument rather than an option, so a paginated
 endpoint can take it from each request without compiling options: zero uses
 the resolved page size and cql.Unpaged requests the whole result. Both forms report results the same way. One detaches borrowed fields before
@@ -778,7 +786,9 @@ Input is copied during execution admission,
 including custom codec borrowed spans. Encoding records cell boundaries and
 computes routing from the same owned bytes; encoders are not called again for
 routing, retries, reprepare or paging. The Unprepared calls take parameter
-Columns from Statement.BindMarkers. Query options are captured at construction, including owned
+Columns from Statement.BindMarkers. A statement with parameters (P other than
+EmptyParams) and no BindMarkers fails with a ValidationError before it is
+sent, except with cql.DynamicParams, whose markers take the values' types. Query options are captured at construction, including owned
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
@@ -853,6 +863,7 @@ No unsafe cache-metadata opt-in bypasses these rules.
 ```go
 type Rows[R any] struct { /* value handle: iterator storage + generation */ }
 func (r Rows[R]) NextInto(dst *R) bool
+func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] // closes the rows when the loop ends
 func (r Rows[R]) Err() error
 func (r Rows[R]) Close() error
 func (r Rows[R]) Retain() (*PageLease, error)
@@ -862,6 +873,7 @@ func (r Rows[R]) Columns() cql.Columns
 
 type Page[R any] struct { /* exactly one response page */ }
 func (p *Page[R]) NextInto(dst *R) bool
+func (p *Page[R]) All(dst *R) iter.Seq2[*R, error] // closes the page; State stays readable
 func (p *Page[R]) Err() error
 func (p *Page[R]) Close() error
 func (p *Page[R]) Retain() (*PageLease, error)
@@ -880,13 +892,20 @@ func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
 func (p PageState) Token() []byte
+func (p PageState) MarshalBinary() ([]byte, error)  // kind byte, then a continuation's token
+func (p *PageState) UnmarshalBinary([]byte) error
+func (p PageState) MarshalText() ([]byte, error)    // unpadded URL-safe base64 of the binary form
+func (p *PageState) UnmarshalText([]byte) error
 
 // package cql
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
 func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
 ```
 
-NextInto is the only row iterator. Views it decodes into the destination
+NextInto is the row iterator; All on Rows, Page and CASBatchRows ranges over
+it, decoding into dst (a new R per row when dst is nil), and yields the
+handle's error once. The Marshal methods of PageState encode the whole state,
+start and completion included, so a cursor round-trips through text. Views it decodes into the destination
 remain valid until the **next** NextInto call or Close, whichever comes first. Retain pins the
 current physical page before advancing; its owner has stable identity independent
 of pooled parsers.
@@ -1014,7 +1033,7 @@ func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R
 func (p *PreparedStream[P, R]) Parameters() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
-func (p *PreparedStream[P, R]) Query(exec.StreamOptions) (*StreamQuery[P, R], error)
+func (p *PreparedStream[P, R]) Query(...exec.StreamOptions) (*StreamQuery[P, R], error) // at most one
 func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (q *StreamQuery[P, R]) Close()
 func (q *StreamQuery[P, R]) Wait(context.Context) error
@@ -1159,7 +1178,7 @@ Actual streaming response metadata selects this query's stream.CompiledStreamRow
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
-stream.RowDecoder, Kind) and returns an immutable PreparedStream[P,R]. Its
+stream.RowDecoder, Kind, Idempotent) and returns an immutable PreparedStream[P,R]. Its
 Query(exec.StreamOptions) creates a worker-owned StreamQuery. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Query-local caches revalidate
@@ -1315,11 +1334,11 @@ type Options struct {
     Profile *config.Profile                       // copied when resolved
     Consistency cql.Option[cql.Consistency]
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
-    Timeout cql.Option[time.Duration]             // tightens the profile timeout; 0 adds no limit
-    PageTimeout cql.Option[time.Duration]
-    PageSize cql.Option[int32]                    // cql.Unpaged: whole result
+    Timeout cql.Option[time.Duration]             // replaces the profile timeout; Some(0): no limit
+    PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
+    PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
-    Idempotent bool
+    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
     Timestamp cql.Option[int64]                   // microseconds
     NowInSeconds cql.Option[int32]
     Keyspace string

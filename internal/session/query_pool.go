@@ -320,8 +320,12 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	if s.Closed() {
 		return cqlerr.ErrClosed
 	}
-	routing := preparedRouting(state, p.privateStorage.kind)
-	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.params, state.InternalParameters, value, true)
+	kind := p.privateStorage.kind
+	if p.privateStorage.kindInferred {
+		kind = cql.UnknownStatement
+	}
+	routing := preparedRouting(state, kind)
+	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.idempotent, p.privateStorage.params, state.InternalParameters, value, true)
 }
 
 // Exec binds value and executes the statement once. The statement must not

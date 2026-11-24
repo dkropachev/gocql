@@ -4,6 +4,8 @@
 package session
 
 import (
+	"iter"
+
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
@@ -109,4 +111,35 @@ func (r Rows[R]) Columns() cql.Columns {
 type rowsHolder[R any] struct {
 	page Page[R]
 	rows rowsImpl[R]
+}
+
+// All iterates the remaining rows, decoding each into dst, or into a new R
+// for each row when dst is nil. An error is yielded once, as (nil, err), and
+// ends the iteration. The rows are closed when the loop ends.
+func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] {
+	return allRows(dst, r.NextInto, r.Close)
+}
+
+// allRows iterates the rows next decodes, as Rows.All describes, and calls
+// close when the loop ends. close's error, the one that ended the rows, is
+// yielded once when the loop ran to the end.
+func allRows[R any](dst *R, next func(*R) bool, close func() error) iter.Seq2[*R, error] {
+	return func(yield func(*R, error) bool) {
+		for {
+			row := dst
+			if row == nil {
+				row = new(R)
+			}
+			if !next(row) {
+				break
+			}
+			if !yield(row, nil) {
+				_ = close()
+				return
+			}
+		}
+		if err := close(); err != nil {
+			yield(nil, err)
+		}
+	}
 }

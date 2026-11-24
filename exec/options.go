@@ -10,15 +10,16 @@
 // (config.ConfigBuilder.WithDefaultProfile). Options.Profile, when set,
 // replaces that profile whole, and then each Options field that is set
 // overrides the matching field of the profile: a cql.Option whose Set is
-// true, a non-nil Retry, and a SerialConsistency other than SerialInherit.
+// true, a non-nil Retry, a non-zero PageSize, and a SerialConsistency other
+// than SerialInherit. Idempotent, when set, overrides the statement's
+// cql.Statement.Idempotent.
 //
-// Time limits combine rather than replace each other. The call's context,
-// the profile's Timeout and Options.Timeout all bound the whole execution,
-// retries and every page Rows fetches included, and whichever expires first
-// ends it. Options.Timeout therefore only tightens the profile's limit: a
-// longer one, or a zero one, leaves the profile's in force. PageTimeout
-// combines the same way, the earliest of the profile's and
-// Options.PageTimeout bounding each page fetch on its own, within the
+// Options.Timeout, when set, replaces the profile's Timeout, so it can
+// lengthen the limit as well as shorten it, and cql.Some(time.Duration(0))
+// removes it. The resulting limit and the call's context both bound the whole
+// execution, retries and every page Rows fetches included, and whichever
+// expires first ends it. Options.PageTimeout replaces the profile's
+// PageTimeout the same way; it bounds each page fetch on its own, within the
 // execution's deadline.
 //
 // Preparation takes no Options. Session.Prepare and Session.PrepareStream are
@@ -60,8 +61,9 @@ type Options struct {
 	Keyspace string
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.
 	CustomPayload []cql.PayloadEntry
-	// Timeout and PageTimeout add a limit to the profile's: the earlier one
-	// applies, so a longer or zero value leaves the profile's limit in force.
+	// Timeout and PageTimeout, when set, replace the profile's limits:
+	// Timeout bounds the whole execution, retries and pages included, and
+	// PageTimeout each page fetch. A set zero means no limit.
 	Timeout, PageTimeout cql.Option[time.Duration]
 	// Prefetch replaces the profile's prefetch, zero or one, when set.
 	Prefetch cql.Option[int]
@@ -69,9 +71,10 @@ type Options struct {
 	// the unit CQL's USING TIMESTAMP takes. Note that cql.Timestamp values
 	// are milliseconds: multiply one by 1000 to use it here.
 	Timestamp cql.Option[int64]
-	// PageSize is the rows per page; cql.Unpaged requests the whole result
-	// in one response.
-	PageSize cql.Option[int32]
+	// PageSize is the rows per page; zero keeps the profile's, and
+	// cql.Unpaged requests the whole result in one response. A negative
+	// value is rejected.
+	PageSize int32
 	// NowInSeconds sets the server's current time, in seconds since the Unix
 	// epoch, for TTL and expiry. Only native protocol 5 carries it: on a
 	// session of another dialect, Session.CompileOptions and every execution
@@ -92,10 +95,11 @@ type Options struct {
 	// IncludeMetadata asks the server for full result metadata even when the
 	// driver has validated metadata cached.
 	IncludeMetadata bool
-	// Idempotent marks the request as safe to run more than once.
-	// Speculative execution requires it, and retry.Safe retries a request
-	// that may have executed only when it is set.
-	Idempotent bool
+	// Idempotent, when set, replaces the statement's cql.Statement.Idempotent
+	// for the execution: cql.Some(true) marks it safe to run more than once,
+	// cql.Some(false) marks it unsafe. A batch is idempotent when every
+	// member is, unless this overrides it.
+	Idempotent cql.Option[bool]
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side

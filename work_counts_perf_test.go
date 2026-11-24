@@ -152,7 +152,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						profile.Speculation = speculation{}
 					}
 					handle := new(profile)
-					options := exec.Options{Profile: handle, Idempotent: true}
+					options := exec.Options{Profile: handle, Idempotent: cql.Some(true)}
 					if mode == "default" {
 						options = exec.Options{}
 					}

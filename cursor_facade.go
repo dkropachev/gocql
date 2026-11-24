@@ -4,6 +4,8 @@
 package gocql
 
 import (
+	"iter"
+
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
@@ -36,6 +38,15 @@ func (r Rows[R]) Retain() (*PageLease, error) {
 // NextInto decodes the next row into dst, reporting whether one exists.
 func (r Rows[R]) NextInto(dst *R) bool { return (implSession.Rows[R])(r).NextInto(dst) }
 
+// All returns an iterator over the remaining rows, fetching pages as
+// NextInto does. Each row is decoded into dst, and the yielded pointer is dst
+// itself, reused for the next row: copy the row to keep it. With a nil dst,
+// each row is decoded into a new R, which the caller may keep. Borrowed
+// fields stay valid until the next iteration. An error is yielded once, as
+// (nil, err), and ends the iteration. The rows are closed when the loop
+// ends, early or not.
+func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] { return (implSession.Rows[R])(r).All(dst) }
+
 // Err returns the terminal iteration error, if any.
 func (r Rows[R]) Err() error { return (implSession.Rows[R])(r).Err() }
 
@@ -67,6 +78,12 @@ func (r Rows[R]) Info() cql.Result { return (implSession.Rows[R])(r).Info() }
 // The zero CASBatchRows has no rows, and its Applied returns a
 // cql.ValidationError.
 type CASBatchRows[X any] implSession.CASBatchRows[X]
+
+// All returns an iterator over the remaining rows, as Rows.All does. Applied
+// still reports the outcome once the loop ran to the end.
+func (r CASBatchRows[X]) All(dst *cql.CASResult[X]) iter.Seq2[*cql.CASResult[X], error] {
+	return (implSession.CASBatchRows[X])(r).All(dst)
+}
 
 // NextInto decodes the next row into dst, reporting whether one exists.
 func (r CASBatchRows[X]) NextInto(dst *cql.CASResult[X]) bool {
@@ -126,6 +143,12 @@ func (r *Page[R]) Retain() (*PageLease, error) {
 
 // NextInto decodes the next row into dst, reporting whether one exists.
 func (r *Page[R]) NextInto(dst *R) bool { return (*implSession.Page[R])(r).NextInto(dst) }
+
+// All returns an iterator over the page's remaining rows, as Rows.All does:
+// dst is reused for every row, and a nil dst decodes each into a new R. The
+// page is closed when the loop ends; State remains available to resume
+// from.
+func (r *Page[R]) All(dst *R) iter.Seq2[*R, error] { return (*implSession.Page[R])(r).All(dst) }
 
 // Err returns the terminal iteration error, if any.
 func (r *Page[R]) Err() error { return (*implSession.Page[R])(r).Err() }

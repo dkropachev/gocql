@@ -199,7 +199,13 @@ func TestExecution(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if b.Routing().Kind != kind {
+					// R is EmptyRow, so an unclassified statement executes
+					// as an ordinary one.
+					want := kind
+					if kind == implCql.UnknownStatement {
+						want = implCql.OrdinaryStatement
+					}
+					if b.Routing().Kind != want {
 						t.Fatal(cql, b.Routing())
 					}
 					b.Close()
@@ -776,7 +782,7 @@ func TestExecution(t *testing.T) {
 					defer b.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
-					page, err := RunPage(ctx, s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, Consistency: tc.consistency}))
+					page, err := RunPage(ctx, s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: implCql.Some(true), Consistency: tc.consistency}))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -811,7 +817,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			bound := runtimeQuery(t)
-			page, err := RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true, CQLTrace: true}))
+			page, err := RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: implCql.Some(true), CQLTrace: true}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -856,7 +862,7 @@ func TestExecution(t *testing.T) {
 					BoundData(b).InternalRequest.routing.Kind = kind
 					result := make(chan error, 1)
 					go func() {
-						page, err := RunPage(context.Background(), s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: true}))
+						page, err := RunPage(context.Background(), s, b, implCql.StartPage(), 0, testOptions(Options{Profile: handle, Idempotent: implCql.Some(true)}))
 						if page != nil {
 							page.Close()
 						}

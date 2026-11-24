@@ -118,7 +118,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 						}
 						served <- nil
 					}()
-					options := testOptions(Options{PageSize: cql.Option[int32]{Set: true, Value: 32}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+					options := testOptions(Options{PageSize: 32, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 					statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 					var query *Query[cql.EmptyRow, []byte]
 					var streaming *StreamQuery[cql.EmptyRow, []byte]
@@ -226,7 +226,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 						case "pageb":
 							// Borrowed column values, valid until the callback returns: no
 							// per-row copy. Measurement only; master's client copies.
-							pageOptions := testOptions(Options{PageSize: cql.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+							pageOptions := testOptions(Options{PageSize: loopbackPageRows, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 							statement := binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}
 							query := codecTestMust(unpreparedQuery(s, statement, pageOptions.Values()))
 							b.Cleanup(query.Close)
@@ -249,7 +249,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 								return nil
 							}
 						case "pageall":
-							pageOptions := testOptions(Options{PageSize: cql.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
+							pageOptions := testOptions(Options{PageSize: loopbackPageRows, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
 							statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 							query := codecTestMust(unpreparedQuery(s, statement, pageOptions.Values()))
 							b.Cleanup(query.Close)
@@ -271,7 +271,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 								return nil
 							}
 						case "page", "pagectx", "pagepto":
-							pageValues := Options{PageSize: cql.Option[int32]{Set: true, Value: loopbackPageRows}, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
+							pageValues := Options{PageSize: loopbackPageRows, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 							if workload == "pagepto" {
 								pageValues.PageTimeout = cql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 							}

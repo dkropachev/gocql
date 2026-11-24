@@ -18,6 +18,9 @@ type StreamStatement[P, R any] struct {
 	CQL string
 	// Kind classifies ordinary and conditional statements for safe execution.
 	Kind StatementKind
+	// Idempotent marks the statement safe to run more than once, as
+	// Statement.Idempotent does.
+	Idempotent bool
 }
 
 // StreamRowOf decodes streamed rows into struct R by column name, mapped like

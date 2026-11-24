@@ -44,6 +44,17 @@ func tooManyPrepareOptions() error {
 	return &cql.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
+// tooManyQueryOptions is the error of a Query call given more than one
+// Options, or StreamOptions when stream is set.
+//
+//go:noinline
+func tooManyQueryOptions(stream bool) error {
+	if stream {
+		return &cql.ValidationError{Field: "options", Err: errors.New("at most one StreamOptions")}
+	}
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one Options")}
+}
+
 // internalOptionList converts the optional exec.Options of a throwaway call; the
 // internal call rejects more than one.
 func internalOptionList(options []exec.Options) []implSession.Options {
@@ -84,9 +95,9 @@ func tooManyOptionsFound() (bool, cql.Result, error) {
 }
 
 func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P, R] {
-	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind}
+	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind, Idempotent: s.Idempotent}
 }
 
 func internalStreamStatement[P, R any](s cql.StreamStatement[P, R]) implSession.StreamStatement[P, R] {
-	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind}
+	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, Idempotent: s.Idempotent}
 }

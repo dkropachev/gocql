@@ -19,9 +19,19 @@ import (
 type PreparedStream[P, R any] implSession.PreparedStream[P, R]
 
 // Query creates a reusable stream query with fixed options. Close the query when
-// its worker finishes, and close each execution cursor before reusing it.
-func (p *PreparedStream[P, R]) Query(options exec.StreamOptions) (*StreamQuery[P, R], error) {
-	q, err := (*implSession.PreparedStream[P, R])(p).Query(internalStreamOptions(options))
+// its worker finishes, and close each execution cursor before reusing it. At
+// most one exec.StreamOptions may be passed; omitting it buffers one page
+// with the session defaults.
+func (p *PreparedStream[P, R]) Query(options ...exec.StreamOptions) (*StreamQuery[P, R], error) {
+	var o exec.StreamOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = options[0]
+	default:
+		return nil, tooManyQueryOptions(true)
+	}
+	q, err := (*implSession.PreparedStream[P, R])(p).Query(internalStreamOptions(o))
 	return (*StreamQuery[P, R])(q), err
 }
 

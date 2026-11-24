@@ -5,7 +5,9 @@ Set statement Kind to `ConditionalStatement` when known. `Exec` and
 `cqlerr.ErrConditionalExec` before sending it, because the result of a
 conditional write reports whether it applied: read it with `One`, `Each`,
 `All`, `Run` or `RunConditionalBatch`. ScyllaDB marks conditional statements in
-prepared metadata. Cassandra does not, so declare the kind there. Server conditional
+prepared metadata. Cassandra does not, so declare the kind there: a statement
+left `UnknownStatement` whose row type is `cql.EmptyRow` executes as an
+ordinary one, since it cannot read the `[applied]` column anyway. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
 replica ordering: a client tries a partition's replicas in the same order

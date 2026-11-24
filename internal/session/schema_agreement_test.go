@@ -198,7 +198,7 @@ func TestSchemaAgreement(t *testing.T) {
 			_, err := Exec(ctx, s, b, testOptions(*func() *Options {
 				opaqueStorageValuexxxxxx := new(Options)
 				OptionsData(opaqueStorageValuexxxxxx).InternalConnection = conn
-				opaqueStorageValuexxxxxx.Idempotent = true
+				opaqueStorageValuexxxxxx.Idempotent = cql.Some(true)
 				opaqueStorageValuexxxxxx.Retry = retryOnce{}
 				return opaqueStorageValuexxxxxx
 			}()))

@@ -1070,7 +1070,7 @@ func TestSession(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, exec.Options{PageSize: cql.Option[int32]{Value: 1, Set: true}}))
+		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, exec.Options{PageSize: 1}))
 		if err != nil {
 			t.Fatal(err)
 		}

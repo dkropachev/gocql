@@ -145,7 +145,7 @@ func TestPreparedOneShot(t *testing.T) {
 			defer peers[0].Close()
 			requests := make(chan oneShotRequest, 1)
 			p := oneShotPrepare(t, s, peers[0], requests)
-			quorum := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Quorum}, PageSize: cql.Option[int32]{Set: true, Value: 7}})
+			quorum := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Quorum}, PageSize: 7})
 			two := testOptions(Options{Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Two}})
 			defaults := settings.InternalDefaultProfile()
 			for i, tc := range []struct {

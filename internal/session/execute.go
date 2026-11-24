@@ -1122,7 +1122,7 @@ func speculationOnly(request *InternalExecutionRequest) bool {
 // speculationDelay returns the delay before the speculative attempt that
 // follows started attempts, if request speculates.
 func speculationDelay(request *InternalExecutionRequest, started int) (time.Duration, bool) {
-	if !request.options.InternalOptions.Idempotent || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
+	if !request.isIdempotent() || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
 		return 0, false
 	}
 	perfAdd(2, 1)
@@ -1549,7 +1549,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.options.InternalOptions.Idempotent, Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.IgnoreWrite {
 				return &transport.InternalResponsePage{ResponseData: model.ResponseData{State: cqltype.CompletePageState(), Result: aggregate}}, nil

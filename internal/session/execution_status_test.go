@@ -280,13 +280,6 @@ func TestExecutionStatusRefused(t *testing.T) {
 			_, err := RunPage(ctx, s, bound, cqltype.CompletePageState(), 0, CompiledOptions{})
 			return err
 		}, cqlerr.ErrPagingComplete},
-		{"NilDestination", func(t *testing.T) error {
-			s, _, _ := runtimeTestSession(t, 1)
-			bound := runtimeQuery(t)
-			defer bound.Close()
-			_, _, err := RunOne(ctx, s, bound, CompiledOptions{}, nil)
-			return err
-		}, nil},
 		{"EmptyBatch", func(t *testing.T) error {
 			s, _, _ := runtimeTestSession(t, 1)
 			_, err := InternalWrapSession(s).ExecBatch(ctx, &Batch{}, CompiledOptions{})
