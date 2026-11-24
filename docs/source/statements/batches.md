@@ -3,7 +3,9 @@
 Append each typed member with `prepared.AddToBatch(&batch, parameters)` (or
 `query.AddToBatch`), then send the batch with
 `session.ExecBatch(ctx, &batch)`. Members of several statements of one
-session may share a batch:
+session may share a batch, and may write tables of different keyspaces. A
+member of another session is rejected with a `*cql.ValidationError`, as is
+the statement after `gocql.MaxBatchStatements`:
 
 ```go
 batch := gocql.Batch{Kind: cql.UnloggedBatch}
@@ -22,7 +24,8 @@ For an occasional statement, `session.UnpreparedAddToBatch(&batch, statement,
 parameters)` adds it without preparing it. Parameters are described by
 `Statement.BindMarkers`, as for `session.UnpreparedExec`, and are compiled on
 every call, so prepare a statement you add often. An unprepared member gives
-the batch no routing token: the batch routes by its first prepared member.
+the batch no routing token: the batch routes by its first prepared member,
+and takes that member's keyspace and table for routing.
 
 `AddToBatch` encodes the parameters straight into storage the batch owns, so
 later input mutation cannot change the batch. It uses none of the query's

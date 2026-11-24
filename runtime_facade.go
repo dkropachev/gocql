@@ -14,10 +14,17 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request: Prepared.AddToBatch and Query.AddToBatch append a statement,
-// Session.ExecBatch and Session.RunConditionalBatch send the batch, and Reset empties it
-// for reuse. Once a batch has grown to its working size, appending allocates
-// nothing. A Batch is not safe for concurrent use and must not be copied.
+// BATCH request. Prepared.AddToBatch, Query.AddToBatch and
+// Session.UnpreparedAddToBatch append a statement; Session.ExecBatch sends
+// the batch, and Session.RunConditionalBatch sends a conditional one and
+// returns its rows. Reset empties it for reuse. Once a batch has grown to its
+// working size, appending allocates nothing. A Batch is not safe for
+// concurrent use and must not be copied.
+//
+// Every member must come from the session that sends the batch; members may
+// write tables of different keyspaces. The batch routes by its first member
+// whose partition key is known, so put a prepared member first to route a
+// batch to a replica. A batch holds at most MaxBatchStatements statements.
 //
 // The exported field Kind cql.BatchKind selects the batch's kind and is sent
 // with every execution: cql.LoggedBatch (the zero value),

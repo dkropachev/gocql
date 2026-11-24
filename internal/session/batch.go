@@ -24,7 +24,7 @@ import (
 // BATCH request. Prepared.AddToBatch and Query.AddToBatch append a
 // statement; Session.ExecBatch and Session.RunConditionalBatch send the batch.
 // Statements of several prepared statements and queries may share a batch
-// when they belong to one session.
+// when they belong to one session, and may write tables of several keyspaces.
 //
 // Appending copies the encoded values into storage the batch owns and reuses:
 // once a batch has grown to its working size, appending and Reset allocate

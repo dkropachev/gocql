@@ -97,8 +97,11 @@ func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal
 
 // AddToBatch encodes value straight into storage batch owns. It uses none of
 // the query's execution state, so it works while the query runs, drains or has
-// an open handle; a closed query or session returns cqlerr.ErrClosed. Neither
-// the query nor batch may be used concurrently with this call.
+// an open handle; a closed query or session returns cqlerr.ErrClosed. A batch
+// that holds members of another session, or already holds
+// MaxBatchStatements, is rejected with a *cql.ValidationError and left
+// unchanged. Neither the query nor batch may be used concurrently with this
+// call.
 func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 	return q.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
