@@ -321,7 +321,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
 | `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |
-| `gocql.ConnectObserver`, `HostStateNotifier` | `WithLifecycleObserver(observe.LifecycleObserver)`, or `session.Subscribe(event.Filter{...})` for cluster events |
+| `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangeConnected`) or the host marked down (`ChangeDown`), `KindStatus` and `KindTopology` the cluster's own events |
 
 ## Not carried over
 

@@ -38,7 +38,6 @@ type Config struct {
 	Conviction        endpoint.ConvictionPolicy
 	AddressTranslator endpoint.Translator
 	Observer          observe.Observer
-	LifecycleObserver observe.LifecycleObserver
 	Logger            *slog.Logger
 	DialHost          func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config

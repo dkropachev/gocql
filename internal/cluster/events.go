@@ -41,7 +41,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/pool"
 	"github.com/scylladb/gocql/v2/internal/protocol"
-	"github.com/scylladb/gocql/v2/observe"
 )
 
 type InternalEventDebouncer struct {
@@ -428,7 +427,7 @@ func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	p.InternalMu.Unlock()
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(pool.InternalHost), At: time.Now()})
+	s.publishPoolEvent(event.ChangeConnected, pool.InternalHost)
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	if s.privateStorage.InternalPool != nil {
@@ -437,21 +436,35 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 		}
 		return
 	}
-	defer s.PublishV2Metadata()
 	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageConnected, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
+	s.PublishV2Metadata()
+	s.publishPoolEvent(event.ChangeConnected, host)
+}
+
+// publishPoolEvent delivers a Pool event for host to the subscriptions. It
+// runs after the metadata publication of the change, so the event's
+// generation shows it.
+func (s *Core) publishPoolEvent(change event.Change, host *implEndpoint.HostInfo) {
+	s.PublishV2LocalEvent(event.Event{
+		Kind:       event.KindPool,
+		Change:     change,
+		Address:    eventV2Address(host.ConnectAddress(), host.Port()),
+		HostID:     implEndpoint.InternalHostInfoHostUUID(host),
+		Generation: s.Metadata().Generation(),
+	})
 }
 
 // HandleNodeDown marks down the host whose node-to-node address is ip, as a
 // DOWN status event names it, and drops its pool.
 func (s *Core) HandleNodeDown(ip net.IP, port int) {
-	defer s.PublishV2Metadata()
 	s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(ip.String(), strconv.Itoa(port)))
 
 	host, ok := s.privateStorage.InternalHostSource.getHostByIP(ip.String())
-	if ok {
-		s.markHostDown(host, false)
+	marked := ok && s.markHostDown(host, false)
+	s.PublishV2Metadata()
+	if marked {
+		s.publishPoolEvent(event.ChangeDown, host)
 	}
 }
 
@@ -466,9 +479,11 @@ func (s *Core) HandleHostDown(host *implEndpoint.HostInfo) {
 		s.HandleNodeDown(host.ConnectAddress(), host.Port())
 		return
 	}
-	defer s.PublishV2Metadata()
-	if s.markHostDown(host, true) {
+	marked := s.markHostDown(host, true)
+	s.PublishV2Metadata()
+	if marked {
 		s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
+		s.publishPoolEvent(event.ChangeDown, host)
 	}
 }
 
@@ -492,7 +507,6 @@ func (s *Core) markHostDown(host *implEndpoint.HostInfo, current bool) bool {
 		s.privateStorage.InternalPool.InternalRemoveHost(implEndpoint.InternalHostInfoHostUUID(host))
 	}
 	p.hostMu.Unlock()
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindHost, Stage: observe.StageDown, HostID: implEndpoint.InternalHostInfoHostUUID(host), At: time.Now()})
 	return true
 }
 

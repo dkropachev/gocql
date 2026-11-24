@@ -152,7 +152,6 @@ package config
 		config.ConfigBuilder method (*T) WithHostFilter(keep func(metadata.HostSnapshot) bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithIgnoreEvents(kinds ...event.Kind) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithKeyspace(name string) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithLifecycleObserver(observer observe.LifecycleObserver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLinger(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string, rack string) *config.ConfigBuilder
@@ -1168,6 +1167,7 @@ package endpoint
 
 package event
 	type event.Change string
+	const event.ChangeConnected event.Change = "CONNECTED"
 	const event.ChangeCreated event.Change = "CREATED"
 	const event.ChangeDown event.Change = "DOWN"
 	const event.ChangeDropped event.Change = "DROPPED"
@@ -1201,7 +1201,8 @@ package event
 		event.Kind method (T) String() string
 	const event.KindClientRoute event.Kind = 5
 	const event.KindControl event.Kind = 4
-	const event.KindOverflow event.Kind = 6
+	const event.KindOverflow event.Kind = 7
+	const event.KindPool event.Kind = 6
 	const event.KindSchema event.Kind = 3
 	const event.KindStatus event.Kind = 2
 	const event.KindTopology event.Kind = 1
@@ -1443,23 +1444,15 @@ package metrics
 package observe
 	type observe.AttemptObserver interface
 		observe.AttemptObserver method StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+	type observe.AttemptObserverFunc func(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+		observe.AttemptObserverFunc method (T) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
 	type observe.AttemptStart struct
 		observe.AttemptStart field Started time.Time
 		observe.AttemptStart field RequestID uint64
 		observe.AttemptStart field Attempt int
 		observe.AttemptStart field Target metadata.Target
 		observe.AttemptStart field Speculative bool
-	const observe.KindHost observe.LifecycleKind = "host"
-	const observe.KindSession observe.LifecycleKind = "session"
-	type observe.LifecycleEvent struct
-		observe.LifecycleEvent field At time.Time
-		observe.LifecycleEvent field Kind observe.LifecycleKind
-		observe.LifecycleEvent field Stage observe.LifecycleStage
-		observe.LifecycleEvent field HostID cql.UUID
-	type observe.LifecycleKind string
-	type observe.LifecycleObserver interface
-		observe.LifecycleObserver method ObserveLifecycle(observe.LifecycleEvent)
-	type observe.LifecycleStage string
+	func observe.Join(observers ...observe.Observer) observe.Observer
 	type observe.Observer interface
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
@@ -1471,6 +1464,8 @@ package observe
 		observe.RequestEvent field ID uint64
 	type observe.RequestObserver interface
 		observe.RequestObserver method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
+	type observe.RequestObserverFunc func(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
+		observe.RequestObserverFunc method (T) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
@@ -1479,10 +1474,6 @@ package observe
 		observe.RequestStart field Routing routing.Info
 		observe.RequestStart field ID uint64
 		observe.RequestStart field CQLTrace bool
-	const observe.StageClosed observe.LifecycleStage = "closed"
-	const observe.StageConnected observe.LifecycleStage = "connected"
-	const observe.StageDown observe.LifecycleStage = "down"
-	const observe.StageReady observe.LifecycleStage = "ready"
 
 package retry
 	type retry.Action uint8

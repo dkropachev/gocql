@@ -29,6 +29,11 @@ const (
 	KindControl
 	// KindClientRoute reports a change of the cluster's client routes.
 	KindClientRoute
+	// KindPool reports the session's connection pool to a host connecting
+	// (ChangeConnected) or the session marking the host down (ChangeDown).
+	// The driver raises it, not the server, so config.WithIgnoreEvents does
+	// not take it.
+	KindPool
 	// KindOverflow is the last event of a Subscription, sent when its queue
 	// overflows or when the session fails to publish a metadata change.
 	KindOverflow
@@ -50,6 +55,8 @@ func (k Kind) String() string {
 		return "control"
 	case KindClientRoute:
 		return "client route"
+	case KindPool:
+		return "pool"
 	case KindOverflow:
 		return "overflow"
 	default:
@@ -72,8 +79,12 @@ const (
 	ChangeMovedNode Change = "MOVED_NODE"
 	// ChangeUp is a Status event for a node that came up.
 	ChangeUp Change = "UP"
-	// ChangeDown is a Status event for a node that went down.
+	// ChangeDown is a Status event for a node that went down, or a Pool
+	// event for a host the session marked down and dropped the pool of.
 	ChangeDown Change = "DOWN"
+	// ChangeConnected is a Pool event for a host whose pool connected and
+	// that the session marked up.
+	ChangeConnected Change = "CONNECTED"
 	// ChangeCreated is a Schema event for a created object.
 	ChangeCreated Change = "CREATED"
 	// ChangeUpdated is a Schema event for an altered object, or a
@@ -120,7 +131,8 @@ const (
 //
 // The driver fills it; its zero value is empty, of KindUnknown.
 type Event struct {
-	// Address is the node's address for a Topology, Status or Control event.
+	// Address is the node's address for a Topology, Status or Control
+	// event, and the address the driver connects to for a Pool event.
 	Address netip.AddrPort
 	// Change is what happened, as the server names it, or as the driver
 	// does for a Control or Overflow event.
@@ -143,10 +155,10 @@ type Event struct {
 	HostIDs []cql.UUID
 	// Generation is the metadata generation when the event was published.
 	Generation uint64
-	// HostID is the node of a Topology or Status event, or the new control
-	// host of a Control event, and zero when the driver does not know the
-	// node's ID. A REMOVED_NODE event takes it from the metadata before the
-	// removal.
+	// HostID is the node of a Topology, Status or Pool event, or the new
+	// control host of a Control event, and zero when the driver does not
+	// know the node's ID. A REMOVED_NODE event takes it from the metadata
+	// before the removal.
 	HostID cql.UUID
 	// Kind classifies the event.
 	Kind Kind

@@ -21,7 +21,6 @@ import (
 	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -225,7 +224,6 @@ func TestConfigBuilder(t *testing.T) {
 			"WithClientID none":                                                         c.Identity.ClientID == "",
 			"WithLogger slog.Default":                                                   c.Logger == nil,
 			"WithObserver none":                                                         c.Observer == nil,
-			"WithLifecycleObserver none":                                                c.LifecycleObserver == nil,
 			"WithConfigReport true":                                                     c.ReportConfiguration,
 			"WithErrorStatementText off":                                                c.ErrorStatementBytes == 0,
 			"Profile WithConsistency LOCAL_QUORUM":                                      p.Consistency == cql.LocalQuorum,
@@ -615,7 +613,6 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("SettersStoreValues", func(t *testing.T) {
-		lifecycle := &lifecycleRecorder{}
 		addr := netip.MustParseAddr("192.0.2.7")
 		c := mustBuildConfig(t, New(ScyllaV4, "h").
 			WithMaxFrameSize(1<<20).
@@ -630,8 +627,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithSendBuffer(2048).
 			WithLinger(2*time.Second).
 			WithMaxRequestsPerConnection(128).
-			WithMaxOrphanedStreams(0).
-			WithLifecycleObserver(lifecycle)).settings
+			WithMaxOrphanedStreams(0)).settings
 		for name, ok := range map[string]bool{
 			"WithMaxFrameSize":             c.Limits.MaxFrameBytes == 1<<20,
 			"WithMaxDecompressedSize":      c.Limits.MaxDecompressedBytes == 2<<20,
@@ -646,7 +642,6 @@ func TestConfigBuilder(t *testing.T) {
 			"WithLinger":                   c.Linger == cql.Some(2*time.Second),
 			"WithMaxRequestsPerConnection": c.Pool.MaxRequestsPerConnection == 128,
 			"WithMaxOrphanedStreams":       c.Pool.MaxOrphanedStreams == 0,
-			"WithLifecycleObserver":        c.LifecycleObserver == observe.LifecycleObserver(lifecycle),
 		} {
 			if !ok {
 				t.Errorf("%s: the built configuration does not carry the chosen value", name)
@@ -826,12 +821,6 @@ func secretTranslator(secret string) endpoint.Translator {
 		_ = secret
 		return addr, nil
 	})
-}
-
-type lifecycleRecorder struct{ events []observe.LifecycleEvent }
-
-func (r *lifecycleRecorder) ObserveLifecycle(e observe.LifecycleEvent) {
-	r.events = append(r.events, e)
 }
 
 type countingReconnect struct {

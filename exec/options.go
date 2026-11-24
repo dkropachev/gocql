@@ -50,7 +50,9 @@ type Options struct {
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
 	// Observer replaces the session's observer for the execution; nil keeps
-	// it.
+	// it. To add to the session's observer rather than replace it, join the
+	// two: observe.Join(sessionObserver, extra), where sessionObserver is
+	// the one given to config.ConfigBuilder.WithObserver.
 	Observer observe.Observer
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal

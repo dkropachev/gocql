@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/netip"
 	"slices"
-	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -18,7 +17,6 @@ import (
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/observe"
 )
 
 // Kind classifies an Event.
@@ -172,7 +170,6 @@ func (s *Core) CloseV2Peripheral() {
 	for _, sub := range subs {
 		sub.Close()
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindSession, Stage: observe.StageClosed, At: time.Now()})
 }
 func eventV2Address(host net.IP, port int) netip.AddrPort {
 	ip, ok := netip.AddrFromSlice(host)

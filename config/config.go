@@ -672,13 +672,6 @@ func (b *ConfigBuilder) WithObserver(observer observe.Observer) *ConfigBuilder {
 	return b
 }
 
-// WithLifecycleObserver receives session and connection lifecycle events.
-// Default none.
-func (b *ConfigBuilder) WithLifecycleObserver(observer observe.LifecycleObserver) *ConfigBuilder {
-	b.settings.LifecycleObserver = observer
-	return b
-}
-
 // WithConfigReport chooses whether the driver configuration is sent to the
 // server, as JSON in the DRIVER_CONFIG STARTUP option of the control
 // connection, following docs/driver-config-schema.json. The report carries no

@@ -26,11 +26,12 @@ func (o *countingObserver) StartAttempt(context.Context, observe.AttemptStart) f
 	return o.ObserveAttempt
 }
 
-// TestRequestCount checks that Requests, derived from the request ids minus
-// the refused registrations, counts exactly the admitted requests.
+// TestRequestCount checks that Requests counts exactly the registered
+// requests and never decreases.
 func TestRequestCount(t *testing.T) {
 	// Refused: a session marked closing refuses the registration after the
-	// admission took its id; that id is not a request.
+	// admission took its id; that id is not a request, and Requests never
+	// counts it, not even while the registration waits.
 	t.Run("Refused", func(t *testing.T) {
 		s, _, peers := runtimeTestSession(t, 1)
 		defer s.Close()
@@ -49,6 +50,9 @@ func TestRequestCount(t *testing.T) {
 		refused := make(chan error, 1)
 		go func() { _, err := Exec(context.Background(), s, b, CompiledOptions{}); refused <- err }()
 		spinUntil(t, "Exec took its request id", func() bool { return rt.requestID.Load() == 2 })
+		if m := s.Metrics(); m.Requests != 1 {
+			t.Fatalf("Requests = %d while a registration waits, want 1", m.Requests)
+		}
 		closed := make(chan struct{})
 		go func() { _ = s.Close(); close(closed) }()
 		spinUntil(t, "Close marked the session", s.Closed)
@@ -57,8 +61,8 @@ func TestRequestCount(t *testing.T) {
 			t.Fatalf("Exec on a closing session: %v", err)
 		}
 		receiveWithin(t, "Close", closed)
-		if refused := rt.refusedRegistrations.Load(); refused != 1 || rt.requestID.Load() != 2 {
-			t.Fatalf("refused %d of %d ids, want 1 of 2", refused, rt.requestID.Load())
+		if ids := rt.requestID.Load(); ids != 2 {
+			t.Fatalf("%d request ids taken, want 2", ids)
 		}
 		if m := s.Metrics(); m.Requests != 1 || m.InFlight != 0 {
 			t.Fatalf("Requests = %d, in flight %d; want 1, 0", m.Requests, m.InFlight)
@@ -92,8 +96,8 @@ func TestRequestCount(t *testing.T) {
 			if err := receiveWithin(t, "Exec", result); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("Exec on a session Close was stopping: %v", err)
 			}
-			if refused := rt.refusedRegistrations.Load(); refused != 1 {
-				t.Fatalf("refused %d registrations, want 1: the execution was registered", refused)
+			if n := rt.requests.Load(); n != 0 {
+				t.Fatalf("Requests = %d, want 0: the execution was registered", n)
 			}
 			if cerr := receiveWithin(t, "Close", closed); cerr != nil {
 				t.Fatal(cerr)

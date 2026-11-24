@@ -20,7 +20,6 @@ import (
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
-	"github.com/scylladb/gocql/v2/observe"
 )
 
 type blockingPolicy struct {
@@ -111,10 +110,6 @@ func agreementSession(t *testing.T) (*cluster.Core, cql.UUID, cql.UUID) {
 func agreementPool(s *cluster.Core, c *transport.Conn) {
 	implCluster.SessionData(s).InternalPool.InternalHostConnPools[implEndpoint.InternalHostInfoHostUUID(c.InternalHost)] = &implPool.InternalHostConnPool{InternalHost: c.InternalHost, InternalConnPicker: &implPool.InternalDefaultConnPicker{InternalConns: []*transport.Conn{c}}}
 }
-
-type lifecycleFunc func(observe.LifecycleEvent)
-
-func (f lifecycleFunc) ObserveLifecycle(e observe.LifecycleEvent) { f(e) }
 
 type unstablePolicy struct {
 	RoutingPolicy

@@ -1559,15 +1559,12 @@ type RequestEvent struct {
     Result Result
     Err error
 }
-type LifecycleObserver interface { ObserveLifecycle(LifecycleEvent) }
-type LifecycleKind string   // KindSession, KindHost
-type LifecycleStage string  // StageReady, StageConnected, StageDown, StageClosed
-type LifecycleEvent struct {
-    At time.Time
-    Kind LifecycleKind
-    Stage LifecycleStage
-    HostID cql.UUID
-}
+type RequestObserverFunc func(context.Context, RequestStart) (context.Context, func(RequestEvent))
+type AttemptObserverFunc func(context.Context, AttemptStart) func(routing.AttemptEvent)
+// Join calls every observer's hooks in order; it implements the union of
+// their hooks. A pool connecting or a host marked down is an event.KindPool
+// event, not an observer hook.
+func Join(observers ...Observer) Observer
 ```
 
 Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
@@ -1782,14 +1779,14 @@ func (s *Session) Closed() bool
 
 // package event
 type Kind uint8
-const (KindUnknown Kind = iota; KindTopology; KindStatus; KindSchema; KindControl; KindClientRoute; KindOverflow)
+const (KindUnknown Kind = iota; KindTopology; KindStatus; KindSchema; KindControl; KindClientRoute; KindPool; KindOverflow)
 type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
     Kind Kind
     Generation uint64
     Address netip.AddrPort
-    HostID cql.UUID // Topology, Status and Control; REMOVED_NODE from the previous snapshot
-    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ...
+    HostID cql.UUID // Topology, Status, Pool and Control; REMOVED_NODE from the previous snapshot
+    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ChangeConnected (Pool), ...
     ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ...
     Keyspace, Object string
     ArgumentTypes []string  // function/aggregate argument types
@@ -1824,7 +1821,7 @@ type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 // package metrics
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
-    Requests, Attempts uint64
+    Requests, Attempts uint64 // never decrease
     Errors, Canceled uint64
     Retries, Speculations uint64
     Orphans uint64

@@ -31,7 +31,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
-	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -138,7 +137,6 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 	if dcs := unsetLocality(config, s.Metadata()); len(dcs) > 1 {
 		s.logger().Warn("the cluster has more than one datacenter and the session has no local one, so requests go to every datacenter and LOCAL_* consistency is local to whichever coordinator serves them; set config.ConfigBuilder.WithLocalDatacenter", "datacenters", dcs)
 	}
-	sessionObserveV2Lifecycle(s, observe.LifecycleEvent{Kind: observe.KindSession, Stage: observe.StageReady, At: time.Now()})
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
@@ -458,19 +456,6 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, e
 		}
 	}
 	return out, tokenErr
-}
-func sessionObserveV2Lifecycle(s *Core, event observe.LifecycleEvent) {
-	p := s.Peripheral()
-	if p == nil {
-		return
-	}
-	p.InternalMu.Lock()
-	observer := p.InternalConfig.LifecycleObserver
-	p.InternalMu.Unlock()
-	if observer == nil {
-		return
-	}
-	s.ObserveSafely(func() { observer.ObserveLifecycle(event) })
 }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's

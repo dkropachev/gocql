@@ -77,11 +77,6 @@ type InternalSessionRuntime struct {
 	closingOnce          sync.Once
 	prepareWorkersMu     sync.Mutex
 	InternalMu           sync.Mutex
-	// refusedRegistrations counts admissions that took a request id but
-	// that registerExecution refused: the session was closing or closed, or
-	// the reusable query was closed. Requests is requestID minus this, so
-	// admission writes no separate request counter.
-	refusedRegistrations atomic.Uint64
 	prepareWorkersClosed bool
 	// collectedFinal is set once Session.Close wrote the last queued
 	// reports; later collections queue none.
@@ -97,8 +92,11 @@ type InternalSessionRuntime struct {
 	timestamps startTimestamps
 	_          cacheLinePad
 	// attempts..inflight feed Metrics only.
-	attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                           atomic.Int64
+	// requests counts the registered executions. It is written next to
+	// inflight, after registerExecution accepted the execution, so it never
+	// counts an admission that is then refused and never decreases.
+	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
+	inflight                                                     atomic.Int64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
@@ -165,16 +163,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	return metrics.Snapshot{Requests: rt.requestCount(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
-}
-
-// requestCount reports the admitted requests: every request id taken, minus
-// the admissions registerExecution refused. The refusals are read first, so a
-// refusal racing with this read cannot outnumber the ids it read. The count
-// may briefly include an admission that has its id but is about to be refused.
-func (rt *InternalSessionRuntime) requestCount() uint64 {
-	refused := rt.refusedRegistrations.Load()
-	return rt.requestID.Load() - refused
+	return metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
 }
 
 // prepareTyped prepares statement for Session.Prepare, bounded by ctx and the
@@ -794,11 +783,11 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	if err := rt.registerExecution(request.InternalLogical, request.InternalOwner); err != nil {
 		// registerExecution refuses a closing or closed session or a closed
 		// query; either way this id is not a request.
-		rt.refusedRegistrations.Add(1)
 		cancel()
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
 	}
+	rt.requests.Add(1)
 	rt.inflight.Add(1)
 	if hooks != nil {
 		if hooks.Request != nil {
