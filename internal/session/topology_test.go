@@ -43,7 +43,7 @@ func TestTopology(t *testing.T) {
 			}
 			config := settings.DefaultConfig(contacts...)
 			config.Protocol = 4
-			config.Metadata.Mode = metadata.SchemaNone
+			config.Metadata.Mode = metadata.ModeNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.AdvancedShardAwareness.Enabled = false
@@ -90,7 +90,7 @@ func TestTopology(t *testing.T) {
 				})
 				config := settings.DefaultConfig(srv.Address)
 				config.Protocol = 4
-				config.Metadata.Mode = metadata.SchemaNone
+				config.Metadata.Mode = metadata.ModeNone
 				config.Metadata.InitialDiscovery = false
 				config.Metadata.AutomaticAgreement = false
 				config.Pool.AdvancedShardAwareness.Enabled = false

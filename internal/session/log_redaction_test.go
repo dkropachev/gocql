@@ -81,7 +81,7 @@ func TestLogsDoNotLeakCredentials(t *testing.T) {
 			logger, logs := logging.NewCapture()
 			config := settings.DefaultConfig(address)
 			config.Protocol = 4
-			config.Metadata.Mode = metadata.SchemaNone
+			config.Metadata.Mode = metadata.ModeNone
 			config.Metadata.InitialDiscovery = false
 			config.Metadata.AutomaticAgreement = false
 			config.Pool.AdvancedShardAwareness.Enabled = false

@@ -177,7 +177,7 @@ func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
 
 // WithTLSSource encrypts every connection with the configuration source
 // returns when the connection is dialed, for one that changes while the
-// session runs: NewTLSFiles or your own endpoint.TLSSource. Build validates the
+// session runs: NewTLSFileSource or your own endpoint.TLSSource. Build validates the
 // configuration source returns at that time. Verification is as for WithTLS.
 // A nil source selects plaintext. It replaces WithTLS.
 func (b *ConfigBuilder) WithTLSSource(source endpoint.TLSSource) *ConfigBuilder {
@@ -448,8 +448,9 @@ func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
 	return b
 }
 
-// WithReconnect sets the delay between attempts to reopen a node's connections.
-// Nil disables reconnection attempts.
+// WithReconnect sets the delay between attempts to reopen a node's connections;
+// see endpoint.ReconnectPolicy for how the driver calls it. Nil disables
+// reconnection attempts.
 // Default jittered backoff from 1s to 32s.
 func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBuilder {
 	b.settings.Reconnect = policy
@@ -465,7 +466,7 @@ func (b *ConfigBuilder) WithConviction(policy endpoint.ConvictionPolicy) *Config
 }
 
 // WithMetadataMode selects how much schema metadata is loaded. Default
-// metadata.SchemaFull.
+// metadata.ModeFull.
 func (b *ConfigBuilder) WithMetadataMode(mode metadata.Mode) *ConfigBuilder {
 	b.settings.Metadata.Mode = mode
 	return b

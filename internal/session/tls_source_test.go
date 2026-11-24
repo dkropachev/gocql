@@ -37,7 +37,7 @@ func TestTLSSourceSession(t *testing.T) {
 	config := settings.DefaultConfig(srv.Address)
 	config.Protocol = 4
 	config.Metadata.InitialDiscovery = false
-	config.Metadata.Mode = metadata.SchemaNone
+	config.Metadata.Mode = metadata.ModeNone
 	config.Metadata.PeriodicRefresh = 0
 	config.ReportConfiguration = false
 	config.Pool.ConnectionsPerHost = 1

@@ -317,7 +317,8 @@ func (u UUID) MarshalText() ([]byte, error) {
 
 // UnmarshalText implements encoding.TextUnmarshaler with ParseUUID. On error
 // it sets u to the zero UUID.
-func (u *UUID) UnmarshalText(text []byte) (err error) {
-	*u, err = ParseUUID(string(text))
-	return
+func (u *UUID) UnmarshalText(data []byte) error {
+	parsed, err := ParseUUID(string(data))
+	*u = parsed
+	return err
 }

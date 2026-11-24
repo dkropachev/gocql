@@ -158,7 +158,7 @@ func TestCompactPermutation(t *testing.T) {
 								if slow {
 									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
 								}
-								info.Conditional = true
+								info.Kind = cql.ConditionalStatement
 								got := compactDrain(t, NewPlan(policy, info, m), len(hosts)+n)
 								want := []Target{target(0, 0), target(0, 1), target(1, 1)}
 								if remote && !slow && !leader {

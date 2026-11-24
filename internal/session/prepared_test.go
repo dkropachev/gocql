@@ -116,7 +116,7 @@ func TestPrepared(t *testing.T) {
 			p := s.Peripheral()
 			p.InternalMu.Lock()
 			p.InternalConfig = settings.DefaultConfig("localhost")
-			p.InternalConfig.Metadata.Mode = metadata2.SchemaNone
+			p.InternalConfig.Metadata.Mode = metadata2.ModeNone
 			p.InternalMu.Unlock()
 			state := &InternalPreparedState{InternalSession: s, InternalInfo: PreparedInfo{Keyspace: "ks1", Table: "t1"}}
 			if err := state.noteMetadataConflict(); err != nil {
@@ -169,11 +169,11 @@ func TestPrepared(t *testing.T) {
 					p.InternalMu.Lock()
 					p.InternalConfig = settings.DefaultConfig("localhost")
 					if mode == "disabled" {
-						p.InternalConfig.Metadata.Mode = metadata2.SchemaNone
+						p.InternalConfig.Metadata.Mode = metadata2.ModeNone
 					} else if mode == "excluded" {
 						p.InternalConfig.Metadata.Keyspaces = []string{"ks2"}
 					} else {
-						p.InternalConfig.Metadata.Mode = metadata2.SchemaKeyspaces
+						p.InternalConfig.Metadata.Mode = metadata2.ModeKeyspaces
 					}
 					p.InternalMu.Unlock()
 					before := s.Metadata()
@@ -1203,7 +1203,7 @@ func TestPrepared(t *testing.T) {
 					case "partitioner":
 						state.partitioner = "different"
 					case "conditional":
-						state.InternalInfo.Conditional = true
+						state.InternalInfo.Kind = implCql.ConditionalStatement
 					}
 					done := make(chan error, 1)
 					go func() {

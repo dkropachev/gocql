@@ -273,7 +273,7 @@ func TestWorkCountsPerf(t *testing.T) {
 							info.HostID = cql.Option[cql.UUID]{Set: true, Value: storage.InternalHosts[0].ID}
 						}
 						if kind == "conditional" {
-							info.Conditional = true
+							info.Kind = cql.ConditionalStatement
 						}
 						if kind == "leader" {
 							storage.InternalKeyspaces["ks"].ConsistencyMode = "global"

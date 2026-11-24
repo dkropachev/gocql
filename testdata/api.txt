@@ -42,7 +42,6 @@ package gocql
 		gocql.PreparedInfo field Table string
 		gocql.PreparedInfo field PartitionKeyIndexes []int
 		gocql.PreparedInfo field Kind cql.StatementKind
-		gocql.PreparedInfo field Conditional bool
 		gocql.PreparedInfo field Generation uint64
 	type gocql.PreparedStream[P any, R any] struct
 		gocql.PreparedStream method (*T) Columns() cql.Columns
@@ -196,7 +195,7 @@ package config
 	func config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder
 	func config.NewClientRoutes() *config.ClientRoutesBuilder
 	func config.NewProfile() *config.ProfileBuilder
-	func config.NewTLSFiles(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
+	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
 	type config.Profile struct
 		config.Profile field Retry retry.Policy
 		config.Profile field Routing routing.Policy
@@ -237,7 +236,7 @@ package cql
 	func cql.ASCIIValue(s string) (cql.Value, error)
 	const cql.All cql.Consistency = 5
 	const cql.Any cql.Consistency = 0
-	type cql.BatchKind byte
+	type cql.BatchKind uint8
 		cql.BatchKind method (T) String() string
 	var cql.BigIntType cql.DataType
 	func cql.BigIntValue(n int64) cql.Value
@@ -715,7 +714,7 @@ package cql
 		cql.UUID method (T) MarshalText() ([]byte, error)
 		cql.UUID method (T) String() string
 		cql.UUID method (*T) UnmarshalJSON(data []byte) error
-		cql.UUID method (*T) UnmarshalText(text []byte) (err error)
+		cql.UUID method (*T) UnmarshalText(data []byte) error
 		cql.UUID method (T) Variant() int
 		cql.UUID method (T) Version() int
 	var cql.UUIDCodec cql.Codec[cql.UUID]
@@ -776,7 +775,7 @@ package cql
 		cql.ValueReader method (T) Type() cql.DataType
 	type cql.ValueWriter struct
 		cql.ValueWriter method (*T) BorrowBytes(b []byte) error
-		cql.ValueWriter method (*T) BorrowString(s string) error
+		cql.ValueWriter method (*T) BorrowText(s string) error
 		cql.ValueWriter method (*T) Child(typ cql.DataType, encode func(*cql.ValueWriter) error) error
 		cql.ValueWriter method (*T) Empty() error
 		cql.ValueWriter method (*T) Null() error
@@ -1333,6 +1332,9 @@ package metadata
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
 		metadata.Mode method (T) String() string
+	const metadata.ModeFull metadata.Mode = 2
+	const metadata.ModeKeyspaces metadata.Mode = 1
+	const metadata.ModeNone metadata.Mode = 0
 	type metadata.Route struct
 		metadata.Route method (T) HostID() cql.UUID
 		metadata.Route method (T) ShardID() cql.Option[uint32]
@@ -1340,9 +1342,6 @@ package metadata
 		metadata.Route method (T) Target() metadata.Target
 		metadata.Route method (T) Usable() bool
 		metadata.Route method (T) WithShardID(shard cql.Option[uint32]) metadata.Route
-	const metadata.SchemaFull metadata.Mode = 2
-	const metadata.SchemaKeyspaces metadata.Mode = 1
-	const metadata.SchemaNone metadata.Mode = 0
 	type metadata.Snapshot struct
 		metadata.Snapshot method (*T) Diagnostics() []error
 		metadata.Snapshot method (*T) Generation() uint64
@@ -1471,7 +1470,7 @@ package retry
 		retry.Attempt field Number int
 		retry.Attempt field Idempotent bool
 		retry.Attempt field Consistency cql.Consistency
-		retry.Attempt field Conditional bool
+		retry.Attempt field Kind cql.StatementKind
 		retry.Attempt field Batch cql.Option[cql.BatchKind]
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
 	type retry.Decision struct
@@ -1518,7 +1517,6 @@ package routing
 		routing.Info field Table string
 		routing.Info field Token cql.Option[int64]
 		routing.Info field Kind cql.StatementKind
-		routing.Info field Conditional bool
 		routing.Info field Consistency cql.Consistency
 		routing.Info field HostID cql.Option[cql.UUID]
 		routing.Info field ShardID cql.Option[uint32]

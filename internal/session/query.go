@@ -176,7 +176,7 @@ func queryOptions(s *implCluster.Core, values Options) (CompiledOptions, error) 
 // kind, as newPreparedQuery builds it; executions add the token.
 func preparedRouting(state *InternalPreparedState, kind cql.StatementKind) routing2.Info {
 	info := &state.InternalInfo
-	return routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}
+	return routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}
 }
 
 func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool *queryPoolBase) (*Query[P, R], error) {
@@ -192,7 +192,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind, Conditional: kind != cql.OrdinaryStatement}, hasCounter: state.hasCounter}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}, hasCounter: state.hasCounter}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -214,7 +214,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: statement.Kind, Conditional: statement.Kind != cql.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: statement.Kind}, hasCounter: hasCounterColumn(columns)}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}

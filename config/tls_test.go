@@ -74,7 +74,7 @@ func (f *tlsTestFiles) set(serial, caSerial int64) {
 
 func (f *tlsTestFiles) source(base *tls.Config) *TLSFileSource {
 	f.t.Helper()
-	s, err := NewTLSFiles(base, f.files)
+	s, err := NewTLSFileSource(base, f.files)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -122,13 +122,13 @@ func TestTLSSource(t *testing.T) {
 			"NotPEM":               {nil, TLSFiles{CAFile: "../testdata/pki/ca.cnf"}, "no PEM certificates"},
 		} {
 			t.Run(name, func(t *testing.T) {
-				if _, err := NewTLSFiles(tc.base, tc.files); err == nil || !strings.Contains(err.Error(), tc.want) {
-					t.Fatalf("NewTLSFiles = %v, want an error containing %q", err, tc.want)
+				if _, err := NewTLSFileSource(tc.base, tc.files); err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("NewTLSFileSource = %v, want an error containing %q", err, tc.want)
 				}
 			})
 		}
 		base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
-		s, err := NewTLSFiles(base, pki)
+		s, err := NewTLSFileSource(base, pki)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -136,9 +136,9 @@ func TestTLSSource(t *testing.T) {
 			t.Fatal("files were not applied over the base")
 		}
 		if len(base.Certificates) != 0 || base.RootCAs != nil {
-			t.Fatal("NewTLSFiles modified the base")
+			t.Fatal("NewTLSFileSource modified the base")
 		}
-		s, err = NewTLSFiles(nil, TLSFiles{CAFile: pki.CAFile})
+		s, err = NewTLSFileSource(nil, TLSFiles{CAFile: pki.CAFile})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -31,7 +31,6 @@ type PreparedInfo struct {
 	Keyspace, Table     string
 	PartitionKeyIndexes []int
 	Kind                cql.StatementKind
-	Conditional         bool
 	Generation          uint64
 }
 type InternalHostPrepared struct {
@@ -191,7 +190,6 @@ func (p *Prepared[P, R]) Info() PreparedInfo {
 	defer p.privateStorage.InternalState.InternalMu.RUnlock()
 	v := p.privateStorage.InternalState.InternalInfo
 	v.Kind = p.privateStorage.kind
-	v.Conditional = p.privateStorage.kind == cql.ConditionalStatement
 	v.PartitionKeyIndexes = append([]int(nil), v.PartitionKeyIndexes...)
 	return v
 }
@@ -221,7 +219,7 @@ func bindPrepared[P, R any](p *Prepared[P, R], value P, owned bool) (*Bound[R], 
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuex := new(Bound[R])
-		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind, Conditional: p.privateStorage.kind != cql.OrdinaryStatement}, hasCounter: p.privateStorage.InternalState.hasCounter}
+		opaqueStorageValuex.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement, keyspace: keyspace, InternalSource: preparedSource{state: p.privateStorage.InternalState}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Token: token, Kind: p.privateStorage.kind}, hasCounter: p.privateStorage.InternalState.hasCounter}
 		opaqueStorageValuex.privateStorage.InternalRows = p.privateStorage.rows
 		opaqueStorageValuex.privateStorage.plans = p.privateStorage.plans
 		return opaqueStorageValuex
@@ -247,7 +245,7 @@ func bindUnprepared[P, R any](s binding.Statement[P, R], columns cql.Columns, va
 	}
 	return func() *Bound[R] {
 		opaqueStorageValuexx := new(Bound[R])
-		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Kind: s.Kind, Conditional: s.Kind != cql.OrdinaryStatement}, hasCounter: hasCounterColumn(columns)}
+		opaqueStorageValuexx.privateStorage.InternalRequest = InternalExecutionRequest{statement: s.CQL, InternalSource: cqlText{}, InternalValues: values, InternalOwner: InternalNewInputOwner(), routing: routing2.Info{Kind: s.Kind}, hasCounter: hasCounterColumn(columns)}
 		opaqueStorageValuexx.privateStorage.InternalRows = s.Rows
 		opaqueStorageValuexx.privateStorage.plans = &InternalResultPlanCache[R]{}
 		return opaqueStorageValuexx

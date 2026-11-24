@@ -150,7 +150,7 @@ func (w *ValueWriter) Null() error
 func (w *ValueWriter) Unset() error
 func (w *ValueWriter) Empty() error
 func (w *ValueWriter) BorrowBytes([]byte) error
-func (w *ValueWriter) BorrowString(string) error
+func (w *ValueWriter) BorrowText(string) error
 func (w *ValueWriter) Uint8(uint8) error
 func (w *ValueWriter) Uint16(uint16) error
 func (w *ValueWriter) Uint32(uint32) error
@@ -659,7 +659,7 @@ owns its type:
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
 | `config.NewClientRoutes() *config.ClientRoutesBuilder` | starts a client routes setting |
-| `config.NewTLSFiles(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
 Package `cql` also exports `func StartPage() PageState` (the zero `PageState`);
@@ -715,7 +715,6 @@ type PreparedInfo struct {
     Keyspace, Table string
     PartitionKeyIndexes []int
     Kind cql.StatementKind
-    Conditional bool
     Generation uint64
 }
 
@@ -1457,7 +1456,6 @@ type Info struct {
     Keyspace, Table string
     Token cql.Option[int64]
     Kind cql.StatementKind
-    Conditional bool
     Consistency cql.Consistency
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
@@ -1548,7 +1546,7 @@ type Attempt struct {
     Number int // 1-based
     Idempotent bool
     Consistency cql.Consistency
-    Conditional bool
+    Kind cql.StatementKind
     ExecutionStatus cqlerr.ExecutionStatus
 }
 type Decision struct {
@@ -1757,7 +1755,7 @@ func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
 // Schema types: Keyspace, Table, TableOptions, Column, ColumnKind, ColumnOrder
 // (ASC, DESC), Index, IndexKind, View, Type, Function, Aggregate.
-type Mode /* SchemaNone, SchemaKeyspaces, SchemaFull (default) */
+type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 
 // package metrics
 // Fields may be added later; read them by name and do not compare snapshots whole.
@@ -1784,7 +1782,7 @@ type TokenRange struct { Start, End int64; Replicas []Target }
 ```
 
 ConfigBuilder.WithMetadataMode selects how much schema a session loads
-(SchemaFull by default); topology always loads. WithMetadataKeyspaces limits
+(ModeFull by default); topology always loads. WithMetadataKeyspaces limits
 schema to the named keyspaces.
 
 metadata.Snapshot exposes immutable snapshots, with full existing schema
@@ -1911,7 +1909,7 @@ connection verifies the node's IP address. `ConfigBuilder.WithTLS` copies a
 fixed `*tls.Config`; `WithTLSSource` takes a `TLSSource`
 (`TLSConfig() *tls.Config`) that the dialer asks for the config of every new
 connection; open connections keep theirs, and a nil result
-fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFiles(base, TLSFiles)`) loads the client
+fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFileSource(base, TLSFiles)`) loads the client
 certificate/key and CA from files over base, fails if they cannot be loaded,
 and rechecks them during a dial once `Interval` has passed, keeping the current
 files when a check fails. Context-taking hooks honor cancellation; synchronous callbacks are

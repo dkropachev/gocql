@@ -24,8 +24,12 @@ func (s *Core) startReconnectingDownedHosts() {
 	if policy == nil {
 		return
 	}
-	delay, again := policy.Delay(0)
-	if !again || delay < 0 {
+	delay, again := policy.Delay(1)
+	if delay < 0 {
+		s.logger().Warn("reconnect policy returned a negative delay; not reconnecting down hosts")
+		return
+	}
+	if !again {
 		return
 	}
 	// A session worker, so Close joins the loop after cancelling its ctx.
@@ -63,7 +67,7 @@ func (s *Core) reconnectTypedDownedHosts(policy implSettings.ReconnectPolicy, in
 				}
 				s.privateStorage.InternalPool.InternalAddHost(host)
 				state.attempt++
-				delay, again := policy.Delay(state.attempt)
+				delay, again := policy.Delay(state.attempt + 1)
 				state.stopped = !again || delay < 0
 				state.next = now.Add(max(delay, time.Millisecond))
 				retries[id] = state

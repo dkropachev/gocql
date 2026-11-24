@@ -37,7 +37,7 @@ func TestEnumStrings(t *testing.T) {
 		{event.Kind(0), "unknown"},
 		{event.ClientRoute, "client route"},
 		{event.Kind(99), "Kind(99)"},
-		{metadata.SchemaFull, "full"},
+		{metadata.ModeFull, "full"},
 		{metadata.Mode(9), "Mode(9)"},
 		{retry.IgnoreWrite, "ignore write"},
 		{retry.Action(9), "Action(9)"},

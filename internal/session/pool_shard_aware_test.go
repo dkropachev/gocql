@@ -48,7 +48,7 @@ func connect(t *testing.T, n *fakeNode, configure func(*settings.Config)) *sessi
 	t.Helper()
 	config := settings.DefaultConfig(n.contact())
 	config.Protocol = 4
-	config.Metadata.Mode = metadata.SchemaNone
+	config.Metadata.Mode = metadata.ModeNone
 	config.Metadata.InitialDiscovery = false
 	config.Metadata.AutomaticAgreement = false
 	config.Logger = logging.Nop()

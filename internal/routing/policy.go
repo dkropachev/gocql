@@ -377,7 +377,7 @@ func (p *InternalRoutingPolicy) Pick(info routing2.Info, m *MetadataSnapshot) (R
 	if m == nil || info.HostID.Set || !o.ShuffleReplicas || !o.TokenAware || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return Route{}, false
 	}
-	if info.Conditional || info.Kind != cql.OrdinaryStatement || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
+	if info.Kind != cql.OrdinaryStatement || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
 		return Route{}, false
 	}
 	if d := p.InternalDecisions.Load(); d != nil && len(d.InternalSlow) > 0 {
@@ -455,7 +455,6 @@ func (p *InternalRoutingPolicy) InternalPlanWith(info routing2.Info, m *Metadata
 
 // planWith initializes plan; a plan that may pick tries Pick's route first.
 func (p *InternalRoutingPolicy) planWith(info routing2.Info, m *MetadataSnapshot, plan *InternalLazyRoutingPlan, tablet *InternalTabletLookup, mayPick bool) QueryPlan {
-	info.Conditional = info.Conditional || info.Kind != cql.OrdinaryStatement
 	if m == nil {
 		return &InternalTargetPlan{}
 	}
@@ -468,7 +467,7 @@ func (p *InternalRoutingPolicy) planWith(info routing2.Info, m *MetadataSnapshot
 	plan.emitted = plan.smallEmitted[:0]
 	plan.token, plan.tokenSet = info.Token.Value, info.Token.Set
 	plan.shard = info.ShardID
-	plan.strict = info.Conditional || info.ShardID.Set
+	plan.strict = info.Kind != cql.OrdinaryStatement || info.ShardID.Set
 	if info.HostID.Set {
 		plan.pinned = true
 		// Pinned plans never traverse replica leaders. Keep only the captured
@@ -490,7 +489,7 @@ func (p *InternalRoutingPolicy) planWith(info routing2.Info, m *MetadataSnapshot
 	if o.TokenAware && info.Token.Set && info.Keyspace != "" && info.Table != "" {
 		plan.replicas, _ = m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
-	plan.conditional = info.Conditional || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial
+	plan.conditional = info.Kind != cql.OrdinaryStatement || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial
 	if o.LeaderAware {
 		plan.leader = p.leader(info, m, lookup)
 	}

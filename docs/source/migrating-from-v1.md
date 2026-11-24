@@ -99,11 +99,11 @@ defer session.Close()
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |
 | `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; other mechanisms implement `auth.Provider` |
-| `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFiles` to reload certificate files |
+| `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFileSource` to reload certificate files |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting`; see [load balancing](load-balancing.md) |
 | `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; see [retries](retry-policy.md) |
-| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)` |
+| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0 |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
 | `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |
 | `cluster.Dialer` | `WithDialer(endpoint.Dialer)` |

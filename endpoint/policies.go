@@ -14,8 +14,12 @@ import (
 
 // ReconnectPolicy decides how long to wait before reconnecting to a node.
 type ReconnectPolicy interface {
-	// Delay returns the wait before the attempt-th reconnection, or false to
-	// give up until the node is reported up again.
+	// Delay returns the wait before a node's attempt-th reconnection, 1-based
+	// and counted from the node's last successful connection, or false to give
+	// up until the node is reported up again. A negative delay also gives up,
+	// and is logged. The driver calls Delay from several goroutines, at each
+	// reconnection and once when the session starts, with attempt 1, to decide
+	// whether to reconnect down nodes at all.
 	Delay(attempt int) (time.Duration, bool)
 }
 

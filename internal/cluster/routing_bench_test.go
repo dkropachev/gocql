@@ -72,7 +72,7 @@ func BenchmarkRouting(b *testing.B) {
 					info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.Quorum}
 					options := routing2.Options{TokenAware: true, Datacenter: "a", Rack: "r1", ShuffleReplicas: true, LeaderAware: kind == "leader"}
 					if kind == "lwt" {
-						info.Conditional = true
+						info.Kind = cql.ConditionalStatement
 					}
 					if kind == "leader" {
 						routing.SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"

@@ -40,7 +40,7 @@ func testSessionCloseStopsGoroutines(t *testing.T, serverGone bool) {
 
 	config := settings.DefaultConfig(srv.Address)
 	config.Protocol = 4
-	config.Metadata.Mode = metadata.SchemaNone
+	config.Metadata.Mode = metadata.ModeNone
 	config.Metadata.InitialDiscovery = false
 	config.Metadata.AutomaticAgreement = false
 	config.Metadata.PeriodicRefresh = 50 * time.Millisecond

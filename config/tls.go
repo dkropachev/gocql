@@ -22,7 +22,7 @@ func (s staticTLS) TLSConfig() *tls.Config { return s.config }
 
 // TLSFiles names the PEM files of a TLSFileSource.
 //
-// The zero TLSFiles names no files, and NewTLSFiles rejects it with a
+// The zero TLSFiles names no files, and NewTLSFileSource rejects it with a
 // cql.ValidationError.
 type TLSFiles struct {
 	// CertFile and KeyFile hold the client certificate chain and its private
@@ -42,14 +42,14 @@ type TLSFiles struct {
 // check, so a change reaches the first connection dialed after it. A check
 // that fails keeps the current files. It is safe for concurrent use.
 //
-// Start one with NewTLSFiles. A zero TLSFileSource names no files: its
+// Start one with NewTLSFileSource. A zero TLSFileSource names no files: its
 // TLSConfig returns nil, so ConfigBuilder.Build rejects it with a
 // cql.ValidationError, and Reload returns one.
 type TLSFileSource struct {
 	current atomic.Pointer[tls.Config]
 
 	// base, sessionCache, err and digest are guarded by mu; files
-	// does not change after NewTLSFiles.
+	// does not change after NewTLSFileSource.
 
 	base *tls.Config
 	// sessionCache replaces base's ClientSessionCache after the files changed,
@@ -62,12 +62,12 @@ type TLSFileSource struct {
 	digest       [sha256.Size]byte
 }
 
-// NewTLSFiles loads files over a copy of base, or over TLS 1.2+ defaults when
+// NewTLSFileSource loads files over a copy of base, or over TLS 1.2+ defaults when
 // base is nil, and returns a source serving the result. It fails if the files
 // cannot be loaded.
-func NewTLSFiles(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
+func NewTLSFileSource(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
 	invalid := func(reason string) error {
-		return &cql.ValidationError{Field: "NewTLSFiles", Err: errors.New(reason)}
+		return &cql.ValidationError{Field: "NewTLSFileSource", Err: errors.New(reason)}
 	}
 	switch {
 	case (files.CertFile == "") != (files.KeyFile == ""):
@@ -121,7 +121,7 @@ func (s *TLSFileSource) Err() error {
 
 func (s *TLSFileSource) reloadLocked(first bool) error {
 	if s.files == (TLSFiles{}) { // a zero source, which names no files
-		s.err = &cql.ValidationError{Field: "TLSFileSource", Err: errors.New("zero source; start one with config.NewTLSFiles")}
+		s.err = &cql.ValidationError{Field: "TLSFileSource", Err: errors.New("zero source; start one with config.NewTLSFileSource")}
 		return s.err
 	}
 	s.next.Store(time.Now().Add(s.files.Interval).UnixNano())

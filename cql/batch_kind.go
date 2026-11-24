@@ -8,7 +8,7 @@ import "fmt"
 // BatchKind selects native protocol batch semantics. Its values are the
 // protocol's, so the zero BatchKind is LoggedBatch. Later releases may add
 // values, so a switch over them needs a default case.
-type BatchKind byte
+type BatchKind uint8
 
 // Batch kinds, with their native protocol values.
 const (

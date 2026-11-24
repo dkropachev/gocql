@@ -58,8 +58,11 @@ type Attempt struct {
 	Idempotent bool
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
-	// Conditional reports a lightweight transaction.
-	Conditional bool
+	// Kind classifies the request's statement, or a batch's statements
+	// together: ConditionalStatement when one of them is conditional, else
+	// UnknownStatement when one was not classified. Anything but
+	// OrdinaryStatement may be a lightweight transaction.
+	Kind cql.StatementKind
 	// Batch is the kind of batch the request sends; it is unset for any
 	// other request.
 	Batch cql.Option[cql.BatchKind]

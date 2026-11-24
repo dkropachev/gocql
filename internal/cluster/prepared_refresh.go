@@ -98,7 +98,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 			return err
 		}
 	}
-	publish := config.Metadata.Mode != metadata2.SchemaNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
+	publish := config.Metadata.Mode != metadata2.ModeNone && (len(config.Metadata.Keyspaces) == 0 || slices.Contains(config.Metadata.Keyspaces, keyspace))
 	p.InternalMu.Lock()
 	if p.schemaEpoch[keyspace] != epoch || p.schemaRevision[keyspace] != revision || !p.tableRevisionsCurrentLocked(keyspace, tables) {
 		p.InternalMu.Unlock()
@@ -109,7 +109,7 @@ func (s *Core) reconcileV2PreparedScope(ctx context.Context, keyspace string) er
 		if absent {
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(keyspace)
 		} else {
-			if config.Metadata.Mode == metadata2.SchemaKeyspaces {
+			if config.Metadata.Mode == metadata2.ModeKeyspaces {
 				schema = minimal
 			}
 			s.privateStorage.InternalMetadataDescriber.InternalMetadata.privateStorage.InternalKeyspaceMetadata.InternalSet(keyspace, schema)

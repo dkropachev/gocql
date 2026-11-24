@@ -129,9 +129,9 @@ func (w *ValueWriter) BorrowBytes(b []byte) error {
 	return w.fail(w.builder.Borrow(wire.Borrow(b)))
 }
 
-// BorrowString appends s to the cell's body without copying it, unless the
+// BorrowText appends s to the cell's body without copying it, unless the
 // writer copies borrowed input, as EncodeValue's does.
-func (w *ValueWriter) BorrowString(s string) error {
+func (w *ValueWriter) BorrowText(s string) error {
 	if err := w.payload(); err != nil {
 		return err
 	}
