@@ -38,8 +38,8 @@ func SetCodec[T any](element Codec[T]) Codec[[]T] {
 // VectorCodec encodes and decodes a vector as a []T of its declared dimension.
 func VectorCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
-		enc: sequenceEncoder[T]{kind: TypeCustom, element: element},
-		dec: sequenceDecoder[T]{kind: TypeCustom, element: element},
+		enc: sequenceEncoder[T]{kind: TypeVector, element: element},
+		dec: sequenceDecoder[T]{kind: TypeVector, element: element},
 	}
 }
 
@@ -101,7 +101,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	} else if !dec.typ.Equal(r.Type()) {
 		return typeValidation("type", "sequence metadata changed after compilation")
 	}
-	if dec.kind != TypeCustom && r.err == nil && r.State() == Null {
+	if dec.kind != TypeVector && r.err == nil && r.State() == Null {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
@@ -123,7 +123,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	for i := range out {
 		var child ValueReader
 		var err error
-		if dec.kind == TypeCustom {
+		if dec.kind == TypeVector {
 			child, err = readVectorElement(&cursor, element, dec.width)
 		} else {
 			child, err = validatedChild(&cursor, element)

@@ -159,17 +159,17 @@ func TestTuple(t *testing.T) {
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
 			}, func(v serializationMixedTuple) []cql.Value {
-				return []cql.Value{cql.IntValue(v.A), codecTestMust(cql.TextValue(v.B))}
+				return []cql.Value{cql.IntValue(v.A), cql.TextValue(v.B)}
 			})
 			arrayCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v [2]cql.Value) serializationMixedTuple {
 				n, _ := v[0].Signed()
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
 			}, func(v serializationMixedTuple) [2]cql.Value {
-				return [2]cql.Value{cql.IntValue(v.A), codecTestMust(cql.TextValue(v.B))}
+				return [2]cql.Value{cql.IntValue(v.A), cql.TextValue(v.B)}
 			})
 			t.Run("slice", func(t *testing.T) {
-				input := [][]cql.Value{{cql.IntValue(1), codecTestMust(cql.TextValue("2"))}, {cql.IntValue(3), codecTestMust(cql.TextValue("4"))}}
+				input := [][]cql.Value{{cql.IntValue(1), cql.TextValue("2")}, {cql.IntValue(3), cql.TextValue("4")}}
 				got := serializationRoundTrip(t, s, table, "val", 0, serializationList(sliceCodec), input)
 				for i := range got {
 					for j := range got[i] {
@@ -178,7 +178,7 @@ func TestTuple(t *testing.T) {
 				}
 			})
 			t.Run("array", func(t *testing.T) {
-				input := [][2]cql.Value{{cql.IntValue(1), codecTestMust(cql.TextValue("2"))}, {cql.IntValue(3), codecTestMust(cql.TextValue("4"))}}
+				input := [][2]cql.Value{{cql.IntValue(1), cql.TextValue("2")}, {cql.IntValue(3), cql.TextValue("4")}}
 				got := serializationRoundTrip(t, s, table, "val", 1, serializationList(arrayCodec), input)
 				for i := range got {
 					for j := range got[i] {

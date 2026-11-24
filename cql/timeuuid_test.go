@@ -22,11 +22,11 @@ func TestTimeUUIDValueAPI(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			uuid := cql.UUID(id)
-			if id.Version() != 1 || id.IsEmpty() || id.String() != uuid.String() || id.Variant() != uuid.Variant() ||
+			if id.Version() != 1 || id.IsZero() || id.String() != uuid.String() || id.Variant() != uuid.Variant() ||
 				!bytes.Equal(id.Bytes(), uuid.Bytes()) {
 				t.Fatalf("value methods differ from UUID: %v", id)
 			}
-			if _, err := cql.TimeUUIDValue(id); err != nil {
+			if _, err := cql.EncodeValue(cql.TimeUUIDType, cql.DynamicCodec, cql.TimeUUIDValue(id)); err != nil {
 				t.Fatal(err)
 			}
 			encoded, err := cql.EncodeValue(cql.TimeUUIDType, cql.TimeUUIDCodec, id)
@@ -88,7 +88,7 @@ func TestTimeUUIDCheckedInput(t *testing.T) {
 		t.Fatal(err)
 	}
 	var zero cql.TimeUUID
-	if !zero.IsEmpty() {
+	if !zero.IsZero() {
 		t.Fatal("zero timeuuid is not empty")
 	}
 	if zero.String() != "00000000-0000-0000-0000-000000000000" {

@@ -325,7 +325,7 @@ func TestValue(t *testing.T) {
 			if _, ok := errors.AsType[*ValidationError](err); !ok {
 				t.Fatalf("invalid UTF-8: %v", err)
 			}
-			if _, err := TextValue(string([]byte{0xff})); !hasErrorType[*ValidationError](err) {
+			if _, err := TextValue(string([]byte{0xff})).Text(); !hasErrorType[*ValidationError](err) {
 				t.Fatalf("invalid dynamic text: %v", err)
 			}
 		})

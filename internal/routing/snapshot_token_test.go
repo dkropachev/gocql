@@ -74,10 +74,7 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("MatchesPreparedRouting", func(t *testing.T) {
-		text, err := cql.TextValue("key")
-		if err != nil {
-			t.Fatal(err)
-		}
+		text := cql.TextValue("key")
 		got, err := m.Token("ks", "composite", cql.IntValue(7), text)
 		if err != nil {
 			t.Fatal(err)
@@ -96,7 +93,7 @@ func TestSnapshotToken(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		text, _ := cql.TextValue("x")
+		text := cql.TextValue("x")
 		tuple, err := cql.TupleValue(tupleType.WithFrozen(true), []cql.Value{cql.IntValue(1), text})
 		if err != nil {
 			t.Fatal(err)
@@ -106,7 +103,7 @@ func TestSnapshotToken(t *testing.T) {
 		}
 	})
 	t.Run("Errors", func(t *testing.T) {
-		text, _ := cql.TextValue("x")
+		text := cql.TextValue("x")
 		for name, call := range map[string]func() error{
 			"arity":       func() error { _, err := m.Token("ks", "composite", cql.IntValue(1)); return err },
 			"type":        func() error { _, err := m.Token("ks", "single", text); return err },

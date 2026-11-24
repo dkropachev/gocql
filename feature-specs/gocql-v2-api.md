@@ -180,7 +180,9 @@ func (r *RowReader) SkipColumn() error
 
 Native cells have three framing states: present, null (-1), and unset (-2).
 EmptyCell is a logical supported-type state over present zero-length wire
-bytes, never a fourth negative sentinel. Empty() checks type support, writes no
+bytes, never a fourth negative sentinel. A decoder sees one shape for it:
+DecodeValue passes an EncodedValue in EmptyCell as Present with an empty body,
+as a response holds it. Empty() checks type support, writes no
 body, and cannot coexist with payload/Null/Unset writes. Unknown CellState
 values fail validation. Null/Unset cannot follow or precede payload writes in a
 cell. A value encoder writes the body; the enclosing writer owns the length.
@@ -340,6 +342,8 @@ const (Present CellState = iota; Null; Unset; EmptyCell)
 type Option[T any] struct { Value T; Set bool }
 func Some[T any](T) Option[T]
 type Nullable[T any] struct { Value T; Valid bool }
+func NonNull[T any](T) Nullable[T]
+var ErrNull error
 type BindValue[T any] struct { Value T; State CellState }
 func NullableCodec[T any](Codec[T]) Codec[Nullable[T]]
 func NullableEncoder[T any](Encoder[T]) Encoder[Nullable[T]]
@@ -350,7 +354,6 @@ func EmptyCodec[T any](Codec[T]) Codec[MaybeEmpty[T]]
 
 type UUID [16]byte
 type Duration struct { Months, Days int32; Nanoseconds int64 }
-type Counter int64
 type Date int32                  // days relative to Unix epoch
 type TimeOfDay int64             // nanoseconds since midnight
 type Timestamp int64             // milliseconds relative to Unix epoch
@@ -362,10 +365,9 @@ var BoolCodec Codec[bool]
 var Int8Codec Codec[int8]
 var Int16Codec Codec[int16]
 var Int32Codec Codec[int32]
-var Int64Codec Codec[int64]
+var Int64Codec Codec[int64]              // bigint and counter
 var Float32Codec Codec[float32]
 var Float64Codec Codec[float64]
-var CounterCodec Codec[Counter]
 var DateCodec Codec[Date]
 var TimeCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
@@ -387,9 +389,11 @@ func VarintFromBigInt(*big.Int) Varint
 func (v Varint) BigInt() *big.Int
 func VarintFromBytes([]byte) (Varint, error)
 func DateFromTime(time.Time) (Date, error)
-func (d Date) Time() (time.Time, error)
+func (d Date) Time() time.Time
 func TimestampFromTime(time.Time) (Timestamp, error)
-func (t Timestamp) Time() (time.Time, error)
+func (t Timestamp) Time() time.Time
+// String on Varint, Decimal, Date, TimeOfDay, Timestamp and Duration
+func (u UUID) IsZero() bool
 func ParseUUID(string) (UUID, error)
 func MustParseUUID(string) UUID
 func UUIDFromBytes([]byte) (UUID, error)
@@ -411,12 +415,17 @@ not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
-VectorType has Kind TypeCustom plus Dimension; ScalarType(TypeCustom)
-rejects an incomplete custom descriptor.
+VectorType has Kind TypeVector, a driver-defined kind that is not a native
+protocol type ID, plus Dimension. The zero DataType has Kind TypeCustom;
+ScalarType(TypeCustom) rejects an incomplete custom descriptor.
+
+A counter is a bigint the server only adds to: Int64Codec, StreamInt64 and
+BigIntValue accept it, and there is no separate counter Go type.
 
 Nil `[]byte` passed to ByteSliceCodec is present empty blob. Null is always
 explicit; nil collections likewise encode a zero count. Nonnullable scalar and vector decoders
-reject null. List/set/map decoders, buffered and streaming, interpret NULL as
+reject null with an error matching `ErrNull`, buffered, streaming and in a
+Value accessor alike. List/set/map decoders, buffered and streaming, interpret NULL as
 empty while preserving destination capacity; Nullable preserves null independently
 of empty. Unset is only an outer bound parameter on v4+; reject unset in results
 and nested values. Empty is distinct from zero-byte text/blob. EmptyCodec
@@ -441,7 +450,7 @@ ParseConsistency and ParseUUID return errors; MustParseConsistency and
 MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
 EncodeValueBorrowed preserves borrowed inputs.
 
-The wrapper roles are separate: Option is for inherited settings; Nullable is
+The wrapper roles are separate: Option is for inherited settings and for result values that may be unknown; Nullable is
 for nullable application data and decoded results; BindValue controls binding
 with Present, Null or Unset; MaybeEmpty represents supported empty CQL values.
 Their zero values mean inherited, NULL, present zero value and ordinary zero
@@ -588,10 +597,17 @@ func (v Value) Float() (float64, error)
 func (v Value) Text() (Text, error)
 func (v Value) Bytes() (Bytes, error)
 func (v Value) UUID() (UUID, error)
+func (v Value) TimeUUID() (TimeUUID, error)
 func (v Value) Inet() (netip.Addr, error)
+func (v Value) Time() (time.Time, error)        // timestamp, or date at midnight UTC
+func (v Value) TimeOfDay() (TimeOfDay, error)
 func (v Value) Duration() (Duration, error)
 func (v Value) Varint() (Varint, error)
 func (v Value) Decimal() (Decimal, error)
+func (v Value) Len() int
+func (v Value) At(int) (Value, error)           // list, set, vector, tuple or UDT member
+func (v Value) Field(string) (Value, error)     // UDT field
+func (v Value) String() string                  // CQL literal, for logs
 func (v Value) Elements() (*Iterator[Value], error)
 func (v Value) Entries() (*Iterator[Entry], error)
 func (v Value) Fields() (*Iterator[Field], error)
@@ -599,6 +615,7 @@ type Iterator[T any] struct { /* bounded cursor for Value traversal */ }
 func (i *Iterator[T]) Next() bool
 func (i *Iterator[T]) Value() T
 func (i *Iterator[T]) Err() error
+func (i *Iterator[T]) All() iter.Seq2[T, error]
 func (i *Iterator[T]) Collect() ([]T, error)
 func Null(DataType) Value
 func Unset(DataType) Value
@@ -607,20 +624,19 @@ func Bool(bool) Value
 func TinyInt(int8) Value
 func SmallInt(int16) Value
 func Int(int32) Value
-func BigInt(int64) Value
-func Counter(Counter) Value
+func BigInt(int64) Value                        // also binds a counter
 func Float(float32) Value
 func Double(float64) Value
-func Text(string) (Value, error)
-func ASCII(string) (Value, error)
+func Text(string) Value                         // payloads are checked at bind
+func ASCII(string) Value
 func Blob([]byte) Value
 func UUID(UUID) Value
-func TimeUUID(TimeUUID) (Value, error)
-func Inet(netip.Addr) (Value, error)
+func TimeUUID(TimeUUID) Value
+func Inet(netip.Addr) Value
 func Date(Date) Value
-func Time(TimeOfDay) (Value, error)
+func Time(TimeOfDay) Value
 func Timestamp(Timestamp) Value
-func Duration(Duration) (Value, error)
+func Duration(Duration) Value
 func Varint(Varint) Value
 func Decimal(Decimal) Value
 func List(DataType, []Value) (Value, error)
@@ -1140,7 +1156,6 @@ var Int32 Decoder[int32]
 var Int64 Decoder[int64]
 var Float32 Decoder[float32]
 var Float64 Decoder[float64]
-var Counter Decoder[Counter]
 var Date Decoder[Date]
 var Time Decoder[TimeOfDay]
 var Timestamp Decoder[Timestamp]

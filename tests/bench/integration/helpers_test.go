@@ -1090,7 +1090,7 @@ func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 func (p *testConviction) Reset(e endpoint.ConvictionEvent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e.Host.ID.IsEmpty() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
+	if e.Host.ID.IsZero() || (len(p.hosts) > 0 && p.hosts[0].ID != e.Host.ID) {
 		panic("reset lost host identity")
 	}
 	p.resets++
@@ -1552,11 +1552,7 @@ var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Tim
 	}
 	return n
 }, func(v cql.Timestamp) time.Time {
-	n, e := v.Time()
-	if e != nil {
-		panic(e)
-	}
-	return n.UTC()
+	return v.Time()
 })
 
 var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {

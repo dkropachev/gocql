@@ -281,7 +281,7 @@ func (c *InternalControlConn) setupConn(conn *transport.Conn) error {
 	if err == nil {
 		if len(hosts) == 0 {
 			err = cqltype.TypeValidation("control topology", "query returned 0 rows")
-		} else if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsEmpty() {
+		} else if len(hosts) != 1 || implEndpoint.InternalHostInfoHostUUID(hosts[0]).IsZero() {
 			err = cqltype.TypeValidation("control topology", "expected one local identity")
 		} else {
 			host = hosts[0]

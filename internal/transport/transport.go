@@ -403,7 +403,7 @@ func (c *Conn) InternalHostID() cql.UUID {
 		return *id
 	}
 	id := implEndpoint.InternalHostInfoHostUUID(c.InternalHost)
-	if !id.IsEmpty() {
+	if !id.IsZero() {
 		c.hostID.Store(&id)
 	}
 	return id

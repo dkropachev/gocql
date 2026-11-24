@@ -103,7 +103,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if s.Closed() {
 		return empty, cqlerr.ErrClosed
 	}
-	if options.HostID.Set && options.HostID.Value.IsEmpty() {
+	if options.HostID.Set && options.HostID.Value.IsZero() {
 		return empty, cqltype.TypeValidation("prepare host", "empty UUID")
 	}
 	if options.privateStorage.InternalConnection != nil && !implCluster.InternalConnectionOwnedBy(options.privateStorage.InternalConnection, s) {

@@ -316,7 +316,7 @@ func TestCodecMatrix(t *testing.T) {
 	// the other mappings are checked through Column.
 	i32 := matrixOf("int/int32", cql.TypeInt, cql.Int32Codec, cql.TypeBigInt, math.MinInt32, 0, math.MaxInt32)
 	i32.paths = matrixDecoders[int32]
-	counter := matrixOf("counter/Counter", cql.TypeCounter, cql.CounterCodec, cql.TypeInt, math.MinInt64, 0, math.MaxInt64)
+	counter := matrixOf("counter/int64", cql.TypeCounter, cql.Int64Codec, cql.TypeInt, int64(math.MinInt64), 0, math.MaxInt64)
 	counter.noEmptyCodec = true
 	list := matrixOfType("list<int>/[]int32", mustMatrixType(cql.ListType(intType)), cql.ListCodec(cql.Int32Codec), mustMatrixType(cql.SetType(intType)), []int32{}, []int32{1, math.MinInt32})
 	list.noEmptyCodec, list.nullDecodes, list.equal = true, true, nilAsEmptyEqual[int32]

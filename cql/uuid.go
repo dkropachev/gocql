@@ -260,12 +260,8 @@ func (u UUID) Bytes() []byte {
 	return u[:]
 }
 
-var emptyUUID = UUID{}
-
-// IsEmpty reports whether u is the zero UUID.
-func (u UUID) IsEmpty() bool {
-	return u == emptyUUID
-}
+// IsZero reports whether u is the zero UUID.
+func (u UUID) IsZero() bool { return u == UUID{} }
 
 // Variant returns the variant of this UUID. This package will only generate
 // UUIDs in the IETF variant.

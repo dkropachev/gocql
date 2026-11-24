@@ -180,7 +180,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	} else if path != "" {
 		snapshot.Address = netip.AddrPort{}
 		if d.InternalUnixHostID != nil {
-			if local := d.InternalUnixHostID(); !local.IsEmpty() && !snapshot.ID.IsEmpty() && local != snapshot.ID {
+			if local := d.InternalUnixHostID(); !local.IsZero() && !snapshot.ID.IsZero() && local != snapshot.ID {
 				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
 			}
 		}

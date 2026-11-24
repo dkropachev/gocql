@@ -152,10 +152,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimestamp {
 				t.Fatal("timestamp metadata expected")
 			}
-			got, err := cql.Timestamp(noFromInt(t, row, 0)).Time()
-			if err != nil {
-				t.Fatal(err)
-			}
+			got := cql.Timestamp(noFromInt(t, row, 0)).Time()
 			if got.Before(before.Add(-time.Hour)) || got.After(after.Add(time.Hour)) {
 				t.Fatalf("timestamp outside tolerance: %v", got)
 			}

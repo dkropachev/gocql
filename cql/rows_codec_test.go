@@ -500,7 +500,7 @@ func TestRowsCodec(t *testing.T) {
 			checkRowScalarEquivalent(t, TypeTinyInt, Int8Codec, rowScalarFrame(1, []byte{0x80}), false, false)
 			checkRowScalarEquivalent(t, TypeSmallInt, Int16Codec, rowScalarFrame(2, []byte{0x80, 0}), false, false)
 			checkRowScalarEquivalent(t, TypeBigInt, Int64Codec, rowScalarFrame(8, []byte{0x80, 0, 0, 0, 0, 0, 0, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeCounter, CounterCodec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
+			checkRowScalarEquivalent(t, TypeCounter, Int64Codec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
 		})
 	})
 	t.Run("Params", func(t *testing.T) {

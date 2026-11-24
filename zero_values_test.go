@@ -234,7 +234,7 @@ func TestZeroValuesUsable(t *testing.T) {
 		t.Error("zero Subscription has an open queue")
 	}
 	sub.Close()
-	if route := (metadata.Route{}); route.Usable() || !route.HostID().IsEmpty() {
+	if route := (metadata.Route{}); route.Usable() || !route.HostID().IsZero() {
 		t.Error("the zero Route names a host")
 	}
 	if (retry.Decision{}).Action != retry.Stop {

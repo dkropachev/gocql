@@ -358,7 +358,7 @@ func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
 			{"port", []cql.Type{cql.TypeInt}},
 			{"tls_port", []cql.Type{cql.TypeInt}},
 		}
-		if n.route.IsEmpty() {
+		if n.route.IsZero() {
 			writeRows(resp, stream, cols)
 			return
 		}

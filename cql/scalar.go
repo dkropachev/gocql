@@ -14,8 +14,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// Counter is a CQL counter, distinct from a bigint.
-
 // scalarCodec contains immutable operations shared by all calls to a codec.
 type scalarCodec[T any] struct {
 	encode      func(*ValueWriter, T) error
@@ -83,6 +81,9 @@ func requirePresent(r ValueReader) error {
 
 //go:noinline
 func cellStateError(r ValueReader) error {
+	if r.state == Null {
+		return nullCellError{kind: r.typ.Kind()}
+	}
 	return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %v", r.typ.Kind(), r.state)
 }
 
@@ -185,6 +186,14 @@ func textColumn(r *RowReader, kind, alternative Type, compiled bool) (Text, erro
 	return textView(v), nil
 }
 
+// counterCodec is the int64 codec, which also accepts counter: a counter is a
+// bigint the server only adds to.
+func counterCodec() Codec[int64] {
+	c := integerCodec[int64](TypeBigInt, 8).(scalarCodec[int64])
+	c.alternative = TypeCounter
+	return c
+}
+
 func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
 	return scalarCodec[T]{kind: kind,
 		decodeRow: func(r *RowReader, kind, alternative Type, compiled bool) (T, error) {
@@ -254,11 +263,8 @@ var (
 	// Int32Codec maps int to int32.
 	Int32Codec Codec[int32] = integerCodec[int32](TypeInt, 4)
 
-	// Int64Codec maps bigint to int64.
-	Int64Codec Codec[int64] = integerCodec[int64](TypeBigInt, 8)
-
-	// CounterCodec maps counter to Counter.
-	CounterCodec Codec[Counter] = integerCodec[Counter](TypeCounter, 8)
+	// Int64Codec maps bigint and counter to int64.
+	Int64Codec Codec[int64] = counterCodec()
 
 	// Float32Codec maps float to float32.
 	Float32Codec Codec[float32] = scalarCodec[float32]{kind: TypeFloat,
@@ -858,12 +864,9 @@ func (c emptyCodec[T]) Decode(r ValueReader) (MaybeEmpty[T], error) {
 	if r.err != nil {
 		return MaybeEmpty[T]{}, r.err
 	}
-	if r.State() == EmptyCell || (r.State() == Present && r.Bytes().Len() == 0) {
+	if r.State() == Present && r.Bytes().Len() == 0 {
 		if e := checkBytesAlive(r.Bytes()); e != nil {
 			return MaybeEmpty[T]{}, e
-		}
-		if r.Bytes().Len() != 0 {
-			return MaybeEmpty[T]{}, errors.New("gocql: Empty has a payload")
 		}
 		return MaybeEmpty[T]{Empty: true}, nil
 	}
@@ -962,7 +965,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *MaybeEmpty[T]) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == EmptyCell || (r.State() == Present && r.Bytes().Len() == 0) {
+	if r.State() == Present && r.Bytes().Len() == 0 {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

@@ -65,7 +65,7 @@ func TestSnapshotTokenMatchesPreparedRouting(t *testing.T) {
 		cql.ColumnSpec{Name: "b", Type: textType, Keyspace: "ks"},
 	)
 	key := snapshotTokenKey{A: 42, B: "partition"}
-	text := codecTestMust(cql.TextValue(key.B))
+	text := cql.TextValue(key.B)
 	for _, tc := range []struct {
 		table   string
 		indexes []int

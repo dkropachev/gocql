@@ -231,7 +231,7 @@ package cql
 	var cql.ASCIICodec cql.Codec[cql.Text]
 	var cql.ASCIIStringCodec cql.Codec[string]
 	var cql.ASCIIType cql.DataType
-	func cql.ASCIIValue(s string) (cql.Value, error)
+	func cql.ASCIIValue(s string) cql.Value
 	const cql.All cql.Consistency = 5
 	const cql.Any cql.Consistency = 0
 	type cql.BatchKind uint8
@@ -323,11 +323,8 @@ package cql
 		cql.Consistency method (*T) UnmarshalText(text []byte) error
 	func cql.ConvertParams[A, B any](codec cql.ParamEncoder[B], mapValue func(A) B) cql.ParamEncoder[A]
 	func cql.ConvertRows[A, B any](codec cql.RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) cql.RowDecoder[B]
-	type cql.Counter int64
 	const cql.CounterBatch cql.BatchKind = 2
-	var cql.CounterCodec cql.Codec[cql.Counter]
 	var cql.CounterType cql.DataType
-	func cql.CounterValue(n cql.Counter) cql.Value
 	type cql.DataType struct
 		cql.DataType method (T) Dimension() (uint16, bool)
 		cql.DataType method (T) Element() (cql.DataType, bool)
@@ -341,7 +338,8 @@ package cql
 		cql.DataType method (T) UDTName() (keyspace string, name string, ok bool)
 		cql.DataType method (T) WithFrozen(frozen bool) cql.DataType
 	type cql.Date int32
-		cql.Date method (T) Time() (time.Time, error)
+		cql.Date method (T) String() string
+		cql.Date method (T) Time() time.Time
 	var cql.DateCodec cql.Codec[cql.Date]
 	func cql.DateFromTime(t time.Time) (cql.Date, error)
 	var cql.DateType cql.DataType
@@ -349,6 +347,7 @@ package cql
 	type cql.Decimal struct
 		cql.Decimal field Unscaled cql.Varint
 		cql.Decimal field Scale int32
+		cql.Decimal method (T) String() string
 	var cql.DecimalCodec cql.Codec[cql.Decimal]
 	type cql.DecimalParts struct
 		cql.DecimalParts field Unscaled []byte
@@ -366,9 +365,10 @@ package cql
 		cql.Duration field Months int32
 		cql.Duration field Days int32
 		cql.Duration field Nanoseconds int64
+		cql.Duration method (T) String() string
 	var cql.DurationCodec cql.Codec[cql.Duration]
 	var cql.DurationType cql.DataType
-	func cql.DurationValue(d cql.Duration) (cql.Value, error)
+	func cql.DurationValue(d cql.Duration) cql.Value
 	var cql.DynamicCodec cql.Codec[cql.Value]
 	var cql.DynamicParams cql.ParamEncoder[[]cql.Value]
 	type cql.DynamicRow struct
@@ -398,6 +398,7 @@ package cql
 	type cql.Entry[K any, V any] struct
 		cql.Entry field Key K
 		cql.Entry field Value V
+	var cql.ErrNull error
 	var cql.ErrReleased error
 	var cql.Float32Codec cql.Codec[float32]
 	var cql.Float64Codec cql.Codec[float64]
@@ -408,7 +409,7 @@ package cql
 	func cql.IgnoreExtraColumns() cql.StructOption
 	var cql.InetCodec cql.Codec[net/netip.Addr]
 	var cql.InetType cql.DataType
-	func cql.InetValue(a net/netip.Addr) (cql.Value, error)
+	func cql.InetValue(a net/netip.Addr) cql.Value
 	type cql.InputField[P any] interface (sealed)
 	var cql.Int16Codec cql.Codec[int16]
 	var cql.Int32Codec cql.Codec[int32]
@@ -449,6 +450,7 @@ package cql
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body cql.Bytes) (cql.EncodedValue, error)
 	func cql.NewTimeUUID() cql.TimeUUID
 	const cql.NoCompression cql.Compression = 0
+	func cql.NonNull[T any](v T) cql.Nullable[T]
 	const cql.Null cql.CellState = 1
 	func cql.NullValue(t cql.DataType) cql.Value
 	type cql.Nullable[T any] struct
@@ -561,7 +563,6 @@ package cql
 		cql.StreamCell field State cql.CellState
 	func cql.StreamColumn[R, V any](name string, decoder cql.StreamDecoder[V], field func(*R) *V) cql.StreamOutputField[R]
 	func cql.StreamColumnAt[R, V any](index int, decoder cql.StreamDecoder[V], field func(*R) *V) cql.StreamOutputField[R]
-	var cql.StreamCounter cql.StreamDecoder[cql.Counter]
 	var cql.StreamDate cql.StreamDecoder[cql.Date]
 	var cql.StreamDecimal cql.StreamDecoder[cql.DecimalParts]
 	type cql.StreamDecoder[T any] interface
@@ -633,15 +634,16 @@ package cql
 		cql.Text method (T) String() string
 	var cql.TextCodec cql.Codec[cql.Text]
 	var cql.TextType cql.DataType
-	func cql.TextValue(s string) (cql.Value, error)
+	func cql.TextValue(s string) cql.Value
 	const cql.Three cql.Consistency = 3
 	var cql.TimeCodec cql.Codec[cql.TimeOfDay]
 	type cql.TimeOfDay int64
+		cql.TimeOfDay method (T) String() string
 	var cql.TimeType cql.DataType
 	type cql.TimeUUID [16]byte
 		cql.TimeUUID method (T) Bytes() []byte
 		cql.TimeUUID method (T) Clock() uint16
-		cql.TimeUUID method (T) IsEmpty() bool
+		cql.TimeUUID method (T) IsZero() bool
 		cql.TimeUUID method (T) MarshalJSON() ([]byte, error)
 		cql.TimeUUID method (T) MarshalText() ([]byte, error)
 		cql.TimeUUID method (T) Node() [6]byte
@@ -656,11 +658,12 @@ package cql
 	func cql.TimeUUIDFromTime(t time.Time) cql.TimeUUID
 	func cql.TimeUUIDFromUUID(u cql.UUID) (cql.TimeUUID, error)
 	var cql.TimeUUIDType cql.DataType
-	func cql.TimeUUIDValue(u cql.TimeUUID) (cql.Value, error)
+	func cql.TimeUUIDValue(u cql.TimeUUID) cql.Value
 	func cql.TimeUUIDWith(t time.Time, clock uint16, node [6]byte) cql.TimeUUID
-	func cql.TimeValue(n cql.TimeOfDay) (cql.Value, error)
+	func cql.TimeValue(n cql.TimeOfDay) cql.Value
 	type cql.Timestamp int64
-		cql.Timestamp method (T) Time() (time.Time, error)
+		cql.Timestamp method (T) String() string
+		cql.Timestamp method (T) Time() time.Time
 	var cql.TimestampCodec cql.Codec[cql.Timestamp]
 	func cql.TimestampFromTime(t time.Time) (cql.Timestamp, error)
 	var cql.TimestampTimeCodec cql.Codec[time.Time]
@@ -703,6 +706,7 @@ package cql
 	const cql.TypeUUID cql.Type = 12
 	const cql.TypeVarchar cql.Type = 13
 	const cql.TypeVarint cql.Type = 14
+	const cql.TypeVector cql.Type = 256
 	func cql.UDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) (cql.Codec[T], error)
 	func cql.UDTDecoder[T any](codec cql.RowDecoder[T], options cql.UDTOptions) cql.Decoder[T]
 	func cql.UDTEncoder[T any](codec cql.ParamEncoder[T], options cql.UDTOptions) cql.Encoder[T]
@@ -716,7 +720,7 @@ package cql
 	func cql.UDTValue(t cql.DataType, fields []cql.ValueField) (cql.Value, error)
 	type cql.UUID [16]byte
 		cql.UUID method (T) Bytes() []byte
-		cql.UUID method (T) IsEmpty() bool
+		cql.UUID method (T) IsZero() bool
 		cql.UUID method (T) MarshalJSON() ([]byte, error)
 		cql.UUID method (T) MarshalText() ([]byte, error)
 		cql.UUID method (T) String() string
@@ -739,6 +743,7 @@ package cql
 		cql.ValidationError method (*T) Error() string
 		cql.ValidationError method (*T) Unwrap() error
 	type cql.Value struct
+		cql.Value method (T) At(index int) (cql.Value, error)
 		cql.Value method (T) Bool() (bool, error)
 		cql.Value method (T) Bytes() (cql.Bytes, error)
 		cql.Value method (T) Clone() cql.Value
@@ -746,12 +751,18 @@ package cql
 		cql.Value method (T) Duration() (cql.Duration, error)
 		cql.Value method (T) Elements() (*cql.ValueIterator[cql.Value], error)
 		cql.Value method (T) Entries() (*cql.ValueIterator[cql.ValueEntry], error)
+		cql.Value method (T) Field(name string) (cql.Value, error)
 		cql.Value method (T) Fields() (*cql.ValueIterator[cql.ValueField], error)
 		cql.Value method (T) Float() (float64, error)
 		cql.Value method (T) Inet() (net/netip.Addr, error)
+		cql.Value method (T) Len() int
 		cql.Value method (T) Signed() (int64, error)
 		cql.Value method (T) State() cql.CellState
+		cql.Value method (T) String() string
 		cql.Value method (T) Text() (cql.Text, error)
+		cql.Value method (T) Time() (time.Time, error)
+		cql.Value method (T) TimeOfDay() (cql.TimeOfDay, error)
+		cql.Value method (T) TimeUUID() (cql.TimeUUID, error)
 		cql.Value method (T) Type() cql.DataType
 		cql.Value method (T) UUID() (cql.UUID, error)
 		cql.Value method (T) Varint() (cql.Varint, error)
@@ -771,6 +782,7 @@ package cql
 		cql.ValueField field Name string
 		cql.ValueField field Value cql.Value
 	type cql.ValueIterator[T any] struct
+		cql.ValueIterator method (*T) All() iter.Seq2[T, error]
 		cql.ValueIterator method (*T) Collect() ([]T, error)
 		cql.ValueIterator method (*T) Err() error
 		cql.ValueIterator method (*T) Next() bool
@@ -799,6 +811,7 @@ package cql
 	const cql.VariantNCSCompat untyped int = 0
 	type cql.Varint struct
 		cql.Varint method (T) BigInt() *math/big.Int
+		cql.Varint method (T) String() string
 	var cql.VarintCodec cql.Codec[cql.Varint]
 	func cql.VarintFromBigInt(v *math/big.Int) cql.Varint
 	func cql.VarintFromBytes(b []byte) (cql.Varint, error)

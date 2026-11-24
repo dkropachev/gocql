@@ -79,7 +79,7 @@ func TestBatch(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
 			stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetValue(codecTestMust(cql.TextValue("")).Type())}, {cql.IntValue(1), cql.UnsetValue(cql.IntValue(0).Type()), codecTestMust(cql.TextValue(""))}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetValue(codecTestMust(cql.TextValue("")).Type())}} {
+			for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetValue(cql.TextValue("").Type())}, {cql.IntValue(1), cql.UnsetValue(cql.IntValue(0).Type()), cql.TextValue("")}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetValue(cql.TextValue("").Type())}} {
 				cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), values)
 			}
 			info := cassandraBatch(t, session, batch, exec.Options{})
@@ -259,8 +259,8 @@ func TestBatch(t *testing.T) {
 			prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO batch_keyspace(id, value) VALUES (?, ?)", Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{Keyspace: keyspace})
 			require.NoError(t, err)
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val1"))})
-			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(2), codecTestMust(cql.TextValue("val2"))})
+			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(1), cql.TextValue("val1")})
+			cassandraAdd(t, batch, prepared, []cql.Value{cql.IntValue(2), cql.TextValue("val2")})
 			_, err = session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Keyspace: keyspace}))
 			require.NoError(t, err)
 			rows, err := v2Query(ctx, session, "SELECT id, value FROM "+keyspace+".batch_keyspace")
@@ -289,7 +289,7 @@ func TestBatch(t *testing.T) {
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s (id int primary key, val text)`, table)))
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id, val) VALUES (?, ?) USING TTL 20", table), exec.PrepareOptions{}), []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val"))})
+			cassandraAdd(t, batch, cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id, val) VALUES (?, ?) USING TTL 20", table), exec.PrepareOptions{}), []cql.Value{cql.IntValue(1), cql.TextValue("val")})
 			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{NowInSeconds: cql.Option[int32]{Value: 0, Set: true}}))
 			require.NoError(t, err)
 
@@ -314,8 +314,8 @@ func TestBatch(t *testing.T) {
 			micros := time.Now().UnixMicro() - 1000
 			insert := cassandraWritePrepared(t, session, fmt.Sprintf(("INSERT INTO "+fixtureKeyspace("")+".%s (id, val) VALUES (?, ?)"), table), exec.PrepareOptions{})
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1), codecTestMust(cql.TextValue("val"))})
-			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(2), codecTestMust(cql.TextValue("val"))})
+			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1), cql.TextValue("val")})
+			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(2), cql.TextValue("val")})
 			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Timestamp: cql.Option[int64]{Value: micros, Set: true}}))
 			require.NoError(t, err)
 			for _, id := range []int32{1, 2} {

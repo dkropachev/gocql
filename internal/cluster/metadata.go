@@ -681,7 +681,7 @@ func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Co
 			last = err
 			continue
 		}
-		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsEmpty() {
+		if len(rows) != 1 || !rows[0].id.Valid || !rows[0].version.Valid || rows[0].id.Value != id || rows[0].version.Value.IsZero() {
 			return cql.UUID{}, cqltype.TypeValidation("schema agreement", "missing/mismatched host identity or version")
 		}
 		return rows[0].version.Value, nil

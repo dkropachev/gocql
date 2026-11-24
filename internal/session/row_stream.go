@@ -459,7 +459,7 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 				break
 			}
 		}
-		if target.HostID.IsEmpty() {
+		if target.HostID.IsZero() {
 			return cqlerr.ErrNoConnections
 		}
 	}

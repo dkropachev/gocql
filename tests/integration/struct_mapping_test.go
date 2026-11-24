@@ -59,7 +59,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		type hit struct {
 			K    int32
-			Hits cql.Counter
+			Hits int64
 		}
 		addPrepared, err := f.session.Prepare(ctx, cql.Statement[hit, cql.EmptyRow]{
 			Kind:   cql.OrdinaryStatement,

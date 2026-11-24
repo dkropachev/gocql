@@ -63,7 +63,7 @@ func TestMetadata(t *testing.T) {
 		defer s.Close()
 		identities := map[cql.UUID]bool{}
 		for _, host := range s.Metadata().Hosts() {
-			if host.ID.IsEmpty() || identities[host.ID] {
+			if host.ID.IsZero() || identities[host.ID] {
 				t.Fatal("invalid configured contact identities", s.Metadata().Hosts())
 			}
 			identities[host.ID] = true
@@ -190,7 +190,7 @@ func TestMetadata(t *testing.T) {
 
 			select {
 			case ev := <-sub.Events():
-				if ev.Kind != event.Control || ev.Change != "RECONNECTED" || ev.HostID.IsEmpty() || !ev.Address.IsValid() {
+				if ev.Kind != event.Control || ev.Change != "RECONNECTED" || ev.HostID.IsZero() || !ev.Address.IsValid() {
 					t.Fatalf("unexpected reconnect event: %+v", ev)
 				}
 			case <-time.After(30 * time.Second):

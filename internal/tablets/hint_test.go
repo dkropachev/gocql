@@ -107,7 +107,7 @@ func TestHint(t *testing.T) {
 			if upper, err := ParseHostUUID(strings.ToUpper(s)); err != nil || upper != want {
 				t.Fatalf("upper-case hex: %x, %v", upper, err)
 			}
-			if !(HostUUID{}).IsEmpty() || u.IsEmpty() {
+			if !(HostUUID{}).IsZero() || u.IsZero() {
 				t.Fatal("IsEmpty is only true for the zero UUID")
 			}
 		})

@@ -74,11 +74,7 @@ var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Tim
 	}
 	return n
 }, func(v cql.Timestamp) time.Time {
-	n, e := v.Time()
-	if e != nil {
-		panic(e)
-	}
-	return n.UTC()
+	return v.Time()
 })
 var serializationDate = cql.NamedScalar(cql.DateCodec, func(v time.Time) cql.Date {
 	n, e := cql.DateFromTime(v)
@@ -87,11 +83,7 @@ var serializationDate = cql.NamedScalar(cql.DateCodec, func(v time.Time) cql.Dat
 	}
 	return n
 }, func(v cql.Date) time.Time {
-	n, e := v.Time()
-	if e != nil {
-		panic(e)
-	}
-	return n.UTC()
+	return v.Time()
 })
 var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
 	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
@@ -305,7 +297,7 @@ func TestVector(t *testing.T) {
 				vectorCase("bigint", "bigint", cql.Int64Codec, []int64{1, 2, 3}, nil),
 				vectorCase("blob", "blob", serializationBlob, [][]byte{{1, 2, 3}, {4, 5, 6, 7}, {8, 9}}, nil),
 				vectorCase("boolean", "boolean", cql.BoolCodec, []bool{true, false, true}, nil),
-				vectorCase("counter", "counter", cql.CounterCodec, []cql.Counter{5, 6, 7}, nil),
+				vectorCase("counter", "counter", cql.Int64Codec, []int64{5, 6, 7}, nil),
 				vectorCase("decimal", "decimal", serializationDecimal, []inf.Dec{*inf.NewDec(1, 0), *inf.NewDec(2, 1), *inf.NewDec(-3, 2)}, nil),
 				vectorCase("double", "double", cql.Float64Codec, []float64{0.1, -1.2, 3}, nil),
 				vectorCase("float", "float", cql.Float32Codec, []float32{0.1, -1.2, 3}, nil),

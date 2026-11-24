@@ -63,12 +63,12 @@ func compileStreamValidationMemo(t DataType, depth int, memo map[*dataTypeDescri
 	}
 	var err error
 	switch t.Kind() {
-	case TypeList, TypeSet, TypeCustom:
+	case TypeList, TypeSet, TypeVector:
 		p.element, err = child(d.Element)
 		if err != nil {
 			return nil, err
 		}
-		if t.Kind() == TypeCustom {
+		if t.Kind() == TypeVector {
 			if d.Dimension == 0 {
 				return nil, typeValidation("dimension", "zero vector dimension")
 			}
@@ -183,7 +183,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 				return fmt.Errorf("gocql: record field %d: %w", i, err)
 			}
 		}
-	case TypeCustom:
+	case TypeVector:
 		count := int(descriptorOf(p.typ).Dimension)
 		if p.width > 0 && r.Remaining() != int64(count)*p.width {
 			return r.fail(typeValidation("dimension", "incorrect fixed vector body width"))
@@ -313,14 +313,12 @@ func compileStreamScalarValidation(t DataType) (func(*StreamValueReader) error, 
 		return streamScalarValidation(t, StreamInt16)
 	case TypeInt:
 		return streamScalarValidation(t, StreamInt32)
-	case TypeBigInt:
+	case TypeBigInt, TypeCounter:
 		return streamScalarValidation(t, StreamInt64)
 	case TypeFloat:
 		return streamScalarValidation(t, StreamFloat32)
 	case TypeDouble:
 		return streamScalarValidation(t, StreamFloat64)
-	case TypeCounter:
-		return streamScalarValidation(t, StreamCounter)
 	case TypeDate:
 		return streamScalarValidation(t, StreamDate)
 	case TypeTime:

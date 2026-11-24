@@ -100,7 +100,7 @@ func TestPool(t *testing.T) {
 					if !reflect.DeepEqual(host, targets[0]) {
 						t.Fatalf("conviction lost dial host context: got=%+v want=%+v", host, targets[0])
 					}
-					if host.ID.IsEmpty() || host.Address.Addr().String() != getClusterHosts()[0] || host.Datacenter == "" || host.Rack == "" || !host.Enabled || host.Connected {
+					if host.ID.IsZero() || host.Address.Addr().String() != getClusterHosts()[0] || host.Datacenter == "" || host.Rack == "" || !host.Enabled || host.Connected {
 						t.Fatalf("incomplete host context: %+v", host)
 					}
 				}

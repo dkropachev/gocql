@@ -418,14 +418,14 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		if v == nil {
 			return null()
 		}
-		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
+		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds}), nil
 	case fixtureDuration.Duration:
-		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds})
+		return cql.DurationValue(cql.Duration{Months: v.Months, Days: v.Days, Nanoseconds: v.Nanoseconds}), nil
 	case *cql.Duration:
 		if v == nil {
 			return null()
 		}
-		return cql.DurationValue(*v)
+		return cql.DurationValue(*v), nil
 	case *big.Int:
 		if v == nil {
 			return null()
@@ -476,12 +476,12 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		case cql.TypeVarint:
 			return cql.VarintValue(cql.VarintFromBigInt(big.NewInt(v))), nil
 		case cql.TypeTime:
-			return cql.TimeValue(cql.TimeOfDay(v))
+			return cql.TimeValue(cql.TimeOfDay(v)), nil
 		case cql.TypeTimestamp:
 			return cql.TimestampValue(cql.Timestamp(v)), nil
 		case cql.TypeDuration:
 			const day = int64(24 * time.Hour)
-			return cql.DurationValue(cql.Duration{Days: int32(v / day), Nanoseconds: v % day})
+			return cql.DurationValue(cql.Duration{Days: int32(v / day), Nanoseconds: v % day}), nil
 		}
 	case time.Duration:
 		return serializationFixtureValue(kind, int64(v))
@@ -493,7 +493,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		return cql.DecimalValue(cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}), nil
 	case [16]byte:
 		if kind == cql.TypeTimeUUID {
-			return cql.TimeUUIDValue(cql.TimeUUID(v))
+			return cql.TimeUUIDValue(cql.TimeUUID(v)), nil
 		}
 		return cql.UUIDValue(cql.UUID(v)), nil
 	case net.IP:
@@ -504,7 +504,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		if !ok {
 			return cql.Value{}, fmt.Errorf("invalid fixture IP")
 		}
-		return cql.InetValue(a.Unmap())
+		return cql.InetValue(a.Unmap()), nil
 	case time.Time:
 		if kind == cql.TypeDate {
 			d, e := cql.DateFromTime(v)
@@ -519,13 +519,13 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		}
 		return cql.TimestampValue(n), nil
 	case cql.Duration:
-		return cql.DurationValue(v)
+		return cql.DurationValue(v), nil
 	case string:
 		switch kind {
 		case cql.TypeText, cql.TypeVarchar:
-			return cql.TextValue(v)
+			return cql.TextValue(v), nil
 		case cql.TypeASCII:
-			return cql.ASCIIValue(v)
+			return cql.ASCIIValue(v), nil
 		case cql.TypeBlob:
 			return cql.BlobValue([]byte(v)), nil
 		}
@@ -559,7 +559,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 				return cql.Value{}, e
 			}
 			if kind == cql.TypeTimeUUID {
-				return cql.TimeUUIDValue(cql.TimeUUID(u))
+				return cql.TimeUUIDValue(cql.TimeUUID(u)), nil
 			}
 			return cql.UUIDValue(u), nil
 		case cql.TypeInet:
@@ -567,7 +567,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			if e != nil {
 				return cql.Value{}, e
 			}
-			return cql.InetValue(a)
+			return cql.InetValue(a), nil
 		case cql.TypeDate:
 			dayPos := strings.LastIndex(v, "-")
 			monthPos := strings.LastIndex(v[:dayPos], "-")
@@ -593,7 +593,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			if e != nil {
 				return cql.Value{}, e
 			}
-			return cql.DurationValue(d)
+			return cql.DurationValue(d), nil
 		}
 	}
 	return cql.Value{}, fmt.Errorf("unsupported scalar fixture %s %T (%v)", kind, input, input)

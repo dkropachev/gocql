@@ -89,7 +89,7 @@ func TestConn(t *testing.T) {
 	t.Run("HostID", func(t *testing.T) {
 		host := new(implEndpoint.HostInfo)
 		c := &Conn{InternalHost: host}
-		if id := c.InternalHostID(); !id.IsEmpty() {
+		if id := c.InternalHostID(); !id.IsZero() {
 			t.Fatalf("got %v for a host without an ID", id)
 		}
 		want := cql.UUID{15: 7}

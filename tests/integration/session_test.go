@@ -932,7 +932,7 @@ func TestSession(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, nows, 1)
-		require.False(t, cql.UUID(nows[0]).IsEmpty())
+		require.False(t, cql.UUID(nows[0]).IsZero())
 		require.Equal(t, hostID, info.HostID)
 		for _, host := range session.Metadata().Hosts() {
 			if host.Connected {

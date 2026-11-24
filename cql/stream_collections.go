@@ -45,7 +45,7 @@ func StreamSet[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 
 // StreamVector decodes a vector into seeded slice storage using child.
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
-	return streamSequenceCodec[T]{kind: TypeCustom, element: child}
+	return streamSequenceCodec[T]{kind: TypeVector, element: child}
 }
 func (c streamSequenceCodec[T]) Compile(t DataType) (CompiledStreamValue[[]T], error) {
 	if c.element == nil {
@@ -80,7 +80,7 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 	if !r.matches(p.typ) {
 		return r.fail(typeValidation("type", "compiled sequence metadata changed"))
 	}
-	if r.state == Null && p.typ.Kind() != TypeCustom {
+	if r.state == Null && p.typ.Kind() != TypeVector {
 		p.Reset(dst)
 		return r.RequireEnd()
 	}
@@ -88,7 +88,7 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 		return err
 	}
 	var count int
-	if p.typ.Kind() == TypeCustom {
+	if p.typ.Kind() == TypeVector {
 		count = int(descriptorOf(p.typ).Dimension)
 		if p.width > 0 && r.Remaining() != int64(count)*p.width {
 			return r.fail(typeValidation("dimension", "incorrect fixed vector body width"))
@@ -112,7 +112,7 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 		p.plan.Reset(value)
 		decode := func(child *StreamValueReader) error { return p.plan.DecodeInto(child, value) }
 		var err error
-		if p.typ.Kind() == TypeCustom {
+		if p.typ.Kind() == TypeVector {
 			size := p.width
 			if size == 0 {
 				size, err = r.vectorLength()

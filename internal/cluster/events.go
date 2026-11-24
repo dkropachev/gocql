@@ -459,7 +459,7 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 // the ring's, replaced or removed meanwhile, is left alone. A contact point
 // the ring has not identified yet has no ID and is looked up by address.
 func (s *Core) HandleHostDown(host *implEndpoint.HostInfo) {
-	if implEndpoint.InternalHostInfoHostUUID(host).IsEmpty() {
+	if implEndpoint.InternalHostInfoHostUUID(host).IsZero() {
 		s.HandleNodeDown(host.ConnectAddress(), host.Port())
 		return
 	}

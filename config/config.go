@@ -114,7 +114,7 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
-		if id.IsEmpty() {
+		if id.IsZero() {
 			return Config{}, &cql.ValidationError{Field: "WithOnlyHost", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter

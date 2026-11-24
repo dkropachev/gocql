@@ -25,7 +25,7 @@ type structFixture struct {
 	ID        UUID `cql:"id"`
 	TimeID    TimeUUID
 	Addr      netip.Addr
-	Hits      Counter
+	Hits      int64
 	Day       Date
 	Clock     TimeOfDay
 	At        Timestamp
@@ -94,7 +94,7 @@ func handWrittenFixture() (ParamEncoder[structFixture], RowDecoder[structFixture
 		Param("id", UUIDCodec, func(v structFixture) UUID { return v.ID }),
 		Param("time_id", TimeUUIDCodec, func(v structFixture) TimeUUID { return v.TimeID }),
 		Param("addr", InetCodec, func(v structFixture) netip.Addr { return v.Addr }),
-		Param("hits", CounterCodec, func(v structFixture) Counter { return v.Hits }),
+		Param("hits", Int64Codec, func(v structFixture) int64 { return v.Hits }),
 		Param("day", DateCodec, func(v structFixture) Date { return v.Day }),
 		Param("clock", TimeCodec, func(v structFixture) TimeOfDay { return v.Clock }),
 		Param("at", TimestampCodec, func(v structFixture) Timestamp { return v.At }),
@@ -116,7 +116,7 @@ func handWrittenFixture() (ParamEncoder[structFixture], RowDecoder[structFixture
 		Column("id", UUIDCodec, func(v *structFixture) *UUID { return &v.ID }),
 		Column("time_id", TimeUUIDCodec, func(v *structFixture) *TimeUUID { return &v.TimeID }),
 		Column("addr", InetCodec, func(v *structFixture) *netip.Addr { return &v.Addr }),
-		Column("hits", CounterCodec, func(v *structFixture) *Counter { return &v.Hits }),
+		Column("hits", Int64Codec, func(v *structFixture) *int64 { return &v.Hits }),
 		Column("day", DateCodec, func(v *structFixture) *Date { return &v.Day }),
 		Column("clock", TimeCodec, func(v *structFixture) *TimeOfDay { return &v.Clock }),
 		Column("at", TimestampCodec, func(v *structFixture) *Timestamp { return &v.At }),

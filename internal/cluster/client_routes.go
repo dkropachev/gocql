@@ -276,7 +276,7 @@ type ClientRoutesHandler struct {
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
 func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
-	if peer.HostID.IsEmpty() {
+	if peer.HostID.IsZero() {
 		return addr, nil
 	}
 	hostID := peer.HostID.String()

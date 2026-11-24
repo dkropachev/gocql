@@ -319,7 +319,7 @@ func (s *Core) init() error {
 	} else {
 		// For testing purposes we populate host ids
 		for _, host := range hosts {
-			if implEndpoint.HostInfoData(host).InternalHostId.IsEmpty() {
+			if implEndpoint.HostInfoData(host).InternalHostId.IsZero() {
 				implEndpoint.HostInfoData(host).InternalHostId = cql.RandomUUID()
 			}
 		}

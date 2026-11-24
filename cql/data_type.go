@@ -162,7 +162,7 @@ func VectorType(element DataType, dimension uint16) (DataType, error) {
 	if dimension == 0 {
 		return DataType{}, typeValidation("dimension", "vector dimension must be positive")
 	}
-	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeCustom, Element: element, Dimension: dimension}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeVector, Element: element, Dimension: dimension}}, nil
 }
 
 // NewColumns snapshots column specifications into immutable metadata.
@@ -170,8 +170,8 @@ func NewColumns(columns ...ColumnSpec) Columns {
 	return Columns{columns: append([]ColumnSpec(nil), columns...)}
 }
 
-// Kind returns the type's kind. A vector is TypeCustom, and so is the invalid
-// zero DataType.
+// Kind returns the type's kind. A vector is TypeVector; the invalid zero
+// DataType is TypeCustom.
 func (t DataType) Kind() Type {
 	if t.descriptor == nil {
 		return TypeCustom
@@ -381,7 +381,7 @@ func (t DataType) String() string {
 		s = "tuple<" + strings.Join(fields, ",") + ">"
 	case TypeUDT:
 		s = d.Keyspace + "." + d.Name
-	case TypeCustom:
+	case TypeVector:
 		s = fmt.Sprintf("vector<%s,%d>", d.Element, d.Dimension)
 	default:
 		s = d.Kind.String()
@@ -449,6 +449,9 @@ type Nullable[T any] struct {
 	// Valid reports that the value is not NULL.
 	Valid bool
 }
+
+// NonNull returns a Nullable holding v.
+func NonNull[T any](v T) Nullable[T] { return Nullable[T]{Value: v, Valid: true} }
 
 // BindValue controls parameters using Present, Null, or Unset.
 // Its zero value binds the ordinary zero value of T. Binding fails for any

@@ -62,7 +62,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 			target = implEndpoint.InternalHostInfoHostUUID(host)
 		}
 	}
-	if target.IsEmpty() {
+	if target.IsZero() {
 		t.Fatal("no host for", node.IP())
 	}
 	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}

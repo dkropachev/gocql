@@ -99,11 +99,11 @@ func TestPrepared(t *testing.T) {
 			for _, s := range []*gocql.Session{session, other} {
 				cassandraDDL(t, s, fmt.Sprintf("CREATE TABLE %s(id varchar PRIMARY KEY,field varchar)", table))
 			}
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(cql.TextValue("key")), codecTestMust(cql.TextValue("one")))
-			cassandraWrite(t, other, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), codecTestMust(cql.TextValue("key")), codecTestMust(cql.TextValue("two")))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), cql.TextValue("key"), cql.TextValue("one"))
+			cassandraWrite(t, other, fmt.Sprintf("INSERT INTO %s(id,field) VALUES(?,?)", table), cql.TextValue("key"), cql.TextValue("two"))
 			stmt := fmt.Sprintf("SELECT field FROM %s WHERE id=?", table)
-			require.Equal(t, "one", cassandraText(t, cassandraRead(t, session, stmt, codecTestMust(cql.TextValue("key"))), "field"))
-			require.Equal(t, "two", cassandraText(t, cassandraRead(t, other, stmt, codecTestMust(cql.TextValue("key"))), "field"))
+			require.Equal(t, "one", cassandraText(t, cassandraRead(t, session, stmt, cql.TextValue("key")), "field"))
+			require.Equal(t, "two", cassandraText(t, cassandraRead(t, other, stmt, cql.TextValue("key")), "field"))
 		})
 		t.Run("OverriddenKeyspace", func(t *testing.T) {
 			session := createV2Session(t)
@@ -237,13 +237,13 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), codecTestMust(cql.TextValue("test")))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES(?)", table), cql.TextValue("test"))
 			selectCQL := fmt.Sprintf("SELECT * FROM %s WHERE id=?", table)
 			before := cassandraDynamicPrepared(t, session, selectCQL, exec.PrepareOptions{})
-			key := []cql.Value{codecTestMust(cql.TextValue("test"))}
+			key := []cql.Value{cql.TextValue("test")}
 			require.Equal(t, "test", cassandraText(t, cassandraReadOne(t, session, before, key, exec.Options{}), "id"))
 			cassandraDDL(t, session, fmt.Sprintf("ALTER TABLE %s ADD val text", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), codecTestMust(cql.TextValue("test")), codecTestMust(cql.TextValue("test-val")))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,val) VALUES(?,?)", table), cql.TextValue("test"), cql.TextValue("test-val"))
 			row := cassandraReadOne(t, session, before, key, exec.Options{})
 			require.Equal(t, "test", cassandraText(t, row, "id"))
 			require.Equal(t, "test-val", cassandraText(t, row, "val"))
@@ -265,7 +265,7 @@ func TestPrepared(t *testing.T) {
 			entry, _ := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 			id := entry.InternalId
 			require.NotEqual(t, []byte("foobar"), id)
-			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
+			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", cql.TextValue("bar")), "bar"))
 		})
 		t.Run("Statement", func(t *testing.T) {
 			t.Parallel()
@@ -283,7 +283,7 @@ func TestPrepared(t *testing.T) {
 			entry, _ := implSession.InternalHostPreparedEntry(preparedData(prepared).InternalState, implEndpoint.InternalHostInfoHostUUID(conn.InternalHost))
 			id := entry.InternalId
 			require.NotEqual(t, []byte("foobar"), id)
-			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", codecTestMust(cql.TextValue("bar"))), "bar"))
+			require.Equal(t, int64(7), cassandraInt(t, cassandraRead(t, session, "SELECT bar FROM "+table+" WHERE foo=?", cql.TextValue("bar")), "bar"))
 		})
 	})
 }

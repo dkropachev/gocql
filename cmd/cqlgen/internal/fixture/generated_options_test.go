@@ -66,7 +66,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 		func(v cql.Timestamp) cql.Timestamp { return v + 100 }, func(v cql.Timestamp) cql.Timestamp { return v - 100 }))
 	partial, _ := encode(t, subset, cql.MustParamsOf[Fixture](first, shift), input)
 	raw := decode(t, subset, cql.MustRowOf[Fixture](), partial)
-	if raw.CreatedAt != input.CreatedAt+100 || raw.Text != "first/"+input.Text || !raw.ID.IsEmpty() || raw.Skipped != "" {
+	if raw.CreatedAt != input.CreatedAt+100 || raw.Text != "first/"+input.Text || !raw.ID.IsZero() || raw.Skipped != "" {
 		t.Fatalf("embedded/subset mapping: %+v", raw)
 	}
 	got := decode(t, subset, cql.MustRowOf[Fixture](first, shift), partial)

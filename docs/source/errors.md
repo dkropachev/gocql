@@ -129,3 +129,9 @@ When no host can be reached, `Connect` returns an error matching
 `cqlerr.ErrNoConnectionsStarted`. `errors.As` into `*cqlerr.ConnectError` lists
 each host tried and its cause, such as a `*net.OpError`. An invalid cluster
 config returns a `*cql.ValidationError` naming the field.
+
+## Decoding
+
+A row that does not decode fails with a `*cql.CodecError` naming the column.
+NULL in a column whose destination cannot hold it, such as an `int64` field,
+matches `cql.ErrNull`; map that column to a `cql.Nullable[T]` field instead.

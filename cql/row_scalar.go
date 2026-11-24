@@ -116,7 +116,7 @@ func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, widt
 		return fail(err)
 	}
 	if length == -1 {
-		return 0, fmt.Errorf("gocql: nonnullable %s cannot decode cell state %v", column.Type.Kind(), Null)
+		return 0, nullCellError{kind: column.Type.Kind()}
 	}
 	if width > 0 && int64(length) != width {
 		return fail(fmt.Errorf("gocql: %s requires %d bytes, got %d", column.Type.Kind(), width, length))

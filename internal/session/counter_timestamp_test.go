@@ -67,7 +67,7 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 		}
 	}
 	t.Run("Counter", func(t *testing.T) {
-		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = c + ? WHERE k = 1", implCql.CounterCodec, 1)
+		counterTimestampWrites(t, ctx, s, "UPDATE ks.tbl SET c = c + ? WHERE k = 1", implCql.Int64Codec, 1)
 		check(t, "counter", false)
 	})
 	t.Run("Ordinary", func(t *testing.T) {

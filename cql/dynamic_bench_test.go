@@ -102,7 +102,7 @@ func BenchmarkDynamic(b *testing.B) {
 					ColumnSpec{Name: "ascii", Type: ASCIIType},
 				)
 				payload := string(bytes.Repeat([]byte{'x'}, size))
-				values := []Value{CodecTestMust(TextValue(payload)), CodecTestMust(ASCIIValue(payload))}
+				values := []Value{TextValue(payload), ASCIIValue(payload)}
 				plan := CodecTestMust(DynamicParams.Compile(columns))
 				builder := wire.NewBuilder(256)
 				w := newParamWriter(builder, columns, true)

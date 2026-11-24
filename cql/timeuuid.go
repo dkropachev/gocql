@@ -42,8 +42,8 @@ func (u TimeUUID) String() string { return UUID(u).String() }
 // Bytes returns a copy of the UUID's 16 bytes.
 func (u TimeUUID) Bytes() []byte { return UUID(u).Bytes() }
 
-// IsEmpty reports whether u is the zero UUID.
-func (u TimeUUID) IsEmpty() bool { return UUID(u).IsEmpty() }
+// IsZero reports whether u is the zero UUID.
+func (u TimeUUID) IsZero() bool { return UUID(u).IsZero() }
 
 // Variant returns the UUID's variant; see UUID.Variant.
 func (u TimeUUID) Variant() int { return UUID(u).Variant() }

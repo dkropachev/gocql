@@ -127,7 +127,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.Prefetch.Set && (p.Prefetch < 0 || p.Prefetch > 1) {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("prefetch", "must be zero or one")
 	}
-	if options.HostID.Set && options.HostID.Value.IsEmpty() {
+	if options.HostID.Set && options.HostID.Value.IsZero() {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("host ID", "empty UUID")
 	}
 	if options.ShardID.Set && !options.HostID.Set {

@@ -9,7 +9,11 @@ predeclared scalars such as `TextType` and `IntType` need no error check.
 `Row(Column(...))` map struct fields explicitly.
 
 Native scalars have explicit codecs such as Int32Codec, Int64Codec, BoolCodec, UUIDCodec,
-TimestampCodec and DurationCodec. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
+TimestampCodec and DurationCodec. `Int64Codec` also reads and writes a counter
+column, so an `int64` field maps one. A non-nullable destination, such as an
+`int64` field, fails on NULL with an error matching `cql.ErrNull`; use
+`Nullable[T]` (or `cql.NonNull(v)` to build a present one) for a column that
+may be NULL. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
 an owned copy; TextCodec and BlobCodec decode a borrowed Text and Bytes
 without copying. Collection decoders eagerly produce slices whose payload elements may borrow pages;
 nullable/empty wrappers distinguish null, empty and present values. Unset is
@@ -17,9 +21,21 @@ an explicit binding state and is invalid in results.
 
 Dynamic values (`cql.DynamicParams`, `cql.DynamicRows`, `cql.Value`)
 and `EncodedValue` support metadata-driven
-applications. Standalone `EncodeValue` (copies caller payloads),
+applications. Scalar constructors such as `cql.TextValue("a")` return a
+`Value` with no error, so a parameter list is written inline; an invalid
+payload, such as a `TextValue` that is not UTF-8, fails when it is bound.
+`BigIntValue` also binds a counter. Accessors such as `Signed`, `Text` and
+`Time` read a present value; `Len`, `At(i)` and `Field(name)` read one member
+of a collection, tuple or UDT, and `Elements`, `Entries` and `Fields` return
+an iterator whose `All` ranges over every member. `String` prints a `Value`,
+and `Varint`, `Decimal`, `Date`, `TimeOfDay`, `Timestamp` and `Duration`
+print, in a CQL literal form. A vector type has kind `TypeVector`, the
+driver's own kind: the protocol sends a vector as a custom type. Standalone
+`EncodeValue` (copies caller payloads),
 `EncodeValueBorrowed` (zero-copy) and `DecodeValue` use the same codec
-implementation as execution. Explicit owned
+implementation as execution. A decoder sees an empty value as a response holds
+it, Present with an empty body, including one `DecodeValue` reads from an
+`EncodedValue` in `EmptyCell`. Explicit owned
 conversion/Clone detaches payloads. Custom codecs use checked reader/writer
 interfaces and preserve metadata validation and lifetime rules.
 

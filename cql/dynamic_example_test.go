@@ -16,15 +16,7 @@ func ExampleListValue() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	first, err := cql.TextValue("a")
-	if err != nil {
-		log.Fatal(err)
-	}
-	second, err := cql.TextValue("b")
-	if err != nil {
-		log.Fatal(err)
-	}
-	list, err := cql.ListValue(typ, []cql.Value{first, second})
+	list, err := cql.ListValue(typ, []cql.Value{cql.TextValue("a"), cql.TextValue("b")})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,21 +28,23 @@ func ExampleListValue() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	fmt.Println(decoded, decoded.Len())
 	elements, err := decoded.Elements()
 	if err != nil {
 		log.Fatal(err)
 	}
-	for elements.Next() {
-		text, err := elements.Value().Text()
+	for element, err := range elements.All() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(text.String())
-	}
-	if err := elements.Err(); err != nil {
-		log.Fatal(err)
+		text, err := element.Text()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(text)
 	}
 	// Output:
+	// ['a', 'b'] 2
 	// a
 	// b
 }

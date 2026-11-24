@@ -280,6 +280,9 @@ func (r *StreamValueReader) present() error {
 	if err := r.check(); err != nil {
 		return err
 	}
+	if r.state == Null {
+		return r.fail(typeValidation("stream value", "nonnullable %s has state null: %w", r.typ, ErrNull))
+	}
 	if r.state != Present {
 		return r.fail(typeValidation("stream value", "nonnullable %s has state %v", r.typ, r.state))
 	}
