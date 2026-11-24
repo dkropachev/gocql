@@ -71,7 +71,7 @@ Write portable code this way:
 
 ## Conditional batches
 
-`session.RunBatch` returns the rows of a conditional batch:
+`session.RunConditionalBatch` returns the rows of a conditional batch:
 
 | Outcome | Cassandra | ScyllaDB |
 |---|---|---|

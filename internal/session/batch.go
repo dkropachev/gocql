@@ -22,7 +22,7 @@ import (
 
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request. Prepared.AddToBatch and Query.AddToBatch append a
-// statement; Session.ExecBatch and Session.RunBatch send the batch.
+// statement; Session.ExecBatch and Session.RunConditionalBatch send the batch.
 // Statements of several prepared statements and queries may share a batch
 // when they belong to one session.
 //

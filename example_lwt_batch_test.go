@@ -34,8 +34,8 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// ExampleSession_RunBatch_conditional consumes every typed row returned by a conditional batch.
-func ExampleSession_RunBatch_conditional() {
+// ExampleCASBatchRows consumes every typed row returned by a conditional batch.
+func ExampleCASBatchRows() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with initial rows (pk1,ck1,1,a) and (pk1,ck2,1,A).
 	ctx := context.Background()
@@ -83,7 +83,7 @@ func ExampleSession_RunBatch_conditional() {
 			log.Fatal(err)
 		}
 	}
-	rows, err := session.RunBatch(ctx, &batch, statement.Rows)
+	rows, err := session.RunConditionalBatch(ctx, &batch, statement.Rows)
 	if err != nil {
 		log.Fatal(err)
 	}

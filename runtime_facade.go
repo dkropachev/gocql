@@ -15,7 +15,7 @@ import (
 
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request: Prepared.AddToBatch and Query.AddToBatch append a statement,
-// Session.ExecBatch and Session.RunBatch send the batch, and Reset empties it
+// Session.ExecBatch and Session.RunConditionalBatch send the batch, and Reset empties it
 // for reuse. Once a batch has grown to its working size, appending allocates
 // nothing. A Batch is not safe for concurrent use and must not be copied.
 //

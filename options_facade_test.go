@@ -153,8 +153,8 @@ func TestTooManyOptions(t *testing.T) {
 	check("RunPage", err)
 	_, err = s.ExecBatch(ctx, nil, two...)
 	check("ExecBatch", err)
-	_, err = s.RunBatch[[]byte](ctx, nil, nil, two...)
-	check("RunBatch", err)
+	_, err = s.RunConditionalBatch[[]byte](ctx, nil, nil, two...)
+	check("RunConditionalBatch", err)
 	checkPrepare := func(name string, err error) {
 		t.Helper()
 		if ve, ok := errors.AsType[*cql.ValidationError](err); !ok || ve.Field != "options" || ve.Err.Error() != "at most one PrepareOptions" {

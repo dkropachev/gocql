@@ -87,7 +87,7 @@ func TestConditional(t *testing.T) {
 		}
 		runCASBatch := func(batch *gocql.Batch, wantApplied bool, wantRows int) {
 			t.Helper()
-			rows, err := session.RunBatch(context.Background(), batch, cql.CASRows(cql.DynamicRows))
+			rows, err := session.RunConditionalBatch(context.Background(), batch, cql.CASRows(cql.DynamicRows))
 			require.NoError(t, err)
 			defer rows.Close()
 			count := 0
@@ -129,7 +129,7 @@ func TestConditional(t *testing.T) {
 		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, exec.PrepareOptions{})
 		require.Error(t, err)
 		for i := 0; i < 2; i++ {
-			rows, err := session.RunBatch(context.Background(), seed, cql.CASRows(cql.DynamicRows))
+			rows, err := session.RunConditionalBatch(context.Background(), seed, cql.CASRows(cql.DynamicRows))
 			rows.Close()
 			require.Error(t, err)
 		}
@@ -140,7 +140,7 @@ func TestConditional(t *testing.T) {
 			if batch {
 				b := &gocql.Batch{Kind: cql.LoggedBatch}
 				cassandraAdd(t, b, cassandraDynamicPrepared(t, session, updateCQL, exec.PrepareOptions{}), updateValues)
-				rows, e := session.RunBatch(context.Background(), b, badDecoder)
+				rows, e := session.RunConditionalBatch(context.Background(), b, badDecoder)
 				rows.Close()
 				require.Error(t, e)
 			} else {

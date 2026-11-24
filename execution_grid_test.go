@@ -39,7 +39,7 @@ var gridNonExecution = map[string][]string{
 	"Session": {
 		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "Dialect",
 		"ExecBatch", "ID", "Metadata", "Metrics", "Prepare", "PrepareStream",
-		"RefreshMetadata", "RunBatch", "RunConditionalBatch", "Subscribe",
+		"RefreshMetadata", "RunConditionalBatch", "Subscribe",
 		"UnpreparedAddToBatch",
 	},
 	"Query":    {"AddToBatch", "Close", "Routing", "Wait"},
@@ -144,7 +144,7 @@ func TestExecutionGrid(t *testing.T) {
 	}
 
 	// Batches send with the shared form's options.
-	for _, method := range []string{"Session.ExecBatch", "Session.RunBatch", "Session.RunConditionalBatch"} {
+	for _, method := range []string{"Session.ExecBatch", "Session.RunConditionalBatch"} {
 		if p := params[method]; !optionsForm(p, gridRows["Shared"].options) {
 			t.Errorf("%s(%s) does not end in %q", method, p, gridRows["Shared"].options)
 		}

@@ -639,7 +639,7 @@ fallback.
 Package-level functions exist only where a method cannot express them. Go 1.27
 methods may declare their own type parameters, so the generic operations are
 methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
-`Session.RunBatch`, `Session.Unprepared*`, `Prepared.Query`,
+`Session.RunConditionalBatch`, `Session.Unprepared*`, `Prepared.Query`,
 `PreparedStream.Query`). Settings that only refine a builder are methods of
 the builder, not values made by a function: pool size and a fixed TLS
 configuration are `ConfigBuilder` methods. Client routes are one read-only
@@ -746,7 +746,7 @@ func (q *Query[P, R]) Close()                       // stop at once
 func (q *Query[P, R]) Wait(context.Context) error   // join the drain
 
 func (s *Session) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
-func (s *Session) RunBatch[R any](context.Context, *Batch, cql.RowDecoder[R], ...exec.CompiledOptions) (Rows[R], error)
+func (s *Session) RunConditionalBatch[X any](context.Context, *Batch, cql.RowDecoder[cql.CASResult[X]], ...exec.CompiledOptions) (CASBatchRows[X], error)
 ```
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
@@ -1301,7 +1301,7 @@ also interrupts active streams; already written caller output remains valid.
 // exec.Options are plain values; the zero exec.Options uses the session default
 // profile. Query constructors take exec.Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Session.ExecBatch, Session.RunBatch) take exec.CompiledOptions: exec.Options compiled by
+// Session.ExecBatch, Session.RunConditionalBatch) take exec.CompiledOptions: exec.Options compiled by
 // Session.CompileOptions for one session's default profile and keyspace. On
 // another session, exec.CompiledOptions are resolved again for that session on each
 // execution. The zero exec.CompiledOptions uses the executing session's default profile.
