@@ -63,8 +63,11 @@ value exceeding available capacity returns StreamCapacityError before writing
 that value body; earlier fields may already have changed. Provision capacity
 from the application's bounds, not from untrusted remote lengths. Reset clears
 logical values recursively while preserving mapped capacity. cql.StreamRowInto's
-explicit callback clears unmapped application state; it must preserve mapped
-buffers. Custom plans/resetters have the same responsibility.
+callback, which may be nil, clears unmapped application state; it must preserve
+mapped buffers. Custom decoders and plans have the same responsibility in
+their `Reset`. Like `RowInto`, `cql.StreamRowInto` needs a field for every
+result column and a column for every field; `cql.StreamIgnoreColumn` skips a
+column.
 
 Only a true NextInto return publishes a complete validated row. Truncation,
 capacity errors, cancellation, malformed text or integrity failure are terminal

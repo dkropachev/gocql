@@ -44,7 +44,7 @@ func TestDetachRow(t *testing.T) {
 			t.Fatal(err)
 		}
 		borrowed := dst.View
-		detachRowFor(plan, &dst)
+		detachRowFor(plan, nil, &dst)
 		lease.Release()
 		if string(dst.View.OwnedBytes()) != "view" || string(dst.Owned) != "owned" || dst.Nested[0].String() != "nested" {
 			t.Fatalf("detached row: %+v", dst)
@@ -61,14 +61,15 @@ func TestDetachRow(t *testing.T) {
 		body := encodeTestParams(t, columns, OneParam(ByteSliceCodec), []byte("custom"))
 		lease := wire.NewLease(body, nil)
 		defer lease.Release()
-		base := CodecTestMust(OneColumn(BlobCodec).Compile(columns))
+		// The wrapper hides the built-in plan's own detach.
+		plan := struct{ CompiledRow[Bytes] }{CodecTestMust(OneColumn(BlobCodec).Compile(columns))}
 		calls := 0
-		plan := cloneCountingPlan{CompiledRow: base, calls: &calls}
+		decoder := cloneCountingDecoder{RowDecoder: OneColumn(BlobCodec), calls: &calls}
 		var dst Bytes
 		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		detachRowFor[Bytes](plan, &dst)
+		detachRowFor[Bytes](plan, decoder, &dst)
 		lease.Release()
 		if calls != 1 || string(dst.OwnedBytes()) != "custom" {
 			t.Fatalf("clone calls %d, value %q", calls, dst.OwnedBytes())
@@ -85,7 +86,7 @@ func TestDetachRow(t *testing.T) {
 		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		detachRowFor(plan, &dst)
+		detachRowFor(plan, nil, &dst)
 		lease.Release()
 		if dst.BigInt().Int64() != 42 {
 			t.Fatal("varint expired")
@@ -102,7 +103,7 @@ func TestDetachRow(t *testing.T) {
 		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
 		}
-		detachRowFor(plan, &dst)
+		detachRowFor(plan, DynamicRows, &dst)
 		lease.Release()
 		value, err := dst.Get("v")
 		if err != nil {
@@ -155,7 +156,7 @@ func TestDetachNestedValues(t *testing.T) {
 	if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 		t.Fatal(err)
 	}
-	detachRowFor(plan, &dst)
+	detachRowFor(plan, nil, &dst)
 	lease.Release()
 	if !dst.Name.Valid || dst.Name.Value.String() != "name" || dst.Amount.Unscaled.BigInt().Int64() != 42 || dst.Amount.Scale != 2 ||
 		dst.Mapping[0].Key.String() != "name" || string(dst.Mapping[0].Value.OwnedBytes()) != "payload" ||
@@ -164,9 +165,9 @@ func TestDetachNestedValues(t *testing.T) {
 	}
 }
 
-type cloneCountingPlan struct {
-	CompiledRow[Bytes]
+type cloneCountingDecoder struct {
+	RowDecoder[Bytes]
 	calls *int
 }
 
-func (p cloneCountingPlan) Clone(v Bytes) Bytes { *p.calls++; return v.Clone() }
+func (d cloneCountingDecoder) Clone(v Bytes) Bytes { *d.calls++; return v.Clone() }

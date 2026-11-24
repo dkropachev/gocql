@@ -143,10 +143,11 @@ func CompileRow[R any](decoder cql.RowDecoder[R], columns cql.Columns) (cql.Comp
 
 // DetachRow makes the fields of the row at dst independent of the response
 // before its page is released. Built-in plans detach only borrowed fields and
-// keep owned buffers; other plans use their Clone.
-func DetachRow[R any](plan cql.CompiledRow[R], dst *R) {
+// keep owned buffers; other plans use the Clone of decoder, which compiled
+// plan.
+func DetachRow[R any](plan cql.CompiledRow[R], decoder cql.RowDecoder[R], dst *R) {
 	if !detachRow(plan, dst) {
-		*dst = plan.Clone(*dst)
+		*dst = decoder.Clone(*dst)
 	}
 }
 

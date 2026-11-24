@@ -172,7 +172,7 @@ func TestDynamic(t *testing.T) {
 			cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text})
 			chain := dynamicTestRowBody(t, cols, []Value{IntValue(3), CodecTestMust(TextValue("right"))})
 			paired := dynamicTestMust(PairRows(OneColumn(Int32Codec), DynamicRows).Compile(cols))
-			pair := dynamicTestMust(paired.Decode(newRowReader(cols, chain, nil)))
+			pair := dynamicTestMust(decodeRow(paired, newRowReader(cols, chain, nil)))
 			if pair.First != 3 || pair.Second.Columns().Len() != 1 {
 				t.Fatal("paired row did not retain physical subset")
 			}
@@ -190,7 +190,7 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestRowBody(t, cols, []Value{IntValue(42), CodecTestMust(TextValue("shared")), IntValue(42)})
 			lease := wire.NewLease(chain, nil)
 			defer lease.Release()
-			row := dynamicTestMust(rows.Decode(newRowReader(cols, chain, lease)))
+			row := dynamicTestMust(decodeRow(rows, newRowReader(cols, chain, lease)))
 			var wg sync.WaitGroup
 			for worker := 0; worker < 8; worker++ {
 				wg.Add(1)
@@ -221,7 +221,7 @@ func TestDynamic(t *testing.T) {
 								return
 							}
 						}
-						independent, err := rows.Decode(newRowReader(cols, chain, lease))
+						independent, err := decodeRow(rows, newRowReader(cols, chain, lease))
 						if err != nil {
 							t.Error(err)
 							return
@@ -247,7 +247,7 @@ func TestDynamic(t *testing.T) {
 			chain := dynamicTestRowBody(t, cols, values)
 			lease := wire.NewLease(chain, nil)
 			plan := CodecTestMust(DynamicRows.Compile(cols))
-			row := CodecTestMust(plan.Decode(newRowReader(cols, chain, lease)))
+			row := CodecTestMust(decodeRow(plan, newRowReader(cols, chain, lease)))
 			copyRow := row
 			if row.physical == nil || row.physical != copyRow.physical || row.physical.cells != nil {
 				t.Fatal("eager or unshared physical index")
@@ -313,7 +313,7 @@ func TestDynamic(t *testing.T) {
 			lease := wire.NewLease(chain, nil)
 			plan := dynamicTestMust(DynamicRows.Compile(cols))
 			reader := newRowReader(cols, chain, lease)
-			row, err := plan.Decode(reader)
+			row, err := decodeRow(plan, reader)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -383,17 +383,17 @@ func TestDynamic(t *testing.T) {
 			boolean := dynamicTestType(TypeBoolean)
 			badCols := NewColumns(ColumnSpec{Name: "b", Type: boolean})
 			badPlan := dynamicTestMust(DynamicRows.Compile(badCols))
-			badRow, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
+			badRow, err := decodeRow(badPlan, newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
 			if err != nil {
 				t.Fatal("valid cell framing rejected before access", err)
 			}
 			if _, err := badRow.At(0); err == nil {
 				t.Fatal("malformed scalar published on access")
 			}
-			if _, err := badPlan.Decode(newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
+			if _, err := decodeRow(badPlan, newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 2, 1}), nil)); err == nil {
 				t.Fatal("truncated physical row accepted")
 			}
-			if _, err := plan.Decode(newRowReader(badCols, chain, nil)); err == nil {
+			if _, err := decodeRow(plan, newRowReader(badCols, chain, nil)); err == nil {
 				t.Fatal("stale row metadata accepted")
 			}
 		})

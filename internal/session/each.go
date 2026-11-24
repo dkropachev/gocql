@@ -160,7 +160,7 @@ func (rt *InternalSessionRuntime) decodeEach[R any](ctx context.Context, respons
 			return cqlerr.ErrClosed
 		}
 		if fn == nil {
-			codec.DetachRow(plan, row)
+			codec.DetachRow(plan, decoder, row)
 			return errStopEach
 		}
 		if err := fn(row); err != nil {

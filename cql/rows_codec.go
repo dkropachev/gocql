@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/scylladb/gocql/v2/internal/syncx"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -33,15 +32,11 @@ type CompiledParams[P any] interface {
 	Encode(*ParamWriter, P) error
 }
 
-// CompiledRow decodes checked rows into caller destinations. Clone must recursively detach
-// all borrowed response storage; custom plans are cloned before One returns.
+// CompiledRow decodes checked rows into caller destinations. The
+// RowDecoder that compiled it detaches what it decodes (RowDecoder.Clone).
 type CompiledRow[R any] interface {
-	// Decode decodes one row.
-	Decode(*RowReader) (R, error)
 	// DecodeInto decodes one row into dst, which the driver clears first.
 	DecodeInto(*RowReader, *R) error
-	// Clone returns a copy of the row that holds no borrowed storage.
-	Clone(R) R
 }
 
 // ParamWriter writes parameters in server order. It is confined to one binding.
@@ -207,12 +202,12 @@ type inputField[P, V any] struct {
 	loc   fieldLocation
 }
 
-// Param maps a named bind marker through valueCodec from the value returned by get.
+// Param maps a named bind marker with codec from the value returned by get.
 func Param[P, V any](name string, codec Encoder[V], get func(P) V) InputField[P] {
 	return inputField[P, V]{loc: fieldLocation{name: name}, codec: codec, get: get}
 }
 
-// ParamAt maps a zero-based bind marker through valueCodec from get.
+// ParamAt maps a zero-based bind marker with codec from get.
 func ParamAt[P, V any](index int, codec Encoder[V], get func(P) V) InputField[P] {
 	return inputField[P, V]{loc: fieldLocation{index: index, positional: true}, codec: codec, get: get}
 }
@@ -365,13 +360,13 @@ type outputField[R, V any] struct {
 	resolved bool
 }
 
-// Column maps the named result column through valueCodec into the address returned by field.
+// Column maps the named result column with codec into the address returned by field.
 // The accessor must return a non-nil address within the destination and must not retain it.
 func Column[R, V any](name string, codec Decoder[V], field func(*R) *V) OutputField[R] {
 	return outputField[R, V]{loc: fieldLocation{name: name}, codec: codec, field: field}
 }
 
-// ColumnAt maps the zero-based result column through valueCodec into field.
+// ColumnAt maps the zero-based result column with codec into field.
 func ColumnAt[R, V any](index int, codec Decoder[V], field func(*R) *V) OutputField[R] {
 	return outputField[R, V]{loc: fieldLocation{index: index, positional: true}, codec: codec, field: field}
 }
@@ -426,12 +421,10 @@ type rowCodec[R any] struct {
 	reset    func(*R)
 	fields   []OutputField[R]
 	optional bool // fields without a column are skipped (struct mappings)
+	extra    bool // columns without a field are skipped (IgnoreExtraColumns)
 }
 type compiledRow[R any] struct {
-	reset func(*R)
-	// Scratch addresses are confined to Decode; accessors must not retain them.
-	// The returned R is copied before scratch is cleared and recycled.
-	scratch *syncx.Pool[*R]
+	reset   func(*R)
 	ordered []OutputField[R]
 	ops     []rowOp[R] // ordered, with built-in codecs as direct ops
 }
@@ -482,7 +475,7 @@ func (c rowCodec[R]) Clone(source R) R {
 	return dst
 }
 func (c rowCodec[R]) Compile(columns Columns) (CompiledRow[R], error) {
-	return c.compile(columns, c.optional, false)
+	return c.compile(columns, c.optional, c.extra)
 }
 
 // compileLenient compiles the previous-row plan of a conditional result,
@@ -504,7 +497,7 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow
 	if err != nil {
 		return nil, err
 	}
-	plan := compiledRow[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping)), scratch: syncx.NewPool(func() *R { return new(R) })}
+	plan := compiledRow[R]{reset: c.reset, ordered: make([]OutputField[R], len(mapping))}
 	for index, field := range mapping {
 		column, _ := columns.At(index)
 		if field < 0 {
@@ -519,18 +512,6 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow
 	}
 	plan.ops = rowOps(plan.ordered)
 	return plan, nil
-}
-func (p compiledRow[R]) Decode(reader *RowReader) (R, error) {
-	row := p.scratch.Get()
-	err := p.DecodeInto(reader, row)
-	result := *row
-	var zero R
-	*row = zero
-	p.scratch.Put(row)
-	if err != nil {
-		return zero, err
-	}
-	return result, nil
 }
 func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	if dst == nil {
@@ -558,13 +539,6 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	}
 	return nil
 }
-func (p compiledRow[R]) Clone(source R) R {
-	dst := source
-	for _, field := range p.ordered {
-		field.clone(&dst, &source)
-	}
-	return dst
-}
 
 // OneParam encodes one positional bind marker using encoder.
 func OneParam[T any](encoder Encoder[T]) ParamEncoder[T] {
@@ -591,9 +565,6 @@ func (c singleColumnRows[T]) Compile(columns Columns) (CompiledRow[T], error) {
 	return singleColumnPlan[T]{decoder: decoder}, nil
 }
 func (c singleColumnRows[T]) Clone(value T) T { return c.decoder.Clone(value) }
-func (p singleColumnPlan[T]) Decode(reader *RowReader) (T, error) {
-	return reader.ReadColumn(p.decoder)
-}
 func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
@@ -607,7 +578,6 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	}
 	return nil
 }
-func (p singleColumnPlan[T]) Clone(value T) T { return p.decoder.Clone(value) }
 
 // EmptyParamsEncoder encodes the parameters of a statement without bind
 // markers.
@@ -626,7 +596,7 @@ type compiledMappedParams[A, B any] struct {
 }
 
 // ConvertParams adapts an encoder for B to input A by converting each A to a B
-// with convert before encoding it.
+// with mapValue before encoding it.
 func ConvertParams[A, B any](codec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
 	return mappedParams[A, B]{codec: codec, mapValue: mapValue}
 }
@@ -655,8 +625,8 @@ type compiledMappedRow[A, B any] struct {
 	cloneValue func(B) B
 }
 
-// ConvertRows decodes A rows with valueCodec and converts each to a B with
-// convert; cloneValue must recursively detach borrowed data in B.
+// ConvertRows decodes A rows with codec and converts each to a B with
+// mapValue; cloneValue must recursively detach borrowed data in B.
 func ConvertRows[A, B any](codec RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) RowDecoder[B] {
 	return mappedRows[A, B]{codec: codec, mapValue: mapValue, cloneValue: cloneValue}
 }
@@ -678,28 +648,19 @@ func (c mappedRows[A, B]) Compile(columns Columns) (CompiledRow[B], error) {
 	}
 	return compiledMappedRow[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
-func (p compiledMappedRow[A, B]) Decode(reader *RowReader) (B, error) {
-	v, err := p.plan.Decode(reader)
-	if err != nil {
-		var zero B
-		return zero, err
-	}
-	return p.mapValue(v), nil
-}
 func (p compiledMappedRow[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	if dst == nil {
 		return typeValidation("destination", "nil row destination")
 	}
 	var zero B
 	*dst = zero
-	value, err := p.plan.Decode(reader)
-	if err != nil {
+	var value A
+	if err := p.plan.DecodeInto(reader, &value); err != nil {
 		return err
 	}
 	*dst = p.mapValue(value) // Explicit value-returning application mapping.
 	return nil
 }
-func (p compiledMappedRow[A, B]) Clone(value B) B { return p.cloneValue(value) }
 
 func splitColumns(columns Columns, split int) (Columns, Columns, error) {
 	if split < 0 || split > columns.Len() {
@@ -845,6 +806,7 @@ type pairedRows[A, B any] struct {
 type compiledPairedRow[A, B any] struct {
 	a           CompiledRow[A]
 	b           CompiledRow[B]
+	decoders    pairedRows[A, B] // detach a and b when they are not built in
 	left, right Columns
 }
 
@@ -875,15 +837,7 @@ func (c pairedRows[A, B]) Compile(columns Columns) (CompiledRow[Pair[A, B]], err
 	if err != nil {
 		return nil, rebaseColumnError(err, left.Len())
 	}
-	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b}, nil
-}
-func (p compiledPairedRow[A, B]) Decode(r *RowReader) (Pair[A, B], error) {
-	var result Pair[A, B]
-	err := p.DecodeInto(r, &result)
-	if err != nil {
-		return Pair[A, B]{}, err
-	}
-	return result, nil
+	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b, decoders: c}, nil
 }
 func (p compiledPairedRow[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error {
 	if dst == nil {
@@ -916,9 +870,6 @@ func (p compiledPairedRow[A, B]) DecodeInto(r *RowReader, dst *Pair[A, B]) error
 	}
 	completed = true
 	return nil
-}
-func (p compiledPairedRow[A, B]) Clone(value Pair[A, B]) Pair[A, B] {
-	return Pair[A, B]{First: p.a.Clone(value.First), Second: p.b.Clone(value.Second)}
 }
 
 // Composite codecs can bind nested field plans once with the enclosing plan.

@@ -219,21 +219,17 @@ func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]Entry[K, V]
 func (c streamSequenceCodec[T]) Reset(dst *[]T) {
 	if dst != nil {
 		for i := range *dst {
-			resetStreamDeclaration(c.element, &(*dst)[i])
+			resetStream(c.element, &(*dst)[i])
 		}
 		*dst = (*dst)[:0]
 	}
 }
-func (c streamSequenceCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.element) }
 func (c streamMapCodec[K, V]) Reset(dst *[]Entry[K, V]) {
 	if dst != nil {
 		for i := range *dst {
-			resetStreamDeclaration(c.key, &(*dst)[i].Key)
-			resetStreamDeclaration(c.value, &(*dst)[i].Value)
+			resetStream(c.key, &(*dst)[i].Key)
+			resetStream(c.value, &(*dst)[i].Value)
 		}
 		*dst = (*dst)[:0]
 	}
-}
-func (c streamMapCodec[K, V]) streamCanReset() bool {
-	return streamDeclarationCanReset(c.key) && streamDeclarationCanReset(c.value)
 }

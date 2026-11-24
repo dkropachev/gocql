@@ -16,7 +16,7 @@ func TestParseFieldTag(t *testing.T) {
 		want             FieldTag
 		ok, fails        bool
 	}{
-		{name: "untagged", field: "UserID", exported: true, want: FieldTag{Column: "userid"}, ok: true},
+		{name: "untagged", field: "UserID", exported: true, want: FieldTag{Column: "user_id"}, ok: true},
 		{name: "renamed", field: "A", tag: `cql:"user_id"`, exported: true, want: FieldTag{Column: "user_id"}, ok: true},
 		{name: "codec only", field: "A", tag: `cql:",codec=Int32Codec"`, exported: true, want: FieldTag{Column: "a", Codec: "Int32Codec"}, ok: true},
 		{name: "codec expression", field: "A", tag: `cql:"a,codec=MapCodec(StringCodec, Int64Codec),stream=S"`, exported: true,
@@ -36,6 +36,26 @@ func TestParseFieldTag(t *testing.T) {
 				t.Fatalf("got %+v, %v, %v", got, ok, err)
 			}
 		})
+	}
+}
+
+func TestSnakeCase(t *testing.T) {
+	for name, want := range map[string]string{
+		"A":             "a",
+		"ID":            "id",
+		"Name":          "name",
+		"CreatedAt":     "created_at",
+		"UserID":        "user_id",
+		"HTTPServer":    "http_server",
+		"UserIDs":       "user_i_ds", // as gocqlx; tag such a field
+		"Field2Name":    "field2_name",
+		"Already_Snake": "already_snake",
+		"lower":         "lower",
+		"ÉtéÀ":          "été_à",
+	} {
+		if got := SnakeCase(name); got != want {
+			t.Errorf("SnakeCase(%q) = %q, want %q", name, got, want)
+		}
 	}
 }
 

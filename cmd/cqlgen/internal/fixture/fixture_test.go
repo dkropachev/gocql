@@ -49,13 +49,13 @@ func columns(t *testing.T) cql.Columns {
 		spec("tiny", cql.TypeTinyInt), spec("small", cql.TypeSmallInt), spec("int", cql.TypeInt),
 		spec("big_value", cql.TypeBigInt), spec("float", cql.TypeFloat), spec("double", cql.TypeDouble),
 		spec("ascii", cql.TypeASCII), spec("blob", cql.TypeBlob), spec("bytes", cql.TypeBlob),
-		spec("timeid", cql.TypeTimeUUID), spec("addr", cql.TypeInet), spec("hits", cql.TypeCounter),
+		spec("time_id", cql.TypeTimeUUID), spec("addr", cql.TypeInet), spec("hits", cql.TypeCounter),
 		spec("varint", cql.TypeVarint), spec("decimal", cql.TypeDecimal), spec("day", cql.TypeDate),
 		spec("clock", cql.TypeTime), spec("at", cql.TypeTimestamp), spec("span", cql.TypeDuration),
-		spec("maybeint", cql.TypeInt), spec("maybe_text", cql.TypeText),
+		spec("maybe_int", cql.TypeInt), spec("maybe_text", cql.TypeText),
 		spec("origin", cql.TypeBigInt), spec("corner", cql.TypeBigInt),
 		collection("names", cql.ListType, cql.TypeText), collection("scores", cql.SetType, cql.TypeInt),
-		cql.ColumnSpec{Name: "attrs", Type: mapType(t)}, spec("createdat", cql.TypeTimestamp),
+		cql.ColumnSpec{Name: "attrs", Type: mapType(t)}, spec("created_at", cql.TypeTimestamp),
 	)
 }
 
@@ -110,8 +110,8 @@ func decode(t *testing.T, cols cql.Columns, rows cql.RowDecoder[Fixture], chain 
 		t.Fatal(err)
 	}
 	reader := codec.NewRowReader(cols, chain, wire.NewLease(chain, nil))
-	row, err := plan.Decode(reader)
-	if err != nil {
+	var row Fixture
+	if err := plan.DecodeInto(reader, &row); err != nil {
 		t.Fatal(err)
 	}
 	if err := codec.FinishRowReader(reader); err != nil {
@@ -159,9 +159,9 @@ type (
 )
 
 // reflectParams is Fixture's parameter mapping built by reflection.
-func reflectParams(t *testing.T, opts ...cql.StructOption[reflectedFixture]) cql.ParamEncoder[Fixture] {
+func reflectParams(t *testing.T, opts ...cql.StructOption) cql.ParamEncoder[Fixture] {
 	t.Helper()
-	params, err := cql.ParamsOf(opts...)
+	params, err := cql.ParamsOf[reflectedFixture](opts...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,9 +169,9 @@ func reflectParams(t *testing.T, opts ...cql.StructOption[reflectedFixture]) cql
 }
 
 // reflectRows is Fixture's row mapping built by reflection.
-func reflectRows(t *testing.T, opts ...cql.StructOption[reflectedFixture]) cql.RowDecoder[Fixture] {
+func reflectRows(t *testing.T, opts ...cql.StructOption) cql.RowDecoder[Fixture] {
 	t.Helper()
-	rows, err := cql.RowOf(opts...)
+	rows, err := cql.RowOf[reflectedFixture](opts...)
 	if err != nil {
 		t.Fatal(err)
 	}

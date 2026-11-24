@@ -55,9 +55,9 @@ type smKey struct {
 	ID     cql.UUID `cql:"id"`
 }
 
-const smColumns = "bucket, id, name, ascii_name, flag, tiny, small, big, float, double, blob, addr, timeid, day, clock, span, maybe, tags, scores, attrs, createdat, updatedat"
+const smColumns = "bucket, id, name, ascii_name, flag, tiny, small, big, float, double, blob, addr, time_id, day, clock, span, maybe, tags, scores, attrs, created_at, updated_at"
 
-var smAttrs = cql.WithCodec[smRecord](cql.MapCodec(cql.StringCodec, cql.Int64Codec))
+var smAttrs = cql.WithCodec(cql.MapCodec(cql.StringCodec, cql.Int64Codec))
 
 type smFixture struct {
 	session *gocql.Session
@@ -74,9 +74,9 @@ func newSMFixture(t *testing.T) (context.Context, smFixture) {
 	if err := v2CreateTable(ctx, session, "CREATE TABLE IF NOT EXISTS "+table+` (
 		bucket int, id uuid, name text, ascii_name ascii, flag boolean, tiny tinyint,
 		small smallint, big bigint, float float, double double, blob blob, addr inet,
-		timeid timeuuid, day date, clock time, span duration, maybe int,
+		time_id timeuuid, day date, clock time, span duration, maybe int,
 		tags list<text>, scores set<int>, attrs map<text, bigint>,
-		createdat timestamp, updatedat timestamp,
+		created_at timestamp, updated_at timestamp,
 		PRIMARY KEY (bucket, id))`); err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func (f smFixture) insert(t *testing.T, ctx context.Context) *gocql.Prepared[smR
 	insert, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.EmptyRow]{
 		Kind:   cql.OrdinaryStatement,
 		CQL:    "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
-		Params: cql.MustParamsOf(smAttrs),
+		Params: cql.MustParamsOf[smRecord](smAttrs),
 	})
 	if err != nil {
 		t.Fatal(err)

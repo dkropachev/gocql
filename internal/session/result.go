@@ -65,7 +65,7 @@ func newPageWithPlans[R any](response *transport.InternalResponsePage, decoder c
 		return nil, &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
 	page := new(Page[R])
-	page.initResponse(response, plan, release)
+	page.initResponse(response, decoder, plan, release)
 	return page, nil
 }
 
@@ -80,11 +80,12 @@ func newPageInto[R any](page *Page[R], response *transport.InternalResponsePage,
 		response.Owner.Release()
 		return &cql.ProtocolError{Stage: "rows", Err: fmt.Errorf("negative row count")}
 	}
-	page.initResponse(response, plan, nil)
+	page.initResponse(response, decoder, plan, nil)
 	return nil
 }
 
-func (p *Page[R]) initResponse(response *transport.InternalResponsePage, plan cql.CompiledRow[R], release func()) {
+func (p *Page[R]) initResponse(response *transport.InternalResponsePage, decoder cql.RowDecoder[R], plan cql.CompiledRow[R], release func()) {
+	p.privateStorage.decoder = decoder
 	p.privateStorage.response = response
 	p.privateStorage.plan = plan
 	p.privateStorage.rowDest = rowDestinationOf(plan)
@@ -252,7 +253,7 @@ func (p *Page[R]) Clone() (R, error) {
 		var zero R
 		return zero, cqlerr.ErrNoCurrentRow
 	}
-	return p.privateStorage.plan.Clone(*p.privateStorage.destination), nil
+	return p.privateStorage.decoder.Clone(*p.privateStorage.destination), nil
 }
 func (p *Page[R]) State() cql.PageState {
 	if p == nil || p.privateStorage.response == nil {
@@ -743,6 +744,7 @@ type pageLeaseStorage struct {
 type pageStorage[R any] struct {
 	ctx            context.Context
 	plan           cql.CompiledRow[R]
+	decoder        cql.RowDecoder[R] // compiled plan; detaches its rows
 	err            error
 	pendingRelease func()
 	destination    *R

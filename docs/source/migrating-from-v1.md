@@ -204,6 +204,17 @@ insertUser, err := session.Prepare(ctx, cql.Statement[User, cql.EmptyRow]{
 })
 ```
 
+An untagged field maps the column named by its name in snake_case, as gocqlx
+maps it: `CreatedAt` is `created_at` and `UserID` is `user_id`. Tag a field
+whose column snake_case does not give, such as `UserIDs` (`user_i_ds`) or a
+column named in one word (`createdat`).
+
+| gocqlx | v2 |
+| --- | --- |
+| a `time.Time` field | the same; `cql.TimestampTimeCodec` maps it by default |
+| a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))` |
+| `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraColumns())`; without it every result column needs a field |
+
 `cql.Params(cql.Param(...))` and `cql.Row(cql.Column(...))` map fields
 explicitly. See [data types](data-types.md).
 

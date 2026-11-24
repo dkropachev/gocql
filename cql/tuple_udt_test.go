@@ -71,7 +71,7 @@ func TestTupleUDT(t *testing.T) {
 				go func() {
 					defer group.Done()
 					for range 30 {
-						got, err := plan.Decode(newRowReader(columns, chain, nil))
+						got, err := decodeRow(plan, newRowReader(columns, chain, nil))
 						if err != nil || got != 9 {
 							t.Errorf("got=%v err=%v", got, err)
 							return
@@ -142,7 +142,7 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			row, err := plan.Decode(newRowReader(columns, chain, nil))
+			row, err := decodeRow(plan, newRowReader(columns, chain, nil))
 			if err != nil || row.First.ID != 7 || row.Second != 9 {
 				t.Fatalf("physical tuple row=%+v err=%v", row, err)
 			}

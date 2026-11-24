@@ -38,7 +38,7 @@ func BenchmarkDynamic(b *testing.B) {
 					}
 					chain := CodecTestMust(wire.NewChain(parts...))
 					plan := CodecTestMust(DynamicRows.Compile(columns))
-					row := CodecTestMust(plan.Decode(newRowReader(columns, chain, nil)))
+					row := CodecTestMust(decodeRow(plan, newRowReader(columns, chain, nil)))
 					CodecTestMust(row.At(n - 1))
 					b.ReportAllocs()
 					b.ResetTimer()

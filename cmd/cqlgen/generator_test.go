@@ -126,7 +126,7 @@ type T struct {
 			}
 			for _, want := range []string{
 				`cql.Param("id", cql.Int64Codec, func(v T) int64 { return v.ID })`,
-				`cql.Column("createdat", cql.TimestampCodec, func(v *T) *cql.Timestamp { return &v.audit.CreatedAt })`,
+				`cql.Column("created_at", cql.TimestampCodec, func(v *T) *cql.Timestamp { return &v.audit.CreatedAt })`,
 				`cql.Column("months", cql.Int32Codec, func(v *T) *int32 { return &v.Duration.Months })`,
 				`cql.StreamColumn("nanoseconds", cql.StreamInt64, func(v *T) *int64 { return &v.Duration.Nanoseconds })`,
 			} {

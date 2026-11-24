@@ -53,7 +53,7 @@ func BenchmarkPaging(b *testing.B) {
 				p := func() *Page[row] {
 					opaqueStorageValuexx := new(Page[row])
 					response := &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner}}
-					opaqueStorageValuexx.initResponse(response, codecTestMust(decoder.Compile(columns)), nil)
+					opaqueStorageValuexx.initResponse(response, decoder, codecTestMust(decoder.Compile(columns)), nil)
 					return opaqueStorageValuexx
 				}()
 				cursor := PageData(p).InternalCursor

@@ -23,6 +23,7 @@ import (
 // by reflection.
 type (
 	reflectedBuffered Buffered
+	reflectedBound    Bound
 	reflectedStreamed Streamed
 )
 
@@ -75,6 +76,9 @@ func fill(v reflect.Value) {
 		return
 	case reflect.TypeFor[cql.TimeUUID]():
 		v.Set(reflect.ValueOf(cql.TimeUUIDFromTime(time.Unix(1, 0))))
+		return
+	case reflect.TypeFor[time.Time]():
+		v.Set(reflect.ValueOf(time.UnixMilli(1500).UTC()))
 		return
 	}
 	switch v.Kind() {
@@ -162,7 +166,8 @@ func decode[T any](rows cql.RowDecoder[T], cols cql.Columns, chain wire.Chain) (
 		return zero, err
 	}
 	reader := codec.NewRowReader(cols, chain, wire.NewLease(chain, nil))
-	row, err := plan.Decode(reader)
+	var row T
+	err = plan.DecodeInto(reader, &row)
 	if err == nil {
 		err = codec.FinishRowReader(reader)
 	}
@@ -238,6 +243,41 @@ func TestGeneratedMatchesReflection(t *testing.T) {
 		}
 		if accepted == 0 {
 			t.Errorf("%s %s: no column type round-trips", f.column, f.typ)
+		}
+	}
+
+	// Bound's fields only bind parameters: its generated mapping has no
+	// Columns, and RowOf rejects it.
+	if f := (Bound{}).CQLFields(); f.Params == nil || f.Columns != nil {
+		t.Fatal("generated Bound mapping is not parameters only")
+	}
+	if _, err := cql.RowOf[Bound](); err == nil {
+		t.Error("RowOf accepted a BindValue field")
+	}
+	genBound, refBound := cql.MustParamsOf[Bound](), cql.MustParamsOf[reflectedBound]()
+	var bound Bound
+	fill(reflect.ValueOf(&bound).Elem())
+	for _, f := range fieldsOf[Bound](t) {
+		accepted := 0
+		for _, typ := range candidateTypes(t, f.typ) {
+			cols := cql.NewColumns(cql.ColumnSpec{Name: f.column, Type: typ})
+			where := fmt.Sprintf("%s %s as %s", f.column, f.typ, typ)
+			genChain, genErr := encode(genBound, cols, bound)
+			refChain, refErr := encode(refBound, cols, reflectedBound(bound))
+			if !sameError(genErr, refErr) {
+				t.Errorf("%s: encode: generated %v, reflected %v", where, genErr, refErr)
+				continue
+			}
+			if genErr != nil {
+				continue
+			}
+			accepted++
+			if gen, ref := chainBytes(t, genChain), chainBytes(t, refChain); !bytes.Equal(gen, ref) {
+				t.Errorf("%s: encodings differ:\ngenerated %x\nreflected %x", where, gen, ref)
+			}
+		}
+		if accepted == 0 {
+			t.Errorf("%s %s: no column type encodes", f.column, f.typ)
 		}
 	}
 

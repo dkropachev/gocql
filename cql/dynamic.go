@@ -1303,7 +1303,6 @@ func (dynamicRowsCodec) Compile(columns Columns) (CompiledRow[DynamicRow], error
 	}
 	return p, nil
 }
-func (p dynamicRowsPlan) Clone(r DynamicRow) DynamicRow { return r.Clone() }
 func (p dynamicRowsPlan) DecodeInto(r *RowReader, dst *DynamicRow) error {
 	if dst == nil {
 		return typeValidation("destination", "nil dynamic row destination")
@@ -1332,14 +1331,6 @@ func (p dynamicRowsPlan) DecodeInto(r *RowReader, dst *DynamicRow) error {
 	dst.physical = &dynamicRowIndex{}
 	dst.columns, dst.lookup, dst.body, dst.allowMissing = p.columns, p.lookup, bytesView(body, r.lease), r.allowMissing
 	return nil
-}
-func (p dynamicRowsPlan) Decode(r *RowReader) (DynamicRow, error) {
-	var result DynamicRow
-	err := p.DecodeInto(r, &result)
-	if err != nil {
-		return DynamicRow{}, err
-	}
-	return result, nil
 }
 
 type checkedDynamicDecoder struct {

@@ -102,14 +102,14 @@ func TestGoMapStructMapping(t *testing.T) {
 	}
 	plan := CodecTestMust(rows.Compile(columns))
 	detached := got
-	detachRowFor(plan, &detached)
+	detachRowFor(plan, nil, &detached)
 	if !reflect.DeepEqual(detached, want) {
 		t.Fatalf("detached %+v", detached)
 	}
 	// A map with no built-in pair, such as one of borrowed views, still needs
 	// a codec.
 	type viewRow struct{ Views map[string]Text }
-	if _, err := reflectRow[viewRow](); err == nil {
+	if _, err := RowOf[viewRow](); err == nil {
 		t.Fatal("reflection mapped a map of views")
 	}
 	found := false

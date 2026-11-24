@@ -143,7 +143,12 @@ func FuzzV2ExclusiveIncrementalFraming(f *testing.F) {
 		if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 			return
 		}
-		plan, err := cql.StreamRowInto(func(*cql.EmptyRow) {}).Compile(response.InternalColumns)
+		var skips []cql.StreamOutputField[cql.EmptyRow]
+		for i := range response.InternalColumns.Len() {
+			column, _ := response.InternalColumns.At(i)
+			skips = append(skips, cql.StreamIgnoreColumn[cql.EmptyRow](column.Name))
+		}
+		plan, err := cql.StreamRowInto(nil, skips...).Compile(response.InternalColumns)
 		if err != nil {
 			return
 		}

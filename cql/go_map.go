@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"reflect"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/structmap"
@@ -300,7 +301,8 @@ type mapElement[T any] struct {
 
 // goMapBuiltins returns map[K]V for every pair of built-in codecs that decode
 // into owned storage, with the comparable ones as keys. CQL allows neither a
-// counter in a collection nor a duration as a key.
+// counter in a collection nor a duration as a key, and time.Time is a value
+// only: its == compares the location and monotonic reading too.
 var goMapBuiltins = sync.OnceValue(func() []goMapBuiltin {
 	var out []goMapBuiltin
 	keys(&out, mapElement[bool]{BoolCodec, "bool", "BoolCodec"})
@@ -337,6 +339,7 @@ func keys[K comparable](out *[]goMapBuiltin, key mapElement[K]) {
 	pair(out, key, mapElement[TimeOfDay]{TimeCodec, "cql.TimeOfDay", "TimeCodec"})
 	pair(out, key, mapElement[Timestamp]{TimestampCodec, "cql.Timestamp", "TimestampCodec"})
 	pair(out, key, mapElement[Duration]{DurationCodec, "cql.Duration", "DurationCodec"})
+	pair(out, key, mapElement[time.Time]{TimestampTimeCodec, "time.Time", "TimestampTimeCodec"})
 }
 
 func pair[K comparable, V any](out *[]goMapBuiltin, key mapElement[K], value mapElement[V]) {

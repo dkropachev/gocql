@@ -63,7 +63,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 								b.Fatal(err)
 							}
 						} else {
-							value, err := plan.Decode(&reader)
+							value, err := decodeRow(plan, &reader)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -243,7 +243,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 									b.Fatal(e)
 								}
 							} else {
-								value, e := plan.Decode(&reader)
+								value, e := decodeRow(plan, &reader)
 								if e != nil {
 									b.Fatal(e)
 								}
@@ -269,7 +269,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			_, err := plan.Decode(newRowReader(columns, chain, nil))
+			_, err := decodeRow(plan, newRowReader(columns, chain, nil))
 			if err != nil {
 				b.Fatal(err)
 			}

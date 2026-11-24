@@ -5,12 +5,12 @@ package cql
 
 // DetachRow makes decoded fields independent of the response before its page
 // is released. Built-in plans preserve owned destination buffers and detach
-// only borrowed fields. Custom plans use their recursive Clone contract.
-func detachRowFor[R any](plan CompiledRow[R], dst *R) {
+// only borrowed fields. Other plans use their decoder's recursive Clone.
+func detachRowFor[R any](plan CompiledRow[R], decoder RowDecoder[R], dst *R) {
 	if p, ok := plan.(interface{ detachRow(*R) }); ok {
 		p.detachRow(dst)
 	} else {
-		*dst = plan.Clone(*dst)
+		*dst = decoder.Clone(*dst)
 	}
 }
 
@@ -34,8 +34,8 @@ func (f ignoredField[R]) detachField(*R)       {}
 func (p singleColumnPlan[T]) detachRow(dst *T) { detachValue(p.decoder, dst) }
 
 func (p compiledPairedRow[A, B]) detachRow(dst *Pair[A, B]) {
-	detachRowFor(p.a, &dst.First)
-	detachRowFor(p.b, &dst.Second)
+	detachRowFor(p.a, p.decoders.a, &dst.First)
+	detachRowFor(p.b, p.decoders.b, &dst.Second)
 }
 
 func (c scalarCodec[T]) detachValue(dst *T) {
@@ -81,7 +81,7 @@ func (c mapDecoder[K, V]) detachValue(dst *[]Entry[K, V]) {
 	}
 }
 
-func (c recordDecoder[T]) detachValue(dst *T) { detachRowFor(c.plan, dst) }
+func (c recordDecoder[T]) detachValue(dst *T) { detachRowFor(c.plan, c.codec, dst) }
 
 // detachRowAt is detachRow for a destination the engine passes as any. The
 // engine passes the *R of the plan's own CompiledRow[R], so the assertion

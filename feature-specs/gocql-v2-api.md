@@ -95,9 +95,7 @@ type RowDecoder[R any] interface {
     Clone(R) R
 }
 type CompiledRow[R any] interface {
-    Decode(*RowReader) (R, error)
     DecodeInto(*RowReader, *R) error
-    Clone(R) R
 }
 ```
 
@@ -117,11 +115,11 @@ state, text and framing validation still runs on every value. Standalone public
 encode/decode calls validate their supplied descriptor on each call; arbitrary
 custom codec work is accounted for separately.
 
-CompiledRow.DecodeInto is required for built-in and custom row plans. It fills a
-non-nil caller-supplied destination using the checked metadata without retaining
-the destination in the shared plan. It replaces the previous value, including
-zeroing unmapped Go fields; custom plans must honor the same rule. Decode is
-the value-returning convenience over the same decoding implementation. Built-in
+CompiledRow.DecodeInto is the only method of a row plan. It fills a non-nil
+caller-supplied destination using the checked metadata without retaining the
+destination in the shared plan. Built-in plans replace the previous value,
+including zeroing unmapped Go fields; the driver clears the destination to the
+zero R before it calls a custom plan, which then writes the row's fields. Built-in
 Row field plans decode directly into destination fields: implementing DecodeInto
 as Decode followed by assignment of an entire temporary R is not sufficient.
 Compositions propagate destination fields to child plans where their semantics
@@ -135,8 +133,8 @@ RowDecoder.Clone is required independently of Compile: it recursively detaches
 the logical Go value using its declared field codecs, without needing actual
 server metadata, a prior successful plan, or retained decode state. This makes
 TupleDecoder/UDTDecoder.Clone correct after standalone DecodeValue as well as
-normal row execution. CompiledRow.Clone remains available for an already compiled
-plan and must provide the same ownership guarantee. Row, OneColumn, PairRows,
+normal row execution. The driver detaches a custom plan's rows with the Clone
+of the RowDecoder that compiled it; a plan has no Clone of its own. Row, OneColumn, PairRows,
 ConvertRows, CASRows, dynamic.Rows and every custom RowDecoder implement the
 schema-independent method; custom decoders must supply explicit clone logic.
 Caching the first successful plan to implement Clone or panicking because no
@@ -278,6 +276,7 @@ func Params[P any](fields ...InputField[P]) ParamEncoder[P]
 func Column[R, V any](name string, codec Decoder[V], field func(*R) *V) OutputField[R]
 func ColumnAt[R, V any](index int, codec Decoder[V], field func(*R) *V) OutputField[R]
 func IgnoreColumn[R any](name string) OutputField[R]
+func StreamIgnoreColumn[R any](name string) StreamOutputField[R]
 func Row[R any](fields ...OutputField[R]) RowDecoder[R]
 func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
 func OneParam[T any](Encoder[T]) ParamEncoder[T]
@@ -291,21 +290,32 @@ var EmptyRowDecoder RowDecoder[EmptyRow]
 
 // Struct mapping.
 type StructFields[P any] struct { Params []InputField[P]; Columns []OutputField[P] }
-type StructOption[P any] /* opaque */
-func ParamsOf[P any](...StructOption[P]) (ParamEncoder[P], error)
-func MustParamsOf[P any](...StructOption[P]) ParamEncoder[P]
-func RowOf[R any](...StructOption[R]) (RowDecoder[R], error)
-func MustRowOf[R any](...StructOption[R]) RowDecoder[R]
-func WithCodec[P, V any](Codec[V]) StructOption[P]
-func ReuseBuffers[P any]() StructOption[P]
+type StructOption /* opaque */
+func ParamsOf[P any](...StructOption) (ParamEncoder[P], error)
+func MustParamsOf[P any](...StructOption) ParamEncoder[P]
+func RowOf[R any](...StructOption) (RowDecoder[R], error)
+func MustRowOf[R any](...StructOption) RowDecoder[R]
+func UDTCodecOf[T any](UDTOptions, ...StructOption) (Codec[T], error)
+func MustUDTCodecOf[T any](UDTOptions, ...StructOption) Codec[T]
+func WithCodec[V any](Codec[V]) StructOption
+func WithEncoder[V any](Encoder[V]) StructOption
+func ReuseBuffers() StructOption
+func IgnoreExtraColumns() StructOption
 ```
 
 `RowInto` calls its reset callback before decoding each row; the callback
 clears application state and may keep owned slices for reuse. `ParamsOf` and
-`RowOf` map exported fields by column name: the `cql:"name"` tag or the
-lowercased field name, `cql:"-"` to skip, `cql:"name,codec=..."` to pick a
-built-in codec. `ParamsOf` skips fields without a matching marker but requires
-a field for every marker; `RowOf` leaves fields of unselected columns zero.
+`RowOf` map exported fields by column name: the `cql:"name"` tag or the field
+name in snake_case as gocqlx maps it (`CreatedAt` is `created_at`, `UserID`
+`user_id`), `cql:"-"` to skip, `cql:"name,codec=..."` to pick a built-in
+codec. `ParamsOf` skips fields without a matching marker but requires a field
+for every marker; `RowOf` leaves fields of unselected columns zero and
+requires a field for every column unless given `IgnoreExtraColumns`. A
+`time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
+parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
+gives. `UDTCodecOf` maps a UDT's fields to struct T the same way. Options are
+not generic, so `WithCodec(c)` infers V from c; a constructor rejects an
+option it does not apply with a ValidationError.
 
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a
@@ -359,6 +369,7 @@ var CounterCodec Codec[Counter]
 var DateCodec Codec[Date]
 var TimeCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
+var TimestampTimeCodec Codec[time.Time] // UTC on decode; millisecond instant on encode
 var DurationCodec Codec[Duration]
 var UUIDCodec Codec[UUID]
 var TimeUUIDCodec Codec[TimeUUID]
@@ -475,8 +486,10 @@ func VectorEncoder[T any](Encoder[T]) Encoder[[]T]
 func VectorDecoder[T any](Decoder[T]) Decoder[[]T]
 func TupleEncoder[T any](ParamEncoder[T]) Encoder[T]
 func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
+func TupleCodec[T any](ParamEncoder[T], RowDecoder[T]) Codec[T]
 type UDTOptions struct {
-    Keyspace, Name string // required expected UDT identity, exact metadata names
+    Keyspace string // empty matches the UDT in any keyspace
+    Name     string // required, exact metadata name
     AllowExtraDatabaseFields, AllowMissingFields bool
 }
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
@@ -522,9 +535,10 @@ partial slice. Dynamic traversal does not imply typed lazy collection decoders.
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
 protocol permits; a nonnullable destination rejects them. UDT matching defaults
-to exact field names and full identity/type validation. UDTOptions.Keyspace/Name
-must supply the expected identity; missing names fail CheckType/Compile with a
-validation error, and equal layouts under a different identity are incompatible.
+to exact field names and full identity/type validation. UDTOptions.Name must
+supply the expected name, and a non-empty Keyspace the expected keyspace; a
+missing name fails CheckType/Compile with a validation error, and equal layouts
+under a different identity are incompatible.
 Explicit options permit extra database fields (encode explicit null; decode
 checked skips) or application fields absent from the database (encode ignores
 those fields; decode sets explicit zero defaults only when allowed).
@@ -910,7 +924,7 @@ remain valid until the **next** NextInto call or Close, whichever comes first. R
 current physical page before advancing; its owner has stable identity independent
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
-the row the last NextInto decoded, using CompiledRow.Clone. Copying a Go row struct does not detach it.
+the row the last NextInto decoded, using RowDecoder.Clone. Copying a Go row struct does not detach it.
 Access through a released view reports cqlerr.ErrReleased where a method returns error;
 methods without error results panic with cqlerr.ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
@@ -1066,11 +1080,12 @@ type StreamInfo struct {
 }
 
 // package stream
-type Statement[P, R any] struct {
-    CQL string
+type Statement[P, R any] struct { // fields in memory-layout order
     Params cql.ParamEncoder[P] // nil when P is cql.EmptyParams
     Rows RowDecoder[R]         // must not be nil
+    CQL string
     Kind cql.StatementKind
+    Idempotent bool
 }
 type RowDecoder[R any] interface {
     Compile(Columns) (CompiledStreamRow[R], error)
@@ -1081,9 +1096,8 @@ type CompiledStreamRow[R any] interface {
 }
 type Decoder[T any] interface {
     Compile(DataType) (CompiledStreamValue[T], error)
+    Reset(*T) // no server DataType is needed
 }
-// Optional declaration capability; no server DataType is needed.
-type Resetter[T any] interface { Reset(*T) }
 type CompiledStreamValue[T any] interface {
     Reset(*T)
     DecodeInto(*ValueReader, *T) error
@@ -1091,11 +1105,12 @@ type CompiledStreamValue[T any] interface {
 type OutputField[R any] struct { /* immutable checked field declaration */ }
 func Column[R, V any](string, Decoder[V], func(*R) *V) OutputField[R]
 func ColumnAt[R, V any](int, Decoder[V], func(*R) *V) OutputField[R]
-func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R]
+func IgnoreColumn[R any](string) OutputField[R]
+func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] // reset may be nil
 func OneColumn[T any](Decoder[T]) RowDecoder[T]
-func RowOf[R any](...cql.StructOption[R]) (RowDecoder[R], error)
-func MustRowOf[R any](...cql.StructOption[R]) RowDecoder[R]
-func WithCodec[P, V any](Decoder[V]) cql.StructOption[P]
+func RowOf[R any](...cql.StructOption) (RowDecoder[R], error)
+func MustRowOf[R any](...cql.StructOption) RowDecoder[R]
+func WithCodec[V any](Decoder[V]) cql.StructOption
 
 // Readers are scoped mutable limited readers, never retained-byte views.
 type RowReader struct { /* checked count and column cursor */ }
@@ -1203,32 +1218,19 @@ construction returns normally through the query Run method's error result.
 Reset is called on a non-nil destination before each active NextInto attempt;
 terminal/exhausted calls return false without touching it. Built-in value Reset
 clears logical values while preserving byte/element slice capacity and nested
-storage. stream.RowInto requires a non-nil application reset callback for unmapped
-Go state, then resets mapped fields through child plans. The callback must
+storage. stream.RowInto calls its application reset callback, when not nil, for
+unmapped Go state, then resets mapped fields through child plans. Like RowInto,
+it requires a field for every column and a column for every field;
+IgnoreColumn skips a column. The callback must
 preserve mapped storage. A custom plan has the same explicit responsibility;
 there is no promise to zero an arbitrary R while preserving its unknown storage.
 An application UDT field absent from database metadata has no DataType with
-which to compile its value plan. stream.Resetter[T]
-is an optional capability on decoder declarations (including row declarations),
-providing metadata-independent Reset while preserving caller-seeded byte and
-nested storage. Built-in scalar, text/blob/numeric payload, nullable/empty,
-collection/map/vector, tuple/UDT, encoded-value and row compositions provide this
-reset behavior recursively. For compositions with custom descendants, the
-required declaration reset capability must be available for every absent
-application mapping; it cannot be inferred from the custom Go representation.
-
-With UDTOptions.AllowMissingFields, compilation permits an application field
-missing from database metadata only when its decoder declaration supports
-stream.Resetter for that destination. Missing custom-field capability produces a
-clear ValidationError during Compile, before row decoding; implementing
-stream.Resetter allows that custom field to participate. The declaration Reset
-clears its logical value while preserving seeded storage, just like built-in
-reset. This also applies recursively to missing fields inside compositions.
-Mapped custom fields continue to use their successfully compiled
-stream.CompiledStreamValue.Reset and need not implement declaration stream.Resetter.
-Custom row declarations used as tuple/UDT compositions follow the same rule
-when metadata-independent reset is required. No synthetic DataType, reflection,
-whole-row temporary or zero-assignment of arbitrary V supplies a substitute.
+which to compile its value plan. stream.Decoder.Reset resets it without one,
+preserving caller-seeded byte and nested storage; every decoder has it, so
+UDTOptions.AllowMissingFields accepts any absent field. Mapped fields use
+their compiled stream.CompiledStreamValue.Reset. A custom row declaration used
+as a tuple/UDT composition resets through its own Reset(*R) method, when it
+has one, or is zeroed.
 stream.RowInto's application callback retains responsibility for unmapped Go state
 and must preserve mapped storage; this optional capability does not shift that
 responsibility or relax the complete streaming type-support requirements.
@@ -2097,8 +2099,10 @@ Recognized built-in tags take precedence over type overrides; overrides replace
 untagged and custom-expression defaults of the matching Go type. Unaffected
 custom-expression defaults retain their generated implementations. Each mapping
 is independent and generated defaults are never mutated. Option scopes:
-WithCodec affects ParamsOf and RowOf, stream.WithCodec only stream.RowOf, and
-ReuseBuffers only RowOf; the other functions ignore them. No per-row override resolution is permitted.
+WithCodec applies to ParamsOf, RowOf and UDTCodecOf, WithEncoder to ParamsOf,
+ReuseBuffers to RowOf, IgnoreExtraColumns to RowOf and stream.RowOf, and
+stream.WithCodec to stream.RowOf; the other functions reject them with a
+ValidationError. No per-row override resolution is permitted.
 
 All Each callbacks may return gocql.StopIteration or a chain of single-error
 wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:

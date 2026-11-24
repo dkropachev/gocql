@@ -55,7 +55,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = plan.Decode(newRowReader(columns, chain, nil))
+		_, err = decodeRow(plan, newRowReader(columns, chain, nil))
 		wantColumnError(t, err, "decode", 1, "id")
 
 		wrong := NewColumns(ColumnSpec{Name: "name", Type: textType}, ColumnSpec{Name: "id", Type: textType})
@@ -93,7 +93,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = plan.Decode(newRowReader(columns, chain, nil))
+		_, err = decodeRow(plan, newRowReader(columns, chain, nil))
 		wantColumnError(t, err, "decode", 1, "v")
 		_, err = CASRows(OneColumn(StringCodec)).Compile(columns)
 		wantColumnError(t, err, "compile", 1, "v")
@@ -110,7 +110,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = plan.Decode(newRowReader(columns, chain, nil))
+		_, err = decodeRow(plan, newRowReader(columns, chain, nil))
 		wantColumnError(t, err, "decode", 1, "t")
 		if e, _ := errors.AsType[*CodecError](err); e.Path != "[0]" {
 			t.Fatalf("path %q, want [0]", e.Path)
@@ -174,7 +174,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = plan.Decode(newRowReader(columns, chain, nil))
+		_, err = decodeRow(plan, newRowReader(columns, chain, nil))
 		wantColumnError(t, err, "decode", 0, "t")
 		if e, _ := errors.AsType[*CodecError](err); e.Path != "[1]" {
 			t.Fatalf("path %q, want [1]", e.Path)
@@ -195,7 +195,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		_, err = plan.Decode(newRowReader(columns, chain, nil))
+		_, err = decodeRow(plan, newRowReader(columns, chain, nil))
 		wantColumnError(t, err, "decode", 0, "t")
 		if _, ok := errors.AsType[*ProtocolError](err); !ok {
 			t.Fatalf("%v does not report the trailing bytes as a ProtocolError", err)

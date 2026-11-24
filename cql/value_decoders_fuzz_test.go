@@ -86,13 +86,14 @@ func fuzzDecoder[T any](typ DataType, decoder Decoder[T]) func(ColumnSpec, wire.
 	return func(column ColumnSpec, chain wire.Chain, lease *wire.Lease) {
 		column.Type = typ
 		columns := NewColumns(column)
-		plan, err := OneColumn(decoder).Compile(columns)
+		rows := OneColumn(decoder)
+		plan, err := rows.Compile(columns)
 		if err != nil {
 			panic(err) // the fixed types always compile
 		}
-		value, err := plan.Decode(newRowReader(columns, chain, lease))
+		value, err := decodeRow(plan, newRowReader(columns, chain, lease))
 		if err == nil {
-			_ = plan.Clone(value)
+			_ = rows.Clone(value)
 		}
 	}
 }
@@ -177,7 +178,7 @@ func FuzzValueDecoders(f *testing.F) {
 		if err != nil {
 			t.Fatalf("DynamicCodec rejected %s: %v", column.Type, err)
 		}
-		if value, err := plan.Decode(newRowReader(columns, chain, lease)); err == nil {
+		if value, err := decodeRow(plan, newRowReader(columns, chain, lease)); err == nil {
 			walkValue(value, 0)
 		}
 	})
@@ -242,7 +243,7 @@ func oneColumnError[T any](typ DataType, decoder Decoder[T]) func(wire.Chain) er
 	plan := CodecTestMust(OneColumn(decoder).Compile(columns))
 	return func(chain wire.Chain) error {
 		reader := newRowReader(columns, chain, nil)
-		v, err := plan.Decode(reader)
+		v, err := decodeRow(plan, reader)
 		if err == nil {
 			if value, ok := any(v).(Value); ok {
 				walkValue(value, 0)

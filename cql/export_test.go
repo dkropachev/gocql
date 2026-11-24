@@ -27,7 +27,7 @@ func EncodeParamsForTest[P any](columns Columns, plan CompiledParams[P], value P
 // plan read every column.
 func DecodeRowForTest[R any](columns Columns, plan CompiledRow[R], chain wire.Chain) (R, error) {
 	reader := newRowReader(columns, chain, wire.NewLease(chain, nil))
-	row, err := plan.Decode(reader)
+	row, err := decodeRow(plan, reader)
 	if err == nil {
 		err = finishRowReader(reader)
 	}

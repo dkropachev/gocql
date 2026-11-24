@@ -92,7 +92,8 @@ func TestPageAPI(t *testing.T) {
 			}
 			chain, _ := wire.NewChain(wire.Borrow([]byte{0, 0, 0, 1, 1}))
 			reader := newRowReader(columns, chain, nil)
-			result, err := plan.Decode(reader)
+			var result cql.CASResult[int32]
+			err = plan.DecodeInto(reader, &result)
 			if err != nil || !result.Applied || result.Previous.Set {
 				t.Fatal(result, err)
 			}
@@ -102,7 +103,8 @@ func TestPageAPI(t *testing.T) {
 				t.Fatal(err)
 			}
 			chain, _ = wire.NewChain(wire.Borrow([]byte{0, 0, 0, 1, 0, 0, 0, 0, 4, 0, 0, 0, 7}))
-			result, err = plan.Decode(newRowReader(columns, chain, nil))
+			result = cql.CASResult[int32]{}
+			err = plan.DecodeInto(newRowReader(columns, chain, nil), &result)
 			if err != nil || result.Applied || !result.Previous.Set || result.Previous.Value != 7 {
 				t.Fatal(result, err)
 			}

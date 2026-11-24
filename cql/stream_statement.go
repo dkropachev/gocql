@@ -7,6 +7,8 @@ package cql
 // into caller-owned storage. Session.PrepareStream prepares it; streaming is
 // always prepared. No buffered row decoder is required.
 //
+// Its fields are ordered for memory layout, not as Statement's are.
+//
 // The zero StreamStatement has no CQL or decoder, which preparation rejects
 // with a ValidationError.
 type StreamStatement[P, R any] struct {
@@ -30,13 +32,14 @@ type StreamStatement[P, R any] struct {
 // (`stream=Set` for sets, `stream=Vector` for vectors). A [][]byte field
 // decodes a list of blobs, or with `stream=Text`, `stream=ASCII` or
 // `stream=Varint` a list of those. Storage of []byte and
-// slice fields is reused across rows. Every column needs a field.
+// slice fields is reused across rows. Every column needs a field, unless
+// IgnoreExtraColumns is given. A time.Time field has no streaming decoder;
+// use cql.Timestamp.
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
-// mapping is used; otherwise R is reflected once, here. Of the
-// StructOption values, StreamRowOf applies WithStreamCodec and ignores
-// WithCodec and ReuseBuffers.
-func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
+// mapping is used; otherwise R is reflected once, here. StreamRowOf applies
+// WithStreamCodec and IgnoreExtraColumns, and rejects other options.
+func StreamRowOf[R any](opts ...StructOption) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]
 	if g, ok := any(new(R)).(interface{ CQLStreamColumns() []StreamOutputField[R] }); ok {
 		columns = g.CQLStreamColumns()
@@ -45,8 +48,8 @@ func StreamRowOf[R any](opts ...StructOption[R]) (StreamRowDecoder[R], error) {
 }
 
 // MustStreamRowOf is StreamRowOf that panics on error, for package-level variables.
-func MustStreamRowOf[R any](opts ...StructOption[R]) StreamRowDecoder[R] {
-	r, err := StreamRowOf(opts...)
+func MustStreamRowOf[R any](opts ...StructOption) StreamRowDecoder[R] {
+	r, err := StreamRowOf[R](opts...)
 	if err != nil {
 		panic(err)
 	}

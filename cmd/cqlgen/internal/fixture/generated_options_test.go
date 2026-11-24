@@ -20,10 +20,10 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	codecFor := func(prefix string) cql.Codec[string] {
 		return cql.NamedScalar(cql.StringCodec, func(v string) string { return prefix + v }, func(v string) string { return strings.TrimPrefix(v, prefix) })
 	}
-	first := cql.WithCodec[Fixture](codecFor("first/"))
-	second := cql.WithCodec[Fixture](codecFor("second/"))
-	firstParams, secondParams := cql.MustParamsOf(first), cql.MustParamsOf(second)
-	firstRows, secondRows := cql.MustRowOf(first), cql.MustRowOf(second)
+	first := cql.WithCodec(codecFor("first/"))
+	second := cql.WithCodec(codecFor("second/"))
+	firstParams, secondParams := cql.MustParamsOf[Fixture](first), cql.MustParamsOf[Fixture](second)
+	firstRows, secondRows := cql.MustRowOf[Fixture](first), cql.MustRowOf[Fixture](second)
 	firstBody, _ := encode(t, cols, firstParams, input)
 	secondBody, _ := encode(t, cols, secondParams, input)
 	for _, tc := range []struct {
@@ -48,28 +48,28 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	// A later construction must not mutate the mappings already built or the registry.
 	_, again := encode(t, cols, firstParams, input)
 	_, original := encode(t, cols, cql.MustParamsOf[Fixture](), input)
-	_, expectedFirst := encode(t, cols, cql.MustParamsOf(first), input)
+	_, expectedFirst := encode(t, cols, cql.MustParamsOf[Fixture](first), input)
 	if !bytes.Equal(again, expectedFirst) || bytes.Equal(again, original) {
 		t.Fatal("mapping options leaked into shared registration")
 	}
 	// Compare against reflection with the custom-expression types supplied explicitly.
-	reflected := reflectParams(t, cql.WithCodec[reflectedFixture](codecFor("first/")), cql.WithCodec[reflectedFixture](PointCodec),
-		cql.WithCodec[reflectedFixture](cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
+	reflected := reflectParams(t, cql.WithCodec(codecFor("first/")), cql.WithCodec(PointCodec),
+		cql.WithCodec(cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
 	_, ref := encode(t, cols, reflected, input)
 	if !bytes.Equal(again, ref) {
 		t.Fatal("generated and reflected option precedence differ")
 	}
 	// Optional fields and embedded offsets use column names, independently of
 	// both declaration order and the physical order selected by the server.
-	subset := cql.NewColumns(cql.ColumnSpec{Name: "createdat", Type: cql.TimestampType}, cql.ColumnSpec{Name: "text", Type: cql.TextType})
-	shift := cql.WithCodec[Fixture](cql.NamedScalar(cql.TimestampCodec,
+	subset := cql.NewColumns(cql.ColumnSpec{Name: "created_at", Type: cql.TimestampType}, cql.ColumnSpec{Name: "text", Type: cql.TextType})
+	shift := cql.WithCodec(cql.NamedScalar(cql.TimestampCodec,
 		func(v cql.Timestamp) cql.Timestamp { return v + 100 }, func(v cql.Timestamp) cql.Timestamp { return v - 100 }))
-	partial, _ := encode(t, subset, cql.MustParamsOf(first, shift), input)
+	partial, _ := encode(t, subset, cql.MustParamsOf[Fixture](first, shift), input)
 	raw := decode(t, subset, cql.MustRowOf[Fixture](), partial)
 	if raw.CreatedAt != input.CreatedAt+100 || raw.Text != "first/"+input.Text || !raw.ID.IsEmpty() || raw.Skipped != "" {
 		t.Fatalf("embedded/subset mapping: %+v", raw)
 	}
-	got := decode(t, subset, cql.MustRowOf(first, shift), partial)
+	got := decode(t, subset, cql.MustRowOf[Fixture](first, shift), partial)
 	if got.CreatedAt != input.CreatedAt || got.Text != input.Text {
 		t.Fatalf("embedded decoder override: %+v", got)
 	}
@@ -135,9 +135,9 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, amount := range []int32{10, 20, 0} {
-		rows := cql.MustStreamRowOf(
-			cql.WithStreamCodec[StreamFixture](offsetStreamInt[int32]{base: cql.StreamInt32, amount: amount}),
-			cql.WithStreamCodec[StreamFixture](offsetStreamInt[int64]{base: cql.StreamInt64, amount: int64(amount)}),
+		rows := cql.MustStreamRowOf[StreamFixture](
+			cql.WithStreamCodec(offsetStreamInt[int32]{base: cql.StreamInt32, amount: amount}),
+			cql.WithStreamCodec(offsetStreamInt[int64]{base: cql.StreamInt64, amount: int64(amount)}),
 		)
 		scope, err := wire.NewStream(context.Background(), bytes.NewReader(data), int64(len(data)), wire.StreamLimits{MaxDepth: 8})
 		if err != nil {

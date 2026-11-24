@@ -118,7 +118,8 @@ func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, 
 			return rows, err
 		}
 		reader := codec.RowReaderFromCursor(response.Columns, cursor, response.Owner)
-		value, err := plan.Decode(&reader)
+		var value R
+		err := plan.DecodeInto(&reader, &value)
 		if err == nil {
 			err = codec.FinishRowReader(&reader)
 		}
@@ -128,7 +129,7 @@ func decodeSystemPage[R any](ctx context.Context, response *model.ResponseData, 
 		if err != nil {
 			return rows, err
 		}
-		rows = append(rows, plan.Clone(value))
+		rows = append(rows, decoder.Clone(value))
 	}
 	if err := ctx.Err(); err != nil {
 		return rows, err

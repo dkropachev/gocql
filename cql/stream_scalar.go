@@ -469,15 +469,13 @@ func (c streamDecimalCodec) Reset(dst *DecimalParts) {
 }
 func (c streamNullableCodec[T]) Reset(dst *Nullable[T]) {
 	if dst != nil {
-		resetStreamDeclaration(c.base, &dst.Value)
+		resetStream(c.base, &dst.Value)
 		dst.Valid = false
 	}
 }
-func (c streamNullableCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.base) }
 func (c streamEmptyCodec[T]) Reset(dst *MaybeEmpty[T]) {
 	if dst != nil {
-		resetStreamDeclaration(c.base, &dst.Value)
+		resetStream(c.base, &dst.Value)
 		dst.Empty = false
 	}
 }
-func (c streamEmptyCodec[T]) streamCanReset() bool { return streamDeclarationCanReset(c.base) }

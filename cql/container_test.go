@@ -138,7 +138,7 @@ func TestContainer(t *testing.T) {
 				go func() {
 					defer group.Done()
 					for range 30 {
-						sequence, err := plan.Decode(newRowReader(columns, chain, nil))
+						sequence, err := decodeRow(plan, newRowReader(columns, chain, nil))
 						if err != nil {
 							t.Error(err)
 							return
