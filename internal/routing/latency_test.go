@@ -232,7 +232,7 @@ func TestLatency(t *testing.T) {
 				if i == 0 {
 					latency = time.Second
 				}
-				p.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: h.ID}, Started: time.Now(), Latency: latency})
+				p.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: h.HostID}, Started: time.Now(), Latency: latency})
 			}
 			_ = NewPlan(p, routing.Info{}, m)
 			ids := v2PlanIDs(NewPlan(p, routing.Info{}, m))

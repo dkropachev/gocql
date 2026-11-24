@@ -306,6 +306,10 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
+| `session.KeyspaceMetadata(ks)` to read one table | `session.Metadata().Table(ks, name)`, which copies one table rather than the keyspace; `Keyspaces()` lists the loaded keyspaces and `Host(id)` finds one host |
+| `KeyspaceMetadata.Functions[name]`, `Aggregates[name]` | keyed by signature, such as `"add(int,int)"`: `metadata.Keyspace.Function(name, argTypes...)`, or `FunctionsNamed(name)` for every overload |
+| `gocql.ColumnPartitionKey`, `ColumnClusteringKey`, `ColumnRegular`, `ColumnCompact`, `ColumnStatic` | `metadata.ColumnKindPartitionKey`, `ColumnKindClusteringKey`, `ColumnKindRegular`, `ColumnKindCompact`, `ColumnKindStatic` |
+| `HostInfo.HostID()` | `metadata.HostSnapshot.HostID` |
 | `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DCLocalReadRepairChance` |
 | `ViewMetadata.KeyspaceName`, `ViewName`, `BaseTableName` | `metadata.View.Keyspace`, `Name`, `BaseTable`, as `metadata.Table` names them |
 | `IndexMetadata.KeyspaceName`, `TableName` | `metadata.Index.Keyspace`, `Table` |

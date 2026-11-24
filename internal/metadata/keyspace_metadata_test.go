@@ -44,7 +44,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:       "V2Keyspace",
 				Table:          "Table1",
 				Name:           "KEY1",
-				Kind:           metadata.ColumnPartitionKey,
+				Kind:           metadata.ColumnKindPartitionKey,
 				ComponentIndex: 0,
 				Type:           "text",
 			},
@@ -52,7 +52,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:       "V2Keyspace",
 				Table:          "Table1",
 				Name:           "Key1",
-				Kind:           metadata.ColumnPartitionKey,
+				Kind:           metadata.ColumnKindPartitionKey,
 				ComponentIndex: 0,
 				Type:           "text",
 			},
@@ -60,7 +60,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:       "V2Keyspace",
 				Table:          "Table2",
 				Name:           "Column1",
-				Kind:           metadata.ColumnPartitionKey,
+				Kind:           metadata.ColumnKindPartitionKey,
 				ComponentIndex: 0,
 				Type:           "text",
 			},
@@ -68,7 +68,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:       "V2Keyspace",
 				Table:          "Table2",
 				Name:           "Column2",
-				Kind:           metadata.ColumnClusteringKey,
+				Kind:           metadata.ColumnKindClusteringKey,
 				ComponentIndex: 0,
 				Type:           "text",
 			},
@@ -76,7 +76,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:        "V2Keyspace",
 				Table:           "Table2",
 				Name:            "Column3",
-				Kind:            metadata.ColumnClusteringKey,
+				Kind:            metadata.ColumnKindClusteringKey,
 				ComponentIndex:  1,
 				Type:            "text",
 				ClusteringOrder: metadata.ColumnOrderDesc,
@@ -85,35 +85,35 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace: "V2Keyspace",
 				Table:    "Table2",
 				Name:     "Column4",
-				Kind:     metadata.ColumnRegular,
+				Kind:     metadata.ColumnKindRegular,
 				Type:     "text",
 			},
 			{
 				Keyspace: "V2Keyspace",
 				Table:    "view",
 				Name:     "ColReg",
-				Kind:     metadata.ColumnRegular,
+				Kind:     metadata.ColumnKindRegular,
 				Type:     "text",
 			},
 			{
 				Keyspace: "V2Keyspace",
 				Table:    "view",
 				Name:     "ColCK",
-				Kind:     metadata.ColumnClusteringKey,
+				Kind:     metadata.ColumnKindClusteringKey,
 				Type:     "text",
 			},
 			{
 				Keyspace: "V2Keyspace",
 				Table:    "view",
 				Name:     "ColPK",
-				Kind:     metadata.ColumnPartitionKey,
+				Kind:     metadata.ColumnKindPartitionKey,
 				Type:     "text",
 			},
 			{
 				Keyspace:        "V2Keyspace",
 				Table:           "buckets_by_owner_index",
 				Name:            "idx_token",
-				Kind:            metadata.ColumnClusteringKey,
+				Kind:            metadata.ColumnKindClusteringKey,
 				ComponentIndex:  0,
 				Type:            "bigint",
 				ClusteringOrder: metadata.ColumnOrderAsc,
@@ -122,7 +122,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace:        "V2Keyspace",
 				Table:           "buckets_by_owner_index",
 				Name:            "name",
-				Kind:            metadata.ColumnClusteringKey,
+				Kind:            metadata.ColumnKindClusteringKey,
 				ComponentIndex:  1,
 				Type:            "text",
 				ClusteringOrder: metadata.ColumnOrderAsc,
@@ -131,7 +131,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 				Keyspace: "V2Keyspace",
 				Table:    "buckets_by_owner_index",
 				Name:     "owner",
-				Kind:     metadata.ColumnPartitionKey,
+				Kind:     metadata.ColumnKindPartitionKey,
 				Type:     "text",
 			},
 		}
@@ -178,17 +178,17 @@ func TestKeyspaceMetadata(t *testing.T) {
 						Columns: map[string]*metadata.Column{
 							"ColPK": {
 								Name: "ColPK",
-								Kind: metadata.ColumnPartitionKey,
+								Kind: metadata.ColumnKindPartitionKey,
 								Type: "text",
 							},
 							"ColCK": {
 								Name: "ColCK",
-								Kind: metadata.ColumnClusteringKey,
+								Kind: metadata.ColumnKindClusteringKey,
 								Type: "text",
 							},
 							"ColReg": {
 								Name: "ColReg",
-								Kind: metadata.ColumnRegular,
+								Kind: metadata.ColumnKindRegular,
 								Type: "text",
 							},
 						},
@@ -207,12 +207,12 @@ func TestKeyspaceMetadata(t *testing.T) {
 							"KEY1": {
 								Name: "KEY1",
 								Type: "text",
-								Kind: metadata.ColumnPartitionKey,
+								Kind: metadata.ColumnKindPartitionKey,
 							},
 							"Key1": {
 								Name: "Key1",
 								Type: "text",
-								Kind: metadata.ColumnPartitionKey,
+								Kind: metadata.ColumnKindPartitionKey,
 							},
 						},
 						OrderedColumns: []string{
@@ -241,23 +241,23 @@ func TestKeyspaceMetadata(t *testing.T) {
 							"Column1": {
 								Name: "Column1",
 								Type: "text",
-								Kind: metadata.ColumnPartitionKey,
+								Kind: metadata.ColumnKindPartitionKey,
 							},
 							"Column2": {
 								Name: "Column2",
 								Type: "text",
-								Kind: metadata.ColumnClusteringKey,
+								Kind: metadata.ColumnKindClusteringKey,
 							},
 							"Column3": {
 								Name:            "Column3",
 								Type:            "text",
 								ClusteringOrder: metadata.ColumnOrderDesc,
-								Kind:            metadata.ColumnClusteringKey,
+								Kind:            metadata.ColumnKindClusteringKey,
 							},
 							"Column4": {
 								Name: "Column4",
 								Type: "text",
-								Kind: metadata.ColumnRegular,
+								Kind: metadata.ColumnKindRegular,
 							},
 						},
 						OrderedColumns: []string{
@@ -283,19 +283,19 @@ func TestKeyspaceMetadata(t *testing.T) {
 							"owner": {
 								Name: "owner",
 								Type: "text",
-								Kind: metadata.ColumnPartitionKey,
+								Kind: metadata.ColumnKindPartitionKey,
 							},
 							"idx_token": {
 								Name:            "idx_token",
 								Type:            "bigint",
 								ClusteringOrder: metadata.ColumnOrderAsc,
-								Kind:            metadata.ColumnClusteringKey,
+								Kind:            metadata.ColumnKindClusteringKey,
 							},
 							"name": {
 								Name:            "name",
 								Type:            "text",
 								ClusteringOrder: metadata.ColumnOrderAsc,
-								Kind:            metadata.ColumnClusteringKey,
+								Kind:            metadata.ColumnKindClusteringKey,
 							},
 						},
 					},
@@ -303,4 +303,56 @@ func TestKeyspaceMetadata(t *testing.T) {
 			},
 		)
 	})
+}
+
+// TestCompileFunctionKeys checks that functions and aggregates are keyed by
+// signature whether or not their name is overloaded, so the
+// metadata.Keyspace lookups find them.
+func TestCompileFunctionKeys(t *testing.T) {
+	t.Parallel()
+	keyspace := &metadata.Keyspace{Name: "ks"}
+	functions := []metadata.Function{
+		{Name: "plus", ArgumentTypes: []string{"int", "int"}},
+		{Name: "plus", ArgumentTypes: []string{"bigint", "bigint"}},
+		{Name: "now"},
+		{Name: "state", ArgumentTypes: []string{"int", "int"}, ReturnType: "int"},
+	}
+	aggregates := []metadata.Aggregate{{Name: "total", StateType: "int", ArgumentTypes: []string{"int"}}}
+	AggregateMetadataData(&aggregates[0]).InternalStateFunc = "state"
+	compileMetadata(keyspace, nil, nil, functions, aggregates, nil, nil, nil, nil)
+
+	for _, key := range []string{"plus(int,int)", "plus(bigint,bigint)", "now()", "state(int,int)"} {
+		if keyspace.Functions[key] == nil {
+			t.Errorf("Functions[%q] missing; keys %v", key, keyspace.Functions)
+		}
+	}
+	if f, ok := keyspace.Function("plus", "bigint", "bigint"); !ok || f.ArgumentTypes[0] != "bigint" {
+		t.Errorf("Function(plus, bigint, bigint) = %v, %v", f, ok)
+	}
+	if f, ok := keyspace.Function("now"); !ok || f.Name != "now" {
+		t.Errorf("Function(now) = %v, %v", f, ok)
+	}
+	if _, ok := keyspace.Function("plus"); ok {
+		t.Error("Function(plus) found an overload with other arguments")
+	}
+	if got := keyspace.FunctionsNamed("plus"); len(got) != 2 || got[0].ArgumentTypes[0] != "bigint" || got[1].ArgumentTypes[0] != "int" {
+		t.Errorf("FunctionsNamed(plus) = %v", got)
+	}
+	if got := keyspace.FunctionsNamed("minus"); got != nil {
+		t.Errorf("FunctionsNamed(minus) = %v", got)
+	}
+	a, ok := keyspace.Aggregate("total", "int")
+	if !ok || a.StateFunc.Name != "state" {
+		t.Fatalf("Aggregate(total, int) = %v, %v", a, ok)
+	}
+	if got := keyspace.AggregatesNamed("total"); len(got) != 1 || got[0] != a {
+		t.Errorf("AggregatesNamed(total) = %v", got)
+	}
+	var none *metadata.Keyspace
+	if _, ok := none.Function("plus"); ok || none.FunctionsNamed("plus") != nil || none.AggregatesNamed("total") != nil {
+		t.Error("a nil Keyspace found functions")
+	}
+	if _, ok := none.Aggregate("total"); ok {
+		t.Error("a nil Keyspace found an aggregate")
+	}
 }

@@ -12,16 +12,20 @@ import (
 
 // Snapshot is an immutable view of cluster topology and schema. A session
 // publishes a new one when either changes; Session.Metadata returns the
-// current one. A Snapshot is safe for concurrent use. A nil or zero
-// Snapshot knows no cluster: it reports no hosts or schema, and its lookups
-// fail with a validation error.
+// current one. A Snapshot is safe for concurrent use. Every host and schema
+// value it returns is the caller's private copy: changing it does not change
+// the snapshot. A nil or zero Snapshot knows no cluster: it reports no hosts
+// or schema, and its lookups fail with a validation error.
 type Snapshot struct{ src snapshotSource }
 
 // snapshotSource is the session's snapshot behind a Snapshot.
 type snapshotSource interface {
 	Generation() uint64
 	Hosts() []HostSnapshot
+	Host(id cql.UUID) (HostSnapshot, bool)
+	Keyspaces() []string
 	Keyspace(name string) (*Keyspace, bool)
+	Table(keyspace, name string) (*Table, bool)
 	Replicas(keyspace, table string, token int64) ([]Target, error)
 	Token(keyspace, table string, key ...cql.Value) (int64, error)
 	TokenRanges(keyspace, table string) ([]TokenRange, error)
@@ -49,7 +53,8 @@ func (s *Snapshot) Generation() uint64 {
 	return s.src.Generation()
 }
 
-// Hosts returns the hosts of the cluster the session knows of.
+// Hosts returns the hosts of the cluster the session knows of. Host looks
+// up one host without copying the others.
 func (s *Snapshot) Hosts() []HostSnapshot {
 	if s.empty() {
 		return nil
@@ -57,12 +62,39 @@ func (s *Snapshot) Hosts() []HostSnapshot {
 	return s.src.Hosts()
 }
 
+// Host returns the host with id.
+func (s *Snapshot) Host(id cql.UUID) (HostSnapshot, bool) {
+	if s.empty() {
+		return HostSnapshot{}, false
+	}
+	return s.src.Host(id)
+}
+
+// Keyspaces returns the names of the keyspaces whose schema the snapshot
+// holds, sorted. Which keyspaces those are depends on Mode.
+func (s *Snapshot) Keyspaces() []string {
+	if s.empty() {
+		return nil
+	}
+	return s.src.Keyspaces()
+}
+
 // Keyspace returns the schema of the named keyspace, as far as Mode loads it.
+// It copies the whole keyspace; Table copies one table.
 func (s *Snapshot) Keyspace(name string) (*Keyspace, bool) {
 	if s.empty() {
 		return nil, false
 	}
 	return s.src.Keyspace(name)
+}
+
+// Table returns the schema of keyspace.name, a table (not a materialized
+// view), as far as Mode loads it.
+func (s *Snapshot) Table(keyspace, name string) (*Table, bool) {
+	if s.empty() {
+		return nil, false
+	}
+	return s.src.Table(keyspace, name)
 }
 
 // Replicas returns the replicas of token in keyspace.table, from the token

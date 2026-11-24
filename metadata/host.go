@@ -30,8 +30,8 @@ type HostSnapshot struct {
 	// ShardingIgnoreMSB is how many most significant token bits the host
 	// ignores when mapping a token to a shard.
 	ShardingIgnoreMSB uint8
-	// ID is the host's host ID.
-	ID cql.UUID
+	// HostID is the host's host HostID.
+	HostID cql.UUID
 	// Enabled reports that the session's host filter accepts the host,
 	// Connected that its pool has at least one connection, and Up that the
 	// driver considers the host up.

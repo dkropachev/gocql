@@ -51,7 +51,7 @@ func TestPrepared(t *testing.T) {
 			t.Parallel()
 			const maxPrepared = 4
 			session := createV2Session(t, func(c *config.ConfigBuilder) {
-				c.WithPreparedCacheSize(maxPrepared).WithIgnoreEvents(event.Schema)
+				c.WithPreparedCacheSize(maxPrepared).WithIgnoreEvents(event.KindSchema)
 			})
 			defer session.Close()
 			table := testTableName(t)

@@ -237,7 +237,7 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned := exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].ID)}
+	pinned := exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)}
 	options := exec.StreamOptions{Incremental: incremental, Options: pinned}
 	query, err := prepared.Query(options)
 	if err != nil {

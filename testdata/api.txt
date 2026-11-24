@@ -1181,12 +1181,10 @@ package event
 	const event.ChangeTabletResync event.Change = "TABLET_RESYNC"
 	const event.ChangeUp event.Change = "UP"
 	const event.ChangeUpdated event.Change = "UPDATED"
-	const event.ClientRoute event.Kind = 5
-	const event.Control event.Kind = 4
 	type event.Event struct
 		event.Event field Address net/netip.AddrPort
 		event.Event field Change event.Change
-		event.Event field Target event.Target
+		event.Event field ObjectKind event.ObjectKind
 		event.Event field Keyspace string
 		event.Event field Object string
 		event.Event field ArgumentTypes []string
@@ -1201,20 +1199,22 @@ package event
 		event.Filter field Capacity int
 	type event.Kind uint8
 		event.Kind method (T) String() string
-	const event.Overflow event.Kind = 6
-	const event.Schema event.Kind = 3
-	const event.Status event.Kind = 2
+	const event.KindClientRoute event.Kind = 5
+	const event.KindControl event.Kind = 4
+	const event.KindOverflow event.Kind = 6
+	const event.KindSchema event.Kind = 3
+	const event.KindStatus event.Kind = 2
+	const event.KindTopology event.Kind = 1
+	const event.KindUnknown event.Kind = 0
+	const event.ObjectAggregate event.ObjectKind = "AGGREGATE"
+	const event.ObjectFunction event.ObjectKind = "FUNCTION"
+	const event.ObjectKeyspace event.ObjectKind = "KEYSPACE"
+	type event.ObjectKind string
+	const event.ObjectTable event.ObjectKind = "TABLE"
+	const event.ObjectType event.ObjectKind = "TYPE"
 	type event.Subscription struct
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
-	type event.Target string
-	const event.TargetAggregate event.Target = "AGGREGATE"
-	const event.TargetFunction event.Target = "FUNCTION"
-	const event.TargetKeyspace event.Target = "KEYSPACE"
-	const event.TargetTable event.Target = "TABLE"
-	const event.TargetType event.Target = "TYPE"
-	const event.Topology event.Kind = 1
-	const event.Unknown event.Kind = 0
 
 package exec
 	type exec.CompiledOptions struct
@@ -1277,19 +1277,19 @@ package metadata
 		metadata.Column field Kind metadata.ColumnKind
 		metadata.Column field ClusteringOrder metadata.ColumnOrder
 		metadata.Column method (*T) Equal(other *metadata.Column) bool
-	const metadata.ColumnClusteringKey metadata.ColumnKind = 2
-	const metadata.ColumnCompact metadata.ColumnKind = 4
 	type metadata.ColumnKind uint8
 		metadata.ColumnKind method (T) String() string
+	const metadata.ColumnKindClusteringKey metadata.ColumnKind = 2
+	const metadata.ColumnKindCompact metadata.ColumnKind = 4
+	const metadata.ColumnKindPartitionKey metadata.ColumnKind = 1
+	const metadata.ColumnKindRegular metadata.ColumnKind = 3
+	const metadata.ColumnKindStatic metadata.ColumnKind = 5
 	const metadata.ColumnKindUnknown metadata.ColumnKind = 0
 	type metadata.ColumnOrder uint8
 		metadata.ColumnOrder method (T) String() string
 	const metadata.ColumnOrderAsc metadata.ColumnOrder = 1
 	const metadata.ColumnOrderDesc metadata.ColumnOrder = 2
 	const metadata.ColumnOrderNone metadata.ColumnOrder = 0
-	const metadata.ColumnPartitionKey metadata.ColumnKind = 1
-	const metadata.ColumnRegular metadata.ColumnKind = 3
-	const metadata.ColumnStatic metadata.ColumnKind = 5
 	type metadata.Function struct
 		metadata.Function field Keyspace string
 		metadata.Function field Name string
@@ -1306,7 +1306,7 @@ package metadata
 		metadata.HostSnapshot field Tokens []int64
 		metadata.HostSnapshot field Shards uint32
 		metadata.HostSnapshot field ShardingIgnoreMSB uint8
-		metadata.HostSnapshot field ID cql.UUID
+		metadata.HostSnapshot field HostID cql.UUID
 		metadata.HostSnapshot field Enabled bool
 		metadata.HostSnapshot field Connected bool
 		metadata.HostSnapshot field Up bool
@@ -1338,7 +1338,10 @@ package metadata
 		metadata.Keyspace field InitialTablets int
 		metadata.Keyspace field TabletBased bool
 		metadata.Keyspace field DurableWrites bool
-		metadata.Keyspace method (*T) Clone() *metadata.Keyspace
+		metadata.Keyspace method (*T) Aggregate(name string, args ...string) (*metadata.Aggregate, bool)
+		metadata.Keyspace method (*T) AggregatesNamed(name string) []*metadata.Aggregate
+		metadata.Keyspace method (*T) Function(name string, args ...string) (*metadata.Function, bool)
+		metadata.Keyspace method (*T) FunctionsNamed(name string) []*metadata.Function
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
 		metadata.Mode method (T) String() string
@@ -1355,9 +1358,12 @@ package metadata
 	type metadata.Snapshot struct
 		metadata.Snapshot method (*T) Diagnostics() []error
 		metadata.Snapshot method (*T) Generation() uint64
+		metadata.Snapshot method (*T) Host(id cql.UUID) (metadata.HostSnapshot, bool)
 		metadata.Snapshot method (*T) Hosts() []metadata.HostSnapshot
 		metadata.Snapshot method (*T) Keyspace(name string) (*metadata.Keyspace, bool)
+		metadata.Snapshot method (*T) Keyspaces() []string
 		metadata.Snapshot method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Target, error)
+		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
 	type metadata.Table struct

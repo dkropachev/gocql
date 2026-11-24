@@ -23,14 +23,14 @@ import (
 func compactFixture(n int) (*MetadataSnapshot, routing.Info) {
 	hosts := make([]HostSnapshot, n+320)
 	for i := range hosts {
-		binary.BigEndian.PutUint64(hosts[i].ID[8:], uint64(i+1000))
+		binary.BigEndian.PutUint64(hosts[i].HostID[8:], uint64(i+1000))
 		hosts[i].Datacenter, hosts[i].Rack = "local", "rack"
 		hosts[i].Enabled, hosts[i].Connected, hosts[i].Up, hosts[i].Shards = true, true, true, 4
 	}
 	replicas := make([]Target, n)
 	for i := range replicas {
 		// Even small replica sets refer to global host positions above 255.
-		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].ID, ShardID: cql.Option[uint32]{Value: uint32(i % 4), Set: true}}
+		replicas[i] = Target{HostID: hosts[len(hosts)-1-i].HostID, ShardID: cql.Option[uint32]{Value: uint32(i % 4), Set: true}}
 	}
 	m := NewMetadataSnapshot(SnapshotState{
 		InternalHosts: hosts, InternalHostIndex: InternalBuildRoutingHostIndex(hosts),
@@ -143,7 +143,7 @@ func TestCompactPermutation(t *testing.T) {
 								SnapshotData(m).InternalHosts = hosts
 								SnapshotData(m).InternalHostIndex = InternalBuildRoutingHostIndex(hosts)
 								target := func(i int, shard uint32) Target {
-									return Target{HostID: hosts[i].ID, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
+									return Target{HostID: hosts[i].HostID, ShardID: cql.Option[uint32]{Value: shard, Set: true}}
 								}
 								replicas := []Target{target(2, 0), target(1, 1), target(0, 0), target(0, 1), target(6, 0), target(4, 0), target(7, 0)}
 								for len(replicas) < n {
@@ -156,7 +156,7 @@ func TestCompactPermutation(t *testing.T) {
 								SnapshotData(m).InternalPlacements = placements.Put(InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root})
 								policy := &InternalRoutingPolicy{InternalOptions: routing.Options{NoLeaderAware: !leader, Datacenter: "local", Rack: "rack", AllowRemote: remote, FixedReplicaOrder: true}}
 								if slow {
-									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{hosts[2].ID: time.Now().Add(time.Hour)}})
+									policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{hosts[2].HostID: time.Now().Add(time.Hour)}})
 								}
 								info.Kind = cql.ConditionalStatement
 								got := compactDrain(t, NewPlan(policy, info, m), len(hosts)+n)
@@ -165,10 +165,10 @@ func TestCompactPermutation(t *testing.T) {
 									want = append(want, target(2, 0))
 								}
 								for _, i := range []int{3, 4, 7} {
-									want = append(want, Target{HostID: hosts[i].ID})
+									want = append(want, Target{HostID: hosts[i].HostID})
 								}
 								if remote {
-									want = append(want, Target{HostID: hosts[5].ID})
+									want = append(want, Target{HostID: hosts[5].HostID})
 								}
 								if remote && leader && !slow {
 									first := target(2, 0)
@@ -203,7 +203,7 @@ func TestCompactPermutation(t *testing.T) {
 						SnapshotData(m).InternalPlacementSignal = signal
 						policy := &InternalRoutingPolicy{InternalOptions: routing.Options{FixedReplicaOrder: true, NoLeaderAware: true}}
 						// A second pass must also remain clear of stale inline and int indexes.
-						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{SnapshotData(m).InternalHosts[0].ID: time.Now().Add(time.Hour)}})
+						policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{SnapshotData(m).InternalHosts[0].HostID: time.Now().Add(time.Hour)}})
 						plan := NewPlan(policy, info, m).(*InternalLazyRoutingPlan)
 						seen := make(map[cql.UUID]bool)
 						if consumed != 0 {

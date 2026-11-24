@@ -1337,7 +1337,7 @@ func TestSchemaMetadata(t *testing.T) {
 
 			s, _ := refreshAllSchemaSession(t)
 			cached, _ := MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGetKeyspace("ks1")
-			stale := cached.Clone()
+			stale := implMetadata.InternalCloneV2Keyspace(cached)
 			stale.StrategyOptions = map[string]string{"replication_factor": "3"}
 			MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks1", stale)
 
@@ -1654,7 +1654,7 @@ func TestSchemaMetadata(t *testing.T) {
 	t.Run("ValidateSchemaParts", func(t *testing.T) {
 		ks := &metadata2.Keyspace{Name: "ks"}
 		tables := []metadata2.Table{{Name: "t"}}
-		columns := []metadata2.Column{{Table: "t", Name: "p", Type: "int", Kind: metadata2.ColumnPartitionKey, ComponentIndex: 0}}
+		columns := []metadata2.Column{{Table: "t", Name: "p", Type: "int", Kind: metadata2.ColumnKindPartitionKey, ComponentIndex: 0}}
 		check := func(cols []metadata2.Column, types []metadata2.Type) error {
 			return metadata.InternalValidateV2SchemaParts(ks, tables, cols, types, nil, nil, nil, nil)
 		}

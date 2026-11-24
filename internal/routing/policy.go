@@ -322,10 +322,10 @@ func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(cql.UUID
 	x := &InternalRoutingHostIndex{enabledDC: make(map[string]int), enabledRack: make(map[routingLocality]int), byID: make(map[cql.UUID]int, len(hosts)), dc: make(map[string][]int), rack: make(map[routingLocality][]int), routes: make([]*pool.HostRoute, len(hosts))}
 	for i, h := range hosts {
 		perfAdd(2, 1)
-		x.byID[h.ID] = i
-		x.routes[i] = route(h.ID)
+		x.byID[h.HostID] = i
+		x.routes[i] = route(h.HostID)
 		if len(hosts) <= smallHostIndex {
-			x.ids = append(x.ids, h.ID)
+			x.ids = append(x.ids, h.HostID)
 		}
 		x.all = append(x.all, i)
 		x.dc[h.Datacenter] = append(x.dc[h.Datacenter], i)
@@ -870,7 +870,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 				if l := p.local(); group == 2 && l.dc != "" && h.Datacenter == l.dc {
 					continue
 				}
-				if r, ok := p.accept(Target{HostID: h.ID}, ids[k], h, false); ok {
+				if r, ok := p.accept(Target{HostID: h.HostID}, ids[k], h, false); ok {
 					return r, true
 				}
 			}

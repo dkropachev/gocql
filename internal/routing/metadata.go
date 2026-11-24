@@ -5,6 +5,8 @@ package routing
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"sync/atomic"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -56,6 +58,52 @@ func (m *MetadataSnapshot) Keyspace(name string) (*metadata.Keyspace, bool) {
 	}
 	return implMetadata.InternalCloneV2Keyspace(ks), true
 }
+
+// Keyspaces returns the names of the keyspaces the snapshot holds, sorted.
+func (m *MetadataSnapshot) Keyspaces() []string {
+	if m == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(SnapshotData(m).InternalKeyspaces))
+}
+
+// Table returns a copy of the schema of keyspace.table.
+func (m *MetadataSnapshot) Table(keyspace, table string) (*metadata.Table, bool) {
+	if m == nil {
+		return nil, false
+	}
+	ks := SnapshotData(m).InternalKeyspaces[keyspace]
+	if ks == nil {
+		return nil, false
+	}
+	t := ks.Tables[table]
+	if t == nil {
+		return nil, false
+	}
+	return implMetadata.InternalCloneV2Table(t), true
+}
+
+// Host returns a copy of the host with id.
+func (m *MetadataSnapshot) Host(id cql.UUID) (HostSnapshot, bool) {
+	if m == nil {
+		return HostSnapshot{}, false
+	}
+	hosts := SnapshotData(m).InternalHosts
+	i, ok := -1, false
+	if idx := SnapshotData(m).InternalHostIndex; idx != nil {
+		i, ok = idx.host(id)
+	}
+	if !ok || i >= len(hosts) || hosts[i].HostID != id {
+		i = slices.IndexFunc(hosts, func(h HostSnapshot) bool { return h.HostID == id })
+		if i < 0 {
+			return HostSnapshot{}, false
+		}
+	}
+	h := hosts[i]
+	h.Tokens = append([]int64(nil), h.Tokens...)
+	return h, true
+}
+
 func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
 	if _, _, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err != nil {
 		return nil, err

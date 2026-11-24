@@ -41,7 +41,7 @@ func TestSessionAPI(t *testing.T) {
 
 		t.Run("RejectsUnknownKind", func(t *testing.T) {
 			s := new(implCluster.Core)
-			for _, kind := range []event.Kind{event.Unknown, event.Overflow + 1} {
+			for _, kind := range []event.Kind{event.KindUnknown, event.KindOverflow + 1} {
 				if _, err := s.Subscribe(event.Filter{Kinds: []event.Kind{kind}}); err == nil {
 					t.Errorf("Subscribe accepted event kind %v", kind)
 				}
@@ -51,7 +51,7 @@ func TestSessionAPI(t *testing.T) {
 		t.Run("ClientRouteIDs", func(t *testing.T) {
 			s := new(implCluster.Core)
 			defer s.CloseV2Peripheral()
-			sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.ClientRoute}, Capacity: 4})
+			sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindClientRoute}, Capacity: 4})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -66,7 +66,7 @@ func TestSessionAPI(t *testing.T) {
 				HostIDs:       []string{host.String(), "not-a-uuid"},
 			})
 			got := <-sub.Events()
-			if got.Kind != event.ClientRoute || got.Change != event.ChangeUpdated {
+			if got.Kind != event.KindClientRoute || got.Change != event.ChangeUpdated {
 				t.Fatalf("event %+v", got)
 			}
 			if !slices.Equal(got.ConnectionIDs, []string{"c1", conn}) {
@@ -86,12 +86,12 @@ func TestSessionAPI(t *testing.T) {
 				return opaqueStorageValue
 			}()
 
-			filter := event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: "ks", Capacity: 1}
+			filter := event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: "ks", Capacity: 1}
 			sub, err := s.Subscribe(filter)
 			if err != nil {
 				t.Fatal(err)
 			}
-			filter.Kinds[0] = event.Status
+			filter.Kinds[0] = event.KindStatus
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "other", Table: "x"})
 			select {
 			case e := <-sub.Events():
@@ -101,14 +101,14 @@ func TestSessionAPI(t *testing.T) {
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "a"})
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "CREATED", Keyspace: "ks", Table: "b"})
 			got := <-sub.Events()
-			if got.Kind != event.Overflow || got.Change != event.ChangeResync || got.Generation != s.Metadata().Generation() {
+			if got.Kind != event.KindOverflow || got.Change != event.ChangeResync || got.Generation != s.Metadata().Generation() {
 				t.Fatal(got)
 			}
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("overflow subscription must close after terminal marker")
 			}
-			fresh, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: "ks", Capacity: 4})
+			fresh, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: "ks", Capacity: 4})
 			if err != nil {
 				t.Fatal(err)
 			}

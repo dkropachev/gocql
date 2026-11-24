@@ -49,7 +49,7 @@ func dropLeftoverKeyspaces() error {
 	defer cancel()
 	cfg, err := createV2Cluster(func(c *config.ConfigBuilder) {
 		c.WithKeyspace("system").
-			WithIgnoreEvents(event.Schema, event.Topology, event.Status).
+			WithIgnoreEvents(event.KindSchema, event.KindTopology, event.KindStatus).
 			WithAutomaticSchemaAgreement(false).
 			WithRefreshAfterAgreement(false)
 	}).Build()

@@ -287,7 +287,7 @@ func TestRouting(t *testing.T) {
 			}
 			tests.AssertEqual(t, "eligible routing hosts", len(clusterHosts)-1, len(targets))
 			for _, host := range session.Metadata().Hosts() {
-				if host.Address.Addr().String() == filtered && (host.Enabled || targets[host.ID]) {
+				if host.Address.Addr().String() == filtered && (host.Enabled || targets[host.HostID]) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
@@ -323,7 +323,7 @@ func TestRouting(t *testing.T) {
 			}
 			tests.AssertEqual(t, "eligible routing hosts", len(clusterHosts)-1, len(targets))
 			for _, host := range session.Metadata().Hosts() {
-				if host.Address.Addr().String() == filtered && (host.Enabled || targets[host.ID]) {
+				if host.Address.Addr().String() == filtered && (host.Enabled || targets[host.HostID]) {
 					t.Fatalf("filtered host remains eligible: %+v", host)
 				}
 			}
@@ -357,7 +357,7 @@ func TestRouting(t *testing.T) {
 		// Integration test of the routing key calculation
 		t.Run("Computed", func(t *testing.T) {
 			t.Parallel()
-			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithIgnoreEvents(event.Schema) })
+			session := createV2Session(t, func(c *config.ConfigBuilder) { c.WithIgnoreEvents(event.KindSchema) })
 			defer session.Close()
 			single, composite := testTableName(t, "single"), testTableName(t, "composite")
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(first_id int,second_id int,PRIMARY KEY(first_id,second_id))", single))
@@ -482,7 +482,7 @@ func TestRouting(t *testing.T) {
 						hosts := session.Metadata().Hosts()
 						if len(hosts) > 0 && hosts[0].Shards > 1 {
 							values := options
-							values.HostID = cql.Option[cql.UUID]{Value: hosts[0].ID, Set: true}
+							values.HostID = cql.Option[cql.UUID]{Value: hosts[0].HostID, Set: true}
 							values.ShardID = cql.Option[uint32]{Value: uint32(attempt) % hosts[0].Shards, Set: true}
 							options = values
 						}
@@ -715,7 +715,7 @@ func TestRouting(t *testing.T) {
 					before := tabletAuthority(t, ctx, s, id, token.Value)
 					opts := exec.Options{}
 					if attempt < 3 {
-						opts = exec.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts[attempt%len(implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts)].ID, Set: true}}
+						opts = exec.Options{HostID: cql.Option[cql.UUID]{Value: implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts[attempt%len(implRouting.SnapshotData(implRouting.SnapshotOf(s.Metadata())).InternalHosts)].HostID, Set: true}}
 					}
 					rows, err := read.Run(ctx, key, bindOptions(s, opts))
 					if err != nil {

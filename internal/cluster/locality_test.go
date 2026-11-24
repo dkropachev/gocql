@@ -18,10 +18,10 @@ import (
 // cluster has no local datacenter.
 func TestUnsetLocality(t *testing.T) {
 	hosts := []metadata.HostSnapshot{
-		{ID: cql.UUID{15: 1}, Datacenter: "b", Enabled: true},
-		{ID: cql.UUID{15: 2}, Datacenter: "a", Enabled: true},
-		{ID: cql.UUID{15: 3}, Datacenter: "a", Enabled: true},
-		{ID: cql.UUID{15: 4}, Datacenter: "c"}, // filtered out
+		{HostID: cql.UUID{15: 1}, Datacenter: "b", Enabled: true},
+		{HostID: cql.UUID{15: 2}, Datacenter: "a", Enabled: true},
+		{HostID: cql.UUID{15: 3}, Datacenter: "a", Enabled: true},
+		{HostID: cql.UUID{15: 4}, Datacenter: "c"}, // filtered out
 	}
 	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts})
 	withPolicy := func(p routing.RoutingPolicy) settings.Config {

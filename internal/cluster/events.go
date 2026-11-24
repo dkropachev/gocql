@@ -279,7 +279,7 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 		}
 	}
 	if !s.PublishV2Metadata() {
-		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
+		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 		return
 	}
 	for _, f := range frames {
@@ -341,6 +341,9 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 		}
 	}
 
+	// The ring refresh drops a removed node; its event takes the node's ID
+	// from the snapshot before it.
+	prev := s.Metadata()
 	if topologyEventReceived && !s.privateStorage.InternalCfg.Events.DisableTopologyEvents {
 		_ = s.RefreshRingNow()
 	}
@@ -362,12 +365,12 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 		}
 	}
 	if !s.PublishV2Metadata() {
-		s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
+		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 		return
 	}
 	for _, f := range frames {
 		if event := events.FrameToEvent(f); event != nil {
-			s.emitV2Event(event)
+			s.emitV2NodeEvent(event, prev)
 			if s.privateStorage.eventBus != nil {
 				s.privateStorage.eventBus.PublishEvent(event)
 			}

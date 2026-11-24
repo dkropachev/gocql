@@ -61,7 +61,7 @@ func TestTopology(t *testing.T) {
 			for _, id := range ids {
 				found := false
 				for _, h := range hosts {
-					if h.ID == id {
+					if h.HostID == id {
 						found = true
 					}
 				}

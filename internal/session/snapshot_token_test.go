@@ -35,7 +35,7 @@ func TestSnapshotTokenMatchesPreparedRouting(t *testing.T) {
 	next := routing.InternalClonePlacementSnapshot(s.Metadata())
 	ks := metadata.InternalCloneV2Keyspace(routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"])
 	column := func(name, typ string) *metadata2.Column {
-		return &metadata2.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata2.ColumnPartitionKey}
+		return &metadata2.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata2.ColumnKindPartitionKey}
 	}
 	ks.Tables["single"] = &metadata2.Table{Keyspace: "ks", Name: "single", PartitionKey: []*metadata2.Column{column("a", "int")}}
 	ks.Tables["composite"] = &metadata2.Table{Keyspace: "ks", Name: "composite", PartitionKey: []*metadata2.Column{column("a", "int"), column("b", "text")}}

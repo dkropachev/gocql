@@ -36,15 +36,15 @@ func (a avoid) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
 
 func ExampleNewSnapshot() {
 	hosts := []metadata.HostSnapshot{
-		{ID: cql.UUID{15: 1}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
-		{ID: cql.UUID{15: 2}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
-		{ID: cql.UUID{15: 3}, Datacenter: "dc2", Enabled: true, Up: true, Connected: true},
+		{HostID: cql.UUID{15: 1}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
+		{HostID: cql.UUID{15: 2}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
+		{HostID: cql.UUID{15: 3}, Datacenter: "dc2", Enabled: true, Up: true, Connected: true},
 	}
 	m := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts:     hosts,
 		Keyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata.Table{"t": {Keyspace: "ks", Name: "t"}}}},
 		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{
-			{HostID: hosts[0].ID}, {HostID: hosts[1].ID}, {HostID: hosts[2].ID},
+			{HostID: hosts[0].HostID}, {HostID: hosts[1].HostID}, {HostID: hosts[2].HostID},
 		}}}},
 		LocalDatacenter: "dc1",
 	})
@@ -52,7 +52,7 @@ func ExampleNewSnapshot() {
 	if err != nil {
 		panic(err)
 	}
-	policy := avoid{Policy: builtin, host: hosts[0].ID}
+	policy := avoid{Policy: builtin, host: hosts[0].HostID}
 	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](42), Kind: cql.OrdinaryStatement}
 	plan := policy.Fallback(info, m)
 	for r, ok := plan.Next(); ok; r, ok = plan.Next() {

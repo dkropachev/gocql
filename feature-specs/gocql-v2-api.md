@@ -1782,15 +1782,15 @@ func (s *Session) Closed() bool
 
 // package event
 type Kind uint8
-const (Unknown Kind = iota; Topology; Status; Schema; Control; ClientRoute; Overflow)
+const (KindUnknown Kind = iota; KindTopology; KindStatus; KindSchema; KindControl; KindClientRoute; KindOverflow)
 type Filter struct { Keyspace string; Kinds []Kind; Capacity int }
 type Event struct {
     Kind Kind
     Generation uint64
     Address netip.AddrPort
-    HostID cql.UUID
+    HostID cql.UUID // Topology, Status and Control; REMOVED_NODE from the previous snapshot
     Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ...
-    Target Target // typed string: TargetKeyspace, TargetTable, ...
+    ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ...
     Keyspace, Object string
     ArgumentTypes []string  // function/aggregate argument types
     ConnectionIDs []string  // ClientRoute
@@ -1802,7 +1802,10 @@ func (s *Subscription) Close()
 // package metadata
 type Snapshot struct { /* immutable */ }
 func (m *Snapshot) Hosts() []routing.HostSnapshot
+func (m *Snapshot) Host(cql.UUID) (routing.HostSnapshot, bool)
+func (m *Snapshot) Keyspaces() []string // sorted names
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
+func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
 func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
 func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
 func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
@@ -1810,8 +1813,12 @@ func (m *Snapshot) HostRoutes() []routing.Route
 func (m *Snapshot) ReplicaRoutes(routing.Info) []routing.Route
 func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
-// Schema types: Keyspace, Table, TableOptions, Column, ColumnKind, ColumnOrder
-// (ASC, DESC), Index, IndexKind, View, Type, Function, Aggregate.
+// Schema types: Keyspace, Table, TableOptions, Column, ColumnKind
+// (ColumnKindPartitionKey, ...), ColumnOrder (ASC, DESC), Index, IndexKind,
+// View, Type, Function, Aggregate.
+// Keyspace.Functions and Aggregates are keyed by signature, "name(int,text)";
+// Keyspace.Function(name, args...), FunctionsNamed(name), Aggregate and
+// AggregatesNamed look them up.
 type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 
 // package metrics
@@ -1832,7 +1839,7 @@ type HostSnapshot struct {
     Tokens []int64
     Shards uint32
     ShardingIgnoreMSB uint8
-    ID cql.UUID
+    HostID cql.UUID
     Enabled, Connected, Up bool
 }
 type TokenRange struct { Start, End int64; Replicas []Target }
@@ -1853,7 +1860,7 @@ topology/status/schema/control/client-route variants and carry a generation.
 Publication events are emitted only after the corresponding snapshot is visible.
 A subscription has a bounded queue (positive Capacity; zero selects 64, negative
 is invalid). On overflow the dispatcher discards queued deltas, guarantees one
-event.Overflow carrying the highest discarded generation, then closes that
+event.KindOverflow carrying the highest discarded generation, then closes that
 subscription after the marker; it never waits on control I/O. Resynchronize by
 subscribing again first, then reading Metadata (or completing an explicit
 refresh if freshness is required), and ignoring queued publication events at or

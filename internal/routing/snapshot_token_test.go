@@ -21,7 +21,7 @@ import (
 
 func tokenTestSnapshot() *MetadataSnapshot {
 	column := func(name, typ string) *metadata.Column {
-		return &metadata.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnPartitionKey}
+		return &metadata.Column{Keyspace: "ks", Name: name, Type: typ, Kind: metadata.ColumnKindPartitionKey}
 	}
 	ks := &metadata.Keyspace{
 		Name: "ks",

@@ -452,7 +452,7 @@ func TestPaging(t *testing.T) {
 		changedSeen := map[int32]bool{dst.ID: true}
 		// Keep this cursor idle while exhausting its exact host reservation. A
 		// separate native control connection must still dispatch real schema events.
-		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Schema}, Keyspace: keyspace, Capacity: 2})
+		sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: keyspace, Capacity: 2})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -480,7 +480,7 @@ func TestPaging(t *testing.T) {
 		}
 		select {
 		case got, ok := <-sub.Events():
-			if !ok || got.Kind != event.Schema {
+			if !ok || got.Kind != event.KindSchema {
 				t.Fatal("control event lost while stream idle", got, ok)
 			}
 		case <-time.After(10 * time.Second):

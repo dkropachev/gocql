@@ -19,12 +19,12 @@ func SnapshotHost(h *HostInfo) (metadata.HostSnapshot, error) {
 	h.privateStorage.InternalMu.RLock()
 	address, _ := hostInfoConnectAddressLocked(h)
 	addr, _ := netip.AddrFromSlice(address)
-	out := metadata.HostSnapshot{ID: h.privateStorage.InternalHostId, Address: netip.AddrPortFrom(addr.Unmap(), uint16(h.privateStorage.InternalPort)), Datacenter: h.privateStorage.InternalDataCenter, Rack: h.privateStorage.InternalRack, Up: h.privateStorage.InternalState.Load() == NodeUp, Enabled: true}
+	out := metadata.HostSnapshot{HostID: h.privateStorage.InternalHostId, Address: netip.AddrPortFrom(addr.Unmap(), uint16(h.privateStorage.InternalPort)), Datacenter: h.privateStorage.InternalDataCenter, Rack: h.privateStorage.InternalRack, Up: h.privateStorage.InternalState.Load() == NodeUp, Enabled: true}
 	var tokenErr error
 	for _, token := range h.privateStorage.InternalTokens {
 		n, err := strconv.ParseInt(token, 10, 64)
 		if err != nil {
-			tokenErr = fmt.Errorf("host %s invalid token %q: %w", out.ID, token, err)
+			tokenErr = fmt.Errorf("host %s invalid token %q: %w", out.HostID, token, err)
 			out.Tokens = nil
 			break
 		}

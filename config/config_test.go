@@ -290,7 +290,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("CorrectionsAndResets", func(t *testing.T) {
 		b := New(ScyllaV4).WithContactPoints("h").
 			WithHeartbeat(-time.Second, -time.Second).WithHeartbeat(0, 0).
-			WithIgnoreEvents(event.Overflow).WithIgnoreEvents(event.Status).
+			WithIgnoreEvents(event.KindOverflow).WithIgnoreEvents(event.KindStatus).
 			WithTLSSource(staticTLS{}).WithTLS(nil).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "a"}).WithClientRoutes().
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
@@ -431,13 +431,13 @@ func TestConfigBuilder(t *testing.T) {
 		id := cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")
 		other := cql.MustParseUUID("10112233-4455-4677-8899-aabbccddeeff")
 		keep := mustBuildConfig(t, New(ScyllaV4, "h").WithOnlyHost(id)).settings.HostFilter
-		if keep == nil || !keep(metadata.HostSnapshot{ID: id}) || keep(metadata.HostSnapshot{ID: other}) {
+		if keep == nil || !keep(metadata.HostSnapshot{HostID: id}) || keep(metadata.HostSnapshot{HostID: other}) {
 			t.Fatal("WithOnlyHost did not keep exactly its host")
 		}
 		keep = mustBuildConfig(t, New(ScyllaV4, "h").WithOnlyHost(id).
 			WithHostFilter(func(h metadata.HostSnapshot) bool { return h.Datacenter == "dc1" })).settings.HostFilter
-		if !keep(metadata.HostSnapshot{ID: id, Datacenter: "dc1"}) || keep(metadata.HostSnapshot{ID: id, Datacenter: "dc2"}) ||
-			keep(metadata.HostSnapshot{ID: other, Datacenter: "dc1"}) {
+		if !keep(metadata.HostSnapshot{HostID: id, Datacenter: "dc1"}) || keep(metadata.HostSnapshot{HostID: id, Datacenter: "dc2"}) ||
+			keep(metadata.HostSnapshot{HostID: other, Datacenter: "dc1"}) {
 			t.Fatal("WithOnlyHost and WithHostFilter must both pass")
 		}
 		if _, err := New(ScyllaV4, "h").WithOnlyHost(cql.UUID{}).Build(); err == nil {
@@ -559,11 +559,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("IgnoreEvents", func(t *testing.T) {
-		m := mustBuildConfig(t, New(ScyllaV4, "h").WithIgnoreEvents(event.Schema, event.Status)).settings.Metadata
+		m := mustBuildConfig(t, New(ScyllaV4, "h").WithIgnoreEvents(event.KindSchema, event.KindStatus)).settings.Metadata
 		if m.SchemaEvents || m.StatusEvents || !m.TopologyEvents || !m.ClientRouteEvents {
 			t.Fatalf("events = %+v", m)
 		}
-		if _, err := New(ScyllaV4, "h").WithIgnoreEvents(event.Overflow).Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithIgnoreEvents(event.KindOverflow).Build(); err == nil {
 			t.Fatal("IgnoreEvents accepted a client-side event")
 		}
 	})

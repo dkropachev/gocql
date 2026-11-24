@@ -40,7 +40,7 @@ func TestControlReconnect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
-	sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.Control}})
+	sub, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindControl}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestControlReconnect(t *testing.T) {
 	for {
 		select {
 		case e := <-sub.Events():
-			if e.Kind == event.Control {
+			if e.Kind == event.KindControl {
 				reconnects++
 			}
 			continue

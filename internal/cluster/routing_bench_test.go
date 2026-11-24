@@ -29,7 +29,7 @@ func BenchmarkRouting(b *testing.B) {
 						routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 						for i := range routing.SnapshotData(m).InternalHosts {
 							h := v2TestHost(0, "a", fmt.Sprintf("r%d", i%3+1))
-							binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+							binary.BigEndian.PutUint64(h.HostID[8:], uint64(i+1))
 							routing.SnapshotData(m).InternalHosts[i] = h
 						}
 						routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
@@ -62,7 +62,7 @@ func BenchmarkRouting(b *testing.B) {
 					routing.SnapshotData(m).InternalHosts = make([]metadata.HostSnapshot, count)
 					for i := range routing.SnapshotData(m).InternalHosts {
 						h := v2TestHost(0, "a", "r1")
-						binary.BigEndian.PutUint64(h.ID[8:], uint64(i+1))
+						binary.BigEndian.PutUint64(h.HostID[8:], uint64(i+1))
 						routing.SnapshotData(m).InternalHosts[i] = h
 					}
 					routing.SnapshotData(m).InternalHostIndex = implRouting.InternalBuildRoutingHostIndex(routing.SnapshotData(m).InternalHosts)
@@ -81,11 +81,11 @@ func BenchmarkRouting(b *testing.B) {
 						options.Latency.Enabled = true
 					}
 					if kind == "pinned" {
-						info.HostID = cql.Option[cql.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].ID, Set: true}
+						info.HostID = cql.Option[cql.UUID]{Value: routing.SnapshotData(m).InternalHosts[0].HostID, Set: true}
 					}
 					p := codecTestMust(implRouting.NewRoutingPolicy(options))
 					if kind == "latency" {
-						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+						p.(*implRouting.InternalRoutingPolicy).InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 					}
 					b.ReportAllocs()
 					b.ResetTimer()

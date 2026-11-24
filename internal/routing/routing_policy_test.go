@@ -51,18 +51,18 @@ func TestRoutingPolicy(t *testing.T) {
 
 		t.Run("TabletMissAndStrictShard", func(t *testing.T) {
 			m := v2TestMetadata()
-			SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}] = []metadata.TokenRange{{Start: 10, End: 20, Replicas: []metadata.Target{{HostID: SnapshotData(m).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 2, Set: true}}}}}
+			SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}] = []metadata.TokenRange{{Start: 10, End: 20, Replicas: []metadata.Target{{HostID: SnapshotData(m).InternalHosts[1].HostID, ShardID: cql.Option[uint32]{Value: 2, Set: true}}}}}
 			if got, err := m.Replicas("ks", "table", 30); err != nil || len(got) != 0 {
 				t.Fatal("tablet miss fell back to vnode", got, err)
 			}
-			single := SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}, StrictShard: true})
+			single := SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].HostID, ShardID: cql.Option[uint32]{Value: 9, Set: true}, StrictShard: true})
 			if err := single.Validate(m); err == nil {
 				t.Fatal("invalid strict shard accepted")
 			}
 			if _, ok := nextTarget(NewPlan(single, routing.Info{}, m)); ok {
 				t.Fatal("strict shard fell back")
 			}
-			single = SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Value: 9, Set: true}})
+			single = SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].HostID, ShardID: cql.Option[uint32]{Value: 9, Set: true}})
 			target, ok := nextTarget(NewPlan(single, routing.Info{}, m))
 			if !ok || target.ShardID.Set {
 				t.Fatal("hint fallback failed", target, ok)

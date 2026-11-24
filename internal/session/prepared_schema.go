@@ -81,11 +81,11 @@ func (s *InternalPreparedState) queueMetadataConflict() error {
 	}
 	s.conflictEpoch.Store(epoch)
 	s.conflictRefresh.Store(true)
-	target := event.TargetTable
+	target := event.ObjectTable
 	if s.InternalInfo.Table == "" {
-		target = event.TargetKeyspace
+		target = event.ObjectKeyspace
 	}
-	s.InternalSession.InvalidatePreparedSchema(event.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, Target: target})
+	s.InternalSession.InvalidatePreparedSchema(event.Event{Keyspace: s.InternalInfo.Keyspace, Object: s.InternalInfo.Table, ObjectKind: target})
 	s.InternalSession.MarkV2SchemaStale(s.InternalInfo.Keyspace, false)
 	return nil
 }

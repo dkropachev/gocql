@@ -49,7 +49,7 @@ func TestHostConnPool(t *testing.T) {
 						if !errors.Is(err, cause) {
 							t.Fatal("failure replaced", err)
 						}
-						if snapshot.ID != id || snapshot.Address.String() != "127.0.0.7:9042" || snapshot.Datacenter != "dc1" || snapshot.Rack != "r2" || !reflect.DeepEqual(snapshot.Tokens, []int64{-12, 64}) || !snapshot.Up || snapshot.Shards != 4 || !snapshot.Enabled || snapshot.Connected {
+						if snapshot.HostID != id || snapshot.Address.String() != "127.0.0.7:9042" || snapshot.Datacenter != "dc1" || snapshot.Rack != "r2" || !reflect.DeepEqual(snapshot.Tokens, []int64{-12, 64}) || !snapshot.Up || snapshot.Shards != 4 || !snapshot.Enabled || snapshot.Connected {
 							t.Fatalf("lost host context: %+v", snapshot)
 						}
 						snapshot.Tokens[0] = 999 // Detached callback storage cannot mutate HostInfo.
@@ -75,7 +75,7 @@ func TestHostConnPool(t *testing.T) {
 					}
 					var hook endpoint2.ConvictionPolicy = policy
 					hook.Reset(endpoint2.ConvictionEvent{Host: fresh})
-					if len(policy.resets) != 1 || policy.resets[0].Host.ID != id {
+					if len(policy.resets) != 1 || policy.resets[0].Host.HostID != id {
 						t.Fatal("reset lost host context")
 					}
 					// A successful completion or a still-connected pool must not invoke policy.
@@ -124,7 +124,7 @@ func TestHostConnPool(t *testing.T) {
 				downs := 0
 				p := newPool(policy, &downs)
 				p.shardFailed(cause, 3, 8)
-				if len(events) != 1 || !events[0].ShardID.Set || events[0].ShardID.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.ID != id || events[0].Source != endpoint2.ConvictionPool {
+				if len(events) != 1 || !events[0].ShardID.Set || events[0].ShardID.Value != 3 || !errors.Is(events[0].Err, cause) || events[0].Host.HostID != id || events[0].Source != endpoint2.ConvictionPool {
 					t.Fatalf("shard failure reported as %+v", events)
 				}
 				if downs != 0 {
@@ -215,7 +215,7 @@ func TestHostConnPool(t *testing.T) {
 				}
 				p.shardFailed(cause, 5, 8)
 				p.resetConviction()
-				if len(policy.resets) != 2 || policy.resets[1].ShardID.Set || policy.resets[1].Host.ID != id {
+				if len(policy.resets) != 2 || policy.resets[1].ShardID.Set || policy.resets[1].Host.HostID != id {
 					t.Fatalf("host reset reported as %+v", policy.resets)
 				}
 				p.shardConnected(5, 8)

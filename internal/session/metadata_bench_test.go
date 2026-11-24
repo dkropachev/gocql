@@ -22,7 +22,7 @@ func BenchmarkMetadata(b *testing.B) {
 		b.ReportAllocs()
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			implCluster.InternalSubscriptionPublish(sub, event.Event{Kind: event.Status})
+			implCluster.InternalSubscriptionPublish(sub, event.Event{Kind: event.KindStatus})
 			<-sub.Events()
 		}
 	})

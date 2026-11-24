@@ -89,11 +89,11 @@ func TestSchemaAgreement(t *testing.T) {
 			for _, success := range []bool{false, true} {
 				t.Run(fmt.Sprint(success), func(t *testing.T) {
 					s, id, missing := agreementSession(t)
-					hosts := []metadata.HostSnapshot{{ID: missing, Enabled: true, Up: false}}
+					hosts := []metadata.HostSnapshot{{HostID: missing, Enabled: true, Up: false}}
 					if success {
 						c, _ := agreementConn(t, s, id, cql.RandomUUID(), 0)
 						agreementPool(s, c)
-						hosts = append(hosts, metadata.HostSnapshot{ID: id, Enabled: true, Up: true})
+						hosts = append(hosts, metadata.HostSnapshot{HostID: id, Enabled: true, Up: true})
 					}
 					s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
 					if err := s.AwaitSchemaAgreement(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
@@ -109,7 +109,7 @@ func TestSchemaAgreement(t *testing.T) {
 			c, _ := agreementConn(t, s, id, version, 0)
 			agreementPool(s, c)
 			coordinator, count := agreementConn(t, s, coordinatorID, version, 0)
-			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{ID: id, Enabled: true}, {ID: cql.RandomUUID(), Enabled: false}}}))
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{HostID: id, Enabled: true}, {HostID: cql.RandomUUID(), Enabled: false}}}))
 			if err := s.AwaitV2SchemaAgreementOn(context.Background(), coordinator); err != nil {
 				t.Fatal(err)
 			}
@@ -126,7 +126,7 @@ func TestSchemaAgreement(t *testing.T) {
 			s, id, _ := agreementSession(t)
 			c, count := agreementConn(t, s, id, cql.RandomUUID(), cqlerr.CodeUnauthorized)
 			agreementPool(s, c)
-			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{ID: id, Enabled: true}}}))
+			s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: []metadata.HostSnapshot{{HostID: id, Enabled: true}}}))
 			err := s.AwaitSchemaAgreement(context.Background())
 			if request, ok := errors.AsType[cqlerr.ServerError](err); !ok || request.Code() != cqlerr.CodeUnauthorized {
 				t.Fatal(err)
@@ -150,7 +150,7 @@ func TestSchemaAgreement(t *testing.T) {
 			snapshot := s.Metadata()
 			snapshotCopy := *snapshot
 			routing.SnapshotData(&snapshotCopy).InternalHosts = append([]metadata.HostSnapshot(nil), routing.SnapshotData(snapshot).InternalHosts...)
-			routing.SnapshotData(&snapshotCopy).InternalHosts = append(routing.SnapshotData(&snapshotCopy).InternalHosts, metadata.HostSnapshot{ID: cql.RandomUUID(), Enabled: true})
+			routing.SnapshotData(&snapshotCopy).InternalHosts = append(routing.SnapshotData(&snapshotCopy).InternalHosts, metadata.HostSnapshot{HostID: cql.RandomUUID(), Enabled: true})
 			s.Peripheral().InternalSnapshot.Store(&snapshotCopy)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()

@@ -81,7 +81,7 @@ func BenchmarkPrepared(b *testing.B) {
 									return
 								default:
 								}
-								s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "unrelated", Target: event.TargetTable})
+								s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "unrelated", ObjectKind: event.ObjectTable})
 								p := s.Peripheral()
 								current := s.Metadata()
 								info := routing.Info{Keyspace: "ks", Table: "table"}

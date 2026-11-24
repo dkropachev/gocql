@@ -140,9 +140,9 @@ func (p *validatingPolicy) Observe(routing.AttemptEvent)      { p.observed++ }
 // pinned plan without consulting an application's policy.
 func TestPinnedBeforePolicy(t *testing.T) {
 	m := v2TestMetadata()
-	host := SnapshotData(m).InternalHosts[2].ID
+	host := SnapshotData(m).InternalHosts[2].HostID
 	app := &appPolicy{}
-	for _, policy := range []RoutingPolicy{EngineOf(app), SingleTargetRouting(Target{HostID: SnapshotData(m).InternalHosts[0].ID})} {
+	for _, policy := range []RoutingPolicy{EngineOf(app), SingleTargetRouting(Target{HostID: SnapshotData(m).InternalHosts[0].HostID})} {
 		plan := NewPlan(policy, routing.Info{HostID: cql.Some(host), ShardID: cql.Some[uint32](1)}, m)
 		target, ok := nextTarget(plan)
 		if !ok || target.HostID != host || target.ShardID != cql.Some[uint32](1) {

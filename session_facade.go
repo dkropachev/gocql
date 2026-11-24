@@ -219,8 +219,20 @@ func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata()
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }
 
-// RefreshMetadata waits for a shared topology refresh under ctx. The queries
-// performing that refresh use the configured metadata timeout.
+// RefreshMetadata reloads the topology, the client routes, when the session
+// uses them, and the schema Mode loads, then publishes a new Snapshot. A
+// topology refresh already under way is shared rather than repeated. ctx
+// bounds the wait; the queries themselves use the configured metadata
+// timeout.
+//
+// A part that fails to reload keeps its previous metadata. A failed topology
+// or client routes reload is a *cqlerr.PartialRefreshError naming it, and so
+// is a keyspace whose schema failed to load. A failed schema listing returns
+// the query's error. When both happen, the errors are joined: errors.As
+// finds the PartialRefreshError.
+// RefreshMetadata also returns ctx's error, cqlerr.ErrClosed once the
+// session closes, and cqlerr.ErrNoControl when the session has no control
+// connection.
 func (s *Session) RefreshMetadata(ctx context.Context) error {
 	return s.internal().RefreshMetadata(ctx)
 }

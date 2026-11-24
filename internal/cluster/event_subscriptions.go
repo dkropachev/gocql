@@ -68,7 +68,7 @@ func (s *Subscription) Close() {
 	}
 }
 func (s *Subscription) accepts(e event.Event) bool {
-	if e.Kind == event.Overflow {
+	if e.Kind == event.KindOverflow {
 		return true
 	}
 	if s.privateStorage.filter.Keyspace != "" && e.Keyspace != s.privateStorage.filter.Keyspace {
@@ -93,7 +93,7 @@ func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 	e.ArgumentTypes = append([]string(nil), e.ArgumentTypes...)
 	e.ConnectionIDs = append([]string(nil), e.ConnectionIDs...)
 	e.HostIDs = append([]cql.UUID(nil), e.HostIDs...)
-	if e.Kind != event.Overflow {
+	if e.Kind != event.KindOverflow {
 		select {
 		case s.privateStorage.events <- e:
 			return
@@ -109,10 +109,10 @@ func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 			}
 		default:
 			change := event.ChangeResync
-			if e.Kind == event.Overflow && e.Change != "" {
+			if e.Kind == event.KindOverflow && e.Change != "" {
 				change = e.Change
 			}
-			s.privateStorage.events <- event.Event{Kind: event.Overflow, Generation: highest, Change: change}
+			s.privateStorage.events <- event.Event{Kind: event.KindOverflow, Generation: highest, Change: change}
 			s.privateStorage.closed = true
 			close(s.privateStorage.events)
 			return
@@ -130,7 +130,7 @@ func (s *Core) Subscribe(filter event.Filter) (*Subscription, error) {
 		filter.Capacity = 64
 	}
 	for _, kind := range filter.Kinds {
-		if kind == event.Unknown || kind > event.Overflow {
+		if kind == event.KindUnknown || kind > event.KindOverflow {
 			return nil, cqltype.TypeValidation("event filter", "unknown event kind")
 		}
 	}
@@ -182,11 +182,18 @@ func eventV2Address(host net.IP, port int) netip.AddrPort {
 	return netip.AddrPortFrom(ip.Unmap(), uint16(port))
 }
 func (s *Core) PublishV2Event(source oldevents.Event) {
-	s.publishV2EventMode(source, true, true)
+	s.publishV2EventMode(source, true, true, nil)
 }
-func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false) }
-func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true) }
-func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool) {
+func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false, nil) }
+func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true, nil) }
+
+// emitV2NodeEvent delivers a topology or status event, taking a host ID the
+// current snapshot no longer has, such as a removed node's, from prev.
+func (s *Core) emitV2NodeEvent(source oldevents.Event, prev *routing.MetadataSnapshot) {
+	s.publishV2EventMode(source, false, true, prev)
+}
+
+func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool, prev *routing.MetadataSnapshot) {
 	p := s.Peripheral()
 	if p == nil {
 		return
@@ -194,64 +201,64 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	e := event.Event{Generation: s.Metadata().Generation()}
 	switch v := source.(type) {
 	case *oldevents.TopologyChangeEvent:
-		e.Kind = event.Topology
+		e.Kind = event.KindTopology
 		e.Change = event.Change(v.Change)
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.StatusChangeEvent:
-		e.Kind = event.Status
+		e.Kind = event.KindStatus
 		e.Change = event.Change(v.Change)
 		e.Address = eventV2Address(v.Host, v.Port)
 	case *oldevents.SchemaChangeKeyspaceEvent:
-		e.Kind = event.Schema
-		e.Target = event.TargetKeyspace
+		e.Kind = event.KindSchema
+		e.ObjectKind = event.ObjectKeyspace
 		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 	case *oldevents.SchemaChangeTableEvent:
-		e.Kind = event.Schema
-		e.Target = event.TargetTable
+		e.Kind = event.KindSchema
+		e.ObjectKind = event.ObjectTable
 		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Table
 	case *oldevents.SchemaChangeTypeEvent:
-		e.Kind = event.Schema
-		e.Target = event.TargetType
+		e.Kind = event.KindSchema
+		e.ObjectKind = event.ObjectType
 		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.TypeName
 	case *oldevents.SchemaChangeFunctionEvent:
-		e.Kind = event.Schema
-		e.Target = event.TargetFunction
+		e.Kind = event.KindSchema
+		e.ObjectKind = event.ObjectFunction
 		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Function
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.SchemaChangeAggregateEvent:
-		e.Kind = event.Schema
-		e.Target = event.TargetAggregate
+		e.Kind = event.KindSchema
+		e.ObjectKind = event.ObjectAggregate
 		e.Change = event.Change(v.Change)
 		e.Keyspace = v.Keyspace
 		e.Object = v.Aggregate
 		e.ArgumentTypes = v.Arguments
 	case *oldevents.ClientRoutesChangedEvent:
-		e.Kind = event.ClientRoute
+		e.Kind = event.KindClientRoute
 		e.Change = event.Change(v.ChangeType)
 		e.ConnectionIDs = append([]string(nil), v.ConnectionIDs...)
 		e.HostIDs = s.clientRouteHostIDs(v.HostIDs)
 	case *oldevents.ControlConnectionRecreatedEvent:
-		e.Kind = event.Control
+		e.Kind = event.KindControl
 		e.Change = event.ChangeReconnected
 		e.Address = eventV2Address(v.NewHost.Host, v.NewHost.Port)
 		e.HostID, _ = cql.ParseUUID(v.NewHost.HostID)
 	default:
 		return
 	}
-	if e.Kind == event.Schema && invalidate {
+	if e.Kind == event.KindSchema && invalidate {
 		s.InvalidatePreparedSchema(e)
 		p.InternalMu.Lock()
 		p.InternalPublicationRevision++
 		p.bumpSchemaEpochLocked(e.Keyspace)
 		p.schemaGeneration.Add(1)
-		if e.Target == event.TargetKeyspace {
+		if e.ObjectKind == event.ObjectKeyspace {
 			if e.Change == "DROPPED" {
 				p.schemaDropped[e.Keyspace] = true
 			}
@@ -261,11 +268,11 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		}
 		if e.Change == "DROPPED" && s.privateStorage.InternalMetadataDescriber != nil {
 			md := s.privateStorage.InternalMetadataDescriber.InternalMetadata
-			if e.Target == event.TargetKeyspace {
+			if e.ObjectKind == event.ObjectKeyspace {
 				md.privateStorage.InternalKeyspaceMetadata.InternalRemoveKeyspace(e.Keyspace)
 			} else {
 				md.privateStorage.InternalKeyspaceMetadata.InternalUpdateKeyspace(e.Keyspace, func(ks *metadata.Keyspace) {
-					switch e.Target {
+					switch e.ObjectKind {
 					case "TABLE":
 						implMetadata.InternalKeyspaceMetadataRemoveTable(ks, e.Object)
 					case "TYPE":
@@ -289,7 +296,7 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		p.InternalMu.Unlock()
 		if deliver || e.Change == "DROPPED" {
 			if !s.PublishV2Metadata() {
-				s.PublishV2LocalEvent(event.Event{Kind: event.Overflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
+				s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 				return
 			}
 			e.Generation = s.Metadata().Generation()
@@ -299,12 +306,12 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 		return
 	}
 	if e.HostID == (cql.UUID{}) && e.Address.IsValid() {
-		for _, host := range routing.SnapshotData(s.Metadata()).InternalHosts {
-			if host.Address == e.Address {
-				e.HostID = host.ID
-				break
-			}
+		snapshots := []*routing.MetadataSnapshot{s.Metadata(), prev}
+		if e.Change == event.ChangeRemovedNode {
+			// The ring update has already dropped a removed node.
+			snapshots[0], snapshots[1] = prev, snapshots[0]
 		}
+		e.HostID = eventHostID(e.Address, snapshots...)
 	}
 	p.InternalMu.Lock()
 	subs := make([]*Subscription, 0, len(p.InternalSubscribers))
@@ -323,6 +330,22 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 			p.InternalMu.Unlock()
 		}
 	}
+}
+
+// eventHostID returns the ID of the host at addr in the first snapshot that
+// has one, or the zero UUID.
+func eventHostID(addr netip.AddrPort, snapshots ...*routing.MetadataSnapshot) cql.UUID {
+	for _, m := range snapshots {
+		if m == nil {
+			continue
+		}
+		for _, host := range routing.SnapshotData(m).InternalHosts {
+			if host.Address == addr {
+				return host.HostID
+			}
+		}
+	}
+	return cql.UUID{}
 }
 
 func (s *Core) PublishV2LocalEvent(event event.Event) {

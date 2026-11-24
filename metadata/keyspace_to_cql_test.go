@@ -314,11 +314,6 @@ func TestKeyspaceToCQL(t *testing.T) {
 					if sb.String() != tc.want {
 						t.Fatalf("got  %q\nwant %q", sb.String(), tc.want)
 					}
-					// Clone keeps what the clause is rendered from.
-					sb.Reset()
-					if err := keyspaceMetadataKeyspaceToCQL(ks.Clone(), &sb); err != nil || sb.String() != tc.want {
-						t.Fatalf("clone: %q, %v", sb.String(), err)
-					}
 				})
 			}
 		})
@@ -348,10 +343,10 @@ func TestKeyspaceToCQL(t *testing.T) {
 						Name:           "users",
 						OrderedColumns: []string{"id", "home"},
 						Columns: map[string]*Column{
-							"id":   col("id", "uuid", ColumnPartitionKey),
-							"home": col("home", "frozen<addr>", ColumnRegular),
+							"id":   col("id", "uuid", ColumnKindPartitionKey),
+							"home": col("home", "frozen<addr>", ColumnKindRegular),
 						},
-						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
+						PartitionKey: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 						Options:      TableOptions{GCGraceSeconds: 864000},
 					},
 				},
@@ -381,7 +376,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						Keyspace: "ks", Name: "users_by_zip", BaseTable: "users",
 						WhereClause:    "home IS NOT NULL",
 						OrderedColumns: []string{"id", "home"},
-						PartitionKey:   []*Column{col("id", "uuid", ColumnPartitionKey)},
+						PartitionKey:   []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					},
 				},
 			}
@@ -460,8 +455,8 @@ func TestKeyspaceToCQL(t *testing.T) {
 					ks.Types[n] = &Type{Keyspace: "ks", Name: n, FieldNames: []string{"f"}, FieldTypes: []string{"int"}}
 					ks.Tables[n] = &Table{
 						Name: n, OrderedColumns: []string{"id"},
-						Columns:      map[string]*Column{"id": col("id", "uuid", ColumnPartitionKey)},
-						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
+						Columns:      map[string]*Column{"id": col("id", "uuid", ColumnKindPartitionKey)},
+						PartitionKey: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					}
 					ks.Indexes[n+"_idx"] = &Index{
 						Name: n + "_idx", Keyspace: "ks", Table: n,
@@ -480,7 +475,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 					ks.Views[n+"_v"] = &View{
 						Keyspace: "ks", Name: n + "_v", BaseTable: n,
 						WhereClause: "id IS NOT NULL", OrderedColumns: []string{"id"},
-						PartitionKey: []*Column{col("id", "uuid", ColumnPartitionKey)},
+						PartitionKey: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					}
 				}
 				return ks
@@ -524,9 +519,9 @@ func TestKeyspaceToCQL(t *testing.T) {
 						ClusteringColumns: []*Column{{Name: "Order", Type: "int", ClusteringOrder: ColumnOrderDesc}},
 						OrderedColumns:    []string{"pk", "Order", "select"},
 						Columns: map[string]*Column{
-							"pk":     {Name: "pk", Type: "int", Kind: ColumnPartitionKey},
-							"Order":  {Name: "Order", Type: "int", Kind: ColumnClusteringKey},
-							"select": {Name: "select", Type: "text", Kind: ColumnRegular},
+							"pk":     {Name: "pk", Type: "int", Kind: ColumnKindPartitionKey},
+							"Order":  {Name: "Order", Type: "int", Kind: ColumnKindClusteringKey},
+							"select": {Name: "select", Type: "text", Kind: ColumnKindRegular},
 						},
 					},
 				},
@@ -608,8 +603,8 @@ func TestKeyspaceToCQL(t *testing.T) {
 				Tables: map[string]*Table{"t": {
 					Name:           "t",
 					OrderedColumns: []string{"id"},
-					Columns:        map[string]*Column{"id": col("id", "int", ColumnPartitionKey)},
-					PartitionKey:   []*Column{col("id", "int", ColumnPartitionKey)},
+					Columns:        map[string]*Column{"id": col("id", "int", ColumnKindPartitionKey)},
+					PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 				}},
 			}
 
@@ -837,7 +832,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause:    "id IS NOT NULL",
 				OrderedColumns: []string{"id", "name"},
-				PartitionKey:   []*Column{col("id", "int", ColumnPartitionKey)},
+				PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 			}
 			var sb strings.Builder
 			if err := keyspaceMetadataViewToCQL(base, &sb, vm); err != nil {
@@ -863,7 +858,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause: "id IS NOT NULL", IncludeAllColumns: true,
 				OrderedColumns: []string{"id"},
-				PartitionKey:   []*Column{col("id", "int", ColumnPartitionKey)},
+				PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 			}
 			var sb strings.Builder
 			if err := keyspaceMetadataViewToCQL(base, &sb, vm); err != nil {

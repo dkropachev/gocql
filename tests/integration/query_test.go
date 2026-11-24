@@ -505,7 +505,7 @@ func TestQuery(t *testing.T) {
 			hosts := session.Metadata().Hosts()
 			for _, host := range hosts {
 				for i := 0; i < 5; i++ {
-					require.Equal(t, host.ID, cassandraUnpreparedOne(t, session, hostIDQuery, cql.OneColumn(cql.UUIDCodec), exec.Options{HostID: cql.Option[cql.UUID]{Value: host.ID, Set: true}}))
+					require.Equal(t, host.HostID, cassandraUnpreparedOne(t, session, hostIDQuery, cql.OneColumn(cql.UUIDCodec), exec.Options{HostID: cql.Option[cql.UUID]{Value: host.HostID, Set: true}}))
 				}
 			}
 			_, err := cql.ParseUUID("[invalid]")
@@ -516,11 +516,11 @@ func TestQuery(t *testing.T) {
 			err = runOn(exec.Options{HostID: cql.Option[cql.UUID]{Value: cql.RandomUUID(), Set: true}})
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 			host := hosts[0]
-			pool, ok := (*implSession.Session)(session).Data().InternalPool.InternalGetPoolByHostID(host.ID.String())
+			pool, ok := (*implSession.Session)(session).Data().InternalPool.InternalGetPoolByHostID(host.HostID.String())
 			require.True(t, ok)
 			implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeDown)
 			defer implEndpoint.InternalHostInfoSetState(pool.InternalHost, NodeUp)
-			err = runOn(exec.Options{HostID: cql.Option[cql.UUID]{Value: host.ID, Set: true}})
+			err = runOn(exec.Options{HostID: cql.Option[cql.UUID]{Value: host.HostID, Set: true}})
 			require.ErrorIs(t, err, cqlerr.ErrNoConnections)
 		})
 		t.Run("Keyspace", func(t *testing.T) {

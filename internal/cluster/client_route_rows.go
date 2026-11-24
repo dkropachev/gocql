@@ -349,7 +349,7 @@ func (p *ClientRoutesHandler) updateHostPortMappingContext(ctx context.Context, 
 		if !p.privateStorage.InternalSession.PublishV2Metadata() {
 			return p.privateStorage.InternalSession.v2MetadataPublicationError()
 		}
-		p.privateStorage.InternalSession.PublishV2LocalEvent(event.Event{Kind: event.ClientRoute, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: event.ChangeRefreshed})
+		p.privateStorage.InternalSession.PublishV2LocalEvent(event.Event{Kind: event.KindClientRoute, Generation: p.privateStorage.InternalSession.Metadata().Generation(), Change: event.ChangeRefreshed})
 	}
 	return nil
 }

@@ -30,6 +30,7 @@ import (
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/logging"
+	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	"github.com/scylladb/gocql/v2/internal/model"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/routing"
@@ -262,7 +263,7 @@ func TestTablets(t *testing.T) {
 			info := routing2.Info{Keyspace: "ks", Table: "table"}
 			first := s.Metadata()
 			stamp := s.CaptureTabletFeedback(info, first)
-			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[0].ID, ShardID: cql.Option[uint32]{Set: true}})
+			h := testHint(t, 0, 100, cql.Option[uint64]{Value: 7, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[0].HostID, ShardID: cql.Option[uint32]{Set: true}})
 			s.QueueTabletFeedback(h, stamp)
 			testDrain(s)
 			a := s.Metadata()
@@ -279,7 +280,7 @@ func TestTablets(t *testing.T) {
 			}
 			// A numerically smaller opaque version is a valid update. The stale request
 			// captured before the first update cannot overwrite its overlapping range.
-			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[1].ID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
+			moved := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, metadata.Target{HostID: routing.SnapshotData(first).InternalHosts[1].HostID, ShardID: cql.Option[uint32]{Value: 1, Set: true}})
 			s.QueueTabletFeedback(moved, stamp)
 			testDrain(s)
 			if s.Metadata() != a {
@@ -324,7 +325,8 @@ func TestTablets(t *testing.T) {
 			// Even before snapshot publication, a source drop/recreate rejects old replies.
 			before := s.Metadata()
 			sourceStamp := s.CaptureTabletFeedback(info, before)
-			dropped := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"].Clone()
+			dropped := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"]
+			dropped = implMetadata.InternalCloneV2Keyspace(dropped)
 			delete(dropped.Tables, "table")
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", dropped)
 			s.QueueTabletFeedback(h, sourceStamp)
@@ -334,7 +336,7 @@ func TestTablets(t *testing.T) {
 			}
 			implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalSet("ks", routing.SnapshotData(before).InternalKeyspaces["ks"])
 			ks := implCluster.MetadataData(implCluster.SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalKeyspaceMetadata.InternalGet()["ks"]
-			ks = ks.Clone()
+			ks = implMetadata.InternalCloneV2Keyspace(ks)
 			table := *ks.Tables["table"]
 			table.ID = cql.UUID{2}
 			ks.Tables["table"] = &table
@@ -392,7 +394,7 @@ func TestTablets(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)
 				first, ok := implRouting.InternalNextTarget(plan)
-				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].ID || !first.StrictShard || first.ShardID.Value != 1 {
+				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].HostID || !first.StrictShard || first.ShardID.Value != 1 {
 					t.Fatal("eligible remote leader was not strict first", first)
 				}
 				if got := v2PlanIDs(plan); !bytes.Equal(got, []byte{1, 2, 4}) {
@@ -427,7 +429,7 @@ func TestTablets(t *testing.T) {
 			}
 			// Explicit latency penalties apply to leaders and LWT without admitting hosts.
 			p := policy.(*implRouting.InternalRoutingPolicy)
-			p.InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].ID: time.Now().Add(time.Hour)}})
+			p.InternalDecisions.Store(&implRouting.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{routing.SnapshotData(m).InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 			if got := v2PlanIDs(implRouting.NewPlan(p, info, m)); !bytes.Equal(got, []byte{1, 2, 4, 3}) {
 				t.Fatal("penalized leader order", got)
 			}

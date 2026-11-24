@@ -70,7 +70,7 @@ func TestSchemaMetadata(t *testing.T) {
 			sub, _ := s.Subscribe(event.Filter{Capacity: 4})
 			s.HandleNodeEvent([]protocol.Frame{&frm.StatusChangeEventFrame{Change: "DOWN", Host: net.IPv4(127, 0, 0, 1), Port: 9042}})
 			ev := <-sub.Events()
-			if ev.Kind != event.Overflow || ev.Change != "PUBLICATION_RESYNC" {
+			if ev.Kind != event.KindOverflow || ev.Change != "PUBLICATION_RESYNC" {
 				t.Fatal("unpublished delta escaped", ev)
 			}
 			if _, ok := <-sub.Events(); ok {

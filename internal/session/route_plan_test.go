@@ -28,7 +28,7 @@ func (invalidPolicy) Fallback(routing2.Info, *metadata2.Snapshot) routing2.Plan 
 // without validating or consulting the profile's policy.
 func TestRoutePlanPinned(t *testing.T) {
 	m := v2TestMetadata()
-	host := implRouting.SnapshotData(m).InternalHosts[1].ID
+	host := implRouting.SnapshotData(m).InternalHosts[1].HostID
 	builtin := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "missing"}))
 	for _, policy := range []implRouting.RoutingPolicy{implRouting.EngineOf(invalidPolicy{}), builtin} {
 		if _, err := routePlan(policy, routing2.Info{}, m, new(implRouting.InternalLazyRoutingPlan), nil); err == nil {

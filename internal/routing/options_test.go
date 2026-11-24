@@ -23,7 +23,7 @@ import (
 // Table ks.tt is placed by tablets: (0, 100] on 4 shard 2 and 5 shard 1.
 
 func optionsHost(id byte, dc, rack string) metadata.HostSnapshot {
-	return metadata.HostSnapshot{ID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
+	return metadata.HostSnapshot{HostID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true, Shards: 4}
 }
 
 func optionsTarget(id byte, shard uint32) metadata.Target {

@@ -185,6 +185,7 @@ func TestClusterExamples(t *testing.T) {
 				}
 			},
 		},
+		{name: "SessionSubscribe", run: ExampleSession_Subscribe, want: []string{"app.events 2 columns"}},
 	} {
 		t.Run(ex.name, func(t *testing.T) {
 			for _, stmt := range ex.setup {

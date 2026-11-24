@@ -14,7 +14,7 @@ import (
 )
 
 func host(id byte, dc, rack string) metadata.HostSnapshot {
-	return metadata.HostSnapshot{ID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true}
+	return metadata.HostSnapshot{HostID: cql.UUID{15: id}, Datacenter: dc, Rack: rack, Enabled: true, Up: true, Connected: true}
 }
 
 // cluster has hosts 1 and 2 in dc a, 3 and 4 in dc b, and one token range
@@ -23,7 +23,7 @@ func cluster() routingtest.Cluster {
 	hosts := []metadata.HostSnapshot{host(1, "a", "r1"), host(2, "a", "r2"), host(3, "b", "r1"), host(4, "b", "r2")}
 	var replicas []metadata.Target
 	for _, i := range []int{2, 0, 3, 1} {
-		replicas = append(replicas, metadata.Target{HostID: hosts[i].ID})
+		replicas = append(replicas, metadata.Target{HostID: hosts[i].HostID})
 	}
 	return routingtest.Cluster{
 		Hosts:       hosts,
@@ -75,7 +75,7 @@ func TestNewSnapshot(t *testing.T) {
 	}
 
 	c := cluster()
-	c.Tablets = map[routingtest.Table][]metadata.TokenRange{{Keyspace: "ks", Name: "t"}: {{Start: 100, End: 200, Replicas: []metadata.Target{{HostID: c.Hosts[1].ID}}}}}
+	c.Tablets = map[routingtest.Table][]metadata.TokenRange{{Keyspace: "ks", Name: "t"}: {{Start: 100, End: 200, Replicas: []metadata.Target{{HostID: c.Hosts[1].HostID}}}}}
 	m = routingtest.NewSnapshot(c)
 	if replicas, err := m.Replicas("ks", "t", 150); err != nil || len(replicas) != 1 || replicas[0].HostID[15] != 2 {
 		t.Fatalf("tablet Replicas = %v, %v", replicas, err)

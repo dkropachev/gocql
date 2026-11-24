@@ -118,17 +118,17 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cql.ValidationError{Field: "WithOnlyHost", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter
-		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
+		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.HostID == id && (keep == nil || keep(host)) }
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
-		case event.Topology:
+		case event.KindTopology:
 			settings.Metadata.TopologyEvents = false
-		case event.Status:
+		case event.KindStatus:
 			settings.Metadata.StatusEvents = false
-		case event.Schema:
+		case event.KindSchema:
 			settings.Metadata.SchemaEvents = false
-		case event.ClientRoute:
+		case event.KindClientRoute:
 			settings.Metadata.ClientRouteEvents = false
 		default:
 			return Config{}, &cql.ValidationError{Field: "WithIgnoreEvents", Err: fmt.Errorf("%v is not a server event", kind)}
@@ -559,9 +559,10 @@ func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilde
 	return b
 }
 
-// WithIgnoreEvents stops listening for the given server events: event.Topology,
-// event.Status, event.Schema or event.ClientRoute. Each call replaces the complete
-// ignored-event list; no arguments restores all events. Default none ignored.
+// WithIgnoreEvents stops listening for the given server events:
+// event.KindTopology, event.KindStatus, event.KindSchema or
+// event.KindClientRoute. Each call replaces the complete ignored-event list;
+// no arguments restores all events. Default none ignored.
 func (b *ConfigBuilder) WithIgnoreEvents(kinds ...event.Kind) *ConfigBuilder {
 	b.ignoredEvents = append([]event.Kind(nil), kinds...)
 	return b

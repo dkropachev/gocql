@@ -874,7 +874,7 @@ func TestSession(t *testing.T) {
 				WithConnectionsPerHost(1).
 				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
-				WithIgnoreEvents(event.Status, event.Topology, event.Schema).
+				WithIgnoreEvents(event.KindStatus, event.KindTopology, event.KindSchema).
 				WithConnectTimeout(connectTimeout).
 				WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {
 					return (&net.Dialer{Timeout: connectTimeout}).DialContext(ctx, target.Network, target.Address)
@@ -919,7 +919,7 @@ func TestSession(t *testing.T) {
 		require.NoError(t, err)
 		hosts := discovery.Metadata().Hosts()
 		require.NotEmpty(t, hosts)
-		hostID := hosts[0].ID
+		hostID := hosts[0].HostID
 		require.NoError(t, discovery.Close())
 		session, err := gocql.Connect(ctx, mustBuild(t, builder.WithOnlyHost(hostID)))
 		require.NoError(t, err)
@@ -936,7 +936,7 @@ func TestSession(t *testing.T) {
 		require.Equal(t, hostID, info.HostID)
 		for _, host := range session.Metadata().Hosts() {
 			if host.Connected {
-				require.Equal(t, hostID, host.ID, "single-host session connected to another host")
+				require.Equal(t, hostID, host.HostID, "single-host session connected to another host")
 			}
 		}
 	})

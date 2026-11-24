@@ -10,46 +10,47 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// Kind classifies an Event. The zero Kind is Unknown. Later releases may add
-// values, so a switch over them needs a default case.
+// Kind classifies an Event. The zero Kind is KindUnknown. Later releases may
+// add values, so a switch over them needs a default case.
 type Kind uint8
 
 const (
-	// Unknown is the zero Kind. No delivered event has it, and a
+	// KindUnknown is the zero Kind. No delivered event has it, and a
 	// subscription filter or config.WithIgnoreEvents rejects it.
-	Unknown Kind = iota
-	// Topology reports a node joining or leaving the cluster.
-	Topology
-	// Status reports a node going up or down.
-	Status
-	// Schema reports a keyspace, table, type, function or aggregate change.
-	Schema
-	// Control reports that the control connection reconnected to another host.
-	Control
-	// ClientRoute reports a change of the cluster's client routes.
-	ClientRoute
-	// Overflow is the last event of a Subscription, sent when its queue
+	KindUnknown Kind = iota
+	// KindTopology reports a node joining or leaving the cluster.
+	KindTopology
+	// KindStatus reports a node going up or down.
+	KindStatus
+	// KindSchema reports a keyspace, table, type, function or aggregate change.
+	KindSchema
+	// KindControl reports that the control connection reconnected to
+	// another host.
+	KindControl
+	// KindClientRoute reports a change of the cluster's client routes.
+	KindClientRoute
+	// KindOverflow is the last event of a Subscription, sent when its queue
 	// overflows or when the session fails to publish a metadata change.
-	Overflow
+	KindOverflow
 )
 
 // String returns the event kind name, or Kind(n) for a value it does not
 // define.
 func (k Kind) String() string {
 	switch k {
-	case Unknown:
+	case KindUnknown:
 		return "unknown"
-	case Topology:
+	case KindTopology:
 		return "topology"
-	case Status:
+	case KindStatus:
 		return "status"
-	case Schema:
+	case KindSchema:
 		return "schema"
-	case Control:
+	case KindControl:
 		return "control"
-	case ClientRoute:
+	case KindClientRoute:
 		return "client route"
-	case Overflow:
+	case KindOverflow:
 		return "overflow"
 	default:
 		return fmt.Sprintf("Kind(%d)", uint8(k))
@@ -97,35 +98,35 @@ const (
 	ChangeTabletResync Change = "TABLET_RESYNC"
 )
 
-// Target is the kind of object a Schema event changed. The zero Target is
-// empty, as on every event that is not a Schema event. Later releases may
-// add values, so a switch over them needs a default case.
-type Target string
+// ObjectKind is the kind of object a Schema event changed. The zero
+// ObjectKind is empty, as on every event that is not a Schema event. Later
+// releases may add values, so a switch over them needs a default case.
+type ObjectKind string
 
 const (
-	// TargetKeyspace is a keyspace change.
-	TargetKeyspace Target = "KEYSPACE"
-	// TargetTable is a table or materialized view change.
-	TargetTable Target = "TABLE"
-	// TargetType is a user-defined type change.
-	TargetType Target = "TYPE"
-	// TargetFunction is a user-defined function change.
-	TargetFunction Target = "FUNCTION"
-	// TargetAggregate is a user-defined aggregate change.
-	TargetAggregate Target = "AGGREGATE"
+	// ObjectKeyspace is a keyspace change.
+	ObjectKeyspace ObjectKind = "KEYSPACE"
+	// ObjectTable is a table or materialized view change.
+	ObjectTable ObjectKind = "TABLE"
+	// ObjectType is a user-defined type change.
+	ObjectType ObjectKind = "TYPE"
+	// ObjectFunction is a user-defined function change.
+	ObjectFunction ObjectKind = "FUNCTION"
+	// ObjectAggregate is a user-defined aggregate change.
+	ObjectAggregate ObjectKind = "AGGREGATE"
 )
 
 // Event is one cluster change delivered to a Subscription.
 //
-// The driver fills it; its zero value is empty, of Kind Unknown.
+// The driver fills it; its zero value is empty, of KindUnknown.
 type Event struct {
 	// Address is the node's address for a Topology, Status or Control event.
 	Address netip.AddrPort
 	// Change is what happened, as the server names it, or as the driver
 	// does for a Control or Overflow event.
 	Change Change
-	// Target is what a Schema event changed, and empty otherwise.
-	Target Target
+	// ObjectKind is what a Schema event changed, and empty otherwise.
+	ObjectKind ObjectKind
 	// Keyspace is the keyspace a Schema event concerns.
 	Keyspace string
 	// Object names the changed table, type, function or aggregate of a
@@ -142,7 +143,10 @@ type Event struct {
 	HostIDs []cql.UUID
 	// Generation is the metadata generation when the event was published.
 	Generation uint64
-	// HostID is the new control host of a Control event.
+	// HostID is the node of a Topology or Status event, or the new control
+	// host of a Control event, and zero when the driver does not know the
+	// node's ID. A REMOVED_NODE event takes it from the metadata before the
+	// removal.
 	HostID cql.UUID
 	// Kind classifies the event.
 	Kind Kind

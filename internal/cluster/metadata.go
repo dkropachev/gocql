@@ -284,7 +284,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		replicaHosts = append(replicaHosts, func() *implEndpoint.HostInfo {
 			opaqueStorageValue := new(implEndpoint.HostInfo)
-			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = snapshot.ID
+			implEndpoint.HostInfoData(opaqueStorageValue).InternalHostId = snapshot.HostID
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalDataCenter = snapshot.Datacenter
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalRack = snapshot.Rack
 			implEndpoint.HostInfoData(opaqueStorageValue).InternalTokens = append([]string(nil), h.Tokens()...)
@@ -292,7 +292,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}())
 	}
 	sort.Slice(routing.SnapshotData(m).InternalHosts, func(i, j int) bool {
-		return routing.SnapshotData(m).InternalHosts[i].ID.String() < routing.SnapshotData(m).InternalHosts[j].ID.String()
+		return routing.SnapshotData(m).InternalHosts[i].HostID.String() < routing.SnapshotData(m).InternalHosts[j].HostID.String()
 	})
 	if len(hosts) > 0 && len(routing.SnapshotData(m).InternalHosts) == 0 && old != nil {
 		return false
@@ -595,7 +595,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 		scope := make(map[cql.UUID][]*transport.Conn)
 		for _, h := range routing.SnapshotData(s.Metadata()).InternalHosts {
 			if h.Enabled {
-				scope[h.ID] = s.v2AgreementConnections(h.ID)
+				scope[h.HostID] = s.v2AgreementConnections(h.HostID)
 			}
 		}
 		if coordinator != nil {
