@@ -64,7 +64,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 	} else if d.InternalConfig.Dialer != nil {
 		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
 	} else {
-		c, err = (endpoint.DefaultDialer{ConnectTimeout: d.InternalConfig.ConnectTimeout, TCPKeepalive: d.InternalConfig.SocketKeepalive}).DialContext(ctx, target)
+		c, err = endpoint.DefaultDialer{}.DialContext(ctx, target)
 	}
 	if err != nil {
 		if c != nil {
@@ -129,21 +129,21 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 			}
 		}
 	}
-	if config.ReceiveBuffer.Set {
+	if config.ReceiveBuffer > 0 {
 		setter, ok := c.(interface{ SetReadBuffer(int) error })
 		if !ok {
 			return unsupported("receive buffer")
 		}
-		if err := setter.SetReadBuffer(config.ReceiveBuffer.Value); err != nil {
+		if err := setter.SetReadBuffer(config.ReceiveBuffer); err != nil {
 			return err
 		}
 	}
-	if config.SendBuffer.Set {
+	if config.SendBuffer > 0 {
 		setter, ok := c.(interface{ SetWriteBuffer(int) error })
 		if !ok {
 			return unsupported("send buffer")
 		}
-		if err := setter.SetWriteBuffer(config.SendBuffer.Value); err != nil {
+		if err := setter.SetWriteBuffer(config.SendBuffer); err != nil {
 			return err
 		}
 	}

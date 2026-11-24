@@ -20,7 +20,11 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 ```
 
 Contact points may include native ports; `WithPort` supplies the port when one is
-absent. A single absolute path, optionally prefixed with `unix:`, connects to a
+absent, and is also the port of every discovered node whose metadata reports
+none, as ScyllaDB's `system.peers` does not. So `Build` rejects contact points
+that all name one port other than `WithPort`, unless `WithDiscovery(false)` or
+client routes are set: set `WithPort` to their port instead. `Build` also
+rejects a contact point it cannot parse, such as `"h:abc"`. A single absolute path, optionally prefixed with `unix:`, connects to a
 Unix socket: no host discovery is then filled in unless chosen.
 
 ## Dialects
@@ -60,11 +64,17 @@ sends no heartbeats, `WithMetadataRefresh(0)` stops periodic metadata reloads,
 `WithErrorStatementText(0)`, the default, leaves the statement out of request
 errors ([errors](../errors.md)). On/off settings take a bool: `WithNagle`,
 `WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement` and
-`WithRefreshAfterAgreement`. `NoAdvancedShardAwareness` turns off what
-`WithAdvancedShardAwareness(first, last)` configures.
+`WithRefreshAfterAgreement` and `WithAdvancedShardAwareness`, whose source
+ports `WithShardAwareSourcePorts` sets. `WithReceiveBuffer(0)` and
+`WithSendBuffer(0)` keep the OS's buffer sizes.
 `ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
-Zero optional timeouts disable their budget; nil optional providers clear the
-override, including `WithTLS(nil)` for plaintext. `WithDefaultProfile(profile)`
+Zero optional timeouts disable their budget. A nil provider or policy restores
+the driver's default: `WithTLS(nil)` is plaintext, `WithReconnect(nil)` the
+default backoff, `ProfileBuilder.WithRetry(nil)` `retry.Safe{MaxAttempts: 3}`
+and `WithRouting(nil)` the default routing policy. Turning a policy off takes
+an explicit value: `retry.Never{}`, or a reconnect policy whose `Delay` returns
+false. The one exception is `WithTimestampGenerator(nil)`, which sends no
+client timestamp so the server assigns one. `WithDefaultProfile(profile)`
 copies and replaces the complete profile. Build profiles with `NewProfile` to
 start from driver defaults; a `config.Profile{...}` literal would leave every
 unset field zero, so `Build` rejects it. A built profile may be copied and its
@@ -75,7 +85,10 @@ all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 
 `WithContactPoints` replaces the contact points. Slice arguments are copied,
-and `Build` snapshots the finished configuration. `WithTLS` copies its input
+and `Build` snapshots the finished configuration. `Build` reports an invalid
+value with a `*cql.ValidationError` whose `Field` names the setter to fix and
+whose message gives the limit, such as `gocql: invalid
+WithMaxRequestsPerConnection: must be 1 to 32768, got 0`. `WithTLS` copies its input
 when called. Callbacks and provider objects remain shared and must support
 concurrent use.
 
@@ -84,7 +97,7 @@ concurrent use.
 of its shard count; the later call wins. `WithConnectionsPerHost` turns shard-aware connection
 management off: connections use the regular port only, the node picks their
 shards, and requests for a shard without a connection take another shard's
-connection. `Build` rejects `WithConnectionsPerHost` with `WithAdvancedShardAwareness` or
+connection. `Build` rejects `WithConnectionsPerHost` with `WithAdvancedShardAwareness(true)` or
 `WithMaxExcessPerShard`. An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.
@@ -146,5 +159,5 @@ set, the connection to a shard whose failure was reported; without it, the
 first connection of a pool that had none, such as a new pool at startup or
 after the host was marked down, or a pool that lost every connection.
 Callbacks run concurrently, some on the goroutine that opens connections, so
-they must not block. The default SimpleConvictionPolicy convicts on every
+they must not block. The default `endpoint.SimpleConvictionPolicy` convicts on every
 whole-host failure, ignores single-shard failures, and its Reset is a no-op.

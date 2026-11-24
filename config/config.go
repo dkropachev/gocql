@@ -35,19 +35,22 @@ type Config struct {
 
 // ConfigBuilder assembles a Config. Settings that are not chosen keep the
 // driver's behavior; when a setting is chosen again, the last call wins.
-// Setters only store values; Build validates the final configuration.
+// Setters only store values; Build validates the final configuration, and a
+// cql.ValidationError it returns names the setter to fix in its Field.
 // Zero durations disable optional timeouts and background work. A nil
-// provider restores the driver's behavior unless its setter says otherwise.
+// provider or policy restores the driver's default; the one exception is
+// WithTimestampGenerator, where nil sends no client timestamp.
 // A ConfigBuilder is not safe for concurrent use. Start one with New: Build
 // rejects a zero ConfigBuilder with a cql.ValidationError.
 type ConfigBuilder struct {
 	profile              *ProfileBuilder
 	ignoredEvents        []event.Kind
-	routes               ClientRoutes
+	routes               []ClientRoute
 	settings             implSettings.Config
 	onlyHost             cql.Option[cql.UUID]
 	discoveryChosen      bool
 	shardAwarenessChosen bool
+	sourcePortsChosen    bool
 	maxExcessChosen      bool
 	perHost              bool
 	dialect              Dialect
@@ -73,27 +76,25 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	server, protocol, ok := implSettings.DialectSpec(uint8(b.dialect))
 	if !ok {
-		return Config{}, &cql.ValidationError{Field: "dialect", Err: fmt.Errorf("%v is not ScyllaV4, CassandraV4 or CassandraV5", b.dialect)}
+		return Config{}, &cql.ValidationError{Field: "New", Err: fmt.Errorf("dialect %v is not ScyllaV4, CassandraV4 or CassandraV5", b.dialect)}
 	}
 	settings := b.settings
 	settings.Server, settings.Protocol = server, protocol
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
-	if len(b.routes.routes) > 0 {
-		settings.ClientRoutes = b.routes.options()
-	}
+	settings.ClientRoutes = clientRoutesOptions(b.routes)
 	if path, _ := implSettings.InternalUnixSocketPath(settings.ContactPoints); path != "" {
 		if !b.discoveryChosen {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
 	if settings.Identity.ApplicationVersion != "" && settings.Identity.ApplicationName == "" {
-		return Config{}, &cql.ValidationError{Field: "application", Err: errors.New("version requires a name")}
+		return Config{}, &cql.ValidationError{Field: "WithApplication", Err: errors.New("a version requires a name")}
 	}
 	if settings.TLSSource != nil {
 		settings.TLS = settings.TLSSource.TLSConfig()
 		if settings.TLS == nil {
-			return Config{}, &cql.ValidationError{Field: "TLS", Err: errors.New("source returned no config")}
+			return Config{}, &cql.ValidationError{Field: "WithTLSSource", Err: errors.New("source returned no config")}
 		}
 	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
@@ -101,17 +102,20 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	if b.perHost {
 		if b.shardAwarenessChosen && settings.Pool.AdvancedShardAwareness.Enabled {
-			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost dials no shard-aware port; drop WithAdvancedShardAwareness or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "WithConnectionsPerHost", Err: errors.New("dials no shard-aware port; drop WithAdvancedShardAwareness(true) or use WithConnectionsPerShard")}
 		}
 		if b.maxExcessChosen {
-			return Config{}, &cql.ValidationError{Field: "pool size", Err: errors.New("WithConnectionsPerHost keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
+			return Config{}, &cql.ValidationError{Field: "WithConnectionsPerHost", Err: errors.New("keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
 		}
 		settings.Pool.AdvancedShardAwareness.Enabled = false
+	}
+	if sa := settings.Pool.AdvancedShardAwareness; b.sourcePortsChosen && (sa.SourcePortStart < 1024 || sa.SourcePortStart > sa.SourcePortEnd) {
+		return Config{}, &cql.ValidationError{Field: "WithShardAwareSourcePorts", Err: fmt.Errorf("%d-%d is not a range within 1024-65535", sa.SourcePortStart, sa.SourcePortEnd)}
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
 		if id.IsEmpty() {
-			return Config{}, &cql.ValidationError{Field: "only host", Err: errors.New("empty host ID")}
+			return Config{}, &cql.ValidationError{Field: "WithOnlyHost", Err: errors.New("empty host ID")}
 		}
 		keep := settings.HostFilter
 		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.ID == id && (keep == nil || keep(host)) }
@@ -127,24 +131,33 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		case event.ClientRoute:
 			settings.Metadata.ClientRouteEvents = false
 		default:
-			return Config{}, &cql.ValidationError{Field: "ignored events", Err: fmt.Errorf("%v is not a server event", kind)}
+			return Config{}, &cql.ValidationError{Field: "WithIgnoreEvents", Err: fmt.Errorf("%v is not a server event", kind)}
 		}
 	}
 	if err := settings.Validate(); err != nil {
+		return Config{}, err
+	}
+	if err := settings.ProbeReconnect(); err != nil {
 		return Config{}, err
 	}
 	resolved := settings.Snapshot()
 	return Config{settings: &resolved}, nil
 }
 
-// WithPort sets the port used for contact points that name none. Default 9042.
+// WithPort sets the CQL port of contact points that name none and of
+// discovered nodes whose metadata reports no native port, as ScyllaDB's
+// system.peers does not. Contact points that all name one port other than
+// port would have the driver dial the nodes it discovers on the wrong port,
+// so Build rejects them unless WithDiscovery(false) or WithClientRoutes is
+// set; name no port in them, or set WithPort to theirs. Default 9042.
 func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
 	b.settings.Port = port
 	return b
 }
 
 // WithContactPoints replaces all contact points, using the same address syntax
-// as New. Build requires at least one contact point.
+// as New. Build requires at least one and rejects one it cannot parse, such
+// as a port that is not a number from 1 to 65535.
 func (b *ConfigBuilder) WithContactPoints(contactPoints ...string) *ConfigBuilder {
 	b.settings.ContactPoints = append([]string(nil), contactPoints...)
 	return b
@@ -233,17 +246,18 @@ func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
 }
 
 // WithDialer opens raw connections; TLS is applied afterward. Use
-// endpoint.DialerFunc to adapt a function. Default net.Dialer.
+// endpoint.DialerFunc to adapt a function. A nil dialer restores the default,
+// endpoint.DefaultDialer.
 //
 // The other connection settings still apply to a custom dialer. The dial
 // context carries the WithConnectTimeout deadline. The source address chosen
 // by WithLocalAddress or advanced shard awareness is in
 // endpoint.DialTarget.LocalAddress, and a connection from another source is
-// rejected. WithNagle, WithTCPKeepalive, WithSocketBuffers and WithLinger are
-// set on the returned TCP connection afterwards; a wrapper that hides those
-// controls fails the connection with a cqlerr.UnsupportedSettingError.
-// A custom dialer may wrap endpoint.DefaultDialer, the dialer used without
-// WithDialer; set its fields to the same connect timeout and TCP keepalive.
+// rejected. WithNagle, WithTCPKeepalive, WithReceiveBuffer, WithSendBuffer
+// and WithLinger are set on the returned TCP connection afterwards; a wrapper
+// that hides those controls fails the connection with a
+// cqlerr.UnsupportedSettingError. A custom dialer may wrap
+// endpoint.DefaultDialer.
 func (b *ConfigBuilder) WithDialer(dialer endpoint.Dialer) *ConfigBuilder {
 	b.settings.Dialer = dialer
 	return b
@@ -288,10 +302,17 @@ func (b *ConfigBuilder) WithTCPKeepalive(period time.Duration) *ConfigBuilder {
 	return b
 }
 
-// WithSocketBuffers sets SO_RCVBUF and SO_SNDBUF in bytes. Default the OS's.
-func (b *ConfigBuilder) WithSocketBuffers(receive, send int) *ConfigBuilder {
-	b.settings.ReceiveBuffer = cql.Some(receive)
-	b.settings.SendBuffer = cql.Some(send)
+// WithReceiveBuffer sets SO_RCVBUF in bytes; zero keeps the OS's. Default
+// the OS's.
+func (b *ConfigBuilder) WithReceiveBuffer(bytes int) *ConfigBuilder {
+	b.settings.ReceiveBuffer = bytes
+	return b
+}
+
+// WithSendBuffer sets SO_SNDBUF in bytes; zero keeps the OS's. Default the
+// OS's.
+func (b *ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder {
+	b.settings.SendBuffer = bytes
 	return b
 }
 
@@ -339,11 +360,11 @@ func (b *ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder {
 //
 // On ScyllaDB it turns shard-aware connection management off: connections are
 // dialed through the regular port only, never the shard-aware port (as with
-// NoAdvancedShardAwareness), so the node assigns each connection's shard and
+// WithAdvancedShardAwareness(false)), so the node assigns each connection's shard and
 // some shards may get none. A request whose shard has no connection goes out
 // on another shard's connection and costs the node a cross-shard hop. There
 // are no per-shard excess connections, so WithMaxExcessPerShard does not
-// apply. Build rejects it together with WithAdvancedShardAwareness or
+// apply. Build rejects it together with WithAdvancedShardAwareness(true) or
 // WithMaxExcessPerShard.
 func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
 	b.perHost = true
@@ -374,33 +395,30 @@ func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 	return b
 }
 
-// WithAdvancedShardAwareness picks the shard of each new connection by dialing
-// the node's shard-aware port from a local source port chosen from first to
-// last. It replaces NoAdvancedShardAwareness. Default on with ports
-// 49152-65535, except under WithConnectionsPerHost and WithClientRoutes.
-// Calling it turns it on under WithClientRoutes; do that only when every route
-// endpoint forwards to ScyllaDB's Proxy Protocol v2 shard-aware listener and
-// passes the client's source port, since NAT rewrites the port and loses the
-// shard. Cassandra has no shard-aware port, so there it has no effect.
-func (b *ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder {
+// WithAdvancedShardAwareness chooses whether each new connection picks its
+// shard by dialing the node's shard-aware port from a local source port of
+// that shard, taken from WithShardAwareSourcePorts (true), or connects through
+// the regular port and lets the node assign the shard, the pool dialing until
+// every shard is covered (false). Default true, except under
+// WithConnectionsPerHost and WithClientRoutes, where it is false unless
+// chosen. Choose true under WithClientRoutes only when every route endpoint
+// forwards to ScyllaDB's Proxy Protocol v2 shard-aware listener and passes
+// the client's source port, since NAT rewrites the port and loses the shard.
+// Cassandra has no shards, so there it has no effect.
+func (b *ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder {
 	b.shardAwarenessChosen = true
-	b.settings.Pool.AdvancedShardAwareness = implSettings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: first, SourcePortEnd: last}
+	b.settings.Pool.AdvancedShardAwareness.Enabled = on
 	return b
 }
 
-// WithDefaultAdvancedShardAwareness is WithAdvancedShardAwareness with the
-// default source ports, 49152-65535.
-func (b *ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder {
-	return b.WithAdvancedShardAwareness(49152, 65535)
-}
-
-// NoAdvancedShardAwareness connects through the regular port only and lets
-// the node assign the shard; the pool keeps dialing until every shard is
-// covered. It replaces WithAdvancedShardAwareness. It has no effect on
-// Cassandra, which has no shards.
-func (b *ConfigBuilder) NoAdvancedShardAwareness() *ConfigBuilder {
-	b.shardAwarenessChosen = true
-	b.settings.Pool.AdvancedShardAwareness.Enabled = false
+// WithShardAwareSourcePorts sets the local source ports, first to last,
+// that advanced shard awareness dials from. Build rejects a range that is
+// empty or starts below 1024. It does not turn advanced shard awareness on.
+// Default 49152-65535.
+func (b *ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder {
+	b.sourcePortsChosen = true
+	b.settings.Pool.AdvancedShardAwareness.SourcePortStart = first
+	b.settings.Pool.AdvancedShardAwareness.SourcePortEnd = last
 	return b
 }
 
@@ -453,28 +471,39 @@ func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *C
 	return b
 }
 
-// WithClientRoutes connects through ScyllaDB client routes built with
-// NewClientRoutes. Each call replaces the complete client routes setting; the
-// zero ClientRoutes removes them. Build rejects them together with
-// WithAddressTranslator. Only ScyllaDB has client routes: Build with a
-// Cassandra dialect fails with a cqlerr.UnsupportedSettingError. Default none.
-func (b *ConfigBuilder) WithClientRoutes(routes ClientRoutes) *ConfigBuilder {
-	b.routes = routes
+// WithClientRoutes connects through ScyllaDB client routes, one per client
+// connection, in order. Each call replaces the complete client routes
+// setting; no routes removes them. Build rejects an empty or repeated
+// connection ID, and client routes together with WithAddressTranslator. Only
+// ScyllaDB has client routes: Build with a Cassandra dialect fails with a
+// cqlerr.UnsupportedSettingError. Default none.
+func (b *ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder {
+	b.routes = append([]ClientRoute(nil), routes...)
 	return b
 }
 
-// WithReconnect sets the delay between attempts to reopen a node's connections;
-// see endpoint.ReconnectPolicy for how the driver calls it. Nil disables
-// reconnection attempts.
+// WithReconnect sets the delay between attempts to reopen a node's
+// connections; see endpoint.ReconnectPolicy for how the driver calls it.
+// Build calls Delay(1) once and rejects a negative delay. A nil policy
+// restores the default. To never reconnect, pass a policy that declines:
+//
+//	type noReconnect struct{}
+//
+//	func (noReconnect) Delay(int) (time.Duration, bool) { return 0, false }
+//
 // Default jittered backoff from 1s to 32s.
 func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBuilder {
+	if policy == nil {
+		policy = implSettings.DefaultReconnect()
+	}
 	b.settings.Reconnect = policy
 	return b
 }
 
-// WithConviction decides when connection errors mark a node down.
-// Default SimpleConvictionPolicy: a node is down once opening its connections
-// leaves it with none, or the control connection fails to dial it.
+// WithConviction decides when connection errors mark a node down. A nil
+// policy restores the default, endpoint.SimpleConvictionPolicy: a node is
+// down once opening its connections leaves it with none, or the control
+// connection fails to dial it.
 func (b *ConfigBuilder) WithConviction(policy endpoint.ConvictionPolicy) *ConfigBuilder {
 	b.settings.Conviction = policy
 	return b
@@ -596,7 +625,8 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 }
 
 // WithTimestampGenerator supplies client timestamps in microseconds. A nil
-// next sends no client timestamp, so the server assigns one. By default the
+// next sends no client timestamp, so the server assigns one: unlike every
+// other setter, nil does not restore the default. By default the
 // driver stamps each request with the time it was admitted, strictly
 // increasing per session. Only ordinary statements, and batches of them, are
 // stamped: a conditional or unclassified one (cql.UnknownStatement), a
@@ -779,17 +809,25 @@ func (p *ProfileBuilder) WithPrefetch(pages int) *ProfileBuilder {
 	return p
 }
 
-// WithRetry sets the retry policy; nil disables retries.
-// Default retry.Safe{MaxAttempts: 3}.
+// WithRetry sets the retry policy. A nil policy restores the default;
+// retry.Never{} disables retries. Default retry.Safe{MaxAttempts: 3}.
 func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
+	if policy == nil {
+		policy = implSettings.InternalDefaultProfile().Retry
+	}
 	p.profile.Retry = policy
 	return p
 }
 
-// WithRouting sets the routing policy. Nil uses the session pool's host
-// selection without a request-specific routing plan. Default token-aware with
-// shuffled replicas and leader-aware for strongly consistent tables.
+// WithRouting sets the routing policy. A nil policy restores the default:
+// routing.NewPolicy(routing.Options{}), token-aware with shuffled replicas
+// and leader-aware for strongly consistent tables, preferring the session's
+// WithLocalDatacenter.
 func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
+	if policy == nil {
+		p.profile.Routing = implSettings.DefaultRouting()
+		return p
+	}
 	p.profile.Routing = implRouting.EngineOf(policy)
 	return p
 }

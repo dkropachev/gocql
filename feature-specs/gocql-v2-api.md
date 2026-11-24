@@ -648,10 +648,11 @@ methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
 `Session.RunConditionalBatch`, `Session.Unprepared*`, `Prepared.Query`,
 `PreparedStream.Query`). Settings that only refine a builder are methods of
 the builder, not values made by a function: pool size and a fixed TLS
-configuration are `ConfigBuilder` methods. Client routes are one read-only
-`config.ClientRoutes`, built with `config.NewClientRoutes().WithRoute(id,
-hostname)...Build()` and passed to `WithClientRoutes`, so a hostname override
-belongs to its route and one call replaces the whole setting. Routed
+configuration are `ConfigBuilder` methods. Client routes are plain
+`config.ClientRoute{ConnectionID, Hostname}` records passed together to
+`WithClientRoutes(routes...)`, so a hostname override belongs to its route and
+one call replaces the whole setting; `Build` rejects an empty or repeated
+connection ID. Routed
 connections dial the route's `tls_port` exactly when TLS is configured.
 
 The root package has one function, `Connect(context.Context, config.Config)
@@ -664,7 +665,6 @@ owns its type:
 |---|---|
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
-| `config.NewClientRoutes() *config.ClientRoutesBuilder` | starts a client routes setting |
 | `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
@@ -1374,7 +1374,9 @@ func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
 // WithSpeculation; zero turns WithTimeout and WithPrefetch off, and
-// NoSerialConsistency clears the serial consistency.
+// NoSerialConsistency clears the serial consistency. A nil WithRetry or
+// WithRouting, or a nil Retry or Routing field, is the default policy;
+// retry.Never{} disables retries.
 
 // package cql
 type BatchKind byte
@@ -1881,20 +1883,29 @@ drains all admissions made by this session.
 Package `config` holds the configuration API. A `config.Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
-and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`,
-`ConfigureDefaultProfile` and `NoAdvancedShardAwareness`. An on/off setting
-takes a bool (`WithDiscovery(false)`), and a size or interval whose zero has no
-other meaning turns its feature off at zero (`WithHeartbeat(0, 0)`,
-`WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`, and on a
-`ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`), and a nil provider
-removes it (`WithTimestampGenerator(nil)`), so no setting has a separate
-`No*` twin; the exceptions clear a setting zero cannot
-(`NoAdvancedShardAwareness`, `ProfileBuilder.NoSerialConsistency`); settings not chosen keep the driver's behavior, and when a setting is chosen
-again the last call wins. Setters store the latest value without validation or
-call history.
-`Build` validates only the final configuration and returns its first typed error.
-Correcting a setting clears the error on the next Build. Optional zero durations
-disable their budget, and nil optional providers remove overrides. `WithIgnoreEvents` replaces its complete
+and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`
+and `ConfigureDefaultProfile`. An on/off setting takes a bool
+(`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
+interval whose zero has no other meaning turns its feature off at zero
+(`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
+and on a `ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`) or keeps the
+OS's value (`WithReceiveBuffer(0)`, `WithSendBuffer(0)`), so no setting has a
+separate `No*` twin; the one exception clears a setting zero cannot
+(`ProfileBuilder.NoSerialConsistency`). A nil provider or policy restores the
+driver's default in every setter (`WithReconnect(nil)`, `WithRetry(nil)`,
+`WithRouting(nil)`, `WithTLS(nil)`, `WithDialer(nil)`); "off" is an explicit
+value (`retry.Never{}`, a reconnect policy that declines). The exception is
+`WithTimestampGenerator(nil)`, which sends no client timestamp. Settings not
+chosen keep the driver's behavior, and when a setting is chosen again the last
+call wins. Setters store the latest value without validation or call history.
+`Build` validates only the final configuration and returns its first typed
+error; a `cql.ValidationError`'s `Field` names the setter to fix and its
+message the limit. Correcting a setting clears the error on the next Build.
+Optional zero durations disable their budget. `Build` parses the contact
+points and asks the reconnect policy for `Delay(1)` once, rejecting a negative
+delay. `WithPort` is also the port of discovered nodes whose metadata reports
+none, so `Build` rejects contact points that all name one other port, unless
+discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
@@ -1913,20 +1924,19 @@ func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
-func (*ConfigBuilder) WithClientRoutes(ClientRoutes) *ConfigBuilder // replaces all; ClientRoutes{} removes
+func (*ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder // replaces all; none removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
 func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
 func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
 func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
 func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
-func (*ConfigBuilder) WithAdvancedShardAwareness(first, last uint16) *ConfigBuilder
-func (*ConfigBuilder) WithDefaultAdvancedShardAwareness() *ConfigBuilder // ports 49152-65535
+func (*ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder
+func (*ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder // default 49152-65535
+func (*ConfigBuilder) WithReceiveBuffer(bytes int) *ConfigBuilder // 0 keeps the OS's
+func (*ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder    // 0 keeps the OS's
 func NewProfile() *ProfileBuilder
-func NewClientRoutes() *ClientRoutesBuilder
-func (*ClientRoutesBuilder) WithRoute(connectionID, hostname string) *ClientRoutesBuilder
-func (*ClientRoutesBuilder) Build() (ClientRoutes, error)
-func (ClientRoutes) Routes() []ClientRoute // copy; ClientRoute{ConnectionID, Hostname}
+type ClientRoute struct { ConnectionID, Hostname string }
 
 // package gocql
 func Connect(context.Context, config.Config) (*Session, error)
@@ -1955,11 +1965,10 @@ files when a check fails. Context-taking hooks honor cancellation; synchronous c
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks, unless `WithAdvancedShardAwareness` or
-`WithDefaultAdvancedShardAwareness` is called. `WithConnectionsPerShard(n)` (default 1) and
+their proxy breaks, unless `WithAdvancedShardAwareness(true)` is called. `WithConnectionsPerShard(n)` (default 1) and
 `WithConnectionsPerHost(n)` size the pool, the later call winning;
 `WithConnectionsPerHost` dials the regular port only and keeps no per-shard
-excess, so Build rejects it with `WithAdvancedShardAwareness` or
+excess, so Build rejects it with `WithAdvancedShardAwareness(true)` or
 `WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
@@ -2026,7 +2035,7 @@ type DialTarget struct {
 }
 type Dialer interface { DialContext(context.Context, DialTarget) (net.Conn, error) }
 type DialerFunc func(context.Context, DialTarget) (net.Conn, error)
-type DefaultDialer struct { ConnectTimeout, TCPKeepalive time.Duration }
+type DefaultDialer struct{} // dial bounded by its context; options set afterwards
 type Resolver interface {
     LookupNetIP(ctx context.Context, network, host string) ([]netip.Addr, error)
 }
@@ -2043,7 +2052,7 @@ type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (n
 
 // package auth
 type Provider interface {
-    Start(context.Context, routing.HostSnapshot, string) (Exchange, cql.Nullable[[]byte], error)
+    Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error)
 }
 type Exchange interface {
     Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)

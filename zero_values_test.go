@@ -256,9 +256,6 @@ func TestZeroValuesUsable(t *testing.T) {
 	if n := (cql.Decimal{}).Unscaled.BigInt(); n.Sign() != 0 {
 		t.Errorf("zero Decimal unscaled = %v", n)
 	}
-	if _, err := new(config.ClientRoutesBuilder).WithRoute("c", "").Build(); err != nil {
-		t.Errorf("zero ClientRoutesBuilder: %v", err)
-	}
 	// The driver's error types print without detail rather than panic.
 	for _, err := range []error{
 		new(cqlerr.ExecutionError), new(cqlerr.ConnectError),

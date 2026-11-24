@@ -27,10 +27,22 @@ func TestConnectRejectsNegativeReconnectDelay(t *testing.T) {
 	config := implSettings.DefaultConfig("127.0.0.1")
 	config.Reconnect = policy
 	_, err := InternalConnectCluster(context.Background(), config, nil)
-	if err == nil || !strings.Contains(err.Error(), "reconnect delay") {
-		t.Fatalf("got %v, want a reconnect delay validation error", err)
+	if err == nil || !strings.Contains(err.Error(), "WithReconnect") {
+		t.Fatalf("got %v, want a WithReconnect validation error", err)
 	}
 	if len(policy.calls) != 1 || policy.calls[0] != 1 {
 		t.Fatalf("Delay calls %v, want [1]", policy.calls)
+	}
+}
+
+// TestProbeReconnectAsksOnce checks that settings whose first delay was
+// already asked for, as config.Build does, are not asked again.
+func TestProbeReconnectAsksOnce(t *testing.T) {
+	policy := &negativeReconnect{}
+	config := implSettings.DefaultConfig("127.0.0.1")
+	config.Reconnect = policy
+	config.ReconnectFirst = implSettings.ReconnectProbe{Delay: time.Second, Again: true, Set: true}
+	if err := config.ProbeReconnect(); err != nil || len(policy.calls) != 0 {
+		t.Fatalf("ProbeReconnect = %v with calls %v, want the kept answer and no call", err, policy.calls)
 	}
 }

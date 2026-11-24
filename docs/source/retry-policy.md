@@ -15,8 +15,9 @@ succeeded. `Decide` runs on the request goroutine and must not block.
 
 `exec.Options.Retry == nil` inherits the selected profile's retry policy. Use
 `exec.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
-replacing other profile settings. `Profile.Retry == nil` disables retries in a
-complete profile; `retry.Never{}` can express that choice there too.
+replacing other profile settings. In a profile, `ProfileBuilder.WithRetry(nil)`
+and a nil `Profile.Retry` mean the default, `retry.Safe{MaxAttempts: 3}`;
+`WithRetry(retry.Never{})` disables retries.
 
 `retry.Safe` bounds attempts (`MaxAttempts`, the first included; zero means
 three) and retries only when replay is safe. Among server errors, it moves to

@@ -22,7 +22,7 @@ func makeIntegrationShardAwareCluster() shardAwareTestCluster {
 				return dialer.DialContext(ctx, target.Network, target.Address)
 			}))
 			if noAdvancedShardAwareness {
-				config.NoAdvancedShardAwareness()
+				config.WithAdvancedShardAwareness(false)
 			}
 			built, err := config.Build()
 			if err != nil {

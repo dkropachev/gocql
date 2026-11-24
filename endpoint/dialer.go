@@ -8,7 +8,6 @@ import (
 	"errors"
 	"net"
 	"net/netip"
-	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -52,29 +51,21 @@ func (f DialerFunc) DialContext(ctx context.Context, target DialTarget) (net.Con
 	return f(ctx, target)
 }
 
-// DefaultDialer opens the selected target with Go's network dialer. It also
-// supports Unix targets; TCP source selection is never applied to Unix sockets.
+// DefaultDialer opens the selected target with Go's network dialer, with TCP
+// keepalive off. It is the dialer a session uses without
+// config.ConfigBuilder.WithDialer, and a custom dialer may wrap it. The dial
+// is bounded by its context, which the session gives the connect timeout; the
+// session sets TCP keepalive and the other socket options on the connection
+// afterwards. It also supports Unix targets; TCP source selection is never
+// applied to Unix sockets.
 //
-// The zero DefaultDialer is ready to use: the dial is bounded only by its
-// context, and TCP keepalive is off.
-type DefaultDialer struct {
-	// ConnectTimeout bounds each dial; zero leaves it bounded only by its
-	// context.
-	ConnectTimeout time.Duration
-	// TCPKeepalive is the TCP keepalive period; zero turns keepalive off.
-	TCPKeepalive time.Duration
-}
+// The zero DefaultDialer, its only value, is ready to use.
+type DefaultDialer struct{}
 
-// DialContext dials the target with a net.Dialer bounded by ConnectTimeout,
-// with TCP keepalive every TCPKeepalive, or off when it is zero. A source
-// address requires a TCP network; any other network with one fails with a
-// ValidationError.
-func (d DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {
-	keepalive := d.TCPKeepalive
-	if keepalive == 0 {
-		keepalive = -1
-	}
-	n := net.Dialer{Timeout: d.ConnectTimeout, KeepAlive: keepalive}
+// DialContext dials the target with a net.Dialer. A source address requires
+// a TCP network; any other network with one fails with a ValidationError.
+func (DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Conn, error) {
+	n := net.Dialer{KeepAlive: -1}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
 			return nil, &cql.ValidationError{Field: "local address", Err: errors.New("source selection requires TCP")}

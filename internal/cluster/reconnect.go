@@ -13,26 +13,22 @@ import (
 )
 
 // startReconnectingDownedHosts starts the loop that reopens the pools of down
-// hosts, paced by the session's reconnect policy. config.WithReconnect(nil),
-// or a policy whose first Delay declines to retry, starts no loop: down hosts
-// then come back only through status and topology events.
+// hosts, paced by the session's reconnect policy. A policy whose first delay,
+// which the configuration asked for once (settings.Config.ProbeReconnect),
+// declines to retry starts no loop: down hosts then come back only through
+// status and topology events. So does no policy, which only internal
+// settings have.
 func (s *Core) startReconnectingDownedHosts() {
 	owner := s.CurrentExecution()
 	if owner == nil {
 		return
 	}
-	policy := owner.ConfigSnapshot().Reconnect
-	if policy == nil {
+	config := owner.ConfigSnapshot()
+	policy, first := config.Reconnect, config.ReconnectFirst
+	if policy == nil || !first.Set || !first.Again {
 		return
 	}
-	delay, again := policy.Delay(1)
-	if delay < 0 {
-		s.logger().Warn("reconnect policy returned a negative delay; not reconnecting down hosts")
-		return
-	}
-	if !again {
-		return
-	}
+	delay := first.Delay
 	// A session worker, so Close joins the loop after cancelling its ctx.
 	s.Peripheral().InternalStartWorker(func() { s.reconnectTypedDownedHosts(policy, max(delay, time.Millisecond)) })
 }

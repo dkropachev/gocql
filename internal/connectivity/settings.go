@@ -68,7 +68,7 @@ type Config struct {
 	ContactPoints                                                                    []string
 	Pool                                                                             PoolOptions
 	Metadata                                                                         MetadataIO
-	ReceiveBuffer, SendBuffer                                                        Option[int]
+	ReceiveBuffer, SendBuffer                                                        int
 	Linger                                                                           Option[time.Duration]
 	Protocol                                                                         int
 	ConnectTimeout, DNSTimeout, KeepaliveInterval, KeepaliveTimeout, SocketKeepalive time.Duration

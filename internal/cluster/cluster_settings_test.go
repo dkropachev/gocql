@@ -126,165 +126,25 @@ func TestClusterSettings(t *testing.T) {
 			}
 		})
 
-		// With no port anywhere, Validate fills in the CQL default; with client routes
-		// it does so without looking at the hosts, whose ports are entry points only.
+		// A zero Port defaults to the CQL port, whatever ports the hosts name:
+		// config.Build checks contact point ports against WithPort.
 		t.Run("DefaultsPort", func(t *testing.T) {
 			t.Parallel()
 
-			cfg := InternalNewClusterSettings("10.0.0.1")
-			cfg.Logger = logging.Nop()
+			for _, hosts := range [][]string{{"10.0.0.1"}, {"10.0.0.1:9142"}, {"10.0.0.1:9142", "10.0.0.2"}, {"10.0.0.1:9142", "[::1]:9043"}} {
+				cfg := InternalNewClusterSettings(hosts...)
+				cfg.Logger = logging.Nop()
+				if err := cfg.Validate(); err != nil {
+					t.Fatalf("hosts %v: %v", hosts, err)
+				}
+				tests.AssertEqual(t, "cfg.Port after Validate", defaultCQLPort, cfg.Port)
+			}
+			cfg := InternalNewClusterSettings("10.0.0.1:9142")
+			cfg.Port = 9043
 			if err := cfg.Validate(); err != nil {
 				t.Fatal(err)
 			}
-			if cfg.Port != defaultCQLPort {
-				t.Fatalf("Port = %d, want %d", cfg.Port, defaultCQLPort)
-			}
-
-			cfg = InternalNewClusterSettings("10.0.0.1:19042", "10.0.0.2")
-			cfg.Logger = logging.Nop()
-			cfg.ClientRoutesConfig = &ClientRoutesConfig{}
-			err := cfg.Validate()
-			// The empty routes config is itself invalid; what matters is that mixed host
-			// ports did not fail first and the port was defaulted.
-			if err == nil || strings.Contains(err.Error(), "all include a port") {
-				t.Fatalf("Validate() = %v, want the client routes error, not a host port error", err)
-			}
-			if cfg.Port != defaultCQLPort {
-				t.Fatalf("Port = %d, want %d with client routes", cfg.Port, defaultCQLPort)
-			}
-		})
-
-		// TestClusterSettings/Validate/HostPortNormalization covers the port-learning logic in Validate():
-		// when cfg.Port is 0 (not explicitly set) the driver learns it from cfg.Hosts.
-		t.Run("HostPortNormalization", func(t *testing.T) {
-			t.Parallel()
-
-			makeValid := func(hosts ...string) *InternalClusterSettings {
-				cfg := InternalNewClusterSettings(hosts...)
-				return cfg
-			}
-
-			t.Run("single host with explicit port sets cfg.Port", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9142, cfg.Port)
-			})
-
-			t.Run("multiple hosts with the same explicit port", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142", "10.0.0.2:9142")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9142, cfg.Port)
-			})
-
-			t.Run("hosts without explicit port default to 9042", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1", "10.0.0.2")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9042, cfg.Port)
-			})
-
-			t.Run("mixed: some hosts with port, some without returns error", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142", "10.0.0.2")
-				if err := cfg.Validate(); err == nil {
-					t.Fatal("expected an error for mixed port/no-port hosts, got nil")
-				}
-			})
-
-			t.Run("hosts with conflicting explicit ports returns error", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142", "10.0.0.2:9043")
-				if err := cfg.Validate(); err == nil {
-					t.Fatal("expected an error for conflicting host ports, got nil")
-				}
-			})
-
-			t.Run("host with invalid port string returns error", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:notaport")
-				if err := cfg.Validate(); err == nil {
-					t.Fatal("expected an error for invalid port, got nil")
-				}
-			})
-
-			t.Run("IPv6 bare address without port defaults to 9042", func(t *testing.T) {
-				t.Parallel()
-				// A bare IPv6 address (no brackets, no port) is not parseable by
-				// net.SplitHostPort, so it is treated as a portless entry and the
-				// driver falls back to the default port 9042.
-				cfg := makeValid("::1")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9042, cfg.Port)
-			})
-
-			t.Run("IPv6 bracketed address with port sets cfg.Port", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("[::1]:9142")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9142, cfg.Port)
-			})
-
-			t.Run("multiple IPv6 hosts with the same explicit port", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("[::1]:9142", "[::2]:9142")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9142, cfg.Port)
-			})
-
-			t.Run("mixed IPv4 and IPv6 hosts with the same port", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142", "[::1]:9142")
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9142, cfg.Port)
-			})
-
-			t.Run("mixed IPv4 and IPv6 hosts with conflicting ports returns error", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142", "[::1]:9043")
-				if err := cfg.Validate(); err == nil {
-					t.Fatal("expected an error for conflicting IPv4/IPv6 host ports, got nil")
-				}
-			})
-
-			t.Run("user-set Port skips learning from hosts", func(t *testing.T) {
-				t.Parallel()
-				// User explicitly sets Port=9042 (same as default) while hosts say 9142.
-				// The driver must NOT override the explicit Port.
-				cfg := makeValid("10.0.0.1:9142")
-				cfg.Port = 9042
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9042, cfg.Port)
-			})
-
-			t.Run("client routes enabled skips learning from hosts", func(t *testing.T) {
-				t.Parallel()
-				cfg := makeValid("10.0.0.1:9142")
-				cfg.ClientRoutesConfig = &ClientRoutesConfig{
-					Endpoints: []ClientRoutesEndpoint{{ConnectionID: "conn-1", ConnectionAddr: "10.0.0.1:9142"}},
-				}
-				if err := cfg.Validate(); err != nil {
-					t.Fatalf("unexpected error: %v", err)
-				}
-				tests.AssertEqual(t, "cfg.Port after Validate", 9042, cfg.Port)
-			})
+			tests.AssertEqual(t, "explicit cfg.Port after Validate", 9043, cfg.Port)
 		})
 
 		// TestClusterSettings/Validate/ProtoV5CompressorCapability covers the capability gate in
@@ -414,7 +274,6 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeNumConns", func(c *InternalClusterSettings) { c.NumConns = -1 }, "NumConns"},
 				{"PortTooLarge", func(c *InternalClusterSettings) { c.Port = 65536 }, "invalid Port"},
 				{"NegativePort", func(c *InternalClusterSettings) { c.Port = -1 }, "invalid Port"},
-				{"MixedHostPorts", func(c *InternalClusterSettings) { c.Hosts = []string{"10.0.0.1:9042", "10.0.0.2"} }, "all include a port or none"},
 				{"NegativeWriteTimeout", func(c *InternalClusterSettings) { c.WriteTimeout = -time.Second }, "WriteTimeout"},
 				{"NegativeTimeout", func(c *InternalClusterSettings) { c.Timeout = -time.Second }, "invalid Timeout:"},
 				{"NegativeConnectTimeout", func(c *InternalClusterSettings) { c.ConnectTimeout = -time.Second }, "ConnectTimeout"},

@@ -477,11 +477,11 @@ func buildTypedSocketReport(typed *connectivity.Config) socketReport {
 	if typed.Linger.Set {
 		report.Linger = &lingerReport{IntervalS: int64(typed.Linger.Value / time.Second)}
 	}
-	if typed.ReceiveBuffer.Set && typed.ReceiveBuffer.Value > 0 {
-		report.ReceiveBuffer = &bufferReport{SizeBytes: typed.ReceiveBuffer.Value}
+	if typed.ReceiveBuffer > 0 {
+		report.ReceiveBuffer = &bufferReport{SizeBytes: typed.ReceiveBuffer}
 	}
-	if typed.SendBuffer.Set && typed.SendBuffer.Value > 0 {
-		report.SendBuffer = &bufferReport{SizeBytes: typed.SendBuffer.Value}
+	if typed.SendBuffer > 0 {
+		report.SendBuffer = &bufferReport{SizeBytes: typed.SendBuffer}
 	}
 	return report
 }

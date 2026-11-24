@@ -87,7 +87,7 @@ defer session.Close()
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort` (9042 by default) |
+| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort` (9042 by default). v1 learned the port from hosts that all named one; v2 does not, and `Build` rejects such hosts when their port differs from `WithPort`, which is also the port of discovered nodes: call `WithPort(port)` |
 | `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg)` |
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
@@ -99,11 +99,15 @@ defer session.Close()
 | `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFileSource` to reload certificate files |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc, rack)` sets its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
-| `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; see [retries](retry-policy.md) |
-| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0 |
+| `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; `WithRetry(nil)` is the default, and `retry.Never{}` disables retries; see [retries](retry-policy.md) |
+| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
+| `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
 | `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |
-| `cluster.Dialer` | `WithDialer(endpoint.Dialer)` |
+| `cluster.Dialer` | `WithDialer(endpoint.Dialer)`; wrap `endpoint.DefaultDialer{}` to keep the default dial |
+| `cluster.SocketKeepalive` | `WithTCPKeepalive(period)` |
+| `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
+| `cluster.ClientRoutesConfig` | `WithClientRoutes(config.ClientRoute{ConnectionID: id, Hostname: host}, ...)` |
 | `cluster.Logger` | `WithLogger(*slog.Logger)` |
 | `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Observer)` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |

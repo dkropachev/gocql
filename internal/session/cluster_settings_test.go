@@ -527,6 +527,7 @@ func TestClusterSettings(t *testing.T) {
 
 			startTime := time.Now()
 			cluster := implCluster.InternalNewClusterSettings(srv.Address)
+			cluster.Port = addressesPort(srv.Address)
 			cluster.Logger = log
 			cluster.ProtoVersion = int(defaultProto)
 			cluster.Data().InternalDisableControlConn = true

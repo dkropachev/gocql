@@ -4,7 +4,7 @@ Set `Profile.Routing` to a typed `routing.Policy` with
 `ProfileBuilder.WithRouting`, in the session's default profile
 (`config.ConfigBuilder.WithDefaultProfile` or `ConfigureDefaultProfile`) or in
 the `exec.Options.Profile` of an execution. The default is token-aware and
-leader-aware with shuffled replicas; nil routes without a request-specific plan.
+leader-aware with shuffled replicas, and `WithRouting(nil)` restores it.
 `routing.NewPolicy(routing.Options{...})` configures
 datacenter/rack preference, remote fallback, latency ordering, and turns off
 token awareness (`NoTokenAware`), replica shuffling (`FixedReplicaOrder`) or

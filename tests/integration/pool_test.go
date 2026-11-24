@@ -64,7 +64,7 @@ func TestPool(t *testing.T) {
 				cfg := newFixtureConfig(getClusterHosts()[:1], 0, func(c *config.ConfigBuilder) {
 					c.WithDiscovery(false).
 						WithConnectionsPerHost(1).
-						NoAdvancedShardAwareness().
+						WithAdvancedShardAwareness(false).
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
 						WithHeartbeat(0, 0).

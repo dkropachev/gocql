@@ -326,7 +326,7 @@ func TestPerformance(t *testing.T) {
 		}
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
 			c.WithConnectionsPerShard(1).
-				WithAdvancedShardAwareness(32768, 65535).
+				WithAdvancedShardAwareness(true).WithShardAwareSourcePorts(32768, 65535).
 				WithHeartbeat(30*time.Second, 30*time.Second).
 				WithMetadataRefresh(0)
 			c.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {

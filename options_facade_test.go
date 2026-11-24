@@ -70,7 +70,7 @@ func roundTripOptions(t *testing.T, o exec.Options) exec.Options {
 func TestOptionsProfileMustBeBuilt(t *testing.T) {
 	literal := config.Profile{PageSize: 1000}
 	_, err := implSession.NewCompiledOptions(nil, internalOptions(exec.Options{Profile: &literal}))
-	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "profile" || !strings.Contains(err.Error(), "NewProfile") {
+	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "Profile" || !strings.Contains(err.Error(), "NewProfile") {
 		t.Fatalf("compiling a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 	}
 	built := codecTestMust(config.NewProfile().Build())

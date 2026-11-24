@@ -325,8 +325,8 @@ func TestConfig(t *testing.T) {
 			defer peer.Close()
 			wrapped := &socketOptions{TCPConn: raw.(*net.TCPConn)}
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = implCql.Option[int]{Set: true, Value: 4096}
-			config.SendBuffer = implCql.Option[int]{Set: true, Value: 8192}
+			config.ReceiveBuffer = 4096
+			config.SendBuffer = 8192
 			config.Linger = implCql.Option[time.Duration]{Set: true, Value: 2 * time.Second}
 			config.SocketKeepalive = 7 * time.Second
 			if err := applyV2SocketOptions(wrapped, config, "tcp"); err != nil {
@@ -335,15 +335,15 @@ func TestConfig(t *testing.T) {
 			if wrapped.read != 4096 || wrapped.write != 8192 || wrapped.linger != 2 || wrapped.period != 7*time.Second {
 				t.Fatal("socket settings were not applied", wrapped)
 			}
+			// Zero buffers keep the OS's sizes; a chosen zero linger is set.
 			zero := config
-			zero.ReceiveBuffer = implCql.Option[int]{Set: true}
-			zero.SendBuffer = implCql.Option[int]{Set: true}
+			zero.ReceiveBuffer, zero.SendBuffer = 0, 0
 			zero.Linger = implCql.Option[time.Duration]{Set: true}
 			if err := applyV2SocketOptions(wrapped, zero, "tcp"); err != nil {
 				t.Fatal(err)
 			}
-			if wrapped.read != 0 || wrapped.write != 0 || wrapped.linger != 0 || wrapped.readCalls != 2 || wrapped.writeCalls != 2 || wrapped.lingerCalls != 2 {
-				t.Fatal("explicit zero socket settings were omitted", wrapped)
+			if wrapped.read != 4096 || wrapped.write != 8192 || wrapped.linger != 0 || wrapped.readCalls != 1 || wrapped.writeCalls != 1 || wrapped.lingerCalls != 2 {
+				t.Fatal("zero buffers were applied or the zero linger was omitted", wrapped)
 			}
 			// Pipe has no TCP preflight controls, so each requested option reaches its
 			// own unsupported-setting branch rather than failing earlier at NODELAY.
@@ -372,7 +372,7 @@ func TestConfig(t *testing.T) {
 			defer a.Close()
 			defer b.Close()
 			config := settings.DefaultConfig("localhost")
-			config.ReceiveBuffer = implCql.Option[int]{Value: 4096, Set: true}
+			config.ReceiveBuffer = 4096
 			if err := applyV2SocketOptions(a, config, "tcp"); !hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("unsupported backend setting", err)
 			}

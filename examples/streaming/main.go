@@ -66,7 +66,7 @@ func run() (resultErr error) {
 	}
 	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
-		NoAdvancedShardAwareness().
+		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
 	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {

@@ -87,7 +87,7 @@ func TestDriverConfigTypedReport(t *testing.T) {
 
 	t.Run("UnixSocketHasNoTCPOptions", func(t *testing.T) {
 		typed := settings.DefaultConfig("/var/lib/scylla/cql.m")
-		typed.SocketKeepalive, typed.Linger, typed.ReceiveBuffer = time.Minute, cql.Some(time.Second), cql.Some(4096)
+		typed.SocketKeepalive, typed.Linger, typed.ReceiveBuffer = time.Minute, cql.Some(time.Second), 4096
 		conn := typed.Connectivity()
 		if got := buildConnectionReport(InternalNewClusterSettings("127.0.0.1"), &conn).Socket; got != (socketReport{}) {
 			t.Fatalf("socket = %+v, want no TCP options", got)

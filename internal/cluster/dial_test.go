@@ -35,6 +35,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,8 +50,27 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
+// addressesPort returns the port that every address names, the port a
+// settings value's Hosts reach the test servers on, or zero.
+func addressesPort(addresses ...string) int {
+	port := 0
+	for _, address := range addresses {
+		_, text, err := net.SplitHostPort(address)
+		if err != nil {
+			return 0
+		}
+		p, err := strconv.Atoi(text)
+		if err != nil || port != 0 && p != port {
+			return 0
+		}
+		port = p
+	}
+	return port
+}
+
 func testCluster(proto frm.ProtoVersion, addresses ...string) *InternalClusterSettings {
 	cluster := InternalNewClusterSettings(addresses...)
+	cluster.Port = addressesPort(addresses...)
 	cluster.ProtoVersion = int(proto)
 	cluster.Data().InternalDisableControlConn = true
 	return cluster
