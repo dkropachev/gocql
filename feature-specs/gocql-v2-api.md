@@ -61,6 +61,8 @@ func TupleType(fields ...DataType) (DataType, error)
 func UDTType(keyspace, name string, fields ...ColumnSpec) (DataType, error)
 func VectorType(element DataType, dimension uint16) (DataType, error)
 func NewColumns(columns ...ColumnSpec) Columns
+func ParseDataType(string) (DataType, error) // "map<text, frozen<list<int>>>"; no UDTs
+func MustParseDataType(string) DataType
 func (t DataType) Kind() Type
 func (t DataType) Equal(other DataType) bool
 func (t DataType) Frozen() bool

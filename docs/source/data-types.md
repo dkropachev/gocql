@@ -3,6 +3,9 @@
 Use immutable `DataType` and `Columns` descriptors. `ScalarType`, `ListType`,
 `SetType`, `MapType`, `TupleType`, `UDTType` and `VectorType` construct them;
 predeclared scalars such as `TextType` and `IntType` need no error check.
+`ParseDataType("map<text, frozen<list<int>>>")` parses a type as CQL writes
+it; a user-defined type needs its fields, so it is built with `UDTType` or
+read from metadata.
 Text and varchar are one CQL type, `TypeText`: a column declared either way
 has that kind.
 `UDTOptionsFor` derives UDT codec options from a UDT `DataType`.

@@ -437,6 +437,7 @@ package cql
 	func cql.MinTimeUUID(t time.Time) cql.TimeUUID
 	func cql.MustParamsOf[P any](opts ...cql.StructOption) cql.ParamEncoder[P]
 	func cql.MustParseConsistency(s string) cql.Consistency
+	func cql.MustParseDataType(s string) cql.DataType
 	func cql.MustParseTimeUUID(input string) cql.TimeUUID
 	func cql.MustParseUUID(input string) cql.UUID
 	func cql.MustRowOf[R any](opts ...cql.StructOption) cql.RowDecoder[R]
@@ -489,6 +490,7 @@ package cql
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
 	func cql.ParamsOf[P any](opts ...cql.StructOption) (cql.ParamEncoder[P], error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
+	func cql.ParseDataType(s string) (cql.DataType, error)
 	func cql.ParseDecimal(s string) (cql.Decimal, error)
 	func cql.ParseTimeUUID(input string) (cql.TimeUUID, error)
 	func cql.ParseUUID(input string) (cql.UUID, error)
