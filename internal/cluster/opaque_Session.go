@@ -30,6 +30,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
 	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -65,15 +66,15 @@ type SessionStorage struct {
 	InternalClientRoutesHandler *ClientRoutesHandler
 	driverConfigReporter        *driverConfigReporter
 	closeDone                   chan struct{}
+	InternalCfg                 InternalClusterSettings
+	nextTypedHost               atomic.Uint64
+	InternalSessionStateMu      sync.RWMutex
+	InternalTypedMu             sync.Mutex
+	schemaMu                    sync.Mutex
 	// id is a globally unique identifier for this session, reported to
 	// the cluster via the SESSION_ID STARTUP option so that all connections
 	// belonging to the same session can be correlated in system.clients.
-	id                     string
-	InternalCfg            InternalClusterSettings
-	nextTypedHost          atomic.Uint64
-	InternalSessionStateMu sync.RWMutex
-	InternalTypedMu        sync.Mutex
-	schemaMu               sync.Mutex
+	id cql.UUID
 	// closedOrClosing mirrors InternalIsClosing||InternalIsClosed for lock-free
 	// Closed; it is set under InternalSessionStateMu with either flag.
 	closedOrClosing                   atomic.Bool

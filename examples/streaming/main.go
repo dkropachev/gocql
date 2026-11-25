@@ -165,7 +165,7 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		_, err := s.UnpreparedExec(operation, cql.Command(text), cql.EmptyParams{})
+		_, err := s.UnpreparedCommand(operation, text)
 		return err
 	}
 	runDDL := func(text string) error { return execContext(ctx, text) }
@@ -210,14 +210,14 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if err != nil {
 		return err
 	}
-	writeQuery, err := insert.Query(exec.Options{})
+	writer, err := insert.Worker(exec.Options{})
 	if err != nil {
 		return err
 	}
-	defer writeQuery.Close()
+	defer writer.Close()
 	payload := bytes.Repeat([]byte("typed-stream-"), 16384)
 	for i := int32(0); i < 3; i++ {
-		if _, err := writeQuery.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
+		if _, err := writer.Exec(ctx, record{ID: i, Payload: payload, Pieces: [][]byte{[]byte("nested"), []byte("storage")}}); err != nil {
 			return err
 		}
 	}
@@ -239,12 +239,12 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	}
 	pinned := exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)}
 	options := exec.StreamOptions{Incremental: incremental, Options: pinned}
-	query, err := prepared.Query(options)
+	worker, err := prepared.Worker(options)
 	if err != nil {
 		return err
 	}
-	defer query.Close()
-	stream, err := query.Run(ctx, cql.EmptyParams{})
+	defer worker.Close()
+	stream, err := worker.Run(ctx, cql.EmptyParams{})
 	if incremental && !segments && frameCompression != cql.NoCompression {
 		if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 			return fmt.Errorf("expected frame compression capability error, got %w", err)
@@ -256,12 +256,12 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 		return err
 	}
 	defer stream.Close()
-	// One worker owns one query; overlapping use is rejected immediately.
+	// One goroutine owns one worker; overlapping use is rejected immediately.
 	blockedCtx, blockedCancel := context.WithTimeout(ctx, 20*time.Millisecond)
-	_, blockedErr := query.Run(blockedCtx, cql.EmptyParams{})
+	_, blockedErr := worker.Run(blockedCtx, cql.EmptyParams{})
 	blockedCancel()
 	if !errors.Is(blockedErr, cqlerr.ErrBusy) {
-		return fmt.Errorf("query admission: %w", blockedErr)
+		return fmt.Errorf("worker admission: %w", blockedErr)
 	}
 	// Seed both the outer slots and every nested payload before the first NextInto.
 	row := record{Payload: make([]byte, 0, len(payload)), Pieces: [][]byte{make([]byte, 0, 16), make([]byte, 0, 16)}}
@@ -284,13 +284,13 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if err := stream.Close(); err != nil {
 		return err
 	}
-	query.Close()
-	if err := query.Wait(ctx); err != nil {
+	worker.Close()
+	if err := worker.Wait(ctx); err != nil {
 		return err
 	}
 	if len(seen) != 3 || !bytes.Equal(row.Payload, payload) {
 		return fmt.Errorf("incomplete stream or output lost on Close")
 	}
-	fmt.Println("3 rows; seeded nested storage reused; query admission and drain verified")
+	fmt.Println("3 rows; seeded nested storage reused; worker admission and drain verified")
 	return nil
 }

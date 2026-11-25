@@ -1,7 +1,7 @@
 # Batches
 
 Append each typed member with `prepared.AddToBatch(&batch, parameters)` (or
-`query.AddToBatch`), then send the batch with
+`worker.AddToBatch`), then send the batch with
 `session.ExecBatch(ctx, &batch)`. Members of several statements of one
 session may share a batch, and may write tables of different keyspaces. A
 member of another session is rejected with a `*cql.ValidationError`, as is
@@ -34,8 +34,8 @@ alone: an unclassified member with an `IF` condition is conditional, which
 makes the batch conditional.
 
 `AddToBatch` encodes the parameters straight into storage the batch owns, so
-later input mutation cannot change the batch. It uses none of the query's
-execution state: `Query.AddToBatch` works while the query runs or has an open
+later input mutation cannot change the batch. It uses none of the worker's
+execution state: `Worker.AddToBatch` works while the worker runs or has an open
 `Rows`, and `Prepared.AddToBatch` takes no pooled query. `ExecBatch` and `RunConditionalBatch` take at most one
 `exec.CompiledOptions` from `session.CompileOptions`. A batch response is a single
 page, so paging options are ignored and the options you compiled for
@@ -73,14 +73,17 @@ writes. Such a failure therefore reports `cqlerr.MaybeExecuted`, and
 [retries](../retry-policy.md).
 
 `ExecBatch` rejects a batch known to be conditional with
-`cqlerr.ErrConditionalExec` before sending it. Conditional batch results use
+`cqlerr.ErrConditionalExec` before sending it. To learn only whether a
+conditional batch applied, send it with
+`applied, result, err := session.ApplyBatch(ctx, &batch)`, which leaves
+nothing to close. To read the rows the server returns, use
 `session.RunConditionalBatch(ctx, &batch, decoder)`, which takes a
 `cql.CASRows` decoder and returns `CASBatchRows`. Iterate them with
 `NextInto`, like the `Rows` of `prepared.Run`, or call `Applied`, which
 reports whether the batch applied without you checking every row. Close the
 rows when done: until then they hold one of the session's pooled queries.
 Once they are closed, sending the batch again with the same decoder reuses
-their storage. It rejects a batch whose members are all known not to be
+their storage. Both reject a batch whose members are all known not to be
 conditional, before sending it. See
 [lightweight transactions](lightweight-transactions.md).
 The rows of a conditional batch differ between Cassandra and ScyllaDB. See

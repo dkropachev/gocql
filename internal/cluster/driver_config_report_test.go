@@ -981,7 +981,7 @@ func TestDriverConfigReport(t *testing.T) {
 				if config, ok := opts[InternalDriverConfigStartupKey]; ok {
 					t.Errorf("STARTUP %d: expected no %s when reporting is disabled, got %q", i, InternalDriverConfigStartupKey, config)
 				}
-				if got := opts[transport.InternalSessionIDStartupKey]; got != session.ID() {
+				if got := opts[transport.InternalSessionIDStartupKey]; got != session.ID().String() {
 					t.Errorf("STARTUP %d: expected %s %q to be reported whatever the option is set to, got %q",
 						i, transport.InternalSessionIDStartupKey, session.ID(), got)
 				}

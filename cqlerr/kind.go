@@ -31,7 +31,7 @@ const (
 	KindConnection
 	// KindCanceled: the caller canceled the request.
 	KindCanceled
-	// KindClosed: the session or query was closed.
+	// KindClosed: the session or worker was closed.
 	KindClosed
 	// KindProtocol: a peer violated the CQL protocol.
 	KindProtocol

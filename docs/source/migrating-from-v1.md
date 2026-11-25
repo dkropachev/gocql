@@ -159,7 +159,7 @@ if !found {
 | v1 | v2 |
 | --- | --- |
 | `session.Query(stmt, values...)` | `session.Prepare(ctx, cql.Statement[P, R]{...})` once, then calls on the `*Prepared` |
-| `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text such as DDL (`cql.Command(text)`) |
+| `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text, or `session.UnpreparedCommand(ctx, text)` for text without bind markers such as DDL |
 | `query.Scan(&a, &b)` | `prepared.One(ctx, params, &row)`; `found` is false instead of `gocql.ErrNotFound` |
 | `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &row, fn)`, `for row, err := range prepared.All(ctx, params, &row)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
 | `iter.MapScan(m)`, `iter.SliceMap()` | rows decoded with `cql.DynamicRows`; `row.Get(name)` returns a `cql.Value` |
@@ -170,12 +170,15 @@ if !found {
 | `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
 | a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
-| `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a worker query (`Prepared.Query`) rejects a fixed timestamp |
+| `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a `Worker` (`Prepared.Worker`) rejects a fixed timestamp |
 | `query.Attempts()`, `query.Latency()` | the returned `cql.Result`'s `Attempts` and `AttemptLatency`, the sum of the completed attempts' latencies |
-| `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page |
+| `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page; `rows.Result().FetchedRows` on an open `Rows` |
+| `query.Observer(o)` | `exec.Options{Observer: o}`, which v2 joins after the session's observer; add `NoSessionObserver: true` for v1's replacement |
+| `iter.Host()` | `Result.HostID`; `rows.Result().HostID` on an open `Rows` |
+| `query.GetRoutingKey()` | `prepared.Routing(params)`, whose `Token` is the partition's token |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
-| `query.Release()` | nothing to release; a reusable `prepared.Query(options)` is closed with `Close` |
+| `query.Release()` | nothing to release; a reusable `prepared.Worker(options)` is closed with `Close` |
 
 v1 sent a client timestamp with every request. v2 stamps only ordinary
 statements. A statement left `cql.UnknownStatement`, as a ported v1
@@ -188,8 +191,8 @@ reading a SELECT through `cql.CASRows` or declaring it
 `cql.ConditionalStatement`.
 
 One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
-`session.CompileOptions`; compile them once and reuse them. A worker that runs
-a statement in a loop can own a `*gocql.Query` from `prepared.Query(options)`,
+`session.CompileOptions`; compile them once and reuse them. A goroutine that runs
+a statement in a loop can own a `*gocql.Worker` from `prepared.Worker(options)`,
 which takes `exec.Options` directly. See [statements](statements/index.md).
 
 ### Struct mapping
@@ -261,7 +264,7 @@ it to an untrusted client. See [paging](statements/paging.md).
 | `session.NewBatch(gocql.UnloggedBatch)` | `batch := gocql.Batch{Kind: cql.UnloggedBatch}` |
 | `batch.Query(stmt, values...)` | `prepared.AddToBatch(&batch, params)`, or `session.UnpreparedAddToBatch` |
 | `session.ExecuteBatch(batch)` | `session.ExecBatch(ctx, &batch)` |
-| `session.ExecuteBatchCAS(batch, dest...)`, `MapExecuteBatchCAS` | `session.RunConditionalBatch(ctx, &batch, cql.CASRows(decoder))` |
+| `session.ExecuteBatchCAS(batch, dest...)`, `MapExecuteBatchCAS` | `session.ApplyBatch(ctx, &batch)` for the applied flag alone; `session.RunConditionalBatch(ctx, &batch, cql.CASRows(decoder))` for the rows |
 | `query.ScanCAS(dest...)`, `MapScanCAS` | a statement whose `Rows` is `cql.CASRows(decoder)`, read with `One`; `CASResult.Applied` reports the outcome |
 
 `Exec` and `ExecBatch` reject a statement or batch known to be conditional,

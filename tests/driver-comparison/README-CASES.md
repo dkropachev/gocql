@@ -38,13 +38,13 @@ Notation: `w.*` is per-worker state built before timing; `check` validates rows.
 |---|---|---|---|
 | B1 | `w.q.Each(ctx, k, &out, check)` | MB1 | `it := w.q.Bind(k).WithContext(ctx).Iter(); for it.Scan(...) {check}; it.Close()` |
 | B2 | `Run` + `Rows.NextInto` loop + `Close` | MB1 | |
-| B3 | `StreamQuery.Run` (page buffered) + `NextInto` loop | MB1 | |
-| B4 | `StreamQuery` with `exec.StreamOptions{Incremental: true}` | MB1 | |
+| B3 | `StreamWorker.Run` (page buffered) + `NextInto` loop | MB1 | |
+| B4 | `StreamWorker` with `exec.StreamOptions{Incremental: true}` | MB1 | |
 | B5 | B1 with `exec.Options{Prefetch: 1}` | MB2 | MB1 with `Prefetch(0.25)` (master's default; nearest to one page) |
 | B6 | `RunPage` with `PageSize: cql.Unpaged`: the whole partition in one response | MB3 | MB1 with `PageSize(0)` |
 | B7 | B1 with `exec.Options{PageSize: 5000}` | MB4 | MB1 with `PageSize(5000)` |
 | B8 | `rows := Run(...)`; read 16 rows; `rows.Close(); w.q.Wait(ctx)` | MB5 | `it := Iter()`; scan 16 rows; `it.Close()` |
-| B9 | incremental `StreamQuery`: read 16 rows; `rs.Close(); Wait` | MB5 | |
+| B9 | incremental `StreamWorker`: read 16 rows; `rs.Close(); Wait` | MB5 | |
 
 ## C. Application-driven paging, 64 workers
 

@@ -11,7 +11,7 @@ import (
 
 // Query and paging errors.
 var (
-	// ErrClosed reports use of a closed query, handle or connection.
+	// ErrClosed reports use of a closed worker, handle or connection.
 	ErrClosed = errors.New("gocql: closed")
 	// ErrPagingStateLimit reports a paging state over the size limit, or a
 	// paging history that grew past its limits.

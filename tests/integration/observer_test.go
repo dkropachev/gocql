@@ -192,7 +192,7 @@ func TestObserver(t *testing.T) {
 				require.Equal(t, int64(42), cassandraInt(t, row, "id"))
 				require.False(t, rows.NextInto(&row))
 				require.NoError(t, rows.Close())
-				checkTrace(rows.Info().CQLTraces())
+				checkTrace(rows.Result().CQLTraces())
 			}
 		})
 		t.Run("Tracer", func(t *testing.T) {
@@ -217,7 +217,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, int32(42), value)
 			require.False(t, rows.NextInto(&value))
 			require.NoError(t, rows.Err())
-			selected := rows.Info()
+			selected := rows.Result()
 			require.NoError(t, rows.Close())
 			require.NotEmpty(t, selected.CQLTraces())
 			// Trace polls readiness under the caller context and returns owned typed

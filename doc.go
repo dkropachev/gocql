@@ -34,7 +34,7 @@
 // allocate no per-call execution state. Each takes at most one exec.CompiledOptions,
 // made once by Session.CompileOptions; none uses the session's default profile.
 // Exec and Each return (cql.Result, error) and One returns (bool, cql.Result, error),
-// on Prepared and Query alike. One detaches borrowed fields before returning;
+// on Prepared and Worker alike. One detaches borrowed fields before returning;
 // Each lends them only until its callback returns. Returning StopIteration
 // from Each stops successfully; other callback errors are returned. All is the
 // range form of Each: a for-range loop over All yields every row, valid until
@@ -43,28 +43,33 @@
 // Prepared.RunPage returns one Page from a saved cql.PageState with a page size
 // argument; each handle holds a pooled query until it is closed.
 //
-// Prepared.Query creates a reusable query owned by one goroutine. It resolves
-// its exec.Options once and saves the pool hand-off of the one-shot calls (about 2
-// to 4 percent of client CPU at high concurrency), and has the same calls. The
-// page size cql.Unpaged requests the whole result in one response.
-// Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll run occasional CQL text statements without server preparation
-// and without a query to close; prepare a statement that runs repeatedly. Parameters are
-// copied during execution admission. A call while
-// a Rows, Page or RowStream of the query is open, or while another goroutine's
-// call runs, returns cqlerr.ErrBusy; a call after an execution that already returned
-// waits until its accepted writes drain. Close stops a query and returns at
-// once; Wait joins its drain. Do not keep Query values in a sync.Pool: a query
-// the pool drops stays open until it is closed.
+// Prepared.Worker creates a reusable execution owned by one goroutine, a
+// Worker. It resolves its exec.Options once and saves the pool hand-off of
+// the one-shot calls (about 2 to 4 percent of client CPU at high
+// concurrency), and has the same calls. A call while a Rows, Page or
+// RowStream of the worker is open, or while another goroutine's call runs,
+// returns cqlerr.ErrBusy; a call after an execution that already returned
+// waits until its accepted writes drain. Close stops a worker and returns at
+// once; Wait joins its drain. Do not keep Worker values in a sync.Pool: a
+// worker the pool drops stays open until it is closed. The page size
+// cql.Unpaged requests the whole result in one response.
 //
-// Prepared.AddToBatch, Query.AddToBatch and Session.UnpreparedAddToBatch
-// append statements to a Batch; Session.ExecBatch sends it, and
-// Session.RunConditionalBatch sends a conditional batch and returns its rows
-// as CASBatchRows, whose Applied reports whether the batch applied. It
-// rejects a batch known to have no conditional member.
+// Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll run
+// occasional CQL text statements without server preparation and without a
+// worker to close; prepare a statement that runs repeatedly. Parameters are
+// copied during execution admission. Session.UnpreparedCommand runs CQL text
+// with nothing to bind and no result, such as DDL.
+//
+// Prepared.AddToBatch, Worker.AddToBatch and Session.UnpreparedAddToBatch
+// append statements to a Batch; Session.ExecBatch sends it. A conditional
+// batch is sent with Session.ApplyBatch, which reports whether it applied, or
+// with Session.RunConditionalBatch, which returns its rows as CASBatchRows,
+// whose Applied reports the same. Both reject a batch known to have no
+// conditional member.
 //
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
-// storage; its shareable PreparedStream creates a StreamQuery per worker. A
-// StreamQuery decodes into seeded caller storage and buffers one response page
+// storage; its shareable PreparedStream creates a StreamWorker per goroutine.
+// A StreamWorker decodes into seeded caller storage and buffers one response page
 // on normal multiplexed connections by default. exec.StreamOptions.Incremental opts into bounded
 // incremental receive through an exclusive connection reservation.
 // Page-buffered memory scales with concurrent response pages and is bounded by

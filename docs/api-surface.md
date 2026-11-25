@@ -27,6 +27,9 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
      resolved options across executions, and the caller closes it.
    - **Shared**: safe for any number of goroutines at once, with no close
      obligation; per-call state comes from an internal pool.
+3. **Batch**: a `Batch` of members added by the other kinds, sent as one
+   request. It follows the batch rules below; its row of the grid shows
+   which method sends it for each output shape.
 
 ## Output shapes
 
@@ -43,16 +46,23 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
 | | None | One row | Many rows | Pages |
 |---|---|---|---|---|
 | Throwaway | `Session.UnpreparedExec` | `Session.UnpreparedOne` | `Session.UnpreparedEach`, `Session.UnpreparedAll` | empty by design |
-| Worker-owned | `Query.Exec` | `Query.One` | `Query.Each`, `Query.All`, `Query.Run` | `Query.RunPage` |
+| Worker-owned | `Worker.Exec` | `Worker.One` | `Worker.Each`, `Worker.All`, `Worker.Run` | `Worker.RunPage` |
 | Shared | `Prepared.Exec` | `Prepared.One` | `Prepared.Each`, `Prepared.All`, `Prepared.Run` | `Prepared.RunPage` |
+| Batch | `Session.ExecBatch` | `Session.ApplyBatch` | `Session.RunConditionalBatch` | empty by design |
 
 Throwaway pages stay empty: a caller that pages through results is executing
-the statement repeatedly, so it prepares the statement.
+the statement repeatedly, so it prepares the statement. Batch pages stay
+empty because a BATCH response is a single page.
+
+The batch row names its verbs for what a batch returns, so its methods end in
+`Batch` and its one-row and many-rows verbs differ from the other rows':
+`Apply`, whose one row is whether a conditional batch applied, and
+`RunConditional`, whose rows are a conditional batch's.
 
 `TestExecutionGrid` checks this table against the public API
-(`testdata/api.txt`): every cell method exists with its row's prefix, its
-column's verb and its row's options form, and every other exported method of
-`Session`, `Query` and `Prepared` is either a cell or on the test's list of
+(`testdata/api.txt`): every cell method exists with its row's prefix or
+suffix, its column's verb and its row's options form, and every other exported method of
+`Session`, `Worker` and `Prepared` is either a cell or on the test's list of
 methods outside the grid. `TestExecutionGridBehavior` runs the same statement
 through each row against a fake node and fails if a row misses a case's
 expected outcome, or if the rows differ in rows, error classification, or the
@@ -60,8 +70,8 @@ consistency, page size, value and page state of the requests they send.
 
 ## Options
 
-- Worker-owned: options are fixed when the query is created, as the
-  `exec.Options` passed to `Prepared.Query`, and its methods take none.
+- Worker-owned: options are fixed when the worker is created, as the
+  `exec.Options` passed to `Prepared.Worker`, and its methods take none.
 - Shared: each call ends in `options ...exec.CompiledOptions`, made once by
   `Session.CompileOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
@@ -69,7 +79,10 @@ consistency, page size, value and page state of the requests they send.
   fails the call at once with a validation error. The type is
   `exec.CompiledOptions`, not `exec.Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
-  and each call passes a pointer to the frozen result.
+  and each call passes a pointer to the frozen result. `Prepared.With`
+  returns a view whose calls without options use given defaults instead of
+  the session's; options passed to a call replace them whole. The view
+  shares the preparation and its pool, so it is not a new row.
 - Throwaway: each call ends in `options ...exec.Options`, the same optional
   parameter with at most one value. The call validates and resolves it: a
   throwaway statement has no setup step to compile options in, and its path
@@ -81,8 +94,9 @@ A new cell follows the options form of its row.
 
 Streaming is a standalone, performance-first API that decodes into caller
 storage. It is always prepared, worker-owned, and has one output shape, many
-rows: `Session.PrepareStream` → `PreparedStream.Query` → `StreamQuery.Run` →
-`RowStream`. Adding another shape or entry point to streaming is a change to
+rows: `Session.PrepareStream` → `PreparedStream.Worker` → `StreamWorker.Run` →
+`RowStream`, read by pull (`NextInto`) or range (`All`), as `Rows` is.
+Adding another shape or entry point to streaming is a change to
 this rule, made with the maintainer.
 
 Streaming and the many-rows methods fetch pages under the hood and expose no
@@ -130,9 +144,12 @@ page state. Explicit paging is the pages column only.
   other row-returning statement.
 - Each column uses the same verbs in every row that fills it: `Exec`, `One`,
   `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
-  Throwaway methods carry the `Unprepared` prefix in front of the verb.
-- `AddToBatch` appears once per reusable form. `Query.Routing` reports where
-  an execution with the given values would go, and lives on `Query`.
+  Throwaway methods carry the `Unprepared` prefix in front of the verb. The
+  batch row is the exception described under the grid.
+- `AddToBatch` appears once per reusable form. `Prepared.Routing` reports
+  where an execution with the given values and options would go. It lives on
+  `Prepared`, which every reusable form starts from, and takes the shared
+  form's options, so reading a route needs no worker.
 - Batches follow the batch rules below, not the grid.
 
 ## Batches
@@ -143,7 +160,7 @@ and no options.
 
 - **Building.** A member joins with `AddToBatch` on the statement that
   supplies it: one method per reusable form (`Prepared.AddToBatch`,
-  `Query.AddToBatch`), and `Session.UnpreparedAddToBatch` for a throwaway
+  `Worker.AddToBatch`), and `Session.UnpreparedAddToBatch` for a throwaway
   statement, which compiles its parameters on every call like the other
   throwaway methods. `AddToBatch` encodes the value straight into storage
   the `Batch` owns and touches no execution state. The zero `Batch` is ready,
@@ -159,6 +176,11 @@ and no options.
   - None: `Session.ExecBatch`. A batch whose members the driver knows to be
     conditional is rejected before it is sent, because the result of an
     applied-or-not write cannot be returned as success or error alone.
+  - One row: `Session.ApplyBatch` → `(applied bool, cql.Result, error)`,
+    the one-row shape of a conditional batch: whether it applied, as
+    `CASBatchRows.Applied` reports it. It runs `RunConditionalBatch` with
+    `cql.CASApplied` and closes the rows before it returns, so it leaves no
+    handle and keeps no pooled query, and it rejects the same batches.
   - Rows: `Session.RunConditionalBatch` → `CASBatchRows[X]`, the pull form
     of the many-rows column with the decoder fixed to `cql.CASRows`: only a
     conditional batch returns rows. The response is a single page with no
@@ -198,6 +220,20 @@ and no options.
 - **Routing.** The batch routes by its first routable member's keyspace,
   table and token. Members must share one session, checked at `AddToBatch`;
   they may span keyspaces, as a logged batch may.
+
+## Exceptions
+
+An exception is an execution method outside the grid, kept because it
+removes boilerplate from a common call without adding a way to execute.
+`TestExecutionGrid` lists each one, with the options form of its row.
+
+- `Session.UnpreparedCommand` runs CQL text, given as a string, with no
+  bind markers and no result columns, such as DDL. It is the
+  throwaway none cell, `UnpreparedExec`, with `cql.Command(statement)` and
+  `cql.EmptyParams{}` filled in, so it takes the throwaway row's
+  `...exec.Options`. Schema setup and occasional commands are most of the
+  throwaway calls, and spelling the statement type and the empty parameters
+  out in each one hid the CQL.
 
 ## Current deviations
 

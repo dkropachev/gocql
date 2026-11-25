@@ -251,7 +251,7 @@ func TestQuery(t *testing.T) {
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implSession.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
@@ -270,7 +270,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
+			assertV2CustomPayload(t, customPayload, page.Result().CustomPayload())
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -299,7 +299,7 @@ func TestQuery(t *testing.T) {
 			requireCassandraFixtures(t)
 			session := createV2Session(t)
 			defer session.Close()
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implSession.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
 			}
@@ -319,7 +319,7 @@ func TestQuery(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
+				assertV2CustomPayload(t, customPayload, page.Result().CustomPayload())
 				if err := page.Close(); err != nil {
 					t.Fatal(err)
 				}
@@ -336,7 +336,7 @@ func TestQuery(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err != nil {
 				t.Fatal("create:", err)
@@ -368,7 +368,7 @@ func TestQuery(t *testing.T) {
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", fixtureKeyspace("_fail"), *flagRF)); err != nil {
 				t.Fatal(err)
 			}
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int,value int,PRIMARY KEY (id))", fixtureKeyspace("_fail"), table)); err != nil {
 				t.Fatalf("failed to create table with error '%v'", err)
@@ -570,7 +570,7 @@ func TestQuery(t *testing.T) {
 			rows, err := v2Query(context.Background(), session, "SELECT * FROM system.peers")
 			require.NoError(t, err)
 			defer rows.Close()
-			require.NotEqual(t, cql.UUID{}, rows.Info().HostID)
+			require.NotEqual(t, cql.UUID{}, rows.Result().HostID)
 		})
 		// Confirms that the stats are returning valid data. Accuracy may be questionable.
 		t.Run("Stats", func(t *testing.T) {
@@ -584,7 +584,7 @@ func TestQuery(t *testing.T) {
 			for rows.NextInto(&row) {
 			}
 			require.NoError(t, rows.Close())
-			info := rows.Info()
+			info := rows.Result()
 			require.Positive(t, info.Attempts)
 			require.Positive(t, info.AttemptLatency)
 			require.Greater(t, session.Metrics().Requests, before.Requests)
@@ -714,7 +714,7 @@ func TestQuery(t *testing.T) {
 			P    []byte
 		}
 		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P }))}, exec.PrepareOptions{}))
-		w := codecTestMust(write.Query(exec.Options{}))
+		w := codecTestMust(write.Worker(exec.Options{}))
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
 		for i := int32(0); i < 6; i++ {
@@ -724,7 +724,7 @@ func TestQuery(t *testing.T) {
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
-		q := codecTestMust(read.Query(exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		q := codecTestMust(read.Worker(exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
@@ -781,7 +781,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.Query(exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		unpaged := codecTestMust(read.Worker(exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
 		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage(), 0))
 		n := 0
@@ -795,7 +795,7 @@ func TestQuery(t *testing.T) {
 		for _, incremental := range []bool{false, true} {
 			streamDecoder := cql.StreamRowInto(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
 			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
-			streamQuery := codecTestMust(readStream.Query(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: 2}}))
+			streamQuery := codecTestMust(readStream.Worker(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: 2}}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
 				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {

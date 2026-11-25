@@ -148,9 +148,9 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement binding
 //
 // The id is assigned when the session is created and never changes, so it is
 // safe to call concurrently and safe to read after the session is closed.
-func (s *Session) ID() string {
+func (s *Session) ID() cql.UUID {
 	if s.Core() == nil {
-		return ""
+		return cql.UUID{}
 	}
 	return s.core.ID()
 }

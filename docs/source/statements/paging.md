@@ -1,21 +1,21 @@
 # Paging and borrowed results
 
 Prefer `One` for a single row and `Each` or `All` to visit every row: they
-reuse the query's scratch space and leave nothing to close. `All` is the range
+reuse the worker's scratch space and leave nothing to close. `All` is the range
 form, `for row, err := range prepared.All(ctx, parameters, &dst)`; each row is
 valid until the next iteration and `break` releases the execution. The
 yielded pointer is `dst` for every row, so `append(rows, *row)` keeps a copy
 while `append(ptrs, row)` keeps the same row many times. Pass a nil `dst` to
 decode each row into a new value the loop may keep; `One` with a nil `dst`
 only reports whether a row exists.
-`Run(ctx, parameters)`, on a prepared statement or a query, returns `Rows`,
+`Run(ctx, parameters)`, on a prepared statement or a worker, returns `Rows`,
 which must be closed; iterate it
 with `NextInto`, which decodes each row into a caller-owned destination and
 fetches continuation pages as needed, or range over `rows.All(&dst)`, which
 closes the rows when the loop ends. Payload fields still borrow the receive page. Their lifetime ends on
 the next advancement or Close unless a retained `PageLease` pins that page.
 Clone explicitly detaches a value. A retained page survives Session.Close and
-does not retain query input storage.
+does not retain worker input storage.
 
 For explicit paging use `RunPage(ctx, parameters, cql.StartPage(), pageSize)` and
 carry the returned page state to the next call:

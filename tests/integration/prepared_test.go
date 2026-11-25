@@ -181,12 +181,7 @@ func TestPrepared(t *testing.T) {
 			info := prepared.Info()
 			tests.AssertEqual(t, "prepared.Keyspace", keyspace, info.Keyspace)
 			tests.AssertEqual(t, "prepared.Table", table, info.Table)
-			query, err := prepared.Query(exec.Options{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer query.Close()
-			route, err := query.Routing([]cql.Value{cql.IntValue(1)})
+			route, err := prepared.Routing([]cql.Value{cql.IntValue(1)})
 			if err != nil {
 				t.Fatal(err)
 			}

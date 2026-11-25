@@ -2,9 +2,9 @@
 
 `session.PrepareStream(ctx, cql.StreamStatement[P,R]{CQL: text, Params: params,
 Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
-`PreparedStream` handle can be shared; `prepared.Query()` creates
-a query for one worker. Streaming is always prepared; `Rows` supplies the
-streaming decoder. The query's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
+`PreparedStream` handle can be shared; `prepared.Worker()` creates
+a `StreamWorker` for one goroutine. Streaming is always prepared; `Rows` supplies the
+streaming decoder. The worker's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
 normal multiplexed connections. `exec.StreamOptions{Incremental: true}` selects
 bounded incremental receive through an exclusive connection reservation. The standalone
@@ -33,10 +33,10 @@ prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams,
     Rows: decoder,
 })
 if err != nil { return err }
-query, err := prepared.Query()
+worker, err := prepared.Worker()
 if err != nil { return err }
-defer query.Close()
-stream, err := query.Run(ctx, cql.EmptyParams{})
+defer worker.Close()
+stream, err := worker.Run(ctx, cql.EmptyParams{})
 if err != nil { return err }
 defer stream.Close()
 for stream.NextInto(&row) {
@@ -45,13 +45,24 @@ for stream.NextInto(&row) {
 return stream.Err()
 ```
 
+`stream.All(&row)` is the range form of the same loop: it yields `&row` for
+each row, yields any error once, and closes the stream when the loop ends,
+so `break` releases the execution:
+
+```go
+for r, err := range stream.All(&row) {
+    if err != nil { return err }
+    consume(*r) // r is &row.
+}
+```
+
 Choose execution and receive behavior independently:
 
 | Use case | API and behavior |
 | --- | --- |
 | Ordinary application reads | `One` for an owned result, `Each` for synchronous consumption, or `Run` for a borrowed cursor |
-| Reusing caller output buffers with normal connection multiplexing | Page-buffered `StreamQuery`, the default |
-| Large responses needing bounded receive scratch | `StreamQuery` with `Incremental: true`, reserving one connection |
+| Reusing caller output buffers with normal connection multiplexing | Page-buffered `StreamWorker`, the default |
+| Large responses needing bounded receive scratch | `StreamWorker` with `Incremental: true`, reserving one connection |
 
 Both stream modes decode into caller-owned output. Page buffering holds a full
 page; incremental mode bounds receive scratch and has the protocol/compression
@@ -75,18 +86,18 @@ and can leave partial destination data. Rows already delivered are never
 replayed. Close cancels and joins in-progress NextInto destination access;
 caller storage stays valid after Close. Concurrent NextInto calls are rejected.
 
-One query permits one active execution; overlapping `Run` calls return
+One worker permits one active execution; overlapping `Run` calls return
 `cqlerr.ErrBusy`.
 Parameters are copied on admission and retries/pages share that owned snapshot.
-Close the cursor on early termination; the query's next `Run` waits for the
-previous execution's accepted writes to drain. `query.Close()` permanently
-stops admission and cancels the active execution; `query.Wait(ctx)` waits for
+Close the cursor on early termination; the worker's next `Run` waits for the
+previous execution's accepted writes to drain. `worker.Close()` permanently
+stops admission and cancels the active execution; `worker.Wait(ctx)` waits for
 its drain. Session close cancels and joins
-queries and writers. Output already decoded remains caller-owned.
+workers and writers. Output already decoded remains caller-owned.
 
 Page-buffered memory is proportional to concurrent response pages and remains
 bounded by configured frame/decompression limits. Incremental mode reserves
-one configured connection through idle time and all pages; independent queries
+one configured connection through idle time and all pages; independent workers
 may wait for pool capacity. Both modes disable prefetch/speculation.
 
 The following receive capability and scratch limits apply to explicit
@@ -100,7 +111,8 @@ or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
 Set exec.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
 The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
-and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
+and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. `stream.Result()` reports the delivered rows and
+the attempts, and `stream.Progress()` the pages read.
 
 Lists, sets, and maps decode NULL as empty, matching buffered decoding, while
 preserving the destination's seeded capacity. `cql.StreamNullable` preserves the

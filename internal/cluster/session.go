@@ -184,14 +184,14 @@ func randomUUID() (cql.UUID, error) {
 // (golang/go#66821). Since RandomUUID's signature still admits an error,
 // handling it costs little and keeps the id unconditional whatever a future
 // implementation does.
-func newSessionID(logger *slog.Logger) string {
+func newSessionID(logger *slog.Logger) cql.UUID {
 	logger = logging.Or(logger)
 	id, err := randomUUID()
 	if err != nil {
 		logger.Warn("unable to generate a random session id; falling back to a pseudo-random one", logging.Err(err))
 		id = pseudoRandomUUID()
 	}
-	return id.String()
+	return id
 }
 
 // pseudoRandomUUID builds a version 4 UUID from the runtime's pseudo-random
@@ -219,7 +219,7 @@ func pseudoRandomUUID() cql.UUID {
 //
 // The id is assigned when the session is created and never changes, so it is
 // safe to call concurrently and safe to read after the session is closed.
-func (s *Core) ID() string {
+func (s *Core) ID() cql.UUID {
 	return s.privateStorage.id
 }
 

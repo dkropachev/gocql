@@ -15,6 +15,7 @@ import (
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/metrics"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 // Session owns cluster metadata, pooled connections and typed executions.
@@ -89,7 +90,7 @@ func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, er
 }
 
 // UnpreparedExec executes an occasional statement without preparing it or
-// leaving a query to close. It must return no result columns. Parameters are
+// leaving a worker to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers, which a statement with parameters (P
 // other than cql.EmptyParams) must set: without them the call fails with a
 // cql.ValidationError before anything is sent. With cql.DynamicParams and no
@@ -100,9 +101,20 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
+// UnpreparedCommand executes statement, CQL text without bind markers or
+// result columns such as DDL, once and unprepared. It is
+// UnpreparedExec(ctx, cql.Command(statement), cql.EmptyParams{}, options...)
+// without the statement and parameter values to spell out, and so a
+// documented exception to the execution grid: the none cell of the throwaway
+// row for a statement with nothing to bind. At most one exec.Options may be
+// passed, as for UnpreparedExec.
+func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...exec.Options) (cql.Result, error) {
+	return s.internal().UnpreparedExec(ctx, internalStatement(cql.Command(statement)), cql.EmptyParams{}, internalOptionList(options)...)
+}
+
 // UnpreparedOne executes an occasional statement and decodes its first row.
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
-// are detached before return; there is no query or cursor to close. Parameters
+// are detached before return; there is no worker or cursor to close. Parameters
 // are described by statement.BindMarkers, as for UnpreparedExec. With a nil
 // dst it only reports whether a row exists. At most one exec.Options may be passed;
 // the call validates and resolves it, and omitting it uses the session defaults.
@@ -112,18 +124,18 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 
 // UnpreparedEach executes an occasional statement, calling fn for every row
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
-// from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
+// from fn stops successfully; other callback errors are returned. There is no worker or cursor to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
 // exec.Options may be passed; the call validates and resolves it, and omitting
-// it uses the session defaults. dst is decoded into as for Query.Each: the
+// it uses the session defaults. dst is decoded into as for Worker.Each: the
 // same pointer for every row, or a new R for each row when dst is nil.
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
 // UnpreparedAll executes an occasional statement and iterates every row
-// across all pages, decoding each into dst, as Query.All does. The statement's
-// query is closed when the loop ends; there is nothing to close. Parameters are
+// across all pages, decoding each into dst, as Worker.All does. The statement's
+// execution is closed when the loop ends; there is nothing to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
 // exec.Options may be passed; the call validates and resolves it, and
 // omitting it uses the session defaults.
@@ -133,7 +145,8 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Sta
 
 // ExecBatch sends batch as one CQL BATCH request of batch.Kind. A batch known to be
 // conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
-// read its result with RunConditionalBatch. At most one exec.CompiledOptions
+// send it with ApplyBatch, or with RunConditionalBatch to read its rows. At
+// most one exec.CompiledOptions
 // may be passed; paging options are ignored, because a BATCH response is a
 // single page. Options are compiled once with CompileOptions and reused, for a
 // one-off batch too, so that sending resolves nothing. Do not modify batch
@@ -176,6 +189,31 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 	return CASBatchRows[X](rows), err
 }
 
+// ApplyBatch sends a conditional batch as one CQL BATCH request of
+// batch.Kind and reports whether it applied, as RunConditionalBatch's
+// CASBatchRows.Applied does, without the rows to close: it reads only the
+// [applied] column, through cql.CASApplied, and releases the response before
+// it returns. The Result is that of the execution, and with an error that
+// of the failed execution, as for ExecBatch. A batch whose members are all
+// known not to be conditional is rejected before it is sent, as by
+// RunConditionalBatch. exec.CompiledOptions and batch ownership are as for
+// ExecBatch.
+func (s *Session) ApplyBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (bool, cql.Result, error) {
+	rows, err := s.RunConditionalBatch(ctx, batch, cql.CASApplied, options...)
+	if err != nil {
+		return false, implSession.InternalExecutionErrorResult(err), err
+	}
+	applied, err := rows.Applied()
+	result := rows.Result()
+	if closeErr := rows.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return false, result, err
+	}
+	return applied, result, nil
+}
+
 // UnpreparedAddToBatch appends an occasional statement with value to batch
 // without preparing it. Parameters are described by statement.BindMarkers, as
 // for UnpreparedExec. The statement is validated and its parameters compiled on
@@ -187,10 +225,11 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Sta
 	return s.internal().UnpreparedAddToBatch((*implSession.Batch)(batch), internalStatement(statement), value)
 }
 
-// ID returns the session identifier sent to nodes in the SESSION_ID startup
-// option. It remains valid after Close and can correlate client observations
-// with system.clients.client_options.
-func (s *Session) ID() string { return s.internal().ID() }
+// ID returns the session's random identifier, sent to nodes as text in the
+// SESSION_ID startup option. It remains valid after Close and can correlate
+// client observations with system.clients.client_options, where ID().String()
+// appears. A zero Session's ID is the zero UUID.
+func (s *Session) ID() cql.UUID { return s.internal().ID() }
 
 // AwaitSchemaAgreement waits for nodes' schema versions to agree, bounded by
 // ctx and the configured schema agreement timeout.
@@ -214,6 +253,12 @@ func (s *Session) Closed() bool { return s.internal().Closed() }
 
 // Metadata returns the current immutable cluster metadata snapshot.
 func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata().Public() }
+
+// Observer returns the observer the session was configured with
+// (config.ConfigBuilder.WithObserver), nil without one or for a zero
+// Session. Every execution calls it unless its exec.Options set
+// NoSessionObserver.
+func (s *Session) Observer() observe.Observer { return s.internal().Observer() }
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }

@@ -167,17 +167,17 @@ func TestTooManyOptions(t *testing.T) {
 	checkPrepare("PrepareStream", err)
 }
 
-// TestWorkerRejectsFixedTimestamp checks that a worker query refuses a fixed
+// TestWorkerRejectsFixedTimestamp checks that a Worker refuses a fixed
 // write timestamp, which every write it runs would carry.
 func TestWorkerRejectsFixedTimestamp(t *testing.T) {
 	options := exec.Options{Timestamp: cql.Some(time.Now())}
 	var prepared Prepared[cql.EmptyParams, cql.EmptyRow]
-	if _, err := prepared.Query(options); !isTimestampValidation(err) {
-		t.Fatalf("Prepared.Query = %v, want a Timestamp ValidationError", err)
+	if _, err := prepared.Worker(options); !isTimestampValidation(err) {
+		t.Fatalf("Prepared.Worker = %v, want a Timestamp ValidationError", err)
 	}
 	var stream PreparedStream[cql.EmptyParams, cql.EmptyRow]
-	if _, err := stream.Query(exec.StreamOptions{Options: options}); !isTimestampValidation(err) {
-		t.Fatalf("PreparedStream.Query = %v, want a Timestamp ValidationError", err)
+	if _, err := stream.Worker(exec.StreamOptions{Options: options}); !isTimestampValidation(err) {
+		t.Fatalf("PreparedStream.Worker = %v, want a Timestamp ValidationError", err)
 	}
 	// One-shot options carry it, in microseconds.
 	if got := internalOptions(exec.Options{Timestamp: cql.Some(time.UnixMicro(1234567))}).Timestamp; !got.Set || got.Value != 1234567 {

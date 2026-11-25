@@ -47,13 +47,13 @@ into reused owned storage first.
 
 | family | workers | master (`old_cases.go`) | v2 (`cases.go`) | rust (`rust/src/main.rs`) |
 |---|---:|---|---|---|
-| A point read, 1 KiB | 64 | MA1: reused template `Bind(k).Scan` | A1: reused `Query.One` | RA1: `execute_unpaged(prepared, (k,))` |
-| B partition read, 128 × 4 KiB, page 32 | 4 | MB1: `Iter` + `Scan` loop | B1: `Query.Each` | RB1: `execute_single_page` loop until no more pages |
+| A point read, 1 KiB | 64 | MA1: reused template `Bind(k).Scan` | A1: reused `Worker.One` | RA1: `execute_unpaged(prepared, (k,))` |
+| B partition read, 128 × 4 KiB, page 32 | 4 | MB1: `Iter` + `Scan` loop | B1: `Worker.Each` | RB1: `execute_single_page` loop until no more pages |
 | C application paging, one 32-row page per op | 64 | MC1: `PageState(st).Iter()` | C1: `RunPage` + `PageStateFromToken` | RC1: `execute_single_page` from `PagingState::new_from_raw_bytes` |
-| D point write, 1 KiB | 64 | MD1: reused template `Bind(...).Exec` | D1: reused `Query.Exec` | RD1: `execute_unpaged(prepared, (k, 0, p))` |
+| D point write, 1 KiB | 64 | MD1: reused template `Bind(...).Exec` | D1: reused `Worker.Exec` | RD1: `execute_unpaged(prepared, (k, 0, p))` |
 | E1 unlogged batch, 8 rows of one partition | 8 | ME1: `Batch` of 8 `pageWrite` | E1: 8 `AddToBatch` + `ExecBatch` | RE1: reused `Batch` of 8 prepared statements |
 | E2 logged batch, 4 point rows | 64 | ME2 | E2 | RE2 |
-| F LWT `UPDATE ... IF v=?`, `LOCAL_SERIAL`, must apply | 64 | MF1: `ScanCAS` | F1: `Query.One` into `CASResult` | RF1: `[applied]` of the first row |
+| F LWT `UPDATE ... IF v=?`, `LOCAL_SERIAL`, must apply | 64 | MF1: `ScanCAS` | F1: `Worker.One` into `CASResult` | RF1: `[applied]` of the first row |
 | G 50/50 point read/write | 64 | MG1 | G1 | RG1 |
 
 Workers and keys are those of the parent harness (`README-CASES.md`): B uses

@@ -83,8 +83,9 @@ batch was applied if and only if every row reports `Applied`.
 `session.RunConditionalBatch` returns `CASBatchRows`, whose `Applied` makes
 that test for you, reading any rows you have not, and returns an error rather
 than an answer when it cannot tell, for example after the rows were closed
-early. It rejects a batch whose members are all known not to be conditional
-before sending it.
+early. `session.ApplyBatch` makes the same test and returns only its answer,
+with no rows to close. Both reject a batch whose members are all known not
+to be conditional before sending it.
 
 On ScyllaDB, row `i` belongs to member `i` of the batch. Every row carries the
 same batch-wide `Applied`: there is no per-statement flag, and the server stops

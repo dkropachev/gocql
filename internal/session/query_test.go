@@ -310,14 +310,10 @@ func TestQuery(t *testing.T) {
 			request.InternalLogical.InternalFinish(cql.Result{}, context.Canceled)
 			request.InternalLogical.releaseInput()
 			q.state.owner.InternalRelease()
-			// The next execution waits for the drain within its context;
-			// Routing has scratch of its own and does not wait.
+			// The next execution waits for the drain within its context.
 			ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
 			defer cancel()
 			if err := q.capture(ctx, input); !errors.Is(err, context.DeadlineExceeded) {
-				t.Fatal(err)
-			}
-			if _, err := q.Routing(input); err != nil {
 				t.Fatal(err)
 			}
 			waited := make(chan error, 1)
@@ -763,9 +759,6 @@ func TestQuery(t *testing.T) {
 			if _, err := query.Exec(wait, cql.EmptyRow{}); !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(err)
 			}
-			if _, err := query.Routing(cql.EmptyRow{}); err != nil {
-				t.Fatal(err)
-			}
 			observer.mu.Lock()
 			observer.onAttempt = nil
 			observer.mu.Unlock()
@@ -799,10 +792,6 @@ func TestQuery(t *testing.T) {
 				}
 			case <-time.After(time.Second):
 				t.Fatal("cancellation joined a blocked writer")
-			}
-			// Routing leaves the buffer the accepted write still reads alone.
-			if _, err := q.Routing([]byte("other")); err != nil {
-				t.Fatal(err)
 			}
 			short, stopShort := context.WithTimeout(context.Background(), time.Millisecond)
 			defer stopShort()

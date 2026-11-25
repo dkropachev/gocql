@@ -95,8 +95,8 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		t.Fatal("coordinator stop was not terminal", interrupted.Err())
 	}
 	terminal := interrupted.Err()
-	if info := interrupted.Info(); info.DeliveredRows != 1 || !info.OutputStarted {
-		t.Fatal("interruption replayed output", info)
+	if result, progress := interrupted.Result(), interrupted.Progress(); result.FetchedRows != 1 || !progress.OutputStarted {
+		t.Fatal("interruption replayed output", result, progress)
 	}
 	if interrupted.NextInto(&dst) || !errors.Is(interrupted.Err(), terminal) {
 		t.Fatal("terminal interruption changed", interrupted.Err())

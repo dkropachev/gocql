@@ -144,8 +144,8 @@ func TestZeroValuesRejected(t *testing.T) {
 	requireValidation(t, "WithTLSSource(zero TLSFileSource)", err)
 
 	var session gocql.Session
-	if !session.Closed() || session.Dialect() != 0 || session.Metadata() != nil || session.ID() != "" {
-		t.Errorf("zero Session: Closed %v, Dialect %v, Metadata %v, ID %q", session.Closed(), session.Dialect(), session.Metadata(), session.ID())
+	if !session.Closed() || session.Dialect() != 0 || session.Metadata() != nil || !session.ID().IsZero() {
+		t.Errorf("zero Session: Closed %v, Dialect %v, Metadata %v, ID %v", session.Closed(), session.Dialect(), session.Metadata(), session.ID())
 	}
 	requireValidation(t, "zero Session.Close", session.Close())
 	requireValidation(t, "zero Session.AwaitSchemaAgreement", session.AwaitSchemaAgreement(ctx))
@@ -172,18 +172,18 @@ func TestZeroValuesRejected(t *testing.T) {
 	var prepared gocql.Prepared[cql.EmptyParams, cql.EmptyRow]
 	_, err = prepared.Exec(ctx, cql.EmptyParams{})
 	requireValidation(t, "zero Prepared.Exec", err)
-	_, err = prepared.Query(exec.Options{})
-	requireValidation(t, "zero Prepared.Query", err)
+	_, err = prepared.Worker(exec.Options{})
+	requireValidation(t, "zero Prepared.Worker", err)
 	requireValidation(t, "zero Prepared.AddToBatch", prepared.AddToBatch(new(gocql.Batch), cql.EmptyParams{}))
-	_, err = new(gocql.PreparedStream[cql.EmptyParams, cql.EmptyRow]).Query(exec.StreamOptions{})
-	requireValidation(t, "zero PreparedStream.Query", err)
-	var query gocql.Query[cql.EmptyParams, cql.EmptyRow]
+	_, err = new(gocql.PreparedStream[cql.EmptyParams, cql.EmptyRow]).Worker(exec.StreamOptions{})
+	requireValidation(t, "zero PreparedStream.Worker", err)
+	var query gocql.Worker[cql.EmptyParams, cql.EmptyRow]
 	_, err = query.Exec(ctx, cql.EmptyParams{})
-	requireValidation(t, "zero Query.Exec", err)
+	requireValidation(t, "zero Worker.Exec", err)
 	query.Close()
-	var streamQuery gocql.StreamQuery[cql.EmptyParams, cql.EmptyRow]
+	var streamQuery gocql.StreamWorker[cql.EmptyParams, cql.EmptyRow]
 	_, err = streamQuery.Run(ctx, cql.EmptyParams{})
-	requireValidation(t, "zero StreamQuery.Run", err)
+	requireValidation(t, "zero StreamWorker.Run", err)
 	streamQuery.Close()
 	_, err = gocql.CASBatchRows[cql.EmptyRow]{}.Applied()
 	requireValidation(t, "zero CASBatchRows.Applied", err)

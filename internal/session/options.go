@@ -67,8 +67,15 @@ func NewCompiledOptions(session *implCluster.Core, values Options) (CompiledOpti
 	if err != nil {
 		return CompiledOptions{}, err
 	}
-	if resolved.observerHooks, err = settings.NewObserverHooks(values.Observer); err != nil {
+	// Options compiled for a session find their hooks for it now; others
+	// only check the observer and find them for each execution's session.
+	if _, err := settings.NewObserverHooks(values.Observer); err != nil {
 		return CompiledOptions{}, err
+	}
+	if owner != nil && overridesObserver(&values) {
+		if resolved.observerHooks, err = executionHooks(owner, &values); err != nil {
+			return CompiledOptions{}, err
+		}
 	}
 	keyspace := values.Keyspace
 	if keyspace == "" && owner != nil {
@@ -115,7 +122,9 @@ func (o CompiledOptions) resolve(rt *InternalSessionRuntime, scratch *InternalRe
 	// NewCompiledOptions validated the values, and the session profile was
 	// validated at Connect, so resolution cannot fail here.
 	*scratch, _ = resolveOptionValues(rt.InternalProfile, o.p.resolved.InternalOptions)
-	scratch.observerHooks = o.p.resolved.observerHooks
+	if o.p.rt == rt {
+		scratch.observerHooks = o.p.resolved.observerHooks
+	}
 	return scratch
 }
 
@@ -139,6 +148,10 @@ func (o CompiledOptions) resolveFixed(rt *InternalSessionRuntime) *InternalResol
 		return o.resolve(rt, nil)
 	}
 	r := o.resolve(rt, new(InternalResolvedOptions))
+	if r.observerHooks == nil && overridesObserver(&r.InternalOptions) {
+		// The values passed NewCompiledOptions, so their observer is valid.
+		r.observerHooks, _ = executionHooks(rt, &r.InternalOptions)
+	}
 	keyspace := r.InternalOptions.Keyspace
 	if keyspace == "" {
 		keyspace = rt.config.Keyspace

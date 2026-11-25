@@ -19,6 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 // hotPathPageRows is how many rows each page of the scan and stream fixtures
@@ -143,6 +144,13 @@ func hotPathPrepare[R any](t *testing.T, ctx context.Context, session *Session, 
 	return p
 }
 
+// hotPathObserver is a request observer that allocates nothing of its own.
+type hotPathObserver struct{}
+
+func (hotPathObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	return ctx, nil
+}
+
 // TestHotPathAllocs gates what a warm execution allocates on each hot path of
 // a prepared statement against a fake node: exec, select one and a paged
 // scan, each through Prepared and through a reused Query, and streaming
@@ -163,6 +171,29 @@ func TestHotPathAllocs(t *testing.T) {
 		})
 		gateAllocs(t, "Query.Exec", 0, func() {
 			if _, err := q.Exec(ctx, 1); err != nil {
+				t.Fatal(err)
+			}
+		})
+		// A view's defaults, and the hooks of an observer in compiled
+		// options, are resolved when the options are compiled, not per
+		// call. (Joining the observer to a session observer costs what
+		// observe.Join costs per request.)
+		compiled, err := NewCompiledOptions(session.Core(), Options{Consistency: cql.Some(cql.Quorum)})
+		if err != nil {
+			t.Fatal(err)
+		}
+		view := p.With(compiled)
+		gateAllocs(t, "Prepared.With(defaults).Exec", 0, func() {
+			if _, err := view.Exec(ctx, 1, CompiledOptions{}); err != nil {
+				t.Fatal(err)
+			}
+		})
+		observed, err := NewCompiledOptions(session.Core(), Options{Observer: hotPathObserver{}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		gateAllocs(t, "Prepared.Exec with an Observer", 0, func() {
+			if _, err := p.Exec(ctx, 1, observed); err != nil {
 				t.Fatal(err)
 			}
 		})

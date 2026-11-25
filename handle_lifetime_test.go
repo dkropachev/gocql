@@ -18,6 +18,7 @@ import (
 // prepared SELECT and the same SELECT prepared for streaming.
 type lifetimeFixture struct {
 	s       *Session
+	srv     *gridServer
 	ctx     context.Context
 	p       *Prepared[int32, []byte]
 	ps      *PreparedStream[int32, []byte]
@@ -44,7 +45,7 @@ func newLifetimeFixture(t *testing.T) *lifetimeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &lifetimeFixture{s: s, ctx: ctx, p: p, ps: ps, options: options}
+	return &lifetimeFixture{s: s, srv: srv, ctx: ctx, p: p, ps: ps, options: options}
 }
 
 // closeTwice closes a handle twice and checks that both calls report want.
@@ -61,11 +62,11 @@ func closeTwice(t *testing.T, name string, close func() error, want error) {
 // handle: Close is idempotent, and Rows, Page and RowStream report the same
 // error each time; Wait after Close returns nil; a closed query refuses work
 // with cqlerr.ErrClosed; handles left open across Session.Close,
-// Query.Close or StreamQuery.Close end with cqlerr.ErrClosed instead of
+// Worker.Close or StreamWorker.Close end with cqlerr.ErrClosed instead of
 // failing; and Session.Close waits for a running Each or All callback.
 func TestHandleLifetimes(t *testing.T) {
 	// TestHandleLifetimes/CloseIsIdempotent checks that closing each handle
-	// twice is harmless and that a closed query or stream query refuses new
+	// twice is harmless and that a closed Worker or StreamWorker refuses new
 	// executions with cqlerr.ErrClosed while Wait returns nil.
 	t.Run("CloseIsIdempotent", func(t *testing.T) {
 		f := newLifetimeFixture(t)
@@ -84,7 +85,7 @@ func TestHandleLifetimes(t *testing.T) {
 		}
 		closeTwice(t, "Page", page.Close, nil)
 
-		q, err := f.p.Query(gridOptions)
+		q, err := f.p.Worker(gridOptions)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -93,21 +94,21 @@ func TestHandleLifetimes(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, err := q.Run(f.ctx, gridKey); !errors.Is(err, cqlerr.ErrBusy) {
-			t.Errorf("Query.Run with open Rows returned %v, want cqlerr.ErrBusy", err)
+			t.Errorf("Worker.Run with open Rows returned %v, want cqlerr.ErrBusy", err)
 		}
 		closeTwice(t, "Query Rows", qrows.Close, nil)
 		q.Close()
 		q.Close()
 		for i := range 2 {
 			if err := q.Wait(f.ctx); err != nil {
-				t.Errorf("Query.Wait #%d after Close returned %v", i+1, err)
+				t.Errorf("Worker.Wait #%d after Close returned %v", i+1, err)
 			}
 		}
 		if _, err := q.Exec(f.ctx, gridKey); !errors.Is(err, cqlerr.ErrClosed) {
-			t.Errorf("Query.Exec after Close returned %v, want cqlerr.ErrClosed", err)
+			t.Errorf("Worker.Exec after Close returned %v, want cqlerr.ErrClosed", err)
 		}
 
-		sq, err := f.ps.Query(exec.StreamOptions{})
+		sq, err := f.ps.Worker(exec.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,10 +124,10 @@ func TestHandleLifetimes(t *testing.T) {
 		sq.Close()
 		sq.Close()
 		if err := sq.Wait(f.ctx); err != nil {
-			t.Errorf("StreamQuery.Wait after Close returned %v", err)
+			t.Errorf("StreamWorker.Wait after Close returned %v", err)
 		}
 		if _, err := sq.Run(f.ctx, gridKey); !errors.Is(err, cqlerr.ErrClosed) {
-			t.Errorf("StreamQuery.Run after Close returned %v, want cqlerr.ErrClosed", err)
+			t.Errorf("StreamWorker.Run after Close returned %v, want cqlerr.ErrClosed", err)
 		}
 	})
 
@@ -136,7 +137,7 @@ func TestHandleLifetimes(t *testing.T) {
 	// and that the session refuses new work.
 	t.Run("OpenAcrossSessionClose", func(t *testing.T) {
 		f := newLifetimeFixture(t)
-		q, err := f.p.Query(gridOptions)
+		q, err := f.p.Worker(gridOptions)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +153,7 @@ func TestHandleLifetimes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sq, err := f.ps.Query(exec.StreamOptions{})
+		sq, err := f.ps.Worker(exec.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -196,14 +197,14 @@ func TestHandleLifetimes(t *testing.T) {
 		}
 		q.Close()
 		if err := q.Wait(f.ctx); err != nil {
-			t.Errorf("Query.Wait after Session.Close returned %v", err)
+			t.Errorf("Worker.Wait after Session.Close returned %v", err)
 		}
 		sq.Close()
 		if err := sq.Wait(f.ctx); err != nil {
-			t.Errorf("StreamQuery.Wait after Session.Close returned %v", err)
+			t.Errorf("StreamWorker.Wait after Session.Close returned %v", err)
 		}
 		if _, err := q.Exec(f.ctx, gridKey); !errors.Is(err, cqlerr.ErrClosed) {
-			t.Errorf("Query.Exec after Session.Close returned %v, want cqlerr.ErrClosed", err)
+			t.Errorf("Worker.Exec after Session.Close returned %v, want cqlerr.ErrClosed", err)
 		}
 		if _, err := f.p.Exec(f.ctx, gridKey); !errors.Is(err, cqlerr.ErrClosed) {
 			t.Errorf("Prepared.Exec after Session.Close returned %v, want cqlerr.ErrClosed", err)
@@ -280,14 +281,13 @@ func TestHandleLifetimes(t *testing.T) {
 	})
 
 	// TestHandleLifetimes/OpenAcrossQueryClose checks that Rows and a Page of
-	// a reusable query, and a RowStream of a stream query, left open while
-	// the query closes report cqlerr.ErrClosed, and that Wait then returns
-	// nil.
+	// a Worker, and a RowStream of a StreamWorker, left open while the worker
+	// closes report cqlerr.ErrClosed, and that Wait then returns nil.
 	t.Run("OpenAcrossQueryClose", func(t *testing.T) {
 		for _, kind := range []string{"Rows", "Page", "RowStream"} {
 			t.Run(kind, func(t *testing.T) {
 				f := newLifetimeFixture(t)
-				q, err := f.p.Query(gridOptions)
+				q, err := f.p.Worker(gridOptions)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -297,7 +297,7 @@ func TestHandleLifetimes(t *testing.T) {
 				closeQuery := q.Close
 				switch kind {
 				case "RowStream":
-					sq, err := f.ps.Query(exec.StreamOptions{})
+					sq, err := f.ps.Worker(exec.StreamOptions{})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -323,7 +323,7 @@ func TestHandleLifetimes(t *testing.T) {
 				closeQuery()
 				dst := make([]byte, 0, 16)
 				if next(&dst) {
-					t.Error("NextInto returned a row after Query.Close")
+					t.Error("NextInto returned a row after Worker.Close")
 				}
 				if err := errOf(); !errors.Is(err, cqlerr.ErrClosed) {
 					t.Errorf("Err returned %v, want cqlerr.ErrClosed", err)

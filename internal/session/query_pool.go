@@ -14,9 +14,11 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // queryPoolBase is what the session runtime sees of a query pool: its idle
@@ -296,6 +298,9 @@ func (p *Prepared[P, R]) pool() (*queryPool[P, R], error) {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return nil, notSent(cqltype.TypeValidation("prepared", "nil handle"))
 	}
+	if p.privateStorage.root != nil {
+		return p.privateStorage.root.pool()
+	}
 	s := &p.privateStorage
 	s.poolOnce.Do(func() {
 		s.pool, s.poolErr = newQueryPool(s.InternalState.InternalSession, func(base *queryPoolBase) (*Query[P, R], error) {
@@ -325,6 +330,70 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.idempotent, p.privateStorage.params, state.InternalParameters, value, true)
 }
 
+// Routing encodes value and returns the routing information of an execution
+// of the statement with value and options, without sending a request: the
+// keyspace, table, token and kind, and the consistency, host and shard the
+// options resolve to. It encodes into scratch of its own and takes no pooled
+// query. A closed session returns cqlerr.ErrClosed.
+func (p *Prepared[P, R]) Routing(value P, options CompiledOptions) (routing2.Info, error) {
+	if p == nil || p.privateStorage.InternalState == nil {
+		return routing2.Info{}, cqltype.TypeValidation("prepared", "nil handle")
+	}
+	state := p.privateStorage.InternalState
+	s := state.InternalSession
+	if s.Closed() {
+		return routing2.Info{}, cqlerr.ErrClosed
+	}
+	info := preparedRouting(state, p.privateStorage.kind)
+	scratch := routingScratch.Get().(*binding.ParameterBuffer)
+	values, err := scratch.Encode(p.privateStorage.params, state.InternalParameters, value, true)
+	if err == nil {
+		info.Token, err = preparedSource{state: state}.token(values.Cells)
+	}
+	scratch.Retire()
+	routingScratch.Put(scratch)
+	if err != nil {
+		return routing2.Info{}, err
+	}
+	rt := InternalRuntimeFor(s)
+	var resolvedScratch InternalResolvedOptions
+	resolved := p.callOptions(options).resolve(rt, &resolvedScratch)
+	if err := fillOptionRouting(&info, rt, resolved); err != nil {
+		return routing2.Info{}, err
+	}
+	return info, nil
+}
+
+// fillOptionRouting completes info with what resolved options add to an
+// execution's routing, as executions do: the keyspace when the statement
+// names none, the consistency, the host and shard pins, and the conditional
+// routing of a SERIAL or LOCAL_SERIAL read. Options the session's dialect
+// does not support, which options compiled for another session can hold, and
+// a keyspace override that differs from the statement's are rejected, as an
+// execution rejects them.
+func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved *InternalResolvedOptions) error {
+	values := &resolved.InternalOptions
+	if err := checkDialectOptions(&rt.config, values); err != nil {
+		return err
+	}
+	if values.Keyspace != "" && info.Keyspace != "" && values.Keyspace != info.Keyspace {
+		return cqltype.TypeValidation("keyspace", "override differs from bound statement")
+	}
+	if info.Keyspace == "" {
+		info.Keyspace = values.Keyspace
+		if info.Keyspace == "" {
+			info.Keyspace = rt.config.Keyspace
+		}
+	}
+	info.Consistency = resolved.InternalProfile.Consistency
+	info.HostID = values.HostID
+	info.ShardID = values.ShardID
+	if info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
+		info.Kind = cql.ConditionalStatement
+	}
+	return nil
+}
+
 // Exec binds value and executes the statement once. The statement must not
 // return rows. The CompiledOptions applies to this call only; the zero value
 // uses the session's default profile. Exec is safe for concurrent use: it runs
@@ -335,7 +404,7 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOpti
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	return pool.exec(ctx, value, options)
+	return pool.exec(ctx, value, p.callOptions(options))
 }
 
 // One binds value, executes the statement once and decodes its first row
@@ -347,7 +416,7 @@ func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options Compi
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := pool.each(ctx, value, dst, nil, options)
+	found, result, err := pool.each(ctx, value, dst, nil, p.callOptions(options))
 	if !found && err == nil {
 		clearDestination(dst)
 	}
@@ -367,7 +436,7 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	_, result, err := pool.each(ctx, value, dst, fn, options)
+	_, result, err := pool.each(ctx, value, dst, fn, p.callOptions(options))
 	return result, err
 }
 
@@ -390,7 +459,7 @@ func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options Compi
 		yield(nil, err)
 		return
 	}
-	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), options); err != nil {
+	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), p.callOptions(options)); err != nil {
 		yield(nil, err)
 	}
 }
@@ -406,7 +475,7 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options CompiledOptio
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	return pool.run(ctx, value, options)
+	return pool.run(ctx, value, p.callOptions(options))
 }
 
 // RunPage binds value and executes one page of the statement, resuming from
@@ -418,7 +487,7 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 	if err != nil {
 		return nil, err
 	}
-	return pool.runPage(ctx, value, state, pageSize, options)
+	return pool.runPage(ctx, value, state, pageSize, p.callOptions(options))
 }
 
 // preparedPoolIdle reports how many idle queries p's pool holds.

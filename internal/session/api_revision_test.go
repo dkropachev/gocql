@@ -53,10 +53,6 @@ func TestQueryDrainAdmission(t *testing.T) {
 		if err := <-done; !errors.Is(err, context.Canceled) {
 			t.Fatal(err)
 		}
-		// Routing uses scratch of its own, so a drain does not block it.
-		if _, err := query.Routing(cql.EmptyRow{}); err != nil {
-			t.Fatal("Routing during drain:", err)
-		}
 		// An execution waits for the drain, bounded by its own context.
 		short, stopShort := context.WithTimeout(context.Background(), 10*time.Millisecond)
 		defer stopShort()

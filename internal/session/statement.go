@@ -310,11 +310,50 @@ type PreparedStorage[P, R any] struct {
 	InternalState *InternalPreparedState
 	plans         *InternalResultPlanCache[R]
 	pool          *queryPool[P, R]
-	poolOnce      sync.Once
+	// root is the Prepared a view made by With shares its pool with, nil
+	// for a Prepared that owns its pool.
+	root *Prepared[P, R]
+	// defaults are the options of a view's calls made without options.
+	defaults CompiledOptions
+	poolOnce sync.Once
 	// kind is the kind executions run as, resolved at Prepare.
 	kind cql.StatementKind
 	// idempotent is the statement's cql.Statement.Idempotent.
 	idempotent bool
+}
+
+// With returns a view of p that shares its preparation and its pool of
+// queries, and whose calls without options use defaults.
+func (p *Prepared[P, R]) With(defaults CompiledOptions) *Prepared[P, R] {
+	if p == nil {
+		return nil
+	}
+	root := p
+	if p.privateStorage.root != nil {
+		root = p.privateStorage.root
+	}
+	s := &p.privateStorage
+	v := new(Prepared[P, R])
+	v.privateStorage = PreparedStorage[P, R]{params: s.params, rows: s.rows, InternalState: s.InternalState, plans: s.plans, kind: s.kind, idempotent: s.idempotent, root: root, defaults: defaults}
+	return v
+}
+
+// Defaults returns the options p's calls use when they are passed none: those
+// given to With, or the zero CompiledOptions.
+func (p *Prepared[P, R]) Defaults() CompiledOptions {
+	if p == nil {
+		return CompiledOptions{}
+	}
+	return p.privateStorage.defaults
+}
+
+// callOptions returns the options of a call passed options: those, or p's
+// defaults when they are zero.
+func (p *Prepared[P, R]) callOptions(options CompiledOptions) CompiledOptions {
+	if options.p == nil {
+		return p.privateStorage.defaults
+	}
+	return options
 }
 
 type BoundStorage[R any] struct {

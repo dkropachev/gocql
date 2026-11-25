@@ -94,7 +94,7 @@ func benchConfig(d endpoint.Dialer) config.Config {
 const benchDialect = config.ScyllaV4
 
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	_, e := s.UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})
+	_, e := s.UnpreparedCommand(ctx, text)
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {
@@ -115,7 +115,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err != nil {
 		return err
 	}
-	b, err := p.Query(exec.Options{})
+	b, err := p.Worker(exec.Options{})
 	if err != nil {
 		return err
 	}
@@ -209,7 +209,7 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	b, e := p.Query(exec.Options{})
+	b, e := p.Worker(exec.Options{})
 	if e != nil {
 		return e
 	}
@@ -249,7 +249,7 @@ func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
 	if e != nil {
 		return e
 	}
-	b, e := p.Query(exec.Options{})
+	b, e := p.Worker(exec.Options{})
 	if e != nil {
 		return e
 	}

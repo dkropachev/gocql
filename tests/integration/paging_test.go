@@ -114,7 +114,7 @@ func TestPaging(t *testing.T) {
 							require.NoError(t, err)
 							result = append(result, row)
 						}
-						require.Equal(t, page.Info().FetchedRows, pageRows)
+						require.Equal(t, page.Result().FetchedRows, pageRows)
 						require.NoError(t, page.Close())
 						if next.Complete() {
 							break
@@ -371,9 +371,9 @@ func TestPaging(t *testing.T) {
 		if err := cursor.Close(); err != nil {
 			t.Fatal(err)
 		}
-		info := cursor.Info()
-		if len(seen) != 5 || info.DeliveredRows != 5 || info.Pages < 3 || info.Result.Attempts < 3 || !info.OutputStarted {
-			t.Fatal("incomplete live stream", len(seen), info)
+		result, progress := cursor.Result(), cursor.Progress()
+		if len(seen) != 5 || result.FetchedRows != 5 || progress.Pages < 3 || result.Attempts < 3 || !progress.OutputStarted {
+			t.Fatal("incomplete live stream", len(seen), result, progress)
 		}
 		if !bytes.Equal(dst.Value, payload) {
 			t.Fatal("output lost after close")
@@ -431,8 +431,8 @@ func TestPaging(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if empty.NextInto(&dst) || empty.Err() != nil || empty.Info().OutputStarted {
-			t.Fatal("empty result", empty.Err(), empty.Info())
+		if empty.NextInto(&dst) || empty.Err() != nil || empty.Progress().OutputStarted {
+			t.Fatal("empty result", empty.Err(), empty.Progress())
 		}
 		empty.Close()
 
@@ -458,7 +458,7 @@ func TestPaging(t *testing.T) {
 		}
 		defer sub.Close()
 		blockedCtx, blockedCancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		second, blockedErr := pagingRunStream(blockedCtx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Info().Result.HostID}}})
+		second, blockedErr := pagingRunStream(blockedCtx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Result().HostID}}})
 		blockedCancel()
 		if second != nil {
 			second.Close()
@@ -504,14 +504,14 @@ func TestPaging(t *testing.T) {
 		}
 		t.Logf("live metadata change: 4 -> %d physical columns, %d delivered rows", changed.Columns().Len(), len(changedSeen))
 
-		t.Logf("public stream protocol=%d compression=%s tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", *flagProto, *flagCompressTest, *flagRunSslTest, info.DeliveredRows, info.Pages, len(payload), info.Result.Attempts)
+		t.Logf("public stream protocol=%d compression=%s tls=%v rows=%d pages=%d bytes/row=%d attempts=%d", *flagProto, *flagCompressTest, *flagRunSslTest, result.FetchedRows, progress.Pages, len(payload), result.Attempts)
 	})
 }
 
 // pagingRunStream runs ps once with options. The stream query is closed when
 // the test ends, after the deferred closes of its streams.
 func pagingRunStream[P, R any](ctx context.Context, t testing.TB, ps *gocql.PreparedStream[P, R], value P, options exec.StreamOptions) (*gocql.RowStream[R], error) {
-	q, err := ps.Query(options)
+	q, err := ps.Worker(options)
 	if err != nil {
 		return nil, err
 	}

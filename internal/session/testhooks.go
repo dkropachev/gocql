@@ -5,6 +5,7 @@ package session
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 )
 
 // Test hooks: accessors for the storage of handles that tests/integration
@@ -35,3 +36,7 @@ func InternalSetHostPrepared(state *InternalPreparedState, host cql.UUID, entry 
 	defer state.InternalMu.Unlock()
 	state.publishHost(host, &entry, false, nil)
 }
+
+// InternalPooledBusy reports how many pooled one-shot queries of s are busy,
+// so tests of the public facades can check that a call released its query.
+func InternalPooledBusy(s *implCluster.Core) int64 { return pooledBusy(s) }

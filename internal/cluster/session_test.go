@@ -441,7 +441,7 @@ func TestSession(t *testing.T) {
 		id1 := newSessionID(logger)
 		id2 := newSessionID(logger)
 
-		if id1 == "" || id2 == "" {
+		if id1.IsZero() || id2.IsZero() {
 			t.Fatal("expected non-empty session ids")
 		}
 		if id1 == id2 {
@@ -609,7 +609,7 @@ func TestSession(t *testing.T) {
 				// driver that generated a fresh id per connection, as long as only
 				// one connection per session had been observed.
 				for i, session := range sessions {
-					if count := sessionIDs[session.ID()]; count < connsPerSession {
+					if count := sessionIDs[session.ID().String()]; count < connsPerSession {
 						t.Errorf("session %d: expected SESSION_ID %q to be reported by all %d of its connections, got %d: %v",
 							i, session.ID(), connsPerSession, count, sessionIDs)
 					}

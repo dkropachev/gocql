@@ -92,12 +92,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		t.Fatal(err)
 	}
 	key := []cql.Value{cql.IntValue(7)}
-	query, err := prepared.Query(exec.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	ri, err := query.Routing(key)
-	query.Close()
+	ri, err := prepared.Routing(key)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +132,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 			rows.Close()
 			t.Fatal("unexpected routed row")
 		}
-		coordinator := rows.Info().HostID
+		coordinator := rows.Result().HostID
 		if rows.NextInto(&row) {
 			rows.Close()
 			t.Fatal("unexpected additional routed row")

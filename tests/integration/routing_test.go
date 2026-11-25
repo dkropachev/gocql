@@ -500,7 +500,7 @@ func TestRouting(t *testing.T) {
 						rows.Close()
 						t.Fatal("unexpected tablet row")
 					}
-					info := rows.Info()
+					info := rows.Result()
 					hinted := false
 					for _, entry := range info.CustomPayload() {
 						if (entry.Key != "tablets-routing-v1" && entry.Key != "tablets-routing-v2") || !entry.Value.Valid {
@@ -671,7 +671,7 @@ func TestRouting(t *testing.T) {
 			if err := serverRows.Err(); err != nil {
 				t.Fatal(err)
 			}
-			t.Logf("initial authoritative tablet read-node=%s", serverRows.Info().HostID)
+			t.Logf("initial authoritative tablet read-node=%s", serverRows.Result().HostID)
 			serverRows.Close()
 			if len(authoritative) == 0 {
 				t.Fatal("no authoritative tablet records")
@@ -722,7 +722,7 @@ func TestRouting(t *testing.T) {
 					if v2SchemaRoutingInt(t, row, "pk") != key || v2SchemaRoutingInt(t, row, "v") != 7 {
 						t.Fatal("bad row")
 					}
-					result := rows.Info()
+					result := rows.Result()
 					for _, entry := range result.CustomPayload() {
 						if entry.Key == "tablets-routing-v1" || entry.Key == "tablets-routing-v2" {
 							feedback++
@@ -826,15 +826,10 @@ func TestRouting(t *testing.T) {
 	})
 }
 
-// routingTestInfo returns the routing a query of p computes for value.
+// routingTestInfo returns the routing p computes for value.
 func routingTestInfo[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) routing.Info {
 	t.Helper()
-	q, err := p.Query(exec.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer q.Close()
-	info, err := q.Routing(value)
+	info, err := p.Routing(value)
 	if err != nil {
 		t.Fatal(err)
 	}

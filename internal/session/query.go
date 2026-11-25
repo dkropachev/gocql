@@ -112,8 +112,9 @@ type Query[P, R any] struct {
 	allowUnset bool
 }
 
-// routingScratch holds Routing's encoding buffers. Routing is rare, so the
-// buffers live in a pool rather than in every Query next to its hot fields.
+// routingScratch holds Prepared.Routing's encoding buffers. Routing is rare,
+// so the buffers live in a pool rather than in every pooled Query next to its
+// hot fields.
 var routingScratch = sync.Pool{New: func() any { return new(binding.ParameterBuffer) }}
 
 // newQueryState sets up state for session. A query of a pool is not tracked
@@ -380,35 +381,6 @@ func (q *Query[P, R]) RunPage(ctx context.Context, value P, state cql.PageState,
 	}
 	defer q.state.owner.InternalRelease()
 	return q.state.runtime.runSinglePage(ctx, &q.bound, state, pageSize, q.options)
-}
-
-// Routing encodes value and returns its routing information without sending a
-// request. It encodes into scratch of its own, not the execution's storage, so
-// it works while the query runs, drains or has an open handle; only a closed
-// query rejects it.
-func (q *Query[P, R]) Routing(value P) (routing2.Info, error) {
-	if q == nil || q.state.owner == nil || q.state.runtime == nil {
-		return routing2.Info{}, cqltype.TypeValidation("query", "uninitialized query")
-	}
-	q.state.mu.Lock()
-	closed := q.state.closed
-	q.state.mu.Unlock()
-	if closed {
-		return routing2.Info{}, cqlerr.ErrClosed
-	}
-	scratch := routingScratch.Get().(*binding.ParameterBuffer)
-	values, err := scratch.Encode(q.params, q.columns, value, q.allowUnset)
-	request := &q.bound.privateStorage.InternalRequest
-	routing := request.routing
-	if err == nil {
-		routing.Token, err = request.InternalSource.token(values.Cells)
-	}
-	scratch.Retire()
-	routingScratch.Put(scratch)
-	if err != nil {
-		return routing2.Info{}, err
-	}
-	return routing, nil
 }
 
 // AddToBatch encodes value with the query's parameters straight into batch's

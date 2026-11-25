@@ -27,20 +27,20 @@ of callback invocations after early stopping.
 Each handle holds one of the statement's pooled queries until it is closed.
 
 For manual cursor lifetimes, explicit paging, or a worker that runs one
-statement repeatedly and benefits from skipping the pool hand-off, create one query per worker
-with `prepared.Query()`, or `prepared.Query(options)` to fix its options; it has the same `Exec`, `One`, `Each`, `All`,
+statement repeatedly and benefits from skipping the pool hand-off, create one `Worker` per goroutine
+with `prepared.Worker()`, or `prepared.Worker(options)` to fix its options; it has the same `Exec`, `One`, `Each`, `All`,
 `Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
 parameter columns from `Statement.BindMarkers`; with `cql.DynamicParams` and
 no markers, the markers take the types of the values. To decode into caller storage,
 use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
-`prepared.Query(streamOptions)`; this checks the streaming decoder directly
+`prepared.Worker(streamOptions)`; this checks the streaming decoder directly
 without requiring a buffered row mapping. It buffers pages by default; set
 `exec.StreamOptions.Incremental` for bounded incremental receive.
-Queries reject overlap (an open handle, or another goroutine's call) with
+Workers reject overlap (an open handle, or another goroutine's call) with
 `cqlerr.ErrBusy`, wait for an execution that already returned to drain, and own
-captured parameters through drain. `query.Close()` stops a query at once, and
-`query.Wait(ctx)` waits for its drain.
+captured parameters through drain. `worker.Close()` stops a worker at once, and
+`worker.Wait(ctx)` waits for its drain.
 
 `exec.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
@@ -55,7 +55,7 @@ or other statement that cannot be conditional declared
 `cql.ConditionalStatement` or decoded with `cql.CASRows`.
 Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
 marks a statement safe to run more than once, for speculation and
-`retry.Safe`; prepared statements, their queries and batch members carry it,
+`retry.Safe`; prepared statements, their workers and batch members carry it,
 and a set `exec.Options.Idempotent` overrides it for one execution.
 
 ```{toctree}
@@ -71,16 +71,22 @@ request-timeouts
 For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
 be described by `Statement.BindMarkers`: a statement with parameters and no
-markers fails before it is sent, unless it binds `cql.DynamicParams`. They take at most one plain `exec.Options`,
+markers fails before it is sent, unless it binds `cql.DynamicParams`.
+`Session.UnpreparedCommand(ctx, text)` runs text with nothing to bind and
+no result, such as DDL, without a statement value. They take at most one plain `exec.Options`,
 validated during the call. Frequent statements should be prepared
-once and shared. Create reusable queries once per worker, rather than once per
-HTTP request, and close each one. A query dropped without `Close` is closed
+once and shared. Create workers once per goroutine, rather than once per
+HTTP request, and close each one. A worker dropped without `Close` is closed
 when the garbage collector finds it unreachable, which may take a while.
 
 For execution options:
 
 - Omit them to use the session defaults.
 - Compile recurring overrides once with `session.CompileOptions` and reuse the result.
+- Give a statement its own defaults with `prepared.With(compiled)`, which
+  returns a view of the statement whose calls without options use them; the
+  view shares the preparation, and options passed to a call replace its
+  defaults whole.
 - Use a request context deadline for a per-request time limit.
 
 Compiled options snapshot explicit overrides and the originating session's defaults.
@@ -91,7 +97,7 @@ support concurrent use.
 
 Compiling options snapshots custom payloads and profiles and precomputes request
 parameters. Keep recurring compiled options alongside prepared statements rather
-than rebuilding them per call. A query's options remain fixed for its lifetime.
+than rebuilding them per call. A worker's options remain fixed for its lifetime.
 For an occasional request-specific timestamp or payload, compile a fresh options
 value and pass it to a one-shot call. Normal default timestamps already vary
 per execution; an explicit `USING TIMESTAMP ?` bind marker is another option

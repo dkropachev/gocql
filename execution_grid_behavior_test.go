@@ -196,12 +196,12 @@ type gridMode struct {
 const gridKey int32 = 7
 
 // gridQuery prepares statement and makes a worker-owned query with options.
-func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options exec.Options) (*Query[int32, R], error) {
+func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options exec.Options) (*Worker[int32, R], error) {
 	p, err := s.Prepare(ctx, statement)
 	if err != nil {
 		return nil, err
 	}
-	return p.Query(options)
+	return p.Worker(options)
 }
 
 // gridShared prepares statement and compiles options for it.
@@ -650,7 +650,7 @@ var gridCases = []gridCase{
 					got = append(got, string(dst))
 				}
 				err = errors.Join(rows.Err(), rows.Close())
-				o.rows, o.resultN = strings.Join(got, ","), rows.Info().FetchedRows
+				o.rows, o.resultN = strings.Join(got, ","), rows.Result().FetchedRows
 			}
 			gridClassify(&o, err)
 			return o, true

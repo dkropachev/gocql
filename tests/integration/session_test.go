@@ -1045,12 +1045,12 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		payload := bytes.Repeat([]byte("typed-large-segment-payload"), 24000)
-		insert, err := prepared.Query(exec.Options{})
+		insert, err := prepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
 		for id := int32(1); id <= 3; id++ {
-			info, err := insert.Routing(input{ID: id, Value: payload})
+			info, err := prepared.Routing(input{ID: id, Value: payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1102,8 +1102,8 @@ func TestSession(t *testing.T) {
 		if count != 3 {
 			t.Fatalf("rows %d", count)
 		}
-		if result.Info().FetchedRows != 3 {
-			t.Fatalf("reported rows %d", result.Info().FetchedRows)
+		if result.Result().FetchedRows != 3 {
+			t.Fatalf("reported rows %d", result.Result().FetchedRows)
 		}
 		if err = result.Close(); err != nil {
 			t.Fatal(err)
@@ -1199,7 +1199,7 @@ func TestSession(t *testing.T) {
 					}
 					found := false
 					for _, row := range rows {
-						if row[sessionIDStartupKey] != s.ID() {
+						if row[sessionIDStartupKey] != s.ID().String() {
 							continue
 						}
 						if tcase.name != "" {
@@ -1257,7 +1257,7 @@ func TestSession(t *testing.T) {
 			// Read the id through the exported accessor rather than the field: an
 			// application correlating its own logs with system.clients has only the
 			// accessor, so that is the path worth exercising end to end.
-			wantSessionID := s.ID()
+			wantSessionID := s.ID().String()
 			if wantSessionID == "" {
 				t.Fatal("expected the session to have a non-empty id")
 			}

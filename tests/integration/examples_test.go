@@ -146,7 +146,7 @@ func TestExamples(t *testing.T) {
 		}
 		// Without -incremental the example buffers whole pages on multiplexed
 		// connections, which carry frame compression, so it always streams.
-		want := "3 rows; seeded nested storage reused; query admission and drain verified"
+		want := "3 rows; seeded nested storage reused; worker admission and drain verified"
 		for _, line := range strings.Split(string(output), "\n") {
 			if strings.HasPrefix(line, "CLEANED ") {
 				testNamespace(t, cfg, strings.TrimPrefix(line, "CLEANED "), false)
