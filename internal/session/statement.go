@@ -149,8 +149,8 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	state, plan, columns := prepared.state, prepared.params, prepared.columns
 	kind := prepared.kind
 	var rows cql.CompiledRow[R]
-	// Cassandra omits conditional result metadata from PREPARE. Unknown and
-	// conditional statements therefore defer absent result shapes until EXECUTE;
+	// Cassandra omits conditional result metadata from PREPARE. Conditional
+	// statements therefore defer absent result shapes until EXECUTE;
 	// actual metadata still selects and validates the plan before any row output.
 	// A confirmed ordinary statement keeps eager zero-column validation.
 	// ScyllaDB does return conditional result metadata; a conditional

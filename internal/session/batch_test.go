@@ -572,10 +572,11 @@ func TestBatch(t *testing.T) {
 			kinds []cql.StatementKind
 			want  cql.StatementKind
 		}{
+			// Members join with their kind resolved, so a batch is ordinary
+			// unless one member is conditional.
 			{[]cql.StatementKind{cql.OrdinaryStatement, cql.OrdinaryStatement}, cql.OrdinaryStatement},
-			{[]cql.StatementKind{cql.UnknownStatement}, cql.UnknownStatement},
-			{[]cql.StatementKind{cql.OrdinaryStatement, cql.UnknownStatement}, cql.UnknownStatement},
-			{[]cql.StatementKind{cql.UnknownStatement, cql.ConditionalStatement, cql.OrdinaryStatement}, cql.ConditionalStatement},
+			{[]cql.StatementKind{cql.ConditionalStatement}, cql.ConditionalStatement},
+			{[]cql.StatementKind{cql.OrdinaryStatement, cql.ConditionalStatement, cql.OrdinaryStatement}, cql.ConditionalStatement},
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {
