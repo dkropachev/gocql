@@ -196,10 +196,13 @@ package config
 		config.ConfigBuilder method (*T) WithTimestampGenerator(next func() int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithWriteTimeout(d time.Duration) *config.ConfigBuilder
 	type config.Dialect uint8
+		config.Dialect method (T) MarshalText() ([]byte, error)
 		config.Dialect method (T) String() string
+		config.Dialect method (*T) UnmarshalText(text []byte) error
 	func config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder
 	func config.NewProfile() *config.ProfileBuilder
 	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
+	func config.ParseDialect(s string) (config.Dialect, error)
 	type config.Profile struct
 		config.Profile field Retry retry.Policy
 		config.Profile field Routing routing.Policy
@@ -322,7 +325,9 @@ package cql
 		cql.CompiledStreamValue method DecodeInto(*cql.StreamValueReader, *T) error
 		cql.CompiledStreamValue method Reset(*T)
 	type cql.Compression uint8
+		cql.Compression method (T) MarshalText() ([]byte, error)
 		cql.Compression method (T) String() string
+		cql.Compression method (*T) UnmarshalText(text []byte) error
 	const cql.ConditionalStatement cql.StatementKind = 2
 	type cql.Consistency uint16
 		cql.Consistency method (T) IsSerial() bool
@@ -530,6 +535,7 @@ package cql
 		cql.ParamWriter method (*T) WriteParam[T any](encoder cql.Encoder[T], value T) error
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
 	func cql.ParamsOf[P any](opts ...cql.StructOption) (cql.ParamEncoder[P], error)
+	func cql.ParseCompression(s string) (cql.Compression, error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
 	func cql.ParseDataType(s string) (cql.DataType, error)
 	func cql.ParseDecimal(s string) (cql.Decimal, error)

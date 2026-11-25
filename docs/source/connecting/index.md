@@ -46,6 +46,11 @@ session, err := gocql.Connect(ctx, cfg)
 | `config.CassandraV4` | Apache Cassandra | 4 |
 | `config.CassandraV5` | Apache Cassandra 4.0 or later | 5 |
 
+`config.ParseDialect` reads the names in the first column without the
+package, `ScyllaV4`, `CassandraV4` and `CassandraV5`, in any case, and
+`config.Dialect` implements `encoding.TextMarshaler` and `TextUnmarshaler`, so
+the dialect can come from a flag (`flag.TextVar`) or a configuration file.
+
 The driver negotiates no version: every connection speaks the dialect's, and
 `Connect` fails when the cluster does not. It also fails with
 `cqlerr.ServerMismatchError` when the cluster is not the dialect's database.

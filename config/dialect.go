@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"strings"
 
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
@@ -51,4 +52,36 @@ func (d Dialect) String() string {
 		return implSettings.DialectName(server, protocol)
 	}
 	return fmt.Sprintf("Dialect(%d)", uint8(d))
+}
+
+// MarshalText implements encoding.TextMarshaler with the name String
+// returns, and returns an error for a value String does not name, such as
+// the zero Dialect.
+func (d Dialect) MarshalText() ([]byte, error) {
+	if _, _, ok := implSettings.DialectSpec(uint8(d)); !ok {
+		return nil, fmt.Errorf("invalid dialect %v", d)
+	}
+	return []byte(d.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler, so a Dialect can be a
+// flag (flag.TextVar) or a field of a JSON or YAML configuration. It accepts
+// the names String returns, "ScyllaV4", "CassandraV4" and "CassandraV5", in
+// any case, and returns an error for any other text.
+func (d *Dialect) UnmarshalText(text []byte) error {
+	for _, candidate := range [...]Dialect{ScyllaV4, CassandraV4, CassandraV5} {
+		if strings.EqualFold(string(text), candidate.String()) {
+			*d = candidate
+			return nil
+		}
+	}
+	return fmt.Errorf("invalid dialect %q; want ScyllaV4, CassandraV4 or CassandraV5", string(text))
+}
+
+// ParseDialect parses a dialect name, such as "ScyllaV4", ignoring case. It
+// is Dialect.UnmarshalText for a string.
+func ParseDialect(s string) (Dialect, error) {
+	var d Dialect
+	err := d.UnmarshalText([]byte(s))
+	return d, err
 }

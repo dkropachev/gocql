@@ -5,6 +5,10 @@ Call `WithCompression` on the `config.ConfigBuilder` with `cql.NoCompression`,
 standalone compressor module or `replace` directive is needed. Native protocol
 5 supports LZ4 segment compression. The outbound data path compresses encoded
 spans directly and sends original spans when a v5 segment is incompressible.
+`cql.ParseCompression` reads the names `none`, `lz4` and `snappy` in any case,
+and `cql.Compression` implements `encoding.TextMarshaler` and
+`TextUnmarshaler`, so it can be a flag (`flag.TextVar`) or a configuration
+file field.
 
 Explicit incremental receive supports no compression on raw/TLS transports and protocol 5 LZ4
 segments. Protocol 4 frame compression with LZ4 or Snappy produces an explicit

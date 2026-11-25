@@ -3,7 +3,10 @@
 
 package cql
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // Compression is the frame compression a connection negotiates. The zero
 // Compression is NoCompression. Later releases may add values, so a switch over
@@ -35,4 +38,38 @@ func (c Compression) String() string {
 	default:
 		return fmt.Sprintf("Compression(%d)", uint8(c))
 	}
+}
+
+// MarshalText implements encoding.TextMarshaler with the name String
+// returns, and returns an error for a value String does not name.
+func (c Compression) MarshalText() ([]byte, error) {
+	if c > SnappyCompression {
+		return nil, fmt.Errorf("invalid compression %v", c)
+	}
+	return []byte(c.String()), nil
+}
+
+// UnmarshalText implements encoding.TextUnmarshaler. It accepts the names
+// String returns, "none", "lz4" and "snappy", in any case, and returns an
+// error for any other text.
+func (c *Compression) UnmarshalText(text []byte) error {
+	switch strings.ToLower(string(text)) {
+	case "none":
+		*c = NoCompression
+	case "lz4":
+		*c = LZ4Compression
+	case "snappy":
+		*c = SnappyCompression
+	default:
+		return fmt.Errorf("invalid compression %q; want none, lz4 or snappy", string(text))
+	}
+	return nil
+}
+
+// ParseCompression parses a compression name, such as "lz4", ignoring
+// case. It is Compression.UnmarshalText for a string.
+func ParseCompression(s string) (Compression, error) {
+	var c Compression
+	err := c.UnmarshalText([]byte(s))
+	return c, err
 }

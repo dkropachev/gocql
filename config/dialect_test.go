@@ -5,6 +5,7 @@ package config
 
 import (
 	"errors"
+	"flag"
 	"strings"
 	"testing"
 	"time"
@@ -96,4 +97,34 @@ func TestScyllaOnlySettings(t *testing.T) {
 	}
 	// A zero server timeout sends none, so Cassandra accepts it.
 	mustBuildConfig(t, New(CassandraV4, "127.0.0.1").WithMetadataServerTimeout(0))
+}
+
+// TestDialectText parses every dialect's name in any case, round-trips it
+// through MarshalText and a flag, and rejects other names.
+func TestDialectText(t *testing.T) {
+	for _, d := range []Dialect{ScyllaV4, CassandraV4, CassandraV5} {
+		text, err := d.MarshalText()
+		if err != nil || string(text) != d.String() {
+			t.Fatalf("%v.MarshalText() = %q, %v", d, text, err)
+		}
+		for _, s := range []string{d.String(), strings.ToLower(d.String()), strings.ToUpper(d.String())} {
+			if got, err := ParseDialect(s); err != nil || got != d {
+				t.Fatalf("ParseDialect(%q) = %v, %v; want %v", s, got, err, d)
+			}
+		}
+		flags := flag.NewFlagSet("test", flag.ContinueOnError)
+		var got Dialect
+		flags.TextVar(&got, "dialect", ScyllaV4, "")
+		if err := flags.Parse([]string{"-dialect", d.String()}); err != nil || got != d {
+			t.Fatalf("flag -dialect %v = %v, %v", d, got, err)
+		}
+	}
+	for _, s := range []string{"", "scylla", "ScyllaV5", "Dialect(0)"} {
+		if d, err := ParseDialect(s); err == nil {
+			t.Fatalf("ParseDialect(%q) = %v, want an error", s, d)
+		}
+	}
+	if _, err := Dialect(0).MarshalText(); err == nil {
+		t.Fatal("the zero Dialect marshaled")
+	}
 }

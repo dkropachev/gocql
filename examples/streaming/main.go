@@ -41,8 +41,10 @@ func main() {
 func run() (resultErr error) {
 	hosts := flag.String("hosts", "127.0.0.1:9042", "comma-separated native endpoints")
 	incremental := flag.Bool("incremental", false, "use bounded incremental receive instead of page buffering")
-	dialect := flag.String("dialect", "scylla-v4", "scylla-v4, cassandra-v4 or cassandra-v5")
-	compression := flag.String("compression", "none", "none, lz4 or snappy")
+	var d config.Dialect
+	flag.TextVar(&d, "dialect", config.ScyllaV4, "ScyllaV4, CassandraV4 or CassandraV5")
+	var frameCompression cql.Compression
+	flag.TextVar(&frameCompression, "compression", cql.NoCompression, "none, lz4 or snappy")
 	username := flag.String("username", "", "authentication username")
 	password := flag.String("password", "", "authentication password (prefer GOCQL_PASSWORD)")
 	ca := flag.String("ca", "", "TLS CA PEM file")
@@ -51,32 +53,11 @@ func run() (resultErr error) {
 	serverName := flag.String("server-name", "", "TLS server DNS identity")
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
-	var d config.Dialect
-	switch *dialect {
-	case "scylla-v4":
-		d = config.ScyllaV4
-	case "cassandra-v4":
-		d = config.CassandraV4
-	case "cassandra-v5":
-		d = config.CassandraV5
-	default:
-		return fmt.Errorf("unknown dialect %q", *dialect)
-	}
 	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
 		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
-	frameCompression := cql.NoCompression
-	switch *compression {
-	case "none":
-	case "lz4":
-		frameCompression = cql.LZ4Compression
-	case "snappy":
-		frameCompression = cql.SnappyCompression
-	default:
-		return fmt.Errorf("unknown compression %q", *compression)
-	}
 	if *password == "" {
 		*password = os.Getenv("GOCQL_PASSWORD")
 	}
