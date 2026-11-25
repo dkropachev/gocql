@@ -82,7 +82,7 @@ func TestEachStopIteration(t *testing.T) {
 			if got := rt.errors.Load(); got != wantErrors {
 				t.Fatalf("error metric %d, want %d", got, wantErrors)
 			}
-			if rt.cancelled.Load() != 0 || rt.inflight.Load() != 0 {
+			if rt.metricsSnapshot().Canceled != 0 || rt.inflight.Load() != 0 {
 				t.Fatal("stop left cancelled or inflight execution")
 			}
 			// The server expects the next request to be a new execution, not a

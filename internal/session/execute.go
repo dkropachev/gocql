@@ -95,8 +95,10 @@ type InternalSessionRuntime struct {
 	// requests counts the registered executions. It is written next to
 	// inflight, after registerExecution accepted the execution, so it never
 	// counts an admission that is then refused and never decreases.
-	requests, attempts, errors, retries, speculations, cancelled atomic.Uint64
-	inflight                                                     atomic.Int64
+	requests, attempts, errors, retries, speculations atomic.Uint64
+	inflight                                          atomic.Int64
+	// errorKinds counts the failed executions by cqlerr.KindOf.
+	errorKinds [errorKindCount]atomic.Uint64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
 	// Close waits for it to reach zero on pooledWake.
 	pooledBusy atomic.Int64
@@ -163,7 +165,44 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	return metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), Canceled: rt.cancelled.Load(), InFlight: rt.inflight.Load()}
+	m := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), InFlight: rt.inflight.Load()}
+	for kind := range rt.errorKinds {
+		if n := rt.errorKinds[kind].Load(); n > 0 {
+			if m.ErrorsByKind == nil {
+				m.ErrorsByKind = make(map[cqlerr.Kind]uint64)
+			}
+			m.ErrorsByKind[cqlerr.Kind(kind)] = n
+		}
+	}
+	m.Canceled = m.ErrorsByKind[cqlerr.KindCanceled]
+	m.Timeouts = m.ErrorsByKind[cqlerr.KindTimeout]
+	return m
+}
+
+// errorKindCount bounds the cqlerr.Kind values the metrics count; a later
+// kind past it counts as KindUnknown.
+const errorKindCount = 32
+
+// countErrorKind counts one failed execution of err's kind.
+func (rt *InternalSessionRuntime) countErrorKind(err error) {
+	kind := cqlerr.KindOf(err)
+	if int(kind) >= errorKindCount {
+		kind = cqlerr.KindUnknown
+	}
+	rt.errorKinds[kind].Add(1)
+}
+
+// attemptEnded fills the outcome fields of an attempt event from its error.
+func attemptEnded(event *routing2.AttemptEvent) {
+	if event.Err == nil {
+		return
+	}
+	switch cqlerr.KindOf(event.Err) {
+	case cqlerr.KindCanceled:
+		event.Canceled = true
+	case cqlerr.KindTimeout:
+		event.TimedOut = true
+	}
 }
 
 // prepareTyped prepares statement for Session.Prepare, bounded by ctx and the
@@ -564,11 +603,9 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	// reading them would wait that long before speculating.
 	if err != nil {
 		rt.errors.Add(1)
+		rt.countErrorKind(err)
 	} else {
 		rt.RecordV2Latency(l.id, time.Since(l.started))
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-		rt.cancelled.Add(1)
 	}
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
@@ -1062,7 +1099,8 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Canceled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded), Speculative: speculative}
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
+	attemptEnded(&event)
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })

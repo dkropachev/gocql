@@ -305,7 +305,8 @@ documented methods.
 
 ### `metrics` (layer 1)
 
-- **Contains:** `Snapshot`, a plain struct of counters.
+- **Contains:** `Snapshot`, a plain struct of counters, which counts failed
+  executions by `cqlerr.Kind`.
 - **Must not contain:** exporters or registries.
 - **Future:** per-host and per-shard snapshots, and latency histograms as new
   fields or new snapshot types. Adding a field to `Snapshot` is not a

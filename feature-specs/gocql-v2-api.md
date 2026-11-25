@@ -1522,7 +1522,7 @@ type AttemptEvent struct {
     Latency time.Duration
     Err error
     CQLTraceID cql.Option[cql.UUID]
-    Canceled, Speculative bool
+    Canceled, TimedOut, Speculative bool // by cqlerr.KindOf(Err)
 }
 
 // package observe
@@ -1822,7 +1822,8 @@ type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
     Requests, Attempts uint64 // never decrease
-    Errors, Canceled uint64
+    Errors, Canceled, Timeouts uint64 // Canceled: KindCanceled; Timeouts: KindTimeout
+    ErrorsByKind map[cqlerr.Kind]uint64
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64

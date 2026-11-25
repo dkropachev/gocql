@@ -11,7 +11,11 @@
 // executions. Per-request detail goes to an observe.Observer instead.
 package metrics
 
-import "time"
+import (
+	"time"
+
+	"github.com/scylladb/gocql/v2/cqlerr"
+)
 
 // Snapshot is a copy of a session's counters at one moment.
 //
@@ -23,14 +27,20 @@ import "time"
 //
 // The zero Snapshot counts nothing.
 type Snapshot struct {
+	// ErrorsByKind counts the executions that ended with an error by
+	// cqlerr.KindOf of the error. It holds only the kinds counted at least
+	// once, and is nil before the first error.
+	ErrorsByKind map[cqlerr.Kind]uint64
 	// Requests counts executions started, and Attempts the attempts they
 	// sent to nodes, including retries and speculative attempts. An
 	// execution refused because the session is closing is not counted.
 	Requests, Attempts uint64
-	// Errors counts executions that ended with an error, and Canceled
-	// those of them that ended because their context was canceled or its
-	// deadline passed.
-	Errors, Canceled uint64
+	// Errors counts executions that ended with an error. Canceled counts
+	// those of them whose error is cqlerr.KindCanceled: the caller canceled
+	// the context. Timeouts counts those whose error is cqlerr.KindTimeout:
+	// the server or the driver gave up waiting, or the caller's deadline
+	// passed.
+	Errors, Canceled, Timeouts uint64
 	// Retries counts attempts the retry policy asked for, and Speculations
 	// the speculative attempts the speculation policy started.
 	Retries, Speculations uint64

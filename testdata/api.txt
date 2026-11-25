@@ -1428,10 +1428,12 @@ package metadata
 
 package metrics
 	type metrics.Snapshot struct
+		metrics.Snapshot field ErrorsByKind map[cqlerr.Kind]uint64
 		metrics.Snapshot field Requests uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
 		metrics.Snapshot field Canceled uint64
+		metrics.Snapshot field Timeouts uint64
 		metrics.Snapshot field Retries uint64
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
@@ -1514,6 +1516,7 @@ package routing
 		routing.AttemptEvent field Target metadata.Target
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
 		routing.AttemptEvent field Canceled bool
+		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool
 	type routing.AttemptObserver interface
 		routing.AttemptObserver method Observe(routing.AttemptEvent)
