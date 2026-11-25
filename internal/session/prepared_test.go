@@ -696,28 +696,51 @@ func TestPrepared(t *testing.T) {
 				kind      implCql.StatementKind
 				initial   bool
 				badResult bool
+				// serverOrdinary: the server flags lightweight
+				// transactions and does not flag this one.
+				serverOrdinary bool
+				// prepareError: PREPARE already shows a result without
+				// the CAS shape, so Prepare fails on it.
+				prepareError bool
 				// rejected: the kind contradicts the CASRows decoder and
-				// the IF, so Prepare fails before it sends anything.
+				// the IF, or the statement can never be conditional, so
+				// Prepare fails before it sends anything.
 				rejected bool
+				// cql replaces the INSERT IF NOT EXISTS the case prepares.
+				cql string
 			}{
 				{name: "unknown", kind: implCql.UnknownStatement},
 				{name: "conditional", kind: implCql.ConditionalStatement},
 				{name: "invalid-execute-metadata", kind: implCql.ConditionalStatement, badResult: true},
 				{name: "ordinary-rejected", kind: implCql.OrdinaryStatement, rejected: true},
-				// The CASRows decoder makes the statement conditional, so a
-				// PREPARE shape that does not fit defers to EXECUTE's.
-				{name: "present-metadata-deferred", kind: implCql.UnknownStatement, initial: true},
+				{name: "select-rejected", kind: implCql.UnknownStatement, rejected: true, cql: "SELECT id FROM ks.tbl WHERE id = 1"},
+				{name: "conditional-select-rejected", kind: implCql.ConditionalStatement, rejected: true, cql: "SELECT id FROM ks.tbl WHERE id = 1"},
+				// Metadata that PREPARE returns without a leading [applied]
+				// column cannot fit CASRows, so Prepare rejects it.
+				{name: "present-metadata-rejected", kind: implCql.UnknownStatement, initial: true, prepareError: true},
+				{name: "present-metadata-rejected-conditional", kind: implCql.ConditionalStatement, initial: true, prepareError: true},
+				// A server that says the statement is no lightweight
+				// transaction returns no [applied] column at all.
+				{name: "server-ordinary-rejected", kind: implCql.UnknownStatement, serverOrdinary: true, prepareError: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					s, _, peers := runtimeTestSession(t, 1)
+					s, conns, peers := runtimeTestSession(t, 1)
 					defer s.Close()
 					defer peers[0].Close()
+					if tc.serverOrdinary {
+						conns[0].InternalFramers.InternalDefaults.InternalFlagLWT = 1 << 30
+						conns[0].InternalRefreshNativeProtocol()
+					}
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
 					if tc.rejected {
-						_, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
+						text := tc.cql
+						if text == "" {
+							text = "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS"
+						}
+						_, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: text, Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
 						if !hasErrorType[*implCql.ValidationError](err) {
-							t.Fatalf("ordinary conditional statement: %v, want a ValidationError", err)
+							t.Fatalf("%s: %v, want a ValidationError", text, err)
 						}
 						return
 					}
@@ -738,7 +761,7 @@ func TestPrepared(t *testing.T) {
 							done <- fmt.Errorf("expected PREPARE got %d", op)
 							return
 						}
-						if _, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("cas"), implCql.NewColumns(), initial))); err != nil {
+						if _, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("cas"), implCql.NewColumns(), initial))); err != nil || tc.prepareError {
 							done <- err
 							return
 						}
@@ -770,6 +793,15 @@ func TestPrepared(t *testing.T) {
 						done <- err
 					}()
 					prepared, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
+					if tc.prepareError {
+						if !hasErrorType[*implCql.ValidationError](err) {
+							t.Fatalf("PREPARE metadata without the CAS shape: %v, want a ValidationError", err)
+						}
+						if err := <-done; err != nil {
+							t.Fatal(err)
+						}
+						return
+					}
 					if err != nil {
 						t.Fatal(err)
 					}

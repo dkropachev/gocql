@@ -85,10 +85,14 @@ type Bound[R any] struct {
 // preparedStatement contains the transport preparation and parameter plan shared
 // by buffered and streaming preparation. Result decoding is selected separately.
 type preparedStatement[P any] struct {
-	state      *InternalPreparedState
-	params     cql.CompiledParams[P]
-	columns    cql.Columns
-	kind       cql.StatementKind
+	state   *InternalPreparedState
+	params  cql.CompiledParams[P]
+	columns cql.Columns
+	kind    cql.StatementKind
+	// serverKind is the kind the server reported: OrdinaryStatement or
+	// ConditionalStatement from a ScyllaDB that flags lightweight
+	// transactions, UnknownStatement from one that does not.
+	serverKind cql.StatementKind
 	idempotent bool
 }
 
@@ -138,7 +142,7 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if confirmedKind == cql.ConditionalStatement {
 		kind = confirmedKind
 	}
-	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind, idempotent: statement.Idempotent}, nil
+	return preparedStatement[P]{state: state, params: plan, columns: columns, kind: kind, serverKind: confirmedKind, idempotent: statement.Idempotent}, nil
 }
 
 func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement binding.Statement[P, R], options PrepareOptions) (*Prepared[P, R], error) {
@@ -150,7 +154,8 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	kind := prepared.kind
 	var rows cql.CompiledRow[R]
 	// Cassandra omits conditional result metadata from PREPARE. Conditional
-	// statements therefore defer absent result shapes until EXECUTE;
+	// statements therefore defer absent result shapes until EXECUTE, except
+	// for a CASRows decoder's [applied] column, checked below;
 	// actual metadata still selects and validates the plan before any row output.
 	// A confirmed ordinary statement keeps eager zero-column validation.
 	// ScyllaDB does return conditional result metadata; a conditional
@@ -160,6 +165,17 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	if columns.Len() != 0 || kind == cql.OrdinaryStatement {
 		rows, err = codec.CompileRow(statement.Rows, columns)
 		if err != nil && kind != cql.ConditionalStatement {
+			return nil, err
+		}
+	}
+	// A CASRows decoder still needs the CAS shape, a leading boolean
+	// [applied] column, wherever PREPARE already tells what EXECUTE returns:
+	// metadata that is there, or a server that reports the statement is not
+	// a lightweight transaction, whose result has no [applied] column at
+	// all. Only the existing row's columns, which differ between outcomes,
+	// wait for EXECUTE.
+	if codec.ConditionalRows(statement.Rows) && (columns.Len() != 0 || prepared.serverKind == cql.OrdinaryStatement) {
+		if _, err := codec.CompileRow(cql.CASApplied, columns); err != nil {
 			return nil, err
 		}
 	}

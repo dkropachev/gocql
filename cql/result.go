@@ -27,6 +27,11 @@ type lenientRowDecoder[R any] interface {
 // CASRows decodes the [applied] column, and the existing row the server
 // returns with it, if any, with decoder into Previous. A nil decoder skips
 // those columns, so Previous is never set; CASApplied is that decoder.
+// It makes its statement conditional, so it decodes only an INSERT, UPDATE,
+// DELETE or BATCH: any other statement, a SELECT included, is rejected
+// before it is sent. Prepare fails when the server's prepared metadata
+// lacks the leading boolean [applied] column; the existing row's columns,
+// which differ between outcomes, are checked against each result.
 func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 	return casRows[R]{decoder: decoder}
 }
