@@ -38,7 +38,7 @@ type TypeInfo interface {
 }
 
 type NativeType struct {
-	//only used for TypeCustom
+	//only used for KindCustom
 	custom string
 	typ    cql.Kind
 	proto  byte
@@ -93,9 +93,9 @@ func NewCollectionType(m NativeType, key, elem TypeInfo) CollectionType {
 }
 
 type CollectionType struct {
-	// Key is used only for TypeMap
+	// Key is used only for KindMap
 	Key TypeInfo
-	// Elem is used for TypeMap, TypeList and TypeSet
+	// Elem is used for KindMap, KindList and KindSet
 	Elem TypeInfo
 	NativeType
 }

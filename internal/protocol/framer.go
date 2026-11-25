@@ -543,7 +543,7 @@ func (f *Framer) readTypeInfo(depth int) TypeInfo {
 	simple := cqltype.NewCustomType(f.Proto,
 		cql.Kind(id), "")
 
-	// Fast path for simple native types (through TypeDuration).
+	// Fast path for simple native types (through KindDuration).
 	if id > 0 && id <= uint16(cql.KindDuration) {
 		return simple
 	}
