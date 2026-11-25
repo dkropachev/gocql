@@ -641,13 +641,16 @@ func serverErrorExecutionStatus(err ServerError) ExecutionStatus {
 }
 
 // writeExecution classifies a write that some replicas acknowledged. Batch log
-// and Paxos acknowledgements do not mean the data itself was applied.
+// and Paxos acknowledgements do not mean the data itself was applied. A
+// logged batch (WriteTypeBatch) failed after its batch log was written, which
+// the server replays until every statement is applied, so it is not left in
+// part: its outcome is MaybeExecuted until the replay completes.
 func writeExecution(received int, writeType WriteType) ExecutionStatus {
 	if received <= 0 {
 		return MaybeExecuted
 	}
 	switch writeType {
-	case WriteTypeSimple, WriteTypeBatch, WriteTypeUnloggedBatch, WriteTypeCounter, WriteTypeView, WriteTypeCDC:
+	case WriteTypeSimple, WriteTypeUnloggedBatch, WriteTypeCounter, WriteTypeView, WriteTypeCDC:
 		return PartiallyExecuted
 	default:
 		return MaybeExecuted

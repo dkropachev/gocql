@@ -2000,7 +2000,8 @@ server error codes/details. A failed request returns an `*ExecutionError`,
 which unwraps only the error the request stopped with, lists every failed
 attempt (`AttemptFailure`, whose `ExecutionStatus` is the attempt's) and
 reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
-`PartiallyExecuted`; `ExecutionStatusOf(err)`; compare with `==`, as the
+`PartiallyExecuted`, and `Executed`, which `ExecutionStatusOf(nil)` returns;
+`ExecutionStatusOf(err)`; compare with `==`, as the
 numeric order is not the severity order). `NewExecutionError(err, status,
 attempts...)` builds one for tests. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`

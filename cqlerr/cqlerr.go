@@ -11,6 +11,7 @@
 //	case cqlerr.NotExecuted:       // nothing was applied; safe to retry
 //	case cqlerr.MaybeExecuted:     // unknown; retry only idempotent requests
 //	case cqlerr.PartiallyExecuted: // applied in part; reconcile before retrying
+//	case cqlerr.Executed:          // err is nil: the request succeeded
 //	}
 //
 // KindOf groups any error by what a caller can do about it (timeout,

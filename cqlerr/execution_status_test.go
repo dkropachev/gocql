@@ -46,7 +46,9 @@ func TestServerErrorExecutionStatus(t *testing.T) {
 		{"write timeout counter acked", &WriteTimeoutError{WriteType: WriteTypeCounter, Received: 1}, PartiallyExecuted},
 		{"write timeout batch log", &WriteTimeoutError{WriteType: WriteTypeBatchLog, Received: 1}, MaybeExecuted},
 		{"write timeout cas", &WriteTimeoutError{WriteType: WriteTypeCAS, Received: 1}, MaybeExecuted},
-		{"write failure batch acked", &WriteFailureError{WriteType: WriteTypeBatch, Received: 2}, PartiallyExecuted},
+		{"write failure batch acked", &WriteFailureError{WriteType: WriteTypeBatch, Received: 2}, MaybeExecuted},
+		{"write timeout logged batch acked", &WriteTimeoutError{WriteType: WriteTypeBatch, Received: 1}, MaybeExecuted},
+		{"write timeout unlogged batch acked", &WriteTimeoutError{WriteType: WriteTypeUnloggedBatch, Received: 1}, PartiallyExecuted},
 		{"write failure no acks", &WriteFailureError{WriteType: WriteTypeBatch}, MaybeExecuted},
 	} {
 		if got := serverErrorExecutionStatus(test.err); got != test.want {
@@ -57,6 +59,14 @@ func TestServerErrorExecutionStatus(t *testing.T) {
 
 func TestExecutionStatus(t *testing.T) {
 	t.Parallel()
+
+	t.Run("Names", func(t *testing.T) {
+		for status, want := range map[ExecutionStatus]string{NotExecuted: "not executed", MaybeExecuted: "maybe executed", PartiallyExecuted: "partially executed", Executed: "executed", Executed + 1: "ExecutionStatus(4)"} {
+			if got := status.String(); got != want {
+				t.Errorf("%d: %q, want %q", uint8(status), got, want)
+			}
+		}
+	})
 
 	t.Run("ZeroValueIsConservative", func(t *testing.T) {
 		var zero ExecutionStatus
@@ -97,7 +107,7 @@ func TestExecutionStatus(t *testing.T) {
 			err  error
 			want ExecutionStatus
 		}{
-			{"nil", nil, NotExecuted},
+			{"nil", nil, Executed},
 			{"request wins over attempt", fmt.Errorf("wrapped: %w", request), PartiallyExecuted},
 			{"attempt", fmt.Errorf("wrapped: %w", attempt), MaybeExecuted},
 			{"bare server error", NewOtherServerError(CodeOverloaded, ""), NotExecuted},

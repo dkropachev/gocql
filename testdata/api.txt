@@ -906,6 +906,7 @@ package cqlerr
 	type cqlerr.ErrorCode uint16
 		cqlerr.ErrorCode method (T) Error() string
 	type cqlerr.ErrorMap map[net/netip.Addr]uint16
+	const cqlerr.Executed cqlerr.ExecutionStatus = 3
 	type cqlerr.ExecutionError struct
 		cqlerr.ExecutionError field Err error
 		cqlerr.ExecutionError field Attempts []cqlerr.AttemptFailure
