@@ -886,11 +886,12 @@ func (streamCodecOption[V]) option() (string, structTarget) { return "WithStream
 func (o streamCodecOption[V]) apply(c *structOptionSet) {
 	c.streams[reflect.TypeFor[V]()] = erasedStreamEntry{column: erasedStreamColumnOf(o.decoder)}
 	c.streams[reflect.TypeFor[Nullable[V]]()] = erasedStreamEntry{column: erasedStreamColumnOf(StreamNullable(o.decoder))}
-	c.streams[reflect.TypeFor[[]V]()] = erasedStreamEntry{column: erasedStreamColumnOf(StreamList(o.decoder))}
+	c.streams[reflect.TypeFor[[]V]()] = erasedStreamEntry{column: erasedStreamColumnOf(StreamSlice(o.decoder))}
 }
 
 // WithStreamDecoder maps the struct's fields of type V, Nullable[V] and []V
-// (as a list) with decoder in StreamRowOf. V is inferred from decoder.
+// (a list, set or vector, whichever the column is) with decoder in
+// StreamRowOf. V is inferred from decoder.
 // Recognized built-in stream tags take precedence, including in generated
 // mappings. Only StreamRowOf applies it.
 func WithStreamDecoder[V any](decoder StreamDecoder[V]) StructOption {

@@ -568,24 +568,28 @@ func TestStructMapping(t *testing.T) {
 			}
 		})
 		t.Run("WithStreamDecoder", func(t *testing.T) {
-			type hitCount int64 // a type with no built-in streaming decoder
+			type hitCount int64 // the option replaces the underlying type's decoder
 			type counted struct {
 				ID   int32
 				Hits hitCount
+				Seen []hitCount
 			}
 			columns := NewColumns(
 				ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
 				ColumnSpec{Name: "hits", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "seen", Type: CodecTestMust(SetType(rowTestType(t, KindBigInt)))},
 			)
 			type source struct {
 				ID   int32
 				Hits int64
+				Seen []int64 `cql:",codec=SetCodec"`
 			}
-			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42}))
+			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42, Seen: []int64{7}}))
 			hits := streamInteger[hitCount](KindBigInt, 8)
-			var dst counted
+			dst := counted{Seen: make([]hitCount, 0, 1)}
+			// A []V field takes the column's kind, here a set.
 			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamDecoder(hits)), data, &dst)
-			if dst != (counted{ID: 1, Hits: 42}) {
+			if dst.ID != 1 || dst.Hits != 42 || len(dst.Seen) != 1 || dst.Seen[0] != 7 {
 				t.Fatalf("custom stream codec: %+v", dst)
 			}
 		})
