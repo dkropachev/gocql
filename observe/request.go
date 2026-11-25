@@ -21,8 +21,14 @@ import (
 //
 // The functions are shared between executions and must be safe for
 // concurrent use. A speculative attempt that loses can start or end after
-// its request has ended. A panic in any hook is logged and otherwise
-// ignored.
+// its request has ended.
+//
+// A panic in a hook, or in a function a hook returns, neither reaches the
+// caller nor stops the request: the driver recovers it and logs it at error
+// level with the request's context, the one Request returned or the caller's
+// without a Request hook. The driver calls each end function a hook returns
+// once, as its request or attempt ends, so a panic that Join recovers in a
+// start hook and raises from the end function it returns is logged then.
 //
 // The zero Hooks observes nothing.
 type Hooks struct {

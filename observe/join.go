@@ -18,7 +18,9 @@ import (
 // one hook does not keep the others from being called: Join raises the
 // first panic again once they have been, for the driver to log. A panic in
 // Request or Attempt is raised from the end function they return, so every
-// hook still sees its request or attempt end.
+// hook still sees its request or attempt end, and the driver logs it as that
+// request or attempt ends. That end function is returned even when no hook
+// returned one, for the panic to be raised.
 func Join(hooks ...Hooks) Hooks {
 	var requests []func(context.Context, RequestStart) (context.Context, func(RequestEvent))
 	var attempts []func(context.Context, AttemptStart) func(routing.AttemptEvent)
