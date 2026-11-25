@@ -35,7 +35,11 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 A custom `routing.Policy` implements Pick and Fallback against
 immutable `metadata.Snapshot` and `routing.Info` values. A request pinned to a
 host with `exec.Options.HostID` goes there, to `ShardID` when set, without
-consulting the policy. The split serves the happy
+consulting the policy; it takes precedence over a `routing.SingleTarget`
+policy too. A pinned shard is strict: the request fails rather than use
+another shard of the host, unless `exec.Options.AnyShardFallback` is set,
+just as for `SingleTarget` and `metadata.Target.AnyShardFallback`. The split
+serves the happy
 path, where the first route serves the request:
 
 - `Pick` returns the first route without building a plan or allocating, or
@@ -121,8 +125,9 @@ keep the replicas' order and do not rotate the hosts.
   token, followed by a route to any shard of the same host, except for a
   conditional request, a statement not known to be ordinary, a request that
   names its shard, and a leader.
-  `SingleTarget` routes only to its host: to its shard first when it names one
-  and the host has it, then to any shard, unless `StrictShard` is set.
+  `SingleTarget` routes only to its host and, when its target names a shard,
+  only to that shard, unless the target sets `AnyShardFallback`: then to the
+  shard first when the host has it, then to any shard.
 
 A tablet hint in a response replaces every tablet its range overlaps, so a
 migrated, split or merged tablet takes effect once a background worker

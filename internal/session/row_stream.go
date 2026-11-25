@@ -447,9 +447,11 @@ func (s *RowStream[R]) acquire(plan implRouting.QueryPlan) error {
 			return cqlerr.ErrNoConnections
 		}
 		target = r.Target()
+		// A stream's route may fall back to another shard of its host.
+		target.AnyShardFallback = target.ShardID.Set
 		routed = r.InternalHost().Pool()
 	} else if request.routing.HostID.Set {
-		target = metadata.Target{HostID: request.routing.HostID.Value, ShardID: request.routing.ShardID, StrictShard: request.routing.ShardID.Set}
+		target = metadata.Target{HostID: request.routing.HostID.Value, ShardID: request.routing.ShardID, AnyShardFallback: request.routing.ShardID.Set && request.routing.AnyShardFallback}
 	} else {
 		hosts := implCluster.SessionData(s.privateStorage.session).InternalHostSource.InternalGetHostsList()
 		for _, host := range hosts {
@@ -595,7 +597,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				return err
 			}
 			s.privateStorage.prepared = prepared
-			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}}
 			if err := s.acquire(plan); err != nil {
 				return err
 			}
@@ -724,7 +726,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				return closeErr
 			}
 			s.privateStorage.reservation = nil
-			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}}
 			s.privateStorage.prepared, err = request.source().onConn(pagectx, InternalRuntimeFor(s.privateStorage.session), conn, request.InternalValues, true, s.privateStorage.prepared)
 			if err != nil {
 				return err
@@ -752,7 +754,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			consistency = decision.Consistency.Value
 		}
 		if decision.Action == retry.Same && s.privateStorage.reservation.InternalClosing.Load() {
-			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}, StrictShard: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0}
+			s.privateStorage.retryTarget = &metadata.Target{HostID: conn.InternalHostID(), ShardID: cql.Option[uint32]{Set: implEndpoint.ScyllaHostFeaturesData(&conn.InternalScyllaSupported.ScyllaHostFeatures).InternalNrShards > 0, Value: uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard)}}
 		}
 		if decision.Action == retry.Next || s.privateStorage.reservation.InternalClosing.Load() {
 			s.privateStorage.reservation.InternalClose(false)

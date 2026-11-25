@@ -91,7 +91,7 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 					if !ok || first.HostID[15] != test.first {
 						t.Fatalf("%v: first target %+v, want host %d", c, first, test.first)
 					}
-					if test.first == test.replicas[0] && test.versioned && (!first.ShardID.Set || first.ShardID.Value != 1 || !first.StrictShard) {
+					if test.first == test.replicas[0] && test.versioned && (!first.ShardID.Set || first.ShardID.Value != 1 || first.AnyShardFallback) {
 						t.Fatalf("%v: leader target %+v, want its tablet shard 1, strict", c, first)
 					}
 					rest := v2PlanIDs(plan)

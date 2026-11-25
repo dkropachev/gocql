@@ -395,7 +395,7 @@ func TestTablets(t *testing.T) {
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)
 				first, ok := implRouting.InternalNextTarget(plan)
-				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].HostID || !first.StrictShard || first.ShardID.Value != 1 {
+				if !ok || first.HostID != routing.SnapshotData(m).InternalHosts[2].HostID || first.AnyShardFallback || first.ShardID.Value != 1 {
 					t.Fatal("eligible remote leader was not strict first", first)
 				}
 				if got := v2PlanIDs(plan); !bytes.Equal(got, []byte{1, 2, 4}) {

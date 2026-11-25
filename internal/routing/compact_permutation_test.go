@@ -106,6 +106,9 @@ func TestCompactPermutation(t *testing.T) {
 							}
 							wantOrder := originalPermutation(n, seed, consistency == cql.Serial || consistency == cql.LocalSerial)
 							for i, index := range wantOrder {
+								// A replica's route may fall back to any shard, which
+								// the snapshot's replicas do not say.
+								got[i].AnyShardFallback = false
 								if got[i] != replicas[index] {
 									t.Fatalf("replica %d: got %+v want %+v", i, got[i], replicas[index])
 								}
@@ -171,19 +174,13 @@ func TestCompactPermutation(t *testing.T) {
 									want = append(want, Target{HostID: hosts[5].HostID})
 								}
 								if remote && leader && !slow {
-									first := target(2, 0)
-									first.StrictShard = true
-									want = append([]Target{first}, want...)
+									want = append([]Target{target(2, 0)}, want...)
 								}
 								if remote && slow {
-									last := target(2, 0)
-									last.StrictShard = leader
-									want = append(want, last)
+									want = append(want, target(2, 0))
 								}
-								// A conditional plan does not fall back from a shard.
-								for i := range want {
-									want[i].StrictShard = want[i].ShardID.Set
-								}
+								// A conditional plan does not fall back from a shard:
+								// no target has AnyShardFallback.
 								if !reflect.DeepEqual(got, want) {
 									t.Fatalf("got %+v\nwant %+v", got, want)
 								}

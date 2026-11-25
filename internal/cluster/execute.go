@@ -112,9 +112,7 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing routing.Info) *trans
 	}
 	// A pool without a typed picker picks the legacy way, strictly when
 	// the route names a shard.
-	target := r.Target()
-	target.StrictShard = target.ShardID.Set
-	return s.PickTypedPool(pool, target, routing)
+	return s.PickTypedPool(pool, r.Target(), routing)
 }
 
 // ObserveSafely calls fn, an observer hook or a policy's Learn, logging a
@@ -168,7 +166,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 		if routing.ShardID.Set {
 			shard = routing.ShardID
 		}
-		if conn != nil && shard.Set && (target.StrictShard || routing.ShardID.Set) && uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard) != shard.Value {
+		if conn != nil && shard.Set && (implPool.StrictTarget(target) || implPool.PinnedShard(routing)) && uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard) != shard.Value {
 			return nil
 		}
 		return conn
@@ -193,7 +191,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	if shard.Set {
 		if uint64(shard.Value) < uint64(len(picker.InternalConns)) {
 			index = int(shard.Value)
-		} else if target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement {
+		} else if implPool.StrictTarget(target) || implPool.PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement {
 			return nil
 		}
 	} else if routing.Token.Set {
@@ -206,7 +204,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 		}
 		return picker.InternalMaybeReplaceWithLessBusyConnection(conn)
 	}
-	if index >= 0 && (target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement) {
+	if index >= 0 && (implPool.StrictTarget(target) || implPool.PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement) {
 		return nil
 	}
 	return picker.InternalLeastBusyConn()

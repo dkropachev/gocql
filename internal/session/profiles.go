@@ -37,6 +37,9 @@ type Options struct {
 	IncludeMetadata   bool
 	Idempotent        cql.Option[bool]
 	CQLTrace          bool
+	// AnyShardFallback lets a request pinned to ShardID use another shard
+	// of HostID.
+	AnyShardFallback bool
 	// NoSessionObserver leaves the session's observer out of the
 	// execution, so Observer alone, or nothing, observes it.
 	NoSessionObserver bool
@@ -137,6 +140,9 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if options.ShardID.Set && !options.HostID.Set {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("shard", "requires a host ID")
+	}
+	if options.AnyShardFallback && !options.ShardID.Set {
+		return InternalResolvedOptions{}, cqltype.TypeValidation("AnyShardFallback", "requires a shard ID")
 	}
 	keys := make(map[string]bool, len(options.CustomPayload))
 	for _, entry := range options.CustomPayload {

@@ -1481,12 +1481,13 @@ Keyspace affects prepare/cache identity and v5 QUERY/BATCH flags; an
 incompatible post-bind override is rejected. v3/v4 nondefault keyspace requires
 a qualified CQL statement or a session established in that keyspace. No
 concurrently mutable session-wide USE operation exists. Host pinning still
-validates host eligibility; a shard ID is a hint unless routing.Target.StrictShard is
-set by the routing policy. StrictShard requires a present shard ID; absent,
+validates host eligibility; a shard ID is strict unless metadata.Target.AnyShardFallback
+(for routing.SingleTarget) or exec.Options.AnyShardFallback (for a pinned
+request) is set. AnyShardFallback requires a present shard ID; absent,
 out-of-range or unavailable strict shards return a typed target error without
-same-host shard fallback. HostID pinning never falls back to a different host.
-Target strictness survives plan, attempt and pool seams; routing.SingleTarget
-honors its target's StrictShard unchanged. Unsupported version options fail
+same-host shard fallback. HostID pinning never falls back to a different host,
+and an exec.Options pin takes precedence over a SingleTarget policy.
+Target strictness survives plan, attempt and pool seams. Unsupported version options fail
 before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
 
@@ -1522,7 +1523,7 @@ type Info struct {
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
 }
-type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; StrictShard bool }
+type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool }
 type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target

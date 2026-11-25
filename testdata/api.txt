@@ -1286,6 +1286,7 @@ package exec
 		exec.Options field IncludeMetadata bool
 		exec.Options field Idempotent cql.Option[bool]
 		exec.Options field CQLTrace bool
+		exec.Options field AnyShardFallback bool
 		exec.Options field NoSessionObserver bool
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string
@@ -1452,9 +1453,9 @@ package metadata
 		metadata.TableOptions field InMemory bool
 		metadata.TableOptions method (*T) Equal(other *metadata.TableOptions) bool
 	type metadata.Target struct
-		metadata.Target field StrictShard bool
 		metadata.Target field HostID cql.UUID
 		metadata.Target field ShardID cql.Option[uint32]
+		metadata.Target field AnyShardFallback bool
 	type metadata.TokenRange struct
 		metadata.TokenRange field Replicas []metadata.Target
 		metadata.TokenRange field Start int64
@@ -1586,10 +1587,11 @@ package routing
 		routing.Info field Keyspace string
 		routing.Info field Table string
 		routing.Info field Token cql.Option[int64]
-		routing.Info field Kind cql.StatementKind
-		routing.Info field Consistency cql.Consistency
-		routing.Info field HostID cql.Option[cql.UUID]
 		routing.Info field ShardID cql.Option[uint32]
+		routing.Info field Consistency cql.Consistency
+		routing.Info field Kind cql.StatementKind
+		routing.Info field HostID cql.Option[cql.UUID]
+		routing.Info field AnyShardFallback bool
 	type routing.LatencyOptions struct
 		routing.LatencyOptions field Enabled bool
 		routing.LatencyOptions field ExclusionThreshold float64

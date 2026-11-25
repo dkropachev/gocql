@@ -161,6 +161,6 @@ func InternalNextTarget(plan QueryPlan) (Target, bool) {
 			p.fallback, strict = false, false
 		}
 	}
-	t.StrictShard = t.ShardID.Set && strict
+	t.AnyShardFallback = t.ShardID.Set && !strict
 	return t, true
 }

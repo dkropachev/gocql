@@ -262,7 +262,7 @@ func (p *InternalTargetPlan) Next() (Route, bool) {
 	t := p.InternalTargets[p.next]
 	r := p.route(p.next)
 	p.next++
-	p.fallback = t.ShardID.Set && !t.StrictShard
+	p.fallback = t.ShardID.Set && t.AnyShardFallback
 	return r, true
 }
 func (p *InternalTargetPlan) route(i int) Route {
@@ -530,7 +530,7 @@ func (plan *InternalLazyRoutingPlan) init(info routing2.Info) {
 	plan.emitted = plan.smallEmitted[:0]
 	plan.token, plan.tokenSet = info.Token.Value, info.Token.Set
 	plan.shard = info.ShardID
-	plan.strict = info.Kind != cql.OrdinaryStatement || info.ShardID.Set
+	plan.strict = info.Kind != cql.OrdinaryStatement || info.ShardID.Set && !info.AnyShardFallback
 }
 
 // prepare builds the replica permutation and the fallback groups.
@@ -606,13 +606,13 @@ func (p *InternalLazyRoutingPlan) pick() (Route, bool) {
 	k := rand.IntN(len(p.replicas))
 	t := p.replicas[k]
 	if i, h := p.host(t); h != nil && preferred(p.local(), h) {
-		return p.accept(t, i, h, true)
+		return p.accept(t, i, h, true, false)
 	}
 	k, i, h := redrawReplica(p.local(), p.metadata, p.index, p.replicas, &p.smallPermutation, k)
 	if h == nil {
 		return Route{}, false
 	}
-	return p.accept(p.replicas[k], i, h, true)
+	return p.accept(p.replicas[k], i, h, true, false)
 }
 
 // redrawReplica is pickReplica after its first draw, replica first, missed:
@@ -719,8 +719,8 @@ func (p *InternalLazyRoutingPlan) duplicate(r Route) bool {
 // route goes to the shard that owns the plan's token, unless placement or
 // the request names one; another host's goes to any shard. A route to a
 // shard is followed by one to any shard of the host unless the plan or
-// target is strict.
-func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, replica bool) (Route, bool) {
+// strict is set, as for a tablet leader.
+func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, replica, strict bool) (Route, bool) {
 	if p.InternalPenalty(t) != (p.latencyPass == 1) {
 		return Route{}, false
 	}
@@ -738,7 +738,7 @@ func (p *InternalLazyRoutingPlan) accept(t Target, i int, h *HostSnapshot, repli
 		return Route{}, false
 	}
 	p.emitted = append(p.emitted, r)
-	if r.shard != AnyShard && !p.strict && !t.StrictShard {
+	if r.shard != AnyShard && !p.strict && !strict {
 		p.fallback = Route{host: host, shard: AnyShard}
 	}
 	return r, true
@@ -775,7 +775,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 		if i, h := p.host(t); h != nil && h.Enabled {
 			p.latencyPass = 0
 			p.InternalSlow = nil // a pinned host is never skipped for latency
-			return p.accept(t, i, h, false)
+			return p.accept(t, i, h, false, false)
 		}
 		return Route{}, false
 	}
@@ -797,8 +797,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 			if p.leader.Set {
 				t := p.leader.Value
 				if i, h := p.host(t); h != nil && p.eligible(h) && h.Connected && h.Up && (!t.ShardID.Set || h.Shards > 0 && t.ShardID.Value < h.Shards) {
-					t.StrictShard = t.ShardID.Set
-					if r, ok := p.accept(t, i, h, true); ok {
+					if r, ok := p.accept(t, i, h, true, t.ShardID.Set); ok {
 						return r, true
 					}
 				}
@@ -841,7 +840,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 				if tier != p.stage {
 					continue
 				}
-				if r, ok := p.accept(t, i, h, true); ok {
+				if r, ok := p.accept(t, i, h, true, false); ok {
 					return r, true
 				}
 			}
@@ -872,7 +871,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 				if l := p.local(); group == 2 && l.dc != "" && h.Datacenter == l.dc {
 					continue
 				}
-				if r, ok := p.accept(Target{HostID: h.HostID}, ids[k], h, false); ok {
+				if r, ok := p.accept(Target{HostID: h.HostID}, ids[k], h, false, false); ok {
 					return r, true
 				}
 			}
@@ -967,14 +966,14 @@ func SingleTargetRouting(t Target) RoutingPolicy {
 	return &singleTargetRouting{target: t}
 }
 func (p *singleTargetRouting) Validate(m *MetadataSnapshot) error {
-	if p.target.StrictShard && !p.target.ShardID.Set {
-		return cqltype.TypeValidation("routing shard", "strict target requires a shard ID")
+	if p.target.AnyShardFallback && !p.target.ShardID.Set {
+		return cqltype.TypeValidation("routing shard", "AnyShardFallback requires a shard ID")
 	}
 	if m != nil {
 		if i, ok := m.routingIndex().host(p.target.HostID); ok {
 			h := SnapshotData(m).InternalHosts[i]
 			if h.Enabled {
-				if p.target.StrictShard && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
+				if !p.target.AnyShardFallback && p.target.ShardID.Set && (h.Shards == 0 || p.target.ShardID.Value >= h.Shards) {
 					return cqltype.TypeValidation("routing shard", "unavailable shard")
 				}
 				return nil
@@ -996,7 +995,7 @@ func (p *singleTargetRouting) Fallback(_ routing2.Info, m *MetadataSnapshot) Que
 			if h.Enabled {
 				t := p.target
 				if t.ShardID.Set && (h.Shards == 0 || t.ShardID.Value >= h.Shards) {
-					if t.StrictShard {
+					if !t.AnyShardFallback {
 						return &InternalTargetPlan{}
 					}
 					t.ShardID = cql.Option[uint32]{}

@@ -81,9 +81,12 @@ func NewPolicy(options Options) (*Builtin, error) {
 	return &Builtin{options: options}, nil
 }
 
-// SingleTarget routes every request to target. When target.StrictShard is
-// set, a request goes to target's shard only. Its Validate checks that target
-// is an eligible host.
+// SingleTarget routes every request to target: to target's shard only when
+// it names one, unless target.AnyShardFallback lets a request use another
+// shard of the host. Its Validate checks that target is an eligible host. A
+// request pinned with exec.Options.HostID goes to that host instead, without
+// consulting the policy, and with exec.Options.AnyShardFallback, not
+// target's, deciding whether it may leave its shard.
 func SingleTarget(target metadata.Target) *Builtin {
 	return &Builtin{single: true, target: target}
 }

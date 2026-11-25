@@ -779,6 +779,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	request.routing.Consistency = resolved.InternalProfile.Consistency
 	request.routing.HostID = values.HostID
 	request.routing.ShardID = values.ShardID
+	request.routing.AnyShardFallback = values.AnyShardFallback
 	// SERIAL/LOCAL_SERIAL main consistency is a Paxos read. It is routed and
 	// retried like a conditional statement (strict replica order, no
 	// speculation, no client timestamp), but its result is ordinary rows, so

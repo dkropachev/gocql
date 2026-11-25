@@ -21,17 +21,21 @@ type Info struct {
 	Keyspace, Table string
 	// Token is the token of the request's partition, when known.
 	Token cql.Option[int64]
+	// ShardID is the shard the request is pinned to, when set; it requires
+	// HostID.
+	ShardID cql.Option[uint32]
+	// Consistency is the request's consistency level.
+	Consistency cql.Consistency
 	// Kind classifies the statement, or a batch's statements together. Any
 	// Kind but OrdinaryStatement is routed as possibly conditional, and so is
 	// a request with SERIAL or LOCAL_SERIAL consistency.
 	Kind cql.StatementKind
-	// Consistency is the request's consistency level.
-	Consistency cql.Consistency
 	// HostID pins the request to a host, when set.
 	HostID cql.Option[cql.UUID]
-	// ShardID is the shard the request is pinned to, when set; it requires
-	// HostID.
-	ShardID cql.Option[uint32]
+	// AnyShardFallback lets a request pinned to ShardID use another shard of
+	// HostID when ShardID has no connection; without it the request stays on
+	// ShardID.
+	AnyShardFallback bool
 }
 
 // AttemptEvent describes how an attempt ended.

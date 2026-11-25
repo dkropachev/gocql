@@ -279,7 +279,7 @@ func TestSingleTarget(t *testing.T) {
 	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1), Kind: cql.OrdinaryStatement}
 	shard := func(id byte, shard uint32, strict bool) metadata.Target {
 		target := optionsTarget(id, shard)
-		target.StrictShard = strict
+		target.AnyShardFallback = !strict
 		return target
 	}
 	for _, test := range []struct {
@@ -294,7 +294,7 @@ func TestSingleTarget(t *testing.T) {
 		{"strict shard", shard(3, 1, true), nil, true, [][2]int{{3, 1}}},
 		{"shard out of range", shard(3, 9, false), nil, true, [][2]int{{3, -1}}},
 		{"strict shard out of range", shard(3, 9, true), nil, false, nil},
-		{"strict without shard", metadata.Target{HostID: cql.UUID{15: 3}, StrictShard: true}, nil, false, [][2]int{{3, -1}}},
+		{"fallback without shard", metadata.Target{HostID: cql.UUID{15: 3}, AnyShardFallback: true}, nil, false, [][2]int{{3, -1}}},
 		{"down host", shard(3, 1, true), func(h []metadata.HostSnapshot) { h[2].Up, h[2].Connected = false, false }, true, [][2]int{{3, 1}}},
 		{"filtered host", shard(3, 1, false), func(h []metadata.HostSnapshot) { h[2].Enabled = false }, false, nil},
 		{"unknown host", shard(9, 1, false), nil, false, nil},
