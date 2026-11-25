@@ -373,16 +373,14 @@ var TimeCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
 var TimestampTimeCodec Codec[time.Time] // UTC on decode; millisecond instant on encode
 var DurationCodec Codec[Duration]
-var UUIDCodec Codec[UUID]
+var UUIDCodec Codec[UUID]                     // uuid and timeuuid; version 1 checked into timeuuid
 var TimeUUIDCodec Codec[TimeUUID]
 var InetCodec Codec[netip.Addr]
 var VarintCodec Codec[Varint]
 var DecimalCodec Codec[Decimal]
-var StringCodec Codec[string]                 // text/varchar; decodes an owned copy
-var ASCIIStringCodec Codec[string]
+var StringCodec Codec[string]                 // text and ascii; decodes an owned copy
 var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
-var TextCodec Codec[Text]                     // text/varchar borrowed view
-var ASCIICodec Codec[Text]
+var TextCodec Codec[Text]                     // text and ascii; borrowed view
 var BlobCodec Codec[Bytes]
 func NamedScalar[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
 func VarintFromBigInt(*big.Int) Varint
@@ -514,7 +512,8 @@ whose key and value types have owning built-in codecs; MapCodec keeps
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
 dynamic.Text likewise returns an error for invalid UTF-8. StringCodec and
-ASCIIStringCodec return ordinary codec errors for invalid encoded input. Malformed
+TextCodec return ordinary codec errors for invalid encoded input: UTF-8 for
+text, ASCII for ascii. Malformed
 input is never a reason for a constructor panic.
 
 Buffered Bytes and Text retain fragments; a cell is not flattened when it
@@ -1160,11 +1159,10 @@ var Date Decoder[Date]
 var Time Decoder[TimeOfDay]
 var Timestamp Decoder[Timestamp]
 var Duration Decoder[Duration]
-var UUID Decoder[UUID]
+var UUID Decoder[UUID] // uuid and timeuuid
 var TimeUUID Decoder[TimeUUID]
 var Inet Decoder[netip.Addr]
-var Text Decoder[[]byte] // text/varchar; incremental UTF-8 check
-var ASCII Decoder[[]byte]
+var Text Decoder[[]byte] // text and ascii; incremental UTF-8 or ASCII check
 var Blob Decoder[[]byte]
 var Varint Decoder[[]byte] // exact signed two's-complement bytes
 // Decimal's unscaled bytes have the same caller-capacity rule.

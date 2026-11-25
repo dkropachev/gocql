@@ -40,8 +40,8 @@ func builtinFields[P any]() []builtinField[P] {
 	add(builtin[P](Int64Codec, "int64", "Int64Codec", true)...)
 	add(builtin[P](Float32Codec, "float32", "Float32Codec", true)...)
 	add(builtin[P](Float64Codec, "float64", "Float64Codec", true)...)
-	add(builtin[P](StringCodec, "string", "StringCodec", true)...)
-	add(builtin[P](ASCIIStringCodec, "string", "ASCIIStringCodec", false)...)
+	// ASCIIStringCodec names StringCodec, which maps ascii too, in a tag.
+	add(builtin[P](StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
 	add(builtin[P](ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
 	add(builtin[P](BlobCodec, "cql.Bytes", "BlobCodec", true)...)
 	add(builtin[P](UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
@@ -61,9 +61,9 @@ func builtinFields[P any]() []builtinField[P] {
 // builtin returns the entries for V, Nullable[V], BindValue[V] (parameters
 // only), and []V as a list (the default), a set (`codec=SetCodec`) or a
 // vector (`codec=VectorCodec`) of c. name is c's exported name, which a
-// `codec=` tag selects it by.
-func builtin[P, V any](c Codec[V], typeSrc, name string, def bool) []builtinField[P] {
-	names := []string{name}
+// `codec=` tag selects it by, as it does each of aliases.
+func builtin[P, V any](c Codec[V], typeSrc, name string, def bool, aliases ...string) []builtinField[P] {
+	names := append([]string{name}, aliases...)
 	plain := builtinField[P]{
 		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[V](), TypeSrc: typeSrc,
@@ -739,8 +739,8 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	add(streamBuiltin[P](StreamFloat32, "float32", "Float32", true)...)
 	add(streamBuiltin[P](StreamFloat64, "float64", "Float64", true)...)
 	add(streamBuiltin[P](StreamBlob, "[]byte", "Blob", true)...)
-	add(streamBuiltin[P](StreamText, "[]byte", "Text", false)...)
-	add(streamBuiltin[P](StreamASCII, "[]byte", "ASCII", false)...)
+	// ASCII names StreamText, which decodes ascii too, in a tag.
+	add(streamBuiltin[P](StreamText, "[]byte", "Text", false, "ASCII")...)
 	add(streamBuiltin[P](StreamVarint, "[]byte", "Varint", false)...)
 	add(streamBuiltin[P](StreamUUID, "cql.UUID", "UUID", true)...)
 	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
@@ -756,9 +756,10 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 // streamBuiltin returns the entries for V, Nullable[V], and []V as a list
 // (the default), a set (`stream=Set`), or a vector (`stream=Vector`). For a
 // decoder that is not its type's default, as Text is not for []byte, the tag
-// that names it also selects the list of it, and there is no set or vector
-// entry: "Set" and "Vector" already select those of the default decoder.
-func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool) []streamBuiltinField[P] {
+// that names it, or one of aliases, also selects the list of it, and there is
+// no set or vector entry: "Set" and "Vector" already select those of the default decoder.
+func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool, aliases ...string) []streamBuiltinField[P] {
+	names := append([]string{name}, aliases...)
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
 		return streamBuiltinField[P]{column: column, BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
@@ -766,13 +767,13 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 	}
 	src := "cql.Stream" + name
 	plain := []streamBuiltinField[P]{
-		entry(reflect.TypeFor[V](), typeSrc, src, []string{name}, def, fieldStreamColumn[P](dec)),
+		entry(reflect.TypeFor[V](), typeSrc, src, names, def, fieldStreamColumn[P](dec)),
 		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",
-			[]string{name}, def, fieldStreamColumn[P](StreamNullable(dec))),
+			names, def, fieldStreamColumn[P](StreamNullable(dec))),
 	}
 	if !def {
 		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
-			[]string{name}, false, fieldStreamColumn[P](StreamList(dec))))
+			names, false, fieldStreamColumn[P](StreamList(dec))))
 	}
 	return append(plain, []streamBuiltinField[P]{
 		// A list or set takes its element's default decoder.

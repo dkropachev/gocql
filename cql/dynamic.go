@@ -756,11 +756,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	case TypeDouble:
 		return decodeDynamicScalar(r, Float64Codec, DoubleValue)
 	case TypeText, TypeASCII:
-		codec := TextCodec
-		if r.Type().Kind() == TypeASCII {
-			codec = ASCIICodec
-		}
-		return decodeDynamicScalar(r, codec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
+		return decodeDynamicScalar(r, TextCodec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
 	case TypeBlob:
 		return decodeDynamicScalar(r, BlobCodec, func(b Bytes) Value { return Value{bytes: b} })
 	case TypeUUID:

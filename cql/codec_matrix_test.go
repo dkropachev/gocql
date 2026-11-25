@@ -278,14 +278,14 @@ func TestCodecMatrix(t *testing.T) {
 	}
 	text := withEq(matrixOf("text/Text", cql.TypeText, cql.TextCodec, cql.TypeInt, cql.Text{}, mustText("héllo")), textEq)
 	text.emptyDecodes, text.noEmptyCodec = true, true
-	ascii := withEq(matrixOf("ascii/Text", cql.TypeASCII, cql.ASCIICodec, cql.TypeInt, mustText("plain")), textEq)
+	ascii := withEq(matrixOf("ascii/Text", cql.TypeASCII, cql.TextCodec, cql.TypeInt, mustText("plain")), textEq)
 	ascii.emptyDecodes, ascii.noEmptyCodec = true, true
 	str := matrixOf("text/string", cql.TypeText, cql.StringCodec, cql.TypeBlob, "", "héllo")
 	str.emptyDecodes, str.noEmptyCodec, str.badValues = true, true, []string{"\xff"}
 	str.paths = matrixDecoders[string]
-	asciiStr := matrixOf("ascii/string", cql.TypeASCII, cql.ASCIIStringCodec, cql.TypeText, "plain")
+	asciiStr := matrixOf("ascii/string", cql.TypeASCII, cql.StringCodec, cql.TypeBlob, "plain")
 	asciiStr.emptyDecodes, asciiStr.noEmptyCodec, asciiStr.badValues = true, true, []string{"é"}
-	varcharStr := matrixOf("legacy-text/string", cql.Type(0x000A), cql.StringCodec, cql.TypeASCII, "v")
+	varcharStr := matrixOf("legacy-text/string", cql.Type(0x000A), cql.StringCodec, cql.TypeBlob, "v")
 	varcharStr.emptyDecodes, varcharStr.noEmptyCodec = true, true
 	blob := matrixOf("blob/Bytes", cql.TypeBlob, cql.BlobCodec, cql.TypeText, cql.BorrowBytes([]byte{1, 2, 3}))
 	blob.emptyDecodes, blob.noEmptyCodec, blob.equal = true, true, bytesEq

@@ -96,7 +96,7 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 	type source struct{ Names, Codes []string }
 	params := Params(
 		Param("names", ListEncoder(StringCodec), func(v source) []string { return v.Names }),
-		Param("codes", ListEncoder(ASCIIStringCodec), func(v source) []string { return v.Codes }),
+		Param("codes", ListEncoder(StringCodec), func(v source) []string { return v.Codes }),
 		Param("counts", ListEncoder(VarintCodec), func(source) []Varint {
 			return []Varint{CodecTestMust(VarintFromBytes([]byte{1})), CodecTestMust(VarintFromBytes([]byte{0xff}))}
 		}),

@@ -605,9 +605,8 @@ func TestScalar(t *testing.T) {
 			if err := StringCodec.CheckType(blob); err == nil {
 				t.Fatal("StringCodec accepted blob")
 			}
-			text := TextType
-			if err := ASCIIStringCodec.CheckType(text); err == nil {
-				t.Fatal("ASCIIStringCodec accepted text")
+			if err := StringCodec.CheckType(UUIDType); err == nil {
+				t.Fatal("StringCodec accepted uuid")
 			}
 		})
 	})
@@ -634,17 +633,27 @@ func TestScalar(t *testing.T) {
 				t.Fatal("encoded invalid UTF-8")
 			}
 		}
-		if _, err := scalarEncode(t, ASCIIStringCodec, TypeASCII, "café"); err == nil {
+		if _, err := scalarEncode(t, StringCodec, TypeASCII, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
-		if _, err := ASCIICodec.Decode(ScalarReader(t, TypeASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
+		if _, err := TextCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
 			t.Fatal("decoded non-ASCII")
 		}
-		if _, err := scalarEncode(t, ASCIICodec, TypeASCII, CodecTestMust(BorrowText("é"))); err == nil {
+		if _, err := scalarEncode(t, TextCodec, TypeASCII, CodecTestMust(BorrowText("é"))); err == nil {
 			t.Fatal("borrowed Text bypassed ASCII validation")
 		}
-		if err := StringCodec.CheckType(scalarType(t, TypeASCII)); err == nil {
-			t.Fatal("StringCodec accepted ASCII metadata")
+		// The text codecs take ascii too, validating ASCII both ways.
+		if err := StringCodec.CheckType(scalarType(t, TypeASCII)); err != nil {
+			t.Fatal("StringCodec rejected ASCII metadata:", err)
+		}
+		if got, err := StringCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte("pl"), []byte("ain"))); err != nil || got != "plain" {
+			t.Fatalf("ascii decode = %q, %v", got, err)
+		}
+		if _, err := StringCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte("caf\xc3\xa9"))); err == nil {
+			t.Fatal("StringCodec decoded non-ASCII from ascii")
+		}
+		if _, err := scalarEncode(t, StringCodec, TypeText, "café"); err != nil {
+			t.Fatal("StringCodec rejected UTF-8 for text:", err)
 		}
 		source := []byte("hello")
 		value, err := TextCodec.Decode(ScalarReader(t, TypeText, Present, source[:2], source[2:]))
@@ -716,4 +725,32 @@ func TestScalar(t *testing.T) {
 			t.Fatal("large varint lost precision")
 		}
 	})
+}
+
+// UUIDCodec and StreamUUID read a timeuuid as a UUID; encoding into a
+// timeuuid still requires version 1.
+func TestUUIDCodecTimeUUID(t *testing.T) {
+	v1 := UUID(NewTimeUUID())
+	v4 := RandomUUID()
+	frame, err := scalarEncode(t, UUIDCodec, TypeTimeUUID, v1)
+	if err != nil {
+		t.Fatal("encode version 1 into timeuuid:", err)
+	}
+	if _, err := scalarEncode(t, UUIDCodec, TypeTimeUUID, v4); err == nil {
+		t.Fatal("encoded a version 4 UUID into timeuuid")
+	}
+	if _, err := scalarEncode(t, UUIDCodec, TypeUUID, v4); err != nil {
+		t.Fatal("encode version 4 into uuid:", err)
+	}
+	got, err := UUIDCodec.Decode(ScalarReader(t, TypeTimeUUID, Present, frame[4:]))
+	if err != nil || got != v1 {
+		t.Fatalf("decode timeuuid = %v, %v; want %v", got, err, v1)
+	}
+	var dst UUID
+	if err := StreamDecodeFixture(t, TimeUUIDType, StreamUUID, streamCellBytes(v1[:]), &dst, 3); err != nil || dst != v1 {
+		t.Fatalf("stream timeuuid = %v, %v", dst, err)
+	}
+	if err := UUIDCodec.CheckType(TextType); err == nil {
+		t.Fatal("UUIDCodec accepted text")
+	}
 }

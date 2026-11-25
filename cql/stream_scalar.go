@@ -86,6 +86,13 @@ func streamFixed[T any](kind Type, size int64, convert func([]byte) (T, error)) 
 	}}
 }
 
+// streamAnyUUID is StreamUUID, which also accepts timeuuid.
+func streamAnyUUID() StreamDecoder[UUID] {
+	c := streamFixed(TypeUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil }).(streamScalarCodec[UUID])
+	c.alternative = TypeTimeUUID
+	return c
+}
+
 // streamCounter is StreamInt64, which also accepts counter.
 func streamCounter() StreamDecoder[int64] {
 	c := streamInteger[int64](TypeBigInt, 8).(streamScalarCodec[int64])
@@ -185,8 +192,8 @@ var (
 	// StreamDuration decodes duration into Duration.
 	StreamDuration StreamDecoder[Duration] = streamScalarCodec[Duration]{kind: TypeDuration, minimum: 3, maximum: 27, decode: streamReadDuration}
 
-	// StreamUUID decodes uuid into UUID.
-	StreamUUID = streamFixed(TypeUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil })
+	// StreamUUID decodes uuid and timeuuid into UUID, as UUIDCodec does.
+	StreamUUID = streamAnyUUID()
 
 	// StreamTimeUUID decodes timeuuid into TimeUUID, rejecting a UUID that is not
 	// version 1.
@@ -213,13 +220,11 @@ var (
 		return v, nil
 	}}
 
-	// StreamText decodes text and varchar into a []byte, validating UTF-8. The
-	// value is written into the destination's existing capacity; a value that
-	// does not fit fails with a StreamCapacityError.
+	// StreamText decodes text and ascii into a []byte, validating UTF-8 for
+	// text and ASCII for ascii. The value is written into the destination's
+	// existing capacity; a value that does not fit fails with a
+	// StreamCapacityError.
 	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: TypeText}
-
-	// StreamASCII is StreamText for the ascii type.
-	StreamASCII StreamDecoder[[]byte] = streamBytesCodec{kind: TypeASCII}
 
 	// StreamBlob decodes blob into a []byte, within the destination's capacity
 	// as for StreamText.
@@ -239,7 +244,7 @@ func (c streamBytesCodec) Compile(t DataType) (CompiledStreamValue[[]byte], erro
 		return nil, err
 	}
 	if c.kind == TypeText {
-		if err := checkTextType(t, false); err != nil {
+		if err := checkTextType(t); err != nil {
 			return nil, err
 		}
 	} else if t.Kind() != c.kind {

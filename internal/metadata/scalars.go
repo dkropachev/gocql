@@ -13,19 +13,10 @@ import (
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeASCII {
-		return cql.ASCIICodec.CheckType(t)
-	}
 	return cql.TextCodec.CheckType(t)
 }
 func (InternalV2MetadataText) Decode(r cql.ValueReader) (string, error) {
-	var text cql.Text
-	var err error
-	if r.Type().Kind() == cql.TypeASCII {
-		text, err = cql.ASCIICodec.Decode(r)
-	} else {
-		text, err = cql.TextCodec.Decode(r)
-	}
+	text, err := cql.TextCodec.Decode(r)
 	if err != nil {
 		return "", err
 	}

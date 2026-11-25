@@ -25,7 +25,7 @@ type StructFields[P any] struct {
 // ParamsOf binds a statement's parameters from the exported fields of struct
 // P by column name. A field's column is its `cql:"name"` tag, or its name in
 // snake_case, as gocqlx maps it (CreatedAt is created_at, UserID user_id);
-// `cql:"-"` skips it and `cql:"name,codec=ASCIIStringCodec"` picks a
+// `cql:"-"` skips it and `cql:"name,codec=SetCodec"` picks a
 // built-in codec other than the type's default (`cql:",codec=..."` keeps the
 // snake_case name). Names match the column exactly, so a quoted mixed-case
 // column, or a name snake_case splits otherwise (UserIDs is user_i_ds),

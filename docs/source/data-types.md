@@ -17,7 +17,10 @@ column, so an `int64` field maps one. A non-nullable destination, such as an
 `Nullable[T]` (or `cql.NonNull(v)` to build a present one) for a column that
 may be NULL. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
 an owned copy; TextCodec and BlobCodec decode a borrowed Text and Bytes
-without copying. Collection decoders eagerly produce slices whose payload elements may borrow pages;
+without copying. The text codecs, `StreamText` included, map both text and
+ascii, and check a value is valid UTF-8 for text and ASCII for ascii.
+`UUIDCodec` maps uuid and timeuuid; it rejects encoding a UUID that is not
+version 1 into a timeuuid. Collection decoders eagerly produce slices whose payload elements may borrow pages;
 nullable/empty wrappers distinguish null, empty and present values. Unset is
 an explicit binding state and is invalid in results.
 

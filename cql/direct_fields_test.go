@@ -51,7 +51,7 @@ var directParams = Params(
 	Param("view", BlobCodec, func(r directRow) Bytes { return r.View }),
 	Param("owned", ByteSliceCodec, func(r directRow) []byte { return r.Owned }),
 	Param("text", StringCodec, func(r directRow) string { return r.Text }),
-	Param("ascii", ASCIIStringCodec, func(r directRow) string { return r.ASCII }),
+	Param("ascii", StringCodec, func(r directRow) string { return r.ASCII }),
 	Param("blob", ByteSliceCodec, func(r directRow) []byte { return r.Blob }),
 	Param("skipped", NullableCodec(Int32Codec), func(r directRow) Nullable[int32] {
 		return Nullable[int32]{Value: r.Skipped, Valid: true}

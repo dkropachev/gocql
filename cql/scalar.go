@@ -174,13 +174,19 @@ func blobColumn(r *RowReader, kind, alternative Type, compiled bool) (Bytes, err
 }
 
 // textColumn decodes a text or ascii cell like textCodec.Decode, validating
-// the view it borrows from the response.
-func textColumn(r *RowReader, kind, alternative Type, compiled bool) (Text, error) {
-	v, err := blobColumn(r, kind, alternative, compiled)
+// the view it borrows from the response for the column's kind.
+func textColumn(r *RowReader, compiled bool) (Text, error) {
+	ascii := false
+	if r != nil {
+		if column, ok := r.columns.At(r.index); ok {
+			ascii = column.Type.Kind() == TypeASCII
+		}
+	}
+	v, err := blobColumn(r, TypeText, TypeASCII, compiled)
 	if err != nil {
 		return Text{}, err
 	}
-	if err := validateText(v, kind == TypeASCII); err != nil {
+	if err := validateText(v, ascii); err != nil {
 		return Text{}, err
 	}
 	return textView(v), nil
@@ -298,8 +304,10 @@ var (
 		},
 	}
 
-	// UUIDCodec maps uuid to UUID.
-	UUIDCodec Codec[UUID] = scalarCodec[UUID]{kind: TypeUUID, encode: encodeUUID, decode: decodeUUID}
+	// UUIDCodec maps uuid and timeuuid to UUID. It rejects encoding a UUID
+	// that is not version 1 into a timeuuid; decoding a timeuuid returns its
+	// UUID as is.
+	UUIDCodec Codec[UUID] = scalarCodec[UUID]{kind: TypeUUID, alternative: TypeTimeUUID, encode: encodeAnyUUID, decode: decodeUUID}
 
 	// TimeUUIDCodec maps timeuuid to TimeUUID, rejecting a UUID that is not
 	// version 1.
@@ -308,20 +316,16 @@ var (
 	// InetCodec maps inet to netip.Addr, as a 4- or 16-byte address.
 	InetCodec Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: TypeInet, encode: encodeInet, decode: decodeInet}
 
-	// StringCodec encodes a string and decodes text into a newly allocated
-	// string that stays valid after the row is released. Use TextCodec to decode
-	// without copying.
+	// StringCodec maps text and ascii to string. It decodes into a newly
+	// allocated string that stays valid after the row is released; use
+	// TextCodec to decode without copying. A value must be valid UTF-8 for
+	// text and ASCII for ascii, both when it is encoded and decoded.
 	StringCodec Codec[string] = stringCodec{}
 
-	// ASCIIStringCodec is StringCodec for the ascii type.
-	ASCIIStringCodec Codec[string] = stringCodec{ascii: true}
-
-	// TextCodec maps text and varchar to Text, validating UTF-8. A decoded Text
-	// borrows the response; Clone or StringCodec detach it.
+	// TextCodec maps text and ascii to Text, validating UTF-8 for text and
+	// ASCII for ascii. A decoded Text borrows the response; Clone or
+	// StringCodec detach it.
 	TextCodec Codec[Text] = textCodec{}
-
-	// ASCIICodec is TextCodec for the ascii type.
-	ASCIICodec Codec[Text] = textCodec{ascii: true}
 
 	// BlobCodec maps blob to Bytes. A decoded Bytes borrows the response, and
 	// encoding borrows the Bytes as ValueWriter.BorrowBytes does; Clone
@@ -388,6 +392,14 @@ func decodeUUID(r ValueReader) (UUID, error) {
 	binary.BigEndian.PutUint64(v[8:], lo)
 	return v, nil
 }
+// encodeAnyUUID writes a UUID into a uuid or a timeuuid, which must hold a
+// version 1 UUID.
+func encodeAnyUUID(w *ValueWriter, v UUID) error {
+	if w.Type().Kind() == TypeTimeUUID && v.Version() != 1 {
+		return errors.New("gocql: timeuuid must have version 1")
+	}
+	return encodeUUID(w, v)
+}
 func encodeTimeUUID(w *ValueWriter, v TimeUUID) error {
 	if UUID(v).Version() != 1 {
 		return errors.New("gocql: timeuuid must have version 1")
@@ -449,27 +461,23 @@ func decodeInet(r ValueReader) (netip.Addr, error) {
 	}
 }
 
-type stringCodec struct{ ascii, compiled bool }
+type stringCodec struct{ compiled bool }
 
-func checkTextType(t DataType, ascii bool) error {
-	if ascii {
-		if t.Kind() == TypeASCII {
-			return nil
-		}
-	} else if t.Kind() == TypeText {
+func checkTextType(t DataType) error {
+	if k := t.Kind(); k == TypeText || k == TypeASCII {
 		return nil
 	}
 	return fmt.Errorf("gocql: incompatible text type %s", t.Kind())
 }
 func (c stringCodec) CheckType(t DataType) error {
 	perfCheckType()
-	return checkTextType(t, c.ascii)
+	return checkTextType(t)
 }
 func (c stringCodec) Encode(w *ValueWriter, v string) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
-	if c.ascii {
+	if w.Type().Kind() == TypeASCII {
 		for i := 0; i < len(v); i++ {
 			if v[i] >= utf8.RuneSelf {
 				return errors.New("gocql: invalid ASCII")
@@ -498,17 +506,17 @@ func (c stringCodec) compileValueDecoder(t DataType) (Decoder[string], error) {
 	return c, nil
 }
 
-type textCodec struct{ ascii, compiled bool }
+type textCodec struct{ compiled bool }
 
 func (c textCodec) CheckType(t DataType) error {
 	perfCheckType()
-	return checkTextType(t, c.ascii)
+	return checkTextType(t)
 }
 func (c textCodec) Encode(w *ValueWriter, v Text) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
-	if e := validateText(v.Bytes(), c.ascii); e != nil {
+	if e := validateText(v.Bytes(), w.Type().Kind() == TypeASCII); e != nil {
 		return e
 	}
 	return w.borrowView(v.Bytes())
@@ -520,7 +528,7 @@ func (c textCodec) Decode(r ValueReader) (Text, error) {
 	if e := requirePresent(r); e != nil {
 		return Text{}, e
 	}
-	if e := validateText(r.Bytes(), c.ascii); e != nil {
+	if e := validateText(r.Bytes(), r.Type().Kind() == TypeASCII); e != nil {
 		return Text{}, e
 	}
 	return textView(r.Bytes()), nil
@@ -1027,7 +1035,7 @@ func (c scalarCodec[T]) compileValueEncoder(t DataType) (Encoder[T], error) {
 }
 func (c textCodec) typeGuard(t DataType) error {
 	if c.compiled {
-		return checkTextType(t, c.ascii)
+		return checkTextType(t)
 	}
 	return c.CheckType(t)
 }
@@ -1047,7 +1055,7 @@ func (c textCodec) compileValueEncoder(t DataType) (Encoder[Text], error) {
 }
 func (c stringCodec) typeGuard(t DataType) error {
 	if c.compiled {
-		return checkTextType(t, c.ascii)
+		return checkTextType(t)
 	}
 	return c.CheckType(t)
 }

@@ -23,10 +23,10 @@ const (
 	directNone      directKind = iota
 	directInt                  // a built-in signed integer codec of width bytes
 	directBlob                 // BlobCodec: a view borrowing the response
-	directText                 // TextCodec or ASCIICodec: a validated view borrowing the response
+	directText                 // TextCodec: a validated view borrowing the response
 	directOwnedBlob            // ByteSliceCodec: a copy into the field's capacity
 	directBytes                // ByteSliceCodec
-	directString               // StringCodec or ASCIIStringCodec
+	directString               // StringCodec
 )
 
 // funcPointer returns a func value's pointer. A func value is one pointer
@@ -141,10 +141,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		// The field stays for columns of another kind, whose type error the
 		// codec reports in its own words.
 		op.kind, op.field, op.compiled = directText, f, c.compiled
-		op.columnKind, op.alt = TypeText, 0
-		if c.ascii {
-			op.columnKind, op.alt = TypeASCII, 0
-		}
+		op.columnKind, op.alt = TypeText, TypeASCII
 	default:
 		return rowOp[R]{}, false
 	}
@@ -197,7 +194,7 @@ func (op *rowOp[R]) decodeText(reader *RowReader, dst *R, ptr unsafe.Pointer) er
 	if column, ok := reader.columns.At(reader.index); ok && column.Type.Kind() != op.columnKind && column.Type.Kind() != op.alt {
 		return op.field.decode(reader, dst)
 	}
-	v, err := textColumn(reader, op.columnKind, op.alt, op.compiled)
+	v, err := textColumn(reader, op.compiled)
 	if err == nil {
 		*(*Text)(ptr) = v
 	}
@@ -211,7 +208,6 @@ type paramOp[P any] struct {
 	width           int64
 	columnKind, alt Type // directInt: the codec's types
 	kind            directKind
-	ascii           bool
 }
 
 // directParamOp compiles f, already compiled for its column, into a direct op
@@ -234,7 +230,7 @@ func (f inputField[P, V]) directParamOp() (paramOp[P], bool) {
 		if !c.compiled {
 			return paramOp[P]{}, false
 		}
-		op.kind, op.ascii = directString, c.ascii
+		op.kind = directString
 	default:
 		return paramOp[P]{}, false
 	}
@@ -285,11 +281,11 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 			return err
 		}
 	default: // directString
-		if checkTextType(column.Type, op.ascii) != nil {
+		if checkTextType(column.Type) != nil {
 			return op.field.encode(w, value)
 		}
 		s := (*(*func(P) string)(unsafe.Pointer(&get)))(value)
-		if op.ascii {
+		if column.Type.Kind() == TypeASCII {
 			for i := 0; i < len(s); i++ {
 				if s[i] >= utf8.RuneSelf {
 					return columnError(CodecStageEncode, w.index, column.Name, errors.New("gocql: invalid ASCII"))

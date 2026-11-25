@@ -227,8 +227,6 @@ package config
 		config.TLSFiles field Interval time.Duration
 
 package cql
-	var cql.ASCIICodec cql.Codec[cql.Text]
-	var cql.ASCIIStringCodec cql.Codec[string]
 	var cql.ASCIIType cql.DataType
 	func cql.ASCIIValue(s string) cql.Value
 	const cql.All cql.Consistency = 5
@@ -543,7 +541,6 @@ package cql
 		cql.Statement field Idempotent bool
 	type cql.StatementKind uint8
 		cql.StatementKind method (T) String() string
-	var cql.StreamASCII cql.StreamDecoder[[]byte]
 	var cql.StreamBlob cql.StreamDecoder[[]byte]
 	var cql.StreamBool cql.StreamDecoder[bool]
 	type cql.StreamCapabilityError struct

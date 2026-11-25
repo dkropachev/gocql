@@ -609,7 +609,7 @@ func TestStream(t *testing.T) {
 					t.Fatalf("invalid text %x", bad)
 				}
 			}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeASCII), StreamASCII, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeASCII), StreamText, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
 				t.Fatal("invalid ASCII accepted")
 			}
 			backing := make([]byte, 12)

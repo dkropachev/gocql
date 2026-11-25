@@ -279,7 +279,7 @@ func TestVector(t *testing.T) {
 			times := []time.Time{parse("15:04:05", "01:00:00"), parse("15:04:05", "15:23:59"), parse("15:04:05.000", "10:31:45.987")}
 			// The historical time subcase stores timestamp values anchored at year zero.
 			// Preserve that wire coverage alongside the scalar time fixtures above.
-			ascii := cql.NamedScalar(cql.ASCIICodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
+			ascii := cql.NamedScalar(cql.TextCodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
 			uintVarint := cql.NamedScalar(cql.VarintCodec, func(n uint64) cql.Varint { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n cql.Varint) uint64 { return n.BigInt().Uint64() })
 			type triple struct {
 				Text  string
