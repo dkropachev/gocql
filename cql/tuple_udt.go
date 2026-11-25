@@ -11,12 +11,12 @@ import (
 // UDTOptions names the UDT a UDTEncoder, UDTDecoder or UDTCodecOf expects and
 // explicitly relaxes field matching. AllowMissingFields concerns fields
 // absent from metadata, not null or absent serialized field values. The zero
-// UDTOptions names no UDT, which those codecs reject with a ValidationError.
+// UDTOptions matches any UDT whose fields match exactly.
 type UDTOptions struct {
 	// Keyspace is the UDT's keyspace, or empty to match the UDT in any
 	// keyspace.
 	Keyspace string
-	// Name is the UDT's name. It is required.
+	// Name is the UDT's name, or empty to match a UDT of any name.
 	Name string
 	// AllowExtraDatabaseFields accepts UDT fields that no application field
 	// maps.
@@ -460,11 +460,14 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (Compi
 
 func checkUDTIdentity(typ DataType, options UDTOptions) error {
 	ks, name, ok := typ.UDTName()
-	if !ok || options.Name == "" {
-		return typeValidation("UDT identity", "expected name is required")
+	if !ok {
+		return typeValidation("UDT identity", "expected a UDT, got %s", typ)
 	}
-	if name != options.Name || options.Keyspace != "" && ks != options.Keyspace {
+	if options.Name != "" && name != options.Name || options.Keyspace != "" && ks != options.Keyspace {
 		want := options.Name
+		if want == "" {
+			want = "*"
+		}
 		if options.Keyspace != "" {
 			want = options.Keyspace + "." + want
 		}
@@ -487,6 +490,67 @@ func TupleCodec[T any](enc ParamEncoder[T], dec RowDecoder[T]) Codec[T] {
 		recordEncoder: recordEncoder[T]{kind: TypeTuple, codec: enc},
 		recordDecoder: recordDecoder[T]{kind: TypeTuple, codec: dec},
 	}
+}
+
+// TupleCodecOf maps a tuple's members to the exported fields of struct T by
+// position: the first mapped field is the first member, and so on, in
+// declaration order with the fields of a struct embedded by value in its
+// place. Field names and column tags do not matter, but a field's
+// `codec=` tag and `cql:"-"` apply as in RowOf. Every member needs a field
+// and every field a member. TupleCodecOf applies WithCodec, for T's own
+// fields, and rejects other options.
+func TupleCodecOf[T any](opts ...StructOption) (Codec[T], error) {
+	fields := generatedFields[T]()
+	params, err := generatedParams(fields, targetTuple, opts...)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := generatedRow(fields, targetTuple, opts...)
+	if err != nil {
+		return nil, err
+	}
+	p, r := params.(paramsCodec[T]), rows.(rowCodec[T])
+	positionalParams := make([]InputField[T], len(p.fields))
+	for i, f := range p.fields {
+		positionalParams[i] = positionalInput[T]{InputField: f, index: i}
+	}
+	positionalRows := make([]OutputField[T], len(r.fields))
+	for i, f := range r.fields {
+		positionalRows[i] = positionalOutput[T]{OutputField: f, index: i}
+	}
+	return TupleCodec[T](paramsCodec[T]{fields: positionalParams}, rowCodec[T]{fields: positionalRows, reset: r.reset}), nil
+}
+
+// MustTupleCodecOf is TupleCodecOf that panics on error, for package-level
+// variables.
+func MustTupleCodecOf[T any](opts ...StructOption) Codec[T] {
+	return must(TupleCodecOf[T](opts...))
+}
+
+// positionalInput and positionalOutput place a struct field at a tuple
+// member's index; compiling them yields the field's own compiled form.
+type positionalInput[P any] struct {
+	InputField[P]
+	index int
+}
+
+func (f positionalInput[P]) location() fieldLocation {
+	return fieldLocation{index: f.index, positional: true}
+}
+
+type positionalOutput[R any] struct {
+	OutputField[R]
+	index int
+}
+
+func (f positionalOutput[R]) location() fieldLocation {
+	return fieldLocation{index: f.index, positional: true}
+}
+
+// PairCodec maps a tuple of two members to a Pair: a maps the first and b
+// the second.
+func PairCodec[A, B any](a Codec[A], b Codec[B]) Codec[Pair[A, B]] {
+	return TupleCodec(PairParams(OneParam[A](a), OneParam[B](b)), PairRows(OneColumn[A](a), OneColumn[B](b)))
 }
 
 func (c recordCodec[T]) CheckType(typ DataType) error {

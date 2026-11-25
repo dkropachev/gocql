@@ -508,8 +508,8 @@ func TestStream(t *testing.T) {
 			if err := StreamDecodeFixture(t, udt, decoder, data, &out, 1); err != nil || out.ID != 7 {
 				t.Fatal("UDT", err)
 			}
-			if _, err := StreamUDT(named, UDTOptions{}).Compile(udt); err == nil {
-				t.Fatal("missing identity accepted")
+			if _, err := StreamUDT(named, UDTOptions{}).Compile(udt); err != nil {
+				t.Fatal("zero options rejected a UDT:", err)
 			}
 			if _, err := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "wrong"}).Compile(udt); err == nil {
 				t.Fatal("wrong identity accepted")

@@ -217,7 +217,8 @@ column named in one word (`createdat`).
 | a named type, such as `type Status string` | the same: it maps like its underlying type |
 | an `int` field | the same; it maps a bigint (`cql.IntCodec`) |
 | a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
-| a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))` |
+| a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))`, which maps `[]Address`, `*Address` and map values too; `UDTOptions.Name` may be left empty |
+| a tuple scanned into a struct | `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, by field position |
 | `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraColumns())`; without it every result column needs a field |
 
 `cql.Params(cql.Param(...))` and `cql.Row(cql.Column(...))` map fields

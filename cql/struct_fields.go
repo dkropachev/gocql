@@ -156,14 +156,14 @@ func fieldColumn[R, V any](dec Decoder[V]) func(string, uintptr) OutputField[R] 
 	}
 }
 
-// StructOption configures a struct mapping: ParamsOf, RowOf, StreamRowOf or
-// UDTCodecOf. Each option applies to some of them, and the others reject it
+// StructOption configures a struct mapping: ParamsOf, RowOf, StreamRowOf,
+// UDTCodecOf or TupleCodecOf. Each option applies to some of them, and the others reject it
 // with a ValidationError rather than ignore it:
 //
-//   - WithCodec: ParamsOf, RowOf and UDTCodecOf.
+//   - WithCodec: ParamsOf, RowOf, UDTCodecOf and TupleCodecOf.
 //   - WithEncoder: ParamsOf.
 //   - ReuseBuffers: RowOf.
-//   - IgnoreExtraColumns: RowOf and StreamRowOf.
+//   - IgnoreExtraColumns: RowOf, StreamRowOf and UDTCodecOf.
 //   - WithStreamCodec: StreamRowOf.
 //
 // Each call builds an independent mapping; options never change a generated
@@ -182,6 +182,7 @@ const (
 	targetRows
 	targetStream
 	targetUDT
+	targetTuple
 )
 
 func (t structTarget) String() string {
@@ -192,6 +193,8 @@ func (t structTarget) String() string {
 		return "RowOf"
 	case targetStream:
 		return "StreamRowOf"
+	case targetTuple:
+		return "TupleCodecOf"
 	default:
 		return "UDTCodecOf"
 	}
@@ -334,41 +337,72 @@ func bindEntry[P any](e erasedEntry) builtinField[P] {
 }
 
 type codecOption[V any] struct {
-	enc  Encoder[V]
-	dec  Decoder[V] // nil for WithEncoder
-	name string
+	enc   Encoder[V]
+	codec Codec[V] // nil for WithEncoder
+	name  string
 }
 
 func (o codecOption[V]) option() (string, structTarget) {
-	if o.dec == nil {
+	if o.codec == nil {
 		return o.name, targetParams
 	}
-	return o.name, targetParams | targetRows | targetUDT
+	return o.name, targetParams | targetRows | targetUDT | targetTuple
 }
 
 func (o codecOption[V]) apply(c *structOptionSet) {
 	plain, nullable := erasedEntry{param: erasedParamOf(o.enc)}, erasedEntry{param: erasedParamOf(NullableEncoder(o.enc))}
-	if o.dec != nil {
-		plain.column, nullable.column = erasedColumnOf(o.dec), erasedColumnOf(NullableDecoder(o.dec))
+	slice := erasedEntry{param: erasedParamOf(Encoder[[]V](sequenceEncoder[V]{kind: anySequence, element: o.enc}))}
+	if o.codec != nil {
+		plain.column, nullable.column = erasedColumnOf(Decoder[V](o.codec)), erasedColumnOf(NullableDecoder(Decoder[V](o.codec)))
+		slice.column = erasedColumnOf(Decoder[[]V](SliceCodec(o.codec)))
+		pointer := PointerCodec(o.codec)
+		c.codecs[reflect.TypeFor[*V]()] = erasedEntry{param: erasedParamOf(Encoder[*V](pointer)), column: erasedColumnOf(Decoder[*V](pointer))}
+		mapValues(c, o.codec)
 	}
 	c.codecs[reflect.TypeFor[V]()] = plain
 	c.codecs[reflect.TypeFor[Nullable[V]]()] = nullable
+	c.codecs[reflect.TypeFor[[]V]()] = slice
 	c.codecs[reflect.TypeFor[BindValue[V]]()] = erasedEntry{param: erasedParamOf(BindEncoder(o.enc))}
 }
 
-// WithCodec maps the struct's fields of type V, Nullable[V] and BindValue[V]
-// (a parameter only) with codec: a type with no built-in codec, such as a
-// UDT, or a replacement for V's default. V is inferred from codec, as in
-// WithCodec(statusCodec). Recognized built-in codec tags take precedence.
-// The option also applies to generated mappings; other generated
-// custom-expression codecs remain defaults. ParamsOf, RowOf and UDTCodecOf
-// apply it; StreamRowOf decodes with stream decoders, so it rejects it: use
-// WithStreamCodec.
-func WithCodec[V any](codec Codec[V]) StructOption {
-	return codecOption[V]{enc: codec, dec: codec, name: "WithCodec"}
+// mapValues maps map[K]V fields with GoMapCodec for each built-in map key
+// type K, as the built-in map fields do.
+func mapValues[V any](c *structOptionSet, value Codec[V]) {
+	mapValue(c, BoolCodec, value)
+	mapValue(c, Int8Codec, value)
+	mapValue(c, Int16Codec, value)
+	mapValue(c, Int32Codec, value)
+	mapValue(c, Int64Codec, value)
+	mapValue(c, Float32Codec, value)
+	mapValue(c, Float64Codec, value)
+	mapValue(c, StringCodec, value)
+	mapValue(c, UUIDCodec, value)
+	mapValue(c, TimeUUIDCodec, value)
+	mapValue(c, InetCodec, value)
+	mapValue(c, DateCodec, value)
+	mapValue(c, TimeCodec, value)
+	mapValue(c, TimestampCodec, value)
 }
 
-// WithEncoder maps the parameter fields of type V, Nullable[V] and
+func mapValue[K comparable, V any](c *structOptionSet, key Codec[K], value Codec[V]) {
+	m := GoMapCodec(key, value)
+	c.codecs[reflect.TypeFor[map[K]V]()] = erasedEntry{param: erasedParamOf(Encoder[map[K]V](m)), column: erasedColumnOf(Decoder[map[K]V](m))}
+}
+
+// WithCodec maps the struct's fields of type V, Nullable[V], *V, []V (a
+// list, set or vector), map[K]V for a built-in map key type K, and
+// BindValue[V] (a parameter only) with codec: a type with no built-in codec,
+// such as a UDT, or a replacement for V's default. V is inferred from codec,
+// as in WithCodec(statusCodec). Recognized built-in codec tags take
+// precedence. The option also applies to generated mappings; other
+// generated custom-expression codecs remain defaults. ParamsOf, RowOf,
+// UDTCodecOf and TupleCodecOf apply it; StreamRowOf decodes with stream
+// decoders, so it rejects it: use WithStreamCodec.
+func WithCodec[V any](codec Codec[V]) StructOption {
+	return codecOption[V]{enc: codec, codec: codec, name: "WithCodec"}
+}
+
+// WithEncoder maps the parameter fields of type V, Nullable[V], []V and
 // BindValue[V] with encoder, for a type that is only ever bound, as
 // WithCodec does for both directions. Only ParamsOf applies it.
 func WithEncoder[V any](encoder Encoder[V]) StructOption {
@@ -551,13 +585,14 @@ func ReuseBuffers() StructOption { return reuseBuffersOption{} }
 type ignoreExtraColumnsOption struct{}
 
 func (ignoreExtraColumnsOption) option() (string, structTarget) {
-	return "IgnoreExtraColumns", targetRows | targetStream
+	return "IgnoreExtraColumns", targetRows | targetStream | targetUDT
 }
 func (ignoreExtraColumnsOption) apply(c *structOptionSet) { c.ignoreExtra = true }
 
 // IgnoreExtraColumns makes RowOf and StreamRowOf skip a result column that no
 // field maps, so that SELECT * keeps working after ALTER TABLE ADD. Without
 // it, every result column needs a field, which catches a misspelled tag.
+// UDTCodecOf takes it as UDTOptions.AllowExtraDatabaseFields.
 func IgnoreExtraColumns() StructOption { return ignoreExtraColumnsOption{} }
 
 // bufferReset returns the RowInto reset that keeps the storage of R's mapped

@@ -251,7 +251,7 @@ func TestTupleUDT(t *testing.T) {
 		typ := CodecTestMust(UDTType("ks", "record", ColumnSpec{Name: "v", Type: FoundationScalar(t, TypeInt)}))
 		params := Params(Param("v", Int32Codec, func(v int32) int32 { return v }))
 		rows := Row(Column("v", Int32Codec, func(v *int32) *int32 { return v }))
-		for _, options := range []UDTOptions{{}, {Keyspace: "other", Name: "record"}, {Keyspace: "ks", Name: "wrong"}} {
+		for _, options := range []UDTOptions{{Keyspace: "other"}, {Keyspace: "other", Name: "record"}, {Keyspace: "ks", Name: "wrong"}} {
 			if _, err := EncodeValueBorrowed(typ, NullableEncoder(UDTEncoder(params, options)), Nullable[int32]{}); err == nil {
 				t.Fatal("invalid UDT identity hidden by null")
 			}

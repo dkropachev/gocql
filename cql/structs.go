@@ -97,14 +97,18 @@ func MustRowOf[R any](opts ...StructOption) RowDecoder[R] { return must(RowOf[R]
 // collection. Every UDT field needs a struct field and every struct field a
 // UDT field, unless options relaxes it; a UDT field the struct leaves out is
 // bound as NULL with AllowExtraDatabaseFields. An empty options.Keyspace
-// matches the UDT in any keyspace.
+// matches the UDT in any keyspace, and an empty options.Name a UDT of any
+// name, so the zero UDTOptions matches by fields alone.
 //
-// Pass the codec to WithCodec to map fields of type T in an enclosing
-// struct. UDTCodecOf applies WithCodec, for T's own fields, and rejects other
-// options.
+// Pass the codec to WithCodec to map fields of type T, and []T, *T and
+// map values of T, in an enclosing struct. UDTCodecOf applies WithCodec, for
+// T's own fields, and IgnoreExtraColumns, which sets
+// AllowExtraDatabaseFields, and rejects other options.
 func UDTCodecOf[T any](options UDTOptions, opts ...StructOption) (Codec[T], error) {
-	if options.Name == "" {
-		return nil, typeValidation("UDTOptions", "no UDT name")
+	for _, opt := range opts {
+		if _, ok := opt.(ignoreExtraColumnsOption); ok {
+			options.AllowExtraDatabaseFields = true
+		}
 	}
 	fields := generatedFields[T]()
 	params, err := generatedParams(fields, targetUDT, opts...)

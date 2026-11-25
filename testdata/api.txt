@@ -441,6 +441,7 @@ package cql
 	func cql.MustParseUUID(input string) cql.UUID
 	func cql.MustRowOf[R any](opts ...cql.StructOption) cql.RowDecoder[R]
 	func cql.MustStreamRowOf[R any](opts ...cql.StructOption) cql.StreamRowDecoder[R]
+	func cql.MustTupleCodecOf[T any](opts ...cql.StructOption) cql.Codec[T]
 	func cql.MustUDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) cql.Codec[T]
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NamedScalar[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
@@ -477,6 +478,7 @@ package cql
 	type cql.Pair[A any, B any] struct
 		cql.Pair field First A
 		cql.Pair field Second B
+	func cql.PairCodec[A, B any](a cql.Codec[A], b cql.Codec[B]) cql.Codec[cql.Pair[A, B]]
 	func cql.PairParams[A, B any](a cql.ParamEncoder[A], b cql.ParamEncoder[B]) cql.ParamEncoder[cql.Pair[A, B]]
 	func cql.PairRows[A, B any](a cql.RowDecoder[A], b cql.RowDecoder[B]) cql.RowDecoder[cql.Pair[A, B]]
 	func cql.Param[P, V any](name string, codec cql.Encoder[V], get func(P) V) cql.InputField[P]
@@ -672,6 +674,7 @@ package cql
 	var cql.TinyIntType cql.DataType
 	func cql.TinyIntValue(n int8) cql.Value
 	func cql.TupleCodec[T any](enc cql.ParamEncoder[T], dec cql.RowDecoder[T]) cql.Codec[T]
+	func cql.TupleCodecOf[T any](opts ...cql.StructOption) (cql.Codec[T], error)
 	func cql.TupleDecoder[T any](codec cql.RowDecoder[T]) cql.Decoder[T]
 	func cql.TupleEncoder[T any](codec cql.ParamEncoder[T]) cql.Encoder[T]
 	func cql.TupleType(fields ...cql.DataType) (cql.DataType, error)

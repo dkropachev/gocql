@@ -299,6 +299,9 @@ func RowOf[R any](...StructOption) (RowDecoder[R], error)
 func MustRowOf[R any](...StructOption) RowDecoder[R]
 func UDTCodecOf[T any](UDTOptions, ...StructOption) (Codec[T], error)
 func MustUDTCodecOf[T any](UDTOptions, ...StructOption) Codec[T]
+func TupleCodecOf[T any](...StructOption) (Codec[T], error) // members by field position
+func MustTupleCodecOf[T any](...StructOption) Codec[T]
+func PairCodec[A, B any](Codec[A], Codec[B]) Codec[Pair[A, B]] // tuple<a, b>
 func WithCodec[V any](Codec[V]) StructOption
 func WithEncoder[V any](Encoder[V]) StructOption
 func ReuseBuffers() StructOption
@@ -318,7 +321,10 @@ maps like its underlying type; `int`, `*V`, `cql.Text` and `*big.Int` fields
 map with `IntCodec`, `PointerCodec`, `TextCodec` and `VarintBigIntCodec`. A
 `time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
 parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
-gives. `UDTCodecOf` maps a UDT's fields to struct T the same way. Options are
+gives. `UDTCodecOf` maps a UDT's fields to struct T the same way; an empty
+`UDTOptions.Name` matches any name, and `IgnoreExtraColumns` sets
+`AllowExtraDatabaseFields`. `WithCodec(c)` also maps `[]V`, `*V` and map
+values of V. `TupleCodecOf` maps a tuple's members to T's fields by position. Options are
 not generic, so `WithCodec(c)` infers V from c; a constructor rejects an
 option it does not apply with a ValidationError.
 
@@ -503,7 +509,7 @@ func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
 func TupleCodec[T any](ParamEncoder[T], RowDecoder[T]) Codec[T]
 type UDTOptions struct {
     Keyspace string // empty matches the UDT in any keyspace
-    Name     string // required, exact metadata name
+    Name     string // empty matches a UDT of any name
     AllowExtraDatabaseFields, AllowMissingFields bool
 }
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
@@ -550,10 +556,10 @@ partial slice. Dynamic traversal does not imply typed lazy collection decoders.
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
 protocol permits; a nonnullable destination rejects them. UDT matching defaults
-to exact field names and full identity/type validation. UDTOptions.Name must
-supply the expected name, and a non-empty Keyspace the expected keyspace; a
-missing name fails CheckType/Compile with a validation error, and equal layouts
-under a different identity are incompatible.
+to exact field names and full identity/type validation. A non-empty
+UDTOptions.Name and Keyspace must match the UDT's name and keyspace, and equal
+layouts under a different identity are then incompatible; an empty one matches
+any.
 Explicit options permit extra database fields (encode explicit null; decode
 checked skips) or application fields absent from the database (encode ignores
 those fields; decode sets explicit zero defaults only when allowed).

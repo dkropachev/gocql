@@ -123,10 +123,7 @@ func TestStructOptionTargets(t *testing.T) {
 		{"StreamRowOf WithCodec", "WithCodec", func() error { _, err := StreamRowOf[row](codec); return err }},
 		{"StreamRowOf ReuseBuffers", "ReuseBuffers", func() error { _, err := StreamRowOf[row](ReuseBuffers()); return err }},
 		{"UDTCodecOf ReuseBuffers", "ReuseBuffers", func() error { _, err := UDTCodecOf[row](UDTOptions{Name: "u"}, ReuseBuffers()); return err }},
-		{"UDTCodecOf IgnoreExtraColumns", "IgnoreExtraColumns", func() error {
-			_, err := UDTCodecOf[row](UDTOptions{Name: "u"}, IgnoreExtraColumns())
-			return err
-		}},
+		{"TupleCodecOf IgnoreExtraColumns", "IgnoreExtraColumns", func() error { _, err := TupleCodecOf[row](IgnoreExtraColumns()); return err }},
 		{"nil", "StructOption", func() error { _, err := RowOf[row](nil); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -274,8 +271,12 @@ func TestUDTCodecOf(t *testing.T) {
 	if err := MustUDTCodecOf[udtAddress](UDTOptions{Name: "address"}).CheckType(other); err == nil {
 		t.Fatal("accepted a UDT of another name")
 	}
-	if _, err := UDTCodecOf[udtAddress](UDTOptions{Keyspace: "ks1"}); err == nil {
-		t.Fatal("accepted options without a name")
+	// Without a name, the options match a UDT of any name.
+	if err := MustUDTCodecOf[udtAddress](UDTOptions{Keyspace: "ks1"}).CheckType(other); err != nil {
+		t.Fatal("options without a name rejected a UDT:", err)
+	}
+	if err := MustUDTCodecOf[udtAddress](UDTOptions{}).CheckType(address("ks2")); err != nil {
+		t.Fatal("zero options rejected a UDT:", err)
 	}
 	// The struct's fields and the UDT's must match unless options relax it.
 	narrow := CodecTestMust(UDTType("ks1", "address", ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)}))
@@ -304,5 +305,81 @@ func TestTupleCodec(t *testing.T) {
 	}
 	if err := codec.CheckType(rowTestType(t, TypeInt)); err == nil {
 		t.Fatal("TupleCodec accepted an int")
+	}
+}
+
+// WithCodec of a UDT codec also maps []T, *T and map values of T, and
+// UDTCodecOf takes IgnoreExtraColumns for extra UDT fields.
+func TestUDTCodecCollections(t *testing.T) {
+	address := CodecTestMust(UDTType("ks", "address",
+		ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)},
+		ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)}))
+	type holder struct {
+		List []udtAddress
+		Set  []udtAddress
+		Ptr  *udtAddress
+		None *udtAddress
+		ByID map[int32]udtAddress
+	}
+	columns := NewColumns(
+		ColumnSpec{Name: "list", Type: CodecTestMust(ListType(address))},
+		ColumnSpec{Name: "set", Type: CodecTestMust(SetType(address.WithFrozen(true)))},
+		ColumnSpec{Name: "ptr", Type: address},
+		ColumnSpec{Name: "none", Type: address},
+		ColumnSpec{Name: "by_id", Type: CodecTestMust(MapType(rowTestType(t, TypeInt), address))},
+	)
+	a, b := udtAddress{Street: "a", ZipCode: 1}, udtAddress{Street: "b", ZipCode: 2}
+	value := holder{List: []udtAddress{a, b}, Set: []udtAddress{b}, Ptr: &a, ByID: map[int32]udtAddress{7: b}}
+	opt := WithCodec(MustUDTCodecOf[udtAddress](UDTOptions{}))
+	got := decodeTestRow(t, columns, MustRowOf[holder](opt), encodeTestParams(t, columns, MustParamsOf[holder](opt), value))
+	if len(got.List) != 2 || got.List[1] != b || len(got.Set) != 1 || got.Ptr == nil || *got.Ptr != a || got.None != nil || got.ByID[7] != b {
+		t.Fatalf("got %+v", got)
+	}
+
+	// A UDT with a field the struct has not.
+	wide := CodecTestMust(UDTType("ks", "address",
+		ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)},
+		ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)},
+		ColumnSpec{Name: "country", Type: rowTestType(t, TypeText)}))
+	if err := MustUDTCodecOf[udtAddress](UDTOptions{}).CheckType(wide); err == nil {
+		t.Fatal("accepted an extra UDT field")
+	}
+	if err := MustUDTCodecOf[udtAddress](UDTOptions{}, IgnoreExtraColumns()).CheckType(wide); err != nil {
+		t.Fatal("IgnoreExtraColumns:", err)
+	}
+}
+
+// TupleCodecOf maps tuple members to fields by position, and PairCodec a
+// two-member tuple to a Pair.
+func TestTupleCodecOf(t *testing.T) {
+	type point struct {
+		X     int32
+		Label string `cql:"whatever"`
+		Skip  int    `cql:"-"`
+		Tags  []string
+	}
+	typ := CodecTestMust(TupleType(rowTestType(t, TypeInt), rowTestType(t, TypeText), CodecTestMust(SetType(rowTestType(t, TypeText)))))
+	codec := MustTupleCodecOf[point]()
+	encoded, err := EncodeValue(typ, codec, point{X: 3, Label: "l", Skip: 9, Tags: []string{"t"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := DecodeValue(codec, encoded)
+	if err != nil || got.X != 3 || got.Label != "l" || got.Skip != 0 || len(got.Tags) != 1 {
+		t.Fatalf("got %+v, %v", got, err)
+	}
+	short := CodecTestMust(TupleType(rowTestType(t, TypeInt), rowTestType(t, TypeText)))
+	if err := codec.CheckType(short); err == nil {
+		t.Fatal("accepted a tuple without a member for every field")
+	}
+
+	pair := PairCodec(Int32Codec, StringCodec)
+	encoded, err = EncodeValue(short, pair, Pair[int32, string]{First: 1, Second: "s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, err := DecodeValue(pair, encoded)
+	if err != nil || p.First != 1 || p.Second != "s" {
+		t.Fatalf("pair %+v, %v", p, err)
 	}
 }
