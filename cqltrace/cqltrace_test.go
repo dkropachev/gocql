@@ -317,4 +317,11 @@ func TestFetchAll(t *testing.T) {
 	if infos, err := fetchAll(context.Background(), nil, nil); len(infos) != 0 || err != nil {
 		t.Fatalf("no refs: %v, %v", infos, err)
 	}
+	// With no references, neither public form reads the session.
+	if infos, err := FetchAll(context.Background(), nil, nil); len(infos) != 0 || err != nil {
+		t.Fatalf("FetchAll with no refs: %v, %v", infos, err)
+	}
+	if infos, err := (Fetcher{Settle: -1}).FetchAll(context.Background(), nil, []cql.CQLTraceRef{}); len(infos) != 0 || err != nil {
+		t.Fatalf("Fetcher.FetchAll with no refs: %v, %v", infos, err)
+	}
 }
