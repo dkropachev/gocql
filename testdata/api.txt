@@ -1039,6 +1039,7 @@ package cqlerr
 		cqlerr.ReadTimeoutError method (*T) Kind() cqlerr.Kind
 		cqlerr.ReadTimeoutError method (*T) Message() string
 		cqlerr.ReadTimeoutError method (*T) Warnings() []string
+	func cqlerr.Retryable(err error, idempotent bool) bool
 	type cqlerr.SchemaChangedError struct
 		cqlerr.SchemaChangedError field Statement string
 		cqlerr.SchemaChangedError field Previous cql.Columns

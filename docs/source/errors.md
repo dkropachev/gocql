@@ -31,12 +31,14 @@ not say whether a retry is safe; combine it with the execution status.
 `KindTimeout` covers both the driver's own budget and the caller's expired
 context. When the profile's `Timeout` or `exec.Options.Timeout` (or
 `PageTimeout`) runs out, the error matches `cqlerr.ErrRequestTimeout`; it
-also matches `context.DeadlineExceeded`, as the caller's deadline does. A
-retry under a context that has ended cannot succeed, so a retry loop checks
-the context first:
+also matches `context.DeadlineExceeded`, as the caller's deadline does.
+
+`cqlerr.Retryable(err, idempotent)` puts the two questions together: the error
+is transient, it is not the caller's own cancellation or deadline, and the
+request was not executed or is idempotent. A retry loop needs nothing else:
 
 ```go
-for attempt := 0; err != nil && cqlerr.KindOf(err).Transient() && ctx.Err() == nil && attempt < 3; attempt++ {
+for attempt := 0; cqlerr.Retryable(err, true) && attempt < 3; attempt++ {
 	_, err = insert.Exec(ctx, row)
 }
 ```

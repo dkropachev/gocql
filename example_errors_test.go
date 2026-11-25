@@ -47,9 +47,13 @@ func Example_errors() {
 		// err is nil: the write succeeded.
 	}
 
-	// KindOf says whether trying again can help.
+	// KindOf says whether trying again can help, and Retryable whether it
+	// also is safe; it is false once ctx has ended.
 	if kind := cqlerr.KindOf(err); kind.Transient() {
 		log.Printf("transient %v failure: %v", kind, err)
+	}
+	for attempt := 0; cqlerr.Retryable(err, false) && attempt < 3; attempt++ {
+		_, err = insert.Exec(ctx, "hello")
 	}
 
 	// Server errors keep their code and details.
