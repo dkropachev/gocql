@@ -1384,7 +1384,8 @@ type Options struct {
     CustomPayload []cql.PayloadEntry
     IncludeMetadata bool                          // request full result metadata
     HostID cql.Option[cql.UUID]
-    ShardID cql.Option[uint32]
+    ShardID cql.Option[uint32]                    // strict unless AnyShardFallback
+    AnyShardFallback bool                         // requires ShardID: may use another shard of HostID
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
     Observer observe.Hooks                        // joined after the session's hooks
     NoSessionObserver bool                        // leave the session's observer out
@@ -1522,12 +1523,14 @@ type Info struct {
     Consistency cql.Consistency
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
+    AnyShardFallback bool
 }
 type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool }
 type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
 func (r Route) Usable() bool
+func (r Route) Datacenter() string                  // and Rack, from the latest snapshot that indexed the host
 func (r Route) Shard() cql.Option[uint32]           // unset: any connection of the host
 func (r Route) ShardOf(token int64) cql.Option[uint32]
 func (r Route) WithShard(shard cql.Option[uint32]) Route
@@ -1539,6 +1542,10 @@ type Policy interface {
 type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
 type Learner interface { Learn(AttemptEvent) }                  // optional
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
+func AppendReplicaRoutes(dst []Route, *metadata.Snapshot, Info) []Route // ReplicaRoutes into a buffer
+func RouteTo(*metadata.Snapshot, Target) (Route, bool) // false: no such host
+func FilterPlan(Plan, keep func(Route) bool) Plan    // lazy
+func Routes(Plan) iter.Seq[Route]                    // consumes the plan
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
@@ -1564,6 +1571,7 @@ type AttemptStart struct {
     Speculative bool
 }
 type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
+type SpeculationPolicyFunc func(started int) (time.Duration, bool)
 type Hooks struct { // a nil hook is skipped; later hooks are new fields
     Request func(context.Context, RequestStart) (context.Context, func(RequestEvent))
     Attempt func(context.Context, AttemptStart) func(routing.AttemptEvent)
@@ -1669,6 +1677,7 @@ var CDCTokenPartitioner TokenPartitioner
 // package routing/routingtest
 type Cluster struct {
     Keyspaces map[string]*metadata.Keyspace
+    Tables []Table // added without columns; Keyspaces is not modified
     TokenRanges map[string][]metadata.TokenRange
     Tablets map[Table][]metadata.TokenRange
     LocalDatacenter, LocalRack string
@@ -1677,6 +1686,7 @@ type Cluster struct {
 }
 type Table struct { Keyspace, Name string }
 func NewSnapshot(Cluster) *metadata.Snapshot // links the built-in policies' engine
+func Host(id cql.UUID, datacenter, rack string) metadata.HostSnapshot // enabled, up, connected
 ```
 
 Tablet v2 takes precedence over v1 when both are negotiated. Every EXECUTE on a
@@ -1790,6 +1800,9 @@ type Fetcher struct {
 }
 func (f Fetcher) Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
 func Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
+// FetchAll reads every session of refs in order, one Info per reference, the
+// failures joined; Fetcher has the same method.
+func FetchAll(context.Context, *gocql.Session, []cql.CQLTraceRef) ([]Info, error)
 var ErrNotReady error // ctx ended before the session was ready
 ```
 
@@ -1828,6 +1841,8 @@ func (m *Snapshot) Host(cql.UUID) (routing.HostSnapshot, bool)
 func (m *Snapshot) Keyspaces() []string // sorted names
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
 func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
+func (m *Snapshot) View(keyspace, name string) (*View, bool)
+func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
 func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
 func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
 func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
@@ -1852,6 +1867,7 @@ type Snapshot struct {
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64
+    Connections int // of every host pool, the control connection not included
     LatencyP50, LatencyP95, LatencyP99 time.Duration
 }
 
@@ -2041,7 +2057,9 @@ numeric order is not the severity order). `NewExecutionError(err, status,
 attempts...)` builds one for tests. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
-...), and `Kind.Transient` reports whether trying again can help. Driver
+...), and `Kind.Transient` reports whether trying again can help;
+`Retryable(err, idempotent)` adds the execution status and rules out the
+caller's own cancellation or deadline. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
 `ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
@@ -2055,14 +2073,16 @@ conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `StreamCapacityError`. `cqlerr` exports only sentinels the driver returns.
 
 Every server error implements the sealed `ServerError` (`Code() ErrorCode`,
-`Message() string`, `Warnings() []string`) and is a concrete `XxxError` type
+`Message() string`, `Warnings() []string`, `Kind() Kind`) and is a concrete `XxxError` type
 per code with its details (`WriteTimeoutError`, `UnavailableError`, ...);
 codes without details are `OtherServerError`. `ErrorCode` is a typed `uint16`
 with one `CodeXxx` constant per native protocol code; it implements `error`,
 and each server error matches its own code, so
 `errors.Is(err, cqlerr.CodeOverloaded)` works through any wrapper.
 Unrecognized future server errors are `OtherServerError` and retain their code
-and message. Invalid lengths and metadata never panic or allocate based on
+and message. A read or write failure's `ErrorMap` maps each failed replica's
+`netip.Addr` to a `FailureReason`, a typed `uint16` whose `String` prints the
+server's name, or the number for a code the driver does not name. Invalid lengths and metadata never panic or allocate based on
 unbounded advertised counts.
 
 ### Transport setup details
