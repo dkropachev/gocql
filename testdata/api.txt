@@ -78,7 +78,7 @@ package gocql
 		gocql.Session method (*T) CompileOptions(options exec.Options) (exec.CompiledOptions, error)
 		gocql.Session method (*T) Dialect() config.Dialect
 		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (cql.Result, error)
-		gocql.Session method (*T) ID() string
+		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)

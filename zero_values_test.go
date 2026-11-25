@@ -144,8 +144,8 @@ func TestZeroValuesRejected(t *testing.T) {
 	requireValidation(t, "WithTLSSource(zero TLSFileSource)", err)
 
 	var session gocql.Session
-	if !session.Closed() || session.Dialect() != 0 || session.Metadata() != nil || session.ID() != "" {
-		t.Errorf("zero Session: Closed %v, Dialect %v, Metadata %v, ID %q", session.Closed(), session.Dialect(), session.Metadata(), session.ID())
+	if !session.Closed() || session.Dialect() != 0 || session.Metadata() != nil || !session.ID().IsZero() {
+		t.Errorf("zero Session: Closed %v, Dialect %v, Metadata %v, ID %v", session.Closed(), session.Dialect(), session.Metadata(), session.ID())
 	}
 	requireValidation(t, "zero Session.Close", session.Close())
 	requireValidation(t, "zero Session.AwaitSchemaAgreement", session.AwaitSchemaAgreement(ctx))

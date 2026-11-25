@@ -224,10 +224,11 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Sta
 	return s.internal().UnpreparedAddToBatch((*implSession.Batch)(batch), internalStatement(statement), value)
 }
 
-// ID returns the session identifier sent to nodes in the SESSION_ID startup
-// option. It remains valid after Close and can correlate client observations
-// with system.clients.client_options.
-func (s *Session) ID() string { return s.internal().ID() }
+// ID returns the session's random identifier, sent to nodes as text in the
+// SESSION_ID startup option. It remains valid after Close and can correlate
+// client observations with system.clients.client_options, where ID().String()
+// appears. A zero Session's ID is the zero UUID.
+func (s *Session) ID() cql.UUID { return s.internal().ID() }
 
 // AwaitSchemaAgreement waits for nodes' schema versions to agree, bounded by
 // ctx and the configured schema agreement timeout.

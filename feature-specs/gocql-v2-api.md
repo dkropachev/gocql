@@ -742,7 +742,7 @@ func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 type Session struct { /* opaque */ }
 func Connect(context.Context, config.Config) (*Session, error)
 func (s *Session) Dialect() config.Dialect
-func (s *Session) ID() string
+func (s *Session) ID() cql.UUID
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each

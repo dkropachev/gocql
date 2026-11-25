@@ -1199,7 +1199,7 @@ func TestSession(t *testing.T) {
 					}
 					found := false
 					for _, row := range rows {
-						if row[sessionIDStartupKey] != s.ID() {
+						if row[sessionIDStartupKey] != s.ID().String() {
 							continue
 						}
 						if tcase.name != "" {
@@ -1257,7 +1257,7 @@ func TestSession(t *testing.T) {
 			// Read the id through the exported accessor rather than the field: an
 			// application correlating its own logs with system.clients has only the
 			// accessor, so that is the path worth exercising end to end.
-			wantSessionID := s.ID()
+			wantSessionID := s.ID().String()
 			if wantSessionID == "" {
 				t.Fatal("expected the session to have a non-empty id")
 			}

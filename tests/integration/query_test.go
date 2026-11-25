@@ -251,7 +251,7 @@ func TestQuery(t *testing.T) {
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implSession.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
@@ -299,7 +299,7 @@ func TestQuery(t *testing.T) {
 			requireCassandraFixtures(t)
 			session := createV2Session(t)
 			defer session.Close()
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int, value int, PRIMARY KEY (id))", (*implSession.Session)(session).Data().InternalCfg.Keyspace, table)); err != nil {
 				t.Fatal(err)
 			}
@@ -336,7 +336,7 @@ func TestQuery(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)); err != nil {
 				t.Fatal("create:", err)
@@ -368,7 +368,7 @@ func TestQuery(t *testing.T) {
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': %d}", fixtureKeyspace("_fail"), *flagRF)); err != nil {
 				t.Fatal(err)
 			}
-			table := testTableName(t, session.ID())
+			table := testTableName(t, session.ID().String())
 
 			if err := v2CreateTable(context.Background(), session, fmt.Sprintf("CREATE TABLE %s.%s (id int,value int,PRIMARY KEY (id))", fixtureKeyspace("_fail"), table)); err != nil {
 				t.Fatalf("failed to create table with error '%v'", err)
