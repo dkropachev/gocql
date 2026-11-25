@@ -347,6 +347,55 @@ field-alignment lint requires.
 | `observe` doc named `config.Build` and a per-host lifecycle; `Routing` did not say what an unknown field holds | Names `ConfigBuilder.Build`, points at `Subscribe` for pool and cluster changes, and says an unknown `Routing` field is empty or unset. |
 | `go vet -tags gocql_perf` failed after the row plan change | The perf tests decode through `DecodeInto` (separate commit). |
 
+## Seventh review pass (2026-11-25)
+
+A seventh pass, with one reviewer per area, made about 80 proposals; all
+are taken and land in six changes before `v2.0.0-rc.1`. This first part
+fixes silent run-time failures, with little or no API change. Rows marked
+**reverses** undo a decision of an earlier pass.
+
+### transport / config
+
+| Finding | Outcome |
+|---|---|
+| A dialer's connection whose `LocalAddr` is a `*net.TCPAddr` but that lacks `SetNoDelay` or `SetKeepAlive` failed to open, though the user chose neither option | The defaults (TCP_NODELAY on, keepalive off) are applied best-effort; only an option a setter chose (`WithNagle`, `WithTCPKeepalive`, buffers, linger) fails an `UnsupportedSettingError`. Controls are also found through an `Unwrap() net.Conn` chain. |
+| `WithShardAwareSourcePorts` was accepted where advanced shard awareness is off and on Cassandra | `Build` rejects it under `WithConnectionsPerHost`, `WithAdvancedShardAwareness(false)` and `WithClientRoutes`, and with a Cassandra dialect as an `UnsupportedSettingError`. |
+| `WithMetadataKeyspaces` under `metadata.ModeNone` did nothing | `Build` rejects it. |
+| Zero for `WithConnectTimeout`, `WithDNSTimeout` or `WithMetadataTimeout` removed the bound | `Build` rejects zero. **Reverses** zero meaning "no limit" for these three; zero still turns `WithMetadataRefresh` and `WithMetadataServerTimeout` off. |
+| `WithMetadataServerTimeout` could be at or above the client timeout, and its 30s default ignored a shorter `WithMetadataTimeout` | `Build` rejects a chosen server timeout at or above `WithMetadataTimeout`; the default is one second below it (half of it at 2s or less). |
+| A session keyspace left out of `WithMetadataKeyspaces` lost replica routing silently | Connect logs a warning. |
+
+### routing / metadata
+
+| Finding | Outcome |
+|---|---|
+| `NewPolicy` and `SingleTarget` returned a `routing.Policy`, so a policy embedding the result lost `Validate` and `Observe` unless it forwarded them | Both return `*routing.Builtin`, which has `Pick`, `Fallback`, `Validate` and `Observe`; the zero `Builtin` is the default policy. The routingtest example and load-balancing.md embed it without forwarding. |
+| `ReplicaRoutes` routed vnode replicas to any shard, and `Route.ShardOf` was unset until the host's pool connected | Vnode replica routes carry the token's shard from `HostSnapshot.Shards`/`ShardingIgnoreMSB`, as the built-in plan does; `ShardOf` falls back to the snapshot's sharding. |
+| Under `metadata.ModeKeyspaces` no table is loaded, so routing found no replicas | A vnode keyspace's tables route by the keyspace's ring when the table is not loaded; tablet keyspaces still need the table. `metadata.Mode` documents what each mode costs routing. **Reverses** the routing cache test's "a table missing from the snapshot has no replicas". |
+
+### event
+
+| Finding | Outcome |
+|---|---|
+| An overflow closed the subscription, so every subscriber had to resubscribe | The overflow discards the queue and queues one `KindOverflow` event with the highest discarded generation; the subscription stays open. `ExampleSession_Subscribe` drops its resubscribe branch. **Reverses** the API spec's terminal Overflow, which closed the subscription after the marker. |
+| A dropped tablet routing hint was delivered as an Overflow event (`TABLET_RESYNC`) though no metadata changed | Not delivered; `event.ChangeTabletResync` is removed. |
+| Whether the snapshot at `Event.Generation` holds the change was not stated | `Event.Generation`, `Subscription` and `Session.Subscribe` say an event is delivered after the publication that reflects it. |
+
+### metrics / errors
+
+| Finding | Outcome |
+|---|---|
+| `Snapshot.Canceled` and `AttemptEvent.Canceled` counted the driver's own timeouts, which match `context.DeadlineExceeded` | `Canceled` counts `KindCanceled` only; added `Snapshot.Timeouts` (`KindTimeout`), `Snapshot.ErrorsByKind` and `AttemptEvent.TimedOut`. |
+| `ExecutionStatusOf(nil)` returned `NotExecuted` | Added `cqlerr.Executed`, which it returns. |
+| A logged batch that failed after its batch log was written was `PartiallyExecuted`, though the server replays it whole | `MaybeExecuted`. `PartiallyExecuted` says to treat it as executed for work that is not idempotent. |
+
+### exec
+
+| Finding | Outcome |
+|---|---|
+| `exec.Options.Timestamp` was microseconds in an `int64`, and a worker query stamped all its writes with it | `Timestamp` is a `cql.Option[time.Time]`; `Prepared.Query` and `PreparedStream.Query` reject it with a `ValidationError`. |
+| `exec.Options.Keyspace` and `PrepareOptions.Keyspace` on protocol 4 failed only per attempt, or did nothing for a qualified statement | `CompileOptions`, admission and `Prepare` reject a keyspace other than the session's on ScyllaV4 and CassandraV4 with an `UnsupportedSettingError`; both fields document it. |
+
 ## Decisions
 
 These changed names or removed symbols that users of the earlier v2 code may
