@@ -18,6 +18,7 @@ package session
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"math"
@@ -98,7 +99,7 @@ func TestTablets(t *testing.T) {
 				stamp := s.CaptureTabletFeedback(info, s.Metadata())
 				payload := cql.BorrowBytes(testPayload(testHint(t, 0, 100, cql.Option[uint64]{}, replica)))
 				page := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []cql.PayloadEntry{{Key: "tablets-routing-v1", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: payload}}}}}}
-				s.ApplyTypedFeedbackStamped(page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true})
+				s.ApplyTypedFeedbackStamped(context.Background(), page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true})
 				testDrain(s)
 				first, ok := implRouting.InternalNextTarget(implRouting.NewPlan(policy, info, s.Metadata()))
 				if !ok || first.HostID != replica.HostID || first.ShardID != replica.ShardID {
@@ -132,7 +133,7 @@ func TestTablets(t *testing.T) {
 			// applyTypedFeedbackStamped is deliberately before execute-error/UNPREPARED
 			// interpretation; a response page can carry payload independently of rows.
 			page := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Extras: &model.ResponseExtras{Payload: []cql.PayloadEntry{{Key: "tablets-routing-v2", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(testPayload(h))}}}}}}
-			s.ApplyTypedFeedbackStamped(page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
+			s.ApplyTypedFeedbackStamped(context.Background(), page, info, stamp, transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 			testDrain(s)
 			m := s.Metadata()
 			for i := 0; i < 1024; i++ {
@@ -148,7 +149,7 @@ func TestTablets(t *testing.T) {
 			// A malformed V2 body never falls back to the simultaneously supplied V1.
 			page.Extras.Payload = append([]cql.PayloadEntry{{Key: "tablets-routing-v1", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(testPayload(testHint(t, 100, 200, cql.Option[uint64]{}, hTarget(2, 0))))}}}, page.Extras.Payload...)
 			page.Extras.Payload[1].Value.Value = cql.BorrowBytes([]byte{0})
-			s.ApplyTypedFeedbackStamped(page, info, s.CaptureTabletFeedback(info, m), transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
+			s.ApplyTypedFeedbackStamped(context.Background(), page, info, s.CaptureTabletFeedback(info, m), transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true})
 			testDrain(s)
 			if s.Metadata() != m {
 				t.Fatal("malformed V2 fell back to V1")

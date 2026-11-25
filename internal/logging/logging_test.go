@@ -77,14 +77,33 @@ func TestLogging(t *testing.T) {
 	t.Run("WrapTagsAndContainsPanics", func(t *testing.T) {
 		t.Parallel()
 		logger, out := NewCapture()
-		Wrap(logger).Warn("hello", KeyHost, "h1")
+		Wrap(logger, DefaultRateLimit).Warn("hello", KeyHost, "h1")
 		if got := out.String(); !strings.Contains(got, "logger=gocql") || !strings.Contains(got, "host=h1") {
 			t.Fatalf("wrapped record = %q", got)
 		}
-		l := Wrap(slog.New(panicHandler{}))
-		l.Error("x")
-		l.With("a", 1).WithGroup("g").Error("x")
-		Wrap(slog.New(panicHandler{inEnabled: true})).Error("x")
+		for _, window := range []time.Duration{DefaultRateLimit, 0} {
+			l := Wrap(slog.New(panicHandler{}), window)
+			l.Error("x")
+			l.With("a", 1).WithGroup("g").Error("x")
+			Wrap(slog.New(panicHandler{inEnabled: true}), window).Error("x")
+		}
+	})
+
+	t.Run("WrapWindow", func(t *testing.T) {
+		t.Parallel()
+		for _, tc := range []struct {
+			window time.Duration
+			want   int
+		}{{DefaultRateLimit, 1}, {0, 3}} {
+			logger, out := NewCapture()
+			l := Wrap(logger, tc.window)
+			for range 3 {
+				l.Warn("repeated", KeyHost, "h1")
+			}
+			if got := strings.Count(out.String(), "repeated"); got != tc.want {
+				t.Errorf("window %v: %d records, want %d", tc.window, got, tc.want)
+			}
+		}
 	})
 
 	t.Run("RateLimit", func(t *testing.T) {

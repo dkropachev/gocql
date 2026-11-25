@@ -277,9 +277,9 @@ func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequ
 	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)
-		s.Core.ObserveSafely(func() { end(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; routingObservesLatency(policy) {
-		s.Core.ObserveSafely(func() { policy.Learn(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { policy.Learn(event) })
 	}
 }

@@ -47,9 +47,12 @@ func Or(l *slog.Logger) *slog.Logger {
 }
 
 // Wrap prepares a user-supplied logger for driver use: handler panics are contained,
-// repeated records are throttled, and every record is tagged logger=gocql.
-// A nil logger means slog.Default().
-func Wrap(l *slog.Logger) *slog.Logger {
-	h := Or(l).Handler()
-	return slog.New(NewRateLimitHandler(SafeHandler{Next: h}, DefaultRateLimit)).With(KeyLogger, "gocql")
+// records repeated within window are throttled, unless window is zero or less, and
+// every record is tagged logger=gocql. A nil logger means slog.Default().
+func Wrap(l *slog.Logger, window time.Duration) *slog.Logger {
+	var h slog.Handler = SafeHandler{Next: Or(l).Handler()}
+	if window > 0 {
+		h = NewRateLimitHandler(h, window)
+	}
+	return slog.New(h).With(KeyLogger, "gocql")
 }

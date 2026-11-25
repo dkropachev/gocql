@@ -133,6 +133,19 @@ func TestConfigBuilder(t *testing.T) {
 		mustBuildConfig(t, b.WithApplication("", ""))
 	})
 
+	t.Run("LogRateLimit", func(t *testing.T) {
+		if _, err := New(ScyllaV4, "h").WithLogRateLimit(-time.Second).Build(); err == nil {
+			t.Fatal("Build accepted a negative log rate limit")
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLogRateLimit" {
+			t.Fatalf("Build = %v, want a WithLogRateLimit ValidationError", err)
+		}
+		for _, d := range []time.Duration{0, time.Minute} {
+			if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLogRateLimit(d)).settings; c.LogRateLimit != d {
+				t.Fatalf("LogRateLimit = %v, want %v", c.LogRateLimit, d)
+			}
+		}
+	})
+
 	t.Run("ErrorStatementText", func(t *testing.T) {
 		if _, err := New(ScyllaV4, "h").WithErrorStatementText(-1).Build(); err == nil {
 			t.Fatal("Build accepted a negative error statement limit")
@@ -270,6 +283,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithApplication none":                                                      c.Identity.ApplicationName == "" && c.Identity.ApplicationVersion == "",
 			"WithClientID none":                                                         c.Identity.ClientID == "",
 			"WithLogger slog.Default":                                                   c.Logger == nil,
+			"WithLogRateLimit 10s":                                                      c.LogRateLimit == 10*time.Second,
 			"WithObserver none":                                                         c.Observer.IsZero(),
 			"WithConfigReport true":                                                     c.ReportConfiguration,
 			"WithErrorStatementText off":                                                c.ErrorStatementBytes == 0,

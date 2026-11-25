@@ -117,12 +117,18 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing routing.Info) *trans
 	return s.PickTypedPool(pool, target, routing)
 }
 
-func (s *Core) ObserveSafely(fn func()) {
+// ObserveSafely calls fn, an observer hook or a policy's Learn, logging a
+// panic in it with ctx, the request's context, instead of raising it. A nil
+// ctx logs without one.
+func (s *Core) ObserveSafely(ctx context.Context, fn func()) {
 	defer func() {
 		if v := recover(); v != nil && s.privateStorage.InternalLogger != nil {
 			func() {
 				defer func() { _ = recover() }()
-				s.logger().Error("observer panicked", "panic", v)
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				s.logger().ErrorContext(ctx, "observer panicked", "panic", v)
 			}()
 		}
 	}()
@@ -206,7 +212,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	return picker.InternalLeastBusyConn()
 }
 
-func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePage, routing routing.Info, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
+func (s *Core) ApplyTypedFeedbackStamped(ctx context.Context, response *transport.InternalResponsePage, routing routing.Info, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
 	if response == nil || routing.Keyspace == "" || routing.Table == "" || s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -223,7 +229,7 @@ func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePag
 		hint, err := transport.InternalParseTypedTabletPayload(entry.Value.Value, routing.Keyspace, routing.Table, features.InternalTabletsRoutingV2)
 		if err != nil {
 			if s.privateStorage.InternalLogger != nil {
-				s.logger().Warn("tablet hint rejected", logging.KeyKeyspace, routing.Keyspace, logging.KeyTable, routing.Table, logging.Err(err))
+				s.logger().WarnContext(ctx, "tablet hint rejected", logging.KeyKeyspace, routing.Keyspace, logging.KeyTable, routing.Table, logging.Err(err))
 			}
 			return
 		}

@@ -107,7 +107,7 @@ defer session.Close()
 | `cluster.SocketKeepalive` | `WithTCPKeepalive(period)` |
 | `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
 | `cluster.ClientRoutesConfig` | `WithClientRoutes(config.ClientRoute{ConnectionID: id, Hostname: host}, ...)` |
-| `cluster.Logger` | `WithLogger(*slog.Logger)` |
+| `cluster.Logger` | `WithLogger(*slog.Logger)`; `WithLogRateLimit(d)` sets how repeated records are collapsed, zero for none |
 | `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Hooks{...})` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |
 | `cluster.DefaultTimestamp = false` | `WithTimestampGenerator(nil)` |

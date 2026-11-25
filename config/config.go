@@ -720,10 +720,20 @@ func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
 //
 //	slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl}))
 //
-// Records at Info and above are rate-limited per message and host; handler
-// panics are contained.
+// Records at Info and above are rate-limited per message and host (see
+// WithLogRateLimit); handler panics are contained.
 func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 	b.settings.Logger = logger
+	return b
+}
+
+// WithLogRateLimit collapses log records of Info and above that repeat the
+// same level, message and host within window into the first one; the next
+// one after the window carries a suppressed count of those dropped. Debug
+// records are never limited. Zero turns the limit off, so every record
+// reaches the logger; Build rejects a negative window. Default 10s.
+func (b *ConfigBuilder) WithLogRateLimit(window time.Duration) *ConfigBuilder {
+	b.settings.LogRateLimit = window
 	return b
 }
 

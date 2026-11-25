@@ -577,8 +577,9 @@ type logicalExecution struct {
 	started time.Time
 	// hooks are the execution's hooks, nil without any.
 	hooks *observe.Hooks
-	// observerCtx and requestEnd are what the observer's StartRequest
-	// returned; observerCtx is the caller's context without that hook.
+	// observerCtx and requestEnd are what the Request hook returned;
+	// observerCtx is the caller's context without that hook. Log records of
+	// the request carry observerCtx.
 	observerCtx    context.Context
 	requestEnd     func(observe.RequestEvent)
 	ddlCoordinator atomic.Pointer[cql.UUID]
@@ -614,7 +615,7 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
 		event := observe.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
-		rt.ObserveSafely(func() { end(event) })
+		rt.ObserveSafely(l.observerCtx, func() { end(event) })
 	}
 }
 
@@ -622,13 +623,22 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
 	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
-	l.rt.ObserveSafely(func() {
+	l.rt.ObserveSafely(ctx, func() {
 		observerCtx, end := l.hooks.Request(ctx, start)
 		if observerCtx != nil {
 			l.observerCtx = observerCtx
 		}
 		l.requestEnd = end
 	})
+}
+
+// logContext returns the context the request's log records carry: the
+// one the Request hook returned, or the caller's.
+func (l *logicalExecution) logContext() context.Context {
+	if l == nil || l.observerCtx == nil {
+		return context.Background()
+	}
+	return l.observerCtx
 }
 
 // observesAttempts reports whether the observer has an attempt hook.
@@ -643,7 +653,7 @@ func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing
 		return nil
 	}
 	var end func(routing2.AttemptEvent)
-	l.rt.ObserveSafely(func() { end = l.hooks.Attempt(l.observerCtx, start) })
+	l.rt.ObserveSafely(l.observerCtx, func() { end = l.hooks.Attempt(l.observerCtx, start) })
 	return end
 }
 
@@ -826,12 +836,10 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	}
 	rt.requests.Add(1)
 	rt.inflight.Add(1)
-	if hooks != nil {
-		if hooks.Request != nil {
-			logical.startRequest(ctx)
-		} else {
-			logical.observerCtx = ctx
-		}
+	if hooks != nil && hooks.Request != nil {
+		logical.startRequest(ctx)
+	} else {
+		logical.observerCtx = ctx
 	}
 	if values.Timestamp.Set {
 		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
@@ -1103,10 +1111,10 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)
-		s.Core.ObserveSafely(func() { end(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		s.Core.ObserveSafely(func() { policy.Learn(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { policy.Learn(event) })
 	}
 	return typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}
 }
@@ -1694,7 +1702,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
-			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
+			s.Core.ApplyTypedFeedbackStamped(ctx, response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
 		if unprepared, ok := errors.AsType[*cqlerr.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
 			repaired = unprepared.StatementID
