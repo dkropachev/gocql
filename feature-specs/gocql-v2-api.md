@@ -1356,7 +1356,7 @@ type Options struct {
     PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
     Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
-    Timestamp cql.Option[int64]                   // microseconds
+    Timestamp cql.Option[time.Time]               // sent in microseconds; worker queries reject it
     NowInSeconds cql.Option[int32]
     Keyspace string
     CQLTrace bool                                 // server-side CQL tracing

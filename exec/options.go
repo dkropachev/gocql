@@ -61,6 +61,14 @@ type Options struct {
 	// Keyspace replaces the session's keyspace for the execution; empty keeps
 	// it.
 	Keyspace string
+	// Timestamp, when set, is the write timestamp of the execution, sent in
+	// microseconds since the Unix epoch, the unit of CQL's USING TIMESTAMP;
+	// finer precision is dropped. It replaces the session's client
+	// timestamp. A worker query from Prepared.Query or PreparedStream.Query
+	// would stamp every write it runs with the same time, so they reject
+	// it with a cql.ValidationError: pass it per call, through
+	// Session.CompileOptions.
+	Timestamp cql.Option[time.Time]
 	// CustomPayload is copied, including borrowed payload bytes, when compiled.
 	CustomPayload []cql.PayloadEntry
 	// Timeout and PageTimeout, when set, replace the profile's limits:
@@ -69,10 +77,6 @@ type Options struct {
 	Timeout, PageTimeout cql.Option[time.Duration]
 	// Prefetch replaces the profile's prefetch, zero or one, when set.
 	Prefetch cql.Option[int]
-	// Timestamp is the write timestamp in microseconds since the Unix epoch,
-	// the unit CQL's USING TIMESTAMP takes. Note that cql.Timestamp values
-	// are milliseconds: multiply one by 1000 to use it here.
-	Timestamp cql.Option[int64]
 	// PageSize is the rows per page; zero keeps the profile's, and
 	// cql.Unpaged requests the whole result in one response. A negative
 	// value is rejected.
@@ -225,11 +229,14 @@ func publicOptions(o implSession.Options) Options {
 	v := Options{
 		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
-		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
+		Prefetch: o.Prefetch, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
+	}
+	if o.Timestamp.Set {
+		v.Timestamp = cql.Some(time.UnixMicro(o.Timestamp.Value).UTC())
 	}
 	if o.Profile != nil {
 		profile := implSettings.InternalProfileToPublic[config.Profile](*o.Profile)

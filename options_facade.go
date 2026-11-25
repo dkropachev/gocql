@@ -18,11 +18,14 @@ func internalOptions(o exec.Options) implSession.Options {
 	v := implSession.Options{
 		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
-		Prefetch: o.Prefetch, Timestamp: o.Timestamp, PageSize: o.PageSize,
+		Prefetch: o.Prefetch, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
+	}
+	if o.Timestamp.Set {
+		v.Timestamp = cql.Some(o.Timestamp.Value.UnixMicro())
 	}
 	if o.Profile != nil {
 		// The only copy of the caller's profile: compiling keeps it.
@@ -53,6 +56,14 @@ func tooManyQueryOptions(stream bool) error {
 		return &cql.ValidationError{Field: "options", Err: errors.New("at most one StreamOptions")}
 	}
 	return &cql.ValidationError{Field: "options", Err: errors.New("at most one Options")}
+}
+
+// fixedWorkerTimestamp is the error of a worker query given a fixed
+// exec.Options.Timestamp, which would stamp each of its writes alike.
+//
+//go:noinline
+func fixedWorkerTimestamp() error {
+	return &cql.ValidationError{Field: "Timestamp", Err: errors.New("a worker query would give every write the same timestamp; pass it per call through Session.CompileOptions")}
 }
 
 // internalOptionList converts the optional exec.Options of a throwaway call; the

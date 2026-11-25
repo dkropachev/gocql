@@ -1225,11 +1225,11 @@ package exec
 		exec.Options field Observer observe.Observer
 		exec.Options field Profile *config.Profile
 		exec.Options field Keyspace string
+		exec.Options field Timestamp cql.Option[time.Time]
 		exec.Options field CustomPayload []cql.PayloadEntry
 		exec.Options field Timeout cql.Option[time.Duration]
 		exec.Options field PageTimeout cql.Option[time.Duration]
 		exec.Options field Prefetch cql.Option[int]
-		exec.Options field Timestamp cql.Option[int64]
 		exec.Options field PageSize int32
 		exec.Options field NowInSeconds cql.Option[int32]
 		exec.Options field ShardID cql.Option[uint32]
