@@ -122,7 +122,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			s.endDirectAttempt(request, conn, attempt, observed, response, err, end)
 		}
 		aggregate.Attempts = attempt
-		aggregate.Latency += latency
+		aggregate.AttemptLatency += latency
 		aggregate.HostID = conn.InternalHostID()
 		aggregate.AchievedConsistency = consistency
 		mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
@@ -133,7 +133,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			request.responseDest = nil
 			request.served = conn
 			response.Result = aggregate
-			response.Result.Rows = int64(response.RowCount)
+			response.Result.FetchedRows = int64(response.RowCount)
 			if response.PagingState != nil {
 				response.State = cqltype.PageStateOwned(response.PagingState)
 			} else {

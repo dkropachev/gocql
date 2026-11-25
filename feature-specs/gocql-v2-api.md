@@ -1427,8 +1427,8 @@ func (b *Batch) Reset() // keeps storage and Kind
 type Result struct {
     HostID cql.UUID
     Attempts int
-    Latency time.Duration
-    Rows int64
+    AttemptLatency time.Duration // summed over completed attempts
+    FetchedRows int64
     AchievedConsistency cql.Consistency
     /* unexported diagnostics */
 }
@@ -2146,7 +2146,7 @@ All Each callbacks may return gocql.StopIteration or a chain of single-error
 wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:
 decoder/transport errors are never suppressed. Normalize successful stopping
 before request metrics and observers. No later row callbacks or continuation
-pages run. Ordinary callback errors remain failures. Result.Rows continues
+pages run. Ordinary callback errors remain failures. Result.FetchedRows continues
 counting fetched response rows, rather than callback invocations.
 
 exec.Options and exec.CompiledOptions remain separate. Compile recurring settings once;

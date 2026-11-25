@@ -542,8 +542,8 @@ package cql
 	type cql.Result struct
 		cql.Result field HostID cql.UUID
 		cql.Result field Attempts int
-		cql.Result field Latency time.Duration
-		cql.Result field Rows int64
+		cql.Result field AttemptLatency time.Duration
+		cql.Result field FetchedRows int64
 		cql.Result field AchievedConsistency cql.Consistency
 		cql.Result method (T) CQLTraces() []cql.CQLTraceRef
 		cql.Result method (T) CustomPayload() []cql.PayloadEntry

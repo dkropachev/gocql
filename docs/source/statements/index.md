@@ -19,7 +19,7 @@ aliases the next row's data: keep `bytes.Clone(row.Field)`. Return
 `gocql.StopIteration` from the callback to finish successfully after enough rows.
 A single-error wrapper around StopIteration has the same effect; joined errors
 and other callback errors are returned and reported to observers as failures.
-`Result.Rows` counts rows fetched in response pages, which may exceed the number
+`Result.FetchedRows` counts rows fetched in response pages, which may exceed the number
 of callback invocations after early stopping.
 
 `prepared.Run(ctx, input)` returns `Rows` for pull iteration and

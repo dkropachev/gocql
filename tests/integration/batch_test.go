@@ -84,7 +84,7 @@ func TestBatch(t *testing.T) {
 			}
 			info := cassandraBatch(t, session, batch, exec.Options{})
 			require.Positive(t, info.Attempts)
-			require.Positive(t, info.Latency)
+			require.Positive(t, info.AttemptLatency)
 			require.Equal(t, int64(2), cassandraInt(t, cassandraRead(t, session, "SELECT count(*) FROM "+table), "count"))
 			row := cassandraRead(t, session, "SELECT id,my_int,my_text FROM "+table+" WHERE id=1")
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
@@ -123,7 +123,7 @@ func TestBatch(t *testing.T) {
 			// Native batch kind remains explicit on Batch.Kind.
 			// Per-request Result/Observer replace attempts/latency on a mutable batch.
 			require.Zero(t, (cql.Result{}).Attempts)
-			require.Zero(t, (cql.Result{}).Latency)
+			require.Zero(t, (cql.Result{}).AttemptLatency)
 			for _, kind := range []cql.BatchKind{cql.UnloggedBatch, cql.LoggedBatch} {
 				batch := &gocql.Batch{Kind: kind}
 				cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1)})
@@ -132,7 +132,7 @@ func TestBatch(t *testing.T) {
 				result, err := session.ExecBatch(ctx, batch, bindOptions(session, options))
 				require.NoError(t, err)
 				require.Equal(t, 1, result.Attempts)
-				require.Greater(t, result.Latency, time.Duration(0))
+				require.Greater(t, result.AttemptLatency, time.Duration(0))
 				require.Equal(t, cql.One, result.AchievedConsistency)
 				require.NotEmpty(t, result.CQLTraces())
 			}
@@ -339,6 +339,6 @@ func TestBatch(t *testing.T) {
 		}
 		info := cassandraBatch(t, session, batch, exec.Options{})
 		require.Positive(t, info.Attempts)
-		require.Positive(t, info.Latency)
+		require.Positive(t, info.AttemptLatency)
 	})
 }

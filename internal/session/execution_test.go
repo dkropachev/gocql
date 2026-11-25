@@ -441,7 +441,7 @@ func TestExecution(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
 					result, err := Exec(ctx, s, b, CompiledOptions{})
-					if err == nil || result.Rows != tc.rows {
+					if err == nil || result.FetchedRows != tc.rows {
 						t.Fatalf("result = %+v, %v", result, err)
 					}
 					if tc.column && (!strings.Contains(err.Error(), "result columns require Run") || result.Attempts != len(tc.bodies)) {
@@ -487,7 +487,7 @@ func TestExecution(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: observer}))
-			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
+			if err != nil || result.Attempts != 1 || result.FetchedRows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
 			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(ownedBytesForTest(result.CustomPayload()[0].Value.Value)) != "val" {

@@ -385,7 +385,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			if ok {
 				s.privateStorage.mu.Lock()
 				s.privateStorage.info.DeliveredRows++
-				s.privateStorage.info.Result.Rows = s.privateStorage.info.DeliveredRows
+				s.privateStorage.info.Result.FetchedRows = s.privateStorage.info.DeliveredRows
 				s.privateStorage.mu.Unlock()
 				return true
 			}
@@ -638,7 +638,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		s.privateStorage.mu.Lock()
 		s.privateStorage.info.Result.Attempts++
-		s.privateStorage.info.Result.Latency += event.Latency
+		s.privateStorage.info.Result.AttemptLatency += event.Latency
 		s.privateStorage.info.Result.HostID = event.Target.HostID
 		s.privateStorage.info.Result.AchievedConsistency = consistency
 

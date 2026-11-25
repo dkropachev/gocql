@@ -171,7 +171,7 @@ func TestCASBatchRows(t *testing.T) {
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if info := rows.Info(); info.Rows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
+	if info := rows.Info(); info.FetchedRows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
 		t.Fatalf("Info = %+v, want two rows from one attempt on the fake node", info)
 	}
 	if cloned.Applied || !cloned.Previous.Set || string(ownedBytesForTest(cloned.Previous.Value)) != "first" {

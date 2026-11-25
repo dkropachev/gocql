@@ -499,8 +499,8 @@ func TestQuery(t *testing.T) {
 				return nil
 			})
 			<-served
-			if err != nil || strings.Join(got, ",") != "a,b,c" || result.Rows != 3 {
-				t.Fatal(got, result.Rows, err)
+			if err != nil || strings.Join(got, ",") != "a,b,c" || result.FetchedRows != 3 {
+				t.Fatal(got, result.FetchedRows, err)
 			}
 			// The query is reusable at once: no Close or Wait obligation.
 			served = serve(runtimeRowsBody(nil, "d"))
@@ -648,8 +648,8 @@ func TestQuery(t *testing.T) {
 				return nil
 			})
 			<-served
-			if err != nil || strings.Join(got, ",") != "a,b,c,d,e" || result.Rows != 5 {
-				t.Fatal(got, result.Rows, err)
+			if err != nil || strings.Join(got, ",") != "a,b,c,d,e" || result.FetchedRows != 5 {
+				t.Fatal(got, result.FetchedRows, err)
 			}
 			got = got[:0]
 			served = serve(runtimeRowsBody([]byte{1}, "a"), runtimeRowsBody([]byte{2, 2}, "b"), runtimeRowsBody([]byte{1}, "c"))
@@ -721,8 +721,8 @@ func TestQuery(t *testing.T) {
 				values = append(values, string(ownedBytesForTest(*row)))
 				return nil
 			})
-			if err != nil || fmt.Sprint(values) != "[one uno two]" || result.Rows != 3 {
-				t.Fatal(values, result.Rows, err)
+			if err != nil || fmt.Sprint(values) != "[one uno two]" || result.FetchedRows != 3 {
+				t.Fatal(values, result.FetchedRows, err)
 			}
 			if err := <-serverDone; err != nil {
 				t.Fatal(err)

@@ -21,11 +21,15 @@ type Result struct {
 	HostID UUID
 	// Attempts is the number of attempts started, speculative ones included.
 	Attempts int
-	// Latency is the sum of the latencies of the completed attempts.
-	Latency time.Duration
-	// Rows is the number of rows the response held, or that a stream
-	// delivered.
-	Rows int64
+	// AttemptLatency is the sum of the latencies of the completed
+	// attempts, from sending each to its response, over every page. It is
+	// not the request's wall time: retries add backoff it leaves out, and
+	// speculative attempts overlap, so it can exceed the wall time.
+	AttemptLatency time.Duration
+	// FetchedRows is the number of rows the responses held, over every
+	// page, or that a stream delivered. It counts rows fetched, which can
+	// exceed the rows a caller read when iteration stopped early.
+	FetchedRows int64
 	// AchievedConsistency is the consistency level of the last completed
 	// attempt, which a retry policy may have lowered.
 	AchievedConsistency Consistency
@@ -142,8 +146,8 @@ func cloneResult(result Result) Result {
 func mergeResult(dst *Result, src Result) {
 	dst.HostID = src.HostID
 	dst.Attempts += src.Attempts
-	dst.Latency += src.Latency
-	dst.Rows += src.Rows
+	dst.AttemptLatency += src.AttemptLatency
+	dst.FetchedRows += src.FetchedRows
 	dst.addWarnings(src.Warnings()...)
 	dst.addCQLTraces(src.CQLTraces()...)
 	dst.addCustomPayload(src.CustomPayload()...)

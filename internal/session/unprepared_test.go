@@ -36,7 +36,7 @@ func TestUnpreparedCalls(t *testing.T) {
 				}
 				return callbackError
 			})
-			if !errors.Is(err, callbackError) || result.Rows != 1 {
+			if !errors.Is(err, callbackError) || result.FetchedRows != 1 {
 				t.Fatal(result, err)
 			}
 			if _, err := dst.At(0); !errors.Is(err, cql.ErrReleased) {

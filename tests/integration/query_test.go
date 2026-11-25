@@ -418,7 +418,7 @@ func TestQuery(t *testing.T) {
 			// to each execution result; a statement never accumulates mutable metrics.
 			zero := cql.Result{}
 			require.Zero(t, zero.Attempts)
-			require.Zero(t, zero.Latency)
+			require.Zero(t, zero.AttemptLatency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
 			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
@@ -440,7 +440,7 @@ func TestQuery(t *testing.T) {
 				result, err := prepared.Exec(ctx, id, bindOptions(session, options))
 				require.NoError(t, err)
 				require.Equal(t, 1, result.Attempts)
-				require.Greater(t, result.Latency, time.Duration(0))
+				require.Greater(t, result.AttemptLatency, time.Duration(0))
 				require.Equal(t, cql.All, result.AchievedConsistency)
 				require.NotEmpty(t, result.CQLTraces())
 			}
@@ -586,7 +586,7 @@ func TestQuery(t *testing.T) {
 			require.NoError(t, rows.Close())
 			info := rows.Info()
 			require.Positive(t, info.Attempts)
-			require.Positive(t, info.Latency)
+			require.Positive(t, info.AttemptLatency)
 			require.Greater(t, session.Metrics().Requests, before.Requests)
 		})
 	})

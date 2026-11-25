@@ -61,8 +61,8 @@ func TestEachStopIteration(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Row accounting describes fetched pages, including rows not visited.
-			if result.Rows != int64(len(pages)*2) {
-				t.Fatalf("fetched rows %d", result.Rows)
+			if result.FetchedRows != int64(len(pages)*2) {
+				t.Fatalf("fetched rows %d", result.FetchedRows)
 			}
 			observer.mu.Lock()
 			if len(observer.requests) != 1 {

@@ -99,7 +99,7 @@ func TestObserver(t *testing.T) {
 		events, attempts := observer.snapshot()
 		require.Len(t, events, 1)
 		require.GreaterOrEqual(t, len(attempts), 5)
-		require.Equal(t, int64(50), events[0].Result.Rows)
+		require.Equal(t, int64(50), events[0].Result.FetchedRows)
 	})
 
 	t.Run("Query", func(t *testing.T) {

@@ -114,7 +114,7 @@ func TestPaging(t *testing.T) {
 							require.NoError(t, err)
 							result = append(result, row)
 						}
-						require.Equal(t, page.Info().Rows, pageRows)
+						require.Equal(t, page.Info().FetchedRows, pageRows)
 						require.NoError(t, page.Close())
 						if next.Complete() {
 							break
