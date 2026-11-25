@@ -81,7 +81,7 @@ func TestFixture(t *testing.T) {
 	// server, including the second page fetched after the helper returns its cursor.
 	t.Run("Helpers", func(t *testing.T) {
 		session := createV2Session(t, func(cfg *config.ConfigBuilder) {
-			cfg.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithPageSize(1) })
+			editDefaultProfile(cfg, func(p *config.ProfileBuilder) { p.WithPageSize(1) })
 		})
 		defer session.Close()
 		ctx := context.Background()

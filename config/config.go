@@ -666,25 +666,12 @@ func (b *ConfigBuilder) WithRefreshAfterAgreement(on bool) *ConfigBuilder {
 // WithDefaultProfile replaces the complete execution defaults for statements
 // that pass no Profile. The profile is copied now; policy objects stay shared.
 // Build validates the final settings and rejects a profile that
-// ProfileBuilder.Build did not make; start one with NewProfile.
+// ProfileBuilder.Build did not make; start one with NewProfile. To change a
+// few fields of a built configuration's profile, derive it with
+// Config.DefaultProfile and Profile.Builder. Default the profile NewProfile
+// builds.
 func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
 	b.profile = &ProfileBuilder{profile: internalProfile(profile), started: true}
-	return b
-}
-
-// ConfigureDefaultProfile chooses execution defaults for statements that pass no
-// Profile. choose receives the builder's default profile, so several calls
-// add to the same profile, and edits apply on top of the profile an earlier
-// WithDefaultProfile set. A nil choose resets the entire default profile.
-func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
-	switch {
-	case choose == nil:
-		b.profile = NewProfile()
-	case b.profile == nil: // a zero ConfigBuilder, which Build rejects
-		choose(new(ProfileBuilder))
-	default:
-		choose(b.profile)
-	}
 	return b
 }
 
@@ -784,6 +771,27 @@ func (c Config) String() string {
 		fmt.Fprintf(&w, " consistency=%v timeout=%v page size=%d", p.Consistency, p.Timeout, p.PageSize)
 	}
 	return w.String()
+}
+
+// DefaultProfile returns the execution defaults of statements that pass no
+// Profile: the profile WithDefaultProfile chose, or the driver's. Derive
+// another profile from it with Profile.Builder. The zero Config returns the
+// zero Profile, which is not built.
+func (c Config) DefaultProfile() Profile {
+	if c.settings == nil || c.settings.DefaultProfile == nil {
+		return Profile{}
+	}
+	return publicProfile(*c.settings.DefaultProfile)
+}
+
+// Observer returns the observer WithObserver chose, which a session
+// connected with c also returns from Session.Observer; nil without one or
+// for the zero Config.
+func (c Config) Observer() observe.Observer {
+	if c.settings == nil {
+		return nil
+	}
+	return c.settings.Observer
 }
 
 // resolved returns the settings to connect with, or an error for the zero

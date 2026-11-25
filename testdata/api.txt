@@ -128,11 +128,12 @@ package config
 		config.ClientRoute field ConnectionID string
 		config.ClientRoute field Hostname string
 	type config.Config struct
+		config.Config method (T) DefaultProfile() config.Profile
+		config.Config method (T) Observer() observe.Observer
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
 		config.ConfigBuilder method (*T) Clone() *config.ConfigBuilder
-		config.ConfigBuilder method (*T) ConfigureDefaultProfile(choose func(*config.ProfileBuilder)) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAddressTranslator(translator endpoint.Translator) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithApplication(name string, version string) *config.ConfigBuilder
@@ -209,6 +210,7 @@ package config
 		config.Profile field PageSize int32
 		config.Profile field SerialConsistency cql.Option[cql.Consistency]
 		config.Profile field Consistency cql.Consistency
+		config.Profile method (T) Builder() *config.ProfileBuilder
 	type config.ProfileBuilder struct
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
 		config.ProfileBuilder method (*T) MustBuild() config.Profile

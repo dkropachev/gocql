@@ -2,7 +2,7 @@
 
 Set `Profile.Routing` to a typed `routing.Policy` with
 `ProfileBuilder.WithRouting`, in the session's default profile
-(`config.ConfigBuilder.WithDefaultProfile` or `ConfigureDefaultProfile`) or in
+(`config.ConfigBuilder.WithDefaultProfile`) or in
 the `exec.Options.Profile` of an execution. The default is token-aware and
 leader-aware with shuffled replicas, and `WithRouting(nil)` restores it.
 `routing.NewPolicy(routing.Options{...})` configures

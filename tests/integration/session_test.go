@@ -660,7 +660,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "Timeout",
 							getCluster: func() config.Config {
-								return mustBuild(t, createV2ClusterWithout(fixtureTimeout).ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithTimeout(lowTimeout) }))
+								return mustBuild(t, editDefaultProfile(createV2ClusterWithout(fixtureTimeout), func(p *config.ProfileBuilder) { p.WithTimeout(lowTimeout) }))
 							},
 							connect: Pass,
 							// Above 1ns the query can complete before the deadline fires,
@@ -709,8 +709,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "AllTimeouts",
 							getCluster: func() config.Config {
-								return mustBuild(t, createV2ClusterWithout(fixtureTimeout).
-									ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithTimeout(lowTimeout) }).
+								return mustBuild(t, editDefaultProfile(createV2ClusterWithout(fixtureTimeout), func(p *config.ProfileBuilder) { p.WithTimeout(lowTimeout) }).
 									WithReadTimeout(lowTimeout).
 									WithWriteTimeout(lowTimeout).
 									WithMetadataTimeout(lowTimeout))
@@ -868,9 +867,7 @@ func TestSession(t *testing.T) {
 			c := config.New(testDialect, "unix:"+socketFiles[0]).
 				WithCQLVersion(*flagCQL).
 				WithSchemaAgreement(200*time.Millisecond, 2*time.Minute).
-				ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-					p.WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})
-				}).
+				WithDefaultProfile(config.NewProfile().WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)}).MustBuild()).
 				WithConnectionsPerHost(1).
 				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
@@ -961,9 +958,7 @@ func TestSession(t *testing.T) {
 		// The smoke cluster speaks the dialect the suite is built for.
 		cfg := config.New(testDialect, strings.Split(v2SmokeOption("cluster", "127.0.20.1,127.0.20.2,127.0.20.3"), ",")...).
 			WithConfigReport(false).
-			ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-				p.WithTimeout(30 * time.Second).WithConsistency(cql.LocalQuorum)
-			})
+			WithDefaultProfile(config.NewProfile().WithTimeout(30 * time.Second).WithConsistency(cql.LocalQuorum).MustBuild())
 		switch v2SmokeOption("compressor", "no-compression") {
 		case "lz4":
 			cfg.WithCompression(cql.LZ4Compression)

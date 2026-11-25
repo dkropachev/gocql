@@ -81,9 +81,16 @@ copies and replaces the complete profile. Build profiles with `NewProfile` to
 start from driver defaults; a `config.Profile{...}` literal would leave every
 unset field zero, so `Build` rejects it. A built profile may be copied and its
 fields edited. Later edits to a supplied profile do not affect the
-configuration. Use `ConfigureDefaultProfile(callback)` to compose changes to
-the current profile, including one set by `WithDefaultProfile`; `ConfigureDefaultProfile(nil)` resets
-all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
+configuration. To change a few fields of a profile, derive a builder from it
+with `Profile.Builder`; `Config.DefaultProfile` reads a built configuration's
+default profile back:
+
+```go
+reads := cfg.DefaultProfile().Builder().WithConsistency(cql.One).MustBuild()
+```
+
+`Config.Observer` returns the observer `WithObserver` chose, which
+`Session.Observer` also returns. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 
 `WithContactPoints` replaces the contact points. Slice arguments are copied,

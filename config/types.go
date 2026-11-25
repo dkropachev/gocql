@@ -51,6 +51,18 @@ type Profile struct {
 	built bool
 }
 
+// Builder returns a ProfileBuilder that starts from p's values, so a profile
+// can be derived from another, such as Config.DefaultProfile:
+//
+//	reads := cfg.DefaultProfile().Builder().WithConsistency(cql.One).MustBuild()
+//
+// Changes to the builder do not reach p. Build rejects a builder derived
+// from a Profile that ProfileBuilder.Build did not make, such as a literal
+// or the zero Profile, as WithDefaultProfile rejects that Profile.
+func (p Profile) Builder() *ProfileBuilder {
+	return &ProfileBuilder{profile: internalProfile(p), started: true}
+}
+
 // defaultRouting is the policy of a Profile whose Routing was set to nil
 // after Build, shared so that converting such a profile allocates none.
 var defaultRouting = sync.OnceValue(implSettings.DefaultRouting)

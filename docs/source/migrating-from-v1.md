@@ -71,9 +71,7 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 	WithKeyspace("app").
 	WithAuth(auth.Password("u", "p")).
 	WithLocalDatacenter("dc1").
-	ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-		p.WithConsistency(cql.LocalQuorum)
-	}).
+	WithDefaultProfile(config.NewProfile().WithConsistency(cql.LocalQuorum).MustBuild()).
 	Build()
 if err != nil {
 	return err
@@ -91,7 +89,7 @@ defer session.Close()
 | `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg)` |
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
-| `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `ConfigureDefaultProfile` with `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
+| `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `WithDefaultProfile` with a profile from `config.NewProfile()` and `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |

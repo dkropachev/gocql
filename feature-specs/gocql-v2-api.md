@@ -1929,7 +1929,7 @@ Package `config` holds the configuration API. A `config.Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`
-and `ConfigureDefaultProfile`. An on/off setting takes a bool
+and `Clone`. An on/off setting takes a bool
 (`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
 interval whose zero has no other meaning turns its feature off at zero
 (`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
@@ -1953,7 +1953,9 @@ none. Without it, contact points that all name one port make that port the
 default; with it, `Build` rejects contact points that all name one other port,
 unless discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
-`ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
+`Config.DefaultProfile()` reads a built configuration's profile back, and
+`Profile.Builder()` starts a builder from a profile's values to derive another.
+`Config.Observer()` returns the observer, as `Session.Observer` does. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
 These functions are the entry points:
 
@@ -1963,7 +1965,9 @@ func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
-func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
+func (Config) DefaultProfile() Profile
+func (Config) Observer() observe.Observer
+func (Profile) Builder() *ProfileBuilder
 func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
 func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
