@@ -58,6 +58,9 @@ var (
 	ManagesRowDestination = NewSlot("cql.managesRowDestination")
 	// PreservesRowDestination holds func(plan any) bool.
 	PreservesRowDestination = NewSlot("cql.preservesRowDestination")
+	// ConditionalRows holds func(decoder any) bool: it reports whether
+	// decoder is a cql.CASRows decoder.
+	ConditionalRows = NewSlot("cql.conditionalRows")
 )
 
 // Package cql's Result, which the engine fills in. The functions take and

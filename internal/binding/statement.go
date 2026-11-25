@@ -99,10 +99,44 @@ func statementDefaults[P, R any](s *Statement[P, R]) {
 	}
 }
 
-// ValidateStatement fills s's empty defaults and validates it.
+// ValidateStatement fills s's empty defaults, validates it and resolves its
+// Kind; see ResolveKind.
 func ValidateStatement[P, R any](s *Statement[P, R]) error {
 	statementDefaults(s)
-	return validateStatement(*s)
+	if err := validateStatement(*s); err != nil {
+		return err
+	}
+	kind, err := ResolveKind(s.Kind, s.CQL, s.Rows)
+	if err != nil {
+		return err
+	}
+	s.Kind = kind
+	return nil
+}
+
+// ResolveKind returns the kind a statement of kind, text and row decoder
+// executes as. A statement decoded with cql.CASRows, or whose text is an
+// INSERT, UPDATE, DELETE or BATCH with an IF outside quotes and comments, is
+// conditional; anything else is ordinary. An UnknownStatement takes that
+// inference; a ConditionalStatement stays one; an OrdinaryStatement the
+// inference finds conditional is rejected with a ValidationError, before
+// anything is sent, since it would run with a client timestamp, shuffled
+// replicas and speculation a conditional statement must not have.
+// It scans the text once, so a prepared statement resolves at Prepare and an
+// unprepared one per call.
+func ResolveKind(kind cql.StatementKind, text string, rows any) (cql.StatementKind, error) {
+	if kind == cql.ConditionalStatement {
+		return kind, nil
+	}
+	conditional := codec.ConditionalRows(rows) || InternalConditionalCQL(text)
+	switch {
+	case !conditional:
+		return cql.OrdinaryStatement, nil
+	case kind == cql.OrdinaryStatement:
+		return 0, cqltype.TypeValidation("statement kind", "an OrdinaryStatement with a CASRows decoder or an IF condition is conditional; declare it ConditionalStatement or leave it UnknownStatement")
+	default:
+		return cql.ConditionalStatement, nil
+	}
 }
 
 func validateStatement[P, R any](s Statement[P, R]) error {
@@ -126,9 +160,23 @@ func InternalFirstCQLWord(cql string) string {
 	visitCQLWords(cql, func(next string) bool { word = next; return false })
 	return word
 }
+
+// InternalConditionalCQL reports whether cql is an INSERT, UPDATE, DELETE or
+// BATCH (BEGIN ... BATCH) with an IF word outside string literals, quoted
+// identifiers and comments: a lightweight transaction. IF is a reserved word,
+// so it cannot be an unquoted identifier; DDL such as CREATE TABLE IF NOT
+// EXISTS is not conditional.
 func InternalConditionalCQL(cql string) bool {
-	conditional := false
+	conditional, first := false, true
 	visitCQLWords(cql, func(word string) bool {
+		if first {
+			first = false
+			switch word {
+			case "INSERT", "UPDATE", "DELETE", "BEGIN":
+				return true
+			}
+			return false
+		}
 		if word == "IF" {
 			conditional = true
 			return false

@@ -44,11 +44,13 @@ captured parameters through drain. `query.Close()` stops a query at once, and
 
 `exec.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
-custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies known
-ordinary/conditional statements; unknown or conditional requests send no
-client timestamp, keep a fixed replica order and cannot speculate. A
-statement left `cql.UnknownStatement` whose row type is `cql.EmptyRow` reads
-no rows, so it executes as ordinary; as a batch member it stays unknown.
+custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies
+ordinary and conditional statements; conditional requests send no client
+timestamp, keep a fixed replica order and cannot speculate. A statement left
+`cql.UnknownStatement` is conditional when its rows decode through
+`cql.CASRows` or its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF`
+condition, and ordinary otherwise; one declared `cql.OrdinaryStatement` that
+is conditional by that test is rejected before it is sent.
 Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
 marks a statement safe to run more than once, for speculation and
 `retry.Safe`; prepared statements, their queries and batch members carry it,

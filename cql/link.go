@@ -47,6 +47,10 @@ func init() {
 		_, ok := plan.(rowDestinationManager)
 		return ok
 	})
+	link.Set(link.ConditionalRows, func(decoder any) bool {
+		_, ok := decoder.(interface{ conditionalRows() })
+		return ok
+	})
 	link.Set(link.PreservesRowDestination, func(plan any) bool {
 		p, ok := plan.(interface{ preserveDestination() bool })
 		return ok && p.preserveDestination()

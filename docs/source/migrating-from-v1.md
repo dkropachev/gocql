@@ -175,12 +175,13 @@ if !found {
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Query(options)` is closed with `Close` |
 
-v1 sent a client timestamp with every request. v2 stamps only statements it
-knows to be ordinary: one whose `Kind` is `cql.OrdinaryStatement`, one
-ScyllaDB's prepared metadata marks as not conditional, and one left
-`cql.UnknownStatement` whose row type is `cql.EmptyRow`. On Cassandra, set
-`Kind: cql.OrdinaryStatement` on a statement that returns rows to get client
-timestamps, replica shuffling and speculation for it.
+v1 sent a client timestamp with every request. v2 stamps only ordinary
+statements. A statement left `cql.UnknownStatement`, as a ported v1
+statement is, is conditional when its rows decode through `cql.CASRows` or
+its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` condition, and
+ordinary otherwise, on every server; v1's `Query.IsLWT` knew it only from
+ScyllaDB's prepared metadata. Declaring `Kind: cql.OrdinaryStatement` on a
+statement the driver finds conditional fails before it is sent.
 
 One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
 `session.CompileOptions`; compile them once and reuse them. A worker that runs

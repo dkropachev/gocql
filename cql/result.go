@@ -37,6 +37,10 @@ func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 // does.
 var CASApplied RowDecoder[CASResult[EmptyRow]] = CASRows[EmptyRow](nil)
 
+// conditionalRows marks a CASRows decoder, which makes a statement of
+// UnknownStatement conditional.
+func (casRows[R]) conditionalRows() {}
+
 func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) {
 	first, ok := columns.At(0)
 	if !ok || first.Name != "[applied]" {

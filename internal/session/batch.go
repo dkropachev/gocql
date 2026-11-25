@@ -275,7 +275,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 		return err
 	}
 	defer request.InternalOwner.InternalRelease()
-	return batch.add(s, request.InternalSource, request.statement, request.memberRouting(), request.idempotent, request.InternalValues)
+	return batch.add(s, request.InternalSource, request.statement, &request.routing, request.idempotent, request.InternalValues)
 }
 
 // queryExec prepares the batch's request for an execution on query q,

@@ -55,7 +55,7 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, kindInferred: prepared.privateStorage.kindInferred, idempotent: prepared.privateStorage.idempotent, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
+	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, idempotent: prepared.privateStorage.idempotent, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := p.Query(options.Options)
 	if err != nil {
 		return nil, err

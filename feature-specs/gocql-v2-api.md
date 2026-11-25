@@ -256,15 +256,17 @@ type Statement[P, R any] struct {
     Params ParamEncoder[P]   // nil when P is EmptyParams
     Rows RowDecoder[R]       // nil when R is EmptyRow
     BindMarkers Columns      // parameter metadata for unprepared execution
-    Kind StatementKind       // Unknown with R == EmptyRow executes as Ordinary
+    Kind StatementKind       // Unknown is inferred: CASRows or a DML IF is Conditional
     Idempotent bool          // carried into Prepared, Query and batch members
 }
 type StatementKind uint8
 const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
-// UnknownStatement sends no client timestamp, keeps a fixed replica order and
-// a strict shard pin, and never speculates. A statement left Unknown whose R is
-// EmptyRow executes as Ordinary, prepared or not; as a batch member it stays
-// Unknown. A batch is idempotent when every member is; exec.Options.Idempotent,
+// A conditional statement sends no client timestamp, keeps a fixed replica
+// order and a strict shard pin, and never speculates. A statement left Unknown
+// is Conditional when Rows is a CASRows decoder or its CQL is an INSERT,
+// UPDATE, DELETE or BATCH with a lexical IF, else Ordinary, prepared,
+// unprepared or as a batch member; an Ordinary one that is Conditional by
+// that test is rejected before it is sent. A batch is idempotent when every member is; exec.Options.Idempotent,
 // when set, overrides the statement's flag.
 func Command(text string) Statement[EmptyParams, EmptyRow]
 func NewStatement[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R]

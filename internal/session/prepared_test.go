@@ -697,12 +697,17 @@ func TestPrepared(t *testing.T) {
 				initial      bool
 				badResult    bool
 				prepareError bool
+				// rejected: the kind contradicts the CASRows decoder and
+				// the IF, so Prepare fails before it sends anything.
+				rejected bool
 			}{
 				{name: "unknown", kind: implCql.UnknownStatement},
 				{name: "conditional", kind: implCql.ConditionalStatement},
 				{name: "invalid-execute-metadata", kind: implCql.ConditionalStatement, badResult: true},
-				{name: "ordinary-still-validates", kind: implCql.OrdinaryStatement, prepareError: true},
-				{name: "present-metadata-still-validates", kind: implCql.UnknownStatement, initial: true, prepareError: true},
+				{name: "ordinary-rejected", kind: implCql.OrdinaryStatement, rejected: true},
+				// The CASRows decoder makes the statement conditional, so a
+				// PREPARE shape that does not fit defers to EXECUTE's.
+				{name: "present-metadata-deferred", kind: implCql.UnknownStatement, initial: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					s, _, peers := runtimeTestSession(t, 1)
@@ -710,6 +715,13 @@ func TestPrepared(t *testing.T) {
 					defer peers[0].Close()
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
+					if tc.rejected {
+						_, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
+						if !hasErrorType[*implCql.ValidationError](err) {
+							t.Fatalf("ordinary conditional statement: %v, want a ValidationError", err)
+						}
+						return
+					}
 					boolType := codecTestMust(implCql.ScalarType(implCql.KindBoolean))
 					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "wrong", Type: boolType})
 					initial := implCql.NewColumns()

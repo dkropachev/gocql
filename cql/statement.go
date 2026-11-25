@@ -26,8 +26,8 @@ type Statement[P, R any] struct {
 	// instead.
 	BindMarkers Columns
 	// Kind classifies ordinary and conditional statements for safe execution.
-	// A statement left UnknownStatement whose R is EmptyRow executes as an
-	// OrdinaryStatement, since it reads no rows; see UnknownStatement.
+	// The driver infers an UnknownStatement's kind from Rows and the CQL;
+	// see UnknownStatement.
 	Kind StatementKind
 	// Idempotent marks the statement safe to run more than once: speculative
 	// execution requires it, and retry.Safe moves a request that may have
@@ -54,7 +54,9 @@ func NewStatement[P, R any](text string, params ParamEncoder[P], rows RowDecoder
 // Select returns a statement that reads rows, such as a SELECT, with params
 // and rows, its type arguments inferred from them. A read runs as often as it
 // is retried without changing anything, so it is an OrdinaryStatement and
-// Idempotent.
+// Idempotent. A conditional statement, one whose CQL is an INSERT, UPDATE,
+// DELETE or BATCH with an IF or whose rows is a CASRows decoder, declared
+// that way is rejected before it is sent.
 func Select[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R] {
 	return Statement[P, R]{CQL: text, Params: params, Rows: rows, Kind: OrdinaryStatement, Idempotent: true}
 }

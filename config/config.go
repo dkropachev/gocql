@@ -667,7 +667,7 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 // other setter, nil does not restore the default. By default the
 // driver stamps each request with the time it was admitted, strictly
 // increasing per session. Only ordinary statements, and batches of them, are
-// stamped: a conditional or unclassified one (cql.UnknownStatement), a
+// stamped: a conditional one, declared or inferred (cql.UnknownStatement), a
 // counter write and a request with exec.Options.Timestamp set take no
 // generated timestamp.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {

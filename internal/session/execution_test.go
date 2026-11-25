@@ -196,14 +196,24 @@ func TestExecution(t *testing.T) {
 			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
 				for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
 					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.NoParams}, implCql.NewColumns(), implCql.EmptyRow{})
+					// An unclassified statement takes the kind its CQL
+					// shows; an ordinary one with an IF is rejected.
+					conditional := strings.Contains(cql, "IF NOT EXISTS")
+					if kind == implCql.OrdinaryStatement && conditional {
+						if !hasErrorType[*implCql.ValidationError](err) {
+							t.Fatal(cql, err)
+						}
+						continue
+					}
 					if err != nil {
 						t.Fatal(err)
 					}
-					// R is EmptyRow, so an unclassified statement executes
-					// as an ordinary one.
 					want := kind
 					if kind == implCql.UnknownStatement {
 						want = implCql.OrdinaryStatement
+						if conditional {
+							want = implCql.ConditionalStatement
+						}
 					}
 					if b.Routing().Kind != want {
 						t.Fatal(cql, b.Routing())
