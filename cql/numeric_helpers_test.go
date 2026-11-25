@@ -64,3 +64,31 @@ func TestParseDecimal(t *testing.T) {
 		t.Fatal(r)
 	}
 }
+
+func TestVarintBigIntCodecClone(t *testing.T) {
+	if VarintBigIntCodec.Clone(nil) != nil {
+		t.Fatal("Clone(nil) is not nil")
+	}
+	v := big.NewInt(42)
+	c := VarintBigIntCodec.Clone(v)
+	if c == v || c.Cmp(v) != 0 {
+		t.Fatalf("Clone = %v (same pointer %t), want a copy of %v", c, c == v, v)
+	}
+	v.SetInt64(7)
+	if c.Int64() != 42 {
+		t.Fatalf("clone changed with the original: %v", c)
+	}
+}
+
+func TestPointerCodecCheckType(t *testing.T) {
+	c := PointerCodec(Int32Codec)
+	if err := c.CheckType(IntType); err != nil {
+		t.Fatalf("CheckType(int) = %v", err)
+	}
+	if err := c.CheckType(TextType); err == nil {
+		t.Fatal("CheckType(text) accepted a text column for *int32")
+	}
+	if err := PointerCodec[int32](nil).CheckType(IntType); err == nil {
+		t.Fatal("CheckType accepted a nil base codec")
+	}
+}
