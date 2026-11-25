@@ -85,7 +85,7 @@ func pinEach(t *testing.T, q *Query[cql.EmptyRow, []byte]) {
 type pinRetryNext struct{}
 
 func (pinRetryNext) Decide(e retry.Attempt) retry.Decision {
-	if e.Number == 1 {
+	if e.Attempt == 1 {
 		return retry.Decision{Action: retry.Next}
 	}
 	return retry.Decision{}

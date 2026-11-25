@@ -47,20 +47,27 @@ func TestErrorKindMetrics(t *testing.T) {
 	})
 
 	t.Run("Attempts", func(t *testing.T) {
+		unavailable := &cqlerr.UnavailableError{}
 		for _, tc := range []struct {
 			err                error
+			partial            bool
 			canceled, timedOut bool
+			status             cqlerr.ExecutionStatus
 		}{
-			{nil, false, false},
-			{context.Canceled, true, false},
-			{context.DeadlineExceeded, false, true},
-			{cqlerr.ErrRequestTimeout, false, true},
-			{errors.New("other"), false, false},
+			{nil, false, false, false, cqlerr.Executed},
+			{context.Canceled, false, true, false, cqlerr.NotExecuted},
+			{context.DeadlineExceeded, false, false, true, cqlerr.NotExecuted},
+			{cqlerr.ErrRequestTimeout, false, false, true, cqlerr.NotExecuted},
+			{errors.New("other"), false, false, false, cqlerr.MaybeExecuted},
+			{unavailable, false, false, false, cqlerr.NotExecuted},
+			// An unlogged batch the server rejected may have applied some
+			// partitions, as AttemptFailure reports.
+			{unavailable, true, false, false, cqlerr.MaybeExecuted},
 		} {
 			event := routing2.AttemptEvent{Err: tc.err}
-			attemptEnded(&event)
-			if event.Canceled != tc.canceled || event.TimedOut != tc.timedOut {
-				t.Errorf("%v: Canceled %t, TimedOut %t", tc.err, event.Canceled, event.TimedOut)
+			attemptEnded(&event, tc.partial)
+			if event.Canceled != tc.canceled || event.TimedOut != tc.timedOut || event.ExecutionStatus != tc.status {
+				t.Errorf("%v: Canceled %t, TimedOut %t, ExecutionStatus %v", tc.err, event.Canceled, event.TimedOut, event.ExecutionStatus)
 			}
 		}
 	})

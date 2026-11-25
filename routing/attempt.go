@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -41,6 +42,10 @@ type AttemptEvent struct {
 	Started time.Time
 	// Err is the attempt's error, or nil when it succeeded.
 	Err error
+	// Address is the host:port of the connection the attempt was sent on,
+	// or the socket path of a Unix socket connection, as in
+	// cqlerr.AttemptFailure.
+	Address string
 	// RequestID is the ID of the attempt's request.
 	RequestID uint64
 	// Attempt is the 1-based number of the attempt within its request.
@@ -52,6 +57,12 @@ type AttemptEvent struct {
 	// CQLTraceID is the CQL trace session the attempt's response named, when
 	// the execution ran with CQL tracing and a response arrived.
 	CQLTraceID cql.Option[cql.UUID]
+	// Consistency is the consistency level the attempt used.
+	Consistency cql.Consistency
+	// ExecutionStatus reports what the attempt may have done on the
+	// cluster: cqlerr.Executed when it succeeded, otherwise what
+	// cqlerr.AttemptFailure.ExecutionStatus reports for it.
+	ExecutionStatus cqlerr.ExecutionStatus
 	// Canceled reports an attempt whose error is cqlerr.KindCanceled: the
 	// caller canceled the request, or the driver canceled the attempt, as
 	// when another attempt of the request won. TimedOut reports one whose

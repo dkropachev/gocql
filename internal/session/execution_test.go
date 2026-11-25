@@ -732,7 +732,7 @@ func TestExecution(t *testing.T) {
 			for _, written := range []bool{false, true} {
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: errors.New("write"), InternalPotentiallyExecuted: written})
 				status := cqlerr.ExecutionStatusOf(err)
-				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Number: 1, ExecutionStatus: status})
+				decision := (retry.Safe{}).Decide(retry.Attempt{Err: err, Attempt: 1, ExecutionStatus: status})
 				if (decision.Action == retry.Next) == written {
 					t.Fatal(written, decision)
 				}

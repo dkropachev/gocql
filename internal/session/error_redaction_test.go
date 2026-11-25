@@ -176,10 +176,10 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					for _, a := range failure.Attempts {
 						target := a.Address
 						if target == "" {
-							target = a.HostID.String()
+							target = a.Target.HostID.String()
 						}
-						if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Number, target)) {
-							t.Errorf("message %q does not name attempt #%d on %s", err, a.Number, target)
+						if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Attempt, target)) {
+							t.Errorf("message %q does not name attempt #%d on %s", err, a.Attempt, target)
 						}
 					}
 				})

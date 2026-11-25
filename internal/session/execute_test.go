@@ -191,14 +191,14 @@ type runtimeDelayedRetry struct {
 }
 
 func (p runtimeDelayedRetry) Decide(e retry.Attempt) retry.Decision {
-	if e.Number >= 3 {
+	if e.Attempt >= 3 {
 		return retry.Decision{}
 	}
 	if p.scheduled != nil {
 		p.scheduled <- struct{}{}
 	}
 	action := retry.Same
-	if e.Number == 2 {
+	if e.Attempt == 2 {
 		action = retry.Next
 	}
 	return retry.Decision{Action: action, Delay: p.delay}

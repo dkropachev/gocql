@@ -36,7 +36,7 @@ attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
 
 ```go
 policy := retry.PolicyFunc(func(a retry.Attempt) retry.Decision {
-	if a.Number < 5 && cqlerr.KindOf(a.Err) == cqlerr.KindOverloaded {
+	if a.Attempt < 5 && cqlerr.KindOf(a.Err) == cqlerr.KindOverloaded {
 		return retry.Decision{Action: retry.Next, Delay: 100 * time.Millisecond}
 	}
 	return retry.Safe{}.Decide(a)

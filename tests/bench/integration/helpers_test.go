@@ -264,7 +264,7 @@ func (o *cassandraObserver) snapshot() ([]observe.RequestEvent, []routing.Attemp
 type cassandraRetry struct{}
 
 func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
-	if a.Idempotent && a.Number < 6 {
+	if a.Idempotent && a.Attempt < 6 {
 		return retry.Decision{Action: retry.Same}
 	}
 	return retry.Decision{Action: retry.Stop}
@@ -1417,7 +1417,7 @@ type sessionTestRetry struct {
 }
 
 func (p sessionTestRetry) Decide(e retry.Attempt) retry.Decision {
-	if e.Number >= p.maxAttempts {
+	if e.Attempt >= p.maxAttempts {
 		return retry.Decision{Action: retry.Stop}
 	}
 	return retry.Decision{Action: p.action}

@@ -87,11 +87,11 @@ if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 	log.Printf("stopped: %v (%s)", failure.Err, failure.ExecutionStatus())
 	for _, a := range failure.Attempts {
 		shard := "-"
-		if a.ShardID.Set {
-			shard = strconv.FormatUint(uint64(a.ShardID.Value), 10)
+		if a.Target.ShardID.Set {
+			shard = strconv.FormatUint(uint64(a.Target.ShardID.Value), 10)
 		}
 		log.Printf("attempt %d: host %s (%s) shard %s at %s: %s: %v",
-			a.Number, a.HostID, a.Address, shard, a.Consistency, a.ExecutionStatus, a.Err)
+			a.Attempt, a.Target.HostID, a.Address, shard, a.Consistency, a.ExecutionStatus, a.Err)
 	}
 }
 ```

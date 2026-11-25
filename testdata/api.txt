@@ -866,12 +866,11 @@ package cqlerr
 	type cqlerr.AttemptFailure struct
 		cqlerr.AttemptFailure field Err error
 		cqlerr.AttemptFailure field Address string
-		cqlerr.AttemptFailure field HostID cql.UUID
-		cqlerr.AttemptFailure field Number int
-		cqlerr.AttemptFailure field ShardID cql.Option[uint32]
+		cqlerr.AttemptFailure field Attempt int
+		cqlerr.AttemptFailure field Target metadata.Target
 		cqlerr.AttemptFailure field Consistency cql.Consistency
-		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
+		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure method (T) String() string
 	type cqlerr.CASWriteUnknownError struct
 		cqlerr.CASWriteUnknownError field Consistency cql.Consistency
@@ -1482,9 +1481,11 @@ package observe
 		observe.AttemptObserverFunc method (T) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
 	type observe.AttemptStart struct
 		observe.AttemptStart field Started time.Time
+		observe.AttemptStart field Address string
 		observe.AttemptStart field RequestID uint64
 		observe.AttemptStart field Attempt int
 		observe.AttemptStart field Target metadata.Target
+		observe.AttemptStart field Consistency cql.Consistency
 		observe.AttemptStart field Speculative bool
 	func observe.Join(observers ...observe.Observer) observe.Observer
 	type observe.Observer interface
@@ -1514,10 +1515,10 @@ package retry
 		retry.Action method (T) String() string
 	type retry.Attempt struct
 		retry.Attempt field Err error
-		retry.Attempt field Number int
+		retry.Attempt field Attempt int
 		retry.Attempt field Idempotent bool
 		retry.Attempt field Consistency cql.Consistency
-		retry.Attempt field Kind cql.StatementKind
+		retry.Attempt field StatementKind cql.StatementKind
 		retry.Attempt field Batch cql.Option[cql.BatchKind]
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
 	type retry.Decision struct
@@ -1543,11 +1544,14 @@ package routing
 	type routing.AttemptEvent struct
 		routing.AttemptEvent field Started time.Time
 		routing.AttemptEvent field Err error
+		routing.AttemptEvent field Address string
 		routing.AttemptEvent field RequestID uint64
 		routing.AttemptEvent field Attempt int
 		routing.AttemptEvent field Latency time.Duration
 		routing.AttemptEvent field Target metadata.Target
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
+		routing.AttemptEvent field Consistency cql.Consistency
+		routing.AttemptEvent field ExecutionStatus cqlerr.ExecutionStatus
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool

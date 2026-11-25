@@ -70,7 +70,7 @@ func (p *recordingRetry) Decide(a retry.Attempt) retry.Decision {
 	p.mu.Lock()
 	p.status = append(p.status, a.ExecutionStatus)
 	p.mu.Unlock()
-	if a.Number >= p.limit {
+	if a.Attempt >= p.limit {
 		return retry.Decision{}
 	}
 	return retry.Decision{Action: retry.Same}
@@ -164,7 +164,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 			t.Fatalf("last server error lost: %v", err)
 		}
 		failure := requestError(t, err)
-		if len(failure.Attempts) != 2 || failure.Attempts[0].ExecutionStatus != cqlerr.MaybeExecuted || failure.Attempts[1].ExecutionStatus != cqlerr.NotExecuted || failure.Attempts[0].HostID == (cqlerr.AttemptFailure{}).HostID {
+		if len(failure.Attempts) != 2 || failure.Attempts[0].ExecutionStatus != cqlerr.MaybeExecuted || failure.Attempts[1].ExecutionStatus != cqlerr.NotExecuted || failure.Attempts[0].Target.HostID == (cqlerr.AttemptFailure{}).Target.HostID {
 			t.Fatalf("attempt history %+v", failure.Attempts)
 		}
 	})
@@ -190,7 +190,7 @@ func testExecutionStatusAggregation(t *testing.T, general bool) {
 			t.Fatalf("result traces = %+v, want IDs %v", traces, ids)
 		}
 		for i, trace := range traces {
-			if trace.ID != ids[i] || trace.Attempt != i+1 || !trace.Failed || trace.HostID != failure.Attempts[i].HostID {
+			if trace.ID != ids[i] || trace.Attempt != i+1 || !trace.Failed || trace.HostID != failure.Attempts[i].Target.HostID {
 				t.Fatalf("result trace %d = %+v, want ID %v of failed attempt %d", i, trace, ids[i], i+1)
 			}
 		}

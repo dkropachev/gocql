@@ -118,7 +118,7 @@ func errorResponse(t *testing.T, stream int, code cqlerr.ErrorCode, id []byte) [
 type retryOnce struct{}
 
 func (retryOnce) Decide(e retry.Attempt) retry.Decision {
-	if e.Number == 1 {
+	if e.Attempt == 1 {
 		return retry.Decision{Action: retry.Same}
 	}
 	return retry.Decision{}

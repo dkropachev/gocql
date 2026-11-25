@@ -1542,9 +1542,12 @@ type AttemptEvent struct {
     RequestID uint64
     Attempt int
     Target Target
+    Address string
+    Consistency cql.Consistency
     Started time.Time
     Latency time.Duration
     Err error
+    ExecutionStatus cqlerr.ExecutionStatus // Executed when Err is nil
     CQLTraceID cql.Option[cql.UUID]
     Canceled, TimedOut, Speculative bool // by cqlerr.KindOf(Err)
 }
@@ -1554,6 +1557,8 @@ type AttemptStart struct {
     RequestID uint64
     Attempt int
     Target Target
+    Address string
+    Consistency cql.Consistency
     Started time.Time
     Speculative bool
 }
@@ -1602,10 +1607,10 @@ type Action uint8
 const (Stop Action = iota; Same; Next)
 type Attempt struct {
     Err error
-    Number int // 1-based
+    Attempt int // 1-based
     Idempotent bool
     Consistency cql.Consistency
-    Kind cql.StatementKind
+    StatementKind cql.StatementKind
     ExecutionStatus cqlerr.ExecutionStatus
 }
 type Decision struct {

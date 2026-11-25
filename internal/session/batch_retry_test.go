@@ -104,8 +104,8 @@ func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, 
 	if a.Batch != cql.Some(kind) {
 		t.Errorf("Attempt.Batch = %+v, want %v", a.Batch, kind)
 	}
-	if a.Kind != cql.OrdinaryStatement {
-		t.Errorf("Attempt.Kind = %v for a member of kind %v, want ordinary", a.Kind, member)
+	if a.StatementKind != cql.OrdinaryStatement {
+		t.Errorf("Attempt.Kind = %v for a member of kind %v, want ordinary", a.StatementKind, member)
 	}
 	if !partial {
 		if err != nil || len(policy.attempts) != 1 || a.ExecutionStatus != cqlerr.NotExecuted {

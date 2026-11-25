@@ -614,7 +614,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		started := time.Now()
 		var end func(routing.AttemptEvent)
 		if request.InternalLogical.observesAttempts() {
-			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started})
+			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Address: conn.Address(), Consistency: consistency, Started: started})
 		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
@@ -622,8 +622,8 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			traces = response.InternalInfo.CQLTraces()
 		}
-		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err}
-		attemptEnded(&event)
+		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err}
+		attemptEnded(&event, request.partialBatch())
 		if len(traces) > 0 {
 			event.CQLTraceID = cql.Option[cql.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}
@@ -734,7 +734,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err

@@ -57,12 +57,17 @@ type AttemptObserver interface {
 type AttemptStart struct {
 	// Started is when the attempt was sent.
 	Started time.Time
+	// Address is the host:port of the connection the attempt is sent on, or
+	// the socket path of a Unix socket connection.
+	Address string
 	// RequestID is the ID of the attempt's request.
 	RequestID uint64
 	// Attempt is the 1-based number of the attempt within its request.
 	Attempt int
 	// Target is the host, and shard, the attempt was sent to.
 	Target metadata.Target
+	// Consistency is the consistency level the attempt uses.
+	Consistency cql.Consistency
 	// Speculative reports a speculative attempt.
 	Speculative bool
 }

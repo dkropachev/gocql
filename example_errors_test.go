@@ -67,7 +67,7 @@ func Example_errors() {
 	// Every failed attempt is kept, with the host it went to.
 	if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 		for _, attempt := range failure.Attempts {
-			log.Printf("attempt %d on %s: %v", attempt.Number, attempt.Address, attempt.Err)
+			log.Printf("attempt %d on %s: %v", attempt.Attempt, attempt.Address, attempt.Err)
 		}
 	}
 }

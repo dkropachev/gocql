@@ -192,11 +192,14 @@ func (rt *InternalSessionRuntime) countErrorKind(err error) {
 	rt.errorKinds[kind].Add(1)
 }
 
-// attemptEnded fills the outcome fields of an attempt event from its error.
-func attemptEnded(event *routing2.AttemptEvent) {
+// attemptEnded fills the outcome fields of an attempt event from its error;
+// partial reports a batch a server may apply in part (see attemptStatus).
+func attemptEnded(event *routing2.AttemptEvent, partial bool) {
 	if event.Err == nil {
+		event.ExecutionStatus = cqlerr.Executed
 		return
 	}
+	event.ExecutionStatus = attemptStatus(event.Err, partial)
 	switch cqlerr.KindOf(event.Err) {
 	case cqlerr.KindCanceled:
 		event.Canceled = true
@@ -1078,7 +1081,7 @@ type typedAttemptOutcome struct {
 
 // beginAttempt tells the request's observer that an attempt on conn starts
 // and returns its target, start time and the observer's end callback.
-func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
+func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, consistency cql.Consistency, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
 	target := attemptTarget(request, conn)
 	var requestID uint64
 	if request.InternalLogical != nil {
@@ -1088,7 +1091,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
@@ -1099,8 +1102,8 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
-	attemptEnded(&event)
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
+	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(func() { end(event) })
@@ -1317,7 +1320,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		}
 		go func() {
 			defer request.InternalOwner.InternalRelease()
-			target, started, end := s.beginAttempt(request, conn, index, speculative)
+			target, started, end := s.beginAttempt(request, conn, index, consistency, speculative)
 			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
 			outcome := s.attemptOutcome(request, conn, target, index, started, response, err, consistency, speculative, end)
 			if err == nil && spec.claimWin(outcome, cancel) {
@@ -1358,7 +1361,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		} else {
 			startedCount, active = 1, 1
 			s.attempts.Add(1)
-			target, started, end := s.beginAttempt(request, conn, 1, false)
+			target, started, end := s.beginAttempt(request, conn, 1, consistency, false)
 			// The callback takes spec.mu, so even after a zero delay it runs
 			// only once the timer is stored.
 			spec.mu.Lock()
@@ -1576,7 +1579,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {

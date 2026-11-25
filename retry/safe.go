@@ -21,7 +21,7 @@ import (
 // could apply them twice; the driver then reports the attempt MaybeExecuted.
 // The rule holds on every server, ScyllaDB included: the driver does not rely
 // on the order in which a server checks a batch's partitions. It also holds
-// for a conditional batch, and for a batch whose Attempt.Kind is
+// for a conditional batch, and for a batch whose Attempt.StatementKind is
 // UnknownStatement, which may be conditional and span partitions. A logged
 // batch is checked whole before its batch log is written, so it is retried.
 //
@@ -45,7 +45,7 @@ func (p Safe) Decide(a Attempt) Decision {
 	if limit <= 0 {
 		limit = 3
 	}
-	if a.Number >= limit || errors.Is(a.Err, context.Canceled) || errors.Is(a.Err, context.DeadlineExceeded) {
+	if a.Attempt >= limit || errors.Is(a.Err, context.Canceled) || errors.Is(a.Err, context.DeadlineExceeded) {
 		return Decision{}
 	}
 	if _, ok := errors.AsType[*cqlerr.UnavailableError](a.Err); ok {
