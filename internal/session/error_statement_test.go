@@ -67,7 +67,7 @@ func TestErrorStatementPrepared(t *testing.T) {
 	handle := new(Prepared[cql.EmptyRow, cql.Bytes])
 	storage := PreparedData(handle)
 	storage.InternalState = state
-	storage.params = codecTestMust(cql.EmptyParamsEncoder.Compile(cql.NewColumns()))
+	storage.params = codecTestMust(cql.NoParams.Compile(cql.NewColumns()))
 	storage.rows = cql.OneColumn(cql.BytesCodec)
 	bound := codecTestMust(BindBorrowed(handle, cql.EmptyRow{}))
 	defer bound.Close()
@@ -124,7 +124,7 @@ func secretQuery(t *testing.T, kind cql.StatementKind) *Bound[cql.Bytes] {
 	t.Helper()
 	bound, err := BindUnpreparedOwned(binding.Statement[string, cql.Bytes]{
 		Kind:   kind,
-		CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
+		CQL:    "UPDATE ks.tbl SET value = 0x01 WHERE k = ?",
 		Params: cql.OneParam(cql.StringCodec),
 		Rows:   cql.OneColumn(cql.BytesCodec),
 	}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
@@ -143,8 +143,8 @@ func checkNamed(t *testing.T, err error) {
 	if !ok {
 		t.Fatalf("%v: want an ExecutionError", err)
 	}
-	const want = `statement "SELECT value FROM ks.tbl WHERE k = ?"`
-	if failure.Statement != "SELECT value FROM ks.tbl WHERE k = ?" || !strings.Contains(err.Error(), want) {
+	const want = `statement "UPDATE ks.tbl SET value = 0x01 WHERE k = ?"`
+	if failure.Statement != "UPDATE ks.tbl SET value = 0x01 WHERE k = ?" || !strings.Contains(err.Error(), want) {
 		t.Errorf("message %q, Statement %q: want %s", err, failure.Statement, want)
 	}
 	if text := errorText(err); strings.Contains(text, redactionSecret) {
@@ -185,7 +185,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		if err := batchTestQuery(t, s).AddToBatch(&batch, []byte(redactionSecret)); err != nil {
 			t.Fatal(err)
 		}
-		_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows(cql.EmptyRowDecoder), CompiledOptions{})
+		_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows(cql.Row[cql.EmptyRow]()), CompiledOptions{})
 		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 		if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {
 			t.Fatalf("RunConditionalBatch of an ordinary batch = %v", err)
@@ -261,7 +261,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		s.Close()
 		session := InternalWrapSession(s)
 		_, execErr := session.ExecBatch(ctx, &batch, CompiledOptions{})
-		_, runErr := session.RunBatch(ctx, &batch, cql.EmptyRowDecoder, CompiledOptions{})
+		_, runErr := session.RunBatch(ctx, &batch, cql.Row[cql.EmptyRow](), CompiledOptions{})
 		for name, err := range map[string]error{"ExecBatch": execErr, "RunBatch": runErr} {
 			failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 			if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {

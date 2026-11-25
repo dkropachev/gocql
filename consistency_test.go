@@ -87,12 +87,24 @@ func TestConsistency(t *testing.T) {
 	})
 
 	t.Run("UnmarshalText", func(t *testing.T) {
-		// UnmarshalText is exact: it neither upper-cases nor trims, unlike the Parse
-		// functions below, and it leaves the receiver untouched on error.
+		// UnmarshalText ignores case, as ParseConsistency does, so a
+		// configuration file may spell a level in lower case.
+		t.Run("IgnoresCase", func(t *testing.T) {
+			t.Parallel()
+
+			for in, want := range map[string]cql.Consistency{"quorum": cql.Quorum, "Local_One": cql.LocalOne, "local_serial": cql.LocalSerial} {
+				var got cql.Consistency
+				if err := got.UnmarshalText([]byte(in)); err != nil || got != want {
+					t.Fatalf("UnmarshalText(%q) = %v, %v; want %v", in, got, err, want)
+				}
+			}
+		})
+		// UnmarshalText does not trim, and it leaves the receiver untouched
+		// on error.
 		t.Run("Rejects", func(t *testing.T) {
 			t.Parallel()
 
-			for _, in := range []string{"", "quorum", " QUORUM", "Consistency(66)", "LOCALQUORUM"} {
+			for _, in := range []string{"", " QUORUM", "Consistency(66)", "LOCALQUORUM"} {
 				got := cql.LocalOne
 				err := got.UnmarshalText([]byte(in))
 				if err == nil || !strings.Contains(err.Error(), "invalid consistency") {

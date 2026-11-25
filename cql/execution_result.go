@@ -21,11 +21,16 @@ type Result struct {
 	HostID UUID
 	// Attempts is the number of attempts started, speculative ones included.
 	Attempts int
-	// Latency is the sum of the latencies of the completed attempts.
-	Latency time.Duration
-	// Rows is the number of rows the response held, or that a stream
-	// delivered.
-	Rows int64
+	// AttemptLatency is the sum of the latencies of the completed
+	// attempts, from sending each to its response, over every page. It is
+	// not the request's wall time: retries add backoff it leaves out, and
+	// speculative attempts overlap, so it can exceed the wall time.
+	AttemptLatency time.Duration
+	// FetchedRows is the number of rows the responses held, over every
+	// page, a stream's included. It counts rows fetched, which can exceed
+	// the rows a caller read when iteration stopped early; a stream counts
+	// those in StreamInfo.DeliveredRows.
+	FetchedRows int64
 	// AchievedConsistency is the consistency level of the last completed
 	// attempt, which a retry policy may have lowered.
 	AchievedConsistency Consistency
@@ -142,8 +147,8 @@ func cloneResult(result Result) Result {
 func mergeResult(dst *Result, src Result) {
 	dst.HostID = src.HostID
 	dst.Attempts += src.Attempts
-	dst.Latency += src.Latency
-	dst.Rows += src.Rows
+	dst.AttemptLatency += src.AttemptLatency
+	dst.FetchedRows += src.FetchedRows
 	dst.addWarnings(src.Warnings()...)
 	dst.addCQLTraces(src.CQLTraces()...)
 	dst.addCustomPayload(src.CustomPayload()...)
@@ -196,11 +201,15 @@ func (p PageState) Token() []byte {
 }
 func completePageState() PageState { return PageState{kind: 2} }
 
-// MarshalBinary encodes the whole state, start and completion included: one
-// byte for its kind, then a continuation's token. UnmarshalBinary reads it
-// back. The encoding carries the token, so it needs the same care before it
-// reaches an untrusted client.
+// MarshalBinary encodes the whole state, start and completion included. The
+// start state encodes as empty, so an absent cursor starts paging; any other
+// state is one byte for its kind, then a continuation's token. UnmarshalBinary
+// reads it back. The encoding carries the token, so it needs the same care
+// before it reaches an untrusted client.
 func (p PageState) MarshalBinary() ([]byte, error) {
+	if p.kind == 0 {
+		return []byte{}, nil
+	}
 	b := make([]byte, 1, 1+len(p.token))
 	b[0] = p.kind
 	if p.kind == 1 {
@@ -210,10 +219,13 @@ func (p PageState) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary decodes a state MarshalBinary encoded, copying its token.
-// Any other input is rejected with a ValidationError.
+// Empty input is the start state, as is the single zero byte earlier
+// releases encoded it as. Any other input is rejected with a
+// ValidationError.
 func (p *PageState) UnmarshalBinary(data []byte) error {
 	if len(data) == 0 {
-		return typeValidation("page state", "empty encoding")
+		*p = PageState{}
+		return nil
 	}
 	switch kind := data[0]; {
 	case kind == 1:
@@ -229,13 +241,16 @@ func (p *PageState) UnmarshalBinary(data []byte) error {
 }
 
 // MarshalText encodes the state as the unpadded URL-safe base64 of its
-// MarshalBinary encoding, fit for a URL or JSON cursor.
+// MarshalBinary encoding, fit for a URL or JSON cursor. The start state
+// encodes as empty text.
 func (p PageState) MarshalText() ([]byte, error) {
 	b, _ := p.MarshalBinary()
 	return base64.RawURLEncoding.AppendEncode(nil, b), nil
 }
 
-// UnmarshalText decodes a state MarshalText encoded. Any other input is
+// UnmarshalText decodes a state MarshalText encoded. Empty text is the start
+// state, so a request without a cursor starts paging, and "AA", the start
+// state of earlier releases, still decodes to it. Any other input is
 // rejected with a ValidationError.
 func (p *PageState) UnmarshalText(text []byte) error {
 	b, err := base64.RawURLEncoding.AppendDecode(nil, text)

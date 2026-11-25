@@ -45,7 +45,7 @@ func readV2TopologyRows(ctx context.Context, conn transport.ConnInterface, stmt 
 	if c, ok := conn.(*transport.Conn); ok {
 		execute = c.InternalExecuteV2System
 	}
-	return readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
+	return readV2SystemRowsVia(ctx, 4, timeout, execute, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: stmt, Params: cql.NoParams, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
 }
 
 func timeForTopology(conn transport.ConnInterface) time.Duration {

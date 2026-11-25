@@ -120,7 +120,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 func hostInfoFromFixture(f *nativeResultFixture, port int) (*endpoint.HostInfo, error) {
 	rows, err := readV2SystemRowsVia(context.Background(), 4, 0, func(_ context.Context, _ *model.AttemptRequest) (*transport.InternalResponsePage, error) {
 		return v2SchemaMockResponse(transport.InternalQrySystemLocal, f)
-	}, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: cql.EmptyParamsEncoder, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
+	}, binding.Statement[cql.EmptyRow, metadata.InternalV2TopologyRow]{CQL: transport.InternalQrySystemLocal, Params: cql.NoParams, Rows: metadata.InternalV2DecodeTopology()}, cql.NewColumns(), cql.EmptyRow{})
 	if err != nil {
 		return nil, err
 	}

@@ -65,6 +65,41 @@ func TestStructMapping(t *testing.T) {
 			t.Fatalf("not applied with null previous: %+v %v", got, err)
 		}
 	})
+	// CASApplied, CASRows with a nil decoder, decodes [applied] and skips
+	// the previous row's columns, null or not.
+	t.Run("CASApplied", func(t *testing.T) {
+		columns := NewColumns(
+			ColumnSpec{Name: "[applied]", Type: rowTestType(t, KindBoolean)},
+			ColumnSpec{Name: "k", Type: rowTestType(t, KindInt)},
+			ColumnSpec{Name: "v", Type: rowTestType(t, KindText)},
+		)
+		for _, decoder := range []RowDecoder[CASResult[EmptyRow]]{CASApplied, CASRows[EmptyRow](nil)} {
+			for _, cols := range []Columns{columns, NewColumns(ColumnSpec{Name: "[applied]", Type: rowTestType(t, KindBoolean)})} {
+				plan, err := decoder.Compile(cols)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var data []byte
+				data = append(data, rowScalarFrame(1, []byte{0})...)
+				if cols.Len() > 1 {
+					data = append(data, rowScalarFrame(4, []byte{0, 0, 0, 7})...)
+					data = append(data, rowScalarFrame(-1, nil)...)
+				}
+				chain, err := wire.NewChain(wire.Borrow(data))
+				if err != nil {
+					t.Fatal(err)
+				}
+				reader := newRowReader(cols, chain, wire.NewLease(chain, nil))
+				got, err := decodeRow(plan, reader)
+				if err == nil {
+					err = finishRowReader(reader)
+				}
+				if err != nil || got.Applied || got.Previous.Set {
+					t.Fatalf("%d columns: %+v %v", cols.Len(), got, err)
+				}
+			}
+		}
+	})
 	// The previous row's columns differ by server and outcome: a field-mapped
 	// decoder skips columns it has no field for and leaves fields without a
 	// column zero.

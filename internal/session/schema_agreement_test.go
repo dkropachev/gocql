@@ -193,7 +193,7 @@ func TestSchemaAgreement(t *testing.T) {
 					}
 				}
 			}()
-			b := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyRow{}))
+			b := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.NoParams}, cql.NewColumns(), cql.EmptyRow{}))
 			defer b.Close()
 			_, err := Exec(ctx, s, b, testOptions(*func() *Options {
 				opaqueStorageValuexxxxxx := new(Options)
@@ -239,7 +239,7 @@ func TestSchemaAgreement(t *testing.T) {
 				close(entered)
 				<-ctx.Done()
 			}()
-			bound := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.NewColumns(), cql.EmptyRow{}))
+			bound := codecTestMust(BindUnpreparedOwned(binding.Statement[cql.EmptyRow, cql.EmptyRow]{CQL: "CREATE KEYSPACE schema_events", Params: cql.NoParams}, cql.NewColumns(), cql.EmptyRow{}))
 			defer bound.Close()
 			result := make(chan error, 1)
 			go func() {

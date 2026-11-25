@@ -38,7 +38,7 @@ import (
 func batchTestQuery(t testing.TB, s *implCluster.Core) *Query[[]byte, cql.EmptyRow] {
 	t.Helper()
 	typ := cql.BlobType
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})}, Options{})
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +230,7 @@ func TestBatch(t *testing.T) {
 		// error leaves the batch as it was.
 		t.Run("FailedEncodingKeepsBatch", func(t *testing.T) {
 			s, _ := attachmentSession()
-			q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam[[]byte](failingBlobEncoder{}), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
+			q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam[[]byte](failingBlobEncoder{}), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -354,7 +354,7 @@ func TestBatch(t *testing.T) {
 				handle := new(Prepared[[]byte, cql.EmptyRow])
 				PreparedData(handle).InternalState = state
 				PreparedData(handle).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
-				PreparedData(handle).rows = cql.EmptyRowDecoder
+				PreparedData(handle).rows = cql.Row[cql.EmptyRow]()
 				PreparedData(handle).plans = &InternalResultPlanCache[cql.EmptyRow]{}
 				q := codecTestMust(handle.Query(Options{}))
 				t.Cleanup(q.Close)
@@ -572,10 +572,11 @@ func TestBatch(t *testing.T) {
 			kinds []cql.StatementKind
 			want  cql.StatementKind
 		}{
+			// Members join with their kind resolved, so a batch is ordinary
+			// unless one member is conditional.
 			{[]cql.StatementKind{cql.OrdinaryStatement, cql.OrdinaryStatement}, cql.OrdinaryStatement},
-			{[]cql.StatementKind{cql.UnknownStatement}, cql.UnknownStatement},
-			{[]cql.StatementKind{cql.OrdinaryStatement, cql.UnknownStatement}, cql.UnknownStatement},
-			{[]cql.StatementKind{cql.UnknownStatement, cql.ConditionalStatement, cql.OrdinaryStatement}, cql.ConditionalStatement},
+			{[]cql.StatementKind{cql.ConditionalStatement}, cql.ConditionalStatement},
+			{[]cql.StatementKind{cql.OrdinaryStatement, cql.ConditionalStatement, cql.OrdinaryStatement}, cql.ConditionalStatement},
 		} {
 			var batch Batch
 			for _, kind := range tc.kinds {

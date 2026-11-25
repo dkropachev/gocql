@@ -90,7 +90,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
-			prepared := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: cql.NamedDynamicParams, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: cql.NamedDynamicParams}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), []cql.ValueField{{Name: "value", Value: cql.TextValue("i am a value")}, {Name: "id", Value: cql.IntValue(1)}})
 			require.NoError(t, err)
 			read := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: cql.NamedDynamicParams, Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
@@ -120,7 +120,7 @@ func TestQuery(t *testing.T) {
 			read := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=? AND cluster=?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 			_, err := read.Run(context.Background(), []cql.Value{cql.IntValue(1)})
 			require.Error(t, err)
-			write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: cql.DynamicParams}, exec.PrepareOptions{})
 			err = write.AddToBatch(&gocql.Batch{}, []cql.Value{cql.IntValue(1), cql.IntValue(2)})
 			require.Error(t, err, "invalid batch entry must fail while it is added")
 		})
@@ -132,8 +132,8 @@ func TestQuery(t *testing.T) {
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
 			params := cql.Params(cql.Param("value", cql.StringCodec, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
-			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
-			require.Equal(t, 3, prepared.Parameters().Len())
+			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params}, exec.PrepareOptions{})
+			require.Equal(t, 3, prepared.BindMarkers().Len())
 			_, err := prepared.Exec(context.Background(), ClusteredKeyValue{200, 300, "baz"})
 			require.NoError(t, err)
 			readParams := cql.Params(cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
@@ -174,7 +174,7 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(113), cql.TextValue("foo"))
 			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, exec.PrepareOptions{})
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			for i := 0; i < 2; i++ {
 				row := cassandraReadOne(t, session, prepared, int32(113), exec.Options{})
 				require.Equal(t, int64(113), cassandraInt(t, row, "id"))
@@ -192,7 +192,7 @@ func TestQuery(t *testing.T) {
 			read := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT * FROM %s WHERE id=?", table), Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 			_, err := read.Run(context.Background(), []cql.Value{cql.IntValue(1), cql.IntValue(2)})
 			require.Error(t, err)
-			write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			write := cassandraPrepared(t, session, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), Params: cql.DynamicParams}, exec.PrepareOptions{})
 			err = write.AddToBatch(&gocql.Batch{}, []cql.Value{cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)})
 			require.Error(t, err, "invalid batch entry must fail while it is added")
 		})
@@ -409,16 +409,16 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
-			prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec)}, exec.PrepareOptions{})
 			require.NoError(t, err)
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			require.Equal(t, table, prepared.Info().Table)
 
 			// Query setters become per-admission Options. Trace IDs and timing belong
 			// to each execution result; a statement never accumulates mutable metrics.
 			zero := cql.Result{}
 			require.Zero(t, zero.Attempts)
-			require.Zero(t, zero.Latency)
+			require.Zero(t, zero.AttemptLatency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
 			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
@@ -440,7 +440,7 @@ func TestQuery(t *testing.T) {
 				result, err := prepared.Exec(ctx, id, bindOptions(session, options))
 				require.NoError(t, err)
 				require.Equal(t, 1, result.Attempts)
-				require.Greater(t, result.Latency, time.Duration(0))
+				require.Greater(t, result.AttemptLatency, time.Duration(0))
 				require.Equal(t, cql.All, result.AchievedConsistency)
 				require.NotEmpty(t, result.CQLTraces())
 			}
@@ -496,7 +496,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			waitForHostConns(t, session)
 			const hostIDQuery = "SELECT host_id FROM system.local"
-			statement := cql.Statement[cql.EmptyParams, cql.UUID]{CQL: hostIDQuery, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.UUIDCodec)}
+			statement := cql.Statement[cql.EmptyParams, cql.UUID]{CQL: hostIDQuery, Params: cql.NoParams, Rows: cql.OneColumn(cql.UUIDCodec)}
 			runOn := func(options exec.Options) error {
 				var id cql.UUID
 				_, err := session.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &id, func(*cql.UUID) error { return nil }, options)
@@ -537,7 +537,7 @@ func TestQuery(t *testing.T) {
 			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), exec.PrepareOptions{Keyspace: ks})
 			_, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(1), cql.TextValue("text")}, bindOptions(session, exec.Options{Keyspace: ks}))
 			require.NoError(t, err)
-			prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{Keyspace: ks})
+			prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, exec.PrepareOptions{Keyspace: ks})
 			for _, row := range []cql.DynamicRow{cassandraReadOne(t, session, prepared, cql.EmptyParams{}, exec.Options{Keyspace: ks}), cassandraUnpreparedOne(t, session, "SELECT * FROM "+table, cql.DynamicRows, exec.Options{Keyspace: ks})} {
 				require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 				require.Equal(t, "text", cassandraText(t, row, "value"))
@@ -586,7 +586,7 @@ func TestQuery(t *testing.T) {
 			require.NoError(t, rows.Close())
 			info := rows.Info()
 			require.Positive(t, info.Attempts)
-			require.Positive(t, info.Latency)
+			require.Positive(t, info.AttemptLatency)
 			require.Greater(t, session.Metrics().Requests, before.Requests)
 		})
 	})
@@ -713,7 +713,7 @@ func TestQuery(t *testing.T) {
 			K, C int32
 			P    []byte
 		}
-		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P })), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P }))}, exec.PrepareOptions{}))
 		w := codecTestMust(write.Query(exec.Options{}))
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)

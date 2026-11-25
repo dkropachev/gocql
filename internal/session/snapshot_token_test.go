@@ -56,7 +56,7 @@ func TestSnapshotTokenMatchesPreparedRouting(t *testing.T) {
 		prepared := new(Prepared[snapshotTokenKey, cql.EmptyRow])
 		PreparedData(prepared).InternalState = state
 		PreparedData(prepared).params = params
-		PreparedData(prepared).rows = cql.EmptyRowDecoder
+		PreparedData(prepared).rows = cql.Row[cql.EmptyRow]()
 		PreparedData(prepared).plans = &InternalResultPlanCache[cql.EmptyRow]{}
 		return prepared
 	}

@@ -352,8 +352,8 @@ field-alignment lint requires.
 A seventh pass, with one reviewer per area, made about 80 proposals; all
 are taken and land in six changes before `v2.0.0-rc.1`. This first part
 fixes silent run-time failures, with little or no API change; the second
-reworks the `cql` types and codecs. Rows marked **reverses** undo a decision
-of an earlier pass.
+reworks the `cql` types and codecs; the third the `cql` statements, results
+and paging. Rows marked **reverses** undo a decision of an earlier pass.
 
 ### transport / config
 
@@ -415,6 +415,24 @@ of an earlier pass.
 | `EncodeValueBorrowed` exposed a zero-copy mode only routing needs; `NewEncodedValue` took a `Bytes`; `Bytes.OwnedBytes` was `Copy` with a panic | `EncodeValueBorrowed` is internal, through `internal/link`; `NewEncodedValue` takes a `[]byte`, which it borrows; `OwnedBytes` is removed. |
 | A nested type took one constructor and error check per level | Added `ParseDataType` and `MustParseDataType` for scalars, collections, tuples, vectors and `frozen`; a UDT needs its fields, so they reject one. |
 | `cql.Type` named a kind next to `DataType`, so `DataType.Kind` returned a `Type` | `cql.Kind` with `KindText`, `KindInt`, ...; the last change of this part, being mechanical. |
+
+### cql statements, results and paging
+
+| Finding | Outcome |
+|---|---|
+| A statement left `UnknownStatement` ran as possibly conditional unless its `R` was `EmptyRow`, so every ported SELECT, and on Cassandra every unclassified statement that returned rows, lost client timestamps, replica shuffling and speculation; one declared ordinary but written with `IF` ran with all three | The driver resolves `UnknownStatement` when a statement is prepared or, unprepared, bound: a `CASRows` decoder, or an INSERT, UPDATE, DELETE or BATCH whose CQL has an `IF` outside string literals, quoted identifiers and comments, is conditional; anything else, a SELECT included, is ordinary. A statement declared `OrdinaryStatement` that this finds conditional is rejected with a `ValidationError` before anything is sent, and so is a statement that can never be conditional, one whose first word is not INSERT, UPDATE, DELETE or BEGIN (a SELECT, DDL), declared `ConditionalStatement` or decoded with `CASRows`. Prepare still fails on PREPARE metadata that lacks the leading boolean `[applied]` column a `CASRows` decoder needs, or on a ScyllaDB that reports the statement is not a lightweight transaction; only the existing row's columns, and metadata Cassandra omits, wait for EXECUTE. A batch member resolves the same way, so an `IF` member makes the batch conditional. **Reverses** "the driver never parses CQL to infer the kind" (`StatementKind`) and the sixth pass's "as a batch member it stays unknown": a lexical scan for `IF` in a DML statement is exact, since `IF` is a reserved word, and costs one pass over the text per preparation, or per unprepared call, while leaving reads unclassified cost them their routing and speculation on Cassandra. |
+| `PageState.UnmarshalText` and `UnmarshalBinary` rejected empty input, so a request without a cursor needed its own branch | Empty input decodes to the start state, and the start state encodes as empty; `"AA"` and the zero byte, its earlier encodings, still decode to it. The paging example decodes every cursor. |
+| `ParseConsistency` ignored case but `Consistency.UnmarshalText` did not, so the same text worked in one and failed through JSON or a flag | `UnmarshalText` ignores case; `ParseConsistency` reads through it and moves to `consistency.go`. |
+| `Result.Rows` read like the rows themselves and `Result.Latency` like the request's wall time | `Result.FetchedRows`, also on `StreamInfo.Result`; `Result.AttemptLatency`, documented as the sum over completed attempts, speculative ones overlapping. |
+| A `Statement` literal repeated `P` and `R` that the codecs fix; the driver filled a nil `Params` or `Rows` from the exported, reassignable `EmptyParamsEncoder` and `EmptyRowDecoder` | Added `NewStatement`, `Select` (ordinary and idempotent) and `Write` (`R` is `EmptyRow`), which infer their type arguments, and `NoParams` for a statement without markers. The driver fills nil codecs with its own values; `EmptyParamsEncoder` and `EmptyRowDecoder` are removed. |
+| `CASRows(nil)` failed to compile whenever the server returned the existing row, so reading only `[applied]` took `CASRows(Row[EmptyRow]())` | A nil decoder skips the existing row's columns; `CASApplied` is `CASRows[EmptyRow](nil)`. |
+| `Columns` had only `Len` and `At`, so finding a column by name took an index loop | Added `Columns.All`, an `iter.Seq2` of index and column, and `Columns.Index`. |
+
+### gocql
+
+| Finding | Outcome |
+|---|---|
+| `Prepared.Parameters` and `PreparedStream.Parameters` named what `Statement.BindMarkers` supplies for an unprepared call | Renamed `BindMarkers`. |
 
 ## Decisions
 

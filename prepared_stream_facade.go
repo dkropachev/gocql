@@ -39,9 +39,10 @@ func (p *PreparedStream[P, R]) Query(options ...exec.StreamOptions) (*StreamQuer
 	return (*StreamQuery[P, R])(q), err
 }
 
-// Parameters returns the immutable bind-marker metadata.
-func (p *PreparedStream[P, R]) Parameters() cql.Columns {
-	return (*implSession.PreparedStream[P, R])(p).Parameters()
+// BindMarkers returns the immutable bind-marker metadata, one column per
+// marker, as the server reported it when preparing.
+func (p *PreparedStream[P, R]) BindMarkers() cql.Columns {
+	return (*implSession.PreparedStream[P, R])(p).BindMarkers()
 }
 
 // Columns returns the prepared statement's immutable result metadata.

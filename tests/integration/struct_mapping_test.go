@@ -727,7 +727,7 @@ func TestStructMapping(t *testing.T) {
 			Kind:        cql.OrdinaryStatement,
 			CQL:         "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 			Params:      cql.MustParamsOf[smRecord](smAttrs),
-			BindMarkers: prepared.Parameters(),
+			BindMarkers: prepared.BindMarkers(),
 		}, r); err != nil {
 			t.Fatal(err)
 		}

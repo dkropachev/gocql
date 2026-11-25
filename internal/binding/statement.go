@@ -76,25 +76,80 @@ type Statement[P, R any] struct {
 	Idempotent  bool
 }
 
+// emptyParams and emptyRows fill a nil Params or Rows of a statement without
+// bind markers or result columns. They are the driver's own, so a package
+// variable an application reassigns cannot change them.
+var (
+	emptyParams = cql.Params[cql.EmptyParams]()
+	emptyRows   = cql.Row[cql.EmptyRow]()
+)
+
 // statementDefaults fills a nil Params or Rows that has an empty
 // default.
 func statementDefaults[P, R any](s *Statement[P, R]) {
 	if s.Params == nil {
-		if e, ok := any(cql.EmptyParamsEncoder).(cql.ParamEncoder[P]); ok {
+		if e, ok := any(emptyParams).(cql.ParamEncoder[P]); ok {
 			s.Params = e
 		}
 	}
 	if s.Rows == nil {
-		if d, ok := any(cql.EmptyRowDecoder).(cql.RowDecoder[R]); ok {
+		if d, ok := any(emptyRows).(cql.RowDecoder[R]); ok {
 			s.Rows = d
 		}
 	}
 }
 
-// ValidateStatement fills s's empty defaults and validates it.
+// ValidateStatement fills s's empty defaults, validates it and resolves its
+// Kind; see ResolveKind.
 func ValidateStatement[P, R any](s *Statement[P, R]) error {
 	statementDefaults(s)
-	return validateStatement(*s)
+	if err := validateStatement(*s); err != nil {
+		return err
+	}
+	kind, err := ResolveKind(s.Kind, s.CQL, s.Rows)
+	if err != nil {
+		return err
+	}
+	s.Kind = kind
+	return nil
+}
+
+// ResolveKind returns the kind a statement of kind, text and row decoder
+// executes as. A statement decoded with cql.CASRows, or whose text is an
+// INSERT, UPDATE, DELETE or BATCH with an IF outside quotes and comments, is
+// conditional; anything else is ordinary. An UnknownStatement takes that
+// inference; a ConditionalStatement stays one; an OrdinaryStatement the
+// inference finds conditional is rejected with a ValidationError, before
+// anything is sent, since it would run with a client timestamp, shuffled
+// replicas and speculation a conditional statement must not have. Only an
+// INSERT, UPDATE, DELETE or BATCH can be conditional, so a statement of any
+// other text, a SELECT included, that is declared ConditionalStatement or
+// decoded with cql.CASRows is rejected with a ValidationError as well.
+// It scans the text once, so a prepared statement resolves at Prepare and an
+// unprepared one per call.
+func ResolveKind(kind cql.StatementKind, text string, rows any) (cql.StatementKind, error) {
+	casRows := codec.ConditionalRows(rows)
+	if kind == cql.ConditionalStatement || casRows {
+		if first := firstCQLWord(text); !conditionalVerb(first) {
+			reason := "a CASRows decoder"
+			if !casRows {
+				reason = "a ConditionalStatement kind"
+			}
+			return 0, cqltype.TypeValidation("statement kind", "only an INSERT, UPDATE, DELETE or BATCH can be conditional; a %s statement cannot have %s", strings.ToUpper(first), reason)
+		}
+	}
+	if kind == cql.ConditionalStatement {
+		return kind, nil
+	}
+	conditional := casRows || InternalConditionalCQL(text)
+	switch {
+	case !conditional:
+		return cql.OrdinaryStatement, nil
+	case kind == cql.OrdinaryStatement:
+		return 0, cqltype.TypeValidation("statement kind", "an OrdinaryStatement with a CASRows decoder or an IF condition is conditional; declare it ConditionalStatement or leave it UnknownStatement")
+	default:
+		return cql.ConditionalStatement, nil
+	}
 }
 
 func validateStatement[P, R any](s Statement[P, R]) error {
@@ -104,7 +159,7 @@ func validateStatement[P, R any](s Statement[P, R]) error {
 	if strings.TrimSpace(s.CQL) == "" {
 		return cqltype.TypeValidation("statement", "empty CQL")
 	}
-	if InternalFirstCQLWord(s.CQL) == "USE" {
+	if strings.EqualFold(firstCQLWord(s.CQL), "USE") {
 		return cqlerr.ErrUseStmt
 	}
 	if s.Params == nil || s.Rows == nil {
@@ -113,15 +168,31 @@ func validateStatement[P, R any](s Statement[P, R]) error {
 	return nil
 }
 
+// InternalFirstCQLWord returns the first unquoted word of cql, upper-cased.
 func InternalFirstCQLWord(cql string) string {
+	return strings.ToUpper(firstCQLWord(cql))
+}
+
+// firstCQLWord returns the first unquoted word of cql as written.
+func firstCQLWord(cql string) string {
 	word := ""
 	visitCQLWords(cql, func(next string) bool { word = next; return false })
 	return word
 }
+
+// InternalConditionalCQL reports whether cql is an INSERT, UPDATE, DELETE or
+// BATCH (BEGIN ... BATCH) with an IF word outside string literals, quoted
+// identifiers and comments: a lightweight transaction. IF is a reserved word,
+// so it cannot be an unquoted identifier; DDL such as CREATE TABLE IF NOT
+// EXISTS is not conditional.
 func InternalConditionalCQL(cql string) bool {
-	conditional := false
+	conditional, first := false, true
 	visitCQLWords(cql, func(word string) bool {
-		if word == "IF" {
+		if first {
+			first = false
+			return conditionalVerb(word)
+		}
+		if strings.EqualFold(word, "IF") {
 			conditional = true
 			return false
 		}
@@ -129,6 +200,24 @@ func InternalConditionalCQL(cql string) bool {
 	})
 	return conditional
 }
+
+// conditionalVerb reports whether word, the first word of a statement,
+// begins one that can be conditional: INSERT, UPDATE, DELETE or BEGIN, which
+// starts a BATCH.
+func conditionalVerb(word string) bool {
+	for _, dml := range [...]string{"INSERT", "UPDATE", "DELETE", "BEGIN"} {
+		if strings.EqualFold(word, dml) {
+			return true
+		}
+	}
+	return false
+}
+
+// visitCQLWords calls visit with each unquoted word of cql, as written,
+// until visit returns false. It skips string literals, single-quoted with
+// a doubled quote as escape or between $$ pairs, double-quoted identifiers,
+// and --, // and /* */ comments, so a word inside one is never visited. It
+// does not allocate.
 func visitCQLWords(cql string, visit func(string) bool) {
 	for i := 0; i < len(cql); {
 		if cql[i] == '\'' || cql[i] == '"' {
@@ -147,19 +236,27 @@ func visitCQLWords(cql string, visit func(string) bool) {
 			}
 			continue
 		}
-		if i+1 < len(cql) && cql[i] == '-' && cql[i+1] == '-' {
+		if strings.HasPrefix(cql[i:], "$$") {
+			end := strings.Index(cql[i+2:], "$$")
+			if end < 0 {
+				return
+			}
+			i += 2 + end + 2
+			continue
+		}
+		if strings.HasPrefix(cql[i:], "--") || strings.HasPrefix(cql[i:], "//") {
 			i += 2
-			for i < len(cql) && cql[i] != '\n' {
+			for i < len(cql) && cql[i] != '\n' && cql[i] != '\r' {
 				i++
 			}
 			continue
 		}
-		if i+1 < len(cql) && cql[i] == '/' && cql[i+1] == '*' {
-			i += 2
-			for i+1 < len(cql) && (cql[i] != '*' || cql[i+1] != '/') {
-				i++
+		if strings.HasPrefix(cql[i:], "/*") {
+			end := strings.Index(cql[i+2:], "*/")
+			if end < 0 {
+				return
 			}
-			i += 2
+			i += 2 + end + 2
 			continue
 		}
 		if cql[i] >= 'a' && cql[i] <= 'z' || cql[i] >= 'A' && cql[i] <= 'Z' || cql[i] == '_' {
@@ -168,7 +265,7 @@ func visitCQLWords(cql string, visit func(string) bool) {
 			for i < len(cql) && (cql[i] >= 'a' && cql[i] <= 'z' || cql[i] >= 'A' && cql[i] <= 'Z' || cql[i] >= '0' && cql[i] <= '9' || cql[i] == '_') {
 				i++
 			}
-			if !visit(strings.ToUpper(cql[start:i])) {
+			if !visit(cql[start:i]) {
 				return
 			}
 			continue

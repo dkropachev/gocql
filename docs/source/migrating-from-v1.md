@@ -133,11 +133,11 @@ if errors.Is(err, gocql.ErrNotFound) {
 v2:
 
 ```go
-selectName, err := session.Prepare(ctx, cql.Statement[int32, string]{
-	CQL:    "SELECT name FROM users WHERE id = ?",
-	Params: cql.OneParam(cql.Int32Codec),
-	Rows:   cql.OneColumn(cql.StringCodec),
-})
+selectName, err := session.Prepare(ctx, cql.Select(
+	"SELECT name FROM users WHERE id = ?",
+	cql.OneParam(cql.Int32Codec),
+	cql.OneColumn(cql.StringCodec),
+))
 if err != nil {
 	return err
 }
@@ -171,16 +171,21 @@ if !found {
 | a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
 | `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a worker query (`Prepared.Query`) rejects a fixed timestamp |
+| `query.Attempts()`, `query.Latency()` | the returned `cql.Result`'s `Attempts` and `AttemptLatency`, the sum of the completed attempts' latencies |
+| `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Query(options)` is closed with `Close` |
 
-v1 sent a client timestamp with every request. v2 stamps only statements it
-knows to be ordinary: one whose `Kind` is `cql.OrdinaryStatement`, one
-ScyllaDB's prepared metadata marks as not conditional, and one left
-`cql.UnknownStatement` whose row type is `cql.EmptyRow`. On Cassandra, set
-`Kind: cql.OrdinaryStatement` on a statement that returns rows to get client
-timestamps, replica shuffling and speculation for it.
+v1 sent a client timestamp with every request. v2 stamps only ordinary
+statements. A statement left `cql.UnknownStatement`, as a ported v1
+statement is, is conditional when its rows decode through `cql.CASRows` or
+its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` condition, and
+ordinary otherwise, on every server; v1's `Query.IsLWT` knew it only from
+ScyllaDB's prepared metadata. Declaring `Kind: cql.OrdinaryStatement` on a
+statement the driver finds conditional fails before it is sent, as does
+reading a SELECT through `cql.CASRows` or declaring it
+`cql.ConditionalStatement`.
 
 One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
 `session.CompileOptions`; compile them once and reuse them. A worker that runs
@@ -198,10 +203,10 @@ type User struct {
 	Name string   `cql:"name"`
 }
 
-insertUser, err := session.Prepare(ctx, cql.Statement[User, cql.EmptyRow]{
-	CQL:    "INSERT INTO users (id, name) VALUES (?, ?)",
-	Params: cql.MustParamsOf[User](),
-})
+insertUser, err := session.Prepare(ctx, cql.Write(
+	"INSERT INTO users (id, name) VALUES (?, ?)",
+	cql.MustParamsOf[User](),
+))
 ```
 
 An untagged field maps the column named by its name in snake_case, as gocqlx
@@ -245,7 +250,7 @@ cursor, err := next.MarshalText() // the opaque cursor to hand out
 ```
 
 `state.UnmarshalText(cursor)` restores the state, start and completion
-included; `cql.PageStateFromToken(token)` restores one from the server token
+included, an empty cursor being the start; `cql.PageStateFromToken(token)` restores one from the server token
 alone. Either carries server state: authenticate or encrypt it before giving
 it to an untrusted client. See [paging](statements/paging.md).
 

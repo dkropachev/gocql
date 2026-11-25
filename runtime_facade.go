@@ -91,12 +91,10 @@ type PreparedInfo struct {
 	// PartitionKeyIndexes are the positions of the bind markers that hold the
 	// partition key, in key order; the session routes with them.
 	PartitionKeyIndexes []int
-	// Kind classifies the statement: the statement's own Kind, except that
-	// it is ConditionalStatement when the server flagged a lightweight
-	// transaction while preparing it, as ScyllaDB does, and an
-	// UnknownStatement takes the server's classification when there is one.
-	// An UnknownStatement left without one is OrdinaryStatement when the
-	// row type is cql.EmptyRow, as its executions run it.
+	// Kind classifies the statement: the statement's own Kind, an
+	// UnknownStatement resolved as cql.UnknownStatement describes, except
+	// that it is ConditionalStatement when the server flagged a lightweight
+	// transaction while preparing it, as ScyllaDB does.
 	Kind cql.StatementKind
 	// Generation counts the statement's re-preparations after schema changes.
 	Generation uint64

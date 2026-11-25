@@ -36,6 +36,7 @@ var (
 	detachRow               = link.Get[func(any, any) bool](link.DetachRow)
 	managesRowDestination   = link.Get[func(any) bool](link.ManagesRowDestination)
 	preservesRowDestination = link.Get[func(any) bool](link.PreservesRowDestination)
+	conditionalRows         = link.Get[func(any) bool](link.ConditionalRows)
 	cloneResult             = link.Get[func(cql.Result) cql.Result](link.CloneResult)
 	mergeResult             = link.Get[func(cql.Result, cql.Result) cql.Result](link.MergeResult)
 	addWarnings             = link.Get[func(cql.Result, []string) cql.Result](link.ResultAddWarnings)
@@ -172,6 +173,10 @@ func ManagesRowDestination[R any](plan cql.CompiledRow[R]) bool {
 func PreservesRowDestination[R any](plan cql.CompiledRow[R]) bool {
 	return preservesRowDestination(plan)
 }
+
+// ConditionalRows reports whether decoder is a cql.CASRows decoder, which
+// decodes a conditional statement's result.
+func ConditionalRows(decoder any) bool { return conditionalRows(decoder) }
 
 // CloneResult returns a copy of result that shares nothing mutable with it.
 func CloneResult(result cql.Result) cql.Result { return cloneResult(result) }

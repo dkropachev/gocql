@@ -45,7 +45,10 @@ Cyclic/nonprogressing state and retained paging-history limits report errors.
 the initial page, a continuation, and completion. `cql.PageState` implements
 `encoding.BinaryMarshaler` and `encoding.TextMarshaler` and their
 unmarshalers, which encode the whole state, so a cursor survives a round trip
-through JSON or a URL; the text form is unpadded URL-safe base64. Both carry
+through JSON or a URL; the text form is unpadded URL-safe base64. The start
+state encodes as empty, and empty input decodes to it, so a request without a
+cursor starts paging; `"AA"`, the start state of earlier v2 releases, still
+decodes to it. Both carry
 the server token, so authenticate them as the `cql.PageState` doc describes
 before trusting one from a client. `state.Token()` returns an owned copy of
 the server continuation token alone; it does not serialize the full state. Check `state.More()` before exporting a token, and use

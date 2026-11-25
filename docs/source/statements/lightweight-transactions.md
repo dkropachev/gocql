@@ -1,13 +1,20 @@
 # Lightweight transactions
 
-Set statement Kind to `ConditionalStatement` when known. `Exec` and
+A statement left `UnknownStatement` is conditional when its `Rows` is a
+`cql.CASRows` decoder or its CQL is an INSERT, UPDATE, DELETE or BATCH with
+an `IF` outside string literals, quoted identifiers and comments; declaring
+such a statement `OrdinaryStatement` fails with a `cql.ValidationError`
+before it is sent. Only an INSERT, UPDATE, DELETE or BATCH can be
+conditional: a SELECT or other statement declared `ConditionalStatement` or
+decoded with `CASRows` fails the same way. When the server returns result
+metadata at prepare time, as ScyllaDB does, `Prepare` also fails if it lacks
+the leading `[applied]` column `CASRows` needs, or if ScyllaDB reports the
+statement is not a lightweight transaction. `Exec` and
 `ExecBatch` reject a statement or batch known to be conditional with
 `cqlerr.ErrConditionalExec` before sending it, because the result of a
 conditional write reports whether it applied: read it with `One`, `Each`,
 `All`, `Run` or `RunConditionalBatch`. ScyllaDB marks conditional statements in
-prepared metadata. Cassandra does not, so declare the kind there: a statement
-left `UnknownStatement` whose row type is `cql.EmptyRow` executes as an
-ordinary one, since it cannot read the `[applied]` column anyway. Server conditional
+prepared metadata. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
 replica ordering: a client tries a partition's replicas in the same order
@@ -26,7 +33,8 @@ conditional statement: `Exec` does not reject it up front, and fails on its
 result columns like any other row-returning statement.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
-typed `CASResult[R]`. For conditional batches, pass this decoder to
+typed `CASResult[R]`. `cql.CASApplied`, which is `CASRows[cql.EmptyRow](nil)`,
+decodes the applied flag alone and skips the returned row. For conditional batches, pass this decoder to
 `session.RunConditionalBatch`, whose rows iterate like `Rows` and whose
 `Applied` reports whether the batch applied. `RunConditionalBatch`
 rejects a batch whose members are all known not to be conditional.

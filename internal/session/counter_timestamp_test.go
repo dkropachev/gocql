@@ -109,7 +109,7 @@ func TestCounterWriteHasNoClientTimestamp(t *testing.T) {
 // prepared statement's pooled query, as a query and as a bound statement.
 func counterTimestampWrites[P any](t *testing.T, ctx context.Context, s *cluster.Core, cql string, encoder implCql.Encoder[P], value P) {
 	t.Helper()
-	p, err := Prepare(ctx, s, binding.Statement[P, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.OneParam(encoder), Rows: implCql.EmptyRowDecoder}, PrepareOptions{})
+	p, err := Prepare(ctx, s, binding.Statement[P, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.OneParam(encoder)}, PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

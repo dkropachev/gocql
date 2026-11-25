@@ -67,7 +67,7 @@ func TestPrepared(t *testing.T) {
 			}
 			selects := []string{fmt.Sprintf("SELECT id,mod FROM %s WHERE id=0", table), fmt.Sprintf("SELECT id,mod FROM %s WHERE id=1", table)}
 			for _, stmt := range selects {
-				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
+				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 				cassandraReadOne(t, session, prepared, cql.EmptyParams{}, exec.Options{})
 			}
 			update := fmt.Sprintf("UPDATE %s SET mod=? WHERE id=?", table)
@@ -126,7 +126,7 @@ func TestPrepared(t *testing.T) {
 				cassandraBatch(t, session, batch, exec.Options{Keyspace: keyspace})
 			}
 			for i, keyspace := range []string{fixtureKeyspace(""), ks} {
-				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT * FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32Codec)}, exec.PrepareOptions{Keyspace: keyspace})
+				prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT * FROM " + table, Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32Codec)}, exec.PrepareOptions{Keyspace: keyspace})
 				require.Equal(t, keyspace, prepared.Info().Keyspace)
 				require.Equal(t, int32(i+1), cassandraReadOne(t, session, prepared, cql.EmptyParams{}, exec.Options{Keyspace: keyspace}))
 			}
@@ -205,7 +205,7 @@ func TestPrepared(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 			prepared := cassandraPrepared(t, session, cql.Statement[string, cql.DynamicRow]{CQL: "SELECT release_version,host_id FROM system.local WHERE key=?", Params: cql.OneParam(cql.StringCodec), Rows: cql.DynamicRows}, exec.PrepareOptions{})
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			require.Equal(t, 2, prepared.Columns().Len())
 		})
 		t.Run("MissingSchema", func(t *testing.T) {
@@ -214,7 +214,7 @@ func TestPrepared(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			conn := getRandomConn(t, session)
-			statement := cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}
+			statement := cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(val) VALUES(?)", table), Params: cql.OneParam(cql.Int32Codec)}
 			options := exec.PrepareOptions{HostID: cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}}
 			_, err := session.Prepare(context.Background(), statement, options)
 			require.Error(t, err)

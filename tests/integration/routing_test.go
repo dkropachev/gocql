@@ -82,7 +82,7 @@ func TestRouting(t *testing.T) {
 			{Datacenter: dc, Rack: rack, FixedReplicaOrder: true, NoLeaderAware: true},
 			{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true},
 		}
-		hostIDStatement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+		hostIDStatement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.NoParams, Rows: cql.DynamicRows}
 		for i, options := range policies {
 			policy, err := routing.NewPolicy(options)
 			if err != nil {
@@ -160,7 +160,7 @@ func TestRouting(t *testing.T) {
 					CQL: fmt.Sprintf(`INSERT INTO %s (
                     connection_id, host_id, Address, port, tls_port, alternator_port, alternator_https_port, Datacenter, Rack)
                     VALUES (?, ?, ?, 9042, 9142, 0, 0, 'dc1', ?)`, qualifiedTable),
-					Kind: cql.OrdinaryStatement, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder,
+					Kind: cql.OrdinaryStatement, Params: cql.DynamicParams,
 				}, exec.PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
@@ -346,7 +346,7 @@ func TestRouting(t *testing.T) {
 				Value int32
 			}
 			params := cql.Params(cql.Param("key", cql.StringCodec, func(v input) string { return v.Key }), cql.Param("value", cql.Int32Codec, func(v input) int32 { return v.Value }))
-			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[input, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(key,value) VALUES(?,?)", table), Params: params}, exec.PrepareOptions{})
 			require.Equal(t, []int{0}, prepared.Info().PartitionKeyIndexes)
 			info := routingTestInfo(t, prepared, input{"routing-key", 5})
 			require.True(t, info.Token.Set)
@@ -375,7 +375,7 @@ func TestRouting(t *testing.T) {
 				prepared := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Equal(t, tc.indexes, prepared.Info().PartitionKeyIndexes)
 				for _, index := range tc.indexes {
-					column, ok := prepared.Parameters().At(index)
+					column, ok := prepared.BindMarkers().At(index)
 					require.True(t, ok)
 					require.Equal(t, cql.KindInt, column.Type.Kind())
 				}
@@ -631,7 +631,7 @@ func TestRouting(t *testing.T) {
 			if !ks.TabletBased || ks.Tables["records"].ID == (cql.UUID{}) {
 				t.Fatal("server tablet/table UUID metadata absent", ks)
 			}
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(pk,v) VALUES(?,7)", Params: cql.OneParam(cql.Int32Codec)}, exec.PrepareOptions{}))
 			read := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT pk,v FROM " + keyspace + ".records WHERE pk=?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, exec.PrepareOptions{}))
 			feedback := 0
 			for key := int32(0); key < 8; key++ {

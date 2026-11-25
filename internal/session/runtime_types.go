@@ -213,20 +213,6 @@ type InternalExecutionRequest struct {
 	// idempotent is the statement's cql.Statement.Idempotent, or for a
 	// batch whether every member is; Options.Idempotent overrides it.
 	idempotent bool
-	// kindInferred reports that routing.Kind is OrdinaryStatement only
-	// because executionKind inferred it: as a batch member the statement
-	// stays UnknownStatement.
-	kindInferred bool
-}
-
-// memberRouting returns the routing r's statement joins a batch with.
-func (r *InternalExecutionRequest) memberRouting() *routing2.Info {
-	if !r.kindInferred {
-		return &r.routing
-	}
-	info := r.routing
-	info.Kind = cql.UnknownStatement
-	return &info
 }
 
 // isIdempotent reports whether r may run more than once: its options'

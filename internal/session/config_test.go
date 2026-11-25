@@ -157,7 +157,7 @@ func TestConfig(t *testing.T) {
 			handle := new(Prepared[implCql.EmptyRow, implCql.Bytes])
 			storage := PreparedData(handle)
 			storage.InternalState = state
-			storage.params = codecTestMust(implCql.EmptyParamsEncoder.Compile(implCql.NewColumns()))
+			storage.params = codecTestMust(implCql.NoParams.Compile(implCql.NewColumns()))
 			storage.rows = implCql.OneColumn(implCql.BytesCodec)
 			storage.plans = &InternalResultPlanCache[implCql.Bytes]{}
 			bound := codecTestMust(BindBorrowed(handle, implCql.EmptyRow{}))
@@ -230,7 +230,7 @@ func TestConfig(t *testing.T) {
 			}
 			// A BATCH response is a single page: paging options compiled for
 			// statements are ignored, so the batch fails only for lack of hosts.
-			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, implCql.EmptyRowDecoder, testOptions(Options{PageSize: 1}))
+			_, err = InternalWrapSession(s).RunBatch(context.Background(), &batch, implCql.Row[implCql.EmptyRow](), testOptions(Options{PageSize: 1}))
 			if err == nil || hasErrorType[*settings.UnsupportedSettingError](err) {
 				t.Fatal("batch with a page size:", err)
 			}
@@ -467,7 +467,7 @@ func TestConfig(t *testing.T) {
 			if err := explicit.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
+			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "UPDATE ks.tbl SET value = 0x01 WHERE k = 0 IF EXISTS", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
 			unpaged := options.Values()
 			unpaged.PageSize = implCql.Unpaged
 			page = codecTestMust(RunPage(ctx, s, conditional, implCql.StartPage(), 0, testOptions(unpaged)))

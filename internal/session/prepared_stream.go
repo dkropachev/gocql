@@ -73,11 +73,11 @@ func (p *PreparedStream[P, R]) Query(options StreamOptions) (*StreamQuery[P, R],
 	return q, nil
 }
 
-func (p *PreparedStream[P, R]) Parameters() cql.Columns {
+func (p *PreparedStream[P, R]) BindMarkers() cql.Columns {
 	if p == nil {
 		return cql.Columns{}
 	}
-	return p.prepared.Parameters()
+	return p.prepared.BindMarkers()
 }
 func (p *PreparedStream[P, R]) Columns() cql.Columns {
 	if p == nil {

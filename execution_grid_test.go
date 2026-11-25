@@ -43,7 +43,7 @@ var gridNonExecution = map[string][]string{
 		"UnpreparedAddToBatch",
 	},
 	"Query":    {"AddToBatch", "Close", "Routing", "Wait"},
-	"Prepared": {"AddToBatch", "Columns", "Info", "Parameters", "Query"},
+	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Query"},
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI

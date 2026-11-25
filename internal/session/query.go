@@ -192,7 +192,7 @@ func newPreparedQuery[P, R any](p *Prepared[P, R], options CompiledOptions, pool
 	q.bound.privateStorage.rows = &q.rows
 	info := &state.InternalInfo
 	kind := p.privateStorage.kind
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}, hasCounter: state.hasCounter, idempotent: p.privateStorage.idempotent, kindInferred: p.privateStorage.kindInferred}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, keyspace: state.InternalKeyspace, InternalSource: preparedSource{state: state}, routing: routing2.Info{Keyspace: info.Keyspace, Table: info.Table, Kind: kind}, hasCounter: state.hasCounter, idempotent: p.privateStorage.idempotent}
 	if err := newQueryState(p.privateStorage.InternalState.InternalSession, &q.state, q.retire, pool); err != nil {
 		return nil, err
 	}
@@ -214,8 +214,7 @@ func newUnpreparedQuery[P, R any](s *implCluster.Core, statement binding.Stateme
 	q.bound.privateStorage.InternalRows = statement.Rows
 	q.bound.privateStorage.plans = &InternalResultPlanCache[R]{}
 	q.bound.privateStorage.rows = &q.rows
-	kind, inferred := executionKind[R](statement.Kind)
-	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: kind}, hasCounter: hasCounterColumn(columns), idempotent: statement.Idempotent, kindInferred: inferred}
+	q.bound.privateStorage.InternalRequest = InternalExecutionRequest{statement: statement.CQL, InternalSource: cqlText{}, routing: routing2.Info{Kind: statement.Kind}, hasCounter: hasCounterColumn(columns), idempotent: statement.Idempotent}
 	if err := newQueryState(s, &q.state, q.retire, nil); err != nil {
 		return nil, err
 	}
@@ -435,7 +434,7 @@ func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
 		return cqlerr.ErrClosed
 	}
 	request := &q.bound.privateStorage.InternalRequest
-	return batch.addValue(s, request.InternalSource, request.statement, request.memberRouting(), request.idempotent, q.params, q.columns, value, q.allowUnset)
+	return batch.addValue(s, request.InternalSource, request.statement, &request.routing, request.idempotent, q.params, q.columns, value, q.allowUnset)
 }
 
 func (s *queryState) close() {

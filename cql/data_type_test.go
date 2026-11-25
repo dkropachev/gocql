@@ -181,3 +181,42 @@ func dataTypeTestMust(t DataType, err error) DataType {
 	}
 	return t
 }
+
+// TestColumnsAllIndex checks that All yields every column in order and stops
+// when asked, and that Index finds the first column of a name exactly.
+func TestColumnsAllIndex(t *testing.T) {
+	columns := NewColumns(
+		ColumnSpec{Name: "id", Type: IntType},
+		ColumnSpec{Name: "v", Type: TextType},
+		ColumnSpec{Name: "v", Type: BigIntType},
+	)
+	var names []string
+	for i, column := range columns.All() {
+		if want, _ := columns.At(i); column != want {
+			t.Fatalf("All yielded %v at %d, want %v", column, i, want)
+		}
+		names = append(names, column.Name)
+	}
+	if len(names) != 3 || names[0] != "id" || names[2] != "v" {
+		t.Fatalf("All yielded %v", names)
+	}
+	for i := range columns.All() {
+		if i > 0 {
+			t.Fatal("All continued after yield returned false")
+		}
+		break
+	}
+	for range (Columns{}).All() {
+		t.Fatal("zero Columns yielded a column")
+	}
+	for name, want := range map[string]int{"id": 0, "v": 1} {
+		if got, ok := columns.Index(name); !ok || got != want {
+			t.Errorf("Index(%q) = %d, %v; want %d", name, got, ok, want)
+		}
+	}
+	for _, name := range []string{"ID", "x", ""} {
+		if got, ok := columns.Index(name); ok || got != -1 {
+			t.Errorf("Index(%q) = %d, %v; want -1, false", name, got, ok)
+		}
+	}
+}

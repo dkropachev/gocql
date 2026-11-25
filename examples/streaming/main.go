@@ -202,11 +202,11 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if err := runDDL("CREATE TABLE " + table + " (id int PRIMARY KEY,payload blob,pieces list<blob>)"); err != nil {
 		return err
 	}
-	insert, err := s.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + " (id,payload,pieces) VALUES (?,?,?)", Params: cql.Params(
+	insert, err := s.Prepare(ctx, cql.Write("INSERT INTO "+table+" (id,payload,pieces) VALUES (?,?,?)", cql.Params(
 		cql.Param("id", cql.Int32Codec, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.ByteSliceCodec, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v record) [][]byte { return v.Pieces }),
-	), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+	)), exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}

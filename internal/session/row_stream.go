@@ -385,7 +385,6 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			if ok {
 				s.privateStorage.mu.Lock()
 				s.privateStorage.info.DeliveredRows++
-				s.privateStorage.info.Result.Rows = s.privateStorage.info.DeliveredRows
 				s.privateStorage.mu.Unlock()
 				return true
 			}
@@ -638,7 +637,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		s.privateStorage.mu.Lock()
 		s.privateStorage.info.Result.Attempts++
-		s.privateStorage.info.Result.Latency += event.Latency
+		s.privateStorage.info.Result.AttemptLatency += event.Latency
 		s.privateStorage.info.Result.HostID = event.Target.HostID
 		s.privateStorage.info.Result.AchievedConsistency = consistency
 
@@ -694,6 +693,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				s.privateStorage.mu.Lock()
 				s.privateStorage.columns = page.columns
 				s.privateStorage.info.Pages++
+				s.privateStorage.info.Result.FetchedRows += int64(response.InternalRowCount)
 				s.privateStorage.mu.Unlock()
 				if prior != nil {
 					prior.InternalReleaseMetadata()

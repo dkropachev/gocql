@@ -55,7 +55,7 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}
-	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, kindInferred: prepared.privateStorage.kindInferred, idempotent: prepared.privateStorage.idempotent, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
+	p := &Prepared[P, cql.EmptyRow]{privateStorage: PreparedStorage[P, cql.EmptyRow]{InternalState: prepared.privateStorage.InternalState, kind: prepared.privateStorage.kind, idempotent: prepared.privateStorage.idempotent, params: prepared.privateStorage.params, rows: execRowsDecoder{}}}
 	q, err := p.Query(options.Options)
 	if err != nil {
 		return nil, err
@@ -123,7 +123,7 @@ func (s *RowStream[R]) mergeBufferedFailure(result cql.Result) {
 	defer p.mu.Unlock()
 	r := &p.info.Result
 	r.Attempts += result.Attempts
-	r.Latency += result.Latency
+	r.AttemptLatency += result.AttemptLatency
 	if len(refs) > 0 {
 		codec.SetDiagnostics(r, r.Warnings(), slices.Concat(r.CQLTraces(), refs), r.CustomPayload())
 	}
@@ -188,8 +188,8 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 	prior := p.info.Result
 	p.info.Result = response.Result
 	p.info.Result.Attempts += prior.Attempts
-	p.info.Result.Latency += prior.Latency
-	p.info.Result.Rows = p.info.DeliveredRows
+	p.info.Result.AttemptLatency += prior.AttemptLatency
+	p.info.Result.FetchedRows += prior.FetchedRows
 	if traces := prior.CQLTraces(); len(traces) > 0 {
 		// CQL trace refs accumulate page after page; the response owns its
 		// own slice, so build a fresh one.
@@ -230,7 +230,6 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 			}
 			p.mu.Lock()
 			p.info.DeliveredRows++
-			p.info.Result.Rows = p.info.DeliveredRows
 			p.mu.Unlock()
 			return true
 		}

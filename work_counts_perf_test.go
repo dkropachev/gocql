@@ -434,7 +434,7 @@ func (speculation) Delay(int) (time.Duration, bool) {
 // without a PREPARE exchange, which the public API always makes.
 func runtimeQuery(t testing.TB) *implSession.Bound[cql.Bytes] {
 	t.Helper()
-	statement := cql.Statement[cql.EmptyParams, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}
+	statement := cql.Statement[cql.EmptyParams, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}
 	b, err := implSession.BindUnpreparedBorrowed(internalStatement(statement), cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		t.Fatal(err)

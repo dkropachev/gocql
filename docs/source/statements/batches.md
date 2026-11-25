@@ -29,10 +29,9 @@ and takes that member's keyspace and table for routing.
 
 A batch is idempotent, for speculation and `retry.Safe`, when every member's
 statement sets `Statement.Idempotent`; a set `exec.Options.Idempotent`
-overrides that for one execution. A member whose statement is
-`cql.UnknownStatement` keeps the batch unclassified, even when the statement
-alone would execute as ordinary because its row type is `cql.EmptyRow`: a
-conditional batch's members rarely decode rows of their own.
+overrides that for one execution. A member's kind is resolved as it is
+alone: an unclassified member with an `IF` condition is conditional, which
+makes the batch conditional.
 
 `AddToBatch` encodes the parameters straight into storage the batch owns, so
 later input mutation cannot change the batch. It uses none of the query's

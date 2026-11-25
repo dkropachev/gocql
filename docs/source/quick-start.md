@@ -22,6 +22,10 @@ results, `prepared.One` reads one row, and `prepared.Each` or a range loop over
 A statement without results has the row type `cql.EmptyRow`; one with no bind
 markers takes `cql.EmptyParams`. Leave `Params` or `Rows` nil for those empty
 types; `cql.Command(text)` builds a statement with neither, such as DDL.
+`cql.Select(text, params, rows)`, `cql.Write(text, params)` and
+`cql.NewStatement(text, params, rows)` build a statement whose type arguments
+Go infers from the codecs; pass `cql.NoParams` for a statement without bind
+markers. `Select` marks the statement ordinary and idempotent.
 Parameters are copied on admission.
 
 A worker that runs one statement many times can own a reusable query:

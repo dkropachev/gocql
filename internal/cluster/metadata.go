@@ -657,7 +657,7 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 	}
 }
 func readV2AgreementHost(ctx context.Context, id cql.UUID, conns []*transport.Conn) (cql.UUID, error) {
-	stmt := binding.Statement[cql.EmptyRow, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: cql.EmptyParamsEncoder, Rows: cql.Row(cql.Column("host_id", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.id }), cql.Column("schema_version", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.version }))}
+	stmt := binding.Statement[cql.EmptyRow, agreementPeer]{CQL: "SELECT host_id, schema_version FROM system.local WHERE key = 'local'", Params: cql.NoParams, Rows: cql.Row(cql.Column("host_id", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.id }), cql.Column("schema_version", cql.NullableCodec(cql.UUIDCodec), func(r *agreementPeer) *cql.Nullable[cql.UUID] { return &r.version }))}
 	var last error = cqlerr.ErrNoConnections
 	for _, conn := range conns {
 		if conn == nil || conn.Closed() {

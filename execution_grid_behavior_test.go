@@ -350,7 +350,6 @@ func gridUpdate(kind cql.StatementKind) cql.Statement[int32, cql.EmptyRow] {
 	return cql.Statement[int32, cql.EmptyRow]{
 		CQL:         "UPDATE ks.tbl SET value = 0x00 WHERE k = ?",
 		Params:      cql.OneParam(cql.Int32Codec),
-		Rows:        cql.EmptyRowDecoder,
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType}),
 		Kind:        kind,
 	}
@@ -452,7 +451,7 @@ func gridEach(ctx context.Context, s *Session, m gridMode, fn func(row []byte, n
 		cb = nil
 	}
 	res, err := m.each(ctx, s, gridSelect(), &dst, cb, gridOptions)
-	o.rows, o.resultN = strings.Join(got, ","), res.Rows
+	o.rows, o.resultN = strings.Join(got, ","), res.FetchedRows
 	gridClassify(&o, err, StopIteration, errGridCallback)
 	return o, true
 }
@@ -651,7 +650,7 @@ var gridCases = []gridCase{
 					got = append(got, string(dst))
 				}
 				err = errors.Join(rows.Err(), rows.Close())
-				o.rows, o.resultN = strings.Join(got, ","), rows.Info().Rows
+				o.rows, o.resultN = strings.Join(got, ","), rows.Info().FetchedRows
 			}
 			gridClassify(&o, err)
 			return o, true

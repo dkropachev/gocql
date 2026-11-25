@@ -358,7 +358,7 @@ removed it.
 | Admission ns/op | 1,087 | 790 | −27.35% |
 
 I7 (first-attempt result path) was not attempted: `mergeResponseResult` only
-checks empty slices, and the `time.Now` pair feeds the public `Result.Latency`.
+checks empty slices, and the `time.Now` pair feeds the public `Result.AttemptLatency`.
 I10 (shared reader 8/16/32/64 KiB) changed w64 by at most −1.2%, so the reader
 stays at 8 KiB.
 

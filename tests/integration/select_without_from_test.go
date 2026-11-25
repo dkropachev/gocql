@@ -186,8 +186,8 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if noFromColumn(t, rows.Columns(), 0).Type.Kind() != cql.KindInt {
 				t.Fatal("literal must have int metadata")
 			}
-			if rows.Info().Rows != 1 {
-				t.Fatalf("page rows=%d want1", rows.Info().Rows)
+			if rows.Info().FetchedRows != 1 {
+				t.Fatalf("page rows=%d want1", rows.Info().FetchedRows)
 			}
 			var row cql.DynamicRow
 			if !rows.NextInto(&row) {
@@ -273,7 +273,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			})
 			t.Run("predicate removes the row", func(t *testing.T) {
 				rows := noFromRows(t, session, filtered)
-				if rows.Columns().Len() != 1 || rows.Info().Rows != 0 {
+				if rows.Columns().Len() != 1 || rows.Info().FetchedRows != 0 {
 					t.Fatal("empty result must retain one column and zero rows")
 				}
 				var row cql.DynamicRow
@@ -296,7 +296,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		session := createSessionWithoutKeyspace(t)
 		defer session.Close()
 		const stmt = "SELECT 1, 'a', true"
-		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}
 		var baseline cql.Columns
 		for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 			t.Run(mode, func(t *testing.T) {

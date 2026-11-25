@@ -297,7 +297,7 @@ func TestExecutionStatusRefused(t *testing.T) {
 			if err := InternalAddBound(&batch, s, runtimeQuery(t)); err != nil {
 				t.Fatal(err)
 			}
-			_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows[cql.EmptyRow](cql.EmptyRowDecoder), CompiledOptions{})
+			_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows[cql.EmptyRow](cql.Row[cql.EmptyRow]()), CompiledOptions{})
 			return err
 		}, nil},
 		{"ClosedPreparedQuery", func(t *testing.T) error {
@@ -316,7 +316,7 @@ func TestExecutionStatusRefused(t *testing.T) {
 		}, nil},
 		{"UnpreparedTwoOptions", func(t *testing.T) error {
 			s, _, _ := runtimeTestSession(t, 1)
-			_, err := InternalWrapSession(s).UnpreparedExec(ctx, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "DELETE FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyRow{}, Options{}, Options{})
+			_, err := InternalWrapSession(s).UnpreparedExec(ctx, binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "DELETE FROM ks.tbl", Params: cql.NoParams}, cql.EmptyRow{}, Options{}, Options{})
 			return err
 		}, nil},
 		{"ClosedSession", func(t *testing.T) error {

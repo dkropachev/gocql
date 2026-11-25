@@ -142,7 +142,7 @@ func TestUnpreparedAddToBatch(t *testing.T) {
 	var batch Batch
 	statement := binding.Statement[[]byte, cql.EmptyRow]{
 		Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.t(v) VALUES(?)",
-		Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder,
+		Params:      cql.OneParam(cql.ByteSliceCodec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType}),
 	}
 	if err := session.UnpreparedAddToBatch(&batch, statement, []byte("abc")); err != nil {

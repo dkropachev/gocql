@@ -254,11 +254,11 @@ func (b *Batch) appendEntry(s *implCluster.Core, source statementSource, stateme
 			b.routing.Keyspace = r.Keyspace
 		}
 	}
-	switch {
-	case r.Kind == cql.ConditionalStatement:
+	// Every member's kind is resolved before it joins (see
+	// binding.ResolveKind), so one conditional member makes the batch
+	// conditional and the batch is otherwise ordinary.
+	if r.Kind == cql.ConditionalStatement {
 		b.routing.Kind = cql.ConditionalStatement
-	case r.Kind == cql.UnknownStatement && b.routing.Kind != cql.ConditionalStatement:
-		b.routing.Kind = cql.UnknownStatement
 	}
 }
 
@@ -275,7 +275,7 @@ func InternalAddBound[R any](batch *Batch, s *implCluster.Core, bound *Bound[R])
 		return err
 	}
 	defer request.InternalOwner.InternalRelease()
-	return batch.add(s, request.InternalSource, request.statement, request.memberRouting(), request.idempotent, request.InternalValues)
+	return batch.add(s, request.InternalSource, request.statement, &request.routing, request.idempotent, request.InternalValues)
 }
 
 // queryExec prepares the batch's request for an execution on query q,

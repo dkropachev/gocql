@@ -132,8 +132,7 @@ func (r CASBatchRows[X]) Info() cql.Result { return r.rows.Info() }
 // CASBatchRows, whose Applied reports whether the batch applied. decoder is
 // a CASRows decoder, typically the Rows of a member's statement. A batch
 // whose members are all known not to be conditional is rejected before it is
-// sent; one of unknown kind that has no condition fails on its result, which
-// has no [applied] column.
+// sent.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options CompiledOptions) (CASBatchRows[X], error) {
 	if s == nil {
 		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("session", "nil session"))

@@ -77,7 +77,7 @@ func TestCursorColumns(t *testing.T) {
 		wantColumns(t, "RowStream.Columns", stream.Columns(), gridValueColumn)
 	})
 	t.Run("PreparedStream", func(t *testing.T) {
-		wantColumns(t, "PreparedStream.Parameters", f.ps.Parameters(), gridKeyColumn)
+		wantColumns(t, "PreparedStream.BindMarkers", f.ps.BindMarkers(), gridKeyColumn)
 		wantColumns(t, "PreparedStream.Columns", f.ps.Columns(), gridValueColumn)
 		info := f.ps.Info()
 		if info.Keyspace != "ks" || info.Table != "tbl" || info.Generation != f.p.Info().Generation {
@@ -171,7 +171,7 @@ func TestCASBatchRows(t *testing.T) {
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if info := rows.Info(); info.Rows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
+	if info := rows.Info(); info.FetchedRows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
 		t.Fatalf("Info = %+v, want two rows from one attempt on the fake node", info)
 	}
 	if cloned.Applied || !cloned.Previous.Set || string(ownedBytesForTest(cloned.Previous.Value)) != "first" {

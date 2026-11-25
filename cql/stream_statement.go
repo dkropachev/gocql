@@ -19,6 +19,8 @@ type StreamStatement[P, R any] struct {
 	// CQL is the statement's text.
 	CQL string
 	// Kind classifies ordinary and conditional statements for safe execution.
+	// The driver infers an UnknownStatement's kind from the CQL, as
+	// Statement.Kind describes.
 	Kind StatementKind
 	// Idempotent marks the statement safe to run more than once, as
 	// Statement.Idempotent does.

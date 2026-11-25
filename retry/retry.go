@@ -56,8 +56,9 @@ type Attempt struct {
 	Consistency cql.Consistency
 	// Kind classifies the request's statement, or a batch's statements
 	// together: ConditionalStatement when one of them is conditional, else
-	// UnknownStatement when one was not classified. Anything but
-	// OrdinaryStatement may be a lightweight transaction.
+	// OrdinaryStatement. The driver resolves an UnknownStatement before
+	// sending it (see cql.UnknownStatement); a policy should still treat
+	// anything but OrdinaryStatement as a possible lightweight transaction.
 	Kind cql.StatementKind
 	// Batch is the kind of batch the request sends; it is unset for any
 	// other request.

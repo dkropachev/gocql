@@ -240,7 +240,7 @@ func TestSession(t *testing.T) {
 			created := false
 			runDDL := func(stmt string) {
 				t.Helper()
-				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); e != nil {
+				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{}); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -258,13 +258,13 @@ func TestSession(t *testing.T) {
 					return
 				}
 				defer cleanupSession.Close()
-				_, e = cleanupSession.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{})
+				_, e = cleanupSession.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{})
 				if e != nil {
 					t.Error(e)
 				}
 			}()
 			runDDL("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec)}, exec.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -273,7 +273,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, exec.PrepareOptions{}))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}, exec.PrepareOptions{}))
 			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
@@ -369,7 +369,7 @@ func TestSession(t *testing.T) {
 
 			intType := cql.IntType
 			var encoded int32
-			statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32Codec, func(n int32) int32 { encoded = n; return n })), Rows: cql.EmptyRowDecoder}
+			statement := cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO test(id) VALUES (?)", Params: cql.Params(cql.ParamAt(0, cql.Int32Codec, func(n int32) int32 { encoded = n; return n }))}
 			statement.BindMarkers = cql.NewColumns(cql.ColumnSpec{Name: "id", Type: intType})
 			batch := &gocql.Batch{}
 			require.NoError(t, session.UnpreparedAddToBatch(batch, statement, int32(1)))
@@ -926,7 +926,7 @@ func TestSession(t *testing.T) {
 		defer session.Close()
 		var now cql.TimeUUID
 		var nows []cql.TimeUUID
-		info, err := session.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.EmptyParams{}, &now, func(n *cql.TimeUUID) error {
+		info, err := session.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, cql.TimeUUID]{CQL: "SELECT now() FROM system.local", Params: cql.NoParams, Rows: cql.OneColumn(cql.TimeUUIDCodec)}, cql.EmptyParams{}, &now, func(n *cql.TimeUUID) error {
 			nows = append(nows, *n)
 			return nil
 		})
@@ -1040,7 +1040,7 @@ func TestSession(t *testing.T) {
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
 		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BytesCodec, func(v *output) *cql.Bytes { return &v.Value }))
-		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1066,7 +1066,7 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Only prepared statements return a cursor that can be retained.
-		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.EmptyParamsEncoder, Rows: rows}, exec.PrepareOptions{})
+		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.NoParams, Rows: rows}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1102,8 +1102,8 @@ func TestSession(t *testing.T) {
 		if count != 3 {
 			t.Fatalf("rows %d", count)
 		}
-		if result.Info().Rows != 3 {
-			t.Fatalf("reported rows %d", result.Info().Rows)
+		if result.Info().FetchedRows != 3 {
+			t.Fatalf("reported rows %d", result.Info().FetchedRows)
 		}
 		if err = result.Close(); err != nil {
 			t.Fatal(err)

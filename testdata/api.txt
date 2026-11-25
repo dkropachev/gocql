@@ -31,12 +31,12 @@ package gocql
 	type gocql.Prepared[P any, R any] struct
 		gocql.Prepared method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Prepared method (*T) All(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Prepared method (*T) BindMarkers() cql.Columns
 		gocql.Prepared method (*T) Columns() cql.Columns
 		gocql.Prepared method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
-		gocql.Prepared method (*T) Parameters() cql.Columns
 		gocql.Prepared method (*T) Query(options ...exec.Options) (*gocql.Query[P, R], error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
@@ -47,9 +47,9 @@ package gocql
 		gocql.PreparedInfo field Kind cql.StatementKind
 		gocql.PreparedInfo field Generation uint64
 	type gocql.PreparedStream[P any, R any] struct
+		gocql.PreparedStream method (*T) BindMarkers() cql.Columns
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
-		gocql.PreparedStream method (*T) Parameters() cql.Columns
 		gocql.PreparedStream method (*T) Query(options ...exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
 	type gocql.Query[P any, R any] struct
 		gocql.Query method (*T) AddToBatch(batch *gocql.Batch, value P) error
@@ -256,6 +256,7 @@ package cql
 		cql.Bytes method (T) Slice(offset int64, length int64) (cql.Bytes, error)
 		cql.Bytes method (T) WriteTo(w io.Writer) (int64, error)
 	var cql.BytesCodec cql.Codec[cql.Bytes]
+	var cql.CASApplied cql.RowDecoder[cql.CASResult[cql.EmptyRow]]
 	type cql.CASResult[R any] struct
 		cql.CASResult field Previous cql.Option[R]
 		cql.CASResult field Applied bool
@@ -295,8 +296,10 @@ package cql
 		cql.ColumnSpec field Table string
 		cql.ColumnSpec field Name string
 	type cql.Columns struct
+		cql.Columns method (T) All() iter.Seq2[int, cql.ColumnSpec]
 		cql.Columns method (T) At(index int) (cql.ColumnSpec, bool)
 		cql.Columns method (T) Equal(other cql.Columns) bool
+		cql.Columns method (T) Index(name string) (int, bool)
 		cql.Columns method (T) Len() int
 	func cql.Command(text string) cql.Statement[cql.EmptyParams, cql.EmptyRow]
 	type cql.CompiledParams[P any] interface
@@ -379,9 +382,7 @@ package cql
 	const cql.EmptyCell cql.CellState = 3
 	func cql.EmptyCodec[T any](base cql.Codec[T]) cql.Codec[cql.MaybeEmpty[T]]
 	type cql.EmptyParams = cql.EmptyRow
-	var cql.EmptyParamsEncoder cql.ParamEncoder[cql.EmptyRow]
 	type cql.EmptyRow struct
-	var cql.EmptyRowDecoder cql.RowDecoder[cql.EmptyRow]
 	func cql.EmptyValue(t cql.DataType) (cql.Value, error)
 	func cql.EncodeValue[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
 	type cql.EncodedValue struct
@@ -476,8 +477,10 @@ package cql
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body []byte) (cql.EncodedValue, error)
+	func cql.NewStatement[P, R any](text string, params cql.ParamEncoder[P], rows cql.RowDecoder[R]) cql.Statement[P, R]
 	func cql.NewTimeUUID() cql.TimeUUID
 	const cql.NoCompression cql.Compression = 0
+	var cql.NoParams cql.ParamEncoder[cql.EmptyParams]
 	func cql.NonNull[T any](v T) cql.Nullable[T]
 	const cql.Null cql.CellState = 1
 	func cql.NullValue(t cql.DataType) cql.Value
@@ -539,8 +542,8 @@ package cql
 	type cql.Result struct
 		cql.Result field HostID cql.UUID
 		cql.Result field Attempts int
-		cql.Result field Latency time.Duration
-		cql.Result field Rows int64
+		cql.Result field AttemptLatency time.Duration
+		cql.Result field FetchedRows int64
 		cql.Result field AchievedConsistency cql.Consistency
 		cql.Result method (T) CQLTraces() []cql.CQLTraceRef
 		cql.Result method (T) CustomPayload() []cql.PayloadEntry
@@ -556,6 +559,7 @@ package cql
 		cql.RowReader method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		cql.RowReader method (*T) SkipColumn() error
 	func cql.ScalarType(kind cql.Kind) (cql.DataType, error)
+	func cql.Select[P, R any](text string, params cql.ParamEncoder[P], rows cql.RowDecoder[R]) cql.Statement[P, R]
 	const cql.Serial cql.Consistency = 8
 	func cql.SetCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.SetDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
@@ -825,6 +829,7 @@ package cql
 	func cql.WithCodec[V any](codec cql.Codec[V]) cql.StructOption
 	func cql.WithEncoder[V any](encoder cql.Encoder[V]) cql.StructOption
 	func cql.WithStreamDecoder[V any](decoder cql.StreamDecoder[V]) cql.StructOption
+	func cql.Write[P any](text string, params cql.ParamEncoder[P]) cql.Statement[P, cql.EmptyRow]
 
 package cqlerr
 	type cqlerr.AlreadyExistsError struct

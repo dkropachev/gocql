@@ -256,17 +256,23 @@ type Statement[P, R any] struct {
     Params ParamEncoder[P]   // nil when P is EmptyParams
     Rows RowDecoder[R]       // nil when R is EmptyRow
     BindMarkers Columns      // parameter metadata for unprepared execution
-    Kind StatementKind       // Unknown with R == EmptyRow executes as Ordinary
+    Kind StatementKind       // Unknown is inferred: CASRows or a DML IF is Conditional
     Idempotent bool          // carried into Prepared, Query and batch members
 }
 type StatementKind uint8
 const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
-// UnknownStatement sends no client timestamp, keeps a fixed replica order and
-// a strict shard pin, and never speculates. A statement left Unknown whose R is
-// EmptyRow executes as Ordinary, prepared or not; as a batch member it stays
-// Unknown. A batch is idempotent when every member is; exec.Options.Idempotent,
+// A conditional statement sends no client timestamp, keeps a fixed replica
+// order and a strict shard pin, and never speculates. A statement left Unknown
+// is Conditional when Rows is a CASRows decoder or its CQL is an INSERT,
+// UPDATE, DELETE or BATCH with a lexical IF, else Ordinary, prepared,
+// unprepared or as a batch member; an Ordinary one that is Conditional by
+// that test is rejected before it is sent. A batch is idempotent when every member is; exec.Options.Idempotent,
 // when set, overrides the statement's flag.
 func Command(text string) Statement[EmptyParams, EmptyRow]
+func NewStatement[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R]
+func Select[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R] // Ordinary, Idempotent
+func Write[P any](text string, params ParamEncoder[P]) Statement[P, EmptyRow]
+var NoParams ParamEncoder[EmptyParams] // the driver fills nil Params and Rows with its own
 
 type EmptyParams = EmptyRecord   // EmptyRecord is struct{}
 type EmptyRow = EmptyRecord
@@ -288,8 +294,6 @@ func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pai
 func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
 func ConvertParams[A, B any](ParamEncoder[B], func(A) B) ParamEncoder[A]
 func ConvertRows[A, B any](RowDecoder[A], func(A) B, func(B) B) RowDecoder[B]
-var EmptyParamsEncoder ParamEncoder[EmptyParams]
-var EmptyRowDecoder RowDecoder[EmptyRow]
 
 // Struct mapping.
 type StructFields[P any] struct { Params []InputField[P]; Columns []OutputField[P] }
@@ -339,7 +343,7 @@ Compile, and concatenate positional plans. Compile rejects any other left side
 with "left side has no fixed arity"; named composition
 uses `Params`/`Row` with accessors. `ConvertRows`' final function is its
 ownership-detaching clone; omitting correct clone semantics is a custom codec
-contract violation. `EmptyRowDecoder` accepts only results with zero physical columns;
+contract violation. The empty row decoder (a nil `Rows` of a `Statement[P, EmptyRow]`) accepts only results with zero physical columns;
 use a real decoder for conditional writes. Ignored result fields still have
 validated framing.
 
@@ -755,7 +759,7 @@ type PrepareOptions struct {
 
 // package gocql
 func (s *Session) Prepare[P, R any](context.Context, cql.Statement[P, R], ...exec.PrepareOptions) (*Prepared[P, R], error) // at most one
-func (p *Prepared[P, R]) Parameters() cql.Columns
+func (p *Prepared[P, R]) BindMarkers() cql.Columns
 func (p *Prepared[P, R]) Columns() cql.Columns
 func (p *Prepared[P, R]) Info() PreparedInfo
 type PreparedInfo struct {
@@ -933,14 +937,15 @@ func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
 func (p PageState) Token() []byte
-func (p PageState) MarshalBinary() ([]byte, error)  // kind byte, then a continuation's token
+func (p PageState) MarshalBinary() ([]byte, error)  // empty for the start; else kind byte, then a continuation's token
 func (p *PageState) UnmarshalBinary([]byte) error
 func (p PageState) MarshalText() ([]byte, error)    // unpadded URL-safe base64 of the binary form
 func (p *PageState) UnmarshalText([]byte) error
 
 // package cql
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
-func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
+func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]] // a nil decoder skips the previous row
+var CASApplied RowDecoder[CASResult[EmptyRow]]           // CASRows[EmptyRow](nil)
 ```
 
 NextInto is the row iterator; All on Rows, Page and CASBatchRows ranges over
@@ -1071,7 +1076,7 @@ The user-facing description is docs/source/statements/streaming.md.
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
 func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
-func (p *PreparedStream[P, R]) Parameters() cql.Columns
+func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
 func (p *PreparedStream[P, R]) Query(...exec.StreamOptions) (*StreamQuery[P, R], error) // at most one
@@ -1422,8 +1427,8 @@ func (b *Batch) Reset() // keeps storage and Kind
 type Result struct {
     HostID cql.UUID
     Attempts int
-    Latency time.Duration
-    Rows int64
+    AttemptLatency time.Duration // summed over completed attempts
+    FetchedRows int64
     AchievedConsistency cql.Consistency
     /* unexported diagnostics */
 }
@@ -2141,7 +2146,7 @@ All Each callbacks may return gocql.StopIteration or a chain of single-error
 wrappers to stop successfully. Joined errors remain failures. Only callback returns recognize this signal:
 decoder/transport errors are never suppressed. Normalize successful stopping
 before request metrics and observers. No later row callbacks or continuation
-pages run. Ordinary callback errors remain failures. Result.Rows continues
+pages run. Ordinary callback errors remain failures. Result.FetchedRows continues
 counting fetched response rows, rather than callback invocations.
 
 exec.Options and exec.CompiledOptions remain separate. Compile recurring settings once;

@@ -1539,7 +1539,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			active--
 			response, attemptErr := outcome.response, outcome.err
 			aggregate.Attempts = startedCount
-			aggregate.Latency += outcome.event.Latency
+			aggregate.AttemptLatency += outcome.event.Latency
 			aggregate.HostID = outcome.event.Target.HostID
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
@@ -1547,7 +1547,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			if attemptErr == nil {
 				response.Result = aggregate
-				response.Result.Rows = int64(response.RowCount)
+				response.Result.FetchedRows = int64(response.RowCount)
 				if response.PagingState != nil {
 					response.State = cqltype.PageStateOwned(response.PagingState)
 				} else {

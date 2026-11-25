@@ -19,27 +19,60 @@ import (
 // TestStatementDefaults pins how an unclassified statement and a
 // statement's Idempotent flag reach executions and batches.
 func TestStatementDefaults(t *testing.T) {
-	// TestStatementDefaults/ExecutionKind checks that only an unclassified
-	// statement that reads no rows executes as ordinary.
-	t.Run("ExecutionKind", func(t *testing.T) {
-		for _, kind := range []cql.StatementKind{cql.UnknownStatement, cql.OrdinaryStatement, cql.ConditionalStatement} {
-			got, inferred := executionKind[cql.EmptyRow](kind)
-			want := kind
-			if kind == cql.UnknownStatement {
-				want = cql.OrdinaryStatement
+	// TestStatementDefaults/InferredKind checks that an unprepared query
+	// resolves an unclassified statement from its decoder and CQL, a
+	// SELECT reading rows included, and rejects an ordinary one that is
+	// conditional, or a SELECT declared conditional or decoded with CASRows,
+	// before anything is sent.
+	t.Run("InferredKind", func(t *testing.T) {
+		s, _, _ := runtimeTestSession(t, 1)
+		defer s.Close()
+		kindOf := func(t *testing.T, err error, request *InternalExecutionRequest) cql.StatementKind {
+			t.Helper()
+			if err != nil {
+				t.Fatal(err)
 			}
-			if got != want || inferred != (kind == cql.UnknownStatement) {
-				t.Errorf("EmptyRow %v: %v, inferred %v", kind, got, inferred)
-			}
-			if got, inferred := executionKind[cql.CASResult[cql.EmptyRow]](kind); got != kind || inferred {
-				t.Errorf("CASResult %v: %v, inferred %v", kind, got, inferred)
-			}
+			return request.routing.Kind
+		}
+		sel, err := unpreparedQuery(s, binding.Statement[cql.EmptyParams, int32]{CQL: "SELECT v FROM ks.t", Rows: cql.OneColumn(cql.Int32Codec)}, Options{})
+		if got := kindOf(t, err, &sel.bound.privateStorage.InternalRequest); got != cql.OrdinaryStatement {
+			t.Errorf("SELECT: %v, want ordinary", got)
+		}
+		sel.Close()
+		lwt, err := unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "UPDATE ks.t SET v = 1 WHERE k = 1 IF v = 0"}, Options{})
+		if got := kindOf(t, err, &lwt.bound.privateStorage.InternalRequest); got != cql.ConditionalStatement {
+			t.Errorf("UPDATE IF: %v, want conditional", got)
+		}
+		lwt.Close()
+		cas, err := unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "INSERT INTO ks.t(k) VALUES(1)", Rows: cql.CASApplied}, Options{})
+		if got := kindOf(t, err, &cas.bound.privateStorage.InternalRequest); got != cql.ConditionalStatement {
+			t.Errorf("CASRows: %v, want conditional", got)
+		}
+		cas.Close()
+		// A SELECT can never be conditional, so neither a CASRows decoder
+		// nor an explicit ConditionalStatement kind is accepted for one.
+		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "SELECT * FROM ks.t", Rows: cql.CASApplied}, Options{})
+		if !hasErrorType[*cql.ValidationError](err) {
+			t.Errorf("CASRows SELECT: %v, want a ValidationError", err)
+		}
+		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, int32]{CQL: "SELECT v FROM ks.t", Rows: cql.OneColumn(cql.Int32Codec), Kind: cql.ConditionalStatement}, Options{})
+		if !hasErrorType[*cql.ValidationError](err) {
+			t.Errorf("conditional SELECT: %v, want a ValidationError", err)
+		}
+		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "INSERT INTO ks.t(k) VALUES(1) IF NOT EXISTS", Kind: cql.OrdinaryStatement}, Options{})
+		if !hasErrorType[*cql.ValidationError](err) {
+			t.Errorf("ordinary INSERT IF NOT EXISTS: %v, want a ValidationError", err)
+		}
+		var batch Batch
+		err = InternalWrapSession(s).UnpreparedAddToBatch(&batch, binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DELETE FROM ks.t WHERE k = 1 IF EXISTS", Kind: cql.OrdinaryStatement}, cql.EmptyParams{})
+		if !hasErrorType[*cql.ValidationError](err) || batch.Len() != 0 {
+			t.Errorf("ordinary DELETE IF EXISTS in a batch: %v, %d members", err, batch.Len())
 		}
 	})
 
 	// TestStatementDefaults/Unprepared checks that an unprepared query
-	// carries the inferred kind and the statement's idempotence, and that
-	// as a batch member it stays unclassified.
+	// carries the inferred kind and the statement's idempotence, as a batch
+	// member too.
 	t.Run("Unprepared", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 1)
 		defer s.Close()
@@ -57,8 +90,8 @@ func TestStatementDefaults(t *testing.T) {
 			if err := q.AddToBatch(&batch, cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
-			if batch.routing.Kind != cql.UnknownStatement {
-				t.Errorf("batch kind %v, want unknown", batch.routing.Kind)
+			if batch.routing.Kind != cql.OrdinaryStatement {
+				t.Errorf("batch kind %v, want ordinary", batch.routing.Kind)
 			}
 			q.Close()
 		}
@@ -118,7 +151,7 @@ func TestStatementDefaults(t *testing.T) {
 	// TestStatementDefaults/Prepared checks, against a server that does not
 	// mark conditional statements, that an unclassified prepared statement
 	// reading no rows is stamped with a client timestamp, carries its
-	// idempotence, and joins a batch unclassified.
+	// idempotence, and joins a batch as ordinary.
 	t.Run("Prepared", func(t *testing.T) {
 		s, _, peers := runtimeTestSession(t, 1)
 		defer s.Close()
@@ -174,7 +207,7 @@ func TestStatementDefaults(t *testing.T) {
 			if err := add(&batch); err != nil {
 				t.Fatal(err)
 			}
-			if batch.routing.Kind != cql.UnknownStatement || batch.notIdempotent {
+			if batch.routing.Kind != cql.OrdinaryStatement || batch.notIdempotent {
 				t.Errorf("batch kind %v, not idempotent %v", batch.routing.Kind, batch.notIdempotent)
 			}
 		}

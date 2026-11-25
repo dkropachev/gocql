@@ -3,12 +3,9 @@
 
 package cql
 
-import (
-	"strings"
-)
-
 // Statement pairs CQL text with a typed parameter encoder and row decoder.
 // Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
+// NewStatement, Select and Write build one with its type arguments inferred.
 // BindMarkers supplies parameter metadata for unprepared execution; Prepare
 // takes that metadata from the server. Kind classifies conditional statements,
 // and Idempotent marks a statement safe to run more than once.
@@ -29,8 +26,8 @@ type Statement[P, R any] struct {
 	// instead.
 	BindMarkers Columns
 	// Kind classifies ordinary and conditional statements for safe execution.
-	// A statement left UnknownStatement whose R is EmptyRow executes as an
-	// OrdinaryStatement, since it reads no rows; see UnknownStatement.
+	// The driver infers an UnknownStatement's kind from Rows and the CQL;
+	// see UnknownStatement.
 	Kind StatementKind
 	// Idempotent marks the statement safe to run more than once: speculative
 	// execution requires it, and retry.Safe moves a request that may have
@@ -41,24 +38,39 @@ type Statement[P, R any] struct {
 	Idempotent bool
 }
 
-// ParseConsistency parses a consistency name, ignoring case.
-func ParseConsistency(s string) (Consistency, error) {
-	var consistency Consistency
-	err := consistency.UnmarshalText([]byte(strings.ToUpper(s)))
-	return consistency, err
+// NoParams encodes the parameters of a statement without bind markers. Pass
+// it to NewStatement, Select or Write, where a nil encoder leaves P without a
+// type to infer; a Statement literal may leave Params nil instead. The driver
+// does not read this variable, so reassigning it changes only code that does.
+var NoParams ParamEncoder[EmptyParams] = emptyParams
+
+// NewStatement returns a statement of text with params and rows, its type
+// arguments inferred from them. Its Kind is UnknownStatement and it is not
+// Idempotent; set either on the result.
+func NewStatement[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R] {
+	return Statement[P, R]{CQL: text, Params: params, Rows: rows}
 }
 
-// MustParseConsistency is ParseConsistency that panics on error.
-func MustParseConsistency(s string) Consistency {
-	consistency, err := ParseConsistency(s)
-	if err != nil {
-		panic(err)
-	}
-	return consistency
+// Select returns a statement that reads rows, such as a SELECT, with params
+// and rows, its type arguments inferred from them. A read runs as often as it
+// is retried without changing anything, so it is an OrdinaryStatement and
+// Idempotent. A conditional statement, one whose CQL is an INSERT, UPDATE,
+// DELETE or BATCH with an IF or whose rows is a CASRows decoder, declared
+// that way is rejected before it is sent.
+func Select[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R] {
+	return Statement[P, R]{CQL: text, Params: params, Rows: rows, Kind: OrdinaryStatement, Idempotent: true}
+}
+
+// Write returns a statement that returns no rows, such as an INSERT, UPDATE
+// or DELETE, with params, P inferred from it. Its Kind is UnknownStatement,
+// which the driver resolves from the CQL, and it is not Idempotent; set
+// Idempotent on the result when running it twice is safe.
+func Write[P any](text string, params ParamEncoder[P]) Statement[P, EmptyRow] {
+	return Statement[P, EmptyRow]{CQL: text, Params: params, Rows: emptyRows}
 }
 
 // Command returns a statement with no bind markers and no result columns,
 // such as DDL or a write with literal values.
 func Command(text string) Statement[EmptyParams, EmptyRow] {
-	return Statement[EmptyParams, EmptyRow]{CQL: text, Params: EmptyParamsEncoder, Rows: EmptyRowDecoder}
+	return Statement[EmptyParams, EmptyRow]{CQL: text, Params: emptyParams, Rows: emptyRows}
 }

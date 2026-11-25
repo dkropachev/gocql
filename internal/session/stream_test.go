@@ -918,6 +918,49 @@ func TestStream(t *testing.T) {
 			}
 		})
 
+		// FetchedRows counts the rows of every page the stream received,
+		// buffered or incremental, and DeliveredRows the rows NextInto
+		// returned, so a stream closed early fetched more than it delivered.
+		t.Run("FetchedRows", func(t *testing.T) {
+			for _, incremental := range []bool{false, true} {
+				t.Run(fmt.Sprint("incremental=", incremental), func(t *testing.T) {
+					s, c, peer := rowStreamSession(t, 4, nil)
+					done := make(chan struct{})
+					go func() {
+						defer close(done)
+						for _, body := range [][]byte{runtimeRowsBody([]byte{1}, "a", "b"), runtimeRowsBody(nil, "c", "d", "e")} {
+							stream := typedTestReadRequest(t, c, peer)
+							if _, err := peer.Write(testResponse(t, c, stream, body)); err != nil {
+								t.Error(err)
+								return
+							}
+						}
+					}()
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					defer cancel()
+					b := runtimeQuery(t)
+					defer b.Close()
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: incremental})
+					if err != nil {
+						t.Fatal(err)
+					}
+					dst := make([]byte, 0, 8)
+					for range 3 {
+						if !cursor.NextInto(&dst) {
+							t.Fatal(cursor.Err())
+						}
+					}
+					if err := cursor.Close(); err != nil {
+						t.Fatal(err)
+					}
+					if info := cursor.Info(); info.Pages != 2 || info.DeliveredRows != 3 || info.Result.FetchedRows != 5 {
+						t.Fatalf("pages %d, delivered %d, fetched %d; want 2, 3, 5", info.Pages, info.DeliveredRows, info.Result.FetchedRows)
+					}
+					<-done
+				})
+			}
+		})
+
 		t.Run("Modes", func(t *testing.T) {
 			for _, mode := range []struct {
 				name        string
