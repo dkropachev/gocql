@@ -440,12 +440,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				q, err := p.Worker(exec.Options{})
-				if err != nil {
-					t.Fatal(err)
-				}
-				info, err := q.Routing(tc.values)
-				q.Close()
+				info, err := p.Routing(tc.values)
 				if err != nil {
 					t.Fatal(err)
 				}

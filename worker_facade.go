@@ -9,7 +9,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
-	"github.com/scylladb/gocql/v2/routing"
 )
 
 // Worker owns reusable parameters and execution state for one goroutine. It
@@ -90,15 +89,6 @@ func (w *Worker[P, R]) RunPage(ctx context.Context, value P, state cql.PageState
 	page, err := w.internal().RunPage(ctx, value, cql.PageState(state), pageSize)
 	return (*Page[R])(page), err
 }
-
-// Routing reports routing information derived from value without executing
-// the statement: keyspace, table, token, statement kind and any host or shard
-// the options pin. Pass the token to metadata.Snapshot.Replicas for the
-// candidate replicas; the routing policy picks among them when the statement
-// runs, so Routing does not say which replica serves it. It uses scratch of
-// its own, so it works while the worker runs, drains or has an open handle; a
-// closed worker returns cqlerr.ErrClosed.
-func (w *Worker[P, R]) Routing(value P) (routing.Info, error) { return w.internal().Routing(value) }
 
 // AddToBatch encodes value straight into storage batch owns. It uses none of
 // the worker's execution state, so it works while the worker runs, drains or has

@@ -131,8 +131,10 @@ page state. Explicit paging is the pages column only.
 - Each column uses the same verbs in every row that fills it: `Exec`, `One`,
   `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of the verb.
-- `AddToBatch` appears once per reusable form. `Worker.Routing` reports where
-  an execution with the given values would go, and lives on `Worker`.
+- `AddToBatch` appears once per reusable form. `Prepared.Routing` reports
+  where an execution with the given values and options would go. It lives on
+  `Prepared`, which every reusable form starts from, and takes the shared
+  form's options, so reading a route needs no worker.
 - Batches follow the batch rules below, not the grid.
 
 ## Batches

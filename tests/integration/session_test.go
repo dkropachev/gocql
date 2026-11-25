@@ -1050,7 +1050,7 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		for id := int32(1); id <= 3; id++ {
-			info, err := insert.Routing(input{ID: id, Value: payload})
+			info, err := prepared.Routing(input{ID: id, Value: payload})
 			if err != nil {
 				t.Fatal(err)
 			}

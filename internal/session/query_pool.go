@@ -14,9 +14,11 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // queryPoolBase is what the session runtime sees of a query pool: its idle
@@ -323,6 +325,58 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	}
 	routing := preparedRouting(state, p.privateStorage.kind)
 	return batch.addValue(s, preparedSource{state: state}, state.InternalStatement, &routing, p.privateStorage.idempotent, p.privateStorage.params, state.InternalParameters, value, true)
+}
+
+// Routing encodes value and returns the routing information of an execution
+// of the statement with value and options, without sending a request: the
+// keyspace, table, token and kind, and the consistency, host and shard the
+// options resolve to. It encodes into scratch of its own and takes no pooled
+// query. A closed session returns cqlerr.ErrClosed.
+func (p *Prepared[P, R]) Routing(value P, options CompiledOptions) (routing2.Info, error) {
+	if p == nil || p.privateStorage.InternalState == nil {
+		return routing2.Info{}, cqltype.TypeValidation("prepared", "nil handle")
+	}
+	state := p.privateStorage.InternalState
+	s := state.InternalSession
+	if s.Closed() {
+		return routing2.Info{}, cqlerr.ErrClosed
+	}
+	info := preparedRouting(state, p.privateStorage.kind)
+	scratch := routingScratch.Get().(*binding.ParameterBuffer)
+	values, err := scratch.Encode(p.privateStorage.params, state.InternalParameters, value, true)
+	if err == nil {
+		info.Token, err = preparedSource{state: state}.token(values.Cells)
+	}
+	scratch.Retire()
+	routingScratch.Put(scratch)
+	if err != nil {
+		return routing2.Info{}, err
+	}
+	rt := InternalRuntimeFor(s)
+	var resolvedScratch InternalResolvedOptions
+	resolved := options.resolve(rt, &resolvedScratch)
+	fillOptionRouting(&info, rt, resolved)
+	return info, nil
+}
+
+// fillOptionRouting completes info with what resolved options add to an
+// execution's routing, as executions do: the keyspace when the statement
+// names none, the consistency, the host and shard pins, and the conditional
+// routing of a SERIAL or LOCAL_SERIAL read.
+func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved *InternalResolvedOptions) {
+	values := &resolved.InternalOptions
+	if info.Keyspace == "" {
+		info.Keyspace = values.Keyspace
+		if info.Keyspace == "" {
+			info.Keyspace = rt.config.Keyspace
+		}
+	}
+	info.Consistency = resolved.InternalProfile.Consistency
+	info.HostID = values.HostID
+	info.ShardID = values.ShardID
+	if info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
+		info.Kind = cql.ConditionalStatement
+	}
 }
 
 // Exec binds value and executes the statement once. The statement must not

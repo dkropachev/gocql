@@ -42,8 +42,8 @@ var gridNonExecution = map[string][]string{
 		"RefreshMetadata", "RunConditionalBatch", "Subscribe",
 		"UnpreparedAddToBatch",
 	},
-	"Worker":   {"AddToBatch", "Close", "Routing", "Wait"},
-	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Worker"},
+	"Worker":   {"AddToBatch", "Close", "Wait"},
+	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Routing", "Worker"},
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI

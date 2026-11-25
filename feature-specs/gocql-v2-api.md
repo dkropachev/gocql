@@ -777,6 +777,7 @@ func (p *Prepared[P, R]) All(context.Context, P, *R, ...exec.CompiledOptions) it
 func (p *Prepared[P, R]) Run(context.Context, P, ...exec.CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
 func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...exec.CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
+func (p *Prepared[P, R]) Routing(P, ...exec.CompiledOptions) (routing.Info, error)
 
 // Worker-owned reusable executions.
 func (p *Prepared[P, R]) Worker(...exec.Options) (*Worker[P, R], error) // at most one
@@ -791,7 +792,6 @@ func (w *Worker[P, R]) One(context.Context, P, *R) (bool, Result, error)
 func (w *Worker[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
 func (w *Worker[P, R]) Run(context.Context, P) (Rows[R], error)
 func (w *Worker[P, R]) RunPage(context.Context, P, cql.PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
-func (w *Worker[P, R]) Routing(P) (routing.Info, error)
 func (w *Worker[P, R]) AddToBatch(*Batch, P) error
 func (w *Worker[P, R]) Close()                       // stop at once
 func (w *Worker[P, R]) Wait(context.Context) error   // join the drain
@@ -837,12 +837,12 @@ sent, except with cql.DynamicParams, whose markers take the values' types. Worke
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
-A call while a Rows, Page or RowStream of the query is open, or while another
+A worker call while a Rows, Page or RowStream of the worker is open, or while another
 goroutine's call runs, returns cqlerr.ErrBusy. Cancellation may return while accepted
-transport writes or callbacks still drain; the query's next execution waits for
-that drain within its own context instead of returning ErrBusy. Routing and
-AddToBatch use storage of their own and work during the drain. Close() stops
-the query, cancels a running call (which returns an error matching
+transport writes or callbacks still drain; the worker's next execution waits for
+that drain within its own context instead of returning ErrBusy. AddToBatch
+uses storage of its own and works during the drain. Close() stops
+the worker, cancels a running call (which returns an error matching
 context.Canceled), stops an open handle with cqlerr.ErrClosed, and returns at once; Wait(ctx) joins the drain, returning ctx.Err() when ctx ends
 first, and Session.Close joins the rest. The session refers to an open query
 weakly: a query dropped without Close is closed by a garbage-collector cleanup,

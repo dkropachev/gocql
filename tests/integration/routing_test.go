@@ -826,15 +826,10 @@ func TestRouting(t *testing.T) {
 	})
 }
 
-// routingTestInfo returns the routing a query of p computes for value.
+// routingTestInfo returns the routing p computes for value.
 func routingTestInfo[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) routing.Info {
 	t.Helper()
-	q, err := p.Worker(exec.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer q.Close()
-	info, err := q.Routing(value)
+	info, err := p.Routing(value)
 	if err != nil {
 		t.Fatal(err)
 	}

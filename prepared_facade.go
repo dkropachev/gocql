@@ -10,6 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // Prepared is an immutable typed statement prepared on a session. Share it
@@ -172,6 +173,26 @@ func (p *Prepared[P, R]) Worker(options ...exec.Options) (*Worker[P, R], error) 
 	}
 	q, err := p.internal().Query(internalOptions(o))
 	return (*Worker[P, R])(q), err
+}
+
+// Routing reports where an execution of the statement with value and
+// options would be routed, without executing it: the keyspace, table, token
+// and statement kind, and the consistency, host and shard the options
+// resolve to. Pass the token to metadata.Snapshot.Replicas for the candidate
+// replicas; the routing policy picks among them when the statement runs, so
+// Routing does not say which replica serves it. Routing takes no pooled
+// query and is safe for concurrent use. At most one exec.CompiledOptions may
+// be passed; a closed session returns cqlerr.ErrClosed.
+func (p *Prepared[P, R]) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error) {
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return routing.Info{}, tooManyOptions()
+	}
+	return p.internal().Routing(value, o)
 }
 
 // AddToBatch encodes value straight into storage batch owns. Calls on p are

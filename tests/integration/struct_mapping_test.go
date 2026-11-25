@@ -409,11 +409,12 @@ func TestStructMapping(t *testing.T) {
 		}
 	})
 
-	// Worker.Exec, Run, RunPage (paged and unpaged), Each, One and Routing,
-	// with paging across pages of two rows.
+	// Worker.Exec, Run, RunPage (paged and unpaged), Each and One, and
+	// Prepared.Routing, with paging across pages of two rows.
 	t.Run("Query", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		insert, err := f.insert(t, ctx).Worker(exec.Options{})
+		insertPrepared := f.insert(t, ctx)
+		insert, err := insertPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -426,7 +427,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		if _, err := insert.Routing(want[0]); err != nil {
+		if _, err := insertPrepared.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
 		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Worker(exec.Options{PageSize: 2})

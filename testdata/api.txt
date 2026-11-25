@@ -37,6 +37,7 @@ package gocql
 		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
+		gocql.Prepared method (*T) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
 		gocql.Prepared method (*T) Worker(options ...exec.Options) (*gocql.Worker[P, R], error)
@@ -103,7 +104,6 @@ package gocql
 		gocql.Worker method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error)
 		gocql.Worker method (*T) Exec(ctx context.Context, value P) (cql.Result, error)
 		gocql.Worker method (*T) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error)
-		gocql.Worker method (*T) Routing(value P) (routing.Info, error)
 		gocql.Worker method (*T) Run(ctx context.Context, value P) (gocql.Rows[R], error)
 		gocql.Worker method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*gocql.Page[R], error)
 		gocql.Worker method (*T) Wait(ctx context.Context) error

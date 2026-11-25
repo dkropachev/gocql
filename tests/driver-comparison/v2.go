@@ -98,13 +98,8 @@ func (a *v2Adapter) Evidence() any {
 	routing := []routing.Info{}
 	for _, prepared := range a.reads {
 		if prepared != nil {
-			b, e := prepared.Worker(exec.Options{})
-			if e == nil {
-				info, err := b.Routing(int32(0))
-				if err == nil {
-					routing = append(routing, info)
-				}
-				b.Close()
+			if info, err := prepared.Routing(int32(0)); err == nil {
+				routing = append(routing, info)
 			}
 		}
 	}
@@ -132,12 +127,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		if e != nil {
 			return nil, nil, e
 		}
-		q, e := p.Worker(exec.Options{})
-		if e != nil {
-			return nil, nil, e
-		}
-		routing, e := q.Routing(int32(0))
-		q.Close()
+		routing, e := p.Routing(int32(0))
 		if e != nil {
 			return nil, nil, e
 		}
