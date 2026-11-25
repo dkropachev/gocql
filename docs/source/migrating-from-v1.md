@@ -318,6 +318,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `ColumnMetadata.ClusteringOrder` (string) and `Order` (`ASC`/`DESC`) | `metadata.Column.ClusteringOrder`, a `metadata.ColumnOrder`: `ColumnOrderAsc`, `ColumnOrderDesc`, or `ColumnOrderNone` for a column that is not a clustering column |
 | `TableMetadata.ID`, `ViewMetadata.ID`, `BaseTableID` | `metadata.Table.ID`, `View.ID`, `View.BaseTableID` and `TableOptions.Version`, all `cql.UUID` |
 | `gocql.TypeAscii` | `cql.TypeASCII` |
+| `gocql.TypeVarchar` and `gocql.TypeText` | `cql.TypeText`: text and varchar are one CQL type, and a column of either has that kind, so their types compare `Equal` |
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
 | `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |

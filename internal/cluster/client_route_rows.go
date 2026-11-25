@@ -96,7 +96,7 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 		kind := cql.TypeUUID
 		for _, v := range vs {
 			if _, err := cql.ParseUUID(v); err != nil {
-				kind = cql.TypeVarchar
+				kind = cql.TypeText
 				break
 			}
 		}

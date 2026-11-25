@@ -695,7 +695,7 @@ package cql
 	const cql.TypeMap cql.Type = 33
 	const cql.TypeSet cql.Type = 34
 	const cql.TypeSmallInt cql.Type = 19
-	const cql.TypeText cql.Type = 10
+	const cql.TypeText cql.Type = 13
 	const cql.TypeTime cql.Type = 18
 	const cql.TypeTimeUUID cql.Type = 15
 	const cql.TypeTimestamp cql.Type = 11
@@ -703,7 +703,6 @@ package cql
 	const cql.TypeTuple cql.Type = 49
 	const cql.TypeUDT cql.Type = 48
 	const cql.TypeUUID cql.Type = 12
-	const cql.TypeVarchar cql.Type = 13
 	const cql.TypeVarint cql.Type = 14
 	const cql.TypeVector cql.Type = 256
 	func cql.UDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) (cql.Codec[T], error)
@@ -803,7 +802,6 @@ package cql
 		cql.ValueWriter method (*T) Uint64(v uint64) error
 		cql.ValueWriter method (*T) Uint8(v uint8) error
 		cql.ValueWriter method (*T) Unset() error
-	var cql.VarcharType cql.DataType
 	const cql.VariantFuture untyped int = 7
 	const cql.VariantIETF untyped int = 2
 	const cql.VariantMicrosoft untyped int = 6

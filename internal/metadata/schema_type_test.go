@@ -18,7 +18,7 @@ func TestSchemaDataType(t *testing.T) {
 	}}
 	for source, want := range map[string]string{
 		"int":                          "int",
-		"varchar":                      "varchar",
+		"varchar":                      "text",
 		"frozen<list<int>>":            "frozen<list<int>>",
 		"map<text, frozen<set<uuid>>>": "map<text,frozen<set<uuid>>>",
 		"frozen<tuple<int, text>>":     "frozen<tuple<int,text>>",

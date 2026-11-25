@@ -275,13 +275,13 @@ func TestScan(t *testing.T) {
 		defer session.Close()
 		table := testTableName(t)
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(testuuid timeuuid PRIMARY KEY,testtimestamp timestamp,testvarchar varchar,testbigint bigint,testblob blob,testbool boolean,testfloat float,testdouble double,testint int,testdecimal decimal,testlist list<text>,testset set<int>,testmap map<varchar,varchar>,testvarint varint,testinet inet)", table))
-		textType := cql.VarcharType
+		textType := cql.TextType
 		intType := cql.IntType
 		listType, err := cql.ListType(textType)
 		require.NoError(t, err)
 		setType, err := cql.SetType(intType)
 		require.NoError(t, err)
-		varcharType := cql.VarcharType
+		varcharType := cql.TextType
 		mapType, err := cql.MapType(varcharType, varcharType)
 		require.NoError(t, err)
 		bigInt, ok := new(big.Int).SetString("830169365738487321165427203929228", 10)

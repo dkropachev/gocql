@@ -9,7 +9,9 @@ import (
 
 // Type is the kind of a CQL data type, as the native protocol numbers it, so
 // the zero Type is TypeCustom. TypeVector is the driver's own: the protocol
-// sends a vector as a custom type. Later releases may add values, so a switch
+// sends a vector as a custom type. CQL's text and varchar are one type, so
+// both are TypeText: the protocol's text ID 0x000A and the schema names text
+// and varchar all decode to it. Later releases may add values, so a switch
 // over them needs a default case.
 type Type uint16
 
@@ -25,10 +27,9 @@ const (
 	TypeDouble    Type = 0x0007
 	TypeFloat     Type = 0x0008
 	TypeInt       Type = 0x0009
-	TypeText      Type = 0x000A
 	TypeTimestamp Type = 0x000B
 	TypeUUID      Type = 0x000C
-	TypeVarchar   Type = 0x000D
+	TypeText      Type = 0x000D
 	TypeVarint    Type = 0x000E
 	TypeTimeUUID  Type = 0x000F
 	TypeInet      Type = 0x0010
@@ -78,8 +79,6 @@ func (t Type) String() string {
 		return "timestamp"
 	case TypeUUID:
 		return "uuid"
-	case TypeVarchar:
-		return "varchar"
 	case TypeTimeUUID:
 		return "timeuuid"
 	case TypeInet:

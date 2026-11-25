@@ -44,12 +44,23 @@ type NativeType struct {
 	proto  byte
 }
 
+// legacyText is the protocol's text ID. Text and varchar are one CQL type,
+// which the driver numbers cql.TypeText (varchar's ID).
+const legacyText cql.Type = 0x000A
+
+func wireKind(typ cql.Type) cql.Type {
+	if typ == legacyText {
+		return cql.TypeText
+	}
+	return typ
+}
+
 func NewNativeType(proto byte, typ cql.Type) NativeType {
-	return NativeType{proto: proto, typ: typ, custom: ""}
+	return NativeType{proto: proto, typ: wireKind(typ), custom: ""}
 }
 
 func NewCustomType(proto byte, typ cql.Type, custom string) NativeType {
-	return NativeType{proto: proto, typ: typ, custom: custom}
+	return NativeType{proto: proto, typ: wireKind(typ), custom: custom}
 }
 
 func (t NativeType) Type() cql.Type {

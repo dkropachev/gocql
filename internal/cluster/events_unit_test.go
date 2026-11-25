@@ -39,23 +39,23 @@ import (
 )
 
 var (
-	typeVarchar = cqltype.NewCustomType(4, cql.TypeVarchar, "")
+	typeVarchar = cqltype.NewCustomType(4, cql.TypeText, "")
 	typeBoolean = cqltype.NewCustomType(4, cql.TypeBoolean, "")
 	typeDouble  = cqltype.NewCustomType(4, cql.TypeDouble, "")
 	typeInt     = cqltype.NewCustomType(4, cql.TypeInt, "")
 	typeMapSS   = cqltype.CollectionType{
 		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, cql.TypeVarchar, ""),
-		Elem:       cqltype.NewCustomType(4, cql.TypeVarchar, ""),
+		Key:        cqltype.NewCustomType(4, cql.TypeText, ""),
+		Elem:       cqltype.NewCustomType(4, cql.TypeText, ""),
 	}
 	typeMapSB = cqltype.CollectionType{
 		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, cql.TypeVarchar, ""),
+		Key:        cqltype.NewCustomType(4, cql.TypeText, ""),
 		Elem:       cqltype.NewCustomType(4, cql.TypeBlob, ""),
 	}
 	typeSetS = cqltype.CollectionType{
 		NativeType: cqltype.NewCustomType(4, cql.TypeSet, ""),
-		Elem:       cqltype.NewCustomType(4, cql.TypeVarchar, ""),
+		Elem:       cqltype.NewCustomType(4, cql.TypeText, ""),
 	}
 )
 

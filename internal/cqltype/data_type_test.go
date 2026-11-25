@@ -52,3 +52,17 @@ func TestDataType(t *testing.T) {
 		}
 	})
 }
+
+// The protocol's legacy text ID becomes cql.TypeText, as varchar's ID does.
+func TestLegacyTextID(t *testing.T) {
+	for _, id := range []cql.Type{0x000A, cql.TypeText} {
+		native := NewNativeType(4, id)
+		if native.Type() != cql.TypeText || native.String() != "text" {
+			t.Fatalf("id %#x: %v %s", uint16(id), native.Type(), native)
+		}
+		dt, err := DataTypeFromInfo(native)
+		if err != nil || !dt.Equal(cql.TextType) {
+			t.Fatalf("id %#x: %v %v", uint16(id), dt, err)
+		}
+	}
+}

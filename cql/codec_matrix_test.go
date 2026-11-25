@@ -285,7 +285,7 @@ func TestCodecMatrix(t *testing.T) {
 	str.paths = matrixDecoders[string]
 	asciiStr := matrixOf("ascii/string", cql.TypeASCII, cql.ASCIIStringCodec, cql.TypeText, "plain")
 	asciiStr.emptyDecodes, asciiStr.noEmptyCodec, asciiStr.badValues = true, true, []string{"é"}
-	varcharStr := matrixOf("varchar/string", cql.TypeVarchar, cql.StringCodec, cql.TypeASCII, "v")
+	varcharStr := matrixOf("legacy-text/string", cql.Type(0x000A), cql.StringCodec, cql.TypeASCII, "v")
 	varcharStr.emptyDecodes, varcharStr.noEmptyCodec = true, true
 	blob := matrixOf("blob/Bytes", cql.TypeBlob, cql.BlobCodec, cql.TypeText, cql.BorrowBytes([]byte{1, 2, 3}))
 	blob.emptyDecodes, blob.noEmptyCodec, blob.equal = true, true, bytesEq

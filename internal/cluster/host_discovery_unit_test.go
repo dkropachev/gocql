@@ -22,11 +22,11 @@ type testPeer struct {
 
 var systemPeersCols = []rowsCol{
 	{"peer", optNative(cql.TypeInet)},
-	{"data_center", optNative(cql.TypeVarchar)},
+	{"data_center", optNative(cql.TypeText)},
 	{"host_id", optNative(cql.TypeUUID)},
-	{"rack", optNative(cql.TypeVarchar)},
+	{"rack", optNative(cql.TypeText)},
 	{"rpc_address", optNative(cql.TypeInet)},
-	{"tokens", optCollection(cql.TypeSet, optNative(cql.TypeVarchar))},
+	{"tokens", optCollection(cql.TypeSet, optNative(cql.TypeText))},
 }
 
 // optBytes encodes s as a value, or as null when it is empty.

@@ -251,7 +251,7 @@ func TestResponse(t *testing.T) {
 				fr.WriteString("pk_a")
 				fr.WriteShort(uint16(cql.TypeInt))
 				fr.WriteString("pk_b")
-				fr.WriteShort(uint16(cql.TypeVarchar))
+				fr.WriteShort(uint16(cql.TypeText))
 				// result metadata
 				fr.WriteInt(int32(frm.FlagNoMetaData))
 				fr.WriteInt(0)
@@ -443,7 +443,7 @@ func TestResponse(t *testing.T) {
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_b")
-			fr.WriteShort(uint16(cql.TypeVarchar))
+			fr.WriteShort(uint16(cql.TypeText))
 
 			// Column 2: same keyspace/table
 			fr.WriteString("test_ks")
@@ -479,7 +479,7 @@ func TestResponse(t *testing.T) {
 			}
 
 			// Verify column types
-			expectedTypes := []cql.Type{cql.TypeInt, cql.TypeVarchar, cql.TypeBoolean}
+			expectedTypes := []cql.Type{cql.TypeInt, cql.TypeText, cql.TypeBoolean}
 			for i, col := range meta.Columns {
 				nt, ok := col.TypeInfo.(NativeType)
 				if !ok {
@@ -694,28 +694,28 @@ func TestResponse(t *testing.T) {
 			// native type, keeping the class name.
 			{"CustomNativeClass", optCustom("org.apache.cassandra.db.marshal.Int32Type"), cqltype.NewCustomType(protoVersion4, cql.TypeInt, "org.apache.cassandra.db.marshal.Int32Type")},
 			{"CustomUnknownClass", optCustom("com.example.MyType"), cqltype.NewCustomType(protoVersion4, cql.TypeCustom, "com.example.MyType")},
-			{"List", optCollection(cql.TypeList, optNative(cql.TypeVarchar)),
-				CollectionType{NativeType: native(cql.TypeList), Elem: native(cql.TypeVarchar)}},
+			{"List", optCollection(cql.TypeList, optNative(cql.TypeText)),
+				CollectionType{NativeType: native(cql.TypeList), Elem: native(cql.TypeText)}},
 			{"Set", optCollection(cql.TypeSet, optNative(cql.TypeUUID)),
 				CollectionType{NativeType: native(cql.TypeSet), Elem: native(cql.TypeUUID)}},
-			{"Map", optCollection(cql.TypeMap, optNative(cql.TypeVarchar), optNative(cql.TypeBigInt)),
-				CollectionType{NativeType: native(cql.TypeMap), Key: native(cql.TypeVarchar), Elem: native(cql.TypeBigInt)}},
+			{"Map", optCollection(cql.TypeMap, optNative(cql.TypeText), optNative(cql.TypeBigInt)),
+				CollectionType{NativeType: native(cql.TypeMap), Key: native(cql.TypeText), Elem: native(cql.TypeBigInt)}},
 			{"Tuple", optTuple(optNative(cql.TypeInt), optNative(cql.TypeBoolean)),
 				TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{native(cql.TypeInt), native(cql.TypeBoolean)}}},
 			{"EmptyTuple", optTuple(), TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{}}},
 			{"UDT", optUDT("ks", "addr",
-				optField{"street", optNative(cql.TypeVarchar)},
+				optField{"street", optNative(cql.TypeText)},
 				optField{"zip", optNative(cql.TypeInt)},
 			), UDTTypeInfo{NativeType: native(cql.TypeUDT), KeySpace: "ks", Name: "addr", Elements: []UDTField{
-				{Name: "street", Type: native(cql.TypeVarchar)},
+				{Name: "street", Type: native(cql.TypeText)},
 				{Name: "zip", Type: native(cql.TypeInt)},
 			}}},
 			{"Nested", optCollection(cql.TypeMap,
-				optNative(cql.TypeVarchar),
+				optNative(cql.TypeText),
 				optCollection(cql.TypeList, optTuple(optNative(cql.TypeInt), optUDT("ks", "u", optField{"f", optNative(cql.TypeBlob)}))),
 			), CollectionType{
 				NativeType: native(cql.TypeMap),
-				Key:        native(cql.TypeVarchar),
+				Key:        native(cql.TypeText),
 				Elem: CollectionType{NativeType: native(cql.TypeList), Elem: TupleTypeInfo{
 					NativeType: native(cql.TypeTuple),
 					Elems: []TypeInfo{native(cql.TypeInt), UDTTypeInfo{

@@ -35,12 +35,12 @@ var systemLocalResultMetadata = protocol.ResultMetadata{
 		Keyspace: "system",
 		Table:    "local",
 		Name:     "cluster_name",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "local",
 		Name:     "data_center",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "local",
@@ -55,17 +55,17 @@ var systemLocalResultMetadata = protocol.ResultMetadata{
 		Keyspace: "system",
 		Table:    "local",
 		Name:     "partitioner",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "local",
 		Name:     "rack",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "local",
 		Name:     "release_version",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "local",
@@ -82,7 +82,7 @@ var systemLocalResultMetadata = protocol.ResultMetadata{
 		Name:     "tokens",
 		TypeInfo: cqltype.CollectionType{
 			NativeType: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeSet, ""),
-			Elem:       cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+			Elem:       cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 		},
 	}},
 }
@@ -100,7 +100,7 @@ var systemPeersResultMetadata = protocol.ResultMetadata{
 		Keyspace: "system",
 		Table:    "peers",
 		Name:     "data_center",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "peers",
@@ -115,12 +115,12 @@ var systemPeersResultMetadata = protocol.ResultMetadata{
 		Keyspace: "system",
 		Table:    "peers",
 		Name:     "rack",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "peers",
 		Name:     "release_version",
-		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+		TypeInfo: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 	}, {
 		Keyspace: "system",
 		Table:    "peers",
@@ -137,7 +137,7 @@ var systemPeersResultMetadata = protocol.ResultMetadata{
 		Name:     "tokens",
 		TypeInfo: cqltype.CollectionType{
 			NativeType: cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeSet, ""),
-			Elem:       cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeVarchar, ""),
+			Elem:       cqltype.NewCustomType(protocol.ProtoVersion4, cql.TypeText, ""),
 		},
 	}},
 }

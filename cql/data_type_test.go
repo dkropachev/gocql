@@ -118,11 +118,14 @@ func TestDataType(t *testing.T) {
 				TypeASCII: ASCIIType, TypeBigInt: BigIntType, TypeBlob: BlobType, TypeBoolean: BooleanType,
 				TypeCounter: CounterType, TypeDecimal: DecimalType, TypeDouble: DoubleType, TypeFloat: FloatType,
 				TypeInt: IntType, TypeText: TextType, TypeTimestamp: TimestampType, TypeUUID: UUIDType,
-				TypeVarchar: VarcharType, TypeVarint: VarintType, TypeTimeUUID: TimeUUIDType, TypeInet: InetType,
+				TypeVarint: VarintType, TypeTimeUUID: TimeUUIDType, TypeInet: InetType,
 				TypeDate: DateType, TypeTime: TimeType, TypeSmallInt: SmallIntType, TypeTinyInt: TinyIntType,
 				TypeDuration: DurationType,
 			}
 			for kind := TypeASCII; kind <= TypeDuration; kind++ {
+				if kind == wireText {
+					continue
+				}
 				want, ok := predeclared[kind]
 				if !ok {
 					t.Fatalf("no predeclared type for %v", kind)
@@ -143,4 +146,38 @@ func TestDataType(t *testing.T) {
 			}
 		})
 	})
+}
+
+// Text and varchar are one CQL type: the protocol's legacy text ID, the
+// varchar ID and the schema names all produce TextType, so types that differ
+// only in which spelling the server used are Equal, also when nested.
+func TestTextVarcharOneKind(t *testing.T) {
+	legacy, err := ScalarType(wireText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if legacy.Kind() != TypeText || descriptorOf(legacy) != descriptorOf(TextType) || !legacy.Equal(TextType) {
+		t.Fatalf("legacy text ID = %v, want TextType", legacy)
+	}
+	if got := TypeText.String(); got != "text" {
+		t.Fatalf("TypeText.String() = %q", got)
+	}
+	nest := func(text DataType) DataType {
+		list := dataTypeTestMust(ListType(text))
+		set := dataTypeTestMust(SetType(text))
+		m := dataTypeTestMust(MapType(text, list))
+		tuple := dataTypeTestMust(TupleType(text, set))
+		udt := dataTypeTestMust(UDTType("ks", "u", ColumnSpec{Name: "f", Type: tuple}))
+		return dataTypeTestMust(MapType(m, udt))
+	}
+	if a, b := nest(TextType), nest(legacy); !a.Equal(b) || a.String() != b.String() {
+		t.Fatalf("nested text types differ: %v / %v", a, b)
+	}
+}
+
+func dataTypeTestMust(t DataType, err error) DataType {
+	if err != nil {
+		panic(err)
+	}
+	return t
 }

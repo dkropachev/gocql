@@ -729,14 +729,14 @@ func TestDynamic(t *testing.T) {
 					}
 				})
 			}
-			varchar := dynamicTestType(TypeVarchar)
-			encoded, err := EncodeValueBorrowed(varchar, DynamicCodec, TextValue("v"))
+			legacy := dynamicTestType(Type(0x000A))
+			encoded, err := EncodeValueBorrowed(legacy, DynamicCodec, TextValue("v"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			value, err := DecodeValue(DynamicCodec, encoded)
-			if err != nil || value.Type().Kind() != TypeVarchar {
-				t.Fatal("varchar actual metadata was lost", err)
+			if err != nil || value.Type().Kind() != TypeText {
+				t.Fatal("legacy text ID did not decode as text", err)
 			}
 			if _, err := IntValue(1).Text(); err == nil {
 				t.Fatal("wrong accessor accepted")

@@ -138,7 +138,7 @@ func TestVector(t *testing.T) {
 			custom   string
 			expected cqltype.TypeInfo
 		}{
-			{name: "text", custom: prefix + "UTF8Type", expected: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+			{name: "text", custom: prefix + "UTF8Type", expected: cqltype.NewCustomType(0, cql.TypeText, "")},
 			{name: "set_int", custom: prefix + "SetType(" + prefix + "Int32Type)", expected: cqltype.CollectionType{NativeType: cqltype.NewCustomType(0, cql.TypeSet, ""), Key: nil, Elem: cqltype.NewCustomType(0, cql.TypeInt, "")}},
 			{
 				name:   "udt",
@@ -148,8 +148,8 @@ func TestVector(t *testing.T) {
 					KeySpace:   fixtureKeyspace(""),
 					Name:       "person",
 					Elements: []cqltype.UDTField{
-						cqltype.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
-						cqltype.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+						cqltype.UDTField{Name: "first_name", Type: cqltype.NewCustomType(0, cql.TypeText, "")},
+						cqltype.UDTField{Name: "last_name", Type: cqltype.NewCustomType(0, cql.TypeText, "")},
 						cqltype.UDTField{Name: "age", Type: cqltype.NewCustomType(0, cql.TypeInt, "")},
 					},
 				},
@@ -159,7 +159,7 @@ func TestVector(t *testing.T) {
 				custom: prefix + "TupleType(" + prefix + "UTF8Type," + prefix + "Int32Type," + prefix + "UTF8Type)",
 				expected: cqltype.TupleTypeInfo{
 					NativeType: cqltype.NewCustomType(0, cql.TypeTuple, ""),
-					Elems:      []cqltype.TypeInfo{cqltype.NewCustomType(0, cql.TypeVarchar, ""), cqltype.NewCustomType(0, cql.TypeInt, ""), cqltype.NewCustomType(0, cql.TypeVarchar, "")},
+					Elems:      []cqltype.TypeInfo{cqltype.NewCustomType(0, cql.TypeText, ""), cqltype.NewCustomType(0, cql.TypeInt, ""), cqltype.NewCustomType(0, cql.TypeText, "")},
 				},
 			},
 			{
@@ -183,7 +183,7 @@ func TestVector(t *testing.T) {
 					Key:        cqltype.NewCustomType(0, cql.TypeInt, ""),
 					Elem: cqltype.VectorType{
 						NativeType: cqltype.NewCustomType(0, cql.TypeCustom, vectorTypePrefix),
-						SubType:    cqltype.NewCustomType(0, cql.TypeVarchar, ""),
+						SubType:    cqltype.NewCustomType(0, cql.TypeText, ""),
 						Dimensions: 10,
 					},
 				},
@@ -201,7 +201,7 @@ func TestVector(t *testing.T) {
 							SubType:    cqltype.NewCustomType(0, cql.TypeInt, ""),
 							Dimensions: 10,
 						},
-						Elem: cqltype.NewCustomType(0, cql.TypeVarchar, ""),
+						Elem: cqltype.NewCustomType(0, cql.TypeText, ""),
 					},
 				},
 			},

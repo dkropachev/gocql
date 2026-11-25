@@ -271,7 +271,7 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 	}
 	*dst = (*dst)[:int(n)]
 	validator := newTextValidation(p.typ.Kind() == TypeASCII)
-	text := p.typ.Kind() == TypeText || p.typ.Kind() == TypeVarchar || p.typ.Kind() == TypeASCII
+	text := p.typ.Kind() == TypeText || p.typ.Kind() == TypeASCII
 	b := *dst
 	for len(b) > 0 {
 		n, err := r.Read(b)

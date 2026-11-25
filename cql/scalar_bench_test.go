@@ -25,7 +25,7 @@ func BenchmarkScalar(b *testing.B) {
 	b.Run("BaselineEquivalent", func(b *testing.B) {
 		b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 			data := bytes.Repeat([]byte{'x'}, 1024)
-			typ := VarcharType
+			typ := TextType
 			r := valueReaderFromLease(typ, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
 			dst := make([]byte, 1024)
 			b.ReportAllocs()

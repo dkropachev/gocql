@@ -41,7 +41,7 @@ var typeLookupTest = []struct {
 	{"DateType", cql.TypeTimestamp},
 	{"TimestampType", cql.TypeTimestamp},
 	{"UUIDType", cql.TypeUUID},
-	{"UTF8Type", cql.TypeVarchar},
+	{"UTF8Type", cql.TypeText},
 	{"IntegerType", cql.TypeVarint},
 	{"TimeUUIDType", cql.TypeTimeUUID},
 	{"InetAddressType", cql.TypeInet},

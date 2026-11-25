@@ -149,7 +149,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 			return r.fail(typeValidation("length", "invalid %s length", p.typ))
 		}
 		return r.rawSkip(nil)
-	case TypeText, TypeVarchar, TypeASCII:
+	case TypeText, TypeASCII:
 		validator := newTextValidation(p.typ.Kind() == TypeASCII)
 		if err := r.rawSkip(validator.write); err != nil {
 			return err
@@ -334,7 +334,7 @@ func compileStreamScalarValidation(t DataType) (func(*StreamValueReader) error, 
 	case TypeInet:
 		return streamScalarValidation(t, StreamInet)
 	// Variable-byte types have specialized incremental validation in skip.
-	case TypeBlob, TypeVarint, TypeDecimal, TypeText, TypeVarchar, TypeASCII:
+	case TypeBlob, TypeVarint, TypeDecimal, TypeText, TypeASCII:
 		return nil, nil
 	default:
 		return nil, typeValidation("type", "unsupported scalar validation %s", t)

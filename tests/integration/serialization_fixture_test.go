@@ -211,7 +211,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		t.Fatalf("state: expected %v, got %v", want.State(), got.State())
 	}
 	wk, gk := want.Type().Kind(), got.Type().Kind()
-	textKinds := func(k cql.Type) bool { return k == cql.TypeText || k == cql.TypeVarchar }
+	textKinds := func(k cql.Type) bool { return k == cql.TypeText }
 	if wk != gk && !(textKinds(wk) && textKinds(gk)) {
 		t.Fatalf("type: expected %s, got %s", want.Type(), got.Type())
 	}
@@ -232,7 +232,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		a, e := want.Float()
 		b, f := got.Float()
 		equal = e == nil && f == nil && math.Float64bits(a) == math.Float64bits(b)
-	case cql.TypeText, cql.TypeVarchar, cql.TypeASCII:
+	case cql.TypeText, cql.TypeASCII:
 		a, e := want.Text()
 		b, f := got.Text()
 		equal = e == nil && f == nil && a.String() == b.String()
@@ -522,7 +522,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		return cql.DurationValue(v), nil
 	case string:
 		switch kind {
-		case cql.TypeText, cql.TypeVarchar:
+		case cql.TypeText:
 			return cql.TextValue(v), nil
 		case cql.TypeASCII:
 			return cql.ASCIIValue(v), nil

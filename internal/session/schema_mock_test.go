@@ -121,7 +121,7 @@ func v2SchemaMockResponse(statement string, fixture *nativeResultFixture) (*tran
 }
 
 func v2SchemaMockEmptyColumns(statement string) (cql.Columns, error) {
-	textType := cql.VarcharType
+	textType := cql.TextType
 	boolType := cql.BooleanType
 	uuidType := cql.UUIDType
 	listText, _ := cql.ListType(textType)
@@ -190,7 +190,7 @@ func (f *fakeControlConn) InternalQueryV2System(ctx context.Context, r *model.At
 	if f.iter != nil {
 		return v2SchemaMockResponse(r.Statement, f.iter)
 	}
-	text := cql.VarcharType
+	text := cql.TextType
 	integer := cql.IntType
 	cols := cql.NewColumns(cql.ColumnSpec{Name: "connection_id", Type: text}, cql.ColumnSpec{Name: "host_id", Type: text}, cql.ColumnSpec{Name: "address", Type: text}, cql.ColumnSpec{Name: "port", Type: integer}, cql.ColumnSpec{Name: "tls_port", Type: integer})
 	chain, _ := wire.NewChain()

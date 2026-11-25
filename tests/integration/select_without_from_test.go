@@ -212,7 +212,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if row.Columns().Len() != 3 {
 				t.Fatal("expected three columns")
 			}
-			for i, kind := range []cql.Type{cql.TypeInt, cql.TypeVarchar, cql.TypeBoolean} {
+			for i, kind := range []cql.Type{cql.TypeInt, cql.TypeText, cql.TypeBoolean} {
 				if noFromColumn(t, row.Columns(), i).Type.Kind() != kind {
 					t.Fatalf("column%d wrong type", i)
 				}

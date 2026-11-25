@@ -18,7 +18,7 @@ var schemaScalarTypes = map[string]cql.Type{
 	"float": cql.TypeFloat, "inet": cql.TypeInet, "int": cql.TypeInt,
 	"smallint": cql.TypeSmallInt, "text": cql.TypeText, "time": cql.TypeTime,
 	"timestamp": cql.TypeTimestamp, "timeuuid": cql.TypeTimeUUID, "tinyint": cql.TypeTinyInt,
-	"uuid": cql.TypeUUID, "varchar": cql.TypeVarchar, "varint": cql.TypeVarint,
+	"uuid": cql.TypeUUID, "varchar": cql.TypeText, "varint": cql.TypeVarint,
 }
 
 // InternalSchemaDataType builds the DataType of a schema type string, such as

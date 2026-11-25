@@ -270,7 +270,7 @@ func (v Value) Float() (float64, error) {
 // the response; see Clone. It fails for a TextValue or ASCIIValue that is not
 // valid for its type.
 func (v Value) Text() (Text, error) {
-	if err := v.require(TypeText, TypeVarchar, TypeASCII); err != nil {
+	if err := v.require(TypeText, TypeASCII); err != nil {
 		return Text{}, err
 	}
 	if !v.encoded {
@@ -475,11 +475,9 @@ func dynamicCompatible(actual, wanted DataType) bool {
 	if actual.Equal(wanted) {
 		return true
 	}
-	// text and varchar are protocol aliases handled by the same typed text
-	// codec, and a bigint binds a counter.
+	// A bigint binds a counter.
 	a, w := actual.Kind(), wanted.Kind()
-	return (a == TypeText || a == TypeVarchar) && (w == TypeText || w == TypeVarchar) ||
-		(a == TypeBigInt || a == TypeCounter) && (w == TypeBigInt || w == TypeCounter)
+	return (a == TypeBigInt || a == TypeCounter) && (w == TypeBigInt || w == TypeCounter)
 }
 func checkDynamicValue(t DataType, v Value, nested bool) error {
 	if err := validateDataType(v.typ); err != nil {
@@ -667,7 +665,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return encodeDynamicScalar(w, Float32Codec, math.Float32frombits(uint32(v.bits)))
 	case TypeDouble:
 		return encodeDynamicScalar(w, Float64Codec, math.Float64frombits(v.bits))
-	case TypeText, TypeVarchar, TypeASCII:
+	case TypeText, TypeASCII:
 		// A decoded payload was validated for its kind, and
 		// checkDynamicValue matched that kind to the column, so it is
 		// written without validating it again.
@@ -757,7 +755,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return decodeDynamicScalar(r, Float32Codec, FloatValue)
 	case TypeDouble:
 		return decodeDynamicScalar(r, Float64Codec, DoubleValue)
-	case TypeText, TypeVarchar, TypeASCII:
+	case TypeText, TypeASCII:
 		codec := TextCodec
 		if r.Type().Kind() == TypeASCII {
 			codec = ASCIICodec

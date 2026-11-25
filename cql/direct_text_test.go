@@ -48,7 +48,7 @@ func textRowString(r textRow) string {
 // Text and ASCII fields compile into direct ops that decode the same views and
 // fail with the same errors as their codec, across fragmented responses.
 func TestDirectTextMatchesCodec(t *testing.T) {
-	for _, other := range []Type{TypeText, TypeVarchar} {
+	for _, other := range []Type{TypeText, Type(0x000A)} {
 		columns := textColumns(t, other)
 		plan := CodecTestMust(textRows.Compile(columns))
 		want := []directKind{directInt, directText, directText, directText}

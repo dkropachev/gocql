@@ -175,7 +175,7 @@ func TestScalar(t *testing.T) {
 		if v, err := wrapped.Decode(ScalarReader(t, TypeInt, Present)); err != nil || !v.Empty {
 			t.Fatal("empty decoding incorrect")
 		}
-		for _, kind := range []Type{TypeText, TypeASCII, TypeVarchar, TypeBlob, TypeCounter, TypeDuration} {
+		for _, kind := range []Type{TypeText, TypeASCII, TypeBlob, TypeCounter, TypeDuration} {
 			if emptySupported(scalarType(t, kind)) {
 				t.Fatalf("unexpected empty support for %s", kind)
 			}
@@ -577,7 +577,7 @@ func TestScalar(t *testing.T) {
 			}
 		})
 		t.Run("DecodesOwned", func(t *testing.T) {
-			typ := VarcharType
+			typ := TextType
 			encoded, err := EncodeValue(typ, StringCodec, "héllo")
 			if err != nil {
 				t.Fatal(err)
@@ -614,7 +614,7 @@ func TestScalar(t *testing.T) {
 	t.Run("TextCodec", func(t *testing.T) {
 		for _, s := range []string{"", "plain ASCII", "é€😀\x00", "\u007f\u0080\u07ff\u0800\ud7ff\ue000\uffff\U00010000\U0010ffff"} {
 			for split := 0; split <= len(s); split++ {
-				value, err := TextCodec.Decode(ScalarReader(t, TypeVarchar, Present, []byte(s[:split]), []byte(s[split:])))
+				value, err := TextCodec.Decode(ScalarReader(t, Type(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
 				if err != nil || value.String() != s {
 					t.Fatalf("valid UTF-8 split %d: %v", split, err)
 				}

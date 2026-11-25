@@ -39,11 +39,19 @@ type ColumnSpec struct {
 // The zero Columns is empty.
 type Columns struct{ columns []ColumnSpec }
 
+// wireText is the native protocol's legacy ID for text. It decodes to
+// TypeText, the ID of varchar, since the two are one CQL type.
+const wireText Type = 0x000A
+
 // scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
+// The legacy text ID shares TypeText's descriptor.
 var scalarTypes = func() (t [TypeDuration + 1]DataType) {
 	for k := TypeASCII; k <= TypeDuration; k++ {
-		t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
+		if k != wireText {
+			t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
+		}
 	}
+	t[wireText] = t[TypeText]
 	return t
 }()
 
@@ -63,7 +71,6 @@ var (
 	TextType      = scalarTypes[TypeText]
 	TimestampType = scalarTypes[TypeTimestamp]
 	UUIDType      = scalarTypes[TypeUUID]
-	VarcharType   = scalarTypes[TypeVarchar]
 	VarintType    = scalarTypes[TypeVarint]
 	TimeUUIDType  = scalarTypes[TypeTimeUUID]
 	InetType      = scalarTypes[TypeInet]
@@ -74,8 +81,9 @@ var (
 	DurationType  = scalarTypes[TypeDuration]
 )
 
-// ScalarType returns the shared descriptor for a supported scalar kind. It
-// fails only for non-scalar kinds; use the predeclared values such as TextType
+// ScalarType returns the shared descriptor for a supported scalar kind. The
+// protocol's legacy text ID, Type(0x000A), returns TextType. It fails only
+// for non-scalar kinds; use the predeclared values such as TextType
 // when the kind is known at compile time.
 func ScalarType(kind Type) (DataType, error) {
 	if err := validateScalarKind(kind); err != nil {

@@ -274,7 +274,7 @@ func GetApacheCassandraType(class string) cql.Type {
 	case "UUIDType", "LexicalUUIDType":
 		return cql.TypeUUID
 	case "UTF8Type":
-		return cql.TypeVarchar
+		return cql.TypeText
 	case "IntegerType":
 		return cql.TypeVarint
 	case "TimeUUIDType":

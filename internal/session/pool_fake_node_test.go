@@ -342,19 +342,19 @@ func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
 		}
 		writeRows(resp, stream, []column{
 			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"data_center", []cql.Type{cql.TypeVarchar}},
-			{"rack", []cql.Type{cql.TypeVarchar}},
+			{"data_center", []cql.Type{cql.TypeText}},
+			{"rack", []cql.Type{cql.TypeText}},
 			{"rpc_address", []cql.Type{cql.TypeInet}},
 			{"broadcast_address", []cql.Type{cql.TypeInet}},
-			{"release_version", []cql.Type{cql.TypeVarchar}},
-			{"partitioner", []cql.Type{cql.TypeVarchar}},
-			{"tokens", []cql.Type{cql.TypeSet, cql.TypeVarchar}},
+			{"release_version", []cql.Type{cql.TypeText}},
+			{"partitioner", []cql.Type{cql.TypeText}},
+			{"tokens", []cql.Type{cql.TypeSet, cql.TypeText}},
 		}, [][]byte{nodeHostID[:], []byte("dc1"), []byte("rack1"), rpc, broadcast, []byte("3.0.8"), []byte("org.apache.cassandra.dht.Murmur3Partitioner"), textSet("-100", "100")})
 	case strings.Contains(q, "system.client_routes"):
 		cols := []column{
 			{"connection_id", []cql.Type{cql.TypeUUID}},
 			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"address", []cql.Type{cql.TypeVarchar}},
+			{"address", []cql.Type{cql.TypeText}},
 			{"port", []cql.Type{cql.TypeInt}},
 			{"tls_port", []cql.Type{cql.TypeInt}},
 		}
@@ -366,11 +366,11 @@ func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
 	case strings.Contains(q, "system.peers"):
 		writeRows(resp, stream, []column{
 			{"peer", []cql.Type{cql.TypeInet}},
-			{"data_center", []cql.Type{cql.TypeVarchar}},
+			{"data_center", []cql.Type{cql.TypeText}},
 			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"rack", []cql.Type{cql.TypeVarchar}},
+			{"rack", []cql.Type{cql.TypeText}},
 			{"rpc_address", []cql.Type{cql.TypeInet}},
-			{"tokens", []cql.Type{cql.TypeSet, cql.TypeVarchar}},
+			{"tokens", []cql.Type{cql.TypeSet, cql.TypeText}},
 		})
 	default:
 		resp.WriteHeader(0, frm.OpResult, stream)

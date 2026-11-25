@@ -136,7 +136,7 @@ func (v Value) format(b *strings.Builder) {
 		b.WriteString(strconv.FormatFloat(float64(math.Float32frombits(uint32(v.bits))), 'g', -1, 32))
 	case TypeDouble:
 		b.WriteString(strconv.FormatFloat(math.Float64frombits(v.bits), 'g', -1, 64))
-	case TypeText, TypeVarchar, TypeASCII:
+	case TypeText, TypeASCII:
 		quoted(textView(v.bytes).String())
 	case TypeBlob:
 		b.WriteString("0x")

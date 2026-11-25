@@ -141,7 +141,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		// The field stays for columns of another kind, whose type error the
 		// codec reports in its own words.
 		op.kind, op.field, op.compiled = directText, f, c.compiled
-		op.columnKind, op.alt = TypeText, TypeVarchar
+		op.columnKind, op.alt = TypeText, 0
 		if c.ascii {
 			op.columnKind, op.alt = TypeASCII, 0
 		}

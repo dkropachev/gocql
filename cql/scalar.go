@@ -456,7 +456,7 @@ func checkTextType(t DataType, ascii bool) error {
 		if t.Kind() == TypeASCII {
 			return nil
 		}
-	} else if t.Kind() == TypeText || t.Kind() == TypeVarchar {
+	} else if t.Kind() == TypeText {
 		return nil
 	}
 	return fmt.Errorf("gocql: incompatible text type %s", t.Kind())

@@ -52,7 +52,7 @@ type Columns struct { /* immutable private ordered column specs */ }
 func ScalarType(kind Type) (DataType, error) // shared descriptor; fails only for non-scalar kinds
 var ASCIIType, BigIntType, BlobType, BooleanType, CounterType, DecimalType,
     DoubleType, FloatType, IntType, TextType, TimestampType, UUIDType,
-    VarcharType, VarintType, TimeUUIDType, InetType, DateType, TimeType,
+    VarintType, TimeUUIDType, InetType, DateType, TimeType,
     SmallIntType, TinyIntType, DurationType DataType // predeclared scalars; treat as constants
 func ListType(element DataType) (DataType, error)
 func SetType(element DataType) (DataType, error)

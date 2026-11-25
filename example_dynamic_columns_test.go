@@ -81,7 +81,7 @@ func Example_dynamicColumns() {
 					return err
 				}
 				fmt.Print(f, " ")
-			case cql.TypeASCII, cql.TypeText, cql.TypeVarchar:
+			case cql.TypeASCII, cql.TypeText:
 				text, err := value.Text()
 				if err != nil {
 					return err
