@@ -867,37 +867,38 @@ func dynamicField(c *ValueCursor, t DataType, shape *streamValidationPlan) (Valu
 // Elements returns an iterator over the members of a list, set, vector or
 // tuple, in order. It yields each member with a nil error; a failure, such
 // as a value of another type or a malformed member, ends the loop with one
-// last pair holding the zero Value and the error. A decoded member may
-// borrow the response; see Clone.
+// last pair holding the zero Value and the error. Each range over it starts
+// from the first member. A decoded member may borrow the response; see
+// Clone.
 func (v Value) Elements() iter.Seq2[Value, error] {
-	it, err := v.iterElements()
-	return seqOf(it, err)
+	return seqOf(v.iterElements)
 }
 
 // Entries returns an iterator over the key and value of each entry of a
 // map, in encoded order, which ends on a failure as Elements does.
 func (v Value) Entries() iter.Seq2[ValueEntry, error] {
-	it, err := v.iterEntries()
-	return seqOf(it, err)
+	return seqOf(v.iterEntries)
 }
 
 // Fields returns an iterator over the fields of a tuple or UDT, in type
 // order, which ends on a failure as Elements does. A tuple's fields have no
 // names.
 func (v Value) Fields() iter.Seq2[ValueField, error] {
-	it, err := v.iterFields()
-	return seqOf(it, err)
+	return seqOf(v.iterFields)
 }
 
-// seqOf returns it as a range iterator, or one that yields only err.
-func seqOf[T any](it *valueIterator[T], err error) iter.Seq2[T, error] {
-	if err != nil {
-		return func(yield func(T, error) bool) {
+// seqOf returns a range iterator that walks a fresh iterator from start on
+// each range, or yields only start's error.
+func seqOf[T any](start func() (*valueIterator[T], error)) iter.Seq2[T, error] {
+	return func(yield func(T, error) bool) {
+		it, err := start()
+		if err != nil {
 			var zero T
 			yield(zero, err)
+			return
 		}
+		it.All()(yield)
 	}
-	return it.All()
 }
 
 // iterElements returns an independent iterator over list, set, vector, or

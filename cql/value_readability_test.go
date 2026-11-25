@@ -196,6 +196,21 @@ func TestValueMembers(t *testing.T) {
 					if _, err := v.Field("x"); err == nil {
 						t.Fatal("Field on a list")
 					}
+					// Each range over Elements starts from the first member.
+					elements := v.Elements()
+					for range 2 {
+						var got []int64
+						for e, err := range elements {
+							n, err2 := e.Signed()
+							if err != nil || err2 != nil {
+								t.Fatal(err, err2)
+							}
+							got = append(got, n)
+						}
+						if len(got) != 3 || got[0] != 10 {
+							t.Fatalf("ranged %v", got)
+						}
+					}
 				case "udt":
 					if v.Len() != 2 {
 						t.Fatal(v.Len())
