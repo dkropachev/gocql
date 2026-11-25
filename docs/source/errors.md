@@ -66,6 +66,12 @@ if timeout, ok := errors.AsType[*cqlerr.WriteTimeoutError](err); ok {
 }
 ```
 
+Every server error also reports its `Kind`, the one `cqlerr.KindOf` gives it.
+A read or write failure on protocol 5 maps each failed replica to a
+`cqlerr.FailureReason` in its `ErrorMap`, such as
+`FailureReasonReadTooManyTombstones`; a code the driver does not name, such
+as one of ScyllaDB's own, prints as a number.
+
 Messages start with the code's name, e.g.
 `write timeout: Operation timed out ...`.
 

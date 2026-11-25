@@ -391,7 +391,7 @@ func (f *Framer) readErrorMap() (errMap cqlerr.ErrorMap) {
 	for i := 0; i < numErrs; i++ {
 		// The address is 4 or 16 bytes long, which AddrFromSlice accepts.
 		ip, _ := netip.AddrFromSlice(f.readInetAdressOnly())
-		errMap[ip.Unmap()] = f.ReadShort()
+		errMap[ip.Unmap()] = cqlerr.FailureReason(f.ReadShort())
 	}
 	return
 }

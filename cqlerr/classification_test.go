@@ -22,7 +22,7 @@ var sentinels = map[string]struct {
 	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use One, Each, All or Run, or ApplyBatch or RunConditionalBatch for a batch"},
 	"ErrConnectionClosed":             {ErrConnectionClosed, "gocql: connection closed waiting for response"},
 	"ErrFrameTooBig":                  {ErrFrameTooBig, "gocql: frame length is bigger than the maximum allowed"},
-	"ErrNoConnections":                {ErrNoConnections, "gocql: no hosts available in the pool"},
+	"ErrNoConnections":                {ErrNoConnections, "gocql: no connections available"},
 	"ErrNoConnectionsStarted":         {ErrNoConnectionsStarted, "gocql: no connections were made when creating the session"},
 	"ErrNoControl":                    {ErrNoControl, "gocql: no control connection available"},
 	"ErrNoKeyspace":                   {ErrNoKeyspace, "gocql: keyspace not found or not set"},

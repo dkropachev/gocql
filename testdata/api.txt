@@ -933,7 +933,7 @@ package cqlerr
 	var cqlerr.ErrUseStmt error
 	type cqlerr.ErrorCode uint16
 		cqlerr.ErrorCode method (T) Error() string
-	type cqlerr.ErrorMap map[net/netip.Addr]uint16
+	type cqlerr.ErrorMap map[net/netip.Addr]cqlerr.FailureReason
 	const cqlerr.Executed cqlerr.ExecutionStatus = 3
 	type cqlerr.ExecutionError struct
 		cqlerr.ExecutionError field Err error
@@ -947,6 +947,19 @@ package cqlerr
 	type cqlerr.ExecutionStatus uint8
 		cqlerr.ExecutionStatus method (T) String() string
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
+	type cqlerr.FailureReason uint16
+		cqlerr.FailureReason method (T) String() string
+	const cqlerr.FailureReasonCoordinatorBehind cqlerr.FailureReason = 10
+	const cqlerr.FailureReasonIncompatibleSchema cqlerr.FailureReason = 3
+	const cqlerr.FailureReasonIndexNotAvailable cqlerr.FailureReason = 6
+	const cqlerr.FailureReasonInvalidRouting cqlerr.FailureReason = 9
+	const cqlerr.FailureReasonNodeDown cqlerr.FailureReason = 5
+	const cqlerr.FailureReasonNotCMS cqlerr.FailureReason = 8
+	const cqlerr.FailureReasonReadSize cqlerr.FailureReason = 4
+	const cqlerr.FailureReasonReadTooManyIndexes cqlerr.FailureReason = 7
+	const cqlerr.FailureReasonReadTooManyTombstones cqlerr.FailureReason = 1
+	const cqlerr.FailureReasonTimeout cqlerr.FailureReason = 2
+	const cqlerr.FailureReasonUnknown cqlerr.FailureReason = 0
 	type cqlerr.FunctionFailureError struct
 		cqlerr.FunctionFailureError field Keyspace string
 		cqlerr.FunctionFailureError field Function string
@@ -1049,6 +1062,7 @@ package cqlerr
 	type cqlerr.ServerError interface (sealed)
 		cqlerr.ServerError method Code() cqlerr.ErrorCode
 		cqlerr.ServerError method Error() string
+		cqlerr.ServerError method Kind() cqlerr.Kind
 		cqlerr.ServerError method Message() string
 		cqlerr.ServerError method Warnings() []string
 	type cqlerr.ServerMismatchError struct

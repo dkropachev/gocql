@@ -163,6 +163,9 @@ type ServerError interface {
 	Message() string
 	// Warnings are the warnings the server sent with the error.
 	Warnings() []string
+	// Kind groups the error by what a caller can do about it, as KindOf
+	// does.
+	Kind() Kind
 	setBase(message string, warnings []string)
 }
 
@@ -215,9 +218,75 @@ func (e *UnavailableError) Is(target error) bool { return target == CodeUnavaila
 func (e *UnavailableError) Kind() Kind { return KindUnavailable }
 
 // ErrorMap maps the address of each replica that failed to its failure
-// reason code. An IPv4 replica is keyed by its 4-byte address, even when the
+// reason. An IPv4 replica is keyed by its 4-byte address, even when the
 // server sent it IPv4-mapped in 16 bytes.
-type ErrorMap map[netip.Addr]uint16
+type ErrorMap map[netip.Addr]FailureReason
+
+// FailureReason is the protocol's code for why a replica failed a request,
+// as a ReadFailureError's or WriteFailureError's ErrorMap reports it. The
+// zero FailureReason is FailureReasonUnknown. A server may send a code this
+// package does not name, such as ScyllaDB's own codes from 0xF000, which
+// String prints as a number. Later releases may add values, so a switch over
+// them needs a default case.
+type FailureReason uint16
+
+// The failure reasons Cassandra and ScyllaDB share.
+const (
+	// FailureReasonUnknown is a failure the server did not classify.
+	FailureReasonUnknown FailureReason = iota
+	// FailureReasonReadTooManyTombstones is a read that scanned more
+	// tombstones than the server's failure threshold.
+	FailureReasonReadTooManyTombstones
+	// FailureReasonTimeout is a replica that timed out.
+	FailureReasonTimeout
+	// FailureReasonIncompatibleSchema is a replica whose schema did not match
+	// the request's.
+	FailureReasonIncompatibleSchema
+	// FailureReasonReadSize is a read whose result exceeded the server's
+	// size threshold.
+	FailureReasonReadSize
+	// FailureReasonNodeDown is a replica that was down.
+	FailureReasonNodeDown
+	// FailureReasonIndexNotAvailable is a read through a secondary index
+	// that was not yet built.
+	FailureReasonIndexNotAvailable
+	// FailureReasonReadTooManyIndexes is a read that would use more indexes
+	// than the server allows.
+	FailureReasonReadTooManyIndexes
+	// FailureReasonNotCMS is a request for the cluster metadata service sent
+	// to a node that is not a member of it.
+	FailureReasonNotCMS
+	// FailureReasonInvalidRouting is a request sent to a replica that does
+	// not own its data.
+	FailureReasonInvalidRouting
+	// FailureReasonCoordinatorBehind is a coordinator whose cluster metadata
+	// was older than a replica's.
+	FailureReasonCoordinatorBehind
+)
+
+var failureReasonNames = [...]string{
+	FailureReasonUnknown:               "UNKNOWN",
+	FailureReasonReadTooManyTombstones: "READ_TOO_MANY_TOMBSTONES",
+	FailureReasonTimeout:               "TIMEOUT",
+	FailureReasonIncompatibleSchema:    "INCOMPATIBLE_SCHEMA",
+	FailureReasonReadSize:              "READ_SIZE",
+	FailureReasonNodeDown:              "NODE_DOWN",
+	FailureReasonIndexNotAvailable:     "INDEX_NOT_AVAILABLE",
+	FailureReasonReadTooManyIndexes:    "READ_TOO_MANY_INDEXES",
+	FailureReasonNotCMS:                "NOT_CMS",
+	FailureReasonInvalidRouting:        "INVALID_ROUTING",
+	FailureReasonCoordinatorBehind:     "COORDINATOR_BEHIND",
+}
+
+// String returns the server's name of the failure reason, such as
+// "READ_TOO_MANY_TOMBSTONES", or FailureReason(0x...) for a code this package
+// does not name.
+func (r FailureReason) String() string {
+	if int(r) < len(failureReasonNames) {
+		return failureReasonNames[r]
+	}
+	return fmt.Sprintf("FailureReason(%#04x)", uint16(r))
+}
 
 // WriteType is the kind of write that a WriteTimeoutError or
 // WriteFailureError reports. Its values are the protocol's write types; the
