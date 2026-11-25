@@ -172,8 +172,9 @@ func TestApplyBatch(t *testing.T) {
 }
 
 // TestRowStreamAll ranges over a RowStream: the loop decodes every page into
-// the seeded destination, and breaking out of it closes the stream, so the
-// worker runs again at once instead of reporting cqlerr.ErrBusy.
+// the seeded destination, and breaking out of it, or panicking in its body,
+// closes the stream, so the worker runs again at once instead of reporting
+// cqlerr.ErrBusy.
 func TestRowStreamAll(t *testing.T) {
 	f := newLifetimeFixture(t)
 	w, err := f.ps.Worker(exec.StreamOptions{Options: gridOptions})
@@ -226,7 +227,26 @@ func TestRowStreamAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run after a broken loop = %v, want the stream closed", err)
 	}
-	_ = again.Close()
+
+	// A panic in the loop body also closes the stream.
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Fatal("the loop body's panic did not propagate")
+			}
+		}()
+		for range again.All(&dst) {
+			panic("loop body")
+		}
+	}()
+	if again.NextInto(&dst) {
+		t.Fatal("NextInto returned a row after the loop body panicked")
+	}
+	last, err := w.Run(f.ctx, gridKey)
+	if err != nil {
+		t.Fatalf("Run after a panicking loop = %v, want the stream closed", err)
+	}
+	_ = last.Close()
 }
 
 // TestPreparedWith runs a statement through views made by With: a call

@@ -188,14 +188,16 @@ func (r *RowStream[R]) NextInto(dst *R) bool { return (*implSession.RowStream[R]
 // which must be seeded as for NextInto: the yielded pointer is dst itself,
 // overwritten by the next row. An error is yielded once, as (nil, err), and
 // ends the iteration. The stream is closed when the loop ends, early or not,
-// so breaking out of the loop releases the execution and any reserved
-// connection.
+// so breaking out of the loop, or a panic in its body, releases the
+// execution and any reserved connection.
 func (r *RowStream[R]) All(dst *R) iter.Seq2[*R, error] {
 	return func(yield func(*R, error) bool) {
 		s := (*implSession.RowStream[R])(r)
+		// Close is idempotent: the deferred call releases the stream when
+		// the loop breaks or its body panics.
+		defer func() { _ = s.Close() }()
 		for s.NextInto(dst) {
 			if !yield(dst, nil) {
-				_ = s.Close()
 				return
 			}
 		}
