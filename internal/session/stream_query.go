@@ -189,7 +189,7 @@ func (s *RowStream[R]) installBufferedPage(response *transport.InternalResponseP
 	p.info.Result = response.Result
 	p.info.Result.Attempts += prior.Attempts
 	p.info.Result.AttemptLatency += prior.AttemptLatency
-	p.info.Result.FetchedRows = p.info.DeliveredRows
+	p.info.Result.FetchedRows += prior.FetchedRows
 	if traces := prior.CQLTraces(); len(traces) > 0 {
 		// CQL trace refs accumulate page after page; the response owns its
 		// own slice, so build a fresh one.
@@ -230,7 +230,6 @@ func (s *RowStream[R]) nextBuffered(dst *R) bool {
 			}
 			p.mu.Lock()
 			p.info.DeliveredRows++
-			p.info.Result.FetchedRows = p.info.DeliveredRows
 			p.mu.Unlock()
 			return true
 		}

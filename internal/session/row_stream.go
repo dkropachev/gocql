@@ -385,7 +385,6 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 			if ok {
 				s.privateStorage.mu.Lock()
 				s.privateStorage.info.DeliveredRows++
-				s.privateStorage.info.Result.FetchedRows = s.privateStorage.info.DeliveredRows
 				s.privateStorage.mu.Unlock()
 				return true
 			}
@@ -694,6 +693,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				s.privateStorage.mu.Lock()
 				s.privateStorage.columns = page.columns
 				s.privateStorage.info.Pages++
+				s.privateStorage.info.Result.FetchedRows += int64(response.InternalRowCount)
 				s.privateStorage.mu.Unlock()
 				if prior != nil {
 					prior.InternalReleaseMetadata()

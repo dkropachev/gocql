@@ -27,8 +27,9 @@ type Result struct {
 	// speculative attempts overlap, so it can exceed the wall time.
 	AttemptLatency time.Duration
 	// FetchedRows is the number of rows the responses held, over every
-	// page, or that a stream delivered. It counts rows fetched, which can
-	// exceed the rows a caller read when iteration stopped early.
+	// page, a stream's included. It counts rows fetched, which can exceed
+	// the rows a caller read when iteration stopped early; a stream counts
+	// those in StreamInfo.DeliveredRows.
 	FetchedRows int64
 	// AchievedConsistency is the consistency level of the last completed
 	// attempt, which a retry policy may have lowered.
