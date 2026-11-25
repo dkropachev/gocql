@@ -6,6 +6,7 @@ package cql
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/structmap"
@@ -137,12 +138,11 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 }
 
 // unsafe: in fieldParam, fieldColumn and fieldStreamColumn, offset is the
-// reflect offset of a field of type exactly V, or of a named type whose
-// underlying type is V and so has V's layout (resolveField, underlyingOf;
-// eachStructField sums the offsets of flattened value embeds; pointer embeds
-// are rejected), so it
-// stays inside the struct the arithmetic starts from and the result is a
-// typed pointer the GC sees.
+// reflect offset of a field of type exactly V, or of a type with V's layout
+// that names a type where V has the type's underlying type (resolveField,
+// sameLayout; eachStructField sums the offsets of flattened value embeds;
+// pointer embeds are rejected), so it stays inside the struct the arithmetic
+// starts from and the result is a typed pointer the GC sees.
 
 func fieldParam[P, V any](enc Encoder[V]) func(string, uintptr) InputField[P] {
 	return func(name string, offset uintptr) InputField[P] {
@@ -516,17 +516,37 @@ func tagSelectsBuiltin[E interface {
 	if name == "" {
 		return false
 	}
-	for _, entry := range builtins {
-		meta := entry.meta()
-		if meta.Type == typ {
-			for _, candidate := range meta.Names {
-				if candidate == name {
-					return true
-				}
+	for _, entry := range builtinsFor(builtins, typ) {
+		for _, candidate := range entry.meta().Names {
+			if candidate == name {
+				return true
 			}
 		}
 	}
 	return false
+}
+
+// builtinsFor returns the entries of builtins for field type typ: those of
+// typ itself or, when it has none, those of the type it maps like because it
+// has that type's layout (sameLayout).
+func builtinsFor[E interface {
+	meta() structmap.BuiltinFieldType
+}](builtins []E, typ reflect.Type) []E {
+	var entries []E
+	for _, b := range builtins {
+		if b.meta().Type == typ {
+			entries = append(entries, b)
+		}
+	}
+	if len(entries) != 0 {
+		return entries
+	}
+	for _, b := range builtins {
+		if sameLayout(typ, b.meta().Type) {
+			entries = append(entries, b)
+		}
+	}
+	return entries
 }
 
 // ReflectParams maps the fields of struct P by reflection, once, here.
@@ -740,24 +760,14 @@ func resolveField[E interface {
 	meta() structmap.BuiltinFieldType
 }](builtins []E, options map[reflect.Type]E, typ reflect.Type, codec, option string) (E, error) {
 	var zero E
-	var candidates []structmap.BuiltinFieldType
-	var entries []E
-	for _, b := range builtins {
-		if b.meta().Type == typ {
-			candidates = append(candidates, b.meta())
-			entries = append(entries, b)
-		}
-	}
-	if len(candidates) == 0 && typ.Name() != "" {
-		// A named type maps like its underlying type when that has a
-		// built-in codec. Its fields read the field as the underlying
-		// type, whose memory layout is the same.
-		for _, b := range builtins {
-			if underlyingOf(typ, b.meta().Type) {
-				candidates = append(candidates, b.meta())
-				entries = append(entries, b)
-			}
-		}
+	// A named type maps like its underlying type when that has a built-in
+	// codec, and so do slices, pointers, maps and Nullable or BindValue
+	// wrappers of it. Their fields read the field as the built-in type,
+	// whose memory layout is the same.
+	entries := builtinsFor(builtins, typ)
+	candidates := make([]structmap.BuiltinFieldType, len(entries))
+	for i, e := range entries {
+		candidates[i] = e.meta()
 	}
 	if codec != "" {
 		if i, ok := structmap.SelectBuiltin(candidates, codec); ok {
@@ -779,11 +789,63 @@ func resolveField[E interface {
 
 func (f builtinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
 
-// underlyingOf reports whether u is the underlying type of the named type t:
-// u is predeclared or unnamed, of t's kind, and t converts to it, which for
-// types of one kind needs identical underlying types.
-func underlyingOf(t, u reflect.Type) bool {
-	return u.PkgPath() == "" && u.Kind() == t.Kind() && t.ConvertibleTo(u)
+// sameLayout reports whether field type t maps like the built-in field type
+// u: t is u with named types in place of the predeclared or unnamed types
+// they are defined from, as a whole or as an element, a key, a value or the
+// type argument of a cql.Nullable or cql.BindValue. Status, []Status,
+// *Status, Nullable[Status] and map[Status]int64 map like string, []string,
+// *string, Nullable[string] and map[string]int64 for type Status string. A
+// type defined from another named type, such as cql.UUID, does not.
+//
+// Such a t has u's memory layout, so its field is read and written as u.
+// For a map it has u's runtime representation too: a named key or value
+// hashes, compares and is stored as the type it is defined from, so a map
+// built as map[string]V is a valid map[Status]V.
+func sameLayout(t, u reflect.Type) bool {
+	if t == u {
+		return true
+	}
+	if t.Kind() != u.Kind() {
+		return false
+	}
+	if u.Name() != "" {
+		if u.PkgPath() == "" {
+			// Predeclared, such as string: t, of its kind, is defined from it.
+			return true
+		}
+		return sameInstance(t, u)
+	}
+	switch u.Kind() {
+	case reflect.Slice, reflect.Pointer:
+		return sameLayout(t.Elem(), u.Elem())
+	case reflect.Array:
+		return t.Len() == u.Len() && sameLayout(t.Elem(), u.Elem())
+	case reflect.Map:
+		return sameLayout(t.Key(), u.Key()) && sameLayout(t.Elem(), u.Elem())
+	}
+	return false
+}
+
+// sameInstance reports whether the struct types t and u instantiate one
+// generic type, such as Nullable, with type arguments of the same layout:
+// their fields match by name and offset and have the same layout.
+func sameInstance(t, u reflect.Type) bool {
+	base := func(name string) (string, bool) {
+		i := strings.IndexByte(name, '[')
+		return name[:max(i, 0)], i > 0
+	}
+	tb, tok := base(t.Name())
+	ub, uok := base(u.Name())
+	if !tok || !uok || tb != ub || t.PkgPath() != u.PkgPath() || t.Kind() != reflect.Struct || t.NumField() != u.NumField() {
+		return false
+	}
+	for i := range u.NumField() {
+		tf, uf := t.Field(i), u.Field(i)
+		if tf.Name != uf.Name || tf.Offset != uf.Offset || !sameLayout(tf.Type, uf.Type) {
+			return false
+		}
+	}
+	return true
 }
 
 // Streaming rows decode with StreamDecoders, which use their own Go types: text

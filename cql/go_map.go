@@ -216,9 +216,10 @@ func ownsDecoded[T any](d Decoder[T]) bool {
 //
 // unsafe: a map value is one pointer word, so a map[K]V and an unsafe.Pointer
 // convert both ways and the GC sees the map through either. offset is the
-// reflect offset of a field whose type is exactly map[K]V (resolveField
-// matches builtins by reflect.Type), inside the row or parameter struct the
-// pointer arithmetic starts from.
+// reflect offset of a field whose type is exactly map[K]V, or a map type
+// with named keys or values that has map[K]V's layout (resolveField,
+// sameLayout), inside the row or parameter struct the pointer arithmetic
+// starts from.
 type goMapField interface {
 	compile(DataType) (goMapField, error)
 	encode(w *ParamWriter, m unsafe.Pointer) error

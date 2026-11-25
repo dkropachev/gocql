@@ -83,8 +83,13 @@ millisecond; `Nullable[time.Time]`, `[]time.Time` and `map[K]time.Time`
 fields map too. A `[]V` field maps a list, a set or a vector, whichever the
 column is (`cql.SliceCodec`); `codec=ListCodec`, `codec=SetCodec` or
 `codec=VectorCodec` requires one. A named type without a codec of its own,
-such as `type Status string`, maps like its underlying type. An `int` field
-maps a bigint with `IntCodec`, as do `[]int` and `int` map keys and values; a `*V` field maps `V` with NULL as nil
+such as `type Status string`, maps like its underlying type, also inside a
+slice, a pointer, a `Nullable`, a `BindValue` or a map: `[]Status` maps like
+`[]string` and `map[Status]int` like `map[string]int`. A type defined from
+a named type other than a predeclared one, such as `type ID cql.UUID`, needs
+a codec.
+An `int` field maps a bigint with `IntCodec`, as do `[]int` and `int` map
+keys and values; a `*V` field maps `V` with NULL as nil
 (`PointerCodec`), a `cql.Text` field maps text with `TextCodec`, and a
 `*big.Int` field maps a varint with `VarintBigIntCodec`. A `BindValue[V]` field binds Present, Null or Unset for a `V`
 with a built-in codec or one `WithCodec` or `WithEncoder` maps; it only binds

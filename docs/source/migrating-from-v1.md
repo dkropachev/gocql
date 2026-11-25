@@ -214,7 +214,7 @@ column named in one word (`createdat`).
 | a `time.Time` field | the same; `cql.TimestampTimeCodec` maps it by default |
 | a `*T` field for a nullable column | the same: nil is NULL (`cql.PointerCodec`); `cql.Nullable[T]` also works |
 | a `[]T` field for a list, set or vector | the same; the column's kind picks the codec |
-| a named type, such as `type Status string` | the same: it maps like its underlying type |
+| a named type, such as `type Status string` | the same: it maps like its underlying type, also as `[]Status`, `*Status`, `cql.Nullable[Status]` or a map key or value |
 | an `int` field | the same; it maps a bigint (`cql.IntCodec`) |
 | a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
 | a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))`, which maps `[]Address`, `*Address` and map values too; `UDTOptions.Name` may be left empty |

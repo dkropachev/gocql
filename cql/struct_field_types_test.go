@@ -113,3 +113,99 @@ func mustBorrowText(t *testing.T, s string) cql.Text {
 	}
 	return text
 }
+
+type fieldStatuses []fieldStatus
+type fieldID cql.UUID
+
+// namedFieldTypes holds named types inside slices, pointers, Nullable,
+// BindValue and maps, which map like the types they are defined from.
+type namedFieldTypes struct {
+	List    []fieldStatus
+	Set     []fieldStatus `cql:"set,codec=SetCodec"`
+	Named   fieldStatuses
+	Ptr     *fieldStatus
+	Nil     *fieldStatus
+	Maybe   cql.Nullable[fieldStatus]
+	Counts  map[fieldStatus]fieldCount
+	ByCount map[fieldCount]fieldStatus
+}
+
+func TestStructNamedElementTypes(t *testing.T) {
+	must := func(typ cql.DataType, err error) cql.DataType {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return typ
+	}
+	columns := cql.NewColumns(
+		cql.ColumnSpec{Name: "list", Type: must(cql.ListType(cql.ASCIIType))},
+		cql.ColumnSpec{Name: "set", Type: must(cql.SetType(cql.TextType))},
+		cql.ColumnSpec{Name: "named", Type: must(cql.VectorType(cql.TextType, 2))},
+		cql.ColumnSpec{Name: "ptr", Type: cql.TextType},
+		cql.ColumnSpec{Name: "nil", Type: cql.TextType},
+		cql.ColumnSpec{Name: "maybe", Type: cql.TextType},
+		cql.ColumnSpec{Name: "counts", Type: must(cql.MapType(cql.TextType, cql.BigIntType))},
+		cql.ColumnSpec{Name: "by_count", Type: must(cql.MapType(cql.BigIntType, cql.TextType))},
+	)
+	ok := fieldStatus("ok")
+	value := namedFieldTypes{
+		List: []fieldStatus{"a", "b"}, Set: []fieldStatus{"s"}, Named: fieldStatuses{"x", "y"},
+		Ptr: &ok, Maybe: cql.Nullable[fieldStatus]{Value: "m", Valid: true},
+		Counts: map[fieldStatus]fieldCount{"c": 3}, ByCount: map[fieldCount]fieldStatus{4: "d"},
+	}
+	row := ruleDecode(t, columns, cql.MustRowOf[namedFieldTypes](), ruleEncode(t, columns, cql.MustParamsOf[namedFieldTypes](), value))
+	if len(row.List) != 2 || row.List[1] != "b" || len(row.Set) != 1 || row.Set[0] != "s" || len(row.Named) != 2 || row.Named[1] != "y" {
+		t.Fatalf("slices: %+v", row)
+	}
+	if row.Ptr == nil || *row.Ptr != "ok" || row.Nil != nil || row.Maybe != value.Maybe {
+		t.Fatalf("pointer and nullable: %+v", row)
+	}
+	if len(row.Counts) != 1 || row.Counts["c"] != 3 || len(row.ByCount) != 1 || row.ByCount[4] != "d" {
+		t.Fatalf("maps: %v %v", row.Counts, row.ByCount)
+	}
+
+	// Elements are checked like those of the underlying type: ascii rejects
+	// non-ASCII, and codec=SetCodec requires a set.
+	plan, err := cql.MustParamsOf[namedFieldTypes]().Compile(columns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := value
+	bad.List = []fieldStatus{"é"}
+	if _, err := cql.EncodeParamsForTest(columns, plan, bad, true); err == nil {
+		t.Fatal("encoded non-ASCII into a list of ascii")
+	}
+	type setOnly struct {
+		Set []fieldStatus `cql:"set,codec=SetCodec"`
+	}
+	list := cql.NewColumns(cql.ColumnSpec{Name: "set", Type: must(cql.ListType(cql.TextType))})
+	if _, err := cql.MustRowOf[setOnly]().Compile(list); err == nil {
+		t.Fatal("codec=SetCodec compiled for a list")
+	}
+
+	// A BindValue of a named type binds parameters.
+	type bound struct{ V cql.BindValue[fieldStatus] }
+	one := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.TextType})
+	if _, err := cql.ParamsOf[bound](); err != nil {
+		t.Fatal(err)
+	}
+	ruleEncode(t, one, cql.MustParamsOf[bound](), bound{V: cql.BindValue[fieldStatus]{Value: "v", State: cql.Present}})
+
+	// WithCodec for the named type replaces its slices, as it does the type.
+	upper := cql.WithCodec(cql.ConvertCodec(cql.StringCodec,
+		func(v fieldStatus) string { return string(v) + "!" }, func(v string) fieldStatus { return fieldStatus(v) }))
+	type listOnly struct{ List []fieldStatus }
+	lists := cql.NewColumns(cql.ColumnSpec{Name: "list", Type: must(cql.ListType(cql.TextType))})
+	got := ruleDecode(t, lists, cql.MustRowOf[listOnly](), ruleEncode(t, lists, cql.MustParamsOf[listOnly](upper), listOnly{List: []fieldStatus{"a"}}))
+	if len(got.List) != 1 || got.List[0] != "a!" {
+		t.Fatalf("WithCodec: %v", got.List)
+	}
+
+	// A type defined from a named type other than a predeclared one maps
+	// like neither, also as an element.
+	type ids struct{ IDs []fieldID }
+	if _, err := cql.RowOf[ids](); err == nil {
+		t.Fatal("mapped a slice of a type defined from cql.UUID")
+	}
+}

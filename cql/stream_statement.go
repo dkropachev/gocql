@@ -30,7 +30,8 @@ type StreamStatement[P, R any] struct {
 // text, ascii, blob and varint columns decode into []byte (blob by default;
 // pick another with `cql:"name,stream=Text"`), and slices decode a list, a
 // set or a vector, whichever the column is (`stream=List`, `stream=Set` or
-// `stream=Vector` requires one). A named type maps like its underlying type.
+// `stream=Vector` requires one). A named type maps like its underlying type,
+// also inside a slice or a Nullable.
 // A [][]byte field decodes a sequence of blobs, or with `stream=Text` or
 // `stream=Varint` one of those. Storage of []byte and
 // slice fields is reused across rows. Every column needs a field, unless

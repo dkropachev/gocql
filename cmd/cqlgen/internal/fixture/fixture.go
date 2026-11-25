@@ -42,8 +42,12 @@ type Fixture struct { //nolint:govet // field order mirrors the column list, not
 	MaybeText cql.Nullable[string] `cql:"maybe_text"`
 	Origin    Point                `cql:"origin,codec=PointCodec"`
 	Corner    cql.Nullable[Point]  `cql:"corner,codec=cql.NullableCodec(PointCodec)"`
-	Audit                          // flattened: createdat; its ID is hidden by Fixture.ID
-	Skipped   string               `cql:"-"`
+	Labels    []Label              // named types map like string, also inside
+	Label     *Label               // slices, pointers, Nullable and maps
+	MaybeTag  cql.Nullable[Label]
+	LabelHits map[Label]int
+	Audit            // flattened: createdat; its ID is hidden by Fixture.ID
+	Skipped   string `cql:"-"`
 	internal  int
 }
 
@@ -53,6 +57,9 @@ type Point struct{ X, Y int32 }
 var PointCodec cql.Codec[Point] = cql.ConvertCodec(cql.Int64Codec,
 	func(p Point) int64 { return int64(p.X)<<32 | int64(uint32(p.Y)) },
 	func(v int64) Point { return Point{X: int32(v >> 32), Y: int32(v)} })
+
+// Label is defined from string, so it maps like string.
+type Label string
 
 // Key is an alias of cql.UUID, so it maps with UUIDCodec.
 type Key = cql.UUID

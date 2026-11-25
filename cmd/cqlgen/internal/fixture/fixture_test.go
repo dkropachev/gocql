@@ -56,10 +56,13 @@ func columns(t *testing.T) cql.Columns {
 		spec("origin", cql.KindBigInt), spec("corner", cql.KindBigInt),
 		collection("names", cql.ListType, cql.KindText), collection("scores", cql.SetType, cql.KindInt),
 		cql.ColumnSpec{Name: "attrs", Type: mapType(t)}, spec("created_at", cql.KindTimestamp),
+		collection("labels", cql.ListType, cql.KindText), spec("label", cql.KindText),
+		spec("maybe_tag", cql.KindText), cql.ColumnSpec{Name: "label_hits", Type: mapType(t)},
 	)
 }
 
 func value() Fixture {
+	label := Label("one")
 	now := time.Date(2026, 11, 6, 12, 0, 0, 0, time.UTC)
 	return Fixture{
 		Bool: true, Tiny: -8, Small: 1600, Int: -32000, Big: 1 << 40, Float: 1.5, Double: -2.25,
@@ -73,8 +76,10 @@ func value() Fixture {
 		MaybeInt: cql.Nullable[int32]{Value: 9, Valid: true},
 		Names:    []string{"a", "b"}, Scores: []int32{4, 2}, Attrs: []cql.Entry[string, int64]{{Key: "k", Value: 1}},
 		Origin: Point{1, -2}, Corner: cql.Nullable[Point]{Value: Point{3, 4}, Valid: true},
-		Audit:   Audit{CreatedAt: 42, ID: cql.UUID{9}},
-		Skipped: "not mapped", internal: 1,
+		Labels: []Label{"l1", "l2"}, Label: &label, MaybeTag: cql.Nullable[Label]{Value: "m", Valid: true},
+		LabelHits: map[Label]int{"h": 5},
+		Audit:     Audit{CreatedAt: 42, ID: cql.UUID{9}},
+		Skipped:   "not mapped", internal: 1,
 	}
 }
 

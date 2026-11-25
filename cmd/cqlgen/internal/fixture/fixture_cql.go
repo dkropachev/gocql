@@ -4,6 +4,7 @@ package fixture
 
 import (
 	"net/netip"
+	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
 )
@@ -41,6 +42,10 @@ func (Fixture) CQLFields() cql.StructFields[Fixture] {
 			cql.Param("maybe_text", cql.NullableEncoder(cql.StringCodec), func(v Fixture) cql.Nullable[string] { return v.MaybeText }),
 			cql.Param("origin", PointCodec, func(v Fixture) Point { return v.Origin }),
 			cql.Param("corner", cql.NullableCodec(PointCodec), func(v Fixture) cql.Nullable[Point] { return v.Corner }),
+			cql.Param("labels", cql.SliceCodec(cql.StringCodec), func(v Fixture) []string { return *(*[]string)(unsafe.Pointer(&v.Labels)) }),
+			cql.Param("label", cql.PointerCodec(cql.StringCodec), func(v Fixture) *string { return *(**string)(unsafe.Pointer(&v.Label)) }),
+			cql.Param("maybe_tag", cql.NullableEncoder(cql.StringCodec), func(v Fixture) cql.Nullable[string] { return *(*cql.Nullable[string])(unsafe.Pointer(&v.MaybeTag)) }),
+			cql.Param("label_hits", cql.GoMapCodec(cql.StringCodec, cql.IntCodec), func(v Fixture) map[string]int { return *(*map[string]int)(unsafe.Pointer(&v.LabelHits)) }),
 			cql.Param("created_at", cql.TimestampCodec, func(v Fixture) cql.Timestamp { return v.Audit.CreatedAt }),
 		},
 		Columns: []cql.OutputField[Fixture]{
@@ -72,6 +77,10 @@ func (Fixture) CQLFields() cql.StructFields[Fixture] {
 			cql.Column("maybe_text", cql.NullableDecoder(cql.StringCodec), func(v *Fixture) *cql.Nullable[string] { return &v.MaybeText }),
 			cql.Column("origin", PointCodec, func(v *Fixture) *Point { return &v.Origin }),
 			cql.Column("corner", cql.NullableCodec(PointCodec), func(v *Fixture) *cql.Nullable[Point] { return &v.Corner }),
+			cql.Column("labels", cql.SliceCodec(cql.StringCodec), func(v *Fixture) *[]string { return (*[]string)(unsafe.Pointer(&v.Labels)) }),
+			cql.Column("label", cql.PointerCodec(cql.StringCodec), func(v *Fixture) **string { return (**string)(unsafe.Pointer(&v.Label)) }),
+			cql.Column("maybe_tag", cql.NullableDecoder(cql.StringCodec), func(v *Fixture) *cql.Nullable[string] { return (*cql.Nullable[string])(unsafe.Pointer(&v.MaybeTag)) }),
+			cql.Column("label_hits", cql.GoMapCodec(cql.StringCodec, cql.IntCodec), func(v *Fixture) *map[string]int { return (*map[string]int)(unsafe.Pointer(&v.LabelHits)) }),
 			cql.Column("created_at", cql.TimestampCodec, func(v *Fixture) *cql.Timestamp { return &v.Audit.CreatedAt }),
 		},
 	}

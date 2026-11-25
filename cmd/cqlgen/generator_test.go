@@ -222,6 +222,8 @@ type T struct {
 		t.Run("NamedTypes", func(t *testing.T) {
 			_, out, err := generateSource(t, "x.go", `package x
 
+import "github.com/scylladb/gocql/v2/cql"
+
 type Status string
 type Tags []string
 type Count int
@@ -230,6 +232,10 @@ type T struct {
 	S Status
 	G Tags
 	C Count
+	L []Status
+	P *Status
+	N cql.Nullable[Status]
+	M map[Status]Count
 }
 `, "T")
 			if err != nil {
@@ -240,6 +246,13 @@ type T struct {
 				`cql.Column("s", cql.StringCodec, func(v *T) *string { return (*string)(&v.S) })`,
 				`cql.Param("g", cql.SliceCodec(cql.StringCodec), func(v T) []string { return []string(v.G) })`,
 				`cql.Column("c", cql.IntCodec, func(v *T) *int { return (*int)(&v.C) })`,
+				// Go does not convert these, so the accessors convert the pointer.
+				`"unsafe"`,
+				`cql.Param("l", cql.SliceCodec(cql.StringCodec), func(v T) []string { return *(*[]string)(unsafe.Pointer(&v.L)) })`,
+				`cql.Column("l", cql.SliceCodec(cql.StringCodec), func(v *T) *[]string { return (*[]string)(unsafe.Pointer(&v.L)) })`,
+				`cql.Column("p", cql.PointerCodec(cql.StringCodec), func(v *T) **string { return (**string)(unsafe.Pointer(&v.P)) })`,
+				`cql.Column("n", cql.NullableDecoder(cql.StringCodec), func(v *T) *cql.Nullable[string] { return (*cql.Nullable[string])(unsafe.Pointer(&v.N)) })`,
+				`cql.Column("m", cql.GoMapCodec(cql.StringCodec, cql.IntCodec), func(v *T) *map[string]int { return (*map[string]int)(unsafe.Pointer(&v.M)) })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)

@@ -44,9 +44,12 @@ type StructFields[P any] struct {
 // field named after its type.
 //
 // A field maps by its Go type. A named type without a codec of its own, such
-// as type Status string, maps like its underlying type; WithCodec overrides
-// it. A []V field maps a list, a set or a vector, whichever the column is
-// (SliceCodec; `codec=ListCodec`, `codec=SetCodec` or `codec=VectorCodec`
+// as type Status string, maps like its underlying type, and so do []Status,
+// *Status, Nullable[Status], BindValue[Status] and map keys and values of
+// Status, like []string, *string and the rest; WithCodec overrides it. A
+// type defined from a named type other than a predeclared one, such as type
+// ID cql.UUID, needs a codec. A []V field maps a list, a set or a vector,
+// whichever the column is (SliceCodec; `codec=ListCodec`, `codec=SetCodec` or `codec=VectorCodec`
 // requires one). An int field maps bigint with IntCodec, a *V field maps V
 // with NULL as nil (PointerCodec), a cql.Text field maps text and ascii with
 // TextCodec, and a *big.Int field maps varint with VarintBigIntCodec. A

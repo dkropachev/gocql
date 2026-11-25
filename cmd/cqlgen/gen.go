@@ -56,10 +56,19 @@ type importRef struct {
 type genField struct {
 	column, goName string
 	typeSrc        string // the field type as the source spells it
-	convertSrc     string // the underlying type the codecs map, for a named type without its own
 	encoderSrc     string
 	decoderSrc     string
 	streamSrc      string // empty when the field has no streaming decoder
+	convert        conversion
+}
+
+// conversion is how the field accessors convert a field to the built-in type
+// its codecs map, for a type that maps like one (sameLayout). src spells the
+// built-in type, empty for none; unsafe converts through unsafe.Pointer, for
+// a type Go does not convert to it, such as []Status to []string.
+type conversion struct {
+	src    string
+	unsafe bool
 }
 
 // builtinType is a table entry with its type resolved by go/types.
@@ -121,6 +130,12 @@ func generate(dir string, typeNames []string) (string, []byte, error) {
 		fields, buffered, stream, err := g.structFields(s)
 		if err != nil {
 			return "", nil, err
+		}
+		for _, f := range fields {
+			// Every mapping written uses each field's accessors.
+			if f.convert.unsafe {
+				g.imports["unsafe"] = importRef{path: "unsafe", pkgName: "unsafe"}
+			}
 		}
 		writeFieldsMethods(&body, s.name, g.cqlName, fields, buffered, stream)
 	}
@@ -430,7 +445,7 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 			return nil, false, false, fmt.Errorf("%s: %w", where, err)
 		}
 		if ok {
-			f.encoderSrc, f.decoderSrc, f.convertSrc = enc, dec, convert
+			f.encoderSrc, f.decoderSrc, f.convert = enc, dec, convert
 		} else if buffered {
 			buffered = false
 			bufferedErr = fmt.Errorf("%s: no codec for type %s; add a `codec=` tag", where, f.typeSrc)
@@ -439,14 +454,14 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 		if err != nil {
 			return nil, false, false, fmt.Errorf("%s: %w", where, err)
 		}
-		if ok && f.encoderSrc != "" && streamConvert != f.convertSrc {
+		if ok && f.encoderSrc != "" && streamConvert != f.convert {
 			// The field accessors are shared, so both mappings convert alike.
 			ok = false
 		}
 		if ok {
 			f.streamSrc = streamDec
 			if f.encoderSrc == "" {
-				f.convertSrc = streamConvert
+				f.convert = streamConvert
 			}
 		} else {
 			stream = false
@@ -533,48 +548,98 @@ func (g *generator) fileOf(pos token.Pos) *ast.File {
 }
 
 // codec picks a field's codec source from table: a built-in named by the tag,
-// else the tag's own Go expression, else the type's built-in default. A
-// named type with no entry of its own maps like its underlying type, as
-// reflection maps it; convert then spells the underlying type, which the
-// field accessors convert the field to.
-func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, tag, key string) (enc, dec, convert string, found bool, err error) {
+// else the tag's own Go expression, else the type's built-in default. A type
+// with no entry of its own that has a built-in type's layout, such as Status
+// or []Status for type Status string, maps like that type, as reflection
+// maps it; convert then spells the built-in type, which the field accessors
+// convert the field to.
+func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, tag, key string) (enc, dec string, convert conversion, found bool, err error) {
+	typ = types.Unalias(typ)
 	var candidates []structmap.BuiltinFieldType
 	for _, b := range table {
-		if types.Identical(types.Unalias(typ), b.typ) {
+		if types.Identical(typ, b.typ) {
 			candidates = append(candidates, b.BuiltinFieldType)
 		}
 	}
-	if named, ok := types.Unalias(typ).(*types.Named); ok && len(candidates) == 0 {
-		underlying := named.Underlying()
+	if len(candidates) == 0 {
+		var like types.Type
 		for _, b := range table {
-			if _, isNamed := b.typ.(*types.Named); !isNamed && types.Identical(underlying, b.typ) {
+			if sameLayout(typ, b.typ) {
 				candidates = append(candidates, b.BuiltinFieldType)
+				like = b.typ
 			}
 		}
-		if len(candidates) > 0 {
-			convert = types.TypeString(underlying, g.qualifier)
+		if like != nil {
+			// Go converts a named type to the type it is defined from, and
+			// a pointer to one to a pointer to that type; anything else,
+			// such as []Status to []string, converts through unsafe.Pointer.
+			convert = conversion{src: types.TypeString(like, g.qualifier), unsafe: !types.Identical(typ.Underlying(), like)}
 		}
 	}
 	if i, ok := structmap.SelectBuiltin(candidates, tag); ok {
 		return g.qualify(candidates[i].EncoderSrc), g.qualify(candidates[i].DecoderSrc), convert, true, nil
 	}
 	if tag == "" {
-		return "", "", "", false, nil
+		return "", "", conversion{}, false, nil
 	}
 	if g.names[tag] {
-		return "", "", "", false, fmt.Errorf("%s %q is not a built-in for %s", key, tag, types.TypeString(typ, nil))
+		return "", "", conversion{}, false, fmt.Errorf("%s %q is not a built-in for %s", key, tag, types.TypeString(typ, nil))
 	}
 	if file == nil {
-		return "", "", "", false, fmt.Errorf("%s %q: a codec expression on a field of a struct from another package cannot be resolved here; use WithCodec or generate in that package", key, tag)
+		return "", "", conversion{}, false, fmt.Errorf("%s %q: a codec expression on a field of a struct from another package cannot be resolved here; use WithCodec or generate in that package", key, tag)
 	}
 	expr, err := parser.ParseExpr(tag)
 	if err != nil {
-		return "", "", "", false, fmt.Errorf("%s %q: %w", key, tag, err)
+		return "", "", conversion{}, false, fmt.Errorf("%s %q: %w", key, tag, err)
 	}
 	if err := g.useExprImports(file, expr); err != nil {
-		return "", "", "", false, err
+		return "", "", conversion{}, false, err
 	}
-	return tag, tag, "", true, nil
+	return tag, tag, conversion{}, true, nil
+}
+
+// sameLayout reports whether field type t maps like the built-in type u, as
+// package cql's sameLayout does: t is u with named types in place of the
+// predeclared or unnamed types they are defined from, as a whole or as an
+// element, a key, a value or the type argument of a cql.Nullable or
+// cql.BindValue.
+func sameLayout(t, u types.Type) bool {
+	t, u = types.Unalias(t), types.Unalias(u)
+	if types.Identical(t, u) {
+		return true
+	}
+	switch u := u.(type) {
+	case *types.Basic:
+		return types.Identical(t.Underlying(), u)
+	case *types.Named:
+		tn, ok := t.(*types.Named)
+		if !ok || u.TypeArgs().Len() == 0 || tn.TypeArgs().Len() != u.TypeArgs().Len() {
+			return false
+		}
+		to, uo := tn.Origin().Obj(), u.Origin().Obj()
+		if to.Pkg() == nil || uo.Pkg() == nil || to.Pkg().Path() != uo.Pkg().Path() || to.Name() != uo.Name() {
+			return false
+		}
+		for i := range u.TypeArgs().Len() {
+			if !sameLayout(tn.TypeArgs().At(i), u.TypeArgs().At(i)) {
+				return false
+			}
+		}
+		return true
+	case *types.Slice:
+		ts, ok := t.Underlying().(*types.Slice)
+		return ok && sameLayout(ts.Elem(), u.Elem())
+	case *types.Pointer:
+		tp, ok := t.Underlying().(*types.Pointer)
+		return ok && sameLayout(tp.Elem(), u.Elem())
+	case *types.Array:
+		ta, ok := t.Underlying().(*types.Array)
+		return ok && ta.Len() == u.Len() && sameLayout(ta.Elem(), u.Elem())
+	case *types.Map:
+		tm, ok := t.Underlying().(*types.Map)
+		return ok && sameLayout(tm.Key(), u.Key()) && sameLayout(tm.Elem(), u.Elem())
+	}
+	return false
 }
 
 // useExprImports records the imports of file that expr names.
@@ -633,9 +698,14 @@ func writeFieldsMethods(b *bytes.Buffer, typeName, cql string, fields []genField
 		fmt.Fprintf(b, "\treturn %s.StructFields[%s]{\n", cql, typeName)
 		fmt.Fprintf(b, "\t\tParams: []%s.InputField[%s]{\n", cql, typeName)
 		for _, f := range fields {
-			if f.convertSrc != "" {
+			if f.convert.unsafe {
+				fmt.Fprintf(b, "\t\t\t%s.Param(%q, %s, func(v %s) %s { return *(*%s)(unsafe.Pointer(&v.%s)) }),\n",
+					cql, f.column, f.encoderSrc, typeName, f.convert.src, f.convert.src, f.goName)
+				continue
+			}
+			if f.convert.src != "" {
 				fmt.Fprintf(b, "\t\t\t%s.Param(%q, %s, func(v %s) %s { return %s(v.%s) }),\n",
-					cql, f.column, f.encoderSrc, typeName, f.convertSrc, conversionType(f.convertSrc), f.goName)
+					cql, f.column, f.encoderSrc, typeName, f.convert.src, conversionType(f.convert.src), f.goName)
 				continue
 			}
 			fmt.Fprintf(b, "\t\t\t%s.Param(%q, %s, func(v %s) %s { return v.%s }),\n",
@@ -675,10 +745,14 @@ func conversionType(t string) string {
 }
 
 // accessor spells the func that points a column at the field, converting
-// the pointer to the underlying type the codecs map for a named type.
+// the pointer to the built-in type the codecs map for a type that maps like
+// one.
 func (f genField) accessor(typeName string) string {
-	if f.convertSrc != "" {
-		return fmt.Sprintf("func(v *%s) *%s { return (*%s)(&v.%s) }", typeName, f.convertSrc, f.convertSrc, f.goName)
+	if f.convert.unsafe {
+		return fmt.Sprintf("func(v *%s) *%s { return (*%s)(unsafe.Pointer(&v.%s)) }", typeName, f.convert.src, f.convert.src, f.goName)
+	}
+	if f.convert.src != "" {
+		return fmt.Sprintf("func(v *%s) *%s { return (*%s)(&v.%s) }", typeName, f.convert.src, f.convert.src, f.goName)
 	}
 	return fmt.Sprintf("func(v *%s) *%s { return &v.%s }", typeName, f.typeSrc, f.goName)
 }

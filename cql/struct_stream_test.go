@@ -112,3 +112,29 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 		t.Fatalf("decoded %q %q %x", got.Names, got.Codes, got.Counts)
 	}
 }
+
+// StreamRowOf maps named types inside slices and Nullable like the types
+// they are defined from, as RowOf does.
+func TestStreamRowOfNamedElements(t *testing.T) {
+	type code int32
+	type row struct {
+		Codes []code
+		Maybe Nullable[code]
+	}
+	columns := NewColumns(
+		ColumnSpec{Name: "codes", Type: CodecTestMust(SetType(rowTestType(t, KindInt)))},
+		ColumnSpec{Name: "maybe", Type: rowTestType(t, KindInt)},
+	)
+	type source struct{ Codes []int32 }
+	params := Params(
+		Param("codes", SetEncoder(Int32Codec), func(v source) []int32 { return v.Codes }),
+		Param("maybe", Int32Codec, func(source) int32 { return 9 }),
+	)
+	data := chainBytes(t, encodeTestParams(t, columns, params, source{Codes: []int32{1, 2}}))
+	// Streaming decoders write into the destination's storage.
+	got := row{Codes: make([]code, 0, 2)}
+	streamDecodeRow(t, columns, MustStreamRowOf[row](), data, &got)
+	if len(got.Codes) != 2 || got.Codes[1] != 2 || got.Maybe != (Nullable[code]{Value: 9, Valid: true}) {
+		t.Fatalf("decoded %+v", got)
+	}
+}
