@@ -146,7 +146,7 @@ func validateStatement[P, R any](s Statement[P, R]) error {
 	if strings.TrimSpace(s.CQL) == "" {
 		return cqltype.TypeValidation("statement", "empty CQL")
 	}
-	if InternalFirstCQLWord(s.CQL) == "USE" {
+	if strings.EqualFold(firstCQLWord(s.CQL), "USE") {
 		return cqlerr.ErrUseStmt
 	}
 	if s.Params == nil || s.Rows == nil {
@@ -155,7 +155,13 @@ func validateStatement[P, R any](s Statement[P, R]) error {
 	return nil
 }
 
+// InternalFirstCQLWord returns the first unquoted word of cql, upper-cased.
 func InternalFirstCQLWord(cql string) string {
+	return strings.ToUpper(firstCQLWord(cql))
+}
+
+// firstCQLWord returns the first unquoted word of cql as written.
+func firstCQLWord(cql string) string {
 	word := ""
 	visitCQLWords(cql, func(next string) bool { word = next; return false })
 	return word
@@ -171,13 +177,14 @@ func InternalConditionalCQL(cql string) bool {
 	visitCQLWords(cql, func(word string) bool {
 		if first {
 			first = false
-			switch word {
-			case "INSERT", "UPDATE", "DELETE", "BEGIN":
-				return true
+			for _, dml := range [...]string{"INSERT", "UPDATE", "DELETE", "BEGIN"} {
+				if strings.EqualFold(word, dml) {
+					return true
+				}
 			}
 			return false
 		}
-		if word == "IF" {
+		if strings.EqualFold(word, "IF") {
 			conditional = true
 			return false
 		}
@@ -186,10 +193,11 @@ func InternalConditionalCQL(cql string) bool {
 	return conditional
 }
 
-// visitCQLWords calls visit with each unquoted word of cql, upper-cased,
+// visitCQLWords calls visit with each unquoted word of cql, as written,
 // until visit returns false. It skips string literals, single-quoted with
 // a doubled quote as escape or between $$ pairs, double-quoted identifiers,
-// and --, // and /* */ comments, so a word inside one is never visited.
+// and --, // and /* */ comments, so a word inside one is never visited. It
+// does not allocate.
 func visitCQLWords(cql string, visit func(string) bool) {
 	for i := 0; i < len(cql); {
 		if cql[i] == '\'' || cql[i] == '"' {
@@ -237,7 +245,7 @@ func visitCQLWords(cql string, visit func(string) bool) {
 			for i < len(cql) && (cql[i] >= 'a' && cql[i] <= 'z' || cql[i] >= 'A' && cql[i] <= 'Z' || cql[i] >= '0' && cql[i] <= '9' || cql[i] == '_') {
 				i++
 			}
-			if !visit(strings.ToUpper(cql[start:i])) {
+			if !visit(cql[start:i]) {
 				return
 			}
 			continue
