@@ -16,9 +16,10 @@ import (
 // Batch collects statements, each with its values, to send as one CQL
 // BATCH request. Prepared.AddToBatch, Worker.AddToBatch and
 // Session.UnpreparedAddToBatch append a statement; Session.ExecBatch sends
-// the batch, and Session.RunConditionalBatch sends a conditional one and
-// returns its rows. Reset empties it for reuse. Once a batch has grown to its
-// working size, appending allocates nothing. A Batch is not safe for
+// the batch, and Session.ApplyBatch or Session.RunConditionalBatch sends a
+// conditional one and reports whether it applied, or returns its rows.
+// Reset empties it for reuse. Once a batch has grown to its working size,
+// appending allocates nothing. A Batch is not safe for
 // concurrent use and must not be copied.
 //
 // Every member must come from the session that sends the batch; members may

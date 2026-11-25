@@ -60,10 +60,11 @@
 // copied during execution admission.
 //
 // Prepared.AddToBatch, Worker.AddToBatch and Session.UnpreparedAddToBatch
-// append statements to a Batch; Session.ExecBatch sends it, and
-// Session.RunConditionalBatch sends a conditional batch and returns its rows
-// as CASBatchRows, whose Applied reports whether the batch applied. It
-// rejects a batch known to have no conditional member.
+// append statements to a Batch; Session.ExecBatch sends it. A conditional
+// batch is sent with Session.ApplyBatch, which reports whether it applied, or
+// with Session.RunConditionalBatch, which returns its rows as CASBatchRows,
+// whose Applied reports the same. Both reject a batch known to have no
+// conditional member.
 //
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamWorker per goroutine.

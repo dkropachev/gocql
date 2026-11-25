@@ -797,6 +797,7 @@ func (w *Worker[P, R]) Close()                       // stop at once
 func (w *Worker[P, R]) Wait(context.Context) error   // join the drain
 
 func (s *Session) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
+func (s *Session) ApplyBatch(context.Context, *Batch, ...exec.CompiledOptions) (bool, Result, error)
 func (s *Session) RunConditionalBatch[X any](context.Context, *Batch, cql.RowDecoder[cql.CASResult[X]], ...exec.CompiledOptions) (CASBatchRows[X], error)
 ```
 

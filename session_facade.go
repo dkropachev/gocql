@@ -133,7 +133,8 @@ func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Sta
 
 // ExecBatch sends batch as one CQL BATCH request of batch.Kind. A batch known to be
 // conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
-// read its result with RunConditionalBatch. At most one exec.CompiledOptions
+// send it with ApplyBatch, or with RunConditionalBatch to read its rows. At
+// most one exec.CompiledOptions
 // may be passed; paging options are ignored, because a BATCH response is a
 // single page. Options are compiled once with CompileOptions and reused, for a
 // one-off batch too, so that sending resolves nothing. Do not modify batch
@@ -174,6 +175,31 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 	}
 	rows, err := s.internal().RunConditionalBatch(ctx, (*implSession.Batch)(batch), decoder, o)
 	return CASBatchRows[X](rows), err
+}
+
+// ApplyBatch sends a conditional batch as one CQL BATCH request of
+// batch.Kind and reports whether it applied, as RunConditionalBatch's
+// CASBatchRows.Applied does, without the rows to close: it reads only the
+// [applied] column, through cql.CASApplied, and releases the response before
+// it returns. The Result is that of the execution, and with an error that
+// of the failed execution, as for ExecBatch. A batch whose members are all
+// known not to be conditional is rejected before it is sent, as by
+// RunConditionalBatch. exec.CompiledOptions and batch ownership are as for
+// ExecBatch.
+func (s *Session) ApplyBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (bool, cql.Result, error) {
+	rows, err := s.RunConditionalBatch(ctx, batch, cql.CASApplied, options...)
+	if err != nil {
+		return false, implSession.InternalExecutionErrorResult(err), err
+	}
+	applied, err := rows.Applied()
+	result := rows.Info()
+	if closeErr := rows.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return false, result, err
+	}
+	return applied, result, nil
 }
 
 // UnpreparedAddToBatch appends an occasional statement with value to batch

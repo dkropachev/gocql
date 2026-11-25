@@ -34,7 +34,7 @@ func (e *ServerMismatchError) Kind() Kind { return KindInvalid }
 
 // ErrConditionalExec reports an Exec or ExecBatch call for a statement or
 // batch known to be conditional. Nothing was sent.
-var ErrConditionalExec = errors.New("gocql: conditional statements return rows: use One, Each, All or Run, or RunConditionalBatch for a batch")
+var ErrConditionalExec = errors.New("gocql: conditional statements return rows: use One, Each, All or Run, or ApplyBatch or RunConditionalBatch for a batch")
 
 // ErrStaleRows is reported by a Rows handle whose query has started a later
 // execution. Its storage now belongs to that execution.

@@ -68,6 +68,7 @@ package gocql
 		gocql.Rows method (T) NextInto(dst *R) bool
 		gocql.Rows method (T) Retain() (*gocql.PageLease, error)
 	type gocql.Session struct
+		gocql.Session method (*T) ApplyBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (bool, cql.Result, error)
 		gocql.Session method (*T) AwaitSchemaAgreement(ctx context.Context) error
 		gocql.Session method (*T) Close() error
 		gocql.Session method (*T) Closed() bool

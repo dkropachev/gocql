@@ -27,6 +27,9 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
      resolved options across executions, and the caller closes it.
    - **Shared**: safe for any number of goroutines at once, with no close
      obligation; per-call state comes from an internal pool.
+3. **Batch**: a `Batch` of members added by the other kinds, sent as one
+   request. It follows the batch rules below; its row of the grid shows
+   which method sends it for each output shape.
 
 ## Output shapes
 
@@ -45,13 +48,20 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
 | Throwaway | `Session.UnpreparedExec` | `Session.UnpreparedOne` | `Session.UnpreparedEach`, `Session.UnpreparedAll` | empty by design |
 | Worker-owned | `Worker.Exec` | `Worker.One` | `Worker.Each`, `Worker.All`, `Worker.Run` | `Worker.RunPage` |
 | Shared | `Prepared.Exec` | `Prepared.One` | `Prepared.Each`, `Prepared.All`, `Prepared.Run` | `Prepared.RunPage` |
+| Batch | `Session.ExecBatch` | `Session.ApplyBatch` | `Session.RunConditionalBatch` | empty by design |
 
 Throwaway pages stay empty: a caller that pages through results is executing
-the statement repeatedly, so it prepares the statement.
+the statement repeatedly, so it prepares the statement. Batch pages stay
+empty because a BATCH response is a single page.
+
+The batch row names its verbs for what a batch returns, so its methods end in
+`Batch` and its one-row and many-rows verbs differ from the other rows':
+`Apply`, whose one row is whether a conditional batch applied, and
+`RunConditional`, whose rows are a conditional batch's.
 
 `TestExecutionGrid` checks this table against the public API
-(`testdata/api.txt`): every cell method exists with its row's prefix, its
-column's verb and its row's options form, and every other exported method of
+(`testdata/api.txt`): every cell method exists with its row's prefix or
+suffix, its column's verb and its row's options form, and every other exported method of
 `Session`, `Worker` and `Prepared` is either a cell or on the test's list of
 methods outside the grid. `TestExecutionGridBehavior` runs the same statement
 through each row against a fake node and fails if a row misses a case's
@@ -130,7 +140,8 @@ page state. Explicit paging is the pages column only.
   other row-returning statement.
 - Each column uses the same verbs in every row that fills it: `Exec`, `One`,
   `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
-  Throwaway methods carry the `Unprepared` prefix in front of the verb.
+  Throwaway methods carry the `Unprepared` prefix in front of the verb. The
+  batch row is the exception described under the grid.
 - `AddToBatch` appears once per reusable form. `Prepared.Routing` reports
   where an execution with the given values and options would go. It lives on
   `Prepared`, which every reusable form starts from, and takes the shared
@@ -161,6 +172,11 @@ and no options.
   - None: `Session.ExecBatch`. A batch whose members the driver knows to be
     conditional is rejected before it is sent, because the result of an
     applied-or-not write cannot be returned as success or error alone.
+  - One row: `Session.ApplyBatch` → `(applied bool, cql.Result, error)`,
+    the one-row shape of a conditional batch: whether it applied, as
+    `CASBatchRows.Applied` reports it. It runs `RunConditionalBatch` with
+    `cql.CASApplied` and closes the rows before it returns, so it leaves no
+    handle and keeps no pooled query, and it rejects the same batches.
   - Rows: `Session.RunConditionalBatch` → `CASBatchRows[X]`, the pull form
     of the many-rows column with the decoder fixed to `cql.CASRows`: only a
     conditional batch returns rows. The response is a single page with no

@@ -4,12 +4,17 @@
 package gocql
 
 import (
+	"context"
+	"encoding/binary"
 	"errors"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
+	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
 // TestPreparedRouting reads a statement's routing from the Prepared itself,
@@ -55,5 +60,113 @@ func TestPreparedRouting(t *testing.T) {
 	}
 	if _, err := f.p.Routing(gridKey); !errors.Is(err, cqlerr.ErrClosed) {
 		t.Fatalf("Routing after Session.Close = %v, want cqlerr.ErrClosed", err)
+	}
+}
+
+// casAppliedBody is a v4 ROWS result of the [applied] column alone, one row
+// per value.
+func casAppliedBody(applied ...bool) []byte {
+	b := binary.BigEndian.AppendUint32(nil, 2)
+	b = binary.BigEndian.AppendUint32(b, 1) // global table spec
+	b = binary.BigEndian.AppendUint32(b, 1)
+	for _, name := range []string{"ks", "tbl", "[applied]"} {
+		b = binary.BigEndian.AppendUint16(b, uint16(len(name)))
+		b = append(b, name...)
+	}
+	b = binary.BigEndian.AppendUint16(b, uint16(cql.KindBoolean))
+	b = binary.BigEndian.AppendUint32(b, uint32(len(applied)))
+	for _, a := range applied {
+		b = binary.BigEndian.AppendUint32(b, 1)
+		if a {
+			b = append(b, 1)
+		} else {
+			b = append(b, 0)
+		}
+	}
+	return b
+}
+
+// waitPooledIdle fails t unless every pooled query of s becomes idle soon.
+func waitPooledIdle(t *testing.T, s *Session, what string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for implSession.InternalPooledBusy(s.internal().Core()) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("%s: a pooled query is still busy", what)
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// TestApplyBatch sends conditional batches with ApplyBatch: one that applied,
+// one that did not, on Cassandra's one row or ScyllaDB's row per statement,
+// and one whose rows disagree. Each call releases its pooled query before it
+// returns, so the session closes at once, and a batch with no conditional
+// member is rejected before it is sent.
+func TestApplyBatch(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	var answer atomic.Pointer[[]byte]
+	srv := newGridServer(t, peers[0], func(r gridRequest) []byte {
+		return typedTestResponse(t, 4, r.stream, *answer.Load())
+	})
+	defer srv.stop(t, peers[0])
+	defer func() { _ = s.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	update, err := s.Prepare(ctx, gridUpdate(cql.ConditionalStatement))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var batch Batch
+	for range 2 {
+		if err := update.AddToBatch(&batch, gridKey); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, c := range []struct {
+		name    string
+		body    []byte
+		rows    int64
+		applied bool
+	}{
+		{"applied", casAppliedBody(true), 1, true},
+		{"applied per statement", casAppliedBody(true, true), 2, true},
+		{"not applied", casAppliedBody(false, false), 2, false},
+		{"rows disagree", casAppliedBody(true, false), 2, false},
+	} {
+		answer.Store(&c.body)
+		applied, result, err := s.ApplyBatch(ctx, &batch)
+		if err != nil {
+			t.Fatalf("%s: %v", c.name, err)
+		}
+		if applied != c.applied || result.Attempts != 1 || result.FetchedRows != c.rows {
+			t.Fatalf("%s: ApplyBatch = %v, %+v; want %v from %d rows of one attempt", c.name, applied, result, c.applied, c.rows)
+		}
+		waitPooledIdle(t, s, c.name)
+	}
+	if _, _, err := s.ApplyBatch(ctx, &batch, exec.CompiledOptions{}, exec.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("ApplyBatch with two options = %v, want a cql.ValidationError", err)
+	}
+
+	ordinary, err := s.Prepare(ctx, gridUpdate(cql.OrdinaryStatement))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plain Batch
+	if err := ordinary.AddToBatch(&plain, gridKey); err != nil {
+		t.Fatal(err)
+	}
+	sent := len(srv.sent())
+	if _, _, err := s.ApplyBatch(ctx, &plain); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("ApplyBatch of an ordinary batch = %v, want a cql.ValidationError", err)
+	}
+	if len(srv.sent()) != sent {
+		t.Fatal("ApplyBatch sent an ordinary batch")
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.ApplyBatch(ctx, &batch); !errors.Is(err, cqlerr.ErrClosed) {
+		t.Fatalf("ApplyBatch after Close = %v, want cqlerr.ErrClosed", err)
 	}
 }

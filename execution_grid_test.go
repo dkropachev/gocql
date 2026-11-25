@@ -12,16 +12,23 @@ import (
 )
 
 // gridRow is a statement kind of the execution grid in docs/api-surface.md:
-// the type that holds its methods, the prefix they carry and the options
-// parameter each of them ends in ("" for none).
+// the type that holds its methods, the prefix and suffix they carry, the
+// options parameter each of them ends in ("" for none), and, for a row whose
+// verbs differ from gridVerbs, its own verbs per column.
 type gridRow struct {
-	typ, prefix, options string
+	typ, prefix, suffix, options string
+	verbs                        map[string][]string
 }
 
 var gridRows = map[string]gridRow{
 	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...exec.Options"},
 	"Worker-owned": {typ: "Worker"},
 	"Shared":       {typ: "Prepared", options: "options ...exec.CompiledOptions"},
+	// A batch's one row is whether it applied, and its rows are those of a
+	// conditional batch, so the batch row names those verbs.
+	"Batch": {typ: "Session", suffix: "Batch", options: "options ...exec.CompiledOptions", verbs: map[string][]string{
+		"None": {"Exec"}, "One row": {"Apply"}, "Many rows": {"RunConditional"},
+	}},
 }
 
 // gridVerbs are the verbs each output shape allows, in every row.
@@ -38,9 +45,8 @@ var gridVerbs = map[string][]string{
 var gridNonExecution = map[string][]string{
 	"Session": {
 		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "Dialect",
-		"ExecBatch", "ID", "Metadata", "Metrics", "Prepare", "PrepareStream",
-		"RefreshMetadata", "RunConditionalBatch", "Subscribe",
-		"UnpreparedAddToBatch",
+		"ID", "Metadata", "Metrics", "Prepare", "PrepareStream",
+		"RefreshMetadata", "Subscribe", "UnpreparedAddToBatch",
 	},
 	"Worker":   {"AddToBatch", "Close", "Wait"},
 	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Routing", "Worker"},
@@ -55,8 +61,8 @@ var apiMethod = regexp.MustCompile(`^\t\tgocql\.(\w+) method \(\*?T\) (\w+)(.*)$
 // row's prefix, and ends in its row's options form; every other exported
 // method of Session, Worker and Prepared is either in the grid or listed in
 // gridNonExecution, so a new execution method fails until the grid documents
-// it. The throwaway pages cell is empty by design, and the throwaway many-rows
-// cell lacks Run because Run returns a handle.
+// it. The throwaway and batch pages cells are empty by design, and the
+// throwaway many-rows cell lacks Run because Run returns a handle.
 func TestExecutionGrid(t *testing.T) {
 	cells := parseGrid(t)
 	params := map[string]string{} // "Type.Method" → parameter list
@@ -87,6 +93,9 @@ func TestExecutionGrid(t *testing.T) {
 				t.Errorf("grid column %q is not a known output shape", col)
 				continue
 			}
+			if spec.verbs != nil {
+				verbs = spec.verbs[col]
+			}
 			for _, method := range methods {
 				documented[method] = true
 				typ, name, _ := strings.Cut(method, ".")
@@ -94,8 +103,9 @@ func TestExecutionGrid(t *testing.T) {
 					t.Errorf("%s row: %s is not a method of %s", row, method, spec.typ)
 				}
 				verb, ok := strings.CutPrefix(name, spec.prefix)
-				if !ok || !slices.Contains(verbs, verb) {
-					t.Errorf("%s/%s: %s is not one of the verbs %v with the prefix %q", row, col, method, verbs, spec.prefix)
+				verb, okSuffix := strings.CutSuffix(verb, spec.suffix)
+				if !ok || !okSuffix || !slices.Contains(verbs, verb) {
+					t.Errorf("%s/%s: %s is not one of the verbs %v with the prefix %q and suffix %q", row, col, method, verbs, spec.prefix, spec.suffix)
 				}
 				p, ok := params[method]
 				if !ok {
@@ -108,10 +118,12 @@ func TestExecutionGrid(t *testing.T) {
 			}
 		}
 	}
-	// The pages column of the throwaway row is empty by design, and Run is
-	// absent from it because it returns a handle.
-	if got := cells["Throwaway"]["Pages"]; len(got) != 0 {
-		t.Errorf("throwaway pages cell holds %v; it is empty by design", got)
+	// The pages column of the throwaway and batch rows is empty by design,
+	// and Run is absent from the throwaway row because it returns a handle.
+	for _, row := range []string{"Throwaway", "Batch"} {
+		if got := cells[row]["Pages"]; len(got) != 0 {
+			t.Errorf("%s pages cell holds %v; it is empty by design", row, got)
+		}
 	}
 	if slices.Contains(cells["Throwaway"]["Many rows"], "Session.UnpreparedRun") {
 		t.Error("throwaway many-rows cell holds Session.UnpreparedRun; Run is absent from it by design")
@@ -143,12 +155,6 @@ func TestExecutionGrid(t *testing.T) {
 		}
 	}
 
-	// Batches send with the shared form's options.
-	for _, method := range []string{"Session.ExecBatch", "Session.RunConditionalBatch"} {
-		if p := params[method]; !optionsForm(p, gridRows["Shared"].options) {
-			t.Errorf("%s(%s) does not end in %q", method, p, gridRows["Shared"].options)
-		}
-	}
 }
 
 // parameterList returns the parameters of a signature from rest, the text

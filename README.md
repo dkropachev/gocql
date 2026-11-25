@@ -184,7 +184,7 @@ Per-execution settings are plain `exec.Options` values (package
 `exec.Options{PageSize: 100}`; the zero `exec.Options{}` uses the
 session default. Worker constructors validate, resolve and encode them for their
 session once, so worker executions do no per-call work. One-shot executions
-(`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunConditionalBatch`) take
+(`prepared.Exec/One/Each`, `session.ExecBatch`, `session.ApplyBatch`, `session.RunConditionalBatch`) take
 `exec.CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
 front. Compiled options carry their session's default profile and keyspace; on
 another session they are resolved again for that session on each execution.

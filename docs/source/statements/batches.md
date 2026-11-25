@@ -73,14 +73,17 @@ writes. Such a failure therefore reports `cqlerr.MaybeExecuted`, and
 [retries](../retry-policy.md).
 
 `ExecBatch` rejects a batch known to be conditional with
-`cqlerr.ErrConditionalExec` before sending it. Conditional batch results use
+`cqlerr.ErrConditionalExec` before sending it. To learn only whether a
+conditional batch applied, send it with
+`applied, result, err := session.ApplyBatch(ctx, &batch)`, which leaves
+nothing to close. To read the rows the server returns, use
 `session.RunConditionalBatch(ctx, &batch, decoder)`, which takes a
 `cql.CASRows` decoder and returns `CASBatchRows`. Iterate them with
 `NextInto`, like the `Rows` of `prepared.Run`, or call `Applied`, which
 reports whether the batch applied without you checking every row. Close the
 rows when done: until then they hold one of the session's pooled queries.
 Once they are closed, sending the batch again with the same decoder reuses
-their storage. It rejects a batch whose members are all known not to be
+their storage. Both reject a batch whose members are all known not to be
 conditional, before sending it. See
 [lightweight transactions](lightweight-transactions.md).
 The rows of a conditional batch differ between Cassandra and ScyllaDB. See

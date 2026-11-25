@@ -261,7 +261,7 @@ it to an untrusted client. See [paging](statements/paging.md).
 | `session.NewBatch(gocql.UnloggedBatch)` | `batch := gocql.Batch{Kind: cql.UnloggedBatch}` |
 | `batch.Query(stmt, values...)` | `prepared.AddToBatch(&batch, params)`, or `session.UnpreparedAddToBatch` |
 | `session.ExecuteBatch(batch)` | `session.ExecBatch(ctx, &batch)` |
-| `session.ExecuteBatchCAS(batch, dest...)`, `MapExecuteBatchCAS` | `session.RunConditionalBatch(ctx, &batch, cql.CASRows(decoder))` |
+| `session.ExecuteBatchCAS(batch, dest...)`, `MapExecuteBatchCAS` | `session.ApplyBatch(ctx, &batch)` for the applied flag alone; `session.RunConditionalBatch(ctx, &batch, cql.CASRows(decoder))` for the rows |
 | `query.ScanCAS(dest...)`, `MapScanCAS` | a statement whose `Rows` is `cql.CASRows(decoder)`, read with `One`; `CASResult.Applied` reports the outcome |
 
 `Exec` and `ExecBatch` reject a statement or batch known to be conditional,

@@ -34,10 +34,12 @@ result columns like any other row-returning statement.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
 typed `CASResult[R]`. `cql.CASApplied`, which is `CASRows[cql.EmptyRow](nil)`,
-decodes the applied flag alone and skips the returned row. For conditional batches, pass this decoder to
+decodes the applied flag alone and skips the returned row. A conditional
+batch is sent with `session.ApplyBatch`, which reports whether it applied
+and leaves nothing to close, or, to read its rows, with
 `session.RunConditionalBatch`, whose rows iterate like `Rows` and whose
-`Applied` reports whether the batch applied. `RunConditionalBatch`
-rejects a batch whose members are all known not to be conditional.
+`Applied` reports whether the batch applied. Both reject a batch whose
+members are all known not to be conditional.
 The ordinary `exec.Options` carries regular and serial consistency; profile defaults
 apply when an explicit override is absent. `exec.Options.SerialConsistency` is an
 `exec.SerialOverride`: `exec.SerialInherit` (the zero value) keeps the profile's,
