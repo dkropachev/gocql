@@ -373,6 +373,7 @@ func mapValues[V any](c *structOptionSet, value Codec[V]) {
 	mapValue(c, Int16Codec, value)
 	mapValue(c, Int32Codec, value)
 	mapValue(c, Int64Codec, value)
+	mapValue(c, IntCodec, value)
 	mapValue(c, Float32Codec, value)
 	mapValue(c, Float64Codec, value)
 	mapValue(c, StringCodec, value)

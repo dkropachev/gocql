@@ -320,6 +320,7 @@ func TestUDTCodecCollections(t *testing.T) {
 		Ptr  *udtAddress
 		None *udtAddress
 		ByID map[int32]udtAddress
+		ByN  map[int]udtAddress
 	}
 	columns := NewColumns(
 		ColumnSpec{Name: "list", Type: CodecTestMust(ListType(address))},
@@ -327,12 +328,13 @@ func TestUDTCodecCollections(t *testing.T) {
 		ColumnSpec{Name: "ptr", Type: address},
 		ColumnSpec{Name: "none", Type: address},
 		ColumnSpec{Name: "by_id", Type: CodecTestMust(MapType(rowTestType(t, KindInt), address))},
+		ColumnSpec{Name: "by_n", Type: CodecTestMust(MapType(rowTestType(t, KindBigInt), address))},
 	)
 	a, b := udtAddress{Street: "a", ZipCode: 1}, udtAddress{Street: "b", ZipCode: 2}
-	value := holder{List: []udtAddress{a, b}, Set: []udtAddress{b}, Ptr: &a, ByID: map[int32]udtAddress{7: b}}
+	value := holder{List: []udtAddress{a, b}, Set: []udtAddress{b}, Ptr: &a, ByID: map[int32]udtAddress{7: b}, ByN: map[int]udtAddress{-1: a}}
 	opt := WithCodec(MustUDTCodecOf[udtAddress](UDTOptions{}))
 	got := decodeTestRow(t, columns, MustRowOf[holder](opt), encodeTestParams(t, columns, MustParamsOf[holder](opt), value))
-	if len(got.List) != 2 || got.List[1] != b || len(got.Set) != 1 || got.Ptr == nil || *got.Ptr != a || got.None != nil || got.ByID[7] != b {
+	if len(got.List) != 2 || got.List[1] != b || len(got.Set) != 1 || got.Ptr == nil || *got.Ptr != a || got.None != nil || got.ByID[7] != b || got.ByN[-1] != a {
 		t.Fatalf("got %+v", got)
 	}
 

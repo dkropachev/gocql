@@ -28,6 +28,9 @@ type fieldTypes struct {
 	Missing *string
 	Big     *big.Int
 	Text    cql.Text
+	Ints    []int
+	Counts  map[string]int
+	ByN     map[int]string
 }
 
 func TestStructFieldTypes(t *testing.T) {
@@ -50,6 +53,9 @@ func TestStructFieldTypes(t *testing.T) {
 		cql.ColumnSpec{Name: "missing", Type: cql.TextType},
 		cql.ColumnSpec{Name: "big", Type: cql.VarintType},
 		cql.ColumnSpec{Name: "text", Type: cql.TextType},
+		cql.ColumnSpec{Name: "ints", Type: must(cql.ListType(cql.BigIntType))},
+		cql.ColumnSpec{Name: "counts", Type: must(cql.MapType(cql.TextType, cql.BigIntType))},
+		cql.ColumnSpec{Name: "by_n", Type: must(cql.MapType(cql.BigIntType, cql.TextType))},
 	)
 	name := "n"
 	big := new(big.Int).Lsh(big.NewInt(1), 80)
@@ -57,6 +63,7 @@ func TestStructFieldTypes(t *testing.T) {
 		Set: []int32{1, 2}, Vector: []float32{1.5, 2.5}, List: []string{"a"},
 		Status: "ok", Tags: fieldTags{"x", "y"}, Count: 7, N: -3,
 		Name: &name, Big: big, Text: mustBorrowText(t, "t"),
+		Ints: []int{4, -5}, Counts: map[string]int{"a": 1}, ByN: map[int]string{-2: "b"},
 	}
 	row := ruleDecode(t, columns, cql.MustRowOf[fieldTypes](), ruleEncode(t, columns, cql.MustParamsOf[fieldTypes](), value))
 	if len(row.Set) != 2 || row.Set[1] != 2 || len(row.Vector) != 2 || row.Vector[1] != 2.5 || len(row.List) != 1 {
@@ -73,6 +80,10 @@ func TestStructFieldTypes(t *testing.T) {
 	}
 	if s, err := row.Text.Copy(); err != nil || s != "t" {
 		t.Fatalf("text: %q %v", s, err)
+	}
+	// int maps bigint as a list element and as a map key or value too.
+	if len(row.Ints) != 2 || row.Ints[1] != -5 || len(row.Counts) != 1 || row.Counts["a"] != 1 || len(row.ByN) != 1 || row.ByN[-2] != "b" {
+		t.Fatalf("int collections: %v %v %v", row.Ints, row.Counts, row.ByN)
 	}
 
 	// A named type's value is checked like its underlying type's: ascii

@@ -54,7 +54,7 @@ type StructFields[P any] struct {
 // or one WithCodec or WithEncoder maps, binds NULL and UNSET too; it maps
 // parameters only, so RowOf rejects it. A map[K]V field maps with GoMapCodec
 // when K and V have built-in codecs that decode into owned storage: the
-// numeric and boolean types, string, UUID, TimeUUID, netip.Addr, Date,
+// numeric types, int included, bool, string, UUID, TimeUUID, netip.Addr, Date,
 // TimeOfDay and Timestamp, and as values also []byte, Duration and time.Time.
 // Other maps, and []Entry[K, V] fields for MapCodec, need WithCodec or a
 // `codec=` tag.
