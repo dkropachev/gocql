@@ -909,10 +909,10 @@ func (v Value) iterElements() (*valueIterator[Value], error) {
 		return nil, err
 	}
 	if !v.encoded {
-		return newValueIterator(len(v.values), func(i int) (Value, error) { return v.values[i], nil }, func(v Value) Value { return v.Clone() }), nil
+		return newValueIterator(len(v.values), func(i int) (Value, error) { return v.values[i], nil }), nil
 	}
 	typ := v.typ
-	return &valueIterator[Value]{clone: func(v Value) Value { return v.Clone() }, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (Value, error) {
+	return &valueIterator[Value]{count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (Value, error) {
 		if typ.Kind() == KindTuple {
 			return dynamicField(c, columnSlice(descriptorOf(typ).Fields)[i].Type, dynamicShapeField(v.shape, i))
 		}
@@ -937,9 +937,9 @@ func (v Value) iterEntries() (*valueIterator[ValueEntry], error) {
 		return nil, err
 	}
 	if !v.encoded {
-		return newValueIterator(len(v.entries), func(i int) (ValueEntry, error) { return v.entries[i], nil }, cloneDynamicEntry), nil
+		return newValueIterator(len(v.entries), func(i int) (ValueEntry, error) { return v.entries[i], nil }), nil
 	}
-	return &valueIterator[ValueEntry]{clone: cloneDynamicEntry, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, _ int) (ValueEntry, error) {
+	return &valueIterator[ValueEntry]{count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, _ int) (ValueEntry, error) {
 		key, err := c.Child(descriptorOf(v.typ).Key)
 		if err != nil {
 			return ValueEntry{}, err
@@ -982,9 +982,9 @@ func (v Value) iterFields() (*valueIterator[ValueField], error) {
 				}
 			}
 			return ValueField{}, typeValidation("fields", "missing UDT field %q", field.Name)
-		}, cloneDynamicField), nil
+		}), nil
 	}
-	return &valueIterator[ValueField]{clone: cloneDynamicField, count: columns.Len(), cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (ValueField, error) {
+	return &valueIterator[ValueField]{count: columns.Len(), cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (ValueField, error) {
 		col := columnSlice(columns)[i]
 		value, err := dynamicField(c, col.Type, dynamicShapeField(v.shape, i))
 		if err != nil {
@@ -1449,13 +1449,6 @@ func (dynamicCodec) compileValueDecoder(t DataType) (Decoder[Value], error) {
 		return nil, err
 	}
 	return checkedDynamicDecoder{typ: t, shape: shape}, nil
-}
-
-func cloneDynamicEntry(v ValueEntry) ValueEntry {
-	return ValueEntry{Key: v.Key.Clone(), Value: v.Value.Clone()}
-}
-func cloneDynamicField(v ValueField) ValueField {
-	return ValueField{Name: v.Name, Value: v.Value.Clone()}
 }
 
 type checkedDynamicEncoder struct {

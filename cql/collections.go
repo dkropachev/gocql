@@ -25,7 +25,6 @@ type Entry[K, V any] struct {
 // valueIterator walks the members of a collection Value. Next advances and
 // reports whether a member is available, Value returns it, and Err reports
 // the failure that stopped iteration. All does the same as a range loop.
-// Collect reads the remaining members into a slice, detached from the page.
 //
 // The zero valueIterator is exhausted: Next reports false, and Err nil.
 type valueIterator[T any] struct {
@@ -33,14 +32,13 @@ type valueIterator[T any] struct {
 	err          error
 	next         func(int) (T, error)
 	nextCursor   func(*ValueCursor, int) (T, error)
-	clone        func(T) T
 	cursor       ValueCursor
 	count, index int
 	done         bool
 }
 
-func newValueIterator[T any](count int, next func(int) (T, error), clone func(T) T) *valueIterator[T] {
-	return &valueIterator[T]{count: count, next: next, clone: clone}
+func newValueIterator[T any](count int, next func(int) (T, error)) *valueIterator[T] {
+	return &valueIterator[T]{count: count, next: next}
 }
 
 // Next advances to the next member and reports whether there is one. It
@@ -96,29 +94,6 @@ func (i *valueIterator[T]) Err() error {
 		return typeValidation("iterator", "nil iterator")
 	}
 	return i.err
-}
-
-// Collect explicitly materializes the iterator's remaining values. It returns
-// no partial slice on failure and recursively detaches every yielded value.
-func (i *valueIterator[T]) Collect() ([]T, error) {
-	if i == nil {
-		return nil, typeValidation("iterator", "nil iterator")
-	}
-	if i.clone == nil && i.count > i.index {
-		return nil, typeValidation("iterator", "missing ownership-detaching clone")
-	}
-	values := make([]T, 0, max(0, i.count-i.index))
-	for i.Next() {
-		value := i.Value()
-		if i.clone != nil {
-			value = i.clone(value)
-		}
-		values = append(values, value)
-	}
-	if err := i.Err(); err != nil {
-		return nil, err
-	}
-	return values, nil
 }
 
 // All returns an iterator over the remaining members, for use with range.

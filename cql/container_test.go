@@ -89,7 +89,7 @@ func TestContainer(t *testing.T) {
 			}
 		})
 	})
-	t.Run("Collect", func(t *testing.T) {
+	t.Run("Detach", func(t *testing.T) {
 		text, blob := FoundationScalar(t, KindText), FoundationScalar(t, KindBlob)
 		tuple := CodecTestMust(TupleType(text, blob))
 		list := CodecTestMust(ListType(tuple))
@@ -101,24 +101,24 @@ func TestContainer(t *testing.T) {
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
 		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
-		dynamicValues := CodecTestMust(CodecTestMust(dynamic.iterElements()).Collect())
+		dynamicValues := dynamicTestDetach(dynamic.Elements(), cloneValue)
 		lease.Release()
 		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.ownedBytes(), []byte("more")) {
 			t.Fatal("typed Clone retained lease")
 		}
-		fields := CodecTestMust(CodecTestMust(dynamicValues[0].iterFields()).Collect())
+		fields := dynamicTestDetach(dynamicValues[0].Fields(), cloneField)
 		txt := CodecTestMust(fields[0].Value.Text())
 		if txt.String() != "one" {
-			t.Fatal("dynamic Collect retained lease")
+			t.Fatal("dynamic Clone retained lease")
 		}
-		// Input-side dynamic values borrow caller arrays too; Collect detaches them.
+		// Input-side dynamic values borrow caller arrays too; Clone detaches them.
 		payload := []byte("input")
 		value := CodecTestMust(ListValue(blob, BlobValue(payload)))
-		input := CodecTestMust(CodecTestMust(value.iterElements()).Collect())
+		input := dynamicTestDetach(value.Elements(), cloneValue)
 		payload[0] = 'X'
 		b := CodecTestMust(input[0].Bytes())
 		if string(b.ownedBytes()) != "input" {
-			t.Fatal("input-side Collect did not detach")
+			t.Fatal("input-side Clone did not detach")
 		}
 	})
 	t.Run("Compile", func(t *testing.T) {

@@ -265,7 +265,7 @@ func TestValueIteratorAll(t *testing.T) {
 			return Value{}, errors.New("broken")
 		}
 		return IntValue(1), nil
-	}, nil)
+	})
 	var pairs []string
 	for e, err := range failing.All() {
 		pairs = append(pairs, e.String()+"/"+errString(err))
