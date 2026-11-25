@@ -37,7 +37,10 @@ ending with an error for a malformed member or a value of another kind.
 `ListValue`, `SetValue` and `VectorValue` take the element type and the
 values: `cql.ListValue(cql.TextType, cql.TextValue("a"))`. `String` prints a `Value`,
 and `Varint`, `Decimal`, `Date`, `TimeOfDay`, `Timestamp` and `Duration`
-print, in a CQL literal form. A vector type has kind `TypeVector`, the
+print, in a CQL literal form. `VarintFromInt64` and `Varint.Int64` convert
+a varint that fits an `int64`, `VarintFromBigInt` and `BigInt` any other;
+`ParseDecimal` reads a decimal as `Decimal.String` prints it, and
+`Decimal.Rat` returns its exact value. A vector type has kind `TypeVector`, the
 driver's own kind: the protocol sends a vector as a custom type. Standalone
 `EncodeValue` (copies caller payloads),
 `EncodeValueBorrowed` (zero-copy) and `DecodeValue` use the same codec

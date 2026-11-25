@@ -345,6 +345,7 @@ package cql
 	type cql.Decimal struct
 		cql.Decimal field Unscaled cql.Varint
 		cql.Decimal field Scale int32
+		cql.Decimal method (T) Rat() *math/big.Rat
 		cql.Decimal method (T) String() string
 	var cql.DecimalCodec cql.Codec[cql.Decimal]
 	type cql.DecimalParts struct
@@ -490,6 +491,7 @@ package cql
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
 	func cql.ParamsOf[P any](opts ...cql.StructOption) (cql.ParamEncoder[P], error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
+	func cql.ParseDecimal(s string) (cql.Decimal, error)
 	func cql.ParseTimeUUID(input string) (cql.TimeUUID, error)
 	func cql.ParseUUID(input string) (cql.UUID, error)
 	type cql.PayloadEntry struct
@@ -806,11 +808,13 @@ package cql
 	const cql.VariantNCSCompat untyped int = 0
 	type cql.Varint struct
 		cql.Varint method (T) BigInt() *math/big.Int
+		cql.Varint method (T) Int64() (int64, error)
 		cql.Varint method (T) String() string
 	var cql.VarintBigIntCodec cql.Codec[*math/big.Int]
 	var cql.VarintCodec cql.Codec[cql.Varint]
 	func cql.VarintFromBigInt(v *math/big.Int) cql.Varint
 	func cql.VarintFromBytes(b []byte) (cql.Varint, error)
+	func cql.VarintFromInt64(n int64) cql.Varint
 	var cql.VarintType cql.DataType
 	func cql.VarintValue(n cql.Varint) cql.Value
 	func cql.VectorCodec[T any](element cql.Codec[T]) cql.Codec[[]T]

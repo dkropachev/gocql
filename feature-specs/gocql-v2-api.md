@@ -395,7 +395,11 @@ var TextCodec Codec[Text]                     // text and ascii; borrowed view
 var BytesCodec Codec[Bytes]
 func ConvertCodec[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
 func VarintFromBigInt(*big.Int) Varint
+func VarintFromInt64(int64) Varint
 func (v Varint) BigInt() *big.Int
+func (v Varint) Int64() (int64, error) // fails when v does not fit
+func ParseDecimal(string) (Decimal, error) // "12.30", "-7", "1.23E+5"
+func (d Decimal) Rat() *big.Rat
 func VarintFromBytes([]byte) (Varint, error)
 func DateFromTime(time.Time) (Date, error)
 func (d Date) Time() time.Time
