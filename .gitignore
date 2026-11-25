@@ -46,3 +46,6 @@ CLAUDE.md
 # Python documentation and evidence tooling caches.
 __pycache__/
 .ccm-artifacts/
+
+# Binaries built from examples/ with go build in the repository root
+/streaming
