@@ -94,7 +94,7 @@ func referenceKindOf(err error) Kind {
 // errors.As checks.
 func referenceExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
-		return NotExecuted
+		return Executed
 	}
 	if reporter, ok := errors.AsType[executionStatusReporter](err); ok {
 		return reporter.ExecutionStatus()
@@ -180,7 +180,7 @@ func classifiedLeaves() []error {
 func TestKindOfMatchesReference(t *testing.T) {
 	t.Parallel()
 	leaves := classifiedLeaves()
-	var trees []error
+	trees := []error{nil}
 	for _, a := range leaves {
 		trees = append(trees, a,
 			fmt.Errorf("wrapped: %w", a),

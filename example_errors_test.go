@@ -43,6 +43,8 @@ func Example_errors() {
 		// A timeout or lost connection: the write may have been applied.
 	case cqlerr.PartiallyExecuted:
 		// Some replicas applied the write; reconcile before retrying.
+	case cqlerr.Executed:
+		// err is nil: the write succeeded.
 	}
 
 	// KindOf says whether trying again can help.
