@@ -235,7 +235,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "D3":
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			opts, err := a.options(exec.Options{IncludeMetadata: true, Idempotent: cql.Some(true), Timestamp: cql.Option[int64]{Set: true, Value: time.Now().UnixMicro()}})
+			opts, err := a.options(exec.Options{IncludeMetadata: true, Idempotent: cql.Some(true), Timestamp: cql.Some(time.Now())})
 			if err != nil {
 				return err
 			}

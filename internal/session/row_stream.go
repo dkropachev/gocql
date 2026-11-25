@@ -623,7 +623,8 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			traces = response.InternalInfo.CQLTraces()
 		}
-		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err, Canceled: errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)}
+		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Started: started, Latency: time.Since(started), Err: err}
+		attemptEnded(&event)
 		if len(traces) > 0 {
 			event.CQLTraceID = cql.Option[cql.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}

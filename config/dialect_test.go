@@ -76,6 +76,9 @@ func TestScyllaOnlySettings(t *testing.T) {
 		"MetadataServerTimeout": {"WithMetadataServerTimeout", func(b *ConfigBuilder) *ConfigBuilder {
 			return b.WithMetadataServerTimeout(time.Second)
 		}},
+		"ShardAwareSourcePorts": {"WithShardAwareSourcePorts", func(b *ConfigBuilder) *ConfigBuilder {
+			return b.WithShardAwareSourcePorts(50000, 60000)
+		}},
 	} {
 		t.Run(name, func(t *testing.T) {
 			for _, d := range []Dialect{CassandraV4, CassandraV5} {

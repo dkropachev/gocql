@@ -12,13 +12,22 @@ type Mode uint8
 
 // The metadata modes.
 const (
-	// ModeNone loads no schema.
+	// ModeNone loads no schema. Without keyspace replication the session
+	// knows no replicas, so routing is neither token- nor tablet-aware: the
+	// built-in policy routes to hosts by locality only, and
+	// Snapshot.Replicas, Snapshot.Token and routing.ReplicaRoutes find
+	// nothing.
 	ModeNone Mode = iota
 	// ModeKeyspaces loads keyspaces (replication, durable writes and
 	// ScyllaDB keyspace options) without their tables, views, types,
-	// functions or aggregates.
+	// functions or aggregates. A vnode keyspace's tables route by the
+	// keyspace's token ring, to the replica and shard that own the token.
+	// A tablet keyspace's tables are not routed to their replicas, since
+	// tablet placement is kept per table, and Snapshot.Replicas,
+	// Snapshot.Token and Snapshot.TokenRanges need the table's schema.
 	ModeKeyspaces
-	// ModeFull loads keyspaces with everything in them. It is the default.
+	// ModeFull loads keyspaces with everything in them, which token- and
+	// tablet-aware routing use fully. It is the default.
 	ModeFull
 )
 

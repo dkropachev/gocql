@@ -1356,7 +1356,7 @@ type Options struct {
     PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
     Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
-    Timestamp cql.Option[int64]                   // microseconds
+    Timestamp cql.Option[time.Time]               // sent in microseconds; worker queries reject it
     NowInSeconds cql.Option[int32]
     Keyspace string
     CQLTrace bool                                 // server-side CQL tracing
@@ -1522,7 +1522,7 @@ type AttemptEvent struct {
     Latency time.Duration
     Err error
     CQLTraceID cql.Option[cql.UUID]
-    Canceled, Speculative bool
+    Canceled, TimedOut, Speculative bool // by cqlerr.KindOf(Err)
 }
 
 // package observe
@@ -1822,7 +1822,8 @@ type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
     Requests, Attempts uint64 // never decrease
-    Errors, Canceled uint64
+    Errors, Canceled, Timeouts uint64 // Canceled: KindCanceled; Timeouts: KindTimeout
+    ErrorsByKind map[cqlerr.Kind]uint64
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64
@@ -1856,12 +1857,13 @@ HostSnapshot separates enabled/connected/up state. Events have explicit
 topology/status/schema/control/client-route variants and carry a generation.
 Publication events are emitted only after the corresponding snapshot is visible.
 A subscription has a bounded queue (positive Capacity; zero selects 64, negative
-is invalid). On overflow the dispatcher discards queued deltas, guarantees one
-event.KindOverflow carrying the highest discarded generation, then closes that
-subscription after the marker; it never waits on control I/O. Resynchronize by
-subscribing again first, then reading Metadata (or completing an explicit
-refresh if freshness is required), and ignoring queued publication events at or
-below the snapshot generation. This subscribe-before-snapshot rule also applies
+is invalid). On overflow the dispatcher discards queued deltas and queues one
+event.KindOverflow carrying the highest discarded generation; the subscription
+stays open and keeps delivering, and the dispatcher never waits on control I/O.
+Resynchronize by reading Metadata again (or completing an explicit refresh if
+freshness is required), and ignoring queued publication events at or below the
+snapshot generation. Dropped tablet routing hints are not reported to
+subscribers. This subscribe-before-snapshot rule also applies
 to initial subscription. event.Subscription.Close is idempotent, cancels delivery
 without requiring the caller to drain, and cannot block control work. Schema
 refresh validates duplicate identities, key order, UDT cycles and type syntax;
@@ -1998,7 +2000,8 @@ server error codes/details. A failed request returns an `*ExecutionError`,
 which unwraps only the error the request stopped with, lists every failed
 attempt (`AttemptFailure`, whose `ExecutionStatus` is the attempt's) and
 reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
-`PartiallyExecuted`; `ExecutionStatusOf(err)`; compare with `==`, as the
+`PartiallyExecuted`, and `Executed`, which `ExecutionStatusOf(nil)` returns;
+`ExecutionStatusOf(err)`; compare with `==`, as the
 numeric order is not the severity order). `NewExecutionError(err, status,
 attempts...)` builds one for tests. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`

@@ -58,13 +58,14 @@ func unsent(err error) bool {
 }
 
 // ExecutionStatusOf reports what the request that failed with err may have
-// done on the cluster, across all of its attempts. It returns NotExecuted for
-// a nil error and MaybeExecuted for an error the driver cannot attribute.
+// done on the cluster, across all of its attempts. It returns Executed for a
+// nil error, the outcome of a request that succeeded, and MaybeExecuted for
+// an error the driver cannot attribute.
 // A call that refuses a request before sending it, for example for an
 // invalid argument, returns an ExecutionError reporting NotExecuted.
 func ExecutionStatusOf(err error) ExecutionStatus {
 	if err == nil {
-		return NotExecuted
+		return Executed
 	}
 	var w statusWalk
 	walkErrors(err, nil, &w)

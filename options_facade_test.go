@@ -26,7 +26,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 		Profile: &profile, Retry: retry.Safe{MaxAttempts: 7}, Keyspace: "ks",
 		CustomPayload: []cql.PayloadEntry{{Key: "key", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(payload)}}},
 		Timeout:       cql.Some(time.Second), PageTimeout: cql.Some(2 * time.Second),
-		Prefetch: cql.Some(0), Timestamp: cql.Some[int64](123), PageSize: 5,
+		Prefetch: cql.Some(0), Timestamp: cql.Some(time.UnixMicro(123).UTC()), PageSize: 5,
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2),
 		SerialConsistency: exec.SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),
@@ -165,4 +165,27 @@ func TestTooManyOptions(t *testing.T) {
 	checkPrepare("Prepare", err)
 	_, err = s.PrepareStream(ctx, cql.StreamStatement[int32, []byte]{}, exec.PrepareOptions{}, exec.PrepareOptions{})
 	checkPrepare("PrepareStream", err)
+}
+
+// TestWorkerRejectsFixedTimestamp checks that a worker query refuses a fixed
+// write timestamp, which every write it runs would carry.
+func TestWorkerRejectsFixedTimestamp(t *testing.T) {
+	options := exec.Options{Timestamp: cql.Some(time.Now())}
+	var prepared Prepared[cql.EmptyParams, cql.EmptyRow]
+	if _, err := prepared.Query(options); !isTimestampValidation(err) {
+		t.Fatalf("Prepared.Query = %v, want a Timestamp ValidationError", err)
+	}
+	var stream PreparedStream[cql.EmptyParams, cql.EmptyRow]
+	if _, err := stream.Query(exec.StreamOptions{Options: options}); !isTimestampValidation(err) {
+		t.Fatalf("PreparedStream.Query = %v, want a Timestamp ValidationError", err)
+	}
+	// One-shot options carry it, in microseconds.
+	if got := internalOptions(exec.Options{Timestamp: cql.Some(time.UnixMicro(1234567))}).Timestamp; !got.Set || got.Value != 1234567 {
+		t.Fatalf("internal timestamp = %+v", got)
+	}
+}
+
+func isTimestampValidation(err error) bool {
+	v, ok := errors.AsType[*cql.ValidationError](err)
+	return ok && v.Field == "Timestamp"
 }

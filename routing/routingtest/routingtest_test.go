@@ -129,3 +129,110 @@ func TestLocalDatacenter(t *testing.T) {
 		t.Fatalf("the policy's own datacenter: %v", err)
 	}
 }
+
+// wrapped overrides only Pick; Validate and Observe come from the embedded
+// *routing.Builtin.
+type wrapped struct{ *routing.Builtin }
+
+func (w wrapped) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
+	return metadata.Route{}, false
+}
+
+// TestEmbeddedBuiltin checks that a policy embedding *routing.Builtin keeps
+// the built-in Validate and Observe, and that the zero Builtin routes as the
+// default policy.
+func TestEmbeddedBuiltin(t *testing.T) {
+	builtin, err := routing.NewPolicy(routing.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy routing.Policy = wrapped{builtin}
+	validator, ok := policy.(routing.Validator)
+	if !ok {
+		t.Fatal("the wrapper lost Validate")
+	}
+	observer, ok := policy.(routing.AttemptObserver)
+	if !ok {
+		t.Fatal("the wrapper lost Observe")
+	}
+	observer.Observe(routing.AttemptEvent{})
+
+	c := cluster()
+	c.LocalDatacenter = "x"
+	if err := validator.Validate(routingtest.NewSnapshot(c)); err == nil {
+		t.Fatal("the wrapper did not run the built-in validation")
+	}
+	if err := validator.Validate(routingtest.NewSnapshot(cluster())); err != nil {
+		t.Fatal(err)
+	}
+	if got := planHosts(t, policy, routingtest.NewSnapshot(cluster())); len(got) != 4 {
+		t.Fatalf("the wrapper's plan: %v", got)
+	}
+	if got := planHosts(t, &routing.Builtin{}, routingtest.NewSnapshot(cluster())); len(got) != 4 {
+		t.Fatalf("the zero Builtin's plan: %v", got)
+	}
+	if err := routing.SingleTarget(metadata.Target{HostID: cql.UUID{15: 9}}).Validate(routingtest.NewSnapshot(cluster())); err == nil {
+		t.Fatal("SingleTarget validated a host the snapshot does not hold")
+	}
+}
+
+// TestVnodeReplicaShards checks that vnode replica routes carry the shard
+// that owns the token, from the hosts' sharding, and that Route.ShardOf
+// works without connections.
+func TestVnodeReplicaShards(t *testing.T) {
+	c := cluster()
+	for i := range c.Hosts {
+		c.Hosts[i].Shards = 8
+		c.Hosts[i].ShardingIgnoreMSB = 12
+	}
+	m := routingtest.NewSnapshot(c)
+	const token = int64(-4611686018427387904)
+	want := routing.HostRoutes(m)[0].ShardOf(token)
+	if !want.Set || want.Value >= 8 {
+		t.Fatalf("ShardOf without connections = %v", want)
+	}
+	routes := routing.ReplicaRoutes(m, routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some(token), Kind: cql.OrdinaryStatement})
+	if len(routes) != 4 {
+		t.Fatalf("ReplicaRoutes = %v", routes)
+	}
+	for _, r := range routes {
+		if r.ShardID() != want {
+			t.Fatalf("vnode replica route to shard %v, want %v", r.ShardID(), want)
+		}
+	}
+	// Without sharding, as on Cassandra, routes go to any shard.
+	for _, r := range routing.ReplicaRoutes(routingtest.NewSnapshot(cluster()), info) {
+		if r.ShardID().Set {
+			t.Fatalf("a host without sharding got shard %v", r.ShardID())
+		}
+		if r.ShardOf(42).Set {
+			t.Fatal("ShardOf on a host without sharding is set")
+		}
+	}
+}
+
+// TestReplicaRoutesWithoutTableSchema checks that a vnode keyspace whose
+// tables are not loaded, as under metadata.ModeKeyspaces, still routes by the
+// keyspace's ring.
+func TestReplicaRoutesWithoutTableSchema(t *testing.T) {
+	c := cluster()
+	c.Keyspaces = map[string]*metadata.Keyspace{"ks": {Name: "ks"}}
+	c.TokenRanges = map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{{HostID: c.Hosts[2].HostID}}}}}
+	m := routingtest.NewSnapshot(c)
+	if routes := routing.ReplicaRoutes(m, info); len(routes) != 1 || routes[0].HostID()[15] != 3 {
+		t.Fatalf("ReplicaRoutes without table schema = %v", routes)
+	}
+	policy, err := routing.NewPolicy(routing.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		if got := planHosts(t, policy, m); len(got) == 0 || got[0] != 3 {
+			t.Fatalf("built-in plan without table schema: %v", got)
+		}
+	}
+	c.Keyspaces["ks"].TabletBased = true
+	if routes := routing.ReplicaRoutes(routingtest.NewSnapshot(c), info); len(routes) != 0 {
+		t.Fatalf("a tablet keyspace routed a table it has no placement for: %v", routes)
+	}
+}

@@ -25,7 +25,7 @@ type attemptLog struct {
 }
 
 // worseStatus returns the more severe of a and b, ordering NotExecuted <
-// MaybeExecuted < PartiallyExecuted. An undefined status counts as
+// MaybeExecuted < PartiallyExecuted < Executed. An undefined status counts as
 // MaybeExecuted, the safe assumption.
 func worseStatus(a, b cqlerr.ExecutionStatus) cqlerr.ExecutionStatus {
 	if statusSeverity(b) > statusSeverity(a) {
@@ -40,6 +40,8 @@ func statusSeverity(s cqlerr.ExecutionStatus) int {
 		return 0
 	case cqlerr.PartiallyExecuted:
 		return 2
+	case cqlerr.Executed:
+		return 3
 	default:
 		return 1
 	}

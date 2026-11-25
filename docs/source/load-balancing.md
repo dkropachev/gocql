@@ -65,7 +65,8 @@ connection for exactly that shard of that host, or any connection of the host
 when the route has no shard, and does not move to another shard or host on its own;
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
-`routing.ReplicaRoutes` (the replicas of a request's token), and narrows them
+`routing.ReplicaRoutes` (the replicas of a request's token, each to the shard
+that owns the token when the host's sharding is known), and narrows them
 with `WithShardID` and `ShardOf`.
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
@@ -189,20 +190,20 @@ Each stage of a request has its own answer:
 
 `routing.Policy` is a public interface, so a health-weighted or pool-based
 policy, such as an adapter for a host-pool library, can live outside the
-driver. Embed the built-in policy to keep token awareness and override what
-you need. The embedded `routing.Policy` has only Pick and Fallback, so forward
-`Validate` and `Observe` to the built-in policy when the wrapper should keep
-its validation and latency tracking:
+driver. Embed the `*routing.Builtin` that `routing.NewPolicy` returns to keep
+token awareness and override what you need; its `Validate` and `Observe` are
+promoted, so the wrapper keeps the built-in validation and latency tracking.
+A wrapper that overrides `Observe` calls the built-in one itself:
 
 ```go
 // skipFailed avoids, for its first route, a host whose last attempt failed.
 type skipFailed struct {
-	routing.Policy // from routing.NewPolicy
-	failed         sync.Map // host ID -> struct{}
+	*routing.Builtin // from routing.NewPolicy
+	failed           sync.Map // host ID -> struct{}
 }
 
 func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool) {
-	r, ok := p.Policy.Pick(info, m)
+	r, ok := p.Builtin.Pick(info, m)
 	if _, bad := p.failed.Load(r.HostID()); ok && bad {
 		return metadata.Route{}, false // the driver asks Fallback instead
 	}
@@ -217,16 +218,7 @@ func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	default:
 		p.failed.Delete(e.Target.HostID)
 	}
-	if o, ok := p.Policy.(routing.AttemptObserver); ok {
-		o.Observe(e)
-	}
-}
-
-func (p *skipFailed) Validate(m *metadata.Snapshot) error {
-	if v, ok := p.Policy.(routing.Validator); ok {
-		return v.Validate(m)
-	}
-	return nil
+	p.Builtin.Observe(e)
 }
 ```
 

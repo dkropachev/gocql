@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
@@ -36,6 +37,11 @@ func TestDialectOnlyOptions(t *testing.T) {
 		},
 		"NowInSeconds": {
 			values: Options{NowInSeconds: cql.Some[int32](10)}, setting: "now in seconds", want: "CassandraV5",
+			rejected: []settings.Config{{Server: settings.ServerScylla, Protocol: 4}, {Server: settings.ServerCassandra, Protocol: 4}, {Server: settings.ServerAny, Protocol: 4}},
+			accepted: []settings.Config{{Server: settings.ServerCassandra, Protocol: 5}},
+		},
+		"Keyspace": {
+			values: Options{Keyspace: "other"}, setting: "Keyspace", want: "CassandraV5",
 			rejected: []settings.Config{{Server: settings.ServerScylla, Protocol: 4}, {Server: settings.ServerCassandra, Protocol: 4}, {Server: settings.ServerAny, Protocol: 4}},
 			accepted: []settings.Config{{Server: settings.ServerCassandra, Protocol: 5}},
 		},
@@ -101,5 +107,26 @@ func TestDialectOnlyOptions(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestSessionKeyspaceOption checks that the session's own keyspace is
+// accepted as a per-request keyspace on protocol 4, where it changes nothing.
+func TestSessionKeyspaceOption(t *testing.T) {
+	s := testSession(t)
+	rt := InternalRuntimeFor(s)
+	config := rt.config
+	config.Server, config.Protocol, config.Keyspace = settings.ServerScylla, 4, "app"
+	rt.config = config
+	if _, err := NewCompiledOptions(s, Options{Keyspace: "app"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := NewCompiledOptions(s, Options{Keyspace: "other"}); err == nil {
+		t.Fatal("protocol 4 compiled a keyspace other than the session's")
+	}
+	statement := binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT * FROM t", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}
+	_, err := Prepare(context.Background(), s, statement, PrepareOptions{Keyspace: "other"})
+	if unsupported, ok := errors.AsType[*cqlerr.UnsupportedSettingError](err); !ok || unsupported.Setting != "Keyspace" {
+		t.Fatalf("Prepare in another keyspace on protocol 4: %v", err)
 	}
 }

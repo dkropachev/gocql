@@ -7,7 +7,6 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	routing "github.com/scylladb/gocql/v2/internal/routing"
@@ -212,9 +211,8 @@ func (s *Core) PublishTabletFeedback(p *InternalV2PeripheralState, updates map[I
 	}
 	p.InternalMu.Unlock()
 	p.publishMu.Unlock()
-	if resync {
-		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: routing.SnapshotData(next).InternalGeneration, Change: event.ChangeTabletResync})
-	}
+	// A resync drops pending tablet hints, which only routing uses; the
+	// cluster's metadata is unchanged, so subscribers are not told.
 }
 func sessionRunV2TabletFeedback(s *Core, p *InternalV2PeripheralState) {
 	for {

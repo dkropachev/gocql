@@ -69,13 +69,21 @@ func TestTablets(t *testing.T) {
 		p.bumpSchemaEpochLocked("ks")
 		p.InternalMu.Unlock()
 		go sessionRunV2TabletFeedback(s, p)
+		// The resync drops routing hints only, so subscribers are not told.
+		deadline := time.Now().Add(time.Second)
+		for {
+			if _, known := routing.InternalMetadataSnapshotTabletRoot(s.Metadata(), implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "t"}); known {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("feedback resync was not processed")
+			}
+			time.Sleep(time.Millisecond)
+		}
 		select {
 		case ev := <-sub.Events():
-			if ev.Kind != event.KindOverflow || ev.Change != "TABLET_RESYNC" {
-				t.Fatal(ev)
-			}
-		case <-time.After(time.Second):
-			t.Fatal("feedback resync was not published")
+			t.Fatal("a tablet resync reached a subscriber", ev)
+		case <-time.After(50 * time.Millisecond):
 		}
 		if got := MetadataData(SessionData(s).InternalMetadataDescriber.InternalMetadata).InternalTabletsMetadata.GetTableTablets("ks", "t"); len(got) != 0 {
 			t.Fatal("stale hint restored tablet", got)

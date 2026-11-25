@@ -316,7 +316,7 @@ func TestBatch(t *testing.T) {
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
 			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(1), cql.TextValue("val")})
 			cassandraAdd(t, batch, insert, []cql.Value{cql.IntValue(2), cql.TextValue("val")})
-			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Timestamp: cql.Option[int64]{Value: micros, Set: true}}))
+			_, err := session.ExecBatch(ctx, batch, bindOptions(session, exec.Options{Timestamp: cql.Some(time.UnixMicro(micros))}))
 			require.NoError(t, err)
 			for _, id := range []int32{1, 2} {
 				row, err := v2ReadOne(ctx, session, fmt.Sprintf((`SELECT writetime(val) AS written FROM `+fixtureKeyspace("")+`.%s WHERE id = ?`), table), cql.IntValue(id))

@@ -53,7 +53,7 @@ func TestSchemaMetadata(t *testing.T) {
 			}
 		})
 
-		t.Run("ContentionEmitsTerminalResync", func(t *testing.T) {
+		t.Run("ContentionEmitsResync", func(t *testing.T) {
 			s := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxxxxx).InternalHostSource = &cluster.InternalRingDescriber{}
@@ -73,8 +73,11 @@ func TestSchemaMetadata(t *testing.T) {
 			if ev.Kind != event.KindOverflow || ev.Change != "PUBLICATION_RESYNC" {
 				t.Fatal("unpublished delta escaped", ev)
 			}
-			if _, ok := <-sub.Events(); ok {
-				t.Fatal("resync marker was not terminal")
+			// The subscription stays open with nothing else queued.
+			select {
+			case e, ok := <-sub.Events():
+				t.Fatal("an event followed the resync marker", e, ok)
+			default:
 			}
 		})
 	})

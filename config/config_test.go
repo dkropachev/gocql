@@ -397,8 +397,8 @@ func TestConfigBuilder(t *testing.T) {
 		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 50000 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 60000 {
 			t.Fatalf("explicit advanced shard awareness under client routes: %+v", c.Pool)
 		}
-		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithShardAwareSourcePorts(50000, 60000).WithClientRoutes(route)).settings; c.Pool.AdvancedShardAwareness.Enabled {
-			t.Fatal("WithShardAwareSourcePorts turned advanced shard awareness on under client routes")
+		if _, err := New(ScyllaV4, "h").WithShardAwareSourcePorts(50000, 60000).WithClientRoutes(route).Build(); err == nil {
+			t.Fatal("Build accepted source ports that client routes leave unused")
 		}
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(true).WithAdvancedShardAwareness(false).WithClientRoutes(route)).settings; c.Pool.AdvancedShardAwareness.Enabled {
 			t.Fatal("the last WithAdvancedShardAwareness did not win")
@@ -423,6 +423,36 @@ func TestConfigBuilder(t *testing.T) {
 				}
 			})
 		}
+	})
+
+	t.Run("IgnoredSettings", func(t *testing.T) {
+		route := ClientRoute{ConnectionID: "c1"}
+		for name, tc := range map[string]struct {
+			b     *ConfigBuilder
+			field string
+		}{
+			"SourcePortsPerHost":        {New(ScyllaV4, "h").WithConnectionsPerHost(2).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
+			"SourcePortsAwarenessOff":   {New(ScyllaV4, "h").WithAdvancedShardAwareness(false).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
+			"SourcePortsClientRoutes":   {New(ScyllaV4, "h").WithClientRoutes(route).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
+			"MetadataKeyspacesModeNone": {New(ScyllaV4, "h").WithMetadataMode(metadata.ModeNone).WithMetadataKeyspaces("ks"), "WithMetadataKeyspaces"},
+			"ZeroConnectTimeout":        {New(ScyllaV4, "h").WithConnectTimeout(0), "WithConnectTimeout"},
+			"ZeroDNSTimeout":            {New(ScyllaV4, "h").WithDNSTimeout(0), "WithDNSTimeout"},
+			"ZeroMetadataTimeout":       {New(ScyllaV4, "h").WithMetadataTimeout(0), "WithMetadataTimeout"},
+			"ServerTimeoutAtClient":     {New(ScyllaV4, "h").WithMetadataTimeout(10 * time.Second).WithMetadataServerTimeout(10 * time.Second), "WithMetadataServerTimeout"},
+			"ServerTimeoutAboveDefault": {New(ScyllaV4, "h").WithMetadataServerTimeout(time.Minute), "WithMetadataServerTimeout"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				_, err := tc.b.Build()
+				if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != tc.field {
+					t.Fatalf("Build = %v, want a %s ValidationError", err, tc.field)
+				}
+			})
+		}
+		// Accepted: a server timeout below the client's, and source ports
+		// under advanced shard awareness.
+		mustBuildConfig(t, New(ScyllaV4, "h").WithMetadataTimeout(10*time.Second).WithMetadataServerTimeout(9*time.Second))
+		mustBuildConfig(t, New(ScyllaV4, "h").WithShardAwareSourcePorts(50000, 60000))
+		mustBuildConfig(t, New(ScyllaV4, "h").WithMetadataMode(metadata.ModeKeyspaces).WithMetadataKeyspaces("ks"))
 	})
 
 	t.Run("OnlyHost", func(t *testing.T) {

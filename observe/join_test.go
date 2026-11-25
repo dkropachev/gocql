@@ -75,8 +75,33 @@ func TestJoin(t *testing.T) {
 		if _, ok := o.(observe.AttemptObserver); ok {
 			t.Fatal("a join of request observers is an AttemptObserver")
 		}
-		if _, ok := o.(observe.RequestObserver); !ok {
+		r, ok := o.(observe.RequestObserver)
+		if !ok {
 			t.Fatal("a join of request observers is no RequestObserver")
+		}
+		_, end := r.StartRequest(context.Background(), observe.RequestStart{ID: 3})
+		end(observe.RequestEvent{ID: 3})
+		want := []string{"a start 3 parent=<nil>", "b start 3 parent=a", "a end 3", "b end 3"}
+		if !slices.Equal(log, want) {
+			t.Fatalf("calls\n%q\nwant\n%q", log, want)
+		}
+	})
+
+	t.Run("OnlyAttempt", func(t *testing.T) {
+		var log []string
+		o := observe.Join(attemptHook("a", &log), attemptHook("b", &log))
+		if _, ok := o.(observe.RequestObserver); ok {
+			t.Fatal("a join of attempt observers is a RequestObserver")
+		}
+		a, ok := o.(observe.AttemptObserver)
+		if !ok {
+			t.Fatal("a join of attempt observers is no AttemptObserver")
+		}
+		end := a.StartAttempt(context.Background(), observe.AttemptStart{Attempt: 2})
+		end(routing.AttemptEvent{Attempt: 2})
+		want := []string{"a attempt 2 parent=<nil>", "b attempt 2 parent=<nil>", "a attempt end 2", "b attempt end 2"}
+		if !slices.Equal(log, want) {
+			t.Fatalf("calls\n%q\nwant\n%q", log, want)
 		}
 	})
 

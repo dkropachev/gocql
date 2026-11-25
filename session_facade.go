@@ -239,6 +239,15 @@ func (s *Session) RefreshMetadata(ctx context.Context) error {
 
 // Subscribe subscribes to matching session events. Close the subscription when
 // done consuming it.
+//
+// Subscribe before reading Session.Metadata, so that no change falls between
+// the snapshot and the first event. Each event is delivered after the
+// metadata publication that reflects it, so a snapshot whose Generation is at
+// least the event's already holds the change, as far as the session could
+// load it: a schema refresh that failed is retried and published later,
+// without a second event. When the queue overflows, the queued events are
+// discarded and one KindOverflow event takes their place; the subscription
+// stays open, and reading Session.Metadata again catches up.
 func (s *Session) Subscribe(filter event.Filter) (*event.Subscription, error) {
 	sub, err := s.internal().Subscribe(filter)
 	return sub.Public(), err

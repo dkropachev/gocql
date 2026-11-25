@@ -5,6 +5,7 @@ package routing
 
 import (
 	"cmp"
+	"errors"
 	"iter"
 	"maps"
 	"math/rand/v2"
@@ -13,6 +14,7 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
@@ -382,10 +384,26 @@ func newPlacementCacheEntry(m *MetadataSnapshot, keyspace, table string) *placem
 		e.placement = &n.InternalValue
 		return e
 	}
-	if ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err == nil {
+	if ranges, tablet, err := routingRanges(m, keyspace, table); err == nil {
 		e.ranges, e.tablet = ranges, tablet
 	}
 	return e
+}
+
+// routingRanges is InternalMetadataSnapshotLookupRanges for routing. A vnode
+// keyspace's token ring places every table of it, so a table whose schema the
+// snapshot does not hold, under metadata.ModeKeyspaces or before a schema
+// refresh, still routes by the keyspace's ring. A tablet keyspace's tables
+// need their own placement.
+func routingRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
+	ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
+	if err == nil || !errors.Is(err, cqlerr.ErrNoTable) {
+		return ranges, tablet, err
+	}
+	if ks := SnapshotData(m).InternalKeyspaces[keyspace]; ks == nil || ks.TabletBased {
+		return nil, false, err
+	}
+	return SnapshotData(m).InternalRanges[keyspace], false, nil
 }
 
 // VersionBlock returns the tablet version block a request with lookup l
@@ -431,7 +449,7 @@ func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, tab
 		}
 		return m.legacyPlacementReplicas(e.ranges, e.tablet, token), nil
 	}
-	ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
+	ranges, tablet, err := routingRanges(m, keyspace, table)
 	if err != nil || len(ranges) == 0 {
 		return nil, nil
 	}

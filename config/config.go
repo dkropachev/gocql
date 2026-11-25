@@ -112,6 +112,21 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	if sa := settings.Pool.AdvancedShardAwareness; b.sourcePortsChosen && (sa.SourcePortStart < 1024 || sa.SourcePortStart > sa.SourcePortEnd) {
 		return Config{}, &cql.ValidationError{Field: "WithShardAwareSourcePorts", Err: fmt.Errorf("%d-%d is not a range within 1024-65535", sa.SourcePortStart, sa.SourcePortEnd)}
 	}
+	if b.sourcePortsChosen {
+		if err := implSettings.ScyllaOnly(&settings, "WithShardAwareSourcePorts"); err != nil {
+			return Config{}, err
+		}
+		if !settings.Pool.AdvancedShardAwareness.Enabled {
+			reason := "WithAdvancedShardAwareness(false)"
+			switch {
+			case b.perHost:
+				reason = "WithConnectionsPerHost"
+			case settings.ClientRoutes != nil && !b.shardAwarenessChosen:
+				reason = "WithClientRoutes"
+			}
+			return Config{}, &cql.ValidationError{Field: "WithShardAwareSourcePorts", Err: fmt.Errorf("has no effect: %s turns advanced shard awareness off", reason)}
+		}
+	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
 		if id.IsZero() {
@@ -277,13 +292,14 @@ func (b *ConfigBuilder) WithLocalAddress(address netip.Addr) *ConfigBuilder {
 	return b
 }
 
-// WithConnectTimeout bounds opening one connection. Default 5s.
+// WithConnectTimeout bounds opening one connection; Build rejects zero.
+// Default 5s.
 func (b *ConfigBuilder) WithConnectTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.ConnectTimeout = d
 	return b
 }
 
-// WithDNSTimeout bounds one name lookup. Default 5s.
+// WithDNSTimeout bounds one name lookup; Build rejects zero. Default 5s.
 func (b *ConfigBuilder) WithDNSTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.DNSTimeout = d
 	return b
@@ -291,14 +307,26 @@ func (b *ConfigBuilder) WithDNSTimeout(d time.Duration) *ConfigBuilder {
 
 // WithNagle turns Nagle's algorithm on or off. Off sets TCP_NODELAY. Default
 // off.
+//
+// The default is applied best-effort: a connection from WithDialer that does
+// not expose SetNoDelay, directly or through an Unwrap() net.Conn method,
+// keeps the OS's setting. Once this setter is called, such a connection
+// fails to open with an UnsupportedSettingError.
 func (b *ConfigBuilder) WithNagle(on bool) *ConfigBuilder {
 	b.settings.NoDelay = !on
+	b.settings.ChosenSocketOptions |= implSettings.SocketNoDelay
 	return b
 }
 
-// WithTCPKeepalive enables TCP keepalive probes with period. Default off.
+// WithTCPKeepalive enables TCP keepalive probes with period; zero turns them
+// off. Default off.
+//
+// The default is applied best-effort, as for WithNagle: a connection that
+// does not expose SetKeepAlive keeps the OS's setting unless this setter was
+// called.
 func (b *ConfigBuilder) WithTCPKeepalive(period time.Duration) *ConfigBuilder {
 	b.settings.SocketKeepalive = period
+	b.settings.ChosenSocketOptions |= implSettings.SocketKeepalive
 	return b
 }
 
@@ -413,8 +441,11 @@ func (b *ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder {
 
 // WithShardAwareSourcePorts sets the local source ports, first to last,
 // that advanced shard awareness dials from. Build rejects a range that is
-// empty or starts below 1024. It does not turn advanced shard awareness on.
-// Default 49152-65535.
+// empty or starts below 1024. It does not turn advanced shard awareness on:
+// Build rejects it where advanced shard awareness is off, under
+// WithConnectionsPerHost, WithAdvancedShardAwareness(false) or
+// WithClientRoutes, and with a Cassandra dialect, which has no shards, as a
+// cqlerr.UnsupportedSettingError. Default 49152-65535.
 func (b *ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder {
 	b.sourcePortsChosen = true
 	b.settings.Pool.AdvancedShardAwareness.SourcePortStart = first
@@ -510,13 +541,16 @@ func (b *ConfigBuilder) WithConviction(policy endpoint.ConvictionPolicy) *Config
 }
 
 // WithMetadataMode selects how much schema metadata is loaded. Default
-// metadata.ModeFull.
+// metadata.ModeFull. Loading less costs routing: the metadata.Mode values say
+// what each mode keeps.
 func (b *ConfigBuilder) WithMetadataMode(mode metadata.Mode) *ConfigBuilder {
 	b.settings.Metadata.Mode = mode
 	return b
 }
 
-// WithMetadataKeyspaces limits schema metadata to keyspaces. Default all.
+// WithMetadataKeyspaces limits schema metadata to keyspaces. Build rejects it
+// under metadata.ModeNone, which loads no schema. Connect logs a warning when
+// the session keyspace (WithKeyspace) is not among them. Default all.
 func (b *ConfigBuilder) WithMetadataKeyspaces(keyspaces ...string) *ConfigBuilder {
 	b.settings.Metadata.Keyspaces = append([]string(nil), keyspaces...)
 	return b
@@ -543,17 +577,20 @@ func (b *ConfigBuilder) WithMetadataRefresh(interval time.Duration) *ConfigBuild
 	return b
 }
 
-// WithMetadataTimeout bounds one metadata request. Default 31s.
+// WithMetadataTimeout bounds one metadata request; Build rejects zero.
+// Default 31s.
 func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.RequestTimeout = d
 	return b
 }
 
 // WithMetadataServerTimeout asks ScyllaDB to bound metadata queries with USING
-// TIMEOUT, in whole milliseconds; zero sends none. Cassandra has no USING
-// TIMEOUT, so Build with a Cassandra dialect fails on a positive value with
-// a cqlerr.UnsupportedSettingError. Default 30s on ScyllaDB,
-// none on Cassandra.
+// TIMEOUT, in whole milliseconds; zero sends none. It must be below
+// WithMetadataTimeout, so that the server gives up first and answers with its
+// own error; Build rejects it otherwise. Cassandra has no USING TIMEOUT, so
+// Build with a Cassandra dialect fails on a positive value with a
+// cqlerr.UnsupportedSettingError. Default one second below WithMetadataTimeout
+// (half of it at 2s or less) on ScyllaDB, none on Cassandra.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.ServerTimeout = cql.Some(d)
 	return b

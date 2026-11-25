@@ -37,6 +37,15 @@ func TestRequestTimeout(t *testing.T) {
 	if KindOf(joined) != KindTimeout {
 		t.Fatalf("KindOf(%v) = %v", joined, KindOf(joined))
 	}
+	// It answers net.Error's Timeout and Temporary as
+	// context.DeadlineExceeded does.
+	var netErr interface {
+		Timeout() bool
+		Temporary() bool
+	}
+	if !errors.As(ErrRequestTimeout, &netErr) || !netErr.Timeout() || !netErr.Temporary() {
+		t.Fatal("ErrRequestTimeout does not report Timeout and Temporary")
+	}
 	if ExecutionStatusOf(ErrRequestTimeout) != NotExecuted {
 		t.Fatalf("a bare request timeout reports %v", ExecutionStatusOf(ErrRequestTimeout))
 	}

@@ -7,10 +7,12 @@ package event
 
 import "github.com/scylladb/gocql/v2/internal/link"
 
-// Subscription owns a bounded queue of events. Overflow discards queued
-// deltas and emits Overflow, then closes. Subscribe again before reading
-// Session.Metadata. gocql.Session.Subscribe makes one; a nil or zero
-// Subscription is closed: its Events queue is closed and empty.
+// Subscription owns a bounded queue of events. When the queue overflows,
+// the queued events are discarded and one KindOverflow event, whose
+// Generation is the highest discarded one, takes their place; the
+// subscription stays open and keeps delivering. Read Session.Metadata again
+// after an Overflow event to catch up. gocql.Session.Subscribe makes one; a
+// nil or zero Subscription is closed: its Events queue is closed and empty.
 type Subscription struct {
 	events <-chan Event
 	close  func()

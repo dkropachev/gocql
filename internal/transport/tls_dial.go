@@ -96,41 +96,45 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 	}
 	return c, nil
 }
+
+// InternalApplyV2SocketOptions applies the socket options to a raw
+// connection. It finds each control on the connection or on the connections
+// it wraps, through an Unwrap() net.Conn method. A default the connection
+// cannot apply is skipped; an option a setter chose fails with an
+// UnsupportedSettingError.
 func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, network string) error {
 	if network == "unix" || network == "unixpacket" {
 		return nil
 	}
-	_, realTCP := c.LocalAddr().(*net.TCPAddr)
 	unsupported := func(setting string) error {
 		return &connectivity.UnsupportedSettingError{Setting: setting, Reason: "raw TCP connection wrapper does not expose requested socket controls"}
 	}
-	if realTCP {
-		noDelay, ok := c.(interface{ SetNoDelay(bool) error })
-		if !ok {
-			return unsupported("TCP_NODELAY")
-		}
+	chosen := func(option connectivity.SocketOptions) bool { return config.ChosenSocketOptions&option != 0 }
+	if noDelay, ok := socketControl[interface{ SetNoDelay(bool) error }](c); ok {
 		if err := noDelay.SetNoDelay(config.NoDelay); err != nil {
 			return err
 		}
-		keepalive, ok := c.(interface{ SetKeepAlive(bool) error })
-		if !ok {
-			return unsupported("TCP keepalive")
-		}
+	} else if chosen(connectivity.SocketNoDelay) {
+		return unsupported("TCP_NODELAY")
+	}
+	if keepalive, ok := socketControl[interface{ SetKeepAlive(bool) error }](c); ok {
 		if err := keepalive.SetKeepAlive(config.SocketKeepalive > 0); err != nil {
 			return err
 		}
-		if config.SocketKeepalive > 0 {
-			period, ok := c.(interface{ SetKeepAlivePeriod(time.Duration) error })
-			if !ok {
-				return unsupported("TCP keepalive period")
-			}
-			if err := period.SetKeepAlivePeriod(config.SocketKeepalive); err != nil {
-				return err
-			}
+	} else if chosen(connectivity.SocketKeepalive) || config.SocketKeepalive > 0 {
+		return unsupported("TCP keepalive")
+	}
+	if config.SocketKeepalive > 0 {
+		period, ok := socketControl[interface{ SetKeepAlivePeriod(time.Duration) error }](c)
+		if !ok {
+			return unsupported("TCP keepalive period")
+		}
+		if err := period.SetKeepAlivePeriod(config.SocketKeepalive); err != nil {
+			return err
 		}
 	}
 	if config.ReceiveBuffer > 0 {
-		setter, ok := c.(interface{ SetReadBuffer(int) error })
+		setter, ok := socketControl[interface{ SetReadBuffer(int) error }](c)
 		if !ok {
 			return unsupported("receive buffer")
 		}
@@ -139,7 +143,7 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 		}
 	}
 	if config.SendBuffer > 0 {
-		setter, ok := c.(interface{ SetWriteBuffer(int) error })
+		setter, ok := socketControl[interface{ SetWriteBuffer(int) error }](c)
 		if !ok {
 			return unsupported("send buffer")
 		}
@@ -148,7 +152,7 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 		}
 	}
 	if config.Linger.Set {
-		setter, ok := c.(interface{ SetLinger(int) error })
+		setter, ok := socketControl[interface{ SetLinger(int) error }](c)
 		if !ok {
 			return unsupported("linger")
 		}
@@ -156,10 +160,24 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 			return err
 		}
 	}
-	if !realTCP && config.SocketKeepalive > 0 {
-		return unsupported("TCP keepalive")
-	}
 	return nil
+}
+
+// socketControl finds a socket control on c or on a connection c wraps,
+// following Unwrap() net.Conn methods.
+func socketControl[T any](c net.Conn) (T, bool) {
+	for depth := 0; c != nil && depth < 16; depth++ {
+		if control, ok := c.(T); ok {
+			return control, true
+		}
+		wrapper, ok := c.(interface{ Unwrap() net.Conn })
+		if !ok {
+			break
+		}
+		c = wrapper.Unwrap()
+	}
+	var zero T
+	return zero, false
 }
 
 func (d *InternalV2TLSHostDialer) DialHost(ctx context.Context, host *implEndpoint.HostInfo) (*DialedHost, error) {

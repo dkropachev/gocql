@@ -742,9 +742,14 @@ func TestTypedConn(t *testing.T) {
 		tcp := raw.(*net.TCPConn)
 		config := settings.DefaultConfig("localhost")
 		opaque := &opaqueTCP{Conn: tcp}
-		err := applyV2SocketOptions(opaque, config, "tcp")
+		if err := applyV2SocketOptions(opaque, config, "tcp"); err != nil {
+			t.Fatal("the default NODELAY failed on a TCP wrapper without controls", err)
+		}
+		chosen := config
+		chosen.ChosenSocketOptions = settings.SocketNoDelay
+		err := applyV2SocketOptions(opaque, chosen, "tcp")
 		if _, ok := errors.AsType[*settings.UnsupportedSettingError](err); !ok {
-			t.Fatal("TCP wrapper silently ignored NODELAY", err)
+			t.Fatal("TCP wrapper silently ignored a chosen NODELAY", err)
 		}
 		forwarding := &forwardingTCP{TCPConn: tcp}
 		for _, value := range []bool{true, false} {

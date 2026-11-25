@@ -170,7 +170,7 @@ if !found {
 | `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
 | a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
-| `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(ts)}` |
+| `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a worker query (`Prepared.Query`) rejects a fixed timestamp |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Query(options)` is closed with `Close` |

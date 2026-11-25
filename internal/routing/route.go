@@ -98,7 +98,9 @@ func (m *MetadataSnapshot) HostRoutes() []Route {
 }
 
 // ReplicaRoutes returns a route to each replica of info's token, to its
-// shard when placement names one and to any shard otherwise.
+// shard: the one tablet placement names, or for a vnode replica the shard
+// that owns the token on its host. A route goes to any shard when the host's
+// sharding is not known, as on Cassandra.
 func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 	if m == nil || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return nil
@@ -106,17 +108,14 @@ func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 	lookup := InternalLookupTablet(m, info)
 	replicas, _ := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
 	x := m.routingIndex()
+	hosts := SnapshotData(m).InternalHosts
 	out := make([]Route, 0, len(replicas))
 	for _, t := range replicas {
 		i, ok := x.host(t.HostID)
-		if !ok {
+		if !ok || i >= len(hosts) {
 			continue
 		}
-		r := Route{host: x.routes[i], shard: AnyShard}
-		if t.ShardID.Set && t.ShardID.Value <= math.MaxInt32 {
-			r.shard = int32(t.ShardID.Value)
-		}
-		out = append(out, r)
+		out = append(out, replicaRoute(x.routes[i], t, &hosts[i], cql.Option[uint32]{}, info.Token.Value))
 	}
 	return out
 }

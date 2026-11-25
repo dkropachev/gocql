@@ -324,6 +324,7 @@ func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(cql.UUID
 		perfAdd(2, 1)
 		x.byID[h.HostID] = i
 		x.routes[i] = route(h.HostID)
+		x.routes[i].SetSharding(h.Shards, h.ShardingIgnoreMSB)
 		if len(hosts) <= smallHostIndex {
 			x.ids = append(x.ids, h.HostID)
 		}

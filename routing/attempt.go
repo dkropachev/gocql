@@ -52,7 +52,11 @@ type AttemptEvent struct {
 	// CQLTraceID is the CQL trace session the attempt's response named, when
 	// the execution ran with CQL tracing and a response arrived.
 	CQLTraceID cql.Option[cql.UUID]
-	// Canceled reports an attempt that ended with its context, and
-	// Speculative a speculative attempt.
-	Canceled, Speculative bool
+	// Canceled reports an attempt whose error is cqlerr.KindCanceled: the
+	// caller canceled the request, or the driver canceled the attempt, as
+	// when another attempt of the request won. TimedOut reports one whose
+	// error is cqlerr.KindTimeout: the server or the driver gave up
+	// waiting, or the caller's deadline passed. Speculative reports a
+	// speculative attempt.
+	Canceled, TimedOut, Speculative bool
 }

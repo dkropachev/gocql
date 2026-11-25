@@ -906,6 +906,7 @@ package cqlerr
 	type cqlerr.ErrorCode uint16
 		cqlerr.ErrorCode method (T) Error() string
 	type cqlerr.ErrorMap map[net/netip.Addr]uint16
+	const cqlerr.Executed cqlerr.ExecutionStatus = 3
 	type cqlerr.ExecutionError struct
 		cqlerr.ExecutionError field Err error
 		cqlerr.ExecutionError field Attempts []cqlerr.AttemptFailure
@@ -1178,7 +1179,6 @@ package event
 	const event.ChangeRefreshed event.Change = "REFRESHED"
 	const event.ChangeRemovedNode event.Change = "REMOVED_NODE"
 	const event.ChangeResync event.Change = "RESYNC"
-	const event.ChangeTabletResync event.Change = "TABLET_RESYNC"
 	const event.ChangeUp event.Change = "UP"
 	const event.ChangeUpdated event.Change = "UPDATED"
 	type event.Event struct
@@ -1225,11 +1225,11 @@ package exec
 		exec.Options field Observer observe.Observer
 		exec.Options field Profile *config.Profile
 		exec.Options field Keyspace string
+		exec.Options field Timestamp cql.Option[time.Time]
 		exec.Options field CustomPayload []cql.PayloadEntry
 		exec.Options field Timeout cql.Option[time.Duration]
 		exec.Options field PageTimeout cql.Option[time.Duration]
 		exec.Options field Prefetch cql.Option[int]
-		exec.Options field Timestamp cql.Option[int64]
 		exec.Options field PageSize int32
 		exec.Options field NowInSeconds cql.Option[int32]
 		exec.Options field ShardID cql.Option[uint32]
@@ -1429,10 +1429,12 @@ package metadata
 
 package metrics
 	type metrics.Snapshot struct
+		metrics.Snapshot field ErrorsByKind map[cqlerr.Kind]uint64
 		metrics.Snapshot field Requests uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
 		metrics.Snapshot field Canceled uint64
+		metrics.Snapshot field Timeouts uint64
 		metrics.Snapshot field Retries uint64
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
@@ -1515,9 +1517,15 @@ package routing
 		routing.AttemptEvent field Target metadata.Target
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
 		routing.AttemptEvent field Canceled bool
+		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool
 	type routing.AttemptObserver interface
 		routing.AttemptObserver method Observe(routing.AttemptEvent)
+	type routing.Builtin struct
+		routing.Builtin method (*T) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan
+		routing.Builtin method (*T) Observe(e routing.AttemptEvent)
+		routing.Builtin method (*T) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool)
+		routing.Builtin method (*T) Validate(m *metadata.Snapshot) error
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
@@ -1536,7 +1544,7 @@ package routing
 		routing.LatencyOptions field RetryPeriod time.Duration
 		routing.LatencyOptions field UpdateInterval time.Duration
 	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
-	func routing.NewPolicy(options routing.Options) (routing.Policy, error)
+	func routing.NewPolicy(options routing.Options) (*routing.Builtin, error)
 	type routing.Options struct
 		routing.Options field Datacenter string
 		routing.Options field Rack string
@@ -1555,7 +1563,7 @@ package routing
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
-	func routing.SingleTarget(target metadata.Target) routing.Policy
+	func routing.SingleTarget(target metadata.Target) *routing.Builtin
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
 	type routing.TokenPartitionerFunc func(routing.PartitionKey) (int64, error)

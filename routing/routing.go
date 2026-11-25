@@ -69,21 +69,21 @@ type AttemptObserver interface {
 
 // NewPolicy builds the default token- and tablet-aware policy with options.
 // It reports invalid options at once; the session builds the policy itself
-// when it first uses it. The policy implements Validator, which checks that
-// its local datacenter and rack have eligible hosts, and AttemptObserver.
-func NewPolicy(options Options) (Policy, error) {
+// when it first uses it. Its Validate checks that the local datacenter and
+// rack have eligible hosts.
+func NewPolicy(options Options) (*Builtin, error) {
 	options, err := options.normalized()
 	if err != nil {
 		return nil, err
 	}
-	return &builtinPolicy{options: options}, nil
+	return &Builtin{options: options}, nil
 }
 
 // SingleTarget routes every request to target. When target.StrictShard is
-// set, a request goes to target's shard only. The policy implements
-// Validator, which checks that target is an eligible host.
-func SingleTarget(target metadata.Target) Policy {
-	return &builtinPolicy{single: true, target: target}
+// set, a request goes to target's shard only. Its Validate checks that target
+// is an eligible host.
+func SingleTarget(target metadata.Target) *Builtin {
+	return &Builtin{single: true, target: target}
 }
 
 // HostRoutes returns a route to every host of snapshot, to any shard.
@@ -96,9 +96,12 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 }
 
 // ReplicaRoutes returns routes to the replicas of the token of the request
-// info describes, to the replica's shard when tablet placement names one. It
-// returns none when info has no token, keyspace or table, or when no replica
-// of the token is known; HostRoutes then gives every host.
+// info describes, each to the replica's shard: the one tablet placement
+// names, or for a vnode replica the shard that owns the token on the host,
+// from metadata.HostSnapshot.Shards. A route goes to any shard when the
+// host's sharding is not known. It returns none when info has no token,
+// keyspace or table, or when no replica of the token is known; HostRoutes
+// then gives every host.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
 	if !ok {
@@ -128,10 +131,16 @@ type emptyPlan struct{}
 
 func (emptyPlan) Next() (metadata.Route, bool) { return metadata.Route{}, false }
 
-// builtinPolicy is a policy the session implements. It builds the session's
-// policy on first use, so a policy made during package initialization works
-// whatever order packages initialize in.
-type builtinPolicy struct {
+// Builtin is a policy the session implements, from NewPolicy or
+// SingleTarget. It implements Policy, Validator and AttemptObserver, so a
+// policy that embeds a *Builtin to override Pick or Fallback keeps the
+// built-in validation and latency tracking without forwarding them.
+//
+// The zero Builtin is the default policy, as NewPolicy(Options{}) returns. A
+// Builtin builds the session's policy on first use, so one made during package
+// initialization works whatever order packages initialize in. It must not be
+// copied after first use; share a *Builtin instead.
+type Builtin struct {
 	impl    Policy
 	options Options
 	target  metadata.Target
@@ -139,9 +148,15 @@ type builtinPolicy struct {
 	single  bool
 }
 
+var (
+	_ Policy          = (*Builtin)(nil)
+	_ Validator       = (*Builtin)(nil)
+	_ AttemptObserver = (*Builtin)(nil)
+)
+
 func init() {
 	link.Set(link.BuiltinPolicy, func(p Policy) (Policy, bool) {
-		b, ok := p.(*builtinPolicy)
+		b, ok := p.(*Builtin)
 		if !ok {
 			return nil, false
 		}
@@ -151,7 +166,7 @@ func init() {
 
 // policy returns the session's policy, or nil in a program without a
 // session, whose package internal/routing fills link.BuildPolicy.
-func (b *builtinPolicy) policy() Policy {
+func (b *Builtin) policy() Policy {
 	build, ok := link.Lookup[func(single bool, options Options, target metadata.Target) Policy](link.BuildPolicy)
 	if !ok {
 		return nil
@@ -164,7 +179,10 @@ func (b *builtinPolicy) policy() Policy {
 // session.
 var errNoSession = &cql.ValidationError{Field: "routing", Err: errors.New("the built-in policies need a session")}
 
-func (b *builtinPolicy) Validate(m *metadata.Snapshot) error {
+// Validate checks the policy against a snapshot: that the local datacenter
+// and rack, or the single target, have eligible hosts. In a program without a
+// session it reports a cql.ValidationError.
+func (b *Builtin) Validate(m *metadata.Snapshot) error {
 	p := b.policy()
 	if p == nil {
 		return errNoSession
@@ -172,7 +190,8 @@ func (b *builtinPolicy) Validate(m *metadata.Snapshot) error {
 	return p.(Validator).Validate(m)
 }
 
-func (b *builtinPolicy) Pick(info Info, m *metadata.Snapshot) (metadata.Route, bool) {
+// Pick returns the first route of the built-in plan, without building it.
+func (b *Builtin) Pick(info Info, m *metadata.Snapshot) (metadata.Route, bool) {
 	p := b.policy()
 	if p == nil {
 		return metadata.Route{}, false
@@ -180,7 +199,8 @@ func (b *builtinPolicy) Pick(info Info, m *metadata.Snapshot) (metadata.Route, b
 	return p.Pick(info, m)
 }
 
-func (b *builtinPolicy) Fallback(info Info, m *metadata.Snapshot) Plan {
+// Fallback returns every route of the built-in plan, in order.
+func (b *Builtin) Fallback(info Info, m *metadata.Snapshot) Plan {
 	p := b.policy()
 	if p == nil {
 		return emptyPlan{}
@@ -188,7 +208,8 @@ func (b *builtinPolicy) Fallback(info Info, m *metadata.Snapshot) Plan {
 	return p.Fallback(info, m)
 }
 
-func (b *builtinPolicy) Observe(e AttemptEvent) {
+// Observe feeds an attempt's outcome to latency-aware routing.
+func (b *Builtin) Observe(e AttemptEvent) {
 	if p := b.policy(); p != nil {
 		p.(AttemptObserver).Observe(e)
 	}

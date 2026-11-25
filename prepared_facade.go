@@ -155,7 +155,8 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 // Query creates a worker-owned reusable query with fixed options. It also
 // provides cursors and explicit paging. Close it when the worker is done. At
 // most one exec.Options may be passed; omitting it uses the session
-// defaults.
+// defaults. Options with a Timestamp are rejected with a cql.ValidationError,
+// since every write of the worker would carry it.
 func (p *Prepared[P, R]) Query(options ...exec.Options) (*Query[P, R], error) {
 	var o exec.Options
 	switch len(options) {
@@ -164,6 +165,9 @@ func (p *Prepared[P, R]) Query(options ...exec.Options) (*Query[P, R], error) {
 		o = options[0]
 	default:
 		return nil, tooManyQueryOptions(false)
+	}
+	if o.Timestamp.Set {
+		return nil, fixedWorkerTimestamp()
 	}
 	q, err := p.internal().Query(internalOptions(o))
 	return (*Query[P, R])(q), err
