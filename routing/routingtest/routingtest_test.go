@@ -129,3 +129,49 @@ func TestLocalDatacenter(t *testing.T) {
 		t.Fatalf("the policy's own datacenter: %v", err)
 	}
 }
+
+// wrapped overrides only Pick; Validate and Observe come from the embedded
+// *routing.Builtin.
+type wrapped struct{ *routing.Builtin }
+
+func (w wrapped) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
+	return metadata.Route{}, false
+}
+
+// TestEmbeddedBuiltin checks that a policy embedding *routing.Builtin keeps
+// the built-in Validate and Observe, and that the zero Builtin routes as the
+// default policy.
+func TestEmbeddedBuiltin(t *testing.T) {
+	builtin, err := routing.NewPolicy(routing.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var policy routing.Policy = wrapped{builtin}
+	validator, ok := policy.(routing.Validator)
+	if !ok {
+		t.Fatal("the wrapper lost Validate")
+	}
+	observer, ok := policy.(routing.AttemptObserver)
+	if !ok {
+		t.Fatal("the wrapper lost Observe")
+	}
+	observer.Observe(routing.AttemptEvent{})
+
+	c := cluster()
+	c.LocalDatacenter = "x"
+	if err := validator.Validate(routingtest.NewSnapshot(c)); err == nil {
+		t.Fatal("the wrapper did not run the built-in validation")
+	}
+	if err := validator.Validate(routingtest.NewSnapshot(cluster())); err != nil {
+		t.Fatal(err)
+	}
+	if got := planHosts(t, policy, routingtest.NewSnapshot(cluster())); len(got) != 4 {
+		t.Fatalf("the wrapper's plan: %v", got)
+	}
+	if got := planHosts(t, &routing.Builtin{}, routingtest.NewSnapshot(cluster())); len(got) != 4 {
+		t.Fatalf("the zero Builtin's plan: %v", got)
+	}
+	if err := routing.SingleTarget(metadata.Target{HostID: cql.UUID{15: 9}}).Validate(routingtest.NewSnapshot(cluster())); err == nil {
+		t.Fatal("SingleTarget validated a host the snapshot does not hold")
+	}
+}

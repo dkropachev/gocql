@@ -189,15 +189,15 @@ func TestPolicyOptions(t *testing.T) {
 						t.Fatal(err)
 					}
 					m := optionsSnapshot(t, variant.hosts)
-					if err := policy.(routing.Validator).Validate(m.Public()); err != nil {
+					if err := policy.Validate(m.Public()); err != nil {
 						t.Fatal(err)
 					}
 					if variant.slow {
 						// Host 1 is measured first; the faster host 2 then
 						// publishes the decision that host 1 is slow.
 						start := time.Now()
-						policy.(routing.AttemptObserver).Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
-						policy.(routing.AttemptObserver).Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
+						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
+						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
 					}
 					for range 20 {
 						if hosts := policyHosts(policy, test.info, m); !inTiers(hosts, variant.tiers) {
@@ -250,7 +250,7 @@ func TestPolicyOptions(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if err := policy.(routing.Validator).Validate(optionsSnapshot(t, test.hosts).Public()); (err == nil) != test.valid {
+				if err := policy.Validate(optionsSnapshot(t, test.hosts).Public()); (err == nil) != test.valid {
 					t.Fatalf("Validate = %v, want valid %v", err, test.valid)
 				}
 			})
@@ -302,7 +302,7 @@ func TestSingleTarget(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			policy := routing.SingleTarget(test.target)
 			m := optionsSnapshot(t, test.hosts)
-			if err := policy.(routing.Validator).Validate(m.Public()); (err == nil) != test.valid {
+			if err := policy.Validate(m.Public()); (err == nil) != test.valid {
 				t.Fatalf("Validate = %v, want valid %v", err, test.valid)
 			}
 			if routes := planRoutes(policy, info, m); !slices.Equal(routes, test.routes) {

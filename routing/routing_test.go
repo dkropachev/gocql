@@ -18,7 +18,7 @@ func TestWithoutSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p.(routing.Validator).Validate(nil); err == nil {
+	if err := p.Validate(nil); err == nil {
 		t.Error("Validate succeeded without a session")
 	}
 	if _, ok := p.Pick(routing.Info{}, nil); ok {
@@ -27,7 +27,7 @@ func TestWithoutSession(t *testing.T) {
 	if _, ok := p.Fallback(routing.Info{}, nil).Next(); ok {
 		t.Error("Fallback found a route without a session")
 	}
-	p.(routing.AttemptObserver).Observe(routing.AttemptEvent{})
+	p.Observe(routing.AttemptEvent{})
 	if r := routing.HostRoutes(nil); r != nil {
 		t.Errorf("HostRoutes = %v", r)
 	}

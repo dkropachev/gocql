@@ -12,20 +12,21 @@ import (
 	"github.com/scylladb/gocql/v2/routing/routingtest"
 )
 
-// avoid wraps a policy and never routes to one host.
+// avoid wraps the built-in policy and never routes to one host. Embedding
+// *routing.Builtin keeps its Validate and Observe.
 type avoid struct {
-	routing.Policy
+	*routing.Builtin
 	host cql.UUID
 }
 
 func (a avoid) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool) {
-	r, ok := a.Policy.Pick(info, m)
+	r, ok := a.Builtin.Pick(info, m)
 	return r, ok && r.HostID() != a.host
 }
 
 func (a avoid) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
 	var routes []metadata.Route
-	plan := a.Policy.Fallback(info, m)
+	plan := a.Builtin.Fallback(info, m)
 	for r, ok := plan.Next(); ok; r, ok = plan.Next() {
 		if r.HostID() != a.host {
 			routes = append(routes, r)
@@ -52,7 +53,7 @@ func ExampleNewSnapshot() {
 	if err != nil {
 		panic(err)
 	}
-	policy := avoid{Policy: builtin, host: hosts[0].HostID}
+	policy := avoid{Builtin: builtin, host: hosts[0].HostID}
 	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](42), Kind: cql.OrdinaryStatement}
 	plan := policy.Fallback(info, m)
 	for r, ok := plan.Next(); ok; r, ok = plan.Next() {

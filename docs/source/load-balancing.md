@@ -189,20 +189,20 @@ Each stage of a request has its own answer:
 
 `routing.Policy` is a public interface, so a health-weighted or pool-based
 policy, such as an adapter for a host-pool library, can live outside the
-driver. Embed the built-in policy to keep token awareness and override what
-you need. The embedded `routing.Policy` has only Pick and Fallback, so forward
-`Validate` and `Observe` to the built-in policy when the wrapper should keep
-its validation and latency tracking:
+driver. Embed the `*routing.Builtin` that `routing.NewPolicy` returns to keep
+token awareness and override what you need; its `Validate` and `Observe` are
+promoted, so the wrapper keeps the built-in validation and latency tracking.
+A wrapper that overrides `Observe` calls the built-in one itself:
 
 ```go
 // skipFailed avoids, for its first route, a host whose last attempt failed.
 type skipFailed struct {
-	routing.Policy // from routing.NewPolicy
-	failed         sync.Map // host ID -> struct{}
+	*routing.Builtin // from routing.NewPolicy
+	failed           sync.Map // host ID -> struct{}
 }
 
 func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool) {
-	r, ok := p.Policy.Pick(info, m)
+	r, ok := p.Builtin.Pick(info, m)
 	if _, bad := p.failed.Load(r.HostID()); ok && bad {
 		return metadata.Route{}, false // the driver asks Fallback instead
 	}
@@ -217,16 +217,7 @@ func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	default:
 		p.failed.Delete(e.Target.HostID)
 	}
-	if o, ok := p.Policy.(routing.AttemptObserver); ok {
-		o.Observe(e)
-	}
-}
-
-func (p *skipFailed) Validate(m *metadata.Snapshot) error {
-	if v, ok := p.Policy.(routing.Validator); ok {
-		return v.Validate(m)
-	}
-	return nil
+	p.Builtin.Observe(e)
 }
 ```
 

@@ -250,10 +250,11 @@ documented methods.
   optional `Validator` and `AttemptObserver` interfaces of a policy,
   `TokenPartitionerFunc`, `Options`, `LatencyOptions`, `Info`, `PartitionKey`
   and `AttemptEvent` (which `AttemptObserver.Observe` consumes), the built-in policy
-  constructors (`NewPolicy`, `SingleTarget`), and the functions a custom
-  policy picks with (`PlanOf`, `HostRoutes`, `ReplicaRoutes`). The built-in
-  policies are the session's: `NewPolicy` validates its options and returns
-  a handle that builds the session's policy on first use.
+  constructors (`NewPolicy`, `SingleTarget`) and the `*Builtin` they return,
+  and the functions a custom policy picks with (`PlanOf`, `HostRoutes`,
+  `ReplicaRoutes`). The built-in policies are the session's: `NewPolicy`
+  validates its options and returns a `*Builtin` that builds the session's
+  policy on first use.
 - **Must not contain:** pool handles or connection state.
 - **Future:** vector-search or other workload-specific placement as further
   `Options` or policies.
