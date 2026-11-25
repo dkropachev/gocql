@@ -31,7 +31,9 @@ type TLSFiles struct {
 	// CAFile holds the CA certificates that verify nodes. It replaces RootCAs.
 	CAFile string
 	// Interval is the least time between two checks of the files of a
-	// TLSFileSource. Zero means one minute. LoadTLSFiles ignores it.
+	// TLSFileSource. Zero means one minute. LoadTLSFiles reads the files
+	// once and does not use it, but rejects a negative one as
+	// NewTLSFileSource does.
 	Interval time.Duration
 }
 
