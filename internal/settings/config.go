@@ -391,16 +391,17 @@ func (config Config) validateContactPorts() error {
 
 // CommonContactPort returns the port every TCP contact point names, and
 // false when one names none, two name different ports, or one does not
-// parse, which Validate reports.
+// parse, which Validate reports. It parses ports as validateContactPorts
+// does, so the two agree on which port a contact point names.
 func CommonContactPort(contactPoints []string) (uint16, bool) {
 	var common uint16
 	for _, point := range contactPoints {
-		_, portText, err := net.SplitHostPort(point)
+		host, portText, err := net.SplitHostPort(point)
 		if err != nil {
 			return 0, false
 		}
-		port, err := strconv.ParseUint(portText, 10, 16)
-		if err != nil || port == 0 || common != 0 && uint16(port) != common {
+		port, err := strconv.Atoi(portText)
+		if host == "" || err != nil || port < 1 || port > 65535 || common != 0 && uint16(port) != common {
 			return 0, false
 		}
 		common = uint16(port)

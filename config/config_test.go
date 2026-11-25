@@ -855,6 +855,8 @@ func TestConfigBuilder(t *testing.T) {
 			port uint16
 		}{
 			"CommonPort":      {New(ScyllaV4, "a:19042", "[::1]:19042"), 19042},
+			"SignedPort":      {New(ScyllaV4, "a:+19042", "b:19042"), 19042},
+			"BareIPv6":        {New(ScyllaV4, "[::1]:19042", "::1"), 9042},
 			"OnePoint":        {New(ScyllaV4, "127.0.0.1:1"), 1},
 			"MixedPorts":      {New(ScyllaV4, "a:19042", "b:19043"), 9042},
 			"SomeNamePorts":   {New(ScyllaV4, "a:19042", "b"), 9042},
