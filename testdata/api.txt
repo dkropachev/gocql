@@ -40,6 +40,7 @@ package gocql
 		gocql.Prepared method (*T) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
+		gocql.Prepared method (*T) With(defaults exec.CompiledOptions) *gocql.Prepared[P, R]
 		gocql.Prepared method (*T) Worker(options ...exec.Options) (*gocql.Worker[P, R], error)
 	type gocql.PreparedInfo struct
 		gocql.PreparedInfo field Keyspace string

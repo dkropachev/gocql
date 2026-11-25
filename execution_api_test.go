@@ -225,3 +225,72 @@ func TestRowStreamAll(t *testing.T) {
 	}
 	_ = again.Close()
 }
+
+// TestPreparedWith runs a statement through views made by With: a call
+// without options uses the view's defaults, options passed to a call replace
+// them, and p itself keeps the session defaults. Views share p's preparation
+// and pool, and a Worker of a view takes its defaults.
+func TestPreparedWith(t *testing.T) {
+	f := newLifetimeFixture(t)
+	compile := func(o exec.Options) exec.CompiledOptions {
+		t.Helper()
+		c, err := f.s.CompileOptions(o)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	quorum := compile(exec.Options{Consistency: cql.Some(cql.Quorum), PageSize: 2})
+	one := compile(exec.Options{Consistency: cql.Some(cql.One), PageSize: 2})
+	view := f.p.With(quorum)
+	var dst []byte
+	sent := func(what string, want cql.Consistency, call func() error) {
+		t.Helper()
+		before := len(f.srv.sent())
+		if err := call(); err != nil {
+			t.Fatalf("%s: %v", what, err)
+		}
+		requests := f.srv.sent()[before:]
+		if len(requests) == 0 || requests[0].consistency != want {
+			t.Fatalf("%s sent %+v, want %v", what, requests, want)
+		}
+	}
+	sent("view.One", cql.Quorum, func() error { _, _, err := view.One(f.ctx, gridKey, &dst); return err })
+	sent("view.One with options", cql.One, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
+	sent("view.One with zero options", cql.Quorum, func() error {
+		_, _, err := view.One(f.ctx, gridKey, &dst, exec.CompiledOptions{})
+		return err
+	})
+	sent("p.One", cql.LocalQuorum, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst); return err })
+	sent("view.Each", cql.Quorum, func() error {
+		_, err := view.Each(f.ctx, gridKey, &dst, func(*[]byte) error { return nil })
+		return err
+	})
+	sent("view.With(one).Run", cql.One, func() error {
+		rows, err := view.With(one).Run(f.ctx, gridKey)
+		if err != nil {
+			return err
+		}
+		return rows.Close()
+	})
+	if info, err := view.Routing(gridKey); err != nil || info.Consistency != cql.Quorum {
+		t.Fatalf("view.Routing = %+v, %v; want QUORUM", info, err)
+	}
+	if view.Info().Generation != f.p.Info().Generation || view.Columns().Len() != 1 {
+		t.Fatal("the view does not share p's preparation")
+	}
+	w, err := view.Worker()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	sent("view.Worker().One", cql.Quorum, func() error { _, _, err := w.One(f.ctx, gridKey, &dst); return err })
+
+	stamped := f.p.With(compile(exec.Options{Timestamp: cql.Some(time.Unix(1, 0))}))
+	if _, err := stamped.Worker(); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("Worker of a view with a Timestamp = %v, want a cql.ValidationError", err)
+	}
+	if _, _, err := new(Prepared[int32, []byte]).With(quorum).One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("One on a view of a zero Prepared = %v, want a cql.ValidationError", err)
+	}
+}

@@ -79,7 +79,10 @@ consistency, page size, value and page state of the requests they send.
   fails the call at once with a validation error. The type is
   `exec.CompiledOptions`, not `exec.Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
-  and each call passes a pointer to the frozen result.
+  and each call passes a pointer to the frozen result. `Prepared.With`
+  returns a view whose calls without options use given defaults instead of
+  the session's; options passed to a call replace them whole. The view
+  shares the preparation and its pool, so it is not a new row.
 - Throwaway: each call ends in `options ...exec.Options`, the same optional
   parameter with at most one value. The call validates and resolves it: a
   throwaway statement has no setup step to compile options in, and its path

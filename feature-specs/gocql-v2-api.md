@@ -778,6 +778,7 @@ func (p *Prepared[P, R]) Run(context.Context, P, ...exec.CompiledOptions) (Rows[
 func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...exec.CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 func (p *Prepared[P, R]) Routing(P, ...exec.CompiledOptions) (routing.Info, error)
+func (p *Prepared[P, R]) With(exec.CompiledOptions) *Prepared[P, R] // a view with its own defaults, sharing the preparation and pool
 
 // Worker-owned reusable executions.
 func (p *Prepared[P, R]) Worker(...exec.Options) (*Worker[P, R], error) // at most one

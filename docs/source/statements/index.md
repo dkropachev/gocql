@@ -81,6 +81,10 @@ For execution options:
 
 - Omit them to use the session defaults.
 - Compile recurring overrides once with `session.CompileOptions` and reuse the result.
+- Give a statement its own defaults with `prepared.With(compiled)`, which
+  returns a view of the statement whose calls without options use them; the
+  view shares the preparation, and options passed to a call replace its
+  defaults whole.
 - Use a request context deadline for a per-request time limit.
 
 Compiled options snapshot explicit overrides and the originating session's defaults.

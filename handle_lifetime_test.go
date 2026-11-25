@@ -18,6 +18,7 @@ import (
 // prepared SELECT and the same SELECT prepared for streaming.
 type lifetimeFixture struct {
 	s       *Session
+	srv     *gridServer
 	ctx     context.Context
 	p       *Prepared[int32, []byte]
 	ps      *PreparedStream[int32, []byte]
@@ -44,7 +45,7 @@ func newLifetimeFixture(t *testing.T) *lifetimeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &lifetimeFixture{s: s, ctx: ctx, p: p, ps: ps, options: options}
+	return &lifetimeFixture{s: s, srv: srv, ctx: ctx, p: p, ps: ps, options: options}
 }
 
 // closeTwice closes a handle twice and checks that both calls report want.
