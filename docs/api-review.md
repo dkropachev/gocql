@@ -354,7 +354,8 @@ are taken and land in six changes before `v2.0.0-rc.1`. This first part
 fixes silent run-time failures, with little or no API change; the second
 reworks the `cql` types and codecs; the third the `cql` statements, results
 and paging; the fourth the root execution API and `exec`; the fifth `config`,
-`auth` and `endpoint`. Rows marked
+`auth` and `endpoint`; the sixth errors, observability, metadata and routing
+extras, and a sweep of the docs. Rows marked
 **reverses** undo a decision of an earlier pass.
 
 ### transport / config
@@ -481,6 +482,75 @@ and paging; the fourth the root execution API and `exec`; the fifth `config`,
 | Finding | Outcome |
 |---|---|
 | `ConvictionSource`, `ConvictionPolicy` and `Reset` docs said "with Shard set" for the `ShardID` field | They say `ShardID`. |
+
+### errors and retry
+
+| Finding | Outcome |
+|---|---|
+| A retry loop combined `KindOf(err).Transient()`, `ExecutionStatusOf` and `ctx.Err()`, the last because `KindTimeout` also covers the caller's own deadline | Added `cqlerr.Retryable(err, idempotent)`, which needs no context: an error matching `context.Canceled`, or `context.DeadlineExceeded` without `ErrRequestTimeout`, is the caller's own end and never retryable; otherwise a transient error is retryable when not executed, or when idempotent. The errors guide and `Example_errors` loop on it. |
+| The attempt number was `Attempt` on the observer events and `Number` on `AttemptFailure` and `retry.Attempt`; `AttemptFailure` named its host with `HostID` and `ShardID` where the events had a `Target`; `retry.Attempt.Kind` did not say what it classified | `Attempt` everywhere; `AttemptFailure.Target` (a `metadata.Target`) replaces `HostID` and `ShardID`; `retry.Attempt.StatementKind`. |
+| `ErrNoConnections` read "no hosts available in the pool" though hosts may be available | "gocql: no connections available". |
+| `ServerError` had no `Kind`, though every server error type did | `ServerError.Kind()`. |
+| `ErrorMap` mapped replicas to a bare `uint16` | `cqlerr.FailureReason`, with the codes Cassandra and ScyllaDB share and a `String` that prints the server's name, or the number for a code it does not name, such as ScyllaDB's own. |
+| A speculation policy needed a named type | Added `retry.SpeculationPolicyFunc`; the speculation guide uses it. |
+
+### observe
+
+| Finding | Outcome |
+|---|---|
+| `observe.Observer` was `any`: a value implementing neither hook, or a hook method with a typo or the wrong receiver, compiled and was rejected or ignored at run time, and a one-function observer needed `RequestObserverFunc` or `AttemptObserverFunc` | `observe.Hooks{Request, Attempt}`, a struct of hook functions whose zero value observes nothing; a nil field is skipped with its event, and a new hook is a new field. `Join` merges `Hooks` field by field, keeping a single function unwrapped. `WithObserver`, `exec.Options.Observer`, `Config.Observer` and `Session.Observer` take or return `Hooks`. `Observer`, `RequestObserver`, `AttemptObserver` and the two adapters are removed. **Reverses** the first pass's "keep `Observer`, `RequestObserver`, `AttemptObserver` (decided under extensibility)": a struct of function fields is as extensible, since a later hook is a field the zero value leaves unset, and the compiler checks it, where `any` deferred every mistake to `Build` or to silence. |
+| An observer saw neither the address an attempt went to nor its consistency, which `AttemptFailure` carried, nor what a failed attempt may have executed | `AttemptStart` and `AttemptEvent` gain `Address` and `Consistency`; `AttemptEvent` gains `ExecutionStatus`, `Executed` for a success. |
+| Package `observe` imported `routing` as `routing2` | Imports it as `routing`. |
+| No example of exporting request metrics | `Example_prometheus` records latency by outcome and attempts by host through hooks shaped like the Prometheus client's, which the driver does not import. |
+
+### routing
+
+| Finding | Outcome |
+|---|---|
+| `routing.AttemptObserver` and its `Observe` shared the observer vocabulary of package `observe`, though a policy learns from attempts rather than instruments them | `routing.Learner` with `Learn(AttemptEvent)`; `Builtin.Learn`. |
+| A policy's `Pick` allocated through `ReplicaRoutes`, routing to one host meant searching `HostRoutes`, dropping hosts from a built-in plan meant draining it, and a route's datacenter took a snapshot lookup | Added `AppendReplicaRoutes`, `RouteTo(snapshot, target)`, `FilterPlan`, which filters lazily, `Routes`, an `iter.Seq` over a plan, and `metadata.Route.Datacenter` and `Rack`, from the host's handle. The routingtest example uses `FilterPlan` and `Routes`. |
+
+### routing/routingtest
+
+| Finding | Outcome |
+|---|---|
+| A test host needed `Enabled`, `Up` and `Connected` spelled out, and routing by token needed a keyspace and table literal | Added `routingtest.Host(id, datacenter, rack)` and `Cluster.Tables`, which adds tables without schema and leaves `Keyspaces` unmodified. |
+
+### metadata / exec
+
+| Finding | Outcome |
+|---|---|
+| A shard named by `exec.Options.ShardID` was strict while one named by a `SingleTarget`'s `metadata.Target` was a hint unless `StrictShard` was set, and a pinned request could not allow the fallback | `metadata.Target.AnyShardFallback` replaces `StrictShard`, so the zero value is strict in both places, and `exec.Options` and `routing.Info` gain `AnyShardFallback`; it requires a shard ID. `exec.Options.HostID`, `SingleTarget` and the load-balancing guide state that an `exec.Options` pin takes precedence over a `SingleTarget` policy, its own `AnyShardFallback` deciding. **Reverses** `SingleTarget`'s shard as a hint by default: a pin's zero value meaning strict in one place and loose in the other invited the wrong one, and strict is the safe default, as a request that names a shard usually needs it. |
+| `RefreshMetadata` returned only an error, so the caller read the result with a second call that could see a later snapshot | Returns `(*metadata.Snapshot, error)`: the snapshot once the refresh ended, also beside a `PartialRefreshError`. |
+| A view or type took `Keyspace`, which copies the whole keyspace; `OrderedColumns` listed names, so walking columns in order took a map lookup per name | Added `Snapshot.View` and `Snapshot.Type`; `OrderedColumns` on `Table`, `View` and `Index` is a `[]*Column`. |
+
+### cqltrace
+
+| Finding | Outcome |
+|---|---|
+| Reading the trace sessions of a failed request took a loop over `ExecutionError.Result.CQLTraces` that stopped at the first one not yet written | `FetchAll` and `Fetcher.FetchAll` read every session, return one `Info` per reference and join the failures; `ExampleFetchAll` and the tracing guide trace a failed request. |
+
+### gocql / config logging
+
+| Finding | Outcome |
+|---|---|
+| Request-path log records, such as a panicking hook or a rejected tablet hint, carried no context, so a handler could not correlate them with the caller's trace | They are logged with the request's context, or the one its `Request` hook returned. |
+| Which log attributes a handler may rely on was not stated | The package doc lists `logger`, `host`, `host_id`, `dc`, `shard`, `keyspace`, `table`, `stream`, `err` and `suppressed` as stable; messages and other attributes may change. |
+| The 10-second collapse of repeated log records could not be changed | `ConfigBuilder.WithLogRateLimit(window)`: zero turns it off, a negative window fails `Build`, the default stays 10s. |
+
+### metrics
+
+| Finding | Outcome |
+|---|---|
+| A session's open connections could not be read | `Snapshot.Connections`, the connections of every host pool, the control connection not included. |
+| The latency percentiles invited charting though they are a sample of ten seconds of successes | Their doc says they serve decisions that follow the current latency, such as a speculation delay, and that charts want a histogram fed from a `Request` hook, as `Example_prometheus` does; the tracing guide gains a Metrics section. |
+
+### docs
+
+| Finding | Outcome |
+|---|---|
+| The guides' Go snippets were checked only by reading, and some called renamed or removed symbols | `TestDocSnippets` builds every Go block of `docs/source` as a package, fragments in a function body and type and function declarations at package level, with the names a block assumes declared in an HTML comment above its fence, which the rendered page hides, and v1 code marked to be skipped. The batch guide's `Idempotent: true` is now `cql.Some(true)`. |
+| The retry and speculation guides described attempt fields and statement classification as they were before this pass; `HostSnapshot.HostID` read "the host's host HostID"; the streaming example passed zero options explicitly | Corrected. |
 
 ## Decisions
 
