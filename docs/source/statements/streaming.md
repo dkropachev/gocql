@@ -12,6 +12,9 @@ bounded incremental receive through an exclusive connection reservation. The sta
 creates its schema, checks exact results and backing identity, and runs through
 the normal public package build.
 
+<!-- snippet
+func consume(Download) {}
+-->
 ```go
 type Download struct {
     ID int32
@@ -49,6 +52,12 @@ return stream.Err()
 each row, yields any error once, and closes the stream when the loop ends,
 so `break` releases the execution:
 
+<!-- snippet
+type Download struct{ ID int32 }
+var stream *gocql.RowStream[Download]
+var row Download
+func consume(Download) {}
+-->
 ```go
 for r, err := range stream.All(&row) {
     if err != nil { return err }

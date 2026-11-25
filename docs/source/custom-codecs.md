@@ -7,6 +7,7 @@ maps it through `Int32Codec`. Custom implementations use the following public co
 `github.com/scylladb/gocql/v2/cql`; the streaming ones carry a `Stream`
 prefix.
 
+<!-- snippet: skip -->
 ```go
 type Encoder[T any] interface {
     CheckType(DataType) error

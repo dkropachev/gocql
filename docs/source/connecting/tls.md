@@ -4,6 +4,9 @@ For a fixed configuration, pass `config.ConfigBuilder.WithTLS` a
 `crypto/tls.Config` with trusted `RootCAs`, optional client certificates and a
 minimum TLS version; it copies it:
 
+<!-- snippet
+var roots *x509.CertPool
+-->
 ```go
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	WithTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}).
@@ -74,6 +77,9 @@ handshake before tickets are reused.
 Any type with a `TLSConfig() *tls.Config` method is a source, for example one
 fed by Vault or cert-manager:
 
+<!-- snippet
+var initial, next *tls.Config
+-->
 ```go
 type rotatingTLS struct{ current atomic.Pointer[tls.Config] }
 

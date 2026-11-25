@@ -37,6 +37,10 @@ also matches `context.DeadlineExceeded`, as the caller's deadline does.
 is transient, it is not the caller's own cancellation or deadline, and the
 request was not executed or is idempotent. A retry loop needs nothing else:
 
+<!-- snippet
+var insert *gocql.Prepared[int32, cql.EmptyRow]
+var row int32
+-->
 ```go
 for attempt := 0; cqlerr.Retryable(err, true) && attempt < 3; attempt++ {
 	_, err = insert.Exec(ctx, row)
@@ -87,6 +91,10 @@ stopped, the error `KindOf` classifies; read an earlier attempt's error from
 `Attempts`. `cqlerr.IsCASWriteUnknown` checks every attempt, so it still
 reports an LWT timeout that the caller's cancellation ended.
 
+<!-- snippet
+var insert *gocql.Prepared[int32, cql.EmptyRow]
+var row int32
+-->
 ```go
 _, err := insert.Exec(ctx, row)
 if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {

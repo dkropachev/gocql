@@ -49,6 +49,9 @@ how to trace a request that failed: its `*cqlerr.ExecutionError` carries the
 `Result` with the failed attempts' sessions. It returns one `Info` per
 reference, and the errors of the sessions it could not read joined:
 
+<!-- snippet
+var insert cql.Statement[int32, cql.EmptyRow]
+-->
 ```go
 _, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true})
 if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
@@ -125,6 +128,12 @@ delay, not for charts. To export latency, count it per request from a
 `Request` hook into a histogram of your metrics library, as
 `observe.Example_prometheus` does with a Prometheus `HistogramVec`:
 
+<!-- snippet
+// latency is a Prometheus HistogramVec.
+var latency interface {
+	WithLabelValues(...string) interface{ Observe(float64) }
+}
+-->
 ```go
 hooks := observe.Hooks{
 	Request: func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {

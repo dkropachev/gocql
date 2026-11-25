@@ -51,6 +51,7 @@ packages are named `gocql`.
 
 v1:
 
+<!-- snippet: skip -->
 ```go
 cluster := gocql.NewCluster("10.0.0.1", "10.0.0.2")
 cluster.Keyspace = "app"
@@ -120,6 +121,7 @@ their defaults. See [connecting](connecting/index.md).
 
 v1:
 
+<!-- snippet: skip -->
 ```go
 var name string
 err := session.Query("SELECT name FROM users WHERE id = ?", id).
@@ -131,6 +133,9 @@ if errors.Is(err, gocql.ErrNotFound) {
 
 v2:
 
+<!-- snippet
+var id int32
+-->
 ```go
 selectName, err := session.Prepare(ctx, cql.Select(
 	"SELECT name FROM users WHERE id = ?",
@@ -236,6 +241,10 @@ explicitly. See [data types](data-types.md).
 v1 resumed with `query.PageState(state)` and read `iter.PageState()`. In v2,
 `RunPage` takes the state and the page size, and returns one `*gocql.Page`:
 
+<!-- snippet
+var listUsers *gocql.Prepared[cql.EmptyParams, string]
+var state cql.PageState
+-->
 ```go
 page, err := listUsers.RunPage(ctx, cql.EmptyParams{}, state, 100)
 if err != nil {

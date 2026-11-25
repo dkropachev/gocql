@@ -80,6 +80,9 @@ or one shard of it), and narrows them with `WithShardID` and `ShardOf`.
 ranges over one:
 
 ```go
+// notDC2 tries no host in dc2 once its first route fails.
+type notDC2 struct{ *routing.Builtin }
+
 // Fallback tries the built-in plan's hosts outside dc2 only.
 func (p *notDC2) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
 	return routing.FilterPlan(p.Builtin.Fallback(info, m), func(r metadata.Route) bool {
