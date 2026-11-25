@@ -842,7 +842,7 @@ func TestSession(t *testing.T) {
 		// and prevents an infinite loop of connection retries.
 		t.Run("Timeout", func(t *testing.T) {
 			t.Parallel()
-			cfg := mustBuild(t, newFixtureConfig([]string{"127.0.0.1:1"}, 0))
+			cfg := mustBuild(t, newFixtureConfig([]string{"127.0.0.1"}, 0, func(b *config.ConfigBuilder) { b.WithPort(1) }))
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			start := time.Now()
