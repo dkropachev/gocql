@@ -63,8 +63,9 @@ func (r Rows[R]) Columns() cql.Columns { return (implSession.Rows[R])(r).Columns
 // With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r Rows[R]) Clone() (R, error) { return (implSession.Rows[R])(r).Clone() }
 
-// Info returns execution information accumulated so far.
-func (r Rows[R]) Info() cql.Result { return (implSession.Rows[R])(r).Info() }
+// Result returns the execution's result so far: its attempts, the rows
+// fetched and the host that answered, as the one-shot calls return it.
+func (r Rows[R]) Result() cql.Result { return (implSession.Rows[R])(r).Info() }
 
 // CASBatchRows are the rows of a conditional batch sent with
 // Session.RunConditionalBatch. Each row reports whether the batch applied, and
@@ -124,8 +125,8 @@ func (r CASBatchRows[X]) Clone() (cql.CASResult[X], error) {
 	return (implSession.CASBatchRows[X])(r).Clone()
 }
 
-// Info returns execution information accumulated so far.
-func (r CASBatchRows[X]) Info() cql.Result { return (implSession.CASBatchRows[X])(r).Info() }
+// Result returns the execution's result so far, as Rows.Result does.
+func (r CASBatchRows[X]) Result() cql.Result { return (implSession.CASBatchRows[X])(r).Info() }
 
 // Page iterates exactly one response page. Borrowed fields expire on
 // advancement or Close unless Retain pins the page. State remains available
@@ -166,8 +167,8 @@ func (r *Page[R]) Columns() cql.Columns { return (*implSession.Page[R])(r).Colum
 // With no current row it returns cqlerr.ErrNoCurrentRow.
 func (r *Page[R]) Clone() (R, error) { return (*implSession.Page[R])(r).Clone() }
 
-// Info returns execution information accumulated so far.
-func (r *Page[R]) Info() cql.Result { return (*implSession.Page[R])(r).Info() }
+// Result returns the page's execution result, as Rows.Result does.
+func (r *Page[R]) Result() cql.Result { return (*implSession.Page[R])(r).Info() }
 
 // State returns the paging state, which remains available after Close.
 func (r *Page[R]) State() cql.PageState { return cql.PageState((*implSession.Page[R])(r).State()) }
@@ -217,5 +218,13 @@ func (r *RowStream[R]) Close() error { return (*implSession.RowStream[R])(r).Clo
 // Columns returns the current page's actual immutable result metadata.
 func (r *RowStream[R]) Columns() cql.Columns { return (*implSession.RowStream[R])(r).Columns() }
 
-// Info reports delivered rows, pages and execution progress.
-func (r *RowStream[R]) Info() StreamInfo { return StreamInfo((*implSession.RowStream[R])(r).Info()) }
+// Result returns the execution's result so far, as Rows.Result does. Its
+// FetchedRows counts the rows NextInto delivered.
+func (r *RowStream[R]) Result() cql.Result { return (*implSession.RowStream[R])(r).Info().Result }
+
+// Progress reports the pages the stream has read and whether a row has been
+// written to caller storage.
+func (r *RowStream[R]) Progress() StreamProgress {
+	info := (*implSession.RowStream[R])(r).Info()
+	return StreamProgress{Pages: info.Pages, OutputStarted: info.OutputStarted}
+}

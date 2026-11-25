@@ -500,7 +500,7 @@ func TestRouting(t *testing.T) {
 						rows.Close()
 						t.Fatal("unexpected tablet row")
 					}
-					info := rows.Info()
+					info := rows.Result()
 					hinted := false
 					for _, entry := range info.CustomPayload() {
 						if (entry.Key != "tablets-routing-v1" && entry.Key != "tablets-routing-v2") || !entry.Value.Valid {
@@ -671,7 +671,7 @@ func TestRouting(t *testing.T) {
 			if err := serverRows.Err(); err != nil {
 				t.Fatal(err)
 			}
-			t.Logf("initial authoritative tablet read-node=%s", serverRows.Info().HostID)
+			t.Logf("initial authoritative tablet read-node=%s", serverRows.Result().HostID)
 			serverRows.Close()
 			if len(authoritative) == 0 {
 				t.Fatal("no authoritative tablet records")
@@ -722,7 +722,7 @@ func TestRouting(t *testing.T) {
 					if v2SchemaRoutingInt(t, row, "pk") != key || v2SchemaRoutingInt(t, row, "v") != 7 {
 						t.Fatal("bad row")
 					}
-					result := rows.Info()
+					result := rows.Result()
 					for _, entry := range result.CustomPayload() {
 						if entry.Key == "tablets-routing-v1" || entry.Key == "tablets-routing-v2" {
 							feedback++

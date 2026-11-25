@@ -916,7 +916,7 @@ func (r Rows[R]) Err() error
 func (r Rows[R]) Close() error
 func (r Rows[R]) Retain() (*PageLease, error)
 func (r Rows[R]) Clone() (R, error)
-func (r Rows[R]) Info() Result
+func (r Rows[R]) Result() Result
 func (r Rows[R]) Columns() cql.Columns
 
 type Page[R any] struct { /* exactly one response page */ }
@@ -927,7 +927,7 @@ func (p *Page[R]) Close() error
 func (p *Page[R]) Retain() (*PageLease, error)
 func (p *Page[R]) Clone() (R, error)
 func (p *Page[R]) State() cql.PageState
-func (p *Page[R]) Info() Result
+func (p *Page[R]) Result() Result
 func (p *Page[R]) Columns() cql.Columns
 
 type PageLease struct { /* stable shared reference to receive storage */ }
@@ -1092,7 +1092,8 @@ func (s *RowStream[R]) All(*R) iter.Seq2[*R, error] // closes the stream when th
 func (s *RowStream[R]) Err() error
 func (s *RowStream[R]) Close() error
 func (s *RowStream[R]) Columns() cql.Columns
-func (s *RowStream[R]) Info() StreamInfo
+func (s *RowStream[R]) Result() Result // FetchedRows counts delivered rows
+func (s *RowStream[R]) Progress() StreamProgress
 
 // package exec
 type StreamOptions struct {
@@ -1108,9 +1109,7 @@ type StreamLimits struct {
 }
 
 // package gocql
-type StreamInfo struct {
-    Result Result
-    DeliveredRows int64
+type StreamProgress struct {
     Pages int64
     OutputStarted bool
 }
@@ -1240,14 +1239,14 @@ complete page. It does not consume row payload waiting for an application
 destination. NextInto reads one row into that destination and performs automatic
 paging on demand, including empty-page progress checks. RowStream has no
 Clone or Retain: output already belongs to the caller and no PageLease is needed.
-Columns returns current-page checked metadata. Info counters are cumulative;
-its Result warnings and custom payload describe only the latest
+Columns returns current-page checked metadata. Result and Progress counters are cumulative;
+Result's warnings and custom payload describe only the latest
 page/attempt, bounded by MaxMetadataBytes, rather than accumulating per-page
 payloads forever; its CQL trace IDs accumulate across pages and attempts. OutputStarted becomes true before the first decoder operation
 that can modify a destination, including Reset; it never becomes false again.
-DeliveredRows increments only after complete checked rows. Pages counts checked
+Result().FetchedRows increments only after complete checked rows. Pages counts checked
 response pages, including empty pages. Errors retain this information through
-Info even when a streaming query has already returned a cursor. An error before cursor
+Result and Progress even when a streaming query has already returned a cursor. An error before cursor
 construction returns normally through the query Run method's error result.
 
 Reset is called on a non-nil destination before each active NextInto attempt;

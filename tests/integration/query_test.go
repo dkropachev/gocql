@@ -270,7 +270,7 @@ func TestQuery(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
+			assertV2CustomPayload(t, customPayload, page.Result().CustomPayload())
 			if err := page.Close(); err != nil {
 				t.Fatal(err)
 			}
@@ -319,7 +319,7 @@ func TestQuery(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				assertV2CustomPayload(t, customPayload, page.Info().CustomPayload())
+				assertV2CustomPayload(t, customPayload, page.Result().CustomPayload())
 				if err := page.Close(); err != nil {
 					t.Fatal(err)
 				}
@@ -570,7 +570,7 @@ func TestQuery(t *testing.T) {
 			rows, err := v2Query(context.Background(), session, "SELECT * FROM system.peers")
 			require.NoError(t, err)
 			defer rows.Close()
-			require.NotEqual(t, cql.UUID{}, rows.Info().HostID)
+			require.NotEqual(t, cql.UUID{}, rows.Result().HostID)
 		})
 		// Confirms that the stats are returning valid data. Accuracy may be questionable.
 		t.Run("Stats", func(t *testing.T) {
@@ -584,7 +584,7 @@ func TestQuery(t *testing.T) {
 			for rows.NextInto(&row) {
 			}
 			require.NoError(t, rows.Close())
-			info := rows.Info()
+			info := rows.Result()
 			require.Positive(t, info.Attempts)
 			require.Positive(t, info.AttemptLatency)
 			require.Greater(t, session.Metrics().Requests, before.Requests)

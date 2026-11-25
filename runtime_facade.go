@@ -101,16 +101,14 @@ type PreparedInfo struct {
 	Generation uint64
 }
 
-// StreamInfo reports delivered rows, pages and execution progress.
+// StreamProgress reports how far a RowStream has read, beyond its
+// cql.Result: RowStream.Result counts the rows it delivered.
 //
-// The driver fills it; its zero value is empty.
-type StreamInfo struct {
-	// Result describes the execution so far.
-	Result cql.Result
-	// DeliveredRows and Pages count the rows NextInto delivered and the pages
-	// they came from.
-	DeliveredRows, Pages int64
+// The driver fills it; its zero value is a stream that has read nothing.
+type StreamProgress struct {
+	// Pages counts the pages the stream has read.
+	Pages int64
 	// OutputStarted reports that a row has been written to the caller's
-	// storage.
+	// storage, so a failed stream may have left a partial row there.
 	OutputStarted bool
 }

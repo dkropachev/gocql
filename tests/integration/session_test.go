@@ -1102,8 +1102,8 @@ func TestSession(t *testing.T) {
 		if count != 3 {
 			t.Fatalf("rows %d", count)
 		}
-		if result.Info().FetchedRows != 3 {
-			t.Fatalf("reported rows %d", result.Info().FetchedRows)
+		if result.Result().FetchedRows != 3 {
+			t.Fatalf("reported rows %d", result.Result().FetchedRows)
 		}
 		if err = result.Close(); err != nil {
 			t.Fatal(err)

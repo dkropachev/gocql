@@ -11,8 +11,8 @@ package gocql
 		gocql.CASBatchRows method (T) Close() error
 		gocql.CASBatchRows method (T) Columns() cql.Columns
 		gocql.CASBatchRows method (T) Err() error
-		gocql.CASBatchRows method (T) Info() cql.Result
 		gocql.CASBatchRows method (T) NextInto(dst *cql.CASResult[X]) bool
+		gocql.CASBatchRows method (T) Result() cql.Result
 		gocql.CASBatchRows method (T) Retain() (*gocql.PageLease, error)
 	func gocql.Connect(ctx context.Context, cfg config.Config) (*gocql.Session, error)
 	const gocql.MaxBatchStatements untyped int = 65535
@@ -22,8 +22,8 @@ package gocql
 		gocql.Page method (*T) Close() error
 		gocql.Page method (*T) Columns() cql.Columns
 		gocql.Page method (*T) Err() error
-		gocql.Page method (*T) Info() cql.Result
 		gocql.Page method (*T) NextInto(dst *R) bool
+		gocql.Page method (*T) Result() cql.Result
 		gocql.Page method (*T) Retain() (*gocql.PageLease, error)
 		gocql.Page method (*T) State() cql.PageState
 	type gocql.PageLease struct
@@ -58,16 +58,17 @@ package gocql
 		gocql.RowStream method (*T) Close() error
 		gocql.RowStream method (*T) Columns() cql.Columns
 		gocql.RowStream method (*T) Err() error
-		gocql.RowStream method (*T) Info() gocql.StreamInfo
 		gocql.RowStream method (*T) NextInto(dst *R) bool
+		gocql.RowStream method (*T) Progress() gocql.StreamProgress
+		gocql.RowStream method (*T) Result() cql.Result
 	type gocql.Rows[R any] struct
 		gocql.Rows method (T) All(dst *R) iter.Seq2[*R, error]
 		gocql.Rows method (T) Clone() (R, error)
 		gocql.Rows method (T) Close() error
 		gocql.Rows method (T) Columns() cql.Columns
 		gocql.Rows method (T) Err() error
-		gocql.Rows method (T) Info() cql.Result
 		gocql.Rows method (T) NextInto(dst *R) bool
+		gocql.Rows method (T) Result() cql.Result
 		gocql.Rows method (T) Retain() (*gocql.PageLease, error)
 	type gocql.Session struct
 		gocql.Session method (*T) ApplyBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (bool, cql.Result, error)
@@ -92,11 +93,9 @@ package gocql
 		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error)
 		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error)
 	var gocql.StopIteration error
-	type gocql.StreamInfo struct
-		gocql.StreamInfo field Result cql.Result
-		gocql.StreamInfo field DeliveredRows int64
-		gocql.StreamInfo field Pages int64
-		gocql.StreamInfo field OutputStarted bool
+	type gocql.StreamProgress struct
+		gocql.StreamProgress field Pages int64
+		gocql.StreamProgress field OutputStarted bool
 	type gocql.StreamWorker[P any, R any] struct
 		gocql.StreamWorker method (*T) Close()
 		gocql.StreamWorker method (*T) Run(ctx context.Context, value P) (*gocql.RowStream[R], error)

@@ -132,7 +132,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 			rows.Close()
 			t.Fatal("unexpected routed row")
 		}
-		coordinator := rows.Info().HostID
+		coordinator := rows.Result().HostID
 		if rows.NextInto(&row) {
 			rows.Close()
 			t.Fatal("unexpected additional routed row")

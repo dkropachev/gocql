@@ -650,7 +650,7 @@ var gridCases = []gridCase{
 					got = append(got, string(dst))
 				}
 				err = errors.Join(rows.Err(), rows.Close())
-				o.rows, o.resultN = strings.Join(got, ","), rows.Info().FetchedRows
+				o.rows, o.resultN = strings.Join(got, ","), rows.Result().FetchedRows
 			}
 			gridClassify(&o, err)
 			return o, true

@@ -115,7 +115,7 @@ func casBatchRowsBody(values ...string) []byte {
 }
 
 // TestCASBatchRows reads the rows of a conditional batch that did not apply:
-// their metadata, an owned Clone and a Retain lease outlive Close, and Info
+// their metadata, an owned Clone and a Retain lease outlive Close, and Result
 // reports the execution.
 func TestCASBatchRows(t *testing.T) {
 	s, _, peers := runtimeTestSession(t, 1)
@@ -171,8 +171,8 @@ func TestCASBatchRows(t *testing.T) {
 	if err := rows.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if info := rows.Info(); info.FetchedRows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
-		t.Fatalf("Info = %+v, want two rows from one attempt on the fake node", info)
+	if info := rows.Result(); info.FetchedRows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
+		t.Fatalf("Result = %+v, want two rows from one attempt on the fake node", info)
 	}
 	if cloned.Applied || !cloned.Previous.Set || string(ownedBytesForTest(cloned.Previous.Value)) != "first" {
 		t.Fatalf("Clone = %+v, want the first row", cloned)

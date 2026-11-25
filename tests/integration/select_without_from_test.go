@@ -186,8 +186,8 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if noFromColumn(t, rows.Columns(), 0).Type.Kind() != cql.KindInt {
 				t.Fatal("literal must have int metadata")
 			}
-			if rows.Info().FetchedRows != 1 {
-				t.Fatalf("page rows=%d want1", rows.Info().FetchedRows)
+			if rows.Result().FetchedRows != 1 {
+				t.Fatalf("page rows=%d want1", rows.Result().FetchedRows)
 			}
 			var row cql.DynamicRow
 			if !rows.NextInto(&row) {
@@ -273,7 +273,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			})
 			t.Run("predicate removes the row", func(t *testing.T) {
 				rows := noFromRows(t, session, filtered)
-				if rows.Columns().Len() != 1 || rows.Info().FetchedRows != 0 {
+				if rows.Columns().Len() != 1 || rows.Result().FetchedRows != 0 {
 					t.Fatal("empty result must retain one column and zero rows")
 				}
 				var row cql.DynamicRow

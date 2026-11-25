@@ -202,8 +202,11 @@ func TestRowStreamAll(t *testing.T) {
 	if err := stream.Close(); err != nil {
 		t.Fatalf("Close after All = %v", err)
 	}
-	if info := stream.Info(); info.Pages != 2 || !info.OutputStarted {
-		t.Fatalf("Info = %+v, want two pages with output", info)
+	if p := stream.Progress(); p.Pages != 2 || !p.OutputStarted {
+		t.Fatalf("Progress = %+v, want two pages with output", p)
+	}
+	if r := stream.Result(); r.FetchedRows != 3 || r.Attempts != 2 {
+		t.Fatalf("Result = %+v, want three rows from two attempts", r)
 	}
 
 	stream, err = w.Run(f.ctx, gridKey)

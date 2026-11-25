@@ -111,7 +111,8 @@ or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
 Set exec.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
 The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
-and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. StreamInfo reports delivered rows, pages and attempts.
+and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. `stream.Result()` reports the delivered rows and
+the attempts, and `stream.Progress()` the pages read.
 
 Lists, sets, and maps decode NULL as empty, matching buffered decoding, while
 preserving the destination's seeded capacity. `cql.StreamNullable` preserves the

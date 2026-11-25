@@ -87,7 +87,7 @@ func TestStrongConsistency(t *testing.T) {
 				}
 				for rows.NextInto(&row) {
 				}
-				result := rows.Info()
+				result := rows.Result()
 				return result, rows.Close()
 			},
 		}

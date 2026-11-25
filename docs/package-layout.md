@@ -171,7 +171,7 @@ documented methods.
 - **Contains:** `Connect`, `Session`, and the execution
   handles (`Prepared`, `Worker`, `PreparedStream`, `StreamWorker`, `Batch`,
   `Rows`, `Page`, `RowStream`, `PageLease`), plus `PreparedInfo` and
-  `StreamInfo` as plain data. `Result` lives in `cql`, because `cqlerr`
+  `StreamProgress` as plain data. `Result` lives in `cql`, because `cqlerr`
   needs it and the root package imports `cqlerr`.
 - **Must not contain:** codecs, policies, configuration builders, error types,
   or anything only one dialect supports.

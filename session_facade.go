@@ -203,7 +203,7 @@ func (s *Session) ApplyBatch(ctx context.Context, batch *Batch, options ...exec.
 		return false, implSession.InternalExecutionErrorResult(err), err
 	}
 	applied, err := rows.Applied()
-	result := rows.Info()
+	result := rows.Result()
 	if closeErr := rows.Close(); err == nil {
 		err = closeErr
 	}
