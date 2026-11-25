@@ -23,13 +23,14 @@ A request speculates only when it is idempotent and known to be ordinary.
 Mark a statement idempotent with `Statement.Idempotent`, which its prepared
 statement, workers and batch members carry, or every statement a profile runs
 with `ProfileBuilder.WithIdempotent(true)`; `exec.Options.Idempotent`, when
-set, overrides both for one execution. ScyllaDB marks conditional statements in
-prepared metadata, so its prepared statements are classified. Elsewhere a
-statement whose row type is `cql.EmptyRow` is ordinary unless its `Kind` says
-otherwise; for any other, on Cassandra or unprepared, set `Statement.Kind` to
-`cql.OrdinaryStatement`.
-Unknown and conditional statements, requests with SERIAL or LOCAL_SERIAL
-consistency, and batches that hold an unknown or conditional member never
+set, overrides both for one execution. A statement left
+`cql.UnknownStatement` is classified when it is prepared or bound: one read
+with `cql.CASRows`, or an INSERT, UPDATE, DELETE or BATCH with `IF` in its
+CQL, is conditional, and anything else, a SELECT included, is ordinary (see
+`cql.UnknownStatement`); ScyllaDB also marks conditional statements in
+prepared metadata.
+Conditional statements, requests with SERIAL or LOCAL_SERIAL
+consistency, and batches that hold a conditional member never
 speculate; an idempotent batch of ordinary members can. Streams never
 speculate or prefetch, whatever their profile says.
 

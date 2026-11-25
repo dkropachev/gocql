@@ -168,11 +168,11 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 		cql.Param("id", cql.Int32Codec, func(v record) int32 { return v.ID }),
 		cql.Param("payload", cql.ByteSliceCodec, func(v record) []byte { return v.Payload }),
 		cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v record) [][]byte { return v.Pieces }),
-	)), exec.PrepareOptions{})
+	)))
 	if err != nil {
 		return err
 	}
-	writer, err := insert.Worker(exec.Options{})
+	writer, err := insert.Worker()
 	if err != nil {
 		return err
 	}
