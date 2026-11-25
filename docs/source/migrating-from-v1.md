@@ -183,7 +183,9 @@ statement is, is conditional when its rows decode through `cql.CASRows` or
 its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` condition, and
 ordinary otherwise, on every server; v1's `Query.IsLWT` knew it only from
 ScyllaDB's prepared metadata. Declaring `Kind: cql.OrdinaryStatement` on a
-statement the driver finds conditional fails before it is sent.
+statement the driver finds conditional fails before it is sent, as does
+reading a SELECT through `cql.CASRows` or declaring it
+`cql.ConditionalStatement`.
 
 One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
 `session.CompileOptions`; compile them once and reuse them. A worker that runs

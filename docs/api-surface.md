@@ -120,7 +120,11 @@ page state. Explicit paging is the pages column only.
   `cql.CASRows` decoder, or an INSERT, UPDATE, DELETE or BATCH whose CQL has
   an `IF` outside literals and comments, is conditional. A statement declared
   `cql.OrdinaryStatement` that the inference finds conditional is rejected
-  with a `cql.ValidationError` before it is sent.
+  with a `cql.ValidationError` before it is sent, and so is one that can
+  never be conditional, such as a SELECT, declared
+  `cql.ConditionalStatement` or decoded with `cql.CASRows`. Prepare fails
+  when PREPARE metadata, where the server returns it, lacks the leading
+  `[applied]` column a `cql.CASRows` decoder needs.
   A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read:
   it is not rejected up front, and `Exec` fails on its result columns like any
   other row-returning statement.

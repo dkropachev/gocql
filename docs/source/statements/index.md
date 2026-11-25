@@ -50,7 +50,9 @@ timestamp, keep a fixed replica order and cannot speculate. A statement left
 `cql.UnknownStatement` is conditional when its rows decode through
 `cql.CASRows` or its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF`
 condition, and ordinary otherwise; one declared `cql.OrdinaryStatement` that
-is conditional by that test is rejected before it is sent.
+is conditional by that test is rejected before it is sent, as is a SELECT
+or other statement that cannot be conditional declared
+`cql.ConditionalStatement` or decoded with `cql.CASRows`.
 Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
 marks a statement safe to run more than once, for speculation and
 `retry.Safe`; prepared statements, their queries and batch members carry it,
