@@ -9,9 +9,10 @@ import "errors"
 // to any host while connecting. ConnectError matches it.
 var ErrNoConnectionsStarted = errors.New("gocql: no connections were made when creating the session")
 
-// ErrBusy indicates that a query still owns an active execution, transport
-// write, or callback. Wait joins that execution before the query is reused.
-var ErrBusy = errors.New("gocql: query is busy")
+// ErrBusy indicates that a Worker or StreamWorker still owns an active
+// execution, transport write, or callback. Wait joins that execution before
+// the worker is reused.
+var ErrBusy = errors.New("gocql: worker is busy")
 
 // ServerMismatchError reports that Connect reached a database other than
 // the one its dialect names.

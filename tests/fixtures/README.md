@@ -102,7 +102,7 @@ materialized-view inputs preserve the same resulting table/view schema.
 `internal/testkit` also provides independent ROWS frames and CRC-protected v5
 units. Literal-only LZ4 blocks test receiver correctness independently of the
 production compressor; actual Cassandra lanes provide compression interoperability.
-Public `StreamQuery.Run` fixture tests cover every split/truncated prefix, every checksum
+Public `StreamWorker.Run` fixture tests cover every split/truncated prefix, every checksum
 byte, first-row gates, request-write interruption, direct final ranges and
 close/cancel/session shutdown during the last caller write, across v3/v4/TLS and
 v5 raw/LZ4. Successful TLS net.Pipe fixtures keep the peer alive until consumption

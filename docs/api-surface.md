@@ -43,7 +43,7 @@ another dialect, before anything is sent. See `docs/server-differences.md`.
 | | None | One row | Many rows | Pages |
 |---|---|---|---|---|
 | Throwaway | `Session.UnpreparedExec` | `Session.UnpreparedOne` | `Session.UnpreparedEach`, `Session.UnpreparedAll` | empty by design |
-| Worker-owned | `Query.Exec` | `Query.One` | `Query.Each`, `Query.All`, `Query.Run` | `Query.RunPage` |
+| Worker-owned | `Worker.Exec` | `Worker.One` | `Worker.Each`, `Worker.All`, `Worker.Run` | `Worker.RunPage` |
 | Shared | `Prepared.Exec` | `Prepared.One` | `Prepared.Each`, `Prepared.All`, `Prepared.Run` | `Prepared.RunPage` |
 
 Throwaway pages stay empty: a caller that pages through results is executing
@@ -52,7 +52,7 @@ the statement repeatedly, so it prepares the statement.
 `TestExecutionGrid` checks this table against the public API
 (`testdata/api.txt`): every cell method exists with its row's prefix, its
 column's verb and its row's options form, and every other exported method of
-`Session`, `Query` and `Prepared` is either a cell or on the test's list of
+`Session`, `Worker` and `Prepared` is either a cell or on the test's list of
 methods outside the grid. `TestExecutionGridBehavior` runs the same statement
 through each row against a fake node and fails if a row misses a case's
 expected outcome, or if the rows differ in rows, error classification, or the
@@ -60,8 +60,8 @@ consistency, page size, value and page state of the requests they send.
 
 ## Options
 
-- Worker-owned: options are fixed when the query is created, as the
-  `exec.Options` passed to `Prepared.Query`, and its methods take none.
+- Worker-owned: options are fixed when the worker is created, as the
+  `exec.Options` passed to `Prepared.Worker`, and its methods take none.
 - Shared: each call ends in `options ...exec.CompiledOptions`, made once by
   `Session.CompileOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
@@ -81,7 +81,7 @@ A new cell follows the options form of its row.
 
 Streaming is a standalone, performance-first API that decodes into caller
 storage. It is always prepared, worker-owned, and has one output shape, many
-rows: `Session.PrepareStream` → `PreparedStream.Query` → `StreamQuery.Run` →
+rows: `Session.PrepareStream` → `PreparedStream.Worker` → `StreamWorker.Run` →
 `RowStream`. Adding another shape or entry point to streaming is a change to
 this rule, made with the maintainer.
 
@@ -131,8 +131,8 @@ page state. Explicit paging is the pages column only.
 - Each column uses the same verbs in every row that fills it: `Exec`, `One`,
   `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of the verb.
-- `AddToBatch` appears once per reusable form. `Query.Routing` reports where
-  an execution with the given values would go, and lives on `Query`.
+- `AddToBatch` appears once per reusable form. `Worker.Routing` reports where
+  an execution with the given values would go, and lives on `Worker`.
 - Batches follow the batch rules below, not the grid.
 
 ## Batches
@@ -143,7 +143,7 @@ and no options.
 
 - **Building.** A member joins with `AddToBatch` on the statement that
   supplies it: one method per reusable form (`Prepared.AddToBatch`,
-  `Query.AddToBatch`), and `Session.UnpreparedAddToBatch` for a throwaway
+  `Worker.AddToBatch`), and `Session.UnpreparedAddToBatch` for a throwaway
   statement, which compiles its parameters on every call like the other
   throwaway methods. `AddToBatch` encodes the value straight into storage
   the `Batch` owns and touches no execution state. The zero `Batch` is ready,

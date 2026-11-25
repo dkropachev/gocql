@@ -1,7 +1,7 @@
 # Batches
 
 Append each typed member with `prepared.AddToBatch(&batch, parameters)` (or
-`query.AddToBatch`), then send the batch with
+`worker.AddToBatch`), then send the batch with
 `session.ExecBatch(ctx, &batch)`. Members of several statements of one
 session may share a batch, and may write tables of different keyspaces. A
 member of another session is rejected with a `*cql.ValidationError`, as is
@@ -34,8 +34,8 @@ alone: an unclassified member with an `IF` condition is conditional, which
 makes the batch conditional.
 
 `AddToBatch` encodes the parameters straight into storage the batch owns, so
-later input mutation cannot change the batch. It uses none of the query's
-execution state: `Query.AddToBatch` works while the query runs or has an open
+later input mutation cannot change the batch. It uses none of the worker's
+execution state: `Worker.AddToBatch` works while the worker runs or has an open
 `Rows`, and `Prepared.AddToBatch` takes no pooled query. `ExecBatch` and `RunConditionalBatch` take at most one
 `exec.CompiledOptions` from `session.CompileOptions`. A batch response is a single
 page, so paging options are ignored and the options you compiled for

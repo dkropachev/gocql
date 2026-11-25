@@ -36,9 +36,9 @@ type v2Adapter struct {
 }
 type v2Worker struct {
 	a           *v2Adapter
-	read        *g.Query[int32, row]
-	write       *g.Query[row, cql.EmptyRow]
-	streamQuery *g.StreamQuery[int32, row]
+	read        *g.Worker[int32, row]
+	write       *g.Worker[row, cql.EmptyRow]
+	streamQuery *g.StreamWorker[int32, row]
 	stream      bool
 	out         row
 }
@@ -98,7 +98,7 @@ func (a *v2Adapter) Evidence() any {
 	routing := []routing.Info{}
 	for _, prepared := range a.reads {
 		if prepared != nil {
-			b, e := prepared.Query(exec.Options{})
+			b, e := prepared.Worker(exec.Options{})
 			if e == nil {
 				info, err := b.Routing(int32(0))
 				if err == nil {
@@ -132,7 +132,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		if e != nil {
 			return nil, nil, e
 		}
-		q, e := p.Query(exec.Options{})
+		q, e := p.Worker(exec.Options{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -183,11 +183,11 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	if paged {
 		size = 4096
 	}
-	readQuery, e := read.Query(exec.Options{})
+	readQuery, e := read.Worker(exec.Options{})
 	if e != nil {
 		return nil, e
 	}
-	writeQuery, e := write.Query(a.metadata)
+	writeQuery, e := write.Worker(a.metadata)
 	if e != nil {
 		readQuery.Close()
 		return nil, e
@@ -198,7 +198,7 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 		writeQuery.Close()
 		return nil, e
 	}
-	streamQuery, e := readStream.Query(exec.StreamOptions{Incremental: *incremental})
+	streamQuery, e := readStream.Worker(exec.StreamOptions{Incremental: *incremental})
 	if e != nil {
 		readQuery.Close()
 		writeQuery.Close()

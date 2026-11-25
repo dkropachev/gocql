@@ -89,7 +89,7 @@ func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, er
 }
 
 // UnpreparedExec executes an occasional statement without preparing it or
-// leaving a query to close. It must return no result columns. Parameters are
+// leaving a worker to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers, which a statement with parameters (P
 // other than cql.EmptyParams) must set: without them the call fails with a
 // cql.ValidationError before anything is sent. With cql.DynamicParams and no
@@ -102,7 +102,7 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 
 // UnpreparedOne executes an occasional statement and decodes its first row.
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
-// are detached before return; there is no query or cursor to close. Parameters
+// are detached before return; there is no worker or cursor to close. Parameters
 // are described by statement.BindMarkers, as for UnpreparedExec. With a nil
 // dst it only reports whether a row exists. At most one exec.Options may be passed;
 // the call validates and resolves it, and omitting it uses the session defaults.
@@ -112,18 +112,18 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 
 // UnpreparedEach executes an occasional statement, calling fn for every row
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
-// from fn stops successfully; other callback errors are returned. There is no query or cursor to close. Parameters are
+// from fn stops successfully; other callback errors are returned. There is no worker or cursor to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
 // exec.Options may be passed; the call validates and resolves it, and omitting
-// it uses the session defaults. dst is decoded into as for Query.Each: the
+// it uses the session defaults. dst is decoded into as for Worker.Each: the
 // same pointer for every row, or a new R for each row when dst is nil.
 func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
 // UnpreparedAll executes an occasional statement and iterates every row
-// across all pages, decoding each into dst, as Query.All does. The statement's
-// query is closed when the loop ends; there is nothing to close. Parameters are
+// across all pages, decoding each into dst, as Worker.All does. The statement's
+// execution is closed when the loop ends; there is nothing to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
 // exec.Options may be passed; the call validates and resolves it, and
 // omitting it uses the session defaults.

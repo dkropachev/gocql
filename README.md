@@ -1,7 +1,7 @@
 # gocql v2
 
 gocql provides a typed Go driver for ScyllaDB and Apache Cassandra. Statements
-pair explicit parameter encoders with result decoders. Worker-owned queries reuse an owned parameter snapshot across retries and paging.
+pair explicit parameter encoders with result decoders. A `Worker` reuses an owned parameter snapshot across retries and paging.
 
 ```sh
 go get github.com/scylladb/gocql/v2@v2.0.0-rc.1
@@ -100,8 +100,8 @@ one of the statement's pooled queries until closed; `Session.Close` stops
 handles still open, and a handle dropped without Close releases its query once
 collected.
 
-`prepared.Query(options)` creates a reusable query owned by one worker; any
-number of queries can share one preparation. It resolves its options once and
+`prepared.Worker(options)` creates a reusable `Worker` owned by one goroutine;
+any number of workers can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
 outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
@@ -113,16 +113,16 @@ size. The page size `cql.Unpaged`, as that argument or as
 response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
-`session.UnpreparedAll` handle occasional CQL text executions without leaving a query to close; prepare
-a statement that runs repeatedly. Each call copies its parameters during admission. A call while
-a `Rows`, `Page` or stream of the query is open, or while another goroutine's
+`session.UnpreparedAll` handle occasional CQL text executions without leaving a worker to close; prepare
+a statement that runs repeatedly. Each call copies its parameters during admission. A worker call while
+a `Rows`, `Page` or stream of the worker is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned
-waits until that execution's accepted writes drain. `query.Close()`
-permanently stops the query and any open handle and returns at once; a call
+waits until that execution's accepted writes drain. `worker.Close()`
+permanently stops the worker and any open handle and returns at once; a call
 running in another goroutine is cancelled and returns an error matching
-`context.Canceled`. `query.Wait(ctx)`
-waits for the drain. A query dropped without `Close` is closed once the
-garbage collector finds it unreachable, but close queries explicitly: collection
+`context.Canceled`. `worker.Wait(ctx)`
+waits for the drain. A worker dropped without `Close` is closed once the
+garbage collector finds it unreachable, but close workers explicitly: collection
 timing is unspecified.
 
 Buffered rows borrow receive pages. Views expire at the next advancement or
@@ -132,7 +132,7 @@ borrow their pages.
 
 `session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
 prepares directly for caller-storage decoding. Share its immutable handle and
-create a query per worker with `prepared.Query(options)`. The query decodes into
+create a `StreamWorker` per goroutine with `prepared.Worker(options)`. It decodes into
 seeded caller storage. It buffers each page on
 normal multiplexed connections by default. `exec.StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
@@ -144,12 +144,12 @@ go run ./examples/streaming -hosts 127.0.0.1:9042
 ```
 
 The example creates and drops its own keyspace, validates every result, seeds
-nested blob buffers, checks backing identity across pages, and exercises pool
-query admission and transport drain. It accepts protocol, compression, authentication
+nested blob buffers, checks backing identity across pages, and exercises worker
+admission and transport drain. It accepts protocol, compression, authentication
 and verified TLS options; see `go run ./examples/streaming -h`.
 
 The following table describes explicit **incremental** mode. Page-buffered
-queries support the normal protocol/compression combinations and retain memory
+streams support the normal protocol/compression combinations and retain memory
 proportional to concurrent response pages, within configured frame and
 decompression limits. Idle receive caching is bounded by 16 MiB total, 9 MiB
 per object and 64 objects per session.
@@ -176,14 +176,14 @@ providers remove overrides, and zero optional timeouts disable them.
 
 `Connect` snapshots validated configuration before starting workers. Configure
 TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`, and
-routing/retry/speculation through `WithDefaultProfile` or a per-query
+routing/retry/speculation through `WithDefaultProfile` or a per-execution
 `*config.Profile`, built with `config.NewProfile` (a `config.Profile` literal is
 rejected).
 Per-execution settings are plain `exec.Options` values (package
 `github.com/scylladb/gocql/v2/exec`), for example
 `exec.Options{PageSize: 100}`; the zero `exec.Options{}` uses the
-session default. Query constructors validate, resolve and encode them for their
-session once, so query executions do no per-call work. One-shot executions
+session default. Worker constructors validate, resolve and encode them for their
+session once, so worker executions do no per-call work. One-shot executions
 (`prepared.Exec/One/Each`, `session.ExecBatch`, `session.RunConditionalBatch`) take
 `exec.CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
 front. Compiled options carry their session's default profile and keyspace; on

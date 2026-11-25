@@ -181,7 +181,7 @@ func TestPrepared(t *testing.T) {
 			info := prepared.Info()
 			tests.AssertEqual(t, "prepared.Keyspace", keyspace, info.Keyspace)
 			tests.AssertEqual(t, "prepared.Table", table, info.Table)
-			query, err := prepared.Query(exec.Options{})
+			query, err := prepared.Worker(exec.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}

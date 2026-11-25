@@ -12,30 +12,30 @@ import (
 	"github.com/scylladb/gocql/v2/routing"
 )
 
-// Query owns reusable parameters and execution state for one worker. It permits
-// one active execution and must not be copied. Options are fixed at creation.
-// Close the query when done, including when execution fails. Prepared.Exec,
-// One, Each and All manage their own state and are convenient for concurrent
-// request handlers.
+// Worker owns reusable parameters and execution state for one goroutine. It
+// permits one active execution and must not be copied. Options are fixed at
+// creation. Close the worker when done, including when execution fails.
+// Prepared.Exec, One, Each and All manage their own state and are convenient
+// for concurrent request handlers.
 //
-// Prepared.Query makes a Query. A zero Query's executions return a
+// Prepared.Worker makes a Worker. A zero Worker's executions return a
 // cql.ValidationError, and its Close does nothing.
-type Query[P, R any] implSession.Query[P, R]
+type Worker[P, R any] implSession.Query[P, R]
 
-func (q *Query[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(q) }
+func (w *Worker[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(w) }
 
 // Exec executes a statement with no result columns, capturing value once for
 // routing, retries and paging. Overlapping calls return cqlerr.ErrBusy.
-func (q *Query[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
-	return q.internal().Exec(ctx, value)
+func (w *Worker[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
+	return w.internal().Exec(ctx, value)
 }
 
 // One decodes the first row into dst, ignoring further rows. It reports whether
 // a row exists and clears dst when none exists. Borrowed fields are detached
 // before return; built-in owning fields keep their destination buffers. With
 // a nil dst, One only reports whether a row exists.
-func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error) {
-	return q.internal().One(ctx, value, dst)
+func (w *Worker[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error) {
+	return w.internal().One(ctx, value, dst)
 }
 
 // Each visits every row across all pages, decoding into dst and calling fn.
@@ -46,13 +46,13 @@ func (q *Query[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Resul
 // fn may keep. With cql.ReuseBuffers, or a RowInto reset that keeps slices,
 // []byte fields reuse their capacity, so a slice kept from one call of fn
 // aliases the next row's data: keep bytes.Clone(row.Field).
-func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error) {
-	return q.internal().Each(ctx, value, dst, fn)
+func (w *Worker[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error) {
+	return w.internal().Each(ctx, value, dst, fn)
 }
 
 // All iterates every row across all pages, decoding each into dst:
 //
-//	for row, err := range q.All(ctx, value, &dst) {
+//	for row, err := range w.All(ctx, value, &dst) {
 //		if err != nil {
 //			return err
 //		}
@@ -67,27 +67,27 @@ func (q *Query[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) err
 // (nil, err) and ends the loop. Breaking out of the loop releases the
 // execution. There is no cursor to close and no Result; use Each or Run when
 // the Result matters. dst is decoded into as for Each.
-func (q *Query[P, R]) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error] {
-	return q.internal().All(ctx, value, dst)
+func (w *Worker[P, R]) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error] {
+	return w.internal().All(ctx, value, dst)
 }
 
 // Run returns a cursor that fetches continuation pages as needed. Close the
-// cursor before reusing the query. Borrowed fields expire on advancement or
+// cursor before reusing the worker. Borrowed fields expire on advancement or
 // Close unless a retained PageLease pins their page.
-func (q *Query[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
-	rows, err := q.internal().Run(ctx, value)
+func (w *Worker[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
+	rows, err := w.internal().Run(ctx, value)
 	return Rows[R](rows), err
 }
 
 // RunPage executes one page, resuming from state. cql.StartPage() begins the first
-// page. Page.State remains available after Close; close the page before reusing q.
-// pageSize is this page's size: zero uses the query's resolved page size, so
+// page. Page.State remains available after Close; close the page before reusing w.
+// pageSize is this page's size: zero uses the worker's resolved page size, so
 // a page size that changes per request needs no new options. With
 // cql.Unpaged the page is the whole result: the response is bounded by the
 // server and by the configured frame and decompression limits. A negative
 // pageSize is rejected.
-func (q *Query[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*Page[R], error) {
-	page, err := q.internal().RunPage(ctx, value, cql.PageState(state), pageSize)
+func (w *Worker[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*Page[R], error) {
+	page, err := w.internal().RunPage(ctx, value, cql.PageState(state), pageSize)
 	return (*Page[R])(page), err
 }
 
@@ -96,60 +96,60 @@ func (q *Query[P, R]) RunPage(ctx context.Context, value P, state cql.PageState,
 // the options pin. Pass the token to metadata.Snapshot.Replicas for the
 // candidate replicas; the routing policy picks among them when the statement
 // runs, so Routing does not say which replica serves it. It uses scratch of
-// its own, so it works while the query runs, drains or has an open handle; a
-// closed query returns cqlerr.ErrClosed.
-func (q *Query[P, R]) Routing(value P) (routing.Info, error) { return q.internal().Routing(value) }
+// its own, so it works while the worker runs, drains or has an open handle; a
+// closed worker returns cqlerr.ErrClosed.
+func (w *Worker[P, R]) Routing(value P) (routing.Info, error) { return w.internal().Routing(value) }
 
 // AddToBatch encodes value straight into storage batch owns. It uses none of
-// the query's execution state, so it works while the query runs, drains or has
-// an open handle; a closed query or session returns cqlerr.ErrClosed. A batch
+// the worker's execution state, so it works while the worker runs, drains or has
+// an open handle; a closed worker or session returns cqlerr.ErrClosed. A batch
 // that holds members of another session, or already holds
 // MaxBatchStatements, is rejected with a *cql.ValidationError and left
-// unchanged. Neither the query nor batch may be used concurrently with this
+// unchanged. Neither the worker nor batch may be used concurrently with this
 // call.
-func (q *Query[P, R]) AddToBatch(batch *Batch, value P) error {
-	return q.internal().AddToBatch((*implSession.Batch)(batch), value)
+func (w *Worker[P, R]) AddToBatch(batch *Batch, value P) error {
+	return w.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
 
-// Close stops the query permanently and returns at once. It may be called
+// Close stops the worker permanently and returns at once. It may be called
 // from any goroutine: a call running at that moment is cancelled and returns
 // an error matching context.Canceled, with cqlerr.ExecutionStatusOf reporting
 // whether the request may have reached the server; open Rows or a Page report
 // cqlerr.ErrClosed, and later calls return cqlerr.ErrClosed. Accepted writes and observer callbacks drain
 // in the background; Wait joins them and Session.Close joins any that remain.
-// A query dropped without Close is closed when the garbage collector finds it
+// A worker dropped without Close is closed when the garbage collector finds it
 // unreachable, but call Close: collection timing is unspecified.
-func (q *Query[P, R]) Close() { q.internal().Close() }
+func (w *Worker[P, R]) Close() { w.internal().Close() }
 
-// Wait waits until the query's last execution has drained: accepted writes,
+// Wait waits until the worker's last execution has drained: accepted writes,
 // attempts in flight and observer callbacks. It returns ctx.Err() if ctx ends
 // first. Wait after Close when code that follows must not race those
 // callbacks, for example before tearing down state an Observer uses.
-func (q *Query[P, R]) Wait(ctx context.Context) error { return q.internal().Wait(ctx) }
+func (w *Worker[P, R]) Wait(ctx context.Context) error { return w.internal().Wait(ctx) }
 
-// StreamQuery owns reusable state for streaming into seeded caller storage.
+// StreamWorker owns reusable state for streaming into seeded caller storage.
 // Close it when done and close each Run cursor before starting another run.
 // Page buffering is the default; exec.StreamOptions.Incremental reserves a connection
 // for bounded incremental receive. It must not be copied or used concurrently.
 //
-// PreparedStream.Query makes a StreamQuery. A zero StreamQuery's Run returns a
+// PreparedStream.Worker makes a StreamWorker. A zero StreamWorker's Run returns a
 // cql.ValidationError, and its Close does nothing.
-type StreamQuery[P, R any] implSession.StreamQuery[P, R]
+type StreamWorker[P, R any] implSession.StreamQuery[P, R]
 
 // Run starts a stream. Only successful NextInto calls publish complete rows.
 // Output belongs to the caller and survives cursor Close; reusing a destination
 // overwrites its contents. Close the returned cursor on early termination.
-func (q *StreamQuery[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
-	stream, err := (*implSession.StreamQuery[P, R])(q).Run(ctx, value)
+func (w *StreamWorker[P, R]) Run(ctx context.Context, value P) (*RowStream[R], error) {
+	stream, err := (*implSession.StreamQuery[P, R])(w).Run(ctx, value)
 	return (*RowStream[R])(stream), err
 }
 
-// Close stops the query permanently and returns at once, as Query.Close
+// Close stops the worker permanently and returns at once, as Worker.Close
 // does. An open RowStream reports cqlerr.ErrClosed.
-func (q *StreamQuery[P, R]) Close() { (*implSession.StreamQuery[P, R])(q).Close() }
+func (w *StreamWorker[P, R]) Close() { (*implSession.StreamQuery[P, R])(w).Close() }
 
-// Wait waits until the query's last execution has drained, as Query.Wait
+// Wait waits until the worker's last execution has drained, as Worker.Wait
 // does.
-func (q *StreamQuery[P, R]) Wait(ctx context.Context) error {
-	return (*implSession.StreamQuery[P, R])(q).Wait(ctx)
+func (w *StreamWorker[P, R]) Wait(ctx context.Context) error {
+	return (*implSession.StreamQuery[P, R])(w).Wait(ctx)
 }

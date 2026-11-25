@@ -37,9 +37,9 @@ package gocql
 		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
-		gocql.Prepared method (*T) Query(options ...exec.Options) (*gocql.Query[P, R], error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
+		gocql.Prepared method (*T) Worker(options ...exec.Options) (*gocql.Worker[P, R], error)
 	type gocql.PreparedInfo struct
 		gocql.PreparedInfo field Keyspace string
 		gocql.PreparedInfo field Table string
@@ -50,18 +50,7 @@ package gocql
 		gocql.PreparedStream method (*T) BindMarkers() cql.Columns
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
-		gocql.PreparedStream method (*T) Query(options ...exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
-	type gocql.Query[P any, R any] struct
-		gocql.Query method (*T) AddToBatch(batch *gocql.Batch, value P) error
-		gocql.Query method (*T) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error]
-		gocql.Query method (*T) Close()
-		gocql.Query method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error)
-		gocql.Query method (*T) Exec(ctx context.Context, value P) (cql.Result, error)
-		gocql.Query method (*T) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error)
-		gocql.Query method (*T) Routing(value P) (routing.Info, error)
-		gocql.Query method (*T) Run(ctx context.Context, value P) (gocql.Rows[R], error)
-		gocql.Query method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*gocql.Page[R], error)
-		gocql.Query method (*T) Wait(ctx context.Context) error
+		gocql.PreparedStream method (*T) Worker(options ...exec.StreamOptions) (*gocql.StreamWorker[P, R], error)
 	type gocql.RowStream[R any] struct
 		gocql.RowStream method (*T) Close() error
 		gocql.RowStream method (*T) Columns() cql.Columns
@@ -103,10 +92,21 @@ package gocql
 		gocql.StreamInfo field DeliveredRows int64
 		gocql.StreamInfo field Pages int64
 		gocql.StreamInfo field OutputStarted bool
-	type gocql.StreamQuery[P any, R any] struct
-		gocql.StreamQuery method (*T) Close()
-		gocql.StreamQuery method (*T) Run(ctx context.Context, value P) (*gocql.RowStream[R], error)
-		gocql.StreamQuery method (*T) Wait(ctx context.Context) error
+	type gocql.StreamWorker[P any, R any] struct
+		gocql.StreamWorker method (*T) Close()
+		gocql.StreamWorker method (*T) Run(ctx context.Context, value P) (*gocql.RowStream[R], error)
+		gocql.StreamWorker method (*T) Wait(ctx context.Context) error
+	type gocql.Worker[P any, R any] struct
+		gocql.Worker method (*T) AddToBatch(batch *gocql.Batch, value P) error
+		gocql.Worker method (*T) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error]
+		gocql.Worker method (*T) Close()
+		gocql.Worker method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error)
+		gocql.Worker method (*T) Exec(ctx context.Context, value P) (cql.Result, error)
+		gocql.Worker method (*T) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error)
+		gocql.Worker method (*T) Routing(value P) (routing.Info, error)
+		gocql.Worker method (*T) Run(ctx context.Context, value P) (gocql.Rows[R], error)
+		gocql.Worker method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*gocql.Page[R], error)
+		gocql.Worker method (*T) Wait(ctx context.Context) error
 
 package auth
 	type auth.Exchange interface

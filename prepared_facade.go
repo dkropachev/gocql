@@ -26,7 +26,7 @@ import (
 // the frozen result.
 //
 // Session.Prepare makes a Prepared. A zero Prepared has no columns, and its
-// methods that execute, batch or make a Query return a cql.ValidationError.
+// methods that execute, batch or make a Worker return a cql.ValidationError.
 type Prepared[P, R any] implSession.Prepared[P, R]
 
 func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
@@ -87,7 +87,7 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 }
 
 // All iterates every row across all pages, decoding each into dst, as
-// Query.All does. Rows stream page by page; they are not loaded into memory.
+// Worker.All does. Rows stream page by page; they are not loaded into memory.
 // The yielded row is dst, reused for every row, or a new R for each row when
 // dst is nil; its borrowed fields are valid only until the next iteration. An
 // error is yielded
@@ -113,7 +113,7 @@ func preparedAll[P, R any](p *Prepared[P, R], ctx context.Context, value P, dst 
 	p.internal().All(ctx, value, dst, o)(yield)
 }
 
-// Run returns a cursor over every row across all pages, as Query.Run does,
+// Run returns a cursor over every row across all pages, as Worker.Run does,
 // for callers that pull rows or pick each row's destination. The rows hold
 // one of the statement's pooled queries until they are closed: close them,
 // including on early termination. Session.Close stops rows still open, and
@@ -133,7 +133,7 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...exec.Compi
 	return Rows[R](rows), err
 }
 
-// RunPage executes one page, resuming from state, as Query.RunPage does with
+// RunPage executes one page, resuming from state, as Worker.RunPage does with
 // pageSize: zero uses the resolved page size and cql.Unpaged requests the
 // whole result. It serves stateless pagination from concurrent handlers: keep
 // Page.State, not the page. The page holds one of the statement's pooled
@@ -152,25 +152,26 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 	return (*Page[R])(page), err
 }
 
-// Query creates a worker-owned reusable query with fixed options. It also
-// provides cursors and explicit paging. Close it when the worker is done. At
-// most one exec.Options may be passed; omitting it uses the session
-// defaults. Options with a Timestamp are rejected with a cql.ValidationError,
-// since every write of the worker would carry it.
-func (p *Prepared[P, R]) Query(options ...exec.Options) (*Query[P, R], error) {
+// Worker creates a reusable execution of the statement, owned by one
+// goroutine, with fixed options. It also provides cursors and explicit
+// paging. Close it when the goroutine is done with it. At most one
+// exec.Options may be passed; omitting it uses the session defaults. Options
+// with a Timestamp are rejected with a cql.ValidationError, since every
+// write of the worker would carry it.
+func (p *Prepared[P, R]) Worker(options ...exec.Options) (*Worker[P, R], error) {
 	var o exec.Options
 	switch len(options) {
 	case 0:
 	case 1:
 		o = options[0]
 	default:
-		return nil, tooManyQueryOptions(false)
+		return nil, tooManyWorkerOptions(false)
 	}
 	if o.Timestamp.Set {
 		return nil, fixedWorkerTimestamp()
 	}
 	q, err := p.internal().Query(internalOptions(o))
-	return (*Query[P, R])(q), err
+	return (*Worker[P, R])(q), err
 }
 
 // AddToBatch encodes value straight into storage batch owns. Calls on p are

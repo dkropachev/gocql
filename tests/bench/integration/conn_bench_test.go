@@ -65,7 +65,7 @@ func BenchmarkConn(b *testing.B) {
 			worker := seed.Add(1)
 			// Each worker owns a reusable query. Routing encodes the parameter
 			// and computes the token without executing the statement.
-			query, err := prepared.Query(exec.Options{})
+			query, err := prepared.Worker(exec.Options{})
 			if err != nil {
 				b.Error(err)
 				return
@@ -103,7 +103,7 @@ func BenchmarkConn(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			worker := seed.Add(1)
-			query, err := prepared.Query(exec.Options{})
+			query, err := prepared.Worker(exec.Options{})
 			if err != nil {
 				b.Error(err)
 				return

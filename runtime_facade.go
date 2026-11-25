@@ -14,7 +14,7 @@ import (
 )
 
 // Batch collects statements, each with its values, to send as one CQL
-// BATCH request. Prepared.AddToBatch, Query.AddToBatch and
+// BATCH request. Prepared.AddToBatch, Worker.AddToBatch and
 // Session.UnpreparedAddToBatch append a statement; Session.ExecBatch sends
 // the batch, and Session.RunConditionalBatch sends a conditional one and
 // returns its rows. Reset empties it for reuse. Once a batch has grown to its

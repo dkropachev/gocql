@@ -42,7 +42,7 @@ import (
 )
 
 // Options overrides execution settings. Its zero value uses session defaults.
-// Query constructors validate and snapshot Options once. Compile recurring
+// Worker constructors validate and snapshot Options once. Compile recurring
 // overrides with gocql.Session.CompileOptions for concurrent one-shot calls.
 // Use context deadlines for request time limits without rebuilding options.
 type Options struct {
@@ -67,7 +67,7 @@ type Options struct {
 	// Timestamp, when set, is the write timestamp of the execution, sent in
 	// microseconds since the Unix epoch, the unit of CQL's USING TIMESTAMP;
 	// finer precision is dropped. It replaces the session's client
-	// timestamp. A worker query from Prepared.Query or PreparedStream.Query
+	// timestamp. A worker from Prepared.Worker or PreparedStream.Worker
 	// would stamp every write it runs with the same time, so they reject
 	// it with a cql.ValidationError: pass it per call, through
 	// Session.CompileOptions.

@@ -165,7 +165,7 @@ func TestClusterExamples(t *testing.T) {
 		// The tweet Example wrote, then this one's.
 		{name: "ParamsOf", run: ExampleParamsOf, want: []string{uuid + " hello world", uuid + " hello world"}},
 		{
-			name: "PreparedQuery", run: ExamplePrepared_Query,
+			name: "PreparedWorker", run: ExamplePrepared_Worker,
 			check: func(t *testing.T) {
 				for _, text := range []string{"first", "second", "third"} {
 					if n := count(t, "SELECT count(*) FROM example.tweet WHERE timeline = 'me' AND text = '"+text+"' ALLOW FILTERING"); n != 1 {

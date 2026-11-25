@@ -511,7 +511,7 @@ func TestPaging(t *testing.T) {
 // pagingRunStream runs ps once with options. The stream query is closed when
 // the test ends, after the deferred closes of its streams.
 func pagingRunStream[P, R any](ctx context.Context, t testing.TB, ps *gocql.PreparedStream[P, R], value P, options exec.StreamOptions) (*gocql.RowStream[R], error) {
-	q, err := ps.Query(options)
+	q, err := ps.Worker(options)
 	if err != nil {
 		return nil, err
 	}

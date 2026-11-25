@@ -75,11 +75,11 @@ func ExampleParamsOf() {
 	}
 }
 
-// ExamplePrepared_Query shows a worker that runs one statement many times. Its
-// Query keeps parameter buffers and resolved options across executions; the
-// worker owns it and closes it when done. Close returns at once; pending writes
-// drain in the background, and Session.Close joins them.
-func ExamplePrepared_Query() {
+// ExamplePrepared_Worker shows a goroutine that runs one statement many times.
+// Its Worker keeps parameter buffers and resolved options across executions;
+// the goroutine owns it and closes it when done. Close returns at once;
+// pending writes drain in the background, and Session.Close joins them.
+func ExamplePrepared_Worker() {
 	// Assumes example.tweet(timeline text, id uuid, text text, PRIMARY KEY(timeline,id)).
 	ctx := context.Background()
 	cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithKeyspace("example").Build()
@@ -109,7 +109,7 @@ func ExamplePrepared_Query() {
 		}
 	}()
 
-	worker, err := edit.Query()
+	worker, err := edit.Worker()
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -171,7 +171,7 @@ Each stage of a request has its own answer:
   its partition-key values, `Snapshot.Replicas(keyspace, table, token)` lists
   its replicas as host and shard targets, and `Snapshot.TokenRanges` and
   `Snapshot.Hosts` describe the ring.
-- **Statement and values, before executing**: `Query.Routing(value)` returns
+- **Statement and values, before executing**: `Worker.Routing(value)` returns
   the keyspace, table, token, statement kind and any host or shard pinned in
   the options, without sending anything. Pass its token to `Snapshot.Replicas`
   for the candidate replicas. These are the candidates, not a promise: the

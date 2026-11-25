@@ -92,7 +92,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		t.Fatal(err)
 	}
 	key := []cql.Value{cql.IntValue(7)}
-	query, err := prepared.Query(exec.Options{})
+	query, err := prepared.Worker(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

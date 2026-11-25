@@ -52,7 +52,7 @@ func (r Rows[R]) Err() error { return (implSession.Rows[R])(r).Err() }
 
 // Close stops iteration and releases this execution. It is idempotent and
 // returns the same error each time: the error that ended iteration, if any,
-// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// or cqlerr.ErrClosed when Worker.Close or Session.Close stopped the execution
 // first.
 func (r Rows[R]) Close() error { return (implSession.Rows[R])(r).Close() }
 
@@ -155,7 +155,7 @@ func (r *Page[R]) Err() error { return (*implSession.Page[R])(r).Err() }
 
 // Close stops iteration and releases this execution. It is idempotent and
 // returns the same error each time: the error that ended iteration, if any,
-// or cqlerr.ErrClosed when Query.Close or Session.Close stopped the execution
+// or cqlerr.ErrClosed when Worker.Close or Session.Close stopped the execution
 // first.
 func (r *Page[R]) Close() error { return (*implSession.Page[R])(r).Close() }
 
@@ -188,7 +188,7 @@ func (r *RowStream[R]) Err() error { return (*implSession.RowStream[R])(r).Err()
 
 // Close stops iteration and releases this execution. It is idempotent and
 // returns the same error each time: the error that ended iteration, if any,
-// or cqlerr.ErrClosed when StreamQuery.Close or Session.Close stopped the
+// or cqlerr.ErrClosed when StreamWorker.Close or Session.Close stopped the
 // execution first. It cancels and joins any in-progress destination access
 // before returning.
 func (r *RowStream[R]) Close() error { return (*implSession.RowStream[R])(r).Close() }

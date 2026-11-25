@@ -169,7 +169,7 @@ documented methods.
 ### `gocql` (root, layer 3)
 
 - **Contains:** `Connect`, `Session`, and the execution
-  handles (`Prepared`, `Query`, `PreparedStream`, `StreamQuery`, `Batch`,
+  handles (`Prepared`, `Worker`, `PreparedStream`, `StreamWorker`, `Batch`,
   `Rows`, `Page`, `RowStream`, `PageLease`), plus `PreparedInfo` and
   `StreamInfo` as plain data. `Result` lives in `cql`, because `cqlerr`
   needs it and the root package imports `cqlerr`.

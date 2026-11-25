@@ -20,7 +20,7 @@ type gridRow struct {
 
 var gridRows = map[string]gridRow{
 	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...exec.Options"},
-	"Worker-owned": {typ: "Query"},
+	"Worker-owned": {typ: "Worker"},
 	"Shared":       {typ: "Prepared", options: "options ...exec.CompiledOptions"},
 }
 
@@ -42,8 +42,8 @@ var gridNonExecution = map[string][]string{
 		"RefreshMetadata", "RunConditionalBatch", "Subscribe",
 		"UnpreparedAddToBatch",
 	},
-	"Query":    {"AddToBatch", "Close", "Routing", "Wait"},
-	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Query"},
+	"Worker":   {"AddToBatch", "Close", "Routing", "Wait"},
+	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Worker"},
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI
@@ -53,7 +53,7 @@ var apiMethod = regexp.MustCompile(`^\t\tgocql\.(\w+) method \(\*?T\) (\w+)(.*)$
 // TestExecutionGrid checks the grid of docs/api-surface.md against the public
 // API: every documented cell method exists, uses its column's verb and its
 // row's prefix, and ends in its row's options form; every other exported
-// method of Session, Query and Prepared is either in the grid or listed in
+// method of Session, Worker and Prepared is either in the grid or listed in
 // gridNonExecution, so a new execution method fails until the grid documents
 // it. The throwaway pages cell is empty by design, and the throwaway many-rows
 // cell lacks Run because Run returns a handle.

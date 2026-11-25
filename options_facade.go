@@ -47,23 +47,23 @@ func tooManyPrepareOptions() error {
 	return &cql.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
-// tooManyQueryOptions is the error of a Query call given more than one
+// tooManyWorkerOptions is the error of a Worker call given more than one
 // Options, or StreamOptions when stream is set.
 //
 //go:noinline
-func tooManyQueryOptions(stream bool) error {
+func tooManyWorkerOptions(stream bool) error {
 	if stream {
 		return &cql.ValidationError{Field: "options", Err: errors.New("at most one StreamOptions")}
 	}
 	return &cql.ValidationError{Field: "options", Err: errors.New("at most one Options")}
 }
 
-// fixedWorkerTimestamp is the error of a worker query given a fixed
+// fixedWorkerTimestamp is the error of a worker given a fixed
 // exec.Options.Timestamp, which would stamp each of its writes alike.
 //
 //go:noinline
 func fixedWorkerTimestamp() error {
-	return &cql.ValidationError{Field: "Timestamp", Err: errors.New("a worker query would give every write the same timestamp; pass it per call through Session.CompileOptions")}
+	return &cql.ValidationError{Field: "Timestamp", Err: errors.New("a worker would give every write the same timestamp; pass it per call through Session.CompileOptions")}
 }
 
 // internalOptionList converts the optional exec.Options of a throwaway call; the

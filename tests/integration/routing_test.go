@@ -829,7 +829,7 @@ func TestRouting(t *testing.T) {
 // routingTestInfo returns the routing a query of p computes for value.
 func routingTestInfo[P, R any](t testing.TB, p *gocql.Prepared[P, R], value P) routing.Info {
 	t.Helper()
-	q, err := p.Query(exec.Options{})
+	q, err := p.Worker(exec.Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

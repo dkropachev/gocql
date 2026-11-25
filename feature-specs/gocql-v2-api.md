@@ -9,7 +9,7 @@ Module: `github.com/scylladb/gocql/v2`. The public packages are:
 
 | Package | Contents |
 |---|---|
-| `gocql` (module root) | dialects, `Connect`, `Session`, `Prepared`, `Query`, `Batch`, cursors, results |
+| `gocql` (module root) | dialects, `Connect`, `Session`, `Prepared`, `Worker`, `Batch`, cursors, results |
 | `config` | cluster configuration and profile builders, observers |
 | `exec` | per-execution options: `Options`, `CompiledOptions`, `PrepareOptions`, `StreamOptions`, `StreamLimits`, `SerialOverride` |
 | `event` | cluster events delivered by `Session.Subscribe` |
@@ -257,7 +257,7 @@ type Statement[P, R any] struct {
     Rows RowDecoder[R]       // nil when R is EmptyRow
     BindMarkers Columns      // parameter metadata for unprepared execution
     Kind StatementKind       // Unknown is inferred: CASRows or a DML IF is Conditional
-    Idempotent bool          // carried into Prepared, Query and batch members
+    Idempotent bool          // carried into Prepared, Worker and batch members
 }
 type StatementKind uint8
 const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStatement)
@@ -690,8 +690,8 @@ fallback.
 Package-level functions exist only where a method cannot express them. Go 1.27
 methods may declare their own type parameters, so the generic operations are
 methods on the type that owns them (`Session.Prepare`, `Session.PrepareStream`,
-`Session.RunConditionalBatch`, `Session.Unprepared*`, `Prepared.Query`,
-`PreparedStream.Query`). Settings that only refine a builder are methods of
+`Session.RunConditionalBatch`, `Session.Unprepared*`, `Prepared.Worker`,
+`PreparedStream.Worker`). Settings that only refine a builder are methods of
 the builder, not values made by a function: pool size and a fixed TLS
 configuration are `ConfigBuilder` methods. Client routes are plain
 `config.ClientRoute{ConnectionID, Hostname}` records passed together to
@@ -778,23 +778,23 @@ func (p *Prepared[P, R]) Run(context.Context, P, ...exec.CompiledOptions) (Rows[
 func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...exec.CompiledOptions) (*Page[R], error)
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 
-// Worker-owned reusable queries.
-func (p *Prepared[P, R]) Query(...exec.Options) (*Query[P, R], error) // at most one
+// Worker-owned reusable executions.
+func (p *Prepared[P, R]) Worker(...exec.Options) (*Worker[P, R], error) // at most one
 func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
 func (s *Session) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) iter.Seq2[*R, error]
 func (s *Session) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
-func (q *Query[P, R]) Exec(context.Context, P) (Result, error)
-func (q *Query[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
-func (q *Query[P, R]) One(context.Context, P, *R) (bool, Result, error)
-func (q *Query[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
-func (q *Query[P, R]) Run(context.Context, P) (Rows[R], error)
-func (q *Query[P, R]) RunPage(context.Context, P, cql.PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
-func (q *Query[P, R]) Routing(P) (routing.Info, error)
-func (q *Query[P, R]) AddToBatch(*Batch, P) error
-func (q *Query[P, R]) Close()                       // stop at once
-func (q *Query[P, R]) Wait(context.Context) error   // join the drain
+func (w *Worker[P, R]) Exec(context.Context, P) (Result, error)
+func (w *Worker[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
+func (w *Worker[P, R]) One(context.Context, P, *R) (bool, Result, error)
+func (w *Worker[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
+func (w *Worker[P, R]) Run(context.Context, P) (Rows[R], error)
+func (w *Worker[P, R]) RunPage(context.Context, P, cql.PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
+func (w *Worker[P, R]) Routing(P) (routing.Info, error)
+func (w *Worker[P, R]) AddToBatch(*Batch, P) error
+func (w *Worker[P, R]) Close()                       // stop at once
+func (w *Worker[P, R]) Wait(context.Context) error   // join the drain
 
 func (s *Session) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
 func (s *Session) RunConditionalBatch[X any](context.Context, *Batch, cql.RowDecoder[cql.CASResult[X]], ...exec.CompiledOptions) (CASBatchRows[X], error)
@@ -805,7 +805,7 @@ a lock-free pool, so they allocate no per-call execution state. Prepared.Run and
 RunPage return a handle that holds a pooled query until it is closed: the
 session registers that query while the handle is open, so Session.Close stops
 the handle, and a handle dropped without Close releases its query once the
-garbage collector finds it. A worker-owned Query skips the pool hand-off (about
+garbage collector finds it. A Worker skips the pool hand-off (about
 2 to 4 percent of client CPU at 64 workers on the loopback benchmark) and
 resolves its exec.Options once; it keeps the same calls for workers that run one
 statement repeatedly.
@@ -833,7 +833,7 @@ computes routing from the same owned bytes; encoders are not called again for
 routing, retries, reprepare or paging. The Unprepared calls take parameter
 Columns from Statement.BindMarkers. A statement with parameters (P other than
 EmptyParams) and no BindMarkers fails with a ValidationError before it is
-sent, except with cql.DynamicParams, whose markers take the values' types. Query options are captured at construction, including owned
+sent, except with cql.DynamicParams, whose markers take the values' types. Worker options are captured at construction, including owned
 custom payload bytes; the selected profile is loaded per execution. Profile
 replacement never changes an active execution's retry or continuation options.
 
@@ -1074,15 +1074,15 @@ unread bytes at a checked frame/unit boundary and restored before shared reads.
 The user-facing description is docs/source/statements/streaming.md.
 
 ```go
-// Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
+// Streaming is always prepared: Session.PrepareStream, then PreparedStream.Worker.
 func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
 func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
-func (p *PreparedStream[P, R]) Query(...exec.StreamOptions) (*StreamQuery[P, R], error) // at most one
-func (q *StreamQuery[P, R]) Run(context.Context, P) (*RowStream[R], error)
-func (q *StreamQuery[P, R]) Close()
-func (q *StreamQuery[P, R]) Wait(context.Context) error
+func (p *PreparedStream[P, R]) Worker(...exec.StreamOptions) (*StreamWorker[P, R], error) // at most one
+func (w *StreamWorker[P, R]) Run(context.Context, P) (*RowStream[R], error)
+func (w *StreamWorker[P, R]) Close()
+func (w *StreamWorker[P, R]) Wait(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
 func (s *RowStream[R]) Err() error
@@ -1225,9 +1225,9 @@ reuse is scoped to this decoder and exact metadata. Applications using both mode
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
 stream.RowDecoder, Kind, Idempotent) and returns an immutable PreparedStream[P,R]. Its
-Query(exec.StreamOptions) creates a worker-owned StreamQuery. Preparation validates
+Worker(exec.StreamOptions) creates a worker-owned StreamWorker. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
-result metadata. No buffered decoder is needed. Query-local caches revalidate
+result metadata. No buffered decoder is needed. Worker-local caches revalidate
 actual changed result metadata without changing the shared preparation.
 
 Streaming query execution installs the stream receiver before sending and returns after checked
@@ -1296,7 +1296,7 @@ defaults. Explicit nonzero exec.Options.Prefetch fails validation before submiss
 zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
-transparent replay. StreamQuery.Close() stops the cursor and StreamQuery.Wait(ctx) covers final transport and callback drain;
+transparent replay. StreamWorker.Close() stops the cursor and StreamWorker.Wait(ctx) covers final transport and callback drain;
 streamed output remains caller-owned.
 
 exec.StreamLimits zero fields select defaults: 1 MiB simultaneously retained
@@ -1351,7 +1351,7 @@ also interrupts active streams; already written caller output remains valid.
 
 ```go
 // exec.Options are plain values; the zero exec.Options uses the session default
-// profile. Query constructors take exec.Options and validate, resolve and encode
+// profile. Worker constructors take exec.Options and validate, resolve and encode
 // them for their session once. One-shot executions (Prepared.Exec/One/Each,
 // Session.ExecBatch, Session.RunConditionalBatch) take exec.CompiledOptions: exec.Options compiled by
 // Session.CompileOptions for one session's default profile and keyspace. On
@@ -1463,7 +1463,7 @@ prefetch, no speculation, and the safe retry policy. Caller context always
 bounds request work, including preparation, metadata refresh, agreement,
 queueing and cleanup waits. Cleanup continues independently where required to
 release an orphan stream; returning a context error never authorizes reuse of
-still-borrowed input before Wait. Query construction copies custom payload bytes and checks source views while
+still-borrowed input before Wait. Worker construction copies custom payload bytes and checks source views while
 capturing options. Public batch execution also owns its options payload; batch
 parameters are copied into the batch when AddToBatch appends them. Returned Result
 payloads use owned storage, because Result outlives pages; this explicit escape
@@ -2150,5 +2150,5 @@ pages run. Ordinary callback errors remain failures. Result.FetchedRows continue
 counting fetched response rows, rather than callback invocations.
 
 exec.Options and exec.CompiledOptions remain separate. Compile recurring settings once;
-request-specific options may be compiled for one-shot calls. Query settings remain
+request-specific options may be compiled for one-shot calls. Worker settings remain
 immutable and request context deadlines need no new options compilation.

@@ -22,10 +22,10 @@ import (
 // Prepared, Query, unprepared queries, batches, conditional statements and row
 // streams.
 func TestStructMapping(t *testing.T) {
-	// Query.AddToBatch with Session.ExecBatch, and a counter table updated through a struct.
+	// Worker.AddToBatch with Session.ExecBatch, and a counter table updated through a struct.
 	t.Run("Batch", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		insert, err := f.insert(t, ctx).Query(exec.Options{})
+		insert, err := f.insert(t, ctx).Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -69,7 +69,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		add, err := addPrepared.Query(exec.Options{})
+		add, err := addPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +94,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(exec.Options{})
+		read, err := readPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -118,7 +118,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		insert, err := insertPrepared.Query(exec.Options{})
+		insert, err := insertPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -152,7 +152,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		update, err := updatePrepared.Query(exec.Options{})
+		update, err := updatePrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -206,7 +206,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			insert, err := insertPrepared.Query(exec.Options{})
+			insert, err := insertPrepared.Worker(exec.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -225,7 +225,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			read, err := readPrepared.Query(exec.Options{})
+			read, err := readPrepared.Worker(exec.Options{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -253,7 +253,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			q, err := prepared.Query(exec.StreamOptions{})
+			q, err := prepared.Worker(exec.StreamOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -317,7 +317,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		insert, err := insertPrepared.Query(exec.Options{})
+		insert, err := insertPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -333,7 +333,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(exec.Options{})
+		read, err := readPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -409,11 +409,11 @@ func TestStructMapping(t *testing.T) {
 		}
 	})
 
-	// Query.Exec, Run, RunPage (paged and unpaged), Each, One and Routing,
+	// Worker.Exec, Run, RunPage (paged and unpaged), Each, One and Routing,
 	// with paging across pages of two rows.
 	t.Run("Query", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
-		insert, err := f.insert(t, ctx).Query(exec.Options{})
+		insert, err := f.insert(t, ctx).Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -429,7 +429,7 @@ func TestStructMapping(t *testing.T) {
 		if _, err := insert.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Query(exec.Options{PageSize: 2})
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Worker(exec.Options{PageSize: 2})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -495,7 +495,7 @@ func TestStructMapping(t *testing.T) {
 		})
 		t.Run("Unpaged", func(t *testing.T) {
 			// The cql.Unpaged page size returns the whole result as one page.
-			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Query(exec.Options{PageSize: cql.Unpaged})
+			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Worker(exec.Options{PageSize: cql.Unpaged})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -554,7 +554,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs, cql.ReuseBuffers())).Query(exec.Options{})
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs, cql.ReuseBuffers())).Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -622,7 +622,7 @@ func TestStructMapping(t *testing.T) {
 		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
 			options := exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: 2}}
-			q, err := read.Query(options)
+			q, err := read.Worker(options)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -664,7 +664,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		update, err := updatePrepared.Query(exec.Options{})
+		update, err := updatePrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -689,7 +689,7 @@ func TestStructMapping(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		read, err := readPrepared.Query(exec.Options{})
+		read, err := readPrepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -440,7 +440,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				q, err := p.Query(exec.Options{})
+				q, err := p.Worker(exec.Options{})
 				if err != nil {
 					t.Fatal(err)
 				}

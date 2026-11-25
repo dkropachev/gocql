@@ -1045,7 +1045,7 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		payload := bytes.Repeat([]byte("typed-large-segment-payload"), 24000)
-		insert, err := prepared.Query(exec.Options{})
+		insert, err := prepared.Worker(exec.Options{})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -17,7 +17,7 @@ var sentinels = map[string]struct {
 	err  error
 	text string
 }{
-	"ErrBusy":                         {ErrBusy, "gocql: query is busy"},
+	"ErrBusy":                         {ErrBusy, "gocql: worker is busy"},
 	"ErrClosed":                       {ErrClosed, "gocql: closed"},
 	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use One, Each, All or Run, or RunConditionalBatch for a batch"},
 	"ErrConnectionClosed":             {ErrConnectionClosed, "gocql: connection closed waiting for response"},

@@ -60,7 +60,7 @@ func TestCursorColumns(t *testing.T) {
 		wantColumns(t, "Page.Columns", page.Columns(), gridValueColumn)
 	})
 	t.Run("RowStream", func(t *testing.T) {
-		q, err := f.ps.Query(exec.StreamOptions{})
+		q, err := f.ps.Worker(exec.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
