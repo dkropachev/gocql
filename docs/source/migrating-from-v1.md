@@ -100,7 +100,7 @@ defer session.Close()
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc)` and `WithLocalRack(rack)` set its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
 | `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; `WithRetry(nil)` is the default, and `retry.Never{}` disables retries; see [retries](retry-policy.md) |
-| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
+| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`, or `endpoint.ReconnectFunc` for a function; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
 | `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
 | `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |

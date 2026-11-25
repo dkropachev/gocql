@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/netip"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -911,4 +912,65 @@ func codecTestMust[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// TestConfigBuilderClone specializes a clone and checks that neither the
+// clone nor the base sees the other's later settings, slices and maps
+// included.
+func TestConfigBuilderClone(t *testing.T) {
+	base := New(ScyllaV4, "a", "b").WithKeyspace("ks").WithMetadataKeyspaces("ks").
+		WithIgnoreEvents(event.KindStatus).WithClientRoutes(ClientRoute{ConnectionID: "c1"}).
+		WithDefaultProfile(NewProfile().WithPageSize(7).MustBuild())
+	clone := base.Clone().WithKeyspace("other").WithContactPoints("c").WithMetadataKeyspaces("other").
+		WithIgnoreEvents().WithClientRoutes(ClientRoute{ConnectionID: "c2"}).
+		WithPartitioner("custom", routing.Murmur3TokenPartitioner)
+	base.WithPartitioner("base", routing.Murmur3TokenPartitioner)
+	b, c := mustBuildConfig(t, base).settings, mustBuildConfig(t, clone).settings
+	if b.Keyspace != "ks" || !slices.Equal(b.ContactPoints, []string{"a", "b"}) || !slices.Equal(b.Metadata.Keyspaces, []string{"ks"}) ||
+		b.Metadata.StatusEvents || b.ClientRoutes.ConnectionIDs[0] != "c1" || b.Partitioners["custom"] != nil || b.Partitioners["base"] == nil {
+		t.Fatalf("the clone's settings reached the base: %+v", b)
+	}
+	if c.Keyspace != "other" || !slices.Equal(c.ContactPoints, []string{"c"}) || !c.Metadata.StatusEvents ||
+		c.ClientRoutes.ConnectionIDs[0] != "c2" || c.Partitioners["custom"] == nil || c.Partitioners["base"] != nil {
+		t.Fatalf("the clone lost or shared settings: %+v", c)
+	}
+	if b.DefaultProfile.PageSize != 7 || c.DefaultProfile.PageSize != 7 {
+		t.Fatalf("page sizes %d and %d, want the base's 7 in both", b.DefaultProfile.PageSize, c.DefaultProfile.PageSize)
+	}
+	if _, err := new(ConfigBuilder).Clone().Build(); err == nil {
+		t.Fatal("Build accepted the clone of a zero ConfigBuilder")
+	}
+}
+
+// TestProfileMustBuild checks that MustBuild returns what Build does and
+// panics with Build's error.
+func TestProfileMustBuild(t *testing.T) {
+	if p := NewProfile().WithPageSize(3).MustBuild(); p.PageSize != 3 {
+		t.Fatalf("PageSize = %d, want 3", p.PageSize)
+	}
+	defer func() {
+		err, _ := recover().(error)
+		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPageSize" {
+			t.Fatalf("MustBuild panicked with %v, want a WithPageSize ValidationError", err)
+		}
+	}()
+	NewProfile().WithPageSize(-1).MustBuild()
+	t.Fatal("MustBuild did not panic")
+}
+
+// TestReconnectFunc installs a function as the reconnect policy; Build
+// probes it once.
+func TestReconnectFunc(t *testing.T) {
+	var calls []int
+	policy := endpoint.ReconnectFunc(func(attempt int) (time.Duration, bool) {
+		calls = append(calls, attempt)
+		return time.Duration(attempt) * time.Second, true
+	})
+	c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(policy)).settings
+	if !slices.Equal(calls, []int{1}) || c.ReconnectFirst != (implSettings.ReconnectProbe{Delay: time.Second, Again: true, Set: true}) {
+		t.Fatalf("calls %v, probe %+v; want one call for attempt 1", calls, c.ReconnectFirst)
+	}
+	if d, ok := c.Reconnect.Delay(3); d != 3*time.Second || !ok {
+		t.Fatalf("Delay(3) = %v, %v", d, ok)
+	}
 }

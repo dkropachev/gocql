@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -65,6 +66,23 @@ type ConfigBuilder struct {
 // filled in unless chosen. Build rejects the zero Dialect.
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder {
 	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, started: true}
+}
+
+// Clone returns an independent copy of the builder, so a shared base can be
+// specialized without changing it: settings chosen on the copy do not reach
+// b, and those chosen on b later do not reach the copy. Providers, policies
+// and callbacks stay shared, as in a Config. The clone of a zero
+// ConfigBuilder is zero too, and Build rejects it.
+func (b *ConfigBuilder) Clone() *ConfigBuilder {
+	c := *b
+	c.settings = b.settings.Snapshot()
+	if b.profile != nil {
+		profile := *b.profile
+		c.profile = &profile
+	}
+	c.ignoredEvents = slices.Clone(b.ignoredEvents)
+	c.routes = slices.Clone(b.routes)
+	return &c
 }
 
 // Build validates the final settings and returns the Config or the first
@@ -533,11 +551,10 @@ func (b *ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder {
 // WithReconnect sets the delay between attempts to reopen a node's
 // connections; see endpoint.ReconnectPolicy for how the driver calls it.
 // Build calls Delay(1) once and rejects a negative delay. A nil policy
-// restores the default. To never reconnect, pass a policy that declines:
+// restores the default. endpoint.ReconnectFunc adapts a function; to never
+// reconnect, pass one that declines:
 //
-//	type noReconnect struct{}
-//
-//	func (noReconnect) Delay(int) (time.Duration, bool) { return 0, false }
+//	endpoint.ReconnectFunc(func(int) (time.Duration, bool) { return 0, false })
 //
 // Default jittered backoff from 1s to 32s.
 func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBuilder {
@@ -792,6 +809,16 @@ type ProfileBuilder struct {
 // NewProfile starts a profile.
 func NewProfile() *ProfileBuilder {
 	return &ProfileBuilder{profile: *implSettings.DefaultConfig().DefaultProfile, started: true}
+}
+
+// MustBuild is Build that panics on error, for package-level profiles and
+// profiles written from constants.
+func (p *ProfileBuilder) MustBuild() Profile {
+	profile, err := p.Build()
+	if err != nil {
+		panic(err)
+	}
+	return profile
 }
 
 // Build validates the profile, for use as Options.Profile.

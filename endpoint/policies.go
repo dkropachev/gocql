@@ -25,6 +25,19 @@ type ReconnectPolicy interface {
 	Delay(attempt int) (time.Duration, bool)
 }
 
+// ReconnectFunc adapts a function to ReconnectPolicy, for
+// config.ConfigBuilder.WithReconnect:
+//
+//	endpoint.ReconnectFunc(func(attempt int) (time.Duration, bool) {
+//		return min(time.Duration(attempt)*time.Second, 10*time.Second), true
+//	})
+//
+// A nil ReconnectFunc panics when called.
+type ReconnectFunc func(attempt int) (time.Duration, bool)
+
+// Delay calls f.
+func (f ReconnectFunc) Delay(attempt int) (time.Duration, bool) { return f(attempt) }
+
 // TLSSource supplies the TLS configuration of each new connection, so the
 // configuration can change while sessions run. The driver calls TLSConfig on
 // every dial, from many goroutines, and copies the result; it must be fast and

@@ -131,6 +131,7 @@ package config
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
+		config.ConfigBuilder method (*T) Clone() *config.ConfigBuilder
 		config.ConfigBuilder method (*T) ConfigureDefaultProfile(choose func(*config.ProfileBuilder)) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAddressTranslator(translator endpoint.Translator) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
@@ -210,6 +211,7 @@ package config
 		config.Profile field Consistency cql.Consistency
 	type config.ProfileBuilder struct
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
+		config.ProfileBuilder method (*T) MustBuild() config.Profile
 		config.ProfileBuilder method (*T) NoSerialConsistency() *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithConsistency(c cql.Consistency) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageSize(rows int32) *config.ProfileBuilder
@@ -1163,6 +1165,8 @@ package endpoint
 		endpoint.Peer field Port uint16
 		endpoint.Peer field ShardAwarePort uint16
 		endpoint.Peer field ShardAwarePortTLS uint16
+	type endpoint.ReconnectFunc func(attempt int) (time.Duration, bool)
+		endpoint.ReconnectFunc method (T) Delay(attempt int) (time.Duration, bool)
 	type endpoint.ReconnectPolicy interface
 		endpoint.ReconnectPolicy method Delay(attempt int) (time.Duration, bool)
 	type endpoint.Resolver interface

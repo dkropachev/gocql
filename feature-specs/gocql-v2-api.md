@@ -1408,6 +1408,7 @@ type Profile struct {
     /* unexported built mark */
 }
 func NewProfile() *ProfileBuilder
+func (*ProfileBuilder) MustBuild() Profile // Build that panics on error
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
@@ -1960,6 +1961,7 @@ These functions are the entry points:
 // package config
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
+func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
 func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
