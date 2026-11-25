@@ -117,7 +117,7 @@ package auth
 		auth.Exchange method Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
 		auth.Exchange method Close()
 		auth.Exchange method Success(context.Context, cql.Nullable[cql.Bytes]) error
-	func auth.Password(username string, password string) auth.Provider
+	func auth.Password(username string, password string, allowed ...string) auth.Provider
 	type auth.Provider interface
 		auth.Provider method Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (auth.Exchange, cql.Nullable[[]byte], error)
 

@@ -2117,7 +2117,7 @@ type Exchange interface {
     Success(context.Context, cql.Nullable[cql.Bytes]) error
     Close()
 }
-func Password(username, password string) Provider
+func Password(username, password string, allowed ...string) Provider // none allowed: any authenticator class
 ```
 
 The context-aware endpoint.Dialer contract applies to all new connections.
