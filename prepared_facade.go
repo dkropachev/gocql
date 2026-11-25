@@ -187,7 +187,9 @@ func (p *Prepared[P, R]) Worker(options ...exec.Options) (*Worker[P, R], error) 
 // replicas; the routing policy picks among them when the statement runs, so
 // Routing does not say which replica serves it. Routing takes no pooled
 // query and is safe for concurrent use. At most one exec.CompiledOptions may
-// be passed; a closed session returns cqlerr.ErrClosed.
+// be passed. Options an execution would reject before sending, such as a
+// Keyspace other than the statement's, return the same cql.ValidationError;
+// a closed session returns cqlerr.ErrClosed.
 func (p *Prepared[P, R]) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {

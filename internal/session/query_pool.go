@@ -358,16 +358,22 @@ func (p *Prepared[P, R]) Routing(value P, options CompiledOptions) (routing2.Inf
 	rt := InternalRuntimeFor(s)
 	var resolvedScratch InternalResolvedOptions
 	resolved := p.callOptions(options).resolve(rt, &resolvedScratch)
-	fillOptionRouting(&info, rt, resolved)
+	if err := fillOptionRouting(&info, rt, resolved); err != nil {
+		return routing2.Info{}, err
+	}
 	return info, nil
 }
 
 // fillOptionRouting completes info with what resolved options add to an
 // execution's routing, as executions do: the keyspace when the statement
 // names none, the consistency, the host and shard pins, and the conditional
-// routing of a SERIAL or LOCAL_SERIAL read.
-func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved *InternalResolvedOptions) {
+// routing of a SERIAL or LOCAL_SERIAL read. A keyspace override that differs
+// from the statement's is rejected, as an execution rejects it.
+func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved *InternalResolvedOptions) error {
 	values := &resolved.InternalOptions
+	if values.Keyspace != "" && info.Keyspace != "" && values.Keyspace != info.Keyspace {
+		return cqltype.TypeValidation("keyspace", "override differs from bound statement")
+	}
 	if info.Keyspace == "" {
 		info.Keyspace = values.Keyspace
 		if info.Keyspace == "" {
@@ -380,6 +386,7 @@ func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved
 	if info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
 		info.Kind = cql.ConditionalStatement
 	}
+	return nil
 }
 
 // Exec binds value and executes the statement once. The statement must not

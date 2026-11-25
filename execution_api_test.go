@@ -49,6 +49,25 @@ func TestPreparedRouting(t *testing.T) {
 	if info, err := f.p.Routing(gridKey, serial); err != nil || info.Kind != cql.ConditionalStatement {
 		t.Fatalf("Routing of a SERIAL read = %+v, %v; want it routed as conditional", info, err)
 	}
+	// An execution rejects a keyspace override that differs from the
+	// statement's, so Routing does too.
+	other, err := f.s.CompileOptions(exec.Options{Keyspace: "other"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.p.Routing(gridKey, other); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("Routing with another keyspace = %v, want a cql.ValidationError", err)
+	}
+	if _, _, err := f.p.One(f.ctx, gridKey, nil, other); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("One with another keyspace = %v, want the cql.ValidationError Routing matches", err)
+	}
+	same, err := f.s.CompileOptions(exec.Options{Keyspace: "ks"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := f.p.Routing(gridKey, same); err != nil || info.Keyspace != "ks" {
+		t.Fatalf("Routing with the statement's keyspace = %+v, %v", info, err)
+	}
 	if _, err := f.p.Routing(gridKey, options, options); err == nil {
 		t.Fatal("Routing took two CompiledOptions")
 	}
