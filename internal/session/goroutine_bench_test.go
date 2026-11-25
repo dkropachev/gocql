@@ -57,7 +57,7 @@ func BenchmarkGoroutines(b *testing.B) {
 				values := Options{Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}}
 				switch variant {
 				case "observer":
-					values.Observer = nopObserver{}
+					values.Observer = hooksOf(nopObserver{})
 				case "speculate":
 					// A delay no loopback read reaches: the timer never fires.
 					profile := settings.InternalDefaultProfile()

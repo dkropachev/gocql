@@ -24,43 +24,38 @@ func Connect(ctx context.Context, config settings.Config) (*Session, error) {
 	return InternalWrapSession(core), nil
 }
 
-// setConfig installs c and finds its observer's hooks. Config.Build has
-// validated the observer.
+// setConfig installs c and keeps its observer's hooks, nil without one.
 func (rt *InternalSessionRuntime) setConfig(c settings.Config) {
 	rt.config = c
-	rt.observerHooks, _ = settings.NewObserverHooks(c.Observer)
+	rt.observerHooks = nil
+	if !c.Observer.IsZero() {
+		rt.observerHooks = &rt.config.Observer
+	}
 }
 
-// noObserverHooks are the hooks of an execution nothing observes.
-var noObserverHooks = &settings.ObserverHooks{}
-
-// overridesObserver reports whether values change which observer sees an
+// overridesObserver reports whether values change which hooks see an
 // execution, so that it does not call the session's hooks alone.
 func overridesObserver(values *Options) bool {
-	return values.Observer != nil || values.NoSessionObserver
+	return !values.Observer.IsZero() || values.NoSessionObserver
 }
 
 // executionHooks returns the hooks of an execution with values on rt's
-// session, when overridesObserver(values): the session observer's hooks, then
-// values.Observer's, as observe.Join orders them; values.Observer's alone
-// with NoSessionObserver; and noObserverHooks when that leaves none.
-func executionHooks(rt *InternalSessionRuntime, values *Options) (*settings.ObserverHooks, error) {
-	observer := values.Observer
-	if !values.NoSessionObserver && rt.config.Observer != nil {
-		observer = observe.Join(rt.config.Observer, values.Observer)
+// session, when overridesObserver(values): the session's hooks, then
+// values.Observer, as observe.Join orders them, or values.Observer alone
+// with NoSessionObserver. It never returns nil.
+func executionHooks(rt *InternalSessionRuntime, values *Options) *observe.Hooks {
+	hooks := values.Observer
+	if !values.NoSessionObserver {
+		hooks = observe.Join(rt.config.Observer, values.Observer)
 	}
-	hooks, err := settings.NewObserverHooks(observer)
-	if hooks == nil && err == nil {
-		hooks = noObserverHooks
-	}
-	return hooks, err
+	return &hooks
 }
 
-// Observer returns the observer the session was configured with, nil
-// without one.
-func (s *Session) Observer() observe.Observer {
+// Observer returns the hooks the session was configured with, the zero
+// Hooks without them.
+func (s *Session) Observer() observe.Hooks {
 	if s.Core() == nil {
-		return nil
+		return observe.Hooks{}
 	}
 	return InternalRuntimeFor(s.Core()).config.Observer
 }

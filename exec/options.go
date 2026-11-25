@@ -49,13 +49,13 @@ type Options struct {
 	// Retry replaces the profile's retry policy; nil keeps it. Use
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
-	// Observer observes the execution as well as the session's observer
-	// (config.ConfigBuilder.WithObserver), joined after it as observe.Join
-	// joins them: each hook calls the session's observer first, then this
-	// one, and the context this one's StartRequest receives is the one the
-	// session's returned. Nil adds nothing. To observe an execution with
+	// Observer observes the execution as well as the session's hooks
+	// (config.ConfigBuilder.WithObserver), joined after them as observe.Join
+	// joins them: each hook calls the session's first, then this one's, and
+	// the context this Request hook receives is the one the session's
+	// returned. The zero Hooks adds nothing. To observe an execution with
 	// Observer alone, set NoSessionObserver too.
-	Observer observe.Observer
+	Observer observe.Hooks
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal
 	// is rejected.
@@ -115,11 +115,11 @@ type Options struct {
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
-	// instrumentation such as OpenTelemetry, which hooks observe.Observer.
+	// instrumentation such as OpenTelemetry, which uses observe.Hooks.
 	CQLTrace bool
-	// NoSessionObserver leaves the session's observer out of the
-	// execution, so Observer alone observes it, or nothing does when
-	// Observer is nil.
+	// NoSessionObserver leaves the session's hooks out of the execution, so
+	// Observer alone observes it, or nothing does when Observer is the zero
+	// Hooks.
 	NoSessionObserver bool
 }
 

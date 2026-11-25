@@ -37,7 +37,7 @@ type Config struct {
 	Reconnect         ReconnectPolicy
 	Conviction        endpoint.ConvictionPolicy
 	AddressTranslator endpoint.Translator
-	Observer          observe.Observer
+	Observer          observe.Hooks
 	Logger            *slog.Logger
 	DialHost          func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
@@ -163,9 +163,6 @@ func (c ClientTimestamps) Generator() func() int64 { return c.next }
 // Field, the config.ConfigBuilder setter that chose the invalid value, and
 // says the limit it broke.
 func (config Config) Validate() error {
-	if _, err := NewObserverHooks(config.Observer); err != nil {
-		return err
-	}
 	path, err := config.UnixContact()
 	if err != nil {
 		return err

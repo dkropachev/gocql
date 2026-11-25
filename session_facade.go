@@ -254,11 +254,11 @@ func (s *Session) Closed() bool { return s.internal().Closed() }
 // Metadata returns the current immutable cluster metadata snapshot.
 func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata().Public() }
 
-// Observer returns the observer the session was configured with
-// (config.ConfigBuilder.WithObserver), nil without one or for a zero
-// Session. Every execution calls it unless its exec.Options set
+// Observer returns the hooks the session was configured with
+// (config.ConfigBuilder.WithObserver), the zero Hooks without them or for a
+// zero Session. Every execution calls them unless its exec.Options set
 // NoSessionObserver.
-func (s *Session) Observer() observe.Observer { return s.internal().Observer() }
+func (s *Session) Observer() observe.Hooks { return s.internal().Observer() }
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }

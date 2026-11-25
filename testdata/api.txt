@@ -81,7 +81,7 @@ package gocql
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
-		gocql.Session method (*T) Observer() observe.Observer
+		gocql.Session method (*T) Observer() observe.Hooks
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
 		gocql.Session method (*T) RefreshMetadata(ctx context.Context) error
@@ -129,7 +129,7 @@ package config
 		config.ClientRoute field Hostname string
 	type config.Config struct
 		config.Config method (T) DefaultProfile() config.Profile
-		config.Config method (T) Observer() observe.Observer
+		config.Config method (T) Observer() observe.Hooks
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
@@ -176,7 +176,7 @@ package config
 		config.ConfigBuilder method (*T) WithMetadataServerTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMetadataTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithNagle(on bool) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithObserver(observer observe.Observer) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithObserver(hooks observe.Hooks) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithOnlyHost(id cql.UUID) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPartitioner(name string, partitioner routing.TokenPartitioner) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPort(port uint16) *config.ConfigBuilder
@@ -1252,7 +1252,7 @@ package exec
 		exec.CompiledOptions method (T) Values() exec.Options
 	type exec.Options struct
 		exec.Options field Retry retry.Policy
-		exec.Options field Observer observe.Observer
+		exec.Options field Observer observe.Hooks
 		exec.Options field Profile *config.Profile
 		exec.Options field Keyspace string
 		exec.Options field Timestamp cql.Option[time.Time]
@@ -1475,10 +1475,6 @@ package metrics
 		metrics.Snapshot field LatencyP99 time.Duration
 
 package observe
-	type observe.AttemptObserver interface
-		observe.AttemptObserver method StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
-	type observe.AttemptObserverFunc func(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
-		observe.AttemptObserverFunc method (T) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
 	type observe.AttemptStart struct
 		observe.AttemptStart field Started time.Time
 		observe.AttemptStart field Address string
@@ -1487,8 +1483,11 @@ package observe
 		observe.AttemptStart field Target metadata.Target
 		observe.AttemptStart field Consistency cql.Consistency
 		observe.AttemptStart field Speculative bool
-	func observe.Join(observers ...observe.Observer) observe.Observer
-	type observe.Observer interface
+	type observe.Hooks struct
+		observe.Hooks field Request func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
+		observe.Hooks field Attempt func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
+		observe.Hooks method (T) IsZero() bool
+	func observe.Join(hooks ...observe.Hooks) observe.Hooks
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
 		observe.RequestEvent field Statement string
@@ -1497,10 +1496,6 @@ package observe
 		observe.RequestEvent field Result cql.Result
 		observe.RequestEvent field Routing routing.Info
 		observe.RequestEvent field ID uint64
-	type observe.RequestObserver interface
-		observe.RequestObserver method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
-	type observe.RequestObserverFunc func(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
-		observe.RequestObserverFunc method (T) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string

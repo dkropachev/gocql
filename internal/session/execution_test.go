@@ -256,7 +256,7 @@ func TestExecution(t *testing.T) {
 			t.Fatal("query execution should run direct")
 		}
 		r = request()
-		r.InternalLogical.hooks, _ = settings.NewObserverHooks(directTestObserver{})
+		r.InternalLogical.hooks = hooksPtr(directTestObserver{})
 		if !canExecuteDirect(r) {
 			t.Fatal("an observer must keep the direct path")
 		}
@@ -300,7 +300,7 @@ func TestExecution(t *testing.T) {
 					defer cancel()
 					done := make(chan error, 1)
 					go func() {
-						_, err := Exec(ctx, s, b, testOptions(Options{Observer: observer, Profile: generalPathProfile()}))
+						_, err := Exec(ctx, s, b, testOptions(Options{Observer: hooksOf(observer), Profile: generalPathProfile()}))
 						done <- err
 					}()
 					select {
@@ -487,7 +487,7 @@ func TestExecution(t *testing.T) {
 			observer := new(execVoidObserver)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: observer}))
+			result, err := Exec(ctx, s, b, testOptions(Options{CQLTrace: true, Observer: hooksOf(observer)}))
 			if err != nil || result.Attempts != 1 || result.FetchedRows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
@@ -553,7 +553,7 @@ func TestExecution(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: panicObserver{}}))
+			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: hooksOf(panicObserver{})}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -576,7 +576,7 @@ func TestExecution(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: panicStartObserver{}}))
+			rows, err := Run(context.Background(), s, b, testOptions(Options{Observer: hooksOf(panicStartObserver{})}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -601,7 +601,7 @@ func TestExecution(t *testing.T) {
 			observer := new(pairingObserver)
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			rows, err := Run(ctx, s, b, testOptions(Options{Observer: observer, CQLTrace: true}))
+			rows, err := Run(ctx, s, b, testOptions(Options{Observer: hooksOf(observer), CQLTrace: true}))
 			if err != nil {
 				t.Fatal(err)
 			}

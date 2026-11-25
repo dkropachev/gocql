@@ -184,8 +184,8 @@ Each stage of a request has its own answer:
   about 7%, so it comes from the observer below. A
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
-  including speculative and cancelled ones, implement
-  `observe.AttemptObserver.StartAttempt` (see [Tracing](tracing.md)).
+  including speculative and cancelled ones, set
+  an `observe.Hooks` `Attempt` hook (see [Tracing](tracing.md)).
 
 ## Writing your own policy
 

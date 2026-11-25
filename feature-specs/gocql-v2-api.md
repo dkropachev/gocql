@@ -744,7 +744,7 @@ type Session struct { /* opaque */ }
 func Connect(context.Context, config.Config) (*Session, error)
 func (s *Session) Dialect() config.Dialect
 func (s *Session) ID() cql.UUID
-func (s *Session) Observer() observe.Observer // the configured one
+func (s *Session) Observer() observe.Hooks    // the configured ones
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each
@@ -1386,7 +1386,7 @@ type Options struct {
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
-    Observer observe.Observer                     // joined after the session's observer
+    Observer observe.Hooks                        // joined after the session's hooks
     NoSessionObserver bool                        // leave the session's observer out
 }
 // package cql
@@ -1563,13 +1563,11 @@ type AttemptStart struct {
     Speculative bool
 }
 type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
-type Observer any // one or more of the hook interfaces below; hooks are found once at install
-type RequestObserver interface {
-    StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+type Hooks struct { // a nil hook is skipped; later hooks are new fields
+    Request func(context.Context, RequestStart) (context.Context, func(RequestEvent))
+    Attempt func(context.Context, AttemptStart) func(routing.AttemptEvent)
 }
-type AttemptObserver interface {
-    StartAttempt(context.Context, AttemptStart) func(routing.AttemptEvent)
-}
+func (Hooks) IsZero() bool
 type RequestStart struct {
     ID uint64
     Started time.Time
@@ -1588,12 +1586,9 @@ type RequestEvent struct {
     Result Result
     Err error
 }
-type RequestObserverFunc func(context.Context, RequestStart) (context.Context, func(RequestEvent))
-type AttemptObserverFunc func(context.Context, AttemptStart) func(routing.AttemptEvent)
-// Join calls every observer's hooks in order; it implements the union of
-// their hooks. A pool connecting or a host marked down is an event.KindPool
-// event, not an observer hook.
-func Join(observers ...Observer) Observer
+// Join calls every argument's hooks in order, field by field. A pool
+// connecting or a host marked down is an event.KindPool event, not a hook.
+func Join(hooks ...Hooks) Hooks
 ```
 
 Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
@@ -1718,17 +1713,17 @@ partitioners must consume it synchronously and not retain borrowed spans.
 
 Policies may not mutate request inputs; no observer receives `[]any`. Observer
 callbacks are synchronous and must not block; panic containment logs observer
-failure without corrupting execution. StartRequest receives the caller's
+failure without corrupting execution. The Request hook receives the caller's
 context as the request is admitted; the context it returns is passed to
-StartAttempt for every attempt of that request and is never used for
+the Attempt hook for every attempt of that request and is never used for
 cancellation. There is one terminal request event and one terminal event per
 started attempt, including cancellation and speculative losers, for each
 configured observer, delivered through the functions the start hooks return.
-Observer is the seam for client-side tracing such as OpenTelemetry, which lives
+observe.Hooks is the seam for client-side tracing such as OpenTelemetry, which lives
 outside the core module; AttemptEvent.CQLTraceID links an attempt to the
 server-side CQL trace session it produced. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
-Observe feedback, metrics and Result accounting still run. Latency percentile
+Learn feedback, metrics and Result accounting still run. Latency percentile
 snapshots are maintained outside individual request completion; disabled
 speculation does not create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
@@ -1965,7 +1960,7 @@ unless discovery is off or client routes are set. `WithIgnoreEvents` replaces it
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `Config.DefaultProfile()` reads a built configuration's profile back, and
 `Profile.Builder()` starts a builder from a profile's values to derive another.
-`Config.Observer()` returns the observer, as `Session.Observer` does. Slice inputs are copied; Build snapshots
+`Config.Observer()` returns the hooks, as `Session.Observer` does. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
 These functions are the entry points:
 
@@ -1976,7 +1971,7 @@ func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (Config) DefaultProfile() Profile
-func (Config) Observer() observe.Observer
+func (Config) Observer() observe.Hooks
 func (Profile) Builder() *ProfileBuilder
 func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
 func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder

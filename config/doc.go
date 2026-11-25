@@ -19,7 +19,7 @@
 // (exec.Options.Profile). WithTLS encrypts connections with a fixed
 // tls.Config; WithTLSSource takes an endpoint.TLSSource such as NewTLSFileSource,
 // which reloads certificates while the session runs. WithObserver installs
-// an observe.Observer; observe.Join combines several.
+// observe.Hooks; observe.Join combines several.
 //
 // # Which setting wins
 //

@@ -144,10 +144,8 @@ func hotPathPrepare[R any](t *testing.T, ctx context.Context, session *Session, 
 	return p
 }
 
-// hotPathObserver is a request observer that allocates nothing of its own.
-type hotPathObserver struct{}
-
-func (hotPathObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+// hotPathRequest is a request hook that allocates nothing of its own.
+func hotPathRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, nil
 }
 
@@ -188,7 +186,7 @@ func TestHotPathAllocs(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
-		observed, err := NewCompiledOptions(session.Core(), Options{Observer: hotPathObserver{}})
+		observed, err := NewCompiledOptions(session.Core(), Options{Observer: observe.Hooks{Request: hotPathRequest}})
 		if err != nil {
 			t.Fatal(err)
 		}

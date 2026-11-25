@@ -58,7 +58,7 @@ func TestObserver(t *testing.T) {
 			cqls = append(cqls, stmt)
 			cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), []cql.Value{cql.IntValue(i)})
 		}
-		cassandraBatch(t, session, batch, exec.Options{Observer: observer})
+		cassandraBatch(t, session, batch, exec.Options{Observer: hooksOf(observer)})
 		events, _ := observer.snapshot()
 		require.Len(t, events, 1)
 		require.NoError(t, events[0].Err)
@@ -93,7 +93,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, i/10+1, len(attempts), "row %d", i)
 			i++
 			return nil
-		}, exec.Options{PageSize: 10, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: observer})
+		}, exec.Options{PageSize: 10, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: hooksOf(observer)})
 		require.NoError(t, err)
 		require.Equal(t, 50, i)
 		events, attempts := observer.snapshot()
@@ -120,7 +120,7 @@ func TestObserver(t *testing.T) {
 		}
 		selectCQL := fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table)
 		read := cassandraDynamicPrepared(t, session, selectCQL, exec.PrepareOptions{})
-		rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(43)}, bindOptions(session, exec.Options{Observer: observer}))
+		rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(43)}, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		defer rows.Close()
 		var row cql.DynamicRow
@@ -130,14 +130,14 @@ func TestObserver(t *testing.T) {
 		observer.reset()
 		insertCQL := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
 		write := cassandraWritePrepared(t, session, insertCQL, exec.PrepareOptions{})
-		_, err = write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{Observer: observer}))
+		_, err = write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		check(insertCQL, false)
 		observer.reset()
-		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []cql.Value{cql.IntValue(42)}, exec.Options{Observer: observer}), "id"))
+		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []cql.Value{cql.IntValue(42)}, exec.Options{Observer: hooksOf(observer)}), "id"))
 		check(selectCQL, false)
 		observer.reset()
-		other := createV2Session(t, func(c *config.ConfigBuilder) { c.WithObserver(observer) })
+		other := createV2Session(t, func(c *config.ConfigBuilder) { c.WithObserver(hooksOf(observer)) })
 		defer other.Close()
 		observer.reset()
 		read = cassandraDynamicPrepared(t, other, selectCQL, exec.PrepareOptions{})
@@ -146,7 +146,7 @@ func TestObserver(t *testing.T) {
 		observer.reset()
 		bad := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id FROM unknown_table WHERE id = 42", Rows: cql.DynamicRows}
 		var badRow cql.DynamicRow
-		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, exec.Options{Observer: observer})
+		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, exec.Options{Observer: hooksOf(observer)})
 		require.Error(t, err)
 		check("SELECT id FROM unknown_table WHERE id = 42", true)
 	})

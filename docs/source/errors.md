@@ -123,7 +123,7 @@ To test code that handles these errors, such as a `retry.Policy` or a
 fallback path, build one with `cqlerr.NewExecutionError(err, status,
 attempts...)`, and a server error with its type or
 `cqlerr.NewOtherServerError(code, message)`. A successful call names its coordinator host
-in `Result.HostID`; an `Observer` sees the shard of every attempt in
+in `Result.HostID`; an `observe.Hooks` attempt hook sees the shard of every attempt in
 `AttemptEvent.Target`.
 
 ## Connecting

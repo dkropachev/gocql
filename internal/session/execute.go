@@ -64,8 +64,9 @@ type InternalSessionRuntime struct {
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]
-	// observerHooks are config.Observer's hooks; setConfig finds them.
-	observerHooks *settings.ObserverHooks
+	// observerHooks points at config.Observer, nil when it has no hook;
+	// setConfig sets it.
+	observerHooks *observe.Hooks
 	batchErr      error
 	// closing is closed when Close starts stopping executions.
 	closing              chan struct{}
@@ -574,8 +575,8 @@ func selectPreparedMetadata(state *InternalPreparedState, host cql.UUID, prepare
 
 type logicalExecution struct {
 	started time.Time
-	// hooks are the observer's hooks, nil without an observer.
-	hooks *settings.ObserverHooks
+	// hooks are the execution's hooks, nil without any.
+	hooks *observe.Hooks
 	// observerCtx and requestEnd are what the observer's StartRequest
 	// returned; observerCtx is the caller's context without that hook.
 	observerCtx    context.Context
@@ -622,7 +623,7 @@ func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
 	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
 	l.rt.ObserveSafely(func() {
-		observerCtx, end := l.hooks.Request.StartRequest(ctx, start)
+		observerCtx, end := l.hooks.Request(ctx, start)
 		if observerCtx != nil {
 			l.observerCtx = observerCtx
 		}
@@ -642,7 +643,7 @@ func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing
 		return nil
 	}
 	var end func(routing2.AttemptEvent)
-	l.rt.ObserveSafely(func() { end = l.hooks.Attempt.StartAttempt(l.observerCtx, start) })
+	l.rt.ObserveSafely(func() { end = l.hooks.Attempt(l.observerCtx, start) })
 	return end
 }
 
@@ -781,11 +782,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 		// resolved for another session find them here.
 		hooks = resolved.observerHooks
 		if hooks == nil {
-			h, err := executionHooks(rt, values)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			hooks = h
+			hooks = executionHooks(rt, values)
 		}
 	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {

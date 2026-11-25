@@ -49,42 +49,49 @@ does not report that session's ID, so find it in `system_traces.sessions`.
 
 ## Client-side tracing
 
-`observe.Observer` is the hook for client-side tracing. An observer is any
-value that implements one or more hook interfaces:
+`observe.Hooks` is the hook for client-side tracing. Each of its fields is
+one hook, a function the driver calls:
 
-- `observe.RequestObserver`: its `StartRequest` receives the caller's
-  context as a request is admitted and returns the context for its attempts,
-  so a span started for the request can parent one span per attempt.
-- `observe.AttemptObserver`: its `StartAttempt` is called for each attempt,
-  retry or speculative attempt.
+- `Request` receives the caller's context as a request is admitted and
+  returns the context for its attempts, so a span started for the request
+  can parent one span per attempt.
+- `Attempt` is called for each attempt, retry or speculative attempt.
 
-Each start returns the function the driver calls when that request or
-attempt finishes. The driver looks the hooks up once, when the observer is
-installed, and skips the call and its event for a hook the observer does
-not implement, so an observer that only needs attempts builds no request
-events. An observer that implements no hook is rejected. Later releases add
-hooks as new interfaces, so an existing observer keeps compiling.
-`observe.RequestObserverFunc` and `observe.AttemptObserverFunc` make an
-observer from a function.
+Each returns the function the driver calls when that request or attempt
+finishes. The driver skips a nil hook and the work of filling its event, so
+hooks that only need attempts build no request events. Later releases add
+hooks as new fields, so existing `Hooks` keep compiling.
 
-Set the observer for the session with `config.ConfigBuilder.WithObserver`;
-`Session.Observer` returns it. To run several observers, such as a tracer and
-a metrics exporter, combine them with `observe.Join`: it calls each
-observer's hooks in order, passes each `StartRequest` the context the one
-before returned, and keeps a panic in one from skipping the others.
+```go
+hooks := observe.Hooks{
+	Attempt: func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent) {
+		return func(e routing.AttemptEvent) {
+			log.Printf("attempt %d on %s at %v: %v (%v)", e.Attempt, e.Address, e.Consistency, e.Err, e.ExecutionStatus)
+		}
+	},
+}
+cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithObserver(hooks).Build()
+```
 
-`exec.Options.Observer` adds an observer to one execution: it is joined
-after the session's, as `observe.Join(session, extra)` would join them, so
-each hook calls the session's observer first and the added one gets the
-context the session's `StartRequest` returned. Set
-`exec.Options.NoSessionObserver` to leave the session's observer out of the
-execution, so that only `exec.Options.Observer`, or nothing, observes it.
+Set the hooks for the session with `config.ConfigBuilder.WithObserver`;
+`Session.Observer` returns them. To run several, such as a tracer and a
+metrics exporter, combine them with `observe.Join`: each hook of the result
+calls the same hook of every argument in order, passes each `Request` the
+context the one before returned, and keeps a panic in one from skipping the
+others.
+
+`exec.Options.Observer` adds hooks to one execution: they are joined after
+the session's, as `observe.Join(session, extra)` would join them, so each
+hook calls the session's first and the added one gets the context the
+session's `Request` returned. Set `exec.Options.NoSessionObserver` to leave
+the session's hooks out of the execution, so that only
+`exec.Options.Observer`, or nothing, observes it.
 
 Attempt hooks usually run on the goroutine that called the execution, the
-start hook before each attempt and its end function after it, so an observer
+start hook before each attempt and its end function after it, so a hook
 that blocks delays that call. Keep them short and hand slow work to a
 goroutine of your own.
 
 The driver itself depends on no tracing library. To link the two kinds, an
-observer can record `AttemptEvent.CQLTraceID` on its attempt span when the
-request runs with `CQLTrace`.
+`Attempt` hook can record `AttemptEvent.CQLTraceID` on its attempt span when
+the request runs with `CQLTrace`.

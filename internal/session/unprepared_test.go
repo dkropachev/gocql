@@ -63,7 +63,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		entered, release := make(chan struct{}), make(chan struct{})
 		defer close(release)
 		observer := &execVoidObserver{onAttempt: func(routing2.AttemptEvent) { close(entered); <-release }}
-		options := Options{Observer: observer, Profile: generalPathProfile()}
+		options := Options{Observer: hooksOf(observer), Profile: generalPathProfile()}
 		served := make(chan struct{})
 		go func() {
 			defer close(served)

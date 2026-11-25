@@ -727,9 +727,11 @@ func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 	return b
 }
 
-// WithObserver receives every request and attempt. Default none.
-func (b *ConfigBuilder) WithObserver(observer observe.Observer) *ConfigBuilder {
-	b.settings.Observer = observer
+// WithObserver installs hooks that observe every request and attempt of the
+// session; observe.Join combines several. The zero Hooks observes nothing.
+// Default none.
+func (b *ConfigBuilder) WithObserver(hooks observe.Hooks) *ConfigBuilder {
+	b.settings.Observer = hooks
 	return b
 }
 
@@ -787,12 +789,12 @@ func (c Config) DefaultProfile() Profile {
 	return publicProfile(*c.settings.DefaultProfile)
 }
 
-// Observer returns the observer WithObserver chose, which a session
-// connected with c also returns from Session.Observer; nil without one or
+// Observer returns the hooks WithObserver chose, which a session connected
+// with c also returns from Session.Observer; the zero Hooks without them or
 // for the zero Config.
-func (c Config) Observer() observe.Observer {
+func (c Config) Observer() observe.Hooks {
 	if c.settings == nil {
-		return nil
+		return observe.Hooks{}
 	}
 	return c.settings.Observer
 }

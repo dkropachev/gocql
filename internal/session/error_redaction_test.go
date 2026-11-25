@@ -133,7 +133,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					defer bound.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
-					opts := Options{Profile: new(profile), Idempotent: cql.Some(true), Observer: panickingObserver{}}
+					opts := Options{Profile: new(profile), Idempotent: cql.Some(true), Observer: hooksOf(panickingObserver{})}
 					if tc.timeout > 0 {
 						opts.Timeout = cql.Some(tc.timeout)
 					}

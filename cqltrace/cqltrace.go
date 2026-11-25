@@ -8,7 +8,7 @@
 // attempts' sessions too.
 //
 // CQL tracing is unrelated to client-side tracing such as OpenTelemetry,
-// which instruments the driver through observe.Observer. An observer can link
+// which instruments the driver through observe.Hooks. An Attempt hook can link
 // the two through routing.AttemptEvent.CQLTraceID.
 package cqltrace
 

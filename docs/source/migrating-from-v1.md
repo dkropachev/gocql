@@ -108,7 +108,7 @@ defer session.Close()
 | `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
 | `cluster.ClientRoutesConfig` | `WithClientRoutes(config.ClientRoute{ConnectionID: id, Hostname: host}, ...)` |
 | `cluster.Logger` | `WithLogger(*slog.Logger)` |
-| `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Observer)` |
+| `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Hooks{...})` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |
 | `cluster.DefaultTimestamp = false` | `WithTimestampGenerator(nil)` |
 
@@ -334,7 +334,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TypeVarchar` and `gocql.TypeText` | `cql.KindText`: text and varchar are one CQL type, and a column of either has that kind, so their types compare `Equal` |
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
-| `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |
+| `gocql.ObservedQuery`, `QueryObserver` | the `Request` and `Attempt` hooks of `observe.Hooks`; `observe.Join` combines several |
 | `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangeConnected`) or the host marked down (`ChangeDown`), `KindStatus` and `KindTopology` the cluster's own events |
 
 ## Not carried over

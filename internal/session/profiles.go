@@ -19,7 +19,7 @@ import (
 // Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
-	Observer             observe.Observer
+	Observer             observe.Hooks
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
 	Keyspace             string
@@ -65,7 +65,7 @@ type InternalResolvedOptions struct {
 	// the session they were resolved for, as executionHooks finds them; nil
 	// when the options leave the session's hooks, or were resolved for
 	// another session.
-	observerHooks   *settings.ObserverHooks
+	observerHooks   *observe.Hooks
 	InternalProfile settings.Profile
 	InternalOptions Options
 }

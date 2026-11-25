@@ -12,7 +12,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -72,10 +71,10 @@ func TestObserverJoin(t *testing.T) {
 	log := new(orderLog)
 	sessionObserver := &orderObserver{name: "session", log: log}
 	rt := InternalRuntimeFor(s)
-	rt.config.Observer = sessionObserver
-	rt.observerHooks, _ = settings.NewObserverHooks(sessionObserver)
-	if got := InternalWrapSession(s).Observer(); got != observe.Observer(sessionObserver) {
-		t.Fatalf("Session.Observer = %v, want the configured one", got)
+	rt.config.Observer = hooksOf(sessionObserver)
+	rt.observerHooks = hooksPtr(sessionObserver)
+	if got := InternalWrapSession(s).Observer(); got.Request == nil || got.Attempt == nil {
+		t.Fatalf("Session.Observer = %+v, want the configured hooks", got)
 	}
 	call := &orderObserver{name: "call", after: "session", log: log}
 	alone := &orderObserver{name: "call", log: log}
@@ -94,10 +93,10 @@ func TestObserverJoin(t *testing.T) {
 		want    []string
 	}{
 		{"none", CompiledOptions{}, []string{"session request", "session attempt", "session attempt end", "session request end"}},
-		{"compiled", compile(Options{Observer: call}), joined},
-		{"unbound", testOptions(Options{Observer: call}), joined},
-		{"NoSessionObserver", compile(Options{Observer: alone, NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
-		{"NoSessionObserver unbound", testOptions(Options{Observer: alone, NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
+		{"compiled", compile(Options{Observer: hooksOf(call)}), joined},
+		{"unbound", testOptions(Options{Observer: hooksOf(call)}), joined},
+		{"NoSessionObserver", compile(Options{Observer: hooksOf(alone), NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
+		{"NoSessionObserver unbound", testOptions(Options{Observer: hooksOf(alone), NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
 		{"NoSessionObserver alone", compile(Options{NoSessionObserver: true}), nil},
 	} {
 		b := runtimeQuery(t)
@@ -110,7 +109,7 @@ func TestObserverJoin(t *testing.T) {
 		}
 	}
 
-	for name, options := range map[string]CompiledOptions{"compiled": compile(Options{Observer: call}), "unbound": testOptions(Options{Observer: call})} {
+	for name, options := range map[string]CompiledOptions{"compiled": compile(Options{Observer: hooksOf(call)}), "unbound": testOptions(Options{Observer: hooksOf(call)})} {
 		statement := binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1"}
 		q, err := newUnpreparedQuery(s, statement, options)
 		if err != nil {

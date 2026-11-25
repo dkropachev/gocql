@@ -114,7 +114,7 @@ func TestBatch(t *testing.T) {
 			require.Equal(t, retryPolicy, inherited.InternalProfile.Retry)
 			override := sessionTestRetry{action: retry.Next, maxAttempts: 4}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, CQLTrace: true, Observer: observer}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Retry: override, CQLTrace: true, Observer: hooksOf(observer)}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, override, resolved.InternalProfile.Retry)

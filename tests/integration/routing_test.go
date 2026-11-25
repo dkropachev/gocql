@@ -473,7 +473,7 @@ func TestRouting(t *testing.T) {
 				success := false
 				for attempt := 1; time.Since(startTime) < timeout; attempt++ {
 					observer := new(v2TabletAttemptObserver)
-					options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Observer: observer}
+					options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.One, Set: true}, Observer: hooksOf(observer)}
 					// Warm the cache by visiting existing shard slots. With RF equal to the
 					// cluster size and token-aligned tablet shards, every ordinary V1 request
 					// can already reach an owner and legitimately receive no feedback.
