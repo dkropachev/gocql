@@ -191,11 +191,11 @@ columns of single statements with other conditions on ScyllaDB.
 ScyllaDB marks conditional statements in prepared metadata through the
 `SCYLLA_LWT_ADD_METADATA_MARK` extension, and the driver reads it as the
 statement kind (`internal/transport/supported.go`). Cassandra has no such
-flag, so the kind is whatever `Statement.Kind` declares. The driver never
-parses CQL to infer it (`internal/cqltype/statement_kind.go`). `Exec` and
-`ExecBatch` reject a known conditional request before sending it
-(`cqlerr.ErrConditionalExec`). On Cassandra with an undeclared kind, the
-request is sent and its result columns are rejected after the response.
+flag. On both servers the driver infers an undeclared kind from the
+statement (`internal/binding/statement.go`): a `cql.CASRows` decoder, or an
+INSERT, UPDATE, DELETE or BATCH with an `IF` outside literals and comments,
+is conditional, and anything else ordinary. `Exec` and `ExecBatch` reject a
+conditional request before sending it (`cqlerr.ErrConditionalExec`).
 A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read,
 not a conditional statement: `Exec` does not reject it up front, and fails on
 its result columns like any other row-returning statement.

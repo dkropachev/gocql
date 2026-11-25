@@ -156,12 +156,11 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.C
 // Rows of a member's statement; it maps the previous values of the columns it
 // names and skips the rest. Which rows the server returns differs between
 // Cassandra and ScyllaDB: on ScyllaDB row i belongs to statement i, on
-// Cassandra rows belong to rows of the partition. A batch whose members are
-// all known not to be conditional is rejected before it is sent: it has no
-// [applied] to report, so send it with ExecBatch. One of unknown kind, as on
-// Cassandra without a declared Kind, is sent, and fails on its result if it
-// has no condition. exec.CompiledOptions and batch ownership are as for
-// ExecBatch. The rows hold a pooled query until they are closed, as
+// Cassandra rows belong to rows of the partition. A batch without a
+// conditional member, declared or inferred (see cql.UnknownStatement), is
+// rejected before it is sent: it has no [applied] to report, so send it with
+// ExecBatch. exec.CompiledOptions and batch ownership are as for ExecBatch.
+// The rows hold a pooled query until they are closed, as
 // Prepared.Run's do. Once they are closed, a batch sent again with the same X
 // and decoder reuses their storage and allocates nothing.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (CASBatchRows[X], error) {
