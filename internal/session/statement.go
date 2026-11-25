@@ -112,11 +112,15 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if err := binding.ValidateStatement(statement); err != nil {
 		return empty, err
 	}
+	rt := InternalRuntimeFor(s)
+	if err := checkKeyspaceOption(&rt.config, options.Keyspace); err != nil {
+		return empty, err
+	}
 	keyspace := options.Keyspace
 	if keyspace == "" {
 		keyspace = implCluster.SessionData(s).InternalCfg.Keyspace
 	}
-	state, err := InternalRuntimeFor(s).prepareTyped(ctx, statement.CQL, keyspace, options)
+	state, err := rt.prepareTyped(ctx, statement.CQL, keyspace, options)
 	if err != nil {
 		return empty, err
 	}

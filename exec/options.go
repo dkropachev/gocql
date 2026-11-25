@@ -59,7 +59,10 @@ type Options struct {
 	// is rejected.
 	Profile *config.Profile
 	// Keyspace replaces the session's keyspace for the execution; empty keeps
-	// it.
+	// it. Only native protocol 5 (CassandraV5) carries a request's keyspace:
+	// on a ScyllaV4 or CassandraV4 session, a keyspace other than the
+	// session's fails Session.CompileOptions and every execution with a
+	// cqlerr.UnsupportedSettingError. Qualify the table names instead.
 	Keyspace string
 	// Timestamp, when set, is the write timestamp of the execution, sent in
 	// microseconds since the Unix epoch, the unit of CQL's USING TIMESTAMP;
@@ -169,6 +172,10 @@ func (o CompiledOptions) Values() Options {
 // Use CompiledOptions for execution settings.
 type PrepareOptions struct {
 	// Keyspace is the keyspace to prepare in; empty uses the session's.
+	// Only native protocol 5 (CassandraV5) carries it: on a ScyllaV4 or
+	// CassandraV4 session, a keyspace other than the session's fails
+	// Prepare with a cqlerr.UnsupportedSettingError. Qualify the table names
+	// instead.
 	Keyspace string
 	// HostID prepares on the host with this host ID when set, and on any
 	// eligible host otherwise.

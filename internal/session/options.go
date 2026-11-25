@@ -177,5 +177,14 @@ func checkDialectOptions(config *settings.Config, values *Options) error {
 			return err
 		}
 	}
-	return nil
+	return checkKeyspaceOption(config, values.Keyspace)
+}
+
+// checkKeyspaceOption rejects a per-request keyspace other than the
+// session's on a protocol 4 dialect, which has no field to send it in.
+func checkKeyspaceOption(config *settings.Config, keyspace string) error {
+	if keyspace == "" || keyspace == config.Keyspace {
+		return nil
+	}
+	return settings.ProtocolV5Only(config, "Keyspace")
 }
