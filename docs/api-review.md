@@ -353,7 +353,8 @@ A seventh pass, with one reviewer per area, made about 80 proposals; all
 are taken and land in six changes before `v2.0.0-rc.1`. This first part
 fixes silent run-time failures, with little or no API change; the second
 reworks the `cql` types and codecs; the third the `cql` statements, results
-and paging; the fourth the root execution API and `exec`. Rows marked
+and paging; the fourth the root execution API and `exec`; the fifth `config`,
+`auth` and `endpoint`. Rows marked
 **reverses** undo a decision of an earlier pass.
 
 ### transport / config
@@ -454,6 +455,32 @@ and paging; the fourth the root execution API and `exec`. Rows marked
 | Finding | Outcome |
 |---|---|
 | `exec.Options.Observer` replaced the session's observer, so adding a span or counter to one execution dropped the session's tracer and metrics unless the caller joined them by hand | The per-call observer is joined after the session's, as `observe.Join` orders them: each hook calls the session's first, and the added one's `StartRequest` gets the session's context. `Options.NoSessionObserver` leaves the session's out, and `Session.Observer` returns it. **Reverses** the sixth pass's "replace, and show `observe.Join(sessionObserver, extra)`": joining was what every caller wanted, and replacing needed the session's observer at each call site; `NoSessionObserver` keeps replacement for the rare caller that wants it. |
+
+### config
+
+| Finding | Outcome |
+|---|---|
+| Contact points that all named one port, such as `"10.0.0.1:19042"`, failed `Build` unless `WithPort` repeated the port, and the streaming example parsed its own flag to call `WithPort` | Without `WithPort`, contact points that all name one TCP port make it the default, which is also the port of discovered nodes, and `Config.String` shows it. A chosen `WithPort` is still checked against them, and mixed or partly named ports keep 9042. **Reverses** the sixth pass, which deleted v1's `learnPortFromHosts` and had `Build` reject such contact points without `WithPort`: rejecting was safe but made every caller say the port twice, while inferring it from a list that agrees cannot dial the wrong port, which was the reason for rejecting, and is what v1 did. |
+| `WithLocalDatacenter(dc, rack)` made the common datacenter-only call pass an empty rack, and a rack read like a second datacenter | `WithLocalDatacenter(dc)` and `WithLocalRack(rack)`; `Build` rejects a rack without a datacenter, naming `WithLocalRack`. `Config.String` prints both. **Reverses** the sixth pass's one setter for the locality: the pair kept the rack next to its datacenter, but most callers have no rack, and two one-argument setters read unambiguously at the call site. |
+| A built `Config` could not say which default profile or observer it held, and `ConfigureDefaultProfile` was a second, callback-based way to set the profile whose nil meant reset | Added `Config.DefaultProfile`, `Config.Observer`, which agrees with `Session.Observer`, and `Profile.Builder`, which starts a builder from a profile's values. `ConfigureDefaultProfile` is removed: `WithDefaultProfile(cfg.DefaultProfile().Builder()....MustBuild())` derives a profile, as the integration fixtures now do. |
+| A dialect or compression read from a flag or a file took a hand-written switch | Added `config.ParseDialect` and `cql.ParseCompression`, which read the `String` names in any case, and `MarshalText`/`UnmarshalText` on both types, so they work with `flag.TextVar` and JSON; the streaming example uses them. Marshaling a value `String` does not name fails. |
+| A one-line reconnect backoff needed a named type; a profile from constants needed an error check; a base builder could not be specialized twice | Added `endpoint.ReconnectFunc`, `ProfileBuilder.MustBuild` and `ConfigBuilder.Clone`, which copies the builder's slices, maps and profile. |
+| Idempotence was per statement or per call, with nothing for v1's `DefaultIdempotence` | `ProfileBuilder.WithIdempotent` and `Profile.Idempotent`: an execution is idempotent when its statement or its profile is; `exec.Options.Idempotent` overrides both. The driver configuration report shows it, and the migration guide maps `DefaultIdempotence` to it. |
+| `WithAutomaticSchemaAgreement` and `WithRefreshAfterAgreement` were two bools for three behaviours: the refresh did nothing without automatic agreement | `WithSchemaChangeWait(SchemaChangeWait)` with `SchemaChangeWaitNone`, `SchemaChangeWaitAgreement` and `SchemaChangeWaitRefresh`, the default as before; `Build` rejects another value. |
+| Loading a CA, certificate and key took a dozen lines of `x509` and `tls` calls, though `NewTLSFileSource` had the loader | Added `config.LoadTLSFiles(base, TLSFiles)` for `WithTLS`, with `NewTLSFileSource`'s checks. The streaming example uses it; the migration guide maps v1's `SslOptions` paths and says that v1 skipped verification by default while v2 verifies the node's IP address unless the config names a server. |
+| `UnsupportedSettingError.Setting` named the setter at `Build` but an internal notion ("Unix TLS", "dial source", "TCP_NODELAY", "compression", "schema metadata", "prefetch") once connected | It names the `ConfigBuilder` setter everywhere (`WithTLS`, `WithDialer`, `WithNagle`, `WithCompression`, `WithMetadataMode`, `New` for the dialect) or the `exec.Options` field (`Prefetch`, `Keyspace`); the field documents it. The one left is an internal guard on the transport's `Conn.Read`, which no public API reaches. |
+
+### auth
+
+| Finding | Outcome |
+|---|---|
+| `auth.Password` sent the credentials to any server that asked, and v1's `AllowedAuthenticators` had no counterpart | `auth.Password(user, password, allowed ...string)`: a server naming a class not in `allowed` fails the connection before the credentials are sent; none allowed accepts any class, as in v1. |
+
+### endpoint
+
+| Finding | Outcome |
+|---|---|
+| `ConvictionSource`, `ConvictionPolicy` and `Reset` docs said "with Shard set" for the `ShardID` field | They say `ShardID`. |
 
 ## Decisions
 
