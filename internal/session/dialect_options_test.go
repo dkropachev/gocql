@@ -33,12 +33,12 @@ func TestDialectOnlyOptions(t *testing.T) {
 		accepted []settings.Config
 	}{
 		"ShardID": {
-			values: Options{HostID: host, ShardID: cql.Some[uint32](1)}, setting: "shard ID", want: "ScyllaV4",
+			values: Options{HostID: host, ShardID: cql.Some[uint32](1)}, setting: "ShardID", want: "ScyllaV4",
 			rejected: []settings.Config{{Server: settings.ServerCassandra, Protocol: 4}, {Server: settings.ServerCassandra, Protocol: 5}},
 			accepted: []settings.Config{{Server: settings.ServerScylla, Protocol: 4}, {Server: settings.ServerAny, Protocol: 4}},
 		},
 		"NowInSeconds": {
-			values: Options{NowInSeconds: cql.Some[int32](10)}, setting: "now in seconds", want: "CassandraV5",
+			values: Options{NowInSeconds: cql.Some[int32](10)}, setting: "NowInSeconds", want: "CassandraV5",
 			rejected: []settings.Config{{Server: settings.ServerScylla, Protocol: 4}, {Server: settings.ServerCassandra, Protocol: 4}, {Server: settings.ServerAny, Protocol: 4}},
 			accepted: []settings.Config{{Server: settings.ServerCassandra, Protocol: 5}},
 		},

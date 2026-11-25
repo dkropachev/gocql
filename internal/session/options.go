@@ -181,12 +181,12 @@ func (rt *InternalSessionRuntime) InternalSetProfile(profile *settings.Profile) 
 // an UnsupportedSettingError naming the option and the dialect.
 func checkDialectOptions(config *settings.Config, values *Options) error {
 	if values.ShardID.Set {
-		if err := settings.ScyllaOnly(config, "shard ID"); err != nil {
+		if err := settings.ScyllaOnly(config, "ShardID"); err != nil {
 			return err
 		}
 	}
 	if values.NowInSeconds.Set {
-		if err := settings.ProtocolV5Only(config, "now in seconds"); err != nil {
+		if err := settings.ProtocolV5Only(config, "NowInSeconds"); err != nil {
 			return err
 		}
 	}
