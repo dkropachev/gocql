@@ -26,7 +26,8 @@ conditional statement: `Exec` does not reject it up front, and fails on its
 result columns like any other row-returning statement.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
-typed `CASResult[R]`. For conditional batches, pass this decoder to
+typed `CASResult[R]`. `cql.CASApplied`, which is `CASRows[cql.EmptyRow](nil)`,
+decodes the applied flag alone and skips the returned row. For conditional batches, pass this decoder to
 `session.RunConditionalBatch`, whose rows iterate like `Rows` and whose
 `Applied` reports whether the batch applied. `RunConditionalBatch`
 rejects a batch whose members are all known not to be conditional.

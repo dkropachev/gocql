@@ -126,7 +126,7 @@ func ExampleSession_RunConditionalBatch() {
 			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
 			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),
 		),
-		Rows: cql.CASRows(cql.Row[cql.EmptyRow]()),
+		Rows: cql.CASApplied,
 	}
 	queryPrepared, err := session.Prepare(ctx, statement)
 	if err != nil {

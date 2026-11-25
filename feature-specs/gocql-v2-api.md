@@ -940,7 +940,8 @@ func (p *PageState) UnmarshalText([]byte) error
 
 // package cql
 type CASResult[R any] struct { Applied bool; Previous Option[R] }
-func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]]
+func CASRows[R any](RowDecoder[R]) RowDecoder[CASResult[R]] // a nil decoder skips the previous row
+var CASApplied RowDecoder[CASResult[EmptyRow]]           // CASRows[EmptyRow](nil)
 ```
 
 NextInto is the row iterator; All on Rows, Page and CASBatchRows ranges over

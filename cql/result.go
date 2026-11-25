@@ -24,10 +24,19 @@ type lenientRowDecoder[R any] interface {
 	compileLenient(columns Columns) (CompiledRow[R], error)
 }
 
-// CASRows decodes the [applied] column and the conditional result with decoder.
+// CASRows decodes the [applied] column, and the existing row the server
+// returns with it, if any, with decoder into Previous. A nil decoder skips
+// those columns, so Previous is never set; CASApplied is that decoder.
 func CASRows[R any](decoder RowDecoder[R]) RowDecoder[CASResult[R]] {
 	return casRows[R]{decoder: decoder}
 }
+
+// CASApplied decodes only the [applied] column of a conditional statement's
+// result, skipping the existing row: it is CASRows[EmptyRow](nil). The driver
+// does not read this variable, so reassigning it changes only code that
+// does.
+var CASApplied RowDecoder[CASResult[EmptyRow]] = CASRows[EmptyRow](nil)
+
 func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) {
 	first, ok := columns.At(0)
 	if !ok || first.Name != "[applied]" {
@@ -41,10 +50,7 @@ func (c casRows[R]) Compile(columns Columns) (CompiledRow[CASResult[R]], error) 
 		return nil, err
 	}
 	p := compiledCASRow[R]{columns: previous}
-	if previous.Len() > 0 {
-		if c.decoder == nil {
-			return nil, typeValidation("CAS result", "nil previous-value decoder")
-		}
+	if previous.Len() > 0 && c.decoder != nil {
 		// The previous row's columns differ between Cassandra and ScyllaDB
 		// and between outcomes, so a field-mapped decoder compiles leniently.
 		if lenient, ok := c.decoder.(lenientRowDecoder[R]); ok {
@@ -69,6 +75,11 @@ func (p compiledCASRow[R]) DecodeInto(reader *RowReader, dst *CASResult[R]) erro
 		return columnError(CodecStageDecode, at, column.Name, err)
 	}
 	if p.previous == nil {
+		for range p.columns.Len() {
+			if err := reader.SkipColumn(); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	if skipNullPrevious(reader, p.columns.Len()) {

@@ -256,6 +256,7 @@ package cql
 		cql.Bytes method (T) Slice(offset int64, length int64) (cql.Bytes, error)
 		cql.Bytes method (T) WriteTo(w io.Writer) (int64, error)
 	var cql.BytesCodec cql.Codec[cql.Bytes]
+	var cql.CASApplied cql.RowDecoder[cql.CASResult[cql.EmptyRow]]
 	type cql.CASResult[R any] struct
 		cql.CASResult field Previous cql.Option[R]
 		cql.CASResult field Applied bool
