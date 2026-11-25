@@ -26,6 +26,7 @@ package cql
 
 import (
 	"fmt"
+	"strings"
 )
 
 // Consistency is a consistency level. Its values are the native protocol's, so
@@ -116,11 +117,11 @@ func (c Consistency) MarshalText() (text []byte, err error) {
 	return []byte(c.String()), nil
 }
 
-// UnmarshalText implements encoding.TextUnmarshaler. It accepts the upper-case
-// protocol names String returns for the defined levels, and returns an error
-// for any other text.
+// UnmarshalText implements encoding.TextUnmarshaler. It accepts the protocol
+// names String returns for the defined levels, in any case, and returns an
+// error for any other text.
 func (c *Consistency) UnmarshalText(text []byte) error {
-	switch string(text) {
+	switch strings.ToUpper(string(text)) {
 	case "ANY":
 		*c = Any
 	case "ONE":
@@ -147,4 +148,21 @@ func (c *Consistency) UnmarshalText(text []byte) error {
 		return fmt.Errorf("invalid consistency %q", string(text))
 	}
 	return nil
+}
+
+// ParseConsistency parses a consistency name, such as "local_quorum",
+// ignoring case. It is Consistency.UnmarshalText for a string.
+func ParseConsistency(s string) (Consistency, error) {
+	var consistency Consistency
+	err := consistency.UnmarshalText([]byte(s))
+	return consistency, err
+}
+
+// MustParseConsistency is ParseConsistency that panics on error.
+func MustParseConsistency(s string) Consistency {
+	consistency, err := ParseConsistency(s)
+	if err != nil {
+		panic(err)
+	}
+	return consistency
 }

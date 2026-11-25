@@ -3,10 +3,6 @@
 
 package cql
 
-import (
-	"strings"
-)
-
 // Statement pairs CQL text with a typed parameter encoder and row decoder.
 // Nil Params or Rows means none when its type is EmptyParams or EmptyRow.
 // BindMarkers supplies parameter metadata for unprepared execution; Prepare
@@ -39,22 +35,6 @@ type Statement[P, R any] struct {
 	// every member is. exec.Options.Idempotent overrides it for one
 	// execution.
 	Idempotent bool
-}
-
-// ParseConsistency parses a consistency name, ignoring case.
-func ParseConsistency(s string) (Consistency, error) {
-	var consistency Consistency
-	err := consistency.UnmarshalText([]byte(strings.ToUpper(s)))
-	return consistency, err
-}
-
-// MustParseConsistency is ParseConsistency that panics on error.
-func MustParseConsistency(s string) Consistency {
-	consistency, err := ParseConsistency(s)
-	if err != nil {
-		panic(err)
-	}
-	return consistency
 }
 
 // Command returns a statement with no bind markers and no result columns,
