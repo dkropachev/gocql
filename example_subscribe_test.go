@@ -16,8 +16,9 @@ import (
 )
 
 // A subscriber keeps a metadata snapshot current: it subscribes before it
-// reads the snapshot, reads a newer one when an event's Generation passes
-// it, and starts over when the subscription overflows.
+// reads the snapshot and reads a newer one when an event's Generation passes
+// it. An Overflow event, which replaces events the queue had no room for,
+// carries the highest generation it replaced, so the same check catches up.
 func ExampleSession_Subscribe() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -38,7 +39,7 @@ func ExampleSession_Subscribe() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer func() { sub.Close() }()
+	defer sub.Close()
 	md := session.Metadata()
 
 	for _, stmt := range []string{
@@ -58,17 +59,8 @@ func ExampleSession_Subscribe() {
 		select {
 		case <-ctx.Done():
 			log.Fatal(ctx.Err())
-		case e, ok := <-sub.Events():
-			switch {
-			case !ok || e.Kind == event.KindOverflow:
-				// The queue overflowed and closed: changes were lost.
-				// Subscribe again, then read a fresh snapshot.
-				sub.Close()
-				if sub, err = session.Subscribe(filter); err != nil {
-					log.Fatal(err)
-				}
-				md = session.Metadata()
-			case e.Generation > md.Generation():
+		case e := <-sub.Events():
+			if e.Generation > md.Generation() {
 				md = session.Metadata()
 			}
 		}

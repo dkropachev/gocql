@@ -1856,12 +1856,13 @@ HostSnapshot separates enabled/connected/up state. Events have explicit
 topology/status/schema/control/client-route variants and carry a generation.
 Publication events are emitted only after the corresponding snapshot is visible.
 A subscription has a bounded queue (positive Capacity; zero selects 64, negative
-is invalid). On overflow the dispatcher discards queued deltas, guarantees one
-event.KindOverflow carrying the highest discarded generation, then closes that
-subscription after the marker; it never waits on control I/O. Resynchronize by
-subscribing again first, then reading Metadata (or completing an explicit
-refresh if freshness is required), and ignoring queued publication events at or
-below the snapshot generation. This subscribe-before-snapshot rule also applies
+is invalid). On overflow the dispatcher discards queued deltas and queues one
+event.KindOverflow carrying the highest discarded generation; the subscription
+stays open and keeps delivering, and the dispatcher never waits on control I/O.
+Resynchronize by reading Metadata again (or completing an explicit refresh if
+freshness is required), and ignoring queued publication events at or below the
+snapshot generation. Dropped tablet routing hints are not reported to
+subscribers. This subscribe-before-snapshot rule also applies
 to initial subscription. event.Subscription.Close is idempotent, cancels delivery
 without requiring the caller to drain, and cannot block control work. Schema
 refresh validates duplicate identities, key order, UDT cycles and type syntax;

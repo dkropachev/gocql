@@ -25,8 +25,8 @@ import (
 // Filter selects the kinds of events a Subscription receives and its queue
 // capacity.
 
-// Subscription owns a bounded queue. Overflow discards queued deltas and emits
-// OverflowEvent, then closes. Subscribe again before reading Session.Metadata.
+// Subscription owns a bounded queue. Overflow discards queued deltas and
+// queues one KindOverflow event; the subscription stays open.
 type Subscription struct {
 	// public is the handle package event exposes.
 	public         *event.Subscription
@@ -110,9 +110,9 @@ func InternalSubscriptionPublish(s *Subscription, e event.Event) {
 			if e.Kind == event.KindOverflow && e.Change != "" {
 				change = e.Change
 			}
+			// The queue is empty, so the marker fits; the subscription
+			// stays open and delivers the events that follow it.
 			s.privateStorage.events <- event.Event{Kind: event.KindOverflow, Generation: highest, Change: change}
-			s.privateStorage.closed = true
-			close(s.privateStorage.events)
 			return
 		}
 	}

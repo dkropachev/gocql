@@ -1178,7 +1178,6 @@ package event
 	const event.ChangeRefreshed event.Change = "REFRESHED"
 	const event.ChangeRemovedNode event.Change = "REMOVED_NODE"
 	const event.ChangeResync event.Change = "RESYNC"
-	const event.ChangeTabletResync event.Change = "TABLET_RESYNC"
 	const event.ChangeUp event.Change = "UP"
 	const event.ChangeUpdated event.Change = "UPDATED"
 	type event.Event struct

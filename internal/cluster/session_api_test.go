@@ -104,9 +104,10 @@ func TestSessionAPI(t *testing.T) {
 			if got.Kind != event.KindOverflow || got.Change != event.ChangeResync || got.Generation != s.Metadata().Generation() {
 				t.Fatal(got)
 			}
+			// The subscription survives the overflow and keeps delivering.
 			s.PublishV2Event(&oldevents.SchemaChangeTableEvent{Change: "DROPPED", Keyspace: "ks", Table: "b"})
-			if _, ok := <-sub.Events(); ok {
-				t.Fatal("overflow subscription must close after terminal marker")
+			if got, ok := <-sub.Events(); !ok || got.Kind != event.KindSchema || got.Object != "b" || got.Change != event.ChangeDropped {
+				t.Fatal("overflowed subscription stopped delivering", got, ok)
 			}
 			fresh, err := s.Subscribe(event.Filter{Kinds: []event.Kind{event.KindSchema}, Keyspace: "ks", Capacity: 4})
 			if err != nil {
@@ -121,6 +122,12 @@ func TestSessionAPI(t *testing.T) {
 			fresh.Close()
 			sub.Close()
 			sub.Close()
+			// Close keeps what was queued; the queue then ends.
+			for range cap(sub.Events()) + 1 {
+				if _, ok := <-sub.Events(); !ok {
+					break
+				}
+			}
 			if _, ok := <-sub.Events(); ok {
 				t.Fatal("closed subscription not closed")
 			}

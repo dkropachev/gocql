@@ -34,8 +34,10 @@ const (
 	// The driver raises it, not the server, so config.WithIgnoreEvents does
 	// not take it.
 	KindPool
-	// KindOverflow is the last event of a Subscription, sent when its queue
-	// overflows or when the session fails to publish a metadata change.
+	// KindOverflow reports that events were lost: the subscription's queue
+	// overflowed, the session dropped events it could not process in time,
+	// or it failed to publish a metadata change. The subscription stays
+	// open; read Session.Metadata again to catch up.
 	KindOverflow
 )
 
@@ -104,9 +106,6 @@ const (
 	// ChangePublicationResync is an Overflow event sent when the session
 	// fails to publish a metadata change.
 	ChangePublicationResync Change = "PUBLICATION_RESYNC"
-	// ChangeTabletResync is an Overflow event sent when the session dropped
-	// pending tablet routing updates.
-	ChangeTabletResync Change = "TABLET_RESYNC"
 )
 
 // ObjectKind is the kind of object a Schema event changed. The zero
@@ -154,6 +153,10 @@ type Event struct {
 	// is nil otherwise.
 	HostIDs []cql.UUID
 	// Generation is the metadata generation when the event was published.
+	// The session publishes the metadata that reflects a change before it
+	// delivers the change's event, so a snapshot of this generation or later
+	// already holds it. An Overflow event's is at least the highest
+	// generation among the events it replaced.
 	Generation uint64
 	// HostID is the node of a Topology, Status or Pool event, or the new
 	// control host of a Control event, and zero when the driver does not

@@ -209,16 +209,23 @@ func TestEvents(t *testing.T) {
 			if !ok || marker.Kind != event.KindOverflow || marker.Generation != 99 {
 				t.Fatal(marker, ok)
 			}
-			if _, ok := <-slow.Events(); ok {
-				t.Fatal("overflow marker was not terminal")
+			select {
+			case e, ok := <-slow.Events():
+				t.Fatal("overflow left more than its marker queued", e, ok)
+			default:
+			}
+			// The overflowed subscription stays open and delivers what follows.
+			s.PublishV2LocalEvent(event.Event{Kind: event.KindStatus, Generation: 100})
+			if e, ok := <-slow.Events(); !ok || e.Kind != event.KindStatus || e.Generation != 100 {
+				t.Fatal("overflowed subscription stopped delivering", e, ok)
 			}
 			for _, generation := range []uint64{40, 99, 41} {
 				if e := <-fast.Events(); e.Kind != event.KindStatus || e.Generation != generation {
 					t.Fatal("one slow subscriber affected another", e)
 				}
 			}
-			if len(s.Peripheral().InternalSubscribers) != 1 {
-				t.Fatal("terminal subscriber leaked in registry")
+			if len(s.Peripheral().InternalSubscribers) != 2 {
+				t.Fatal("an overflowed subscriber left the registry")
 			}
 		})
 	})
