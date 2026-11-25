@@ -753,11 +753,11 @@ func buildControlPlaneReport(cfg *InternalClusterSettings, typed *connectivity.C
 	}
 	if typed != nil && isScyllaConn {
 		// Conn.InternalExecuteV2System appends USING TIMEOUT from
-		// config.WithMetadataServerTimeout, 30s when unset, to every system
-		// SELECT on ScyllaDB, whatever the client-side timeout.
+		// config.WithMetadataServerTimeout, one second below the metadata
+		// client timeout when unset, to every system SELECT on ScyllaDB.
 		server := typed.Metadata.ServerTimeout
 		if !server.Set {
-			server = cql.Some(transport.InternalDefaultSystemServerTimeout)
+			server = cql.Some(connectivity.DefaultMetadataServerTimeout(typed.Metadata.RequestTimeout))
 		}
 		if ms := server.Value.Milliseconds(); server.Value > 0 && ms > 0 {
 			timeout.ServerSideMs = &ms

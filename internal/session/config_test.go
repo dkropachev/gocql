@@ -101,10 +101,17 @@ func TestConfig(t *testing.T) {
 					t.Fatal("invalid explicit setting accepted")
 				}
 			}
-			c.ConnectTimeout = 0
-			c.DNSTimeout = 0
+			// A zero connect, DNS or metadata timeout would remove the bound,
+			// so it is rejected; zero turns periodic refresh and the server
+			// timeout off.
+			for _, edit := range []func(*settings.Config){func(c *settings.Config) { c.ConnectTimeout = 0 }, func(c *settings.Config) { c.DNSTimeout = 0 }, func(c *settings.Config) { c.Metadata.RequestTimeout = 0 }} {
+				invalid := settings.DefaultConfig("localhost")
+				edit(&invalid)
+				if invalid.Validate() == nil {
+					t.Fatal("a zero timeout was accepted")
+				}
+			}
 			c.Metadata.PeriodicRefresh = 0
-			c.Metadata.RequestTimeout = 0
 			c.Metadata.ServerTimeout = implCql.Option[time.Duration]{Set: true, Value: 0}
 			if err := c.Validate(); err != nil {
 				t.Fatal(err)

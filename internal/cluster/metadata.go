@@ -137,12 +137,21 @@ func (s *Core) initV2Peripheral(config settings.Config) error {
 	if dcs := unsetLocality(config, s.Metadata()); len(dcs) > 1 {
 		s.logger().Warn("the cluster has more than one datacenter and the session has no local one, so requests go to every datacenter and LOCAL_* consistency is local to whichever coordinator serves them; set config.ConfigBuilder.WithLocalDatacenter", "datacenters", dcs)
 	}
+	if keyspaceExcluded(config) {
+		s.logger().Warn("the session keyspace is not among the metadata keyspaces, so its schema and replication are not loaded and its tables are not routed to their replicas; add it to config.ConfigBuilder.WithMetadataKeyspaces", "keyspace", config.Keyspace, "metadata_keyspaces", config.Metadata.Keyspaces)
+	}
 	if config.Metadata.PeriodicRefresh > 0 {
 		s.Peripheral().periodicOnce.Do(func() {
 			s.Peripheral().InternalStartWorker(func() { s.runV2PeriodicRefresh(config.Metadata) })
 		})
 	}
 	return nil
+}
+
+// keyspaceExcluded reports whether config names a session keyspace that its
+// metadata keyspaces leave out.
+func keyspaceExcluded(config settings.Config) bool {
+	return config.Keyspace != "" && len(config.Metadata.Keyspaces) > 0 && config.Metadata.Mode != metadata.ModeNone && !slices.Contains(config.Metadata.Keyspaces, config.Keyspace)
 }
 
 // unsetLocality returns the datacenters of m's enabled hosts when config

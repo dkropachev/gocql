@@ -221,6 +221,18 @@ func (config Config) Validate() error {
 			return cqltype.TypeValidation(d.setter, "must not be negative, got %v", d.value)
 		}
 	}
+	for _, d := range []struct {
+		setter string
+		value  time.Duration
+	}{
+		{"WithConnectTimeout", config.ConnectTimeout},
+		{"WithDNSTimeout", config.DNSTimeout},
+		{"WithMetadataTimeout", config.Metadata.RequestTimeout},
+	} {
+		if d.value == 0 {
+			return cqltype.TypeValidation(d.setter, "must be positive, got 0")
+		}
+	}
 	if config.KeepaliveInterval > 0 && config.KeepaliveTimeout == 0 {
 		return cqltype.TypeValidation("WithHeartbeat", "timeout must be positive when the interval is")
 	}
@@ -275,8 +287,14 @@ func (config Config) Validate() error {
 	if timeout := config.Metadata.ServerTimeout; timeout.Set && (timeout.Value < 0 || timeout.Value%time.Millisecond != 0) {
 		return cqltype.TypeValidation("WithMetadataServerTimeout", "must be whole milliseconds, not negative, got %v", timeout.Value)
 	}
+	if timeout := config.Metadata.ServerTimeout; timeout.Set && timeout.Value > 0 && timeout.Value >= config.Metadata.RequestTimeout {
+		return cqltype.TypeValidation("WithMetadataServerTimeout", "must be below WithMetadataTimeout (%v), so the server gives up first, got %v", config.Metadata.RequestTimeout, timeout.Value)
+	}
 	if config.Metadata.Mode > metadata.ModeFull {
 		return cqltype.TypeValidation("WithMetadataMode", "unknown mode %d", config.Metadata.Mode)
+	}
+	if config.Metadata.Mode == metadata.ModeNone && len(config.Metadata.Keyspaces) > 0 {
+		return cqltype.TypeValidation("WithMetadataKeyspaces", "has no effect under metadata.ModeNone, which loads no schema")
 	}
 	if routes := config.ClientRoutes; routes != nil {
 		if len(routes.ConnectionIDs) == 0 {
