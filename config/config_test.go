@@ -793,13 +793,39 @@ func TestConfigBuilder(t *testing.T) {
 			"NoHost":          {New(ScyllaV4, ":9042"), "WithContactPoints"},
 			"Empty":           {New(ScyllaV4, ""), "WithContactPoints"},
 			"BracketsNoPort":  {New(ScyllaV4, "[::1]"), "WithContactPoints"},
-			"OtherCommonPort": {New(ScyllaV4, "a:19042", "b:19042"), "WithPort"},
-			"OtherPortOnce":   {New(ScyllaV4).WithContactPoints("a:19042"), "WithPort"},
+			"OtherCommonPort": {New(ScyllaV4, "a:19042", "b:19042").WithPort(9042), "WithPort"},
+			"OtherPortOnce":   {New(ScyllaV4).WithPort(9042).WithContactPoints("a:19042"), "WithPort"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, err := tc.b.Build()
 				if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != tc.setter {
 					t.Fatalf("Build = %v, want a %s ValidationError", err, tc.setter)
+				}
+			})
+		}
+	})
+
+	t.Run("PortInference", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			b    *ConfigBuilder
+			port uint16
+		}{
+			"CommonPort":      {New(ScyllaV4, "a:19042", "[::1]:19042"), 19042},
+			"OnePoint":        {New(ScyllaV4, "127.0.0.1:1"), 1},
+			"MixedPorts":      {New(ScyllaV4, "a:19042", "b:19043"), 9042},
+			"SomeNamePorts":   {New(ScyllaV4, "a:19042", "b"), 9042},
+			"NoPorts":         {New(ScyllaV4, "a", "b"), 9042},
+			"ChosenPortKept":  {New(ScyllaV4, "a:19042", "b:19042").WithPort(19042), 19042},
+			"ChosenOverMixed": {New(ScyllaV4, "a:19042", "b:19043").WithPort(9142), 9142},
+			"UnixSocket":      {New(ScyllaV4, "unix:/var/lib/scylla/cql.m"), 9042},
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg := mustBuildConfig(t, tc.b)
+				if cfg.settings.Port != tc.port {
+					t.Fatalf("Port = %d, want %d", cfg.settings.Port, tc.port)
+				}
+				if want := fmt.Sprintf("port=%d ", tc.port); !strings.Contains(cfg.String(), want) {
+					t.Fatalf("String() = %q, want it to contain %q", cfg.String(), want)
 				}
 			})
 		}

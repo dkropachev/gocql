@@ -87,7 +87,7 @@ defer session.Close()
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort` (9042 by default). v1 learned the port from hosts that all named one; v2 does not, and `Build` rejects such hosts when their port differs from `WithPort`, which is also the port of discovered nodes: call `WithPort(port)` |
+| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort`. As in v1, hosts that all name one port make it the default, which is also the port of discovered nodes; otherwise the default is 9042. `Build` rejects such hosts when `WithPort` names another port |
 | `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg)` |
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |

@@ -1948,8 +1948,9 @@ message the limit. Correcting a setting clears the error on the next Build.
 Optional zero durations disable their budget. `Build` parses the contact
 points and asks the reconnect policy for `Delay(1)` once, rejecting a negative
 delay. `WithPort` is also the port of discovered nodes whose metadata reports
-none, so `Build` rejects contact points that all name one other port, unless
-discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
+none. Without it, contact points that all name one port make that port the
+default; with it, `Build` rejects contact points that all name one other port,
+unless discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.

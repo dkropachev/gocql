@@ -52,6 +52,7 @@ type ConfigBuilder struct {
 	shardAwarenessChosen bool
 	sourcePortsChosen    bool
 	maxExcessChosen      bool
+	portChosen           bool
 	perHost              bool
 	dialect              Dialect
 	// started reports that New made the builder.
@@ -80,6 +81,11 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	settings := b.settings
 	settings.Server, settings.Protocol = server, protocol
+	if !b.portChosen {
+		if port, ok := implSettings.CommonContactPort(settings.ContactPoints); ok {
+			settings.Port = port
+		}
+	}
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
 	settings.ClientRoutes = clientRoutesOptions(b.routes)
@@ -164,9 +170,12 @@ func (b *ConfigBuilder) Build() (Config, error) {
 // system.peers does not. Contact points that all name one port other than
 // port would have the driver dial the nodes it discovers on the wrong port,
 // so Build rejects them unless WithDiscovery(false) or WithClientRoutes is
-// set; name no port in them, or set WithPort to theirs. Default 9042.
+// set; name no port in them, or set WithPort to theirs. Default the port
+// every TCP contact point names, when they all name the same one, and 9042
+// otherwise; Config.String shows the port in effect.
 func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
 	b.settings.Port = port
+	b.portChosen = true
 	return b
 }
 

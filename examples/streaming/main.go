@@ -13,10 +13,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -69,13 +67,6 @@ func run() (resultErr error) {
 		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
-	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {
-		n, err := strconv.ParseUint(port, 10, 16)
-		if err != nil {
-			return err
-		}
-		builder.WithPort(uint16(n))
-	}
 	frameCompression := cql.NoCompression
 	switch *compression {
 	case "none":

@@ -21,9 +21,11 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 
 Contact points may include native ports; `WithPort` supplies the port when one is
 absent, and is also the port of every discovered node whose metadata reports
-none, as ScyllaDB's `system.peers` does not. So `Build` rejects contact points
-that all name one port other than `WithPort`, unless `WithDiscovery(false)` or
-client routes are set: set `WithPort` to their port instead. `Build` also
+none, as ScyllaDB's `system.peers` does not. Without `WithPort`, contact points
+that all name one port make it the default, so `config.New(config.ScyllaV4,
+"10.0.0.1:19042")` dials discovered nodes on 19042 too, and `Config.String`
+shows it. With `WithPort` chosen, `Build` rejects contact points that all name
+another port, unless `WithDiscovery(false)` or client routes are set. `Build` also
 rejects a contact point it cannot parse, such as `"h:abc"`. A single absolute path, optionally prefixed with `unix:`, connects to a
 Unix socket: no host discovery is then filled in unless chosen.
 
