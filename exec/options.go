@@ -49,10 +49,12 @@ type Options struct {
 	// Retry replaces the profile's retry policy; nil keeps it. Use
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
-	// Observer replaces the session's observer for the execution; nil keeps
-	// it. To add to the session's observer rather than replace it, join the
-	// two: observe.Join(sessionObserver, extra), where sessionObserver is
-	// the one given to config.ConfigBuilder.WithObserver.
+	// Observer observes the execution as well as the session's observer
+	// (config.ConfigBuilder.WithObserver), joined after it as observe.Join
+	// joins them: each hook calls the session's observer first, then this
+	// one, and the context this one's StartRequest receives is the one the
+	// session's returned. Nil adds nothing. To observe an execution with
+	// Observer alone, set NoSessionObserver too.
 	Observer observe.Observer
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal
@@ -114,6 +116,10 @@ type Options struct {
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
 	// instrumentation such as OpenTelemetry, which hooks observe.Observer.
 	CQLTrace bool
+	// NoSessionObserver leaves the session's observer out of the
+	// execution, so Observer alone observes it, or nothing does when
+	// Observer is nil.
+	NoSessionObserver bool
 }
 
 // SerialOverride chooses the serial consistency an execution sends, relative to
@@ -241,6 +247,7 @@ func publicOptions(o implSession.Options) Options {
 		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
+		NoSessionObserver: o.NoSessionObserver,
 	}
 	if o.Timestamp.Set {
 		v.Timestamp = cql.Some(time.UnixMicro(o.Timestamp.Value).UTC())

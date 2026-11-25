@@ -8,6 +8,7 @@ import (
 
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 func Connect(ctx context.Context, config settings.Config) (*Session, error) {
@@ -28,4 +29,38 @@ func Connect(ctx context.Context, config settings.Config) (*Session, error) {
 func (rt *InternalSessionRuntime) setConfig(c settings.Config) {
 	rt.config = c
 	rt.observerHooks, _ = settings.NewObserverHooks(c.Observer)
+}
+
+// noObserverHooks are the hooks of an execution nothing observes.
+var noObserverHooks = &settings.ObserverHooks{}
+
+// overridesObserver reports whether values change which observer sees an
+// execution, so that it does not call the session's hooks alone.
+func overridesObserver(values *Options) bool {
+	return values.Observer != nil || values.NoSessionObserver
+}
+
+// executionHooks returns the hooks of an execution with values on rt's
+// session, when overridesObserver(values): the session observer's hooks, then
+// values.Observer's, as observe.Join orders them; values.Observer's alone
+// with NoSessionObserver; and noObserverHooks when that leaves none.
+func executionHooks(rt *InternalSessionRuntime, values *Options) (*settings.ObserverHooks, error) {
+	observer := values.Observer
+	if !values.NoSessionObserver && rt.config.Observer != nil {
+		observer = observe.Join(rt.config.Observer, values.Observer)
+	}
+	hooks, err := settings.NewObserverHooks(observer)
+	if hooks == nil && err == nil {
+		hooks = noObserverHooks
+	}
+	return hooks, err
+}
+
+// Observer returns the observer the session was configured with, nil
+// without one.
+func (s *Session) Observer() observe.Observer {
+	if s.Core() == nil {
+		return nil
+	}
+	return InternalRuntimeFor(s.Core()).config.Observer
 }

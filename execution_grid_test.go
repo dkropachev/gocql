@@ -45,7 +45,7 @@ var gridVerbs = map[string][]string{
 var gridNonExecution = map[string][]string{
 	"Session": {
 		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "Dialect",
-		"ID", "Metadata", "Metrics", "Prepare", "PrepareStream",
+		"ID", "Metadata", "Metrics", "Observer", "Prepare", "PrepareStream",
 		"RefreshMetadata", "Subscribe", "UnpreparedAddToBatch", "UnpreparedCommand",
 	},
 	"Worker":   {"AddToBatch", "Close", "Wait"},

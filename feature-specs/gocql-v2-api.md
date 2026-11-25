@@ -743,6 +743,7 @@ type Session struct { /* opaque */ }
 func Connect(context.Context, config.Config) (*Session, error)
 func (s *Session) Dialect() config.Dialect
 func (s *Session) ID() cql.UUID
+func (s *Session) Observer() observe.Observer // the configured one
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each
@@ -1384,7 +1385,8 @@ type Options struct {
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
-    Observer config.Observer
+    Observer observe.Observer                     // joined after the session's observer
+    NoSessionObserver bool                        // leave the session's observer out
 }
 // package cql
 type PayloadEntry struct { Key string; Value Nullable[Bytes] }

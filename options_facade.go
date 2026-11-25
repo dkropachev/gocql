@@ -23,6 +23,7 @@ func internalOptions(o exec.Options) implSession.Options {
 		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
+		NoSessionObserver: o.NoSessionObserver,
 	}
 	if o.Timestamp.Set {
 		v.Timestamp = cql.Some(o.Timestamp.Value.UnixMicro())

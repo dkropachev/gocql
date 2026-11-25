@@ -773,12 +773,12 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 		request.routing.Kind = cql.ConditionalStatement
 	}
 	hooks := rt.observerHooks
-	if values.Observer != nil {
-		// NewCompiledOptions found the hooks; options resolved elsewhere
-		// find them here.
+	if overridesObserver(values) {
+		// NewCompiledOptions found the hooks for its session; options
+		// resolved for another session find them here.
 		hooks = resolved.observerHooks
 		if hooks == nil {
-			h, err := settings.NewObserverHooks(values.Observer)
+			h, err := executionHooks(rt, values)
 			if err != nil {
 				return nil, nil, nil, err
 			}

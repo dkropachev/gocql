@@ -67,14 +67,18 @@ hooks as new interfaces, so an existing observer keeps compiling.
 `observe.RequestObserverFunc` and `observe.AttemptObserverFunc` make an
 observer from a function.
 
-Set the observer for the session with `config.ConfigBuilder.WithObserver`, or
-per execution with `exec.Options.Observer`, which replaces the session's. To
-run several observers, such as a tracer and a metrics exporter, combine them
-with `observe.Join`: it calls each observer's hooks in order, passes each
-`StartRequest` the context the one before returned, and keeps a panic in one
-from skipping the others. To add an observer to the session's for one
-execution, set `exec.Options.Observer` to `observe.Join(sessionObserver,
-extra)`.
+Set the observer for the session with `config.ConfigBuilder.WithObserver`;
+`Session.Observer` returns it. To run several observers, such as a tracer and
+a metrics exporter, combine them with `observe.Join`: it calls each
+observer's hooks in order, passes each `StartRequest` the context the one
+before returned, and keeps a panic in one from skipping the others.
+
+`exec.Options.Observer` adds an observer to one execution: it is joined
+after the session's, as `observe.Join(session, extra)` would join them, so
+each hook calls the session's observer first and the added one gets the
+context the session's `StartRequest` returned. Set
+`exec.Options.NoSessionObserver` to leave the session's observer out of the
+execution, so that only `exec.Options.Observer`, or nothing, observes it.
 
 Attempt hooks usually run on the goroutine that called the execution, the
 start hook before each attempt and its end function after it, so an observer

@@ -37,6 +37,9 @@ type Options struct {
 	IncludeMetadata   bool
 	Idempotent        cql.Option[bool]
 	CQLTrace          bool
+	// NoSessionObserver leaves the session's observer out of the
+	// execution, so Observer alone, or nothing, observes it.
+	NoSessionObserver bool
 }
 
 // SerialOverride chooses the serial consistency of an execution relative to
@@ -58,8 +61,10 @@ type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
 	// resolved; nil for options resolved for one execution.
 	templates *optionTemplates
-	// observerHooks are InternalOptions.Observer's hooks, found when the
-	// options were compiled; nil without an observer.
+	// observerHooks are the hooks an execution with these options calls on
+	// the session they were resolved for, as executionHooks finds them; nil
+	// when the options leave the session's hooks, or were resolved for
+	// another session.
 	observerHooks   *settings.ObserverHooks
 	InternalProfile settings.Profile
 	InternalOptions Options

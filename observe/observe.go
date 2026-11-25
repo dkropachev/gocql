@@ -3,8 +3,8 @@
 
 // Package observe lets an application watch every request and attempt a
 // session runs, from the client side. config.ConfigBuilder.WithObserver
-// installs an Observer for the session, and exec.Options.Observer one for an
-// execution; Join combines several. Changes of the cluster and of the
+// installs an Observer for the session, and exec.Options.Observer adds one to
+// an execution, joined after the session's; Join combines several. Changes of the cluster and of the
 // session's connection pools, such as a host going down, are events instead:
 // see gocql.Session.Subscribe and the event package.
 package observe

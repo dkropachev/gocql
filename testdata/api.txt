@@ -81,6 +81,7 @@ package gocql
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
+		gocql.Session method (*T) Observer() observe.Observer
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
 		gocql.Session method (*T) RefreshMetadata(ctx context.Context) error
@@ -1248,6 +1249,7 @@ package exec
 		exec.Options field IncludeMetadata bool
 		exec.Options field Idempotent cql.Option[bool]
 		exec.Options field CQLTrace bool
+		exec.Options field NoSessionObserver bool
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string
 		exec.PrepareOptions field HostID cql.Option[cql.UUID]
