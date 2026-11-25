@@ -119,7 +119,8 @@ func waitPooledIdle(t *testing.T, s *Session, what string) {
 
 // TestApplyBatch sends conditional batches with ApplyBatch: one that applied,
 // one that did not, on Cassandra's one row or ScyllaDB's row per statement,
-// and one whose rows disagree. Each call releases its pooled query before it
+// and one whose rows disagree, then a result with no rows and a cancelled
+// context, which fail. Each call releases its pooled query before it
 // returns, so the session closes at once, and a batch with no conditional
 // member is rejected before it is sent.
 func TestApplyBatch(t *testing.T) {
@@ -163,6 +164,20 @@ func TestApplyBatch(t *testing.T) {
 		}
 		waitPooledIdle(t, s, c.name)
 	}
+	// A response without the [applied] rows fails the call, and so does a
+	// cancelled context; either way the call releases its pooled query.
+	empty := casAppliedBody()
+	answer.Store(&empty)
+	if applied, result, err := s.ApplyBatch(ctx, &batch); err == nil || applied || result.Attempts != 1 {
+		t.Fatalf("ApplyBatch of a result with no rows = %v, %+v, %v; want an error after one attempt", applied, result, err)
+	}
+	waitPooledIdle(t, s, "no rows")
+	cancelled, cancelNow := context.WithCancel(ctx)
+	cancelNow()
+	if applied, _, err := s.ApplyBatch(cancelled, &batch); !errors.Is(err, context.Canceled) || applied {
+		t.Fatalf("ApplyBatch with a cancelled context = %v, %v; want context.Canceled", applied, err)
+	}
+	waitPooledIdle(t, s, "cancelled")
 	if _, _, err := s.ApplyBatch(ctx, &batch, exec.CompiledOptions{}, exec.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("ApplyBatch with two options = %v, want a cql.ValidationError", err)
 	}
