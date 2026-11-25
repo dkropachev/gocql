@@ -63,13 +63,13 @@ func TestLatency(t *testing.T) {
 					if plan.InternalPenalty(Target{HostID: host}) {
 						t.Fatal("abandoned claim did not expire")
 					}
-					policy.Observe(routing.AttemptEvent{Target: Target{HostID: host}, Started: test.now, Latency: time.Millisecond})
+					policy.Learn(routing.AttemptEvent{Target: Target{HostID: host}, Started: test.now, Latency: time.Millisecond})
 					sample.mu.Lock()
 					observed := sample.nextProbe
 					sample.mu.Unlock()
 					want := test.now.Add(time.Millisecond).Add(test.period)
 					if !observed.Equal(want) {
-						t.Fatal("Observe deadline narrowed", observed, want)
+						t.Fatal("Learn deadline narrowed", observed, want)
 					}
 				})
 			}
@@ -170,8 +170,8 @@ func TestLatency(t *testing.T) {
 			// Exactly one replica keeps first-target selection deterministic. A healthy
 			// nonreplica must be preferred while another plan owns the retry probe.
 			SnapshotData(snapshot).InternalRanges["ks"][0].Replicas = []metadata.Target{{HostID: slow}}
-			policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: healthy}, Started: time.Now().Add(-2 * time.Minute), Latency: time.Millisecond})
-			policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: slow}, Started: time.Now().Add(-2 * time.Minute), Latency: 10 * time.Millisecond})
+			policy.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: healthy}, Started: time.Now().Add(-2 * time.Minute), Latency: time.Millisecond})
+			policy.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: slow}, Started: time.Now().Add(-2 * time.Minute), Latency: 10 * time.Millisecond})
 			// Publish both real samples; the regular hourly updater is deliberately idle.
 			policy.InternalDecisions.Store(&InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{slow: time.Now().Add(-time.Minute)}})
 			info := routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cql.OrdinaryStatement}
@@ -200,7 +200,7 @@ func TestLatency(t *testing.T) {
 			if got := probes.Load(); got != 1 {
 				t.Fatalf("expired slow replica got %d concurrent first-target probes; want one", got)
 			}
-			// An emitted target abandoned before Observe cannot lock out future probes.
+			// An emitted target abandoned before Learn cannot lock out future probes.
 			// Advancing the plan clock avoids a timing-dependent minute-long test.
 			future := time.Now().Add(2 * time.Minute)
 			for attempt := 0; attempt < 2; attempt++ {
@@ -213,7 +213,7 @@ func TestLatency(t *testing.T) {
 			}
 			// A completed probe restarts its retry interval even before the decision
 			// updater publishes again; sharing a policy shares the reservation state.
-			policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: slow}, Started: future, Latency: 10 * time.Millisecond})
+			policy.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: slow}, Started: future, Latency: 10 * time.Millisecond})
 			plan := NewPlan(policy, info, snapshot).(*InternalLazyRoutingPlan)
 			plan.InternalNow = future.Add(20 * time.Millisecond)
 			if target, ok := InternalNextTarget(plan); !ok || target.HostID == slow {
@@ -232,7 +232,7 @@ func TestLatency(t *testing.T) {
 				if i == 0 {
 					latency = time.Second
 				}
-				p.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: h.HostID}, Started: time.Now(), Latency: latency})
+				p.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: h.HostID}, Started: time.Now(), Latency: latency})
 			}
 			_ = NewPlan(p, routing.Info{}, m)
 			ids := v2PlanIDs(NewPlan(p, routing.Info{}, m))

@@ -13,7 +13,7 @@ import (
 )
 
 // avoid wraps the built-in policy and never routes to one host. Embedding
-// *routing.Builtin keeps its Validate and Observe.
+// *routing.Builtin keeps its Validate and Learn.
 type avoid struct {
 	*routing.Builtin
 	host cql.UUID

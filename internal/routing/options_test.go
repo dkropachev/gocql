@@ -196,8 +196,8 @@ func TestPolicyOptions(t *testing.T) {
 						// Host 1 is measured first; the faster host 2 then
 						// publishes the decision that host 1 is slow.
 						start := time.Now()
-						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
-						policy.Observe(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
+						policy.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 1}}, Started: start, Latency: time.Second})
+						policy.Learn(routing.AttemptEvent{Target: metadata.Target{HostID: cql.UUID{15: 2}}, Started: start, Latency: time.Millisecond})
 					}
 					for range 20 {
 						if hosts := policyHosts(policy, test.info, m); !inTiers(hosts, variant.tiers) {

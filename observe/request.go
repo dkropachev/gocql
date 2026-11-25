@@ -9,7 +9,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/metadata"
-	routing2 "github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // Observer instruments requests and their attempts from the client side; it
@@ -48,7 +48,7 @@ type AttemptObserver interface {
 	// returns, if not nil, is called once with the completed attempt;
 	// routing.AttemptEvent.CQLTraceID links it to the server-side CQL trace
 	// session when the request runs with exec.Options.CQLTrace.
-	StartAttempt(context.Context, AttemptStart) func(routing2.AttemptEvent)
+	StartAttempt(context.Context, AttemptStart) func(routing.AttemptEvent)
 }
 
 // AttemptStart describes an attempt as it is sent to its target.
@@ -84,7 +84,7 @@ type RequestStart struct {
 	// Routing describes the request for routing. A field the driver does
 	// not know is empty or unset, such as Token when it cannot compute the
 	// request's partition key.
-	Routing routing2.Info
+	Routing routing.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.
 	ID uint64
@@ -111,7 +111,7 @@ type RequestEvent struct {
 	Result cql.Result
 	// Routing describes the request for routing, as RequestStart.Routing
 	// does.
-	Routing routing2.Info
+	Routing routing.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.
 	ID uint64

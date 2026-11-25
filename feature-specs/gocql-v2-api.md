@@ -1536,7 +1536,7 @@ type Policy interface {
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
 }
 type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
-type AttemptObserver interface { Observe(AttemptEvent) }        // optional
+type Learner interface { Learn(AttemptEvent) }                  // optional
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
 type AttemptEvent struct {
     RequestID uint64

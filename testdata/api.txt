@@ -1551,11 +1551,9 @@ package routing
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool
-	type routing.AttemptObserver interface
-		routing.AttemptObserver method Observe(routing.AttemptEvent)
 	type routing.Builtin struct
 		routing.Builtin method (*T) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan
-		routing.Builtin method (*T) Observe(e routing.AttemptEvent)
+		routing.Builtin method (*T) Learn(e routing.AttemptEvent)
 		routing.Builtin method (*T) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool)
 		routing.Builtin method (*T) Validate(m *metadata.Snapshot) error
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
@@ -1575,6 +1573,8 @@ package routing
 		routing.LatencyOptions field Scale time.Duration
 		routing.LatencyOptions field RetryPeriod time.Duration
 		routing.LatencyOptions field UpdateInterval time.Duration
+	type routing.Learner interface
+		routing.Learner method Learn(routing.AttemptEvent)
 	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
 	func routing.NewPolicy(options routing.Options) (*routing.Builtin, error)
 	type routing.Options struct

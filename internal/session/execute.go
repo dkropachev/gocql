@@ -1106,7 +1106,7 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 		s.Core.ObserveSafely(func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		s.Core.ObserveSafely(func() { policy.Observe(event) })
+		s.Core.ObserveSafely(func() { policy.Learn(event) })
 	}
 	return typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}
 }

@@ -52,7 +52,7 @@ A policy may also implement two optional interfaces:
   session calls it once per snapshot before routing with the policy; while it
   fails, so do the requests the policy would route, and Connect fails when it
   fails for the default profile's policy.
-- `routing.AttemptObserver`: `Observe` receives every attempt's outcome.
+- `routing.Learner`: `Learn` receives every attempt's outcome.
 
 Package `routing/routingtest` builds snapshots from hosts, schema, token
 ranges and tablets, so a policy can be tested without a cluster.
@@ -192,9 +192,9 @@ Each stage of a request has its own answer:
 `routing.Policy` is a public interface, so a health-weighted or pool-based
 policy, such as an adapter for a host-pool library, can live outside the
 driver. Embed the `*routing.Builtin` that `routing.NewPolicy` returns to keep
-token awareness and override what you need; its `Validate` and `Observe` are
+token awareness and override what you need; its `Validate` and `Learn` are
 promoted, so the wrapper keeps the built-in validation and latency tracking.
-A wrapper that overrides `Observe` calls the built-in one itself:
+A wrapper that overrides `Learn` calls the built-in one itself:
 
 ```go
 // skipFailed avoids, for its first route, a host whose last attempt failed.
@@ -211,7 +211,7 @@ func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Rou
 	return r, ok
 }
 
-func (p *skipFailed) Observe(e routing.AttemptEvent) {
+func (p *skipFailed) Learn(e routing.AttemptEvent) {
 	switch {
 	case e.Canceled:
 	case e.Err != nil:
@@ -219,9 +219,9 @@ func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	default:
 		p.failed.Delete(e.Target.HostID)
 	}
-	p.Builtin.Observe(e)
+	p.Builtin.Learn(e)
 }
 ```
 
-Pick, Fallback, `Plan.Next` and Observe run concurrently for many requests,
+Pick, Fallback, `Plan.Next` and Learn run concurrently for many requests,
 so a policy's own state must be safe for concurrent use.

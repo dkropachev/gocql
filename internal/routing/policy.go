@@ -692,7 +692,7 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	// retained when the ordinary plan has no usable alternative.
 	// time.Time retains the full configured duration and monotonic clock. An
 	// absolute UnixNano deadline can wrap even for a valid positive duration.
-	// Observe already uses this per-host lock; no policy-wide lock is involved.
+	// Learn already uses this per-host lock; no policy-wide lock is involved.
 	sample.mu.Lock()
 	defer sample.mu.Unlock()
 	if p.InternalNow.Before(sample.nextProbe) {
@@ -887,7 +887,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 		return Route{}, false
 	}
 }
-func (p *InternalRoutingPolicy) Observe(e routing2.AttemptEvent) {
+func (p *InternalRoutingPolicy) Learn(e routing2.AttemptEvent) {
 	if !p.InternalOptions.Latency.Enabled || e.Canceled || !InternalRoutingLatencySample(e.Err) || e.Latency <= 0 {
 		return
 	}
@@ -1006,7 +1006,7 @@ func (p *singleTargetRouting) Fallback(_ routing2.Info, m *MetadataSnapshot) Que
 	}
 	return &InternalTargetPlan{}
 }
-func (*singleTargetRouting) Observe(routing2.AttemptEvent) {}
+func (*singleTargetRouting) Learn(routing2.AttemptEvent) {}
 
 func InternalRoutingLatencySample(err error) bool {
 	if err == nil {

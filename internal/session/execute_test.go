@@ -108,7 +108,7 @@ func (p *runtimePolicy) Pick(routing2.Info, *routing.MetadataSnapshot) (routing.
 func (p *runtimePolicy) Fallback(routing2.Info, *routing.MetadataSnapshot) routing.QueryPlan {
 	return &routing.InternalTargetPlan{InternalTargets: append([]metadata.Target(nil), p.targets...)}
 }
-func (p *runtimePolicy) Observe(e routing2.AttemptEvent) {
+func (p *runtimePolicy) Learn(e routing2.AttemptEvent) {
 	p.events.Add(1)
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -130,7 +130,7 @@ func TestLocalDatacenter(t *testing.T) {
 	}
 }
 
-// wrapped overrides only Pick; Validate and Observe come from the embedded
+// wrapped overrides only Pick; Validate and Learn come from the embedded
 // *routing.Builtin.
 type wrapped struct{ *routing.Builtin }
 
@@ -139,7 +139,7 @@ func (w wrapped) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
 }
 
 // TestEmbeddedBuiltin checks that a policy embedding *routing.Builtin keeps
-// the built-in Validate and Observe, and that the zero Builtin routes as the
+// the built-in Validate and Learn, and that the zero Builtin routes as the
 // default policy.
 func TestEmbeddedBuiltin(t *testing.T) {
 	builtin, err := routing.NewPolicy(routing.Options{})
@@ -151,11 +151,11 @@ func TestEmbeddedBuiltin(t *testing.T) {
 	if !ok {
 		t.Fatal("the wrapper lost Validate")
 	}
-	observer, ok := policy.(routing.AttemptObserver)
+	observer, ok := policy.(routing.Learner)
 	if !ok {
-		t.Fatal("the wrapper lost Observe")
+		t.Fatal("the wrapper lost Learn")
 	}
-	observer.Observe(routing.AttemptEvent{})
+	observer.Learn(routing.AttemptEvent{})
 
 	c := cluster()
 	c.LocalDatacenter = "x"

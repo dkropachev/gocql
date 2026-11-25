@@ -315,7 +315,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TokenAwareHostPolicy(fallback, gocql.ShuffleReplicas())` | the default: replicas are shuffled unless `routing.Options.FixedReplicaOrder` is set |
 | `gocql.DCAwareRoundRobinPolicy(dc)` without token awareness | `routing.Options{Datacenter: dc, NoTokenAware: true}` |
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
-| `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.AttemptObserver`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
+| `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.Learner`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |

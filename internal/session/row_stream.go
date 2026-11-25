@@ -633,7 +633,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			s.privateStorage.session.ObserveSafely(func() { end(event) })
 		}
 		if policy := request.options.InternalProfile.Routing; policy != nil {
-			s.privateStorage.session.ObserveSafely(func() { policy.Observe(event) })
+			s.privateStorage.session.ObserveSafely(func() { policy.Learn(event) })
 		}
 		s.privateStorage.mu.Lock()
 		s.privateStorage.info.Result.Attempts++

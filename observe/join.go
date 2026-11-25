@@ -6,7 +6,7 @@ package observe
 import (
 	"context"
 
-	routing2 "github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 // RequestObserverFunc is a function used as a RequestObserver: its
@@ -20,10 +20,10 @@ func (f RequestObserverFunc) StartRequest(ctx context.Context, start RequestStar
 
 // AttemptObserverFunc is a function used as an AttemptObserver: its
 // StartAttempt calls f. A nil AttemptObserverFunc panics when called.
-type AttemptObserverFunc func(context.Context, AttemptStart) func(routing2.AttemptEvent)
+type AttemptObserverFunc func(context.Context, AttemptStart) func(routing.AttemptEvent)
 
 // StartAttempt calls f(ctx, start).
-func (f AttemptObserverFunc) StartAttempt(ctx context.Context, start AttemptStart) func(routing2.AttemptEvent) {
+func (f AttemptObserverFunc) StartAttempt(ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
 	return f(ctx, start)
 }
 
@@ -91,7 +91,7 @@ func (o *joinedRequest) StartRequest(ctx context.Context, start RequestStart) (c
 
 type joinedAttempt struct{ j joined }
 
-func (o *joinedAttempt) StartAttempt(ctx context.Context, start AttemptStart) func(routing2.AttemptEvent) {
+func (o *joinedAttempt) StartAttempt(ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
 	return o.j.startAttempt(ctx, start)
 }
 
@@ -101,7 +101,7 @@ func (o *joinedBoth) StartRequest(ctx context.Context, start RequestStart) (cont
 	return o.j.startRequest(ctx, start)
 }
 
-func (o *joinedBoth) StartAttempt(ctx context.Context, start AttemptStart) func(routing2.AttemptEvent) {
+func (o *joinedBoth) StartAttempt(ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
 	return o.j.startAttempt(ctx, start)
 }
 
@@ -154,9 +154,9 @@ func (j *joined) startRequest(ctx context.Context, start RequestStart) (context.
 	}
 }
 
-func (j *joined) startAttempt(ctx context.Context, start AttemptStart) func(routing2.AttemptEvent) {
+func (j *joined) startAttempt(ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
 	var started hookPanic
-	ends := make([]func(routing2.AttemptEvent), 0, len(j.attempts))
+	ends := make([]func(routing.AttemptEvent), 0, len(j.attempts))
 	for _, a := range j.attempts {
 		started.call(func() {
 			if end := a.StartAttempt(ctx, start); end != nil {
@@ -167,7 +167,7 @@ func (j *joined) startAttempt(ctx context.Context, start AttemptStart) func(rout
 	if len(ends) == 0 && !started.set {
 		return nil
 	}
-	return func(e routing2.AttemptEvent) {
+	return func(e routing.AttemptEvent) {
 		ended := started
 		for _, end := range ends {
 			ended.call(func() { end(e) })

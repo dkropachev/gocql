@@ -280,6 +280,6 @@ func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequ
 		s.Core.ObserveSafely(func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; routingObservesLatency(policy) {
-		s.Core.ObserveSafely(func() { policy.Observe(event) })
+		s.Core.ObserveSafely(func() { policy.Learn(event) })
 	}
 }

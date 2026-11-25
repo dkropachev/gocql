@@ -59,7 +59,7 @@ func (p *pickFallbackPolicy) Fallback(routing.Info, *MetadataSnapshot) QueryPlan
 	p.fallbacks++
 	return &routeList{routes: p.fallback}
 }
-func (p *pickFallbackPolicy) Observe(routing.AttemptEvent) {}
+func (p *pickFallbackPolicy) Learn(routing.AttemptEvent) {}
 
 type routeList struct{ routes []Route }
 

@@ -108,7 +108,7 @@ func TestRoutingPolicy(t *testing.T) {
 			for id, value := range map[byte]float64{1: float64(time.Millisecond), 2: float64(2500 * time.Microsecond), 3: float64(3500 * time.Microsecond)} {
 				policy.InternalLatencies.Store(cql.UUID{15: id}, &implRouting.InternalRoutingLatency{InternalValue: value, InternalSamples: 1, InternalUpdated: now})
 			}
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 4}}, Started: now, Latency: time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 4}}, Started: now, Latency: time.Millisecond})
 			decisions := policy.InternalDecisions.Load()
 			if decisions == nil {
 				t.Fatal("no latency decision")
@@ -124,9 +124,9 @@ func TestRoutingPolicy(t *testing.T) {
 		t.Run("LargePublicationInterval", func(t *testing.T) {
 			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Latency: routing2.LatencyOptions{Enabled: true, MinimumSamples: 1, UpdateInterval: time.Duration(1<<63 - 1)}, NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})).(*implRouting.InternalRoutingPolicy)
 			now := time.Now()
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 1}}, Started: now, Latency: time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 1}}, Started: now, Latency: time.Millisecond})
 			first := policy.InternalDecisions.Load()
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 2}}, Started: now, Latency: 3 * time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 2}}, Started: now, Latency: 3 * time.Millisecond})
 			if policy.InternalDecisions.Load() != first {
 				t.Fatal("valid MaxDuration UpdateInterval republished before deadline without a new minimum")
 			}
@@ -141,8 +141,8 @@ func TestRoutingPolicy(t *testing.T) {
 			routing.SnapshotData(metadata).InternalRanges["ks"][0].Replicas = []metadata2.Target{{HostID: slow}}
 			now := time.Now()
 			old := now.Add(-period).Add(-time.Minute)
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: healthy}, Started: old, Latency: time.Millisecond})
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: slow}, Started: old, Latency: 10 * time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: healthy}, Started: old, Latency: time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: slow}, Started: old, Latency: 10 * time.Millisecond})
 			policy.InternalDecisions.Store(&routing.InternalRoutingDecisions{InternalSlow: map[cql.UUID]time.Time{slow: now.Add(-time.Minute)}})
 			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Kind: cql.OrdinaryStatement}
 			start := make(chan struct{})
@@ -179,7 +179,7 @@ func TestRoutingPolicy(t *testing.T) {
 				}
 				policy.InternalLatencies.Store(cql.UUID{15: id}, &implRouting.InternalRoutingLatency{InternalValue: value, InternalSamples: samples, InternalUpdated: now})
 			}
-			policy.Observe(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 5}}, Started: now, Latency: time.Millisecond})
+			policy.Learn(routing2.AttemptEvent{Target: metadata2.Target{HostID: cql.UUID{15: 5}}, Started: now, Latency: time.Millisecond})
 			decisions := policy.InternalDecisions.Load()
 			if decisions == nil {
 				t.Fatal("no decisions")

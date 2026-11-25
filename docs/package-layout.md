@@ -247,9 +247,9 @@ documented methods.
 ### `routing` (layer 1)
 
 - **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces, the
-  optional `Validator` and `AttemptObserver` interfaces of a policy,
+  optional `Validator` and `Learner` interfaces of a policy,
   `TokenPartitionerFunc`, `Options`, `LatencyOptions`, `Info`, `PartitionKey`
-  and `AttemptEvent` (which `AttemptObserver.Observe` consumes), the built-in policy
+  and `AttemptEvent` (which `Learner.Learn` consumes), the built-in policy
   constructors (`NewPolicy`, `SingleTarget`) and the `*Builtin` they return,
   and the functions a custom policy picks with (`PlanOf`, `HostRoutes`,
   `ReplicaRoutes`). The built-in policies are the session's: `NewPolicy`

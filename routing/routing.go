@@ -37,7 +37,7 @@ type Plan interface {
 // (exec.Options.HostID) goes there without consulting the policy. Methods
 // may be called concurrently.
 //
-// A Policy may also implement Validator and AttemptObserver.
+// A Policy may also implement Validator and Learner.
 type Policy interface {
 	// Pick returns the first route, cheaply: without building a plan and
 	// without allocating. It returns false when it has no cheap answer, and
@@ -59,12 +59,12 @@ type Validator interface {
 	Validate(*metadata.Snapshot) error
 }
 
-// AttemptObserver is implemented by a Policy that learns from attempts, such
-// as one that tracks latency. The session calls Observe with the outcome of
-// every attempt of the requests of the profiles that use the policy.
-type AttemptObserver interface {
-	// Observe receives the outcome of an attempt.
-	Observe(AttemptEvent)
+// Learner is implemented by a Policy that learns from attempts, such as one
+// that tracks latency. The session calls Learn with the outcome of every
+// attempt of the requests of the profiles that use the policy.
+type Learner interface {
+	// Learn receives the outcome of an attempt.
+	Learn(AttemptEvent)
 }
 
 // NewPolicy builds the default token- and tablet-aware policy with options.
@@ -132,7 +132,7 @@ type emptyPlan struct{}
 func (emptyPlan) Next() (metadata.Route, bool) { return metadata.Route{}, false }
 
 // Builtin is a policy the session implements, from NewPolicy or
-// SingleTarget. It implements Policy, Validator and AttemptObserver, so a
+// SingleTarget. It implements Policy, Validator and Learner, so a
 // policy that embeds a *Builtin to override Pick or Fallback keeps the
 // built-in validation and latency tracking without forwarding them.
 //
@@ -149,9 +149,9 @@ type Builtin struct {
 }
 
 var (
-	_ Policy          = (*Builtin)(nil)
-	_ Validator       = (*Builtin)(nil)
-	_ AttemptObserver = (*Builtin)(nil)
+	_ Policy    = (*Builtin)(nil)
+	_ Validator = (*Builtin)(nil)
+	_ Learner   = (*Builtin)(nil)
 )
 
 func init() {
@@ -208,9 +208,9 @@ func (b *Builtin) Fallback(info Info, m *metadata.Snapshot) Plan {
 	return p.Fallback(info, m)
 }
 
-// Observe feeds an attempt's outcome to latency-aware routing.
-func (b *Builtin) Observe(e AttemptEvent) {
+// Learn feeds an attempt's outcome to latency-aware routing.
+func (b *Builtin) Learn(e AttemptEvent) {
 	if p := b.policy(); p != nil {
-		p.(AttemptObserver).Observe(e)
+		p.(Learner).Learn(e)
 	}
 }
