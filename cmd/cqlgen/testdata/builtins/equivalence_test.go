@@ -112,6 +112,9 @@ func fill(v reflect.Value) {
 		fill(value)
 		m.SetMapIndex(key, value)
 		v.Set(m)
+	case reflect.Pointer:
+		v.Set(reflect.New(v.Type().Elem()))
+		fill(v.Elem())
 	case reflect.Struct:
 		for i := range v.NumField() {
 			if v.Type().Field(i).IsExported() {

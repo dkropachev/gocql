@@ -162,11 +162,33 @@ func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] {
 	return sequenceEncoder[T]{kind: TypeVector, element: element}
 }
 
+// anySequence is the kind of a sequence codec that takes the kind of the
+// type it compiles for: a list, a set or a vector.
+const anySequence = TypeCustom
+
+// resolveSequenceKind returns the kind a sequence codec of kind uses for typ.
+func resolveSequenceKind(typ DataType, kind Type) Type {
+	if kind != anySequence {
+		return kind
+	}
+	switch k := typ.Kind(); k {
+	case TypeList, TypeSet, TypeVector:
+		return k
+	}
+	return anySequence
+}
+
 func sequenceElement(typ DataType, kind Type) (DataType, int64, error) {
 	if err := validateDataType(typ); err != nil {
 		return DataType{}, 0, err
 	}
 	element, ok := typ.Element()
+	if kind == anySequence {
+		if !ok || resolveSequenceKind(typ, kind) == anySequence {
+			return DataType{}, 0, typeValidation("type", "expected list, set or vector, got %s", typ)
+		}
+		kind = typ.Kind()
+	}
 	if !ok || typ.Kind() != kind {
 		return DataType{}, 0, typeValidation("type", "expected %s, got %s", kind, typ)
 	}
@@ -198,7 +220,7 @@ func (c sequenceEncoder[T]) compileValueEncoder(typ DataType) (Encoder[[]T], err
 	if err != nil {
 		return nil, fmt.Errorf("gocql: element type: %w", err)
 	}
-	c.typ, c.element, c.width = typ, encoder, width
+	c.typ, c.element, c.width, c.kind = typ, encoder, width, typ.Kind()
 	return c, nil
 }
 func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
@@ -290,7 +312,7 @@ func (c sequenceDecoder[T]) compileValueDecoder(typ DataType) (Decoder[[]T], err
 	if err != nil {
 		return nil, fmt.Errorf("gocql: element type: %w", err)
 	}
-	c.typ, c.element, c.width = typ, decoder, width
+	c.typ, c.element, c.width, c.kind = typ, decoder, width, typ.Kind()
 	c.elementInto, _ = decoder.(valueIntoDecoder[T])
 	return c, nil
 }
@@ -434,7 +456,7 @@ func validateSequenceBody(r ValueReader, kind Type) (Bytes, int, int64, error) {
 	if err != nil {
 		return Bytes{}, 0, 0, err
 	}
-	return validateSequenceLayout(r, kind, element, width)
+	return validateSequenceLayout(r, r.Type().Kind(), element, width)
 }
 func validateSequenceLayout(r ValueReader, kind Type, element DataType, width int64) (Bytes, int, int64, error) {
 	if err := requirePresent(r); err != nil {

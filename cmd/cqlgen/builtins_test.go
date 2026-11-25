@@ -38,6 +38,7 @@ func builtinsSource() []byte {
 package builtins
 
 import (
+	"math/big"
 	"net/netip"
 	"time"
 
@@ -45,6 +46,7 @@ import (
 )
 
 var (
+	_ big.Int
 	_ netip.Addr
 	_ time.Time
 )

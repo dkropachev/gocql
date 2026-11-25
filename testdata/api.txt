@@ -412,6 +412,7 @@ package cql
 	var cql.Int32Codec cql.Codec[int32]
 	var cql.Int64Codec cql.Codec[int64]
 	var cql.Int8Codec cql.Codec[int8]
+	var cql.IntCodec cql.Codec[int]
 	var cql.IntType cql.DataType
 	func cql.IntValue(n int32) cql.Value
 	const cql.LZ4Compression cql.Compression = 1
@@ -492,6 +493,7 @@ package cql
 	type cql.PayloadEntry struct
 		cql.PayloadEntry field Key string
 		cql.PayloadEntry field Value cql.Nullable[cql.Bytes]
+	func cql.PointerCodec[T any](base cql.Codec[T]) cql.Codec[*T]
 	const cql.Present cql.CellState = 0
 	type cql.ProtocolError struct
 		cql.ProtocolError field Err error
@@ -527,6 +529,7 @@ package cql
 	func cql.SetEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
 	func cql.SetType(element cql.DataType) (cql.DataType, error)
 	func cql.SetValue(t cql.DataType, v []cql.Value) (cql.Value, error)
+	func cql.SliceCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	var cql.SmallIntType cql.DataType
 	func cql.SmallIntValue(n int16) cql.Value
 	const cql.SnappyCompression cql.Compression = 2
@@ -590,6 +593,7 @@ package cql
 		cql.StreamRowReader method (*T) RequireEnd() error
 		cql.StreamRowReader method (*T) SkipColumn() error
 	func cql.StreamSet[T any](child cql.StreamDecoder[T]) cql.StreamDecoder[[]T]
+	func cql.StreamSlice[T any](child cql.StreamDecoder[T]) cql.StreamDecoder[[]T]
 	type cql.StreamStatement[P any, R any] struct
 		cql.StreamStatement field Params cql.ParamEncoder[P]
 		cql.StreamStatement field Rows cql.StreamRowDecoder[R]
@@ -806,6 +810,7 @@ package cql
 	type cql.Varint struct
 		cql.Varint method (T) BigInt() *math/big.Int
 		cql.Varint method (T) String() string
+	var cql.VarintBigIntCodec cql.Codec[*math/big.Int]
 	var cql.VarintCodec cql.Codec[cql.Varint]
 	func cql.VarintFromBigInt(v *math/big.Int) cql.Varint
 	func cql.VarintFromBytes(b []byte) (cql.Varint, error)

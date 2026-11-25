@@ -25,7 +25,7 @@ type StructFields[P any] struct {
 // ParamsOf binds a statement's parameters from the exported fields of struct
 // P by column name. A field's column is its `cql:"name"` tag, or its name in
 // snake_case, as gocqlx maps it (CreatedAt is created_at, UserID user_id);
-// `cql:"-"` skips it and `cql:"name,codec=SetCodec"` picks a
+// `cql:"-"` skips it and `cql:"name,codec=ListCodec"` picks a
 // built-in codec other than the type's default (`cql:",codec=..."` keeps the
 // snake_case name). Names match the column exactly, so a quoted mixed-case
 // column, or a name snake_case splits otherwise (UserIDs is user_i_ds),
@@ -43,11 +43,14 @@ type StructFields[P any] struct {
 // an embedded struct, is rejected. An embedded non-struct is an ordinary
 // field named after its type.
 //
-// A field maps by its exact Go type: a named type, such as
-// type Status string, has no built-in codec and needs WithCodec. Slice
-// fields map lists by default (ListCodec; `codec=SetCodec` for sets,
-// `codec=VectorCodec` for vectors). A time.Time field maps a timestamp with
-// TimestampTimeCodec. A BindValue[V] field of a type with a built-in codec,
+// A field maps by its Go type. A named type without a codec of its own, such
+// as type Status string, maps like its underlying type; WithCodec overrides
+// it. A []V field maps a list, a set or a vector, whichever the column is
+// (SliceCodec; `codec=ListCodec`, `codec=SetCodec` or `codec=VectorCodec`
+// requires one). An int field maps bigint with IntCodec, a *V field maps V
+// with NULL as nil (PointerCodec), a cql.Text field maps text and ascii with
+// TextCodec, and a *big.Int field maps varint with VarintBigIntCodec. A
+// time.Time field maps a timestamp with TimestampTimeCodec. A BindValue[V] field of a type with a built-in codec,
 // or one WithCodec or WithEncoder maps, binds NULL and UNSET too; it maps
 // parameters only, so RowOf rejects it. A map[K]V field maps with GoMapCodec
 // when K and V have built-in codecs that decode into owned storage: the

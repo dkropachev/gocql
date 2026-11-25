@@ -38,16 +38,19 @@ func builtinFields[P any]() []builtinField[P] {
 	add(builtin[P](Int16Codec, "int16", "Int16Codec", true)...)
 	add(builtin[P](Int32Codec, "int32", "Int32Codec", true)...)
 	add(builtin[P](Int64Codec, "int64", "Int64Codec", true)...)
+	add(builtin[P](IntCodec, "int", "IntCodec", true)...)
 	add(builtin[P](Float32Codec, "float32", "Float32Codec", true)...)
 	add(builtin[P](Float64Codec, "float64", "Float64Codec", true)...)
 	// ASCIIStringCodec names StringCodec, which maps ascii too, in a tag.
 	add(builtin[P](StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
+	add(builtin[P](TextCodec, "cql.Text", "TextCodec", true)...)
 	add(builtin[P](ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
 	add(builtin[P](BlobCodec, "cql.Bytes", "BlobCodec", true)...)
 	add(builtin[P](UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
 	add(builtin[P](TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
 	add(builtin[P](InetCodec, "netip.Addr", "InetCodec", true)...)
 	add(builtin[P](VarintCodec, "cql.Varint", "VarintCodec", true)...)
+	add(builtin[P](VarintBigIntCodec, "*big.Int", "VarintBigIntCodec", true)...)
 	add(builtin[P](DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
 	add(builtin[P](DateCodec, "cql.Date", "DateCodec", true)...)
 	add(builtin[P](TimeCodec, "cql.TimeOfDay", "TimeCodec", true)...)
@@ -58,10 +61,12 @@ func builtinFields[P any]() []builtinField[P] {
 	return fields
 }
 
-// builtin returns the entries for V, Nullable[V], BindValue[V] (parameters
-// only), and []V as a list (the default), a set (`codec=SetCodec`) or a
-// vector (`codec=VectorCodec`) of c. name is c's exported name, which a
-// `codec=` tag selects it by, as it does each of aliases.
+// builtin returns the entries for V, Nullable[V], *V (unless V is a
+// pointer), BindValue[V] (parameters only), and []V as whichever of a list,
+// a set or a vector the column is (the default), or as a list
+// (`codec=ListCodec`), a set (`codec=SetCodec`) or a vector
+// (`codec=VectorCodec`) of c. name is c's exported name, which a `codec=`
+// tag selects it by, as it does each of aliases.
 func builtin[P, V any](c Codec[V], typeSrc, name string, def bool, aliases ...string) []builtinField[P] {
 	names := append([]string{name}, aliases...)
 	plain := builtinField[P]{
@@ -101,8 +106,20 @@ func builtin[P, V any](c Codec[V], typeSrc, name string, def bool, aliases ...st
 		}
 	}
 	fields := []builtinField[P]{plain, nullable, bind,
-		collection(ListCodec(c), "cql.ListCodec(cql."+name+")", names, def)}
+		collection(SliceCodec(c), "cql.SliceCodec(cql."+name+")", names, def)}
+	if reflect.TypeFor[V]().Kind() != reflect.Pointer {
+		fields = append(fields, builtinField[P]{
+			BuiltinFieldType: structmap.BuiltinFieldType{
+				Type: reflect.TypeFor[*V](), TypeSrc: "*" + typeSrc,
+				EncoderSrc: "cql.PointerCodec(cql." + name + ")", DecoderSrc: "cql.PointerCodec(cql." + name + ")",
+				Names: names, Default: def,
+			},
+			param:  fieldParam[P](Encoder[*V](PointerCodec(c))),
+			column: fieldColumn[P](Decoder[*V](PointerCodec(c))),
+		})
+	}
 	if def {
+		fields = append(fields, collection(ListCodec(c), "cql.ListCodec(cql."+name+")", []string{"ListCodec"}, false))
 		fields = append(fields, collection(SetCodec(c), "cql.SetCodec(cql."+name+")", []string{"SetCodec"}, false))
 		fields = append(fields, collection(VectorCodec(c), "cql.VectorCodec(cql."+name+")", []string{"VectorCodec"}, false))
 	}
@@ -120,8 +137,10 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 }
 
 // unsafe: in fieldParam, fieldColumn and fieldStreamColumn, offset is the
-// reflect offset of a field of type exactly V (eachStructField sums the
-// offsets of flattened value embeds; pointer embeds are rejected), so it
+// reflect offset of a field of type exactly V, or of a named type whose
+// underlying type is V and so has V's layout (resolveField, underlyingOf;
+// eachStructField sums the offsets of flattened value embeds; pointer embeds
+// are rejected), so it
 // stays inside the struct the arithmetic starts from and the result is a
 // typed pointer the GC sees.
 
@@ -693,6 +712,17 @@ func resolveField[E interface {
 			entries = append(entries, b)
 		}
 	}
+	if len(candidates) == 0 && typ.Name() != "" {
+		// A named type maps like its underlying type when that has a
+		// built-in codec. Its fields read the field as the underlying
+		// type, whose memory layout is the same.
+		for _, b := range builtins {
+			if underlyingOf(typ, b.meta().Type) {
+				candidates = append(candidates, b.meta())
+				entries = append(entries, b)
+			}
+		}
+	}
 	if codec != "" {
 		if i, ok := structmap.SelectBuiltin(candidates, codec); ok {
 			return entries[i], nil
@@ -712,6 +742,13 @@ func resolveField[E interface {
 }
 
 func (f builtinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
+
+// underlyingOf reports whether u is the underlying type of the named type t:
+// u is predeclared or unnamed, of t's kind, and t converts to it, which for
+// types of one kind needs identical underlying types.
+func underlyingOf(t, u reflect.Type) bool {
+	return u.PkgPath() == "" && u.Kind() == t.Kind() && t.ConvertibleTo(u)
+}
 
 // Streaming rows decode with StreamDecoders, which use their own Go types: text
 // and blob columns decode into reusable []byte storage, and there is no string
@@ -753,11 +790,13 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 	return fields
 }
 
-// streamBuiltin returns the entries for V, Nullable[V], and []V as a list
-// (the default), a set (`stream=Set`), or a vector (`stream=Vector`). For a
+// streamBuiltin returns the entries for V, Nullable[V], and []V as whichever
+// of a list, a set or a vector the column is (the default), or as a list
+// (`stream=List`), a set (`stream=Set`) or a vector (`stream=Vector`). For a
 // decoder that is not its type's default, as Text is not for []byte, the tag
-// that names it, or one of aliases, also selects the list of it, and there is
-// no set or vector entry: "Set" and "Vector" already select those of the default decoder.
+// that names it, or one of aliases, also selects the slice of it, and there
+// is no list, set or vector entry: those tags already select the default
+// decoder's.
 func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool, aliases ...string) []streamBuiltinField[P] {
 	names := append([]string{name}, aliases...)
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
@@ -772,13 +811,15 @@ func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def boo
 			names, def, fieldStreamColumn[P](StreamNullable(dec))),
 	}
 	if !def {
-		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
-			names, false, fieldStreamColumn[P](StreamList(dec))))
+		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSlice("+src+")",
+			names, false, fieldStreamColumn[P](StreamSlice(dec))))
 	}
 	return append(plain, []streamBuiltinField[P]{
-		// A list or set takes its element's default decoder.
+		// A slice takes its element's default decoder.
+		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSlice("+src+")",
+			nil, def, fieldStreamColumn[P](StreamSlice(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
-			[]string{"List"}, def, fieldStreamColumn[P](StreamList(dec))),
+			[]string{"List"}, false, fieldStreamColumn[P](StreamList(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSet("+src+")",
 			[]string{"Set"}, false, fieldStreamColumn[P](StreamSet(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",

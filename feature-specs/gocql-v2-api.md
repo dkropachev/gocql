@@ -313,6 +313,9 @@ name in snake_case as gocqlx maps it (`CreatedAt` is `created_at`, `UserID`
 codec. `ParamsOf` skips fields without a matching marker but requires a field
 for every marker; `RowOf` leaves fields of unselected columns zero and
 requires a field for every column unless given `IgnoreExtraColumns`. A
+`[]V` field maps a list, set or vector, whichever the column is; a named type
+maps like its underlying type; `int`, `*V`, `cql.Text` and `*big.Int` fields
+map with `IntCodec`, `PointerCodec`, `TextCodec` and `VarintBigIntCodec`. A
 `time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
 parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
 gives. `UDTCodecOf` maps a UDT's fields to struct T the same way. Options are
@@ -366,6 +369,7 @@ var Int8Codec Codec[int8]
 var Int16Codec Codec[int16]
 var Int32Codec Codec[int32]
 var Int64Codec Codec[int64]              // bigint and counter
+var IntCodec Codec[int]                  // bigint and counter; decode checks the range
 var Float32Codec Codec[float32]
 var Float64Codec Codec[float64]
 var DateCodec Codec[Date]
@@ -377,6 +381,7 @@ var UUIDCodec Codec[UUID]                     // uuid and timeuuid; version 1 ch
 var TimeUUIDCodec Codec[TimeUUID]
 var InetCodec Codec[netip.Addr]
 var VarintCodec Codec[Varint]
+var VarintBigIntCodec Codec[*big.Int]    // varint; nil is NULL
 var DecimalCodec Codec[Decimal]
 var StringCodec Codec[string]                 // text and ascii; decodes an owned copy
 var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
@@ -478,6 +483,8 @@ func (t Text) String() string
 func (t Text) Copy() (string, error)
 
 type Entry[K, V any] struct { Key K; Value V }
+func SliceCodec[T any](Codec[T]) Codec[[]T] // list, set or vector, per the column
+func PointerCodec[T any](Codec[T]) Codec[*T] // nil is NULL
 func ListCodec[T any](Codec[T]) Codec[[]T]
 func SetCodec[T any](Codec[T]) Codec[[]T]
 func MapCodec[K, V any](Codec[K], Codec[V]) Codec[[]Entry[K, V]]
@@ -1170,6 +1177,7 @@ type DecimalParts struct { Scale int32; Unscaled []byte }
 var Decimal Decoder[DecimalParts]
 func Nullable[T any](Decoder[T]) Decoder[Nullable[T]]
 func Empty[T any](Decoder[T]) Decoder[MaybeEmpty[T]]
+func Slice[T any](Decoder[T]) Decoder[[]T] // list, set or vector, per the column
 func List[T any](Decoder[T]) Decoder[[]T]
 func Set[T any](Decoder[T]) Decoder[[]T]
 func Map[K, V any](Decoder[K], Decoder[V]) Decoder[[]Entry[K, V]]

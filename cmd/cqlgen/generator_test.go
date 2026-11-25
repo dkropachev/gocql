@@ -166,7 +166,7 @@ type T struct {
 
 		t.Run("Errors", func(t *testing.T) {
 			for want, src := range map[string]string{
-				"no codec for type int":        "type T struct{ A int }",
+				"no codec for type uint":       "type T struct{ A uint }",
 				"is not a built-in for string": "type T struct{ A string `cql:\"a,codec=Int32Codec\"` }",
 				"no codec for type Defined":    "import \"github.com/scylladb/gocql/v2/cql\"\ntype Defined cql.UUID\ntype T struct{ A Defined }",
 				"embedded pointer field E":     "type E struct{ A int32 }\ntype T struct{ *E }",
@@ -206,14 +206,44 @@ type T struct {
 			}
 			for _, want := range []string{
 				`cql.StreamColumn("a", cql.StreamUUID, func(v *T) *ID { return &v.A })`,
-				`cql.StreamColumn("b", cql.StreamList(cql.StreamBlob), func(v *T) *Blobs { return &v.B })`,
+				`cql.StreamColumn("b", cql.StreamSlice(cql.StreamBlob), func(v *T) *Blobs { return &v.B })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
 				}
 			}
-			if want := `cql.Column("b", cql.ListCodec(cql.ByteSliceCodec), func(v *T) *Blobs { return &v.B })`; !strings.Contains(out, want) {
+			if want := `cql.Column("b", cql.SliceCodec(cql.ByteSliceCodec), func(v *T) *Blobs { return &v.B })`; !strings.Contains(out, want) {
 				t.Errorf("missing %s in:\n%s", want, out)
+			}
+		})
+
+		// A named type without an entry of its own maps like its underlying
+		// type, as reflection maps it, converting the field.
+		t.Run("NamedTypes", func(t *testing.T) {
+			_, out, err := generateSource(t, "x.go", `package x
+
+type Status string
+type Tags []string
+type Count int
+
+type T struct {
+	S Status
+	G Tags
+	C Count
+}
+`, "T")
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				`cql.Param("s", cql.StringCodec, func(v T) string { return string(v.S) })`,
+				`cql.Column("s", cql.StringCodec, func(v *T) *string { return (*string)(&v.S) })`,
+				`cql.Param("g", cql.SliceCodec(cql.StringCodec), func(v T) []string { return []string(v.G) })`,
+				`cql.Column("c", cql.IntCodec, func(v *T) *int { return (*int)(&v.C) })`,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
 			}
 		})
 

@@ -16,8 +16,7 @@ type sliceCodec[T any] struct {
 	dec sequenceDecoder[T]
 }
 
-// ListCodec encodes and decodes a list as a []T, the form struct mappings
-// use for slice fields. A null cell, how CQL stores an empty list, decodes as
+// ListCodec encodes and decodes a list as a []T. A null cell, how CQL stores an empty list, decodes as
 // an empty slice. Decoding allocates the slice unless the destination has the
 // capacity (see ReuseBuffers). ListDecoder uses the same eager decoding path.
 func ListCodec[T any](element Codec[T]) Codec[[]T] {
@@ -40,6 +39,17 @@ func VectorCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
 		enc: sequenceEncoder[T]{kind: TypeVector, element: element},
 		dec: sequenceDecoder[T]{kind: TypeVector, element: element},
+	}
+}
+
+// SliceCodec encodes and decodes a list, a set or a vector as a []T,
+// whichever the column is when the codec is compiled; struct mappings use it
+// for slice fields. It behaves as ListCodec, SetCodec or VectorCodec does
+// for that kind.
+func SliceCodec[T any](element Codec[T]) Codec[[]T] {
+	return sliceCodec[T]{
+		enc: sequenceEncoder[T]{kind: anySequence, element: element},
+		dec: sequenceDecoder[T]{kind: anySequence, element: element},
 	}
 }
 

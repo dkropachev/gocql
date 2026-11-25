@@ -94,13 +94,14 @@ func TestStructMappingRules(t *testing.T) {
 	})
 	t.Run("EmbeddedNonStruct", func(t *testing.T) {
 		columns := cql.NewColumns(cql.ColumnSpec{Name: "rule_text", Type: text})
-		// A named type has no built-in codec, whatever its underlying type.
-		if _, err := cql.RowOf[ruleEmbeddedNonStruct](); err == nil || !strings.Contains(err.Error(), "no codec for type cql_test.RuleText") {
-			t.Fatalf("named type: %v", err)
+		// A named type maps like its underlying type, and a WithCodec
+		// option for it takes precedence.
+		value := ruleEmbeddedNonStruct{ruleName: "hidden", RuleText: "shown"}
+		if row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](), value)); row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
+			t.Fatalf("named type: %+v", row)
 		}
 		opt := cql.WithCodec(cql.NamedScalar(cql.StringCodec,
 			func(v RuleText) string { return string(v) }, func(v string) RuleText { return RuleText(v) }))
-		value := ruleEmbeddedNonStruct{ruleName: "hidden", RuleText: "shown"}
 		row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](opt), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](opt), value))
 		if row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
 			t.Fatalf("got %+v", row)

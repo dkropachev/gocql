@@ -43,6 +43,13 @@ func StreamSet[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeSet, element: child}
 }
 
+// StreamSlice decodes a list, a set or a vector, whichever the column is
+// when the decoder is compiled, as StreamList, StreamSet or StreamVector
+// does; StreamRowOf uses it for slice fields.
+func StreamSlice[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
+	return streamSequenceCodec[T]{kind: anySequence, element: child}
+}
+
 // StreamVector decodes a vector into seeded slice storage using child.
 func StreamVector[T any](child StreamDecoder[T]) StreamDecoder[[]T] {
 	return streamSequenceCodec[T]{kind: TypeVector, element: child}

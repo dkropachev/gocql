@@ -200,6 +200,24 @@ func counterCodec() Codec[int64] {
 	return c
 }
 
+// intCodec is IntCodec: Int64Codec with a range check on decode.
+func intCodec() Codec[int] {
+	base := counterCodec().(scalarCodec[int64])
+	return scalarCodec[int]{kind: base.kind, alternative: base.alternative,
+		encode: func(w *ValueWriter, v int) error { return base.encode(w, int64(v)) },
+		decode: func(r ValueReader) (int, error) {
+			v, err := base.decode(r)
+			if err != nil {
+				return 0, err
+			}
+			if int64(int(v)) != v {
+				return 0, fmt.Errorf("gocql: bigint %d overflows int", v)
+			}
+			return int(v), nil
+		},
+	}
+}
+
 func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
 	return scalarCodec[T]{kind: kind,
 		decodeRow: func(r *RowReader, kind, alternative Type, compiled bool) (T, error) {
@@ -271,6 +289,11 @@ var (
 
 	// Int64Codec maps bigint and counter to int64.
 	Int64Codec Codec[int64] = counterCodec()
+
+	// IntCodec maps bigint and counter to int, as Int64Codec does to int64.
+	// Decoding fails for a value that does not fit an int, which only a
+	// 32-bit platform has.
+	IntCodec Codec[int] = intCodec()
 
 	// Float32Codec maps float to float32.
 	Float32Codec Codec[float32] = scalarCodec[float32]{kind: TypeFloat,

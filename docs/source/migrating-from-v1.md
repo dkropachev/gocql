@@ -212,6 +212,11 @@ column named in one word (`createdat`).
 | gocqlx | v2 |
 | --- | --- |
 | a `time.Time` field | the same; `cql.TimestampTimeCodec` maps it by default |
+| a `*T` field for a nullable column | the same: nil is NULL (`cql.PointerCodec`); `cql.Nullable[T]` also works |
+| a `[]T` field for a list, set or vector | the same; the column's kind picks the codec |
+| a named type, such as `type Status string` | the same: it maps like its underlying type |
+| an `int` field | the same; it maps a bigint (`cql.IntCodec`) |
+| a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
 | a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))` |
 | `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraColumns())`; without it every result column needs a field |
 
