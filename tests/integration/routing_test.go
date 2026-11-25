@@ -273,7 +273,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
+			editDefaultProfile(cluster, func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host metadata.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -309,7 +309,7 @@ func TestRouting(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(rr) })
+			editDefaultProfile(cluster, func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
 			cluster.WithHostFilter(func(host metadata.HostSnapshot) bool { return host.Address.Addr().String() != filtered })
@@ -440,7 +440,7 @@ func TestRouting(t *testing.T) {
 			v2ConfigureRouting(t, cluster, routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 			// The rows are read back at ONE from whichever replica the tablet
 			// routes to: write them at ALL so a lagging replica cannot miss one.
-			cluster.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
+			editDefaultProfile(cluster, func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
 			supported, err := v2TabletsSupported(ctx, session)
@@ -787,7 +787,7 @@ func TestRouting(t *testing.T) {
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *config.ConfigBuilder) {
 				c.WithConnectionsPerHost(1)
 				// The row is read back at ONE: write it at ALL so any replica has it.
-				c.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
+				editDefaultProfile(c, func(p *config.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			conns := waitForHostConns(t, session)

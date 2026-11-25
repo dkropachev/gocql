@@ -27,7 +27,7 @@
 // one before:
 //
 //  1. The session's default profile: the one ConfigBuilder.WithDefaultProfile
-//     or ConfigureDefaultProfile chose, or the driver's defaults.
+//     chose, or the driver's defaults; Config.DefaultProfile returns it.
 //  2. exec.Options.Profile, when set, replaces that profile whole. A field the
 //     profile did not choose keeps the driver's default, not the session's.
 //  3. Each exec.Options field that is set overrides the matching field of the

@@ -20,18 +20,20 @@ type staticTLS struct{ config *tls.Config }
 
 func (s staticTLS) TLSConfig() *tls.Config { return s.config }
 
-// TLSFiles names the PEM files of a TLSFileSource.
+// TLSFiles names the PEM files of a TLSFileSource or of LoadTLSFiles.
 //
-// The zero TLSFiles names no files, and NewTLSFileSource rejects it with a
-// cql.ValidationError.
+// The zero TLSFiles names no files, and NewTLSFileSource and LoadTLSFiles
+// reject it with a cql.ValidationError.
 type TLSFiles struct {
 	// CertFile and KeyFile hold the client certificate chain and its private
 	// key. Set both or neither.
 	CertFile, KeyFile string
 	// CAFile holds the CA certificates that verify nodes. It replaces RootCAs.
 	CAFile string
-	// Interval is the least time between two checks of the files. Zero means
-	// one minute.
+	// Interval is the least time between two checks of the files of a
+	// TLSFileSource. Zero means one minute. LoadTLSFiles reads the files
+	// once and does not use it, but rejects a negative one as
+	// NewTLSFileSource does.
 	Interval time.Duration
 }
 
@@ -62,22 +64,49 @@ type TLSFileSource struct {
 	digest       [sha256.Size]byte
 }
 
+// LoadTLSFiles loads files once over a copy of base, or over TLS 1.2+
+// defaults when base is nil, and returns the result for
+// ConfigBuilder.WithTLS: the certificate and key replace Certificates and
+// the CA file replaces RootCAs. Verification is as for WithTLS: unless base
+// names a ServerName, each connection verifies the node's IP address. It
+// fails with a cql.ValidationError if the files cannot be loaded. Use
+// NewTLSFileSource instead to reload files that change while sessions run.
+func LoadTLSFiles(base *tls.Config, files TLSFiles) (*tls.Config, error) {
+	if err := checkTLSFiles("LoadTLSFiles", base, files); err != nil {
+		return nil, err
+	}
+	content, err := implSettings.ReadTLSFiles(files.CertFile, files.KeyFile, files.CAFile)
+	if err != nil {
+		return nil, err
+	}
+	return implSettings.BuildTLSFromFiles(base, content)
+}
+
+// checkTLSFiles rejects files that name no usable set, as a
+// cql.ValidationError whose Field is function.
+func checkTLSFiles(function string, base *tls.Config, files TLSFiles) error {
+	invalid := func(reason string) error {
+		return &cql.ValidationError{Field: function, Err: errors.New(reason)}
+	}
+	switch {
+	case (files.CertFile == "") != (files.KeyFile == ""):
+		return invalid("cert and key files must be set together")
+	case files.CertFile == "" && files.CAFile == "":
+		return invalid("a cert and key pair or a CA file is required")
+	case files.Interval < 0:
+		return invalid("interval must not be negative")
+	case base != nil && files.CertFile != "" && base.GetClientCertificate != nil:
+		return invalid("base sets GetClientCertificate, which would ignore CertFile")
+	}
+	return nil
+}
+
 // NewTLSFileSource loads files over a copy of base, or over TLS 1.2+ defaults when
 // base is nil, and returns a source serving the result. It fails if the files
 // cannot be loaded.
 func NewTLSFileSource(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
-	invalid := func(reason string) error {
-		return &cql.ValidationError{Field: "NewTLSFileSource", Err: errors.New(reason)}
-	}
-	switch {
-	case (files.CertFile == "") != (files.KeyFile == ""):
-		return nil, invalid("cert and key files must be set together")
-	case files.CertFile == "" && files.CAFile == "":
-		return nil, invalid("a cert and key pair or a CA file is required")
-	case files.Interval < 0:
-		return nil, invalid("interval must not be negative")
-	case base != nil && files.CertFile != "" && base.GetClientCertificate != nil:
-		return nil, invalid("base sets GetClientCertificate, which would ignore CertFile")
+	if err := checkTLSFiles("NewTLSFileSource", base, files); err != nil {
+		return nil, err
 	}
 	if files.Interval == 0 {
 		files.Interval = time.Minute

@@ -368,7 +368,7 @@ func TestConfig(t *testing.T) {
 				e := applyV2SocketOptions(a, c, "tcp")
 				a.Close()
 				b.Close()
-				if unsupported, ok := errors.AsType[*settings.UnsupportedSettingError](e); !ok || unsupported.Setting != map[string]string{"receive": "receive buffer", "send": "send buffer", "linger": "linger"}[field] {
+				if unsupported, ok := errors.AsType[*settings.UnsupportedSettingError](e); !ok || unsupported.Setting != map[string]string{"receive": "WithReceiveBuffer", "send": "WithSendBuffer", "linger": "WithLinger"}[field] {
 					t.Fatal("wrong unsupported setting", field, e)
 				}
 			}

@@ -177,7 +177,7 @@ func (config Config) Validate() error {
 		return cqltype.TypeValidation("New", "supported protocol versions are 4 and 5")
 	}
 	if config.Server == ServerScylla && config.Protocol == 5 {
-		return &UnsupportedSettingError{Setting: "protocol", Reason: "ScyllaDB speaks native protocol 4"}
+		return &UnsupportedSettingError{Setting: "New", Reason: "ScyllaDB speaks native protocol 4"}
 	}
 	if config.ClientRoutes != nil {
 		if err := ScyllaOnly(&config, "WithClientRoutes"); err != nil {
@@ -190,7 +190,7 @@ func (config Config) Validate() error {
 		}
 	}
 	if config.LocalRack != "" && config.LocalDatacenter == "" {
-		return cqltype.TypeValidation("WithLocalDatacenter", "a rack requires a datacenter")
+		return cqltype.TypeValidation("WithLocalRack", "a rack requires WithLocalDatacenter")
 	}
 	if config.Port == 0 {
 		return cqltype.TypeValidation("WithPort", "must be 1 to 65535")
@@ -388,6 +388,27 @@ func (config Config) validateContactPorts() error {
 	}
 	return nil
 }
+
+// CommonContactPort returns the port every TCP contact point names, and
+// false when one names none, two name different ports, or one does not
+// parse, which Validate reports. It parses ports as validateContactPorts
+// does, so the two agree on which port a contact point names.
+func CommonContactPort(contactPoints []string) (uint16, bool) {
+	var common uint16
+	for _, point := range contactPoints {
+		host, portText, err := net.SplitHostPort(point)
+		if err != nil {
+			return 0, false
+		}
+		port, err := strconv.Atoi(portText)
+		if host == "" || err != nil || port < 1 || port > 65535 || common != 0 && uint16(port) != common {
+			return 0, false
+		}
+		common = uint16(port)
+	}
+	return common, common != 0
+}
+
 func (config Config) Snapshot() Config {
 	if config.DefaultProfile != nil {
 		profile := *config.DefaultProfile

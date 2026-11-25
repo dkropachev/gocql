@@ -51,16 +51,16 @@ func connect(hosts []string) (adapter, error) {
 	builder := config.New(config.ScyllaV4, hosts...).
 		WithConnectionsPerShard(1).
 		WithMaxExcessPerShard(0).
-		ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-			p.WithConsistency(cql.LocalQuorum).
-				NoSerialConsistency().
-				WithTimeout(10 * time.Second).
-				WithPageTimeout(10 * time.Second).
-				WithPageSize(32).
-				WithPrefetch(0).
-				WithRetry(retry.Safe{MaxAttempts: 1}).
-				WithRouting(policy) // no speculation: the default
-		})
+		WithDefaultProfile(config.NewProfile().
+			WithConsistency(cql.LocalQuorum).
+			NoSerialConsistency().
+			WithTimeout(10 * time.Second).
+			WithPageTimeout(10 * time.Second).
+			WithPageSize(32).
+			WithPrefetch(0).
+			WithRetry(retry.Safe{MaxAttempts: 1}).
+			WithRouting(policy). // no speculation: the default
+			MustBuild())
 	if *metadataRefresh > 0 {
 		builder.WithMetadataRefresh(*metadataRefresh)
 	} else {

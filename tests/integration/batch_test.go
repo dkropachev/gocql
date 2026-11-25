@@ -103,7 +103,7 @@ func TestBatch(t *testing.T) {
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureRetry|fixtureConsistency, func(cfg *config.ConfigBuilder) {
 				// The batch below writes at ONE, so the rows are read back at ALL:
 				// a QUORUM read could miss the one replica that took the write.
-				cfg.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRetry(retryPolicy).WithConsistency(cql.All) })
+				editDefaultProfile(cfg, func(p *config.ProfileBuilder) { p.WithRetry(retryPolicy).WithConsistency(cql.All) })
 			}), t, false)
 			defer session.Close()
 			table := testTableName(t)

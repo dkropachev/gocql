@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -19,6 +20,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 type tlsTestFiles struct {
@@ -384,4 +387,42 @@ func TestTLSSource(t *testing.T) {
 		f.set(2, 10)
 		wg.Wait()
 	})
+}
+
+// TestLoadTLSFiles loads the files once over a base, which it leaves
+// unchanged, and rejects what NewTLSFileSource rejects, naming itself.
+func TestLoadTLSFiles(t *testing.T) {
+	pki := TLSFiles{CertFile: "../testdata/pki/gocql.crt", KeyFile: "../testdata/pki/gocql.key", CAFile: "../testdata/pki/ca.crt", Interval: -time.Second}
+	base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
+	if _, err := LoadTLSFiles(base, pki); err == nil {
+		t.Fatal("LoadTLSFiles accepted a negative interval")
+	}
+	pki.Interval = 0
+	c, err := LoadTLSFiles(base, pki)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.ServerName != "node" || c.MinVersion != tls.VersionTLS13 || len(c.Certificates) != 1 || c.RootCAs == nil {
+		t.Fatal("files were not applied over the base")
+	}
+	if len(base.Certificates) != 0 || base.RootCAs != nil {
+		t.Fatal("LoadTLSFiles modified the base")
+	}
+	if c, err := LoadTLSFiles(nil, TLSFiles{CAFile: pki.CAFile}); err != nil || c.MinVersion != tls.VersionTLS12 || c.RootCAs == nil {
+		t.Fatalf("CA-only files without a base = %v, %v; want a TLS 1.2+ config", c, err)
+	}
+	mustBuildConfig(t, New(ScyllaV4, "h").WithTLS(c))
+	for name, files := range map[string]TLSFiles{
+		"Empty":          {},
+		"CertWithoutKey": {CertFile: pki.CertFile},
+		"MissingFile":    {CAFile: "../testdata/pki/missing.crt"},
+	} {
+		_, err := LoadTLSFiles(nil, files)
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+			t.Fatalf("%s: LoadTLSFiles = %v, want a cql.ValidationError", name, err)
+		}
+		if name != "MissingFile" && !strings.Contains(err.Error(), "LoadTLSFiles") {
+			t.Fatalf("%s: %v does not name LoadTLSFiles", name, err)
+		}
+	}
 }

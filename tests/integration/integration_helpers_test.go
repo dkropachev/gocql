@@ -70,7 +70,9 @@ func newFixtureConfigFor(dialect config.Dialect, hosts []string, skip fixturePar
 	if skip&fixtureAgreement == 0 {
 		b.WithSchemaAgreement(200*time.Millisecond, 2*time.Minute)
 	}
-	b.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { fixtureProfileExcept(p, skip) })
+	profile := config.NewProfile()
+	fixtureProfileExcept(profile, skip)
+	b.WithDefaultProfile(profile.MustBuild())
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
 		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
@@ -100,6 +102,19 @@ func newFixtureConfigFor(dialect config.Dialect, hosts []string, skip fixturePar
 		opt(b)
 	}
 	return b
+}
+
+// editDefaultProfile replaces b's default profile with that profile changed
+// by edit, deriving it from the profile b builds with
+// config.Config.DefaultProfile and config.Profile.Builder.
+func editDefaultProfile(b *config.ConfigBuilder, edit func(*config.ProfileBuilder)) *config.ConfigBuilder {
+	cfg, err := b.Build()
+	if err != nil {
+		panic(fmt.Errorf("derive the default profile: %w", err))
+	}
+	p := cfg.DefaultProfile().Builder()
+	edit(p)
+	return b.WithDefaultProfile(p.MustBuild())
 }
 
 // fixtureProfileExcept applies the fixture's profile choices, except skip.
@@ -222,8 +237,8 @@ func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDis
 	initKeyspaceOnce.GetOnce("v2:" + keyspace).Do(func() {
 		// Keyspace creation uses a fresh fixture config: the test's own
 		// choices may not reach a working cluster.
-		bootstrap := mustBuild(t, createV2ClusterWithout(fixtureTimeout).WithKeyspace("system").
-			ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
+		bootstrap := mustBuild(t, editDefaultProfile(createV2ClusterWithout(fixtureTimeout).WithKeyspace("system"),
+			func(p *config.ProfileBuilder) { p.WithTimeout(30 * time.Second) }))
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 		defer cancel()
 		session, err := gocql.Connect(ctx, bootstrap)

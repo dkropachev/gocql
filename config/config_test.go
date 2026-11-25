@@ -11,16 +11,19 @@ import (
 	"net"
 	"net/netip"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
+	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -43,6 +46,45 @@ func comparable(c implSettings.Config) implSettings.Config {
 	profile.Routing = nil
 	c.DefaultProfile = &profile
 	return c
+}
+
+// editedProfile returns the default built profile changed by edit, which
+// Build validates when the profile is the default one.
+func editedProfile(edit func(*Profile)) Profile {
+	p := NewProfile().MustBuild()
+	edit(&p)
+	return p
+}
+
+// TestConfigReadBack reads a built configuration's default profile and
+// observer back, and derives a profile from it.
+func TestConfigReadBack(t *testing.T) {
+	var zero Config
+	if p := zero.DefaultProfile(); p != (Profile{}) || zero.Observer() != nil {
+		t.Fatalf("zero Config: profile %+v, observer %v", p, zero.Observer())
+	}
+	observer := observe.RequestObserverFunc(func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+		return ctx, func(observe.RequestEvent) {}
+	})
+	cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithObserver(observer).
+		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.Never{}).MustBuild()))
+	if cfg.Observer() == nil {
+		t.Fatal("Observer() = nil, want the configured observer")
+	}
+	p := cfg.DefaultProfile()
+	if p.Consistency != cql.Quorum || p.PageSize != 7 || p.Retry != (retry.Never{}) || p.Routing == nil {
+		t.Fatalf("DefaultProfile() = %+v", p)
+	}
+	derived := p.Builder().WithConsistency(cql.One).MustBuild()
+	if derived.Consistency != cql.One || derived.PageSize != 7 || derived.Retry != (retry.Never{}) || p.Consistency != cql.Quorum {
+		t.Fatalf("derived %+v from %+v", derived, p)
+	}
+	if again := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(derived)).DefaultProfile(); again.Consistency != cql.One || again.PageSize != 7 {
+		t.Fatalf("a derived profile did not round-trip: %+v", again)
+	}
+	if _, err := (Profile{}).Builder().Build(); err == nil {
+		t.Fatal("the zero Profile's builder built")
+	}
 }
 
 func TestConfigBuilder(t *testing.T) {
@@ -103,16 +145,22 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("LocalDatacenter", func(t *testing.T) {
-		if _, err := New(ScyllaV4, "h").WithLocalDatacenter("", "r1").Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithLocalRack("r1").Build(); err == nil {
 			t.Fatal("Build accepted a local rack without a datacenter")
-		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLocalDatacenter" {
-			t.Fatalf("Build = %v, want a WithLocalDatacenter ValidationError", err)
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLocalRack" {
+			t.Fatalf("Build = %v, want a WithLocalRack ValidationError", err)
 		}
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1")).settings
-		if c.LocalDatacenter != "dc1" || c.LocalRack != "r1" {
+		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalRack("r1").WithLocalDatacenter("dc1"))
+		if c := cfg.settings; c.LocalDatacenter != "dc1" || c.LocalRack != "r1" {
 			t.Fatalf("locality %q/%q", c.LocalDatacenter, c.LocalRack)
 		}
-		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1").WithLocalDatacenter("", "")).settings; c.LocalDatacenter != "" || c.LocalRack != "" {
+		if want := `local datacenter="dc1" local rack="r1"`; !strings.Contains(cfg.String(), want) {
+			t.Fatalf("String() = %q, want it to contain %s", cfg.String(), want)
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1").WithLocalRack("r1").WithLocalDatacenter("dc2")).settings; c.LocalDatacenter != "dc2" || c.LocalRack != "r1" {
+			t.Fatalf("WithLocalDatacenter changed the rack: %q/%q", c.LocalDatacenter, c.LocalRack)
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1").WithLocalRack("r1").WithLocalRack("").WithLocalDatacenter("")).settings; c.LocalDatacenter != "" || c.LocalRack != "" {
 			t.Fatalf("cleared locality %q/%q", c.LocalDatacenter, c.LocalRack)
 		}
 	})
@@ -125,8 +173,8 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("LastCallWins", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.All) }).
+			WithDefaultProfile(NewProfile().WithConsistency(cql.One).MustBuild()).
+			WithDefaultProfile(NewProfile().WithConsistency(cql.All).MustBuild()).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "a"}, ClientRoute{ConnectionID: "c2", Hostname: "x"}).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "b"}).
 			WithAdvancedShardAwareness(false)).settings
@@ -216,8 +264,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithMetadataServerTimeout not chosen (30s on ScyllaDB, none on Cassandra)": !c.Metadata.ServerTimeout.Set,
 			"WithIgnoreEvents none ignored":                                             c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
 			"WithSchemaAgreement 200ms and 60s":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
-			"WithAutomaticSchemaAgreement true":                                         c.Metadata.AutomaticAgreement,
-			"WithRefreshAfterAgreement true":                                            c.Metadata.RefreshAfterAgreement,
+			"WithSchemaChangeWait refresh":                                              c.Metadata.AutomaticAgreement && c.Metadata.RefreshAfterAgreement,
 			"WithPreparedCacheSize 1000":                                                c.PreparedCacheSize == 1000,
 			"WithTimestampGenerator driver stamps":                                      c.Timestamps.Mode() == implSettings.DriverTimestampMode,
 			"WithApplication none":                                                      c.Identity.ApplicationName == "" && c.Identity.ApplicationVersion == "",
@@ -294,18 +341,15 @@ func TestConfigBuilder(t *testing.T) {
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
 			WithDiscovery(false).WithDiscovery(true).
 			WithConfigReport(false).WithConfigReport(true).
-			WithAutomaticSchemaAgreement(false).WithAutomaticSchemaAgreement(true).
-			WithRefreshAfterAgreement(false).WithRefreshAfterAgreement(true).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) {
-				p.WithPageSize(0).WithPageSize(42).WithPrefetch(0).WithPrefetch(1)
-			})
+			WithSchemaChangeWait(SchemaChangeWaitNone).WithSchemaChangeWait(SchemaChangeWaitRefresh).
+			WithDefaultProfile(NewProfile().WithPageSize(0).WithPageSize(42).WithPrefetch(0).WithPrefetch(1).MustBuild())
 		c := mustBuildConfig(t, b).settings
 		if c.TLS != nil || c.ClientRoutes != nil || !c.Metadata.InitialDiscovery || !c.ReportConfiguration ||
 			!c.Metadata.AutomaticAgreement || !c.Metadata.RefreshAfterAgreement ||
 			!c.Metadata.SchemaEvents || c.Metadata.StatusEvents || c.DefaultProfile.PageSize != 42 || c.DefaultProfile.Prefetch != 1 {
 			t.Fatalf("later settings did not replace previous choices: %+v", c)
 		}
-		b.WithIgnoreEvents().ConfigureDefaultProfile(nil)
+		b.WithIgnoreEvents().WithDefaultProfile(NewProfile().MustBuild())
 		reset := mustBuildConfig(t, b).settings
 		if !reset.Metadata.StatusEvents || reset.DefaultProfile.PageSize != 5000 {
 			t.Fatal("reset did not restore defaults")
@@ -340,7 +384,7 @@ func TestConfigBuilder(t *testing.T) {
 			want string
 		}{
 			"NoConfig":   {New(ScyllaV4, "h").WithTLSSource(staticTLS{}), "returned no config"},
-			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
+			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "WithTLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -522,16 +566,13 @@ func TestConfigBuilder(t *testing.T) {
 		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "Profile" || !strings.Contains(err.Error(), "NewProfile") {
 			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 		}
-		_, err = New(ScyllaV4, "h").WithDefaultProfile(Profile{PageSize: 1000}).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) }).Build()
-		if err == nil {
-			t.Fatal("ConfigureDefaultProfile made a Profile literal acceptable")
+		if _, err = (Profile{PageSize: 1000}).Builder().WithConsistency(cql.One).Build(); err == nil {
+			t.Fatal("Profile.Builder made a Profile literal acceptable")
 		}
 		built := codecTestMust(NewProfile().Build())
 		edited := built
 		edited.PageSize = 1000
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(edited).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.One) })).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(edited.Builder().WithConsistency(cql.One).MustBuild())).settings
 		if c.DefaultProfile.PageSize != 1000 || c.DefaultProfile.Consistency != cql.One || c.DefaultProfile.Retry == nil {
 			t.Fatalf("edited copy of a built profile: %+v", *c.DefaultProfile)
 		}
@@ -546,7 +587,7 @@ func TestConfigBuilder(t *testing.T) {
 		if first.DefaultProfile.PageSize != 7 || first.DefaultProfile.Timeout != 0 {
 			t.Fatal("WithDefaultProfile did not snapshot the complete profile")
 		}
-		b.ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(11) })
+		b.WithDefaultProfile(mustBuildConfig(t, b).DefaultProfile().Builder().WithPageSize(11).MustBuild())
 		if got := mustBuildConfig(t, other).settings.DefaultProfile.PageSize; got != 7 {
 			t.Fatalf("configuring another builder changed the shared profile: %d", got)
 		}
@@ -566,15 +607,20 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("DefaultProfileChoicesAccumulate", func(t *testing.T) {
-		c := mustBuildConfig(t, New(ScyllaV4, "h").
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithConsistency(cql.Quorum) }).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(7) })).settings
+	t.Run("DefaultProfileDerives", func(t *testing.T) {
+		b := New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).MustBuild())
+		base := mustBuildConfig(t, b)
+		derived := base.DefaultProfile().Builder().WithPageSize(7)
+		c := mustBuildConfig(t, b.WithDefaultProfile(derived.MustBuild())).settings
 		if c.DefaultProfile.Consistency != cql.Quorum || c.DefaultProfile.PageSize != 7 {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
-		_, err := New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(0) }).Build()
-		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPageSize" {
+		if p := base.DefaultProfile(); p.PageSize != 5000 || p.Consistency != cql.Quorum {
+			t.Fatalf("deriving changed the base profile: %+v", p)
+		}
+		if _, err := derived.WithPageSize(0).Build(); err == nil {
+			t.Fatal("a derived builder accepted page size 0")
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPageSize" {
 			t.Fatalf("invalid profile error = %v", err)
 		}
 	})
@@ -598,7 +644,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DisableMethods", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithTimestampGenerator(nil).
-			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).WithAdvancedShardAwareness(false).WithNagle(true)).settings
+			WithConfigReport(false).WithDiscovery(false).WithSchemaChangeWait(SchemaChangeWaitNone).WithAdvancedShardAwareness(false).WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
@@ -715,8 +761,8 @@ func TestConfigBuilder(t *testing.T) {
 			"MetadataKeyspacesRepeated":        {New(ScyllaV4, "h").WithMetadataKeyspaces("ks", "ks"), "WithMetadataKeyspaces", "repeated"},
 			"SchemaAgreementZero":              {New(ScyllaV4, "h").WithSchemaAgreement(0, time.Second), "WithSchemaAgreement", "positive"},
 			"HeartbeatWithoutTimeout":          {New(ScyllaV4, "h").WithHeartbeat(time.Second, 0), "WithHeartbeat", "positive"},
-			"ProfilePageSize":                  {New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageSize(-1) }), "WithPageSize", "positive"},
-			"ProfileTimeout":                   {New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithTimeout(-1) }), "WithTimeout", "negative"},
+			"ProfilePageSize":                  {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.PageSize = -1 })), "WithPageSize", "positive"},
+			"ProfileTimeout":                   {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.Timeout = -1 })), "WithTimeout", "negative"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, err := tc.b.Build()
@@ -734,9 +780,7 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(declineReconnect{}).WithReconnect(nil).
 			WithConviction(endpoint.SimpleConvictionPolicy{}).WithConviction(nil).
 			WithDialer(secretDialer{}).WithDialer(nil).
-			ConfigureDefaultProfile(func(p *ProfileBuilder) {
-				p.WithRetry(retry.Never{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil)
-			})).settings
+			WithDefaultProfile(NewProfile().WithRetry(retry.Never{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil).MustBuild())).settings
 		if !implSettings.IsDefaultReconnect(c.Reconnect) || c.Conviction != nil || c.Dialer != nil {
 			t.Fatalf("nil did not restore the default: reconnect %T, conviction %T, dialer %T", c.Reconnect, c.Conviction, c.Dialer)
 		}
@@ -793,13 +837,41 @@ func TestConfigBuilder(t *testing.T) {
 			"NoHost":          {New(ScyllaV4, ":9042"), "WithContactPoints"},
 			"Empty":           {New(ScyllaV4, ""), "WithContactPoints"},
 			"BracketsNoPort":  {New(ScyllaV4, "[::1]"), "WithContactPoints"},
-			"OtherCommonPort": {New(ScyllaV4, "a:19042", "b:19042"), "WithPort"},
-			"OtherPortOnce":   {New(ScyllaV4).WithContactPoints("a:19042"), "WithPort"},
+			"OtherCommonPort": {New(ScyllaV4, "a:19042", "b:19042").WithPort(9042), "WithPort"},
+			"OtherPortOnce":   {New(ScyllaV4).WithPort(9042).WithContactPoints("a:19042"), "WithPort"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, err := tc.b.Build()
 				if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != tc.setter {
 					t.Fatalf("Build = %v, want a %s ValidationError", err, tc.setter)
+				}
+			})
+		}
+	})
+
+	t.Run("PortInference", func(t *testing.T) {
+		for name, tc := range map[string]struct {
+			b    *ConfigBuilder
+			port uint16
+		}{
+			"CommonPort":      {New(ScyllaV4, "a:19042", "[::1]:19042"), 19042},
+			"SignedPort":      {New(ScyllaV4, "a:+19042", "b:19042"), 19042},
+			"BareIPv6":        {New(ScyllaV4, "[::1]:19042", "::1"), 9042},
+			"OnePoint":        {New(ScyllaV4, "127.0.0.1:1"), 1},
+			"MixedPorts":      {New(ScyllaV4, "a:19042", "b:19043"), 9042},
+			"SomeNamePorts":   {New(ScyllaV4, "a:19042", "b"), 9042},
+			"NoPorts":         {New(ScyllaV4, "a", "b"), 9042},
+			"ChosenPortKept":  {New(ScyllaV4, "a:19042", "b:19042").WithPort(19042), 19042},
+			"ChosenOverMixed": {New(ScyllaV4, "a:19042", "b:19043").WithPort(9142), 9142},
+			"UnixSocket":      {New(ScyllaV4, "unix:/var/lib/scylla/cql.m"), 9042},
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg := mustBuildConfig(t, tc.b)
+				if cfg.settings.Port != tc.port {
+					t.Fatalf("Port = %d, want %d", cfg.settings.Port, tc.port)
+				}
+				if want := fmt.Sprintf("port=%d ", tc.port); !strings.Contains(cfg.String(), want) {
+					t.Fatalf("String() = %q, want it to contain %q", cfg.String(), want)
 				}
 			})
 		}
@@ -820,9 +892,20 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := NewProfile().WithPageTimeout(-time.Second).Build(); err == nil {
 			t.Fatal("negative page timeout accepted")
 		}
-		c := mustBuildConfig(t, New(ScyllaV4, "h").ConfigureDefaultProfile(func(p *ProfileBuilder) { p.WithPageTimeout(time.Second) })).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithPageTimeout(time.Second).MustBuild())).settings
 		if c.DefaultProfile.PageTimeout != time.Second {
 			t.Fatalf("default profile PageTimeout = %v", c.DefaultProfile.PageTimeout)
+		}
+		if NewProfile().MustBuild().Idempotent {
+			t.Fatal("a profile is idempotent by default")
+		}
+		idempotent := NewProfile().WithIdempotent(true).MustBuild()
+		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(idempotent))
+		if !idempotent.Idempotent || !cfg.settings.DefaultProfile.Idempotent || !cfg.DefaultProfile().Idempotent {
+			t.Fatal("WithIdempotent(true) was not kept")
+		}
+		if p := idempotent.Builder().WithIdempotent(false).MustBuild(); p.Idempotent {
+			t.Fatal("WithIdempotent(false) did not clear it")
 		}
 	})
 
@@ -879,4 +962,104 @@ func codecTestMust[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// TestConfigBuilderClone specializes a clone and checks that neither the
+// clone nor the base sees the other's later settings, slices and maps
+// included.
+func TestConfigBuilderClone(t *testing.T) {
+	base := New(ScyllaV4, "a", "b").WithKeyspace("ks").WithMetadataKeyspaces("ks").
+		WithIgnoreEvents(event.KindStatus).WithClientRoutes(ClientRoute{ConnectionID: "c1"}).
+		WithDefaultProfile(NewProfile().WithPageSize(7).MustBuild())
+	clone := base.Clone().WithKeyspace("other").WithContactPoints("c").WithMetadataKeyspaces("other").
+		WithIgnoreEvents().WithClientRoutes(ClientRoute{ConnectionID: "c2"}).
+		WithPartitioner("custom", routing.Murmur3TokenPartitioner)
+	base.WithPartitioner("base", routing.Murmur3TokenPartitioner)
+	b, c := mustBuildConfig(t, base).settings, mustBuildConfig(t, clone).settings
+	if b.Keyspace != "ks" || !slices.Equal(b.ContactPoints, []string{"a", "b"}) || !slices.Equal(b.Metadata.Keyspaces, []string{"ks"}) ||
+		b.Metadata.StatusEvents || b.ClientRoutes.ConnectionIDs[0] != "c1" || b.Partitioners["custom"] != nil || b.Partitioners["base"] == nil {
+		t.Fatalf("the clone's settings reached the base: %+v", b)
+	}
+	if c.Keyspace != "other" || !slices.Equal(c.ContactPoints, []string{"c"}) || !c.Metadata.StatusEvents ||
+		c.ClientRoutes.ConnectionIDs[0] != "c2" || c.Partitioners["custom"] == nil || c.Partitioners["base"] != nil {
+		t.Fatalf("the clone lost or shared settings: %+v", c)
+	}
+	if b.DefaultProfile.PageSize != 7 || c.DefaultProfile.PageSize != 7 {
+		t.Fatalf("page sizes %d and %d, want the base's 7 in both", b.DefaultProfile.PageSize, c.DefaultProfile.PageSize)
+	}
+	if _, err := new(ConfigBuilder).Clone().Build(); err == nil {
+		t.Fatal("Build accepted the clone of a zero ConfigBuilder")
+	}
+}
+
+// TestProfileMustBuild checks that MustBuild returns what Build does and
+// panics with Build's error.
+func TestProfileMustBuild(t *testing.T) {
+	if p := NewProfile().WithPageSize(3).MustBuild(); p.PageSize != 3 {
+		t.Fatalf("PageSize = %d, want 3", p.PageSize)
+	}
+	defer func() {
+		err, _ := recover().(error)
+		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPageSize" {
+			t.Fatalf("MustBuild panicked with %v, want a WithPageSize ValidationError", err)
+		}
+	}()
+	NewProfile().WithPageSize(-1).MustBuild()
+	t.Fatal("MustBuild did not panic")
+}
+
+// TestReconnectFunc installs a function as the reconnect policy; Build
+// probes it once.
+func TestReconnectFunc(t *testing.T) {
+	var calls []int
+	policy := endpoint.ReconnectFunc(func(attempt int) (time.Duration, bool) {
+		calls = append(calls, attempt)
+		return time.Duration(attempt) * time.Second, true
+	})
+	c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(policy)).settings
+	if !slices.Equal(calls, []int{1}) || c.ReconnectFirst != (implSettings.ReconnectProbe{Delay: time.Second, Again: true, Set: true}) {
+		t.Fatalf("calls %v, probe %+v; want one call for attempt 1", calls, c.ReconnectFirst)
+	}
+	if d, ok := c.Reconnect.Delay(3); d != 3*time.Second || !ok {
+		t.Fatalf("Delay(3) = %v, %v", d, ok)
+	}
+}
+
+// TestSchemaChangeWait maps each wait to the two internal switches and
+// rejects a value it does not define.
+func TestSchemaChangeWait(t *testing.T) {
+	for _, tc := range []struct {
+		wait             SchemaChangeWait
+		name             string
+		agree, refreshes bool
+	}{
+		{SchemaChangeWaitNone, "none", false, false},
+		{SchemaChangeWaitAgreement, "agreement", true, false},
+		{SchemaChangeWaitRefresh, "refresh", true, true},
+	} {
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithSchemaChangeWait(tc.wait)).settings
+		if c.Metadata.AutomaticAgreement != tc.agree || c.Metadata.RefreshAfterAgreement != tc.refreshes || tc.wait.String() != tc.name {
+			t.Fatalf("%v: agreement %v, refresh %v", tc.wait, c.Metadata.AutomaticAgreement, c.Metadata.RefreshAfterAgreement)
+		}
+	}
+	_, err := New(ScyllaV4, "h").WithSchemaChangeWait(SchemaChangeWait(3)).Build()
+	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithSchemaChangeWait" || !strings.Contains(err.Error(), "SchemaChangeWait(3)") {
+		t.Fatalf("Build = %v, want a WithSchemaChangeWait ValidationError", err)
+	}
+}
+
+// TestUnixSocketSettingErrors checks that a setting a Unix socket contact
+// point cannot honor fails Build with an UnsupportedSettingError naming the
+// setter to drop.
+func TestUnixSocketSettingErrors(t *testing.T) {
+	for setter, b := range map[string]*ConfigBuilder{
+		"WithDiscovery":    New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithDiscovery(true),
+		"WithTLS":          New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithTLS(&tls.Config{ServerName: "node"}),
+		"WithLocalAddress": New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithLocalAddress(netip.MustParseAddr("127.0.0.1")),
+	} {
+		_, err := b.Build()
+		if unsupported, ok := errors.AsType[*cqlerr.UnsupportedSettingError](err); !ok || unsupported.Setting != setter {
+			t.Errorf("Build = %v, want an UnsupportedSettingError naming %s", err, setter)
+		}
+	}
 }

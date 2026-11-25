@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -65,5 +66,28 @@ func TestPasswordExchange(t *testing.T) {
 	}
 	if _, _, err := Password("us\x00er", "pass").Start(ctx, metadata.HostSnapshot{}, ""); err == nil {
 		t.Fatal("Start accepted credentials containing NUL")
+	}
+}
+
+// TestPasswordAllowedAuthenticators sends the credentials only to an allowed
+// authenticator class, and to any class when none is allowed.
+func TestPasswordAllowedAuthenticators(t *testing.T) {
+	ctx := context.Background()
+	const allowed = "org.apache.cassandra.auth.PasswordAuthenticator"
+	classes := []string{allowed, "com.scylladb.auth.TransitionalAuthenticator"}
+	p := Password("user", "pass", classes...)
+	classes[0] = "changed"
+	if _, response, err := p.Start(ctx, metadata.HostSnapshot{}, allowed); err != nil || !response.Valid {
+		t.Fatalf("Start with an allowed class = %v, %v", response, err)
+	}
+	for _, class := range []string{"com.example.Other", "", "org.apache.cassandra.auth.passwordauthenticator"} {
+		if exchange, response, err := p.Start(ctx, metadata.HostSnapshot{}, class); err == nil || exchange != nil || response.Valid {
+			t.Fatalf("Start with %q = %v, %v, %v; want an error and no credentials", class, exchange, response, err)
+		} else if !strings.Contains(err.Error(), strconv.Quote(class)) {
+			t.Fatalf("error %q does not name %q", err, class)
+		}
+	}
+	if _, _, err := Password("user", "pass").Start(ctx, metadata.HostSnapshot{}, "com.example.Other"); err != nil {
+		t.Fatalf("Start without allowed classes = %v, want any class accepted", err)
 	}
 }

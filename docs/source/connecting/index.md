@@ -21,9 +21,11 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 
 Contact points may include native ports; `WithPort` supplies the port when one is
 absent, and is also the port of every discovered node whose metadata reports
-none, as ScyllaDB's `system.peers` does not. So `Build` rejects contact points
-that all name one port other than `WithPort`, unless `WithDiscovery(false)` or
-client routes are set: set `WithPort` to their port instead. `Build` also
+none, as ScyllaDB's `system.peers` does not. Without `WithPort`, contact points
+that all name one port make it the default, so `config.New(config.ScyllaV4,
+"10.0.0.1:19042")` dials discovered nodes on 19042 too, and `Config.String`
+shows it. With `WithPort` chosen, `Build` rejects contact points that all name
+another port, unless `WithDiscovery(false)` or client routes are set. `Build` also
 rejects a contact point it cannot parse, such as `"h:abc"`. A single absolute path, optionally prefixed with `unix:`, connects to a
 Unix socket: no host discovery is then filled in unless chosen.
 
@@ -44,6 +46,11 @@ session, err := gocql.Connect(ctx, cfg)
 | `config.CassandraV4` | Apache Cassandra | 4 |
 | `config.CassandraV5` | Apache Cassandra 4.0 or later | 5 |
 
+`config.ParseDialect` reads the names in the first column without the
+package, `ScyllaV4`, `CassandraV4` and `CassandraV5`, in any case, and
+`config.Dialect` implements `encoding.TextMarshaler` and `TextUnmarshaler`, so
+the dialect can come from a flag (`flag.TextVar`) or a configuration file.
+
 The driver negotiates no version: every connection speaks the dialect's, and
 `Connect` fails when the cluster does not. It also fails with
 `cqlerr.ServerMismatchError` when the cluster is not the dialect's database.
@@ -63,25 +70,34 @@ sends no heartbeats, `WithMetadataRefresh(0)` stops periodic metadata reloads,
 `WithPreparedCacheSize(0)` caches no prepared statements and
 `WithErrorStatementText(0)`, the default, leaves the statement out of request
 errors ([errors](../errors.md)). On/off settings take a bool: `WithNagle`,
-`WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement` and
-`WithRefreshAfterAgreement` and `WithAdvancedShardAwareness`, whose source
-ports `WithShardAwareSourcePorts` sets. `WithReceiveBuffer(0)` and
+`WithDiscovery`, `WithConfigReport` and `WithAdvancedShardAwareness`, whose
+source ports `WithShardAwareSourcePorts` sets. `WithSchemaChangeWait` chooses
+what a schema change waits for before it returns: `config.SchemaChangeWaitNone`,
+`SchemaChangeWaitAgreement` among the nodes, or, the default,
+`SchemaChangeWaitRefresh`, agreement and then a metadata reload. `WithReceiveBuffer(0)` and
 `WithSendBuffer(0)` keep the OS's buffer sizes.
 `ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
 Zero optional timeouts disable their budget. A nil provider or policy restores
 the driver's default: `WithTLS(nil)` is plaintext, `WithReconnect(nil)` the
 default backoff, `ProfileBuilder.WithRetry(nil)` `retry.Safe{MaxAttempts: 3}`
 and `WithRouting(nil)` the default routing policy. Turning a policy off takes
-an explicit value: `retry.Never{}`, or a reconnect policy whose `Delay` returns
+an explicit value: `retry.Never{}`, or a reconnect policy (`endpoint.ReconnectFunc` adapts a function) whose `Delay` returns
 false. The one exception is `WithTimestampGenerator(nil)`, which sends no
 client timestamp so the server assigns one. `WithDefaultProfile(profile)`
 copies and replaces the complete profile. Build profiles with `NewProfile` to
 start from driver defaults; a `config.Profile{...}` literal would leave every
 unset field zero, so `Build` rejects it. A built profile may be copied and its
 fields edited. Later edits to a supplied profile do not affect the
-configuration. Use `ConfigureDefaultProfile(callback)` to compose changes to
-the current profile, including one set by `WithDefaultProfile`; `ConfigureDefaultProfile(nil)` resets
-all profile settings. `WithIgnoreEvents` replaces the complete ignored-event
+configuration. To change a few fields of a profile, derive a builder from it
+with `Profile.Builder`; `Config.DefaultProfile` reads a built configuration's
+default profile back:
+
+```go
+reads := cfg.DefaultProfile().Builder().WithConsistency(cql.One).MustBuild()
+```
+
+`Config.Observer` returns the observer `WithObserver` chose, which
+`Session.Observer` also returns. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 
 `WithContactPoints` replaces the contact points. Slice arguments are copied,

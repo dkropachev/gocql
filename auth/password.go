@@ -6,7 +6,9 @@ package auth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -14,11 +16,20 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-type passwordAuth struct{ username, password string }
+type passwordAuth struct {
+	username, password string
+	allowed            []string
+}
 
-// Password authenticates with PasswordAuthenticator credentials.
-func Password(username, password string) Provider {
-	return passwordAuth{username: username, password: password}
+// Password authenticates with PasswordAuthenticator credentials. When
+// allowed names authenticator classes, such as
+// "org.apache.cassandra.auth.PasswordAuthenticator", a connection whose
+// server asks for any other class fails before the credentials are sent, so
+// they reach only servers that are expected to check them; no allowed class
+// sends them to any server that asks, as v1's PasswordAuthenticator did with
+// no AllowedAuthenticators. Classes are compared exactly.
+func Password(username, password string, allowed ...string) Provider {
+	return passwordAuth{username: username, password: password, allowed: slices.Clone(allowed)}
 }
 
 // String names the username and leaves the password out, so that printing a
@@ -33,9 +44,12 @@ func (p passwordAuth) GoString() string { return p.String() }
 // LogValue is String, for log/slog.
 func (p passwordAuth) LogValue() slog.Value { return slog.StringValue(p.String()) }
 
-func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, _ string) (Exchange, cql.Nullable[[]byte], error) {
+func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cql.Nullable[[]byte]{}, err
+	}
+	if len(p.allowed) > 0 && !slices.Contains(p.allowed, authenticator) {
+		return nil, cql.Nullable[[]byte]{}, fmt.Errorf("gocql: the server's authenticator %q is not one auth.Password allows, %q", authenticator, p.allowed)
 	}
 	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
 		return nil, cql.Nullable[[]byte]{}, &cql.ValidationError{Field: "password authentication", Err: errors.New("credentials contain NUL")}

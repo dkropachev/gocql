@@ -117,7 +117,7 @@ package auth
 		auth.Exchange method Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
 		auth.Exchange method Close()
 		auth.Exchange method Success(context.Context, cql.Nullable[cql.Bytes]) error
-	func auth.Password(username string, password string) auth.Provider
+	func auth.Password(username string, password string, allowed ...string) auth.Provider
 	type auth.Provider interface
 		auth.Provider method Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (auth.Exchange, cql.Nullable[[]byte], error)
 
@@ -128,15 +128,16 @@ package config
 		config.ClientRoute field ConnectionID string
 		config.ClientRoute field Hostname string
 	type config.Config struct
+		config.Config method (T) DefaultProfile() config.Profile
+		config.Config method (T) Observer() observe.Observer
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
-		config.ConfigBuilder method (*T) ConfigureDefaultProfile(choose func(*config.ProfileBuilder)) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) Clone() *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAddressTranslator(translator endpoint.Translator) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithApplication(name string, version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAuth(provider auth.Provider) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithAutomaticSchemaAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCQLVersion(version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientID(id string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientRoutes(routes ...config.ClientRoute) *config.ConfigBuilder
@@ -158,7 +159,8 @@ package config
 		config.ConfigBuilder method (*T) WithKeyspace(name string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLinger(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string, rack string) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalRack(rack string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxDecompressedSize(bytes int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
@@ -182,9 +184,9 @@ package config
 		config.ConfigBuilder method (*T) WithReadTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReceiveBuffer(bytes int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReconnect(policy endpoint.ReconnectPolicy) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithRefreshAfterAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithResolver(resolver endpoint.Resolver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSchemaAgreement(poll time.Duration, timeout time.Duration) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithSchemaChangeWait(wait config.SchemaChangeWait) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSendBuffer(bytes int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
@@ -193,10 +195,14 @@ package config
 		config.ConfigBuilder method (*T) WithTimestampGenerator(next func() int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithWriteTimeout(d time.Duration) *config.ConfigBuilder
 	type config.Dialect uint8
+		config.Dialect method (T) MarshalText() ([]byte, error)
 		config.Dialect method (T) String() string
+		config.Dialect method (*T) UnmarshalText(text []byte) error
+	func config.LoadTLSFiles(base *crypto/tls.Config, files config.TLSFiles) (*crypto/tls.Config, error)
 	func config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder
 	func config.NewProfile() *config.ProfileBuilder
 	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)
+	func config.ParseDialect(s string) (config.Dialect, error)
 	type config.Profile struct
 		config.Profile field Retry retry.Policy
 		config.Profile field Routing routing.Policy
@@ -207,10 +213,14 @@ package config
 		config.Profile field PageSize int32
 		config.Profile field SerialConsistency cql.Option[cql.Consistency]
 		config.Profile field Consistency cql.Consistency
+		config.Profile field Idempotent bool
+		config.Profile method (T) Builder() *config.ProfileBuilder
 	type config.ProfileBuilder struct
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
+		config.ProfileBuilder method (*T) MustBuild() config.Profile
 		config.ProfileBuilder method (*T) NoSerialConsistency() *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithConsistency(c cql.Consistency) *config.ProfileBuilder
+		config.ProfileBuilder method (*T) WithIdempotent(on bool) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageSize(rows int32) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageTimeout(d time.Duration) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPrefetch(pages int) *config.ProfileBuilder
@@ -219,6 +229,11 @@ package config
 		config.ProfileBuilder method (*T) WithSerialConsistency(c cql.Consistency) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithSpeculation(policy retry.SpeculationPolicy) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithTimeout(d time.Duration) *config.ProfileBuilder
+	type config.SchemaChangeWait uint8
+		config.SchemaChangeWait method (T) String() string
+	const config.SchemaChangeWaitAgreement config.SchemaChangeWait = 1
+	const config.SchemaChangeWaitNone config.SchemaChangeWait = 0
+	const config.SchemaChangeWaitRefresh config.SchemaChangeWait = 2
 	const config.ScyllaV4 config.Dialect = 1
 	type config.TLSFileSource struct
 		config.TLSFileSource method (*T) Err() error
@@ -317,7 +332,9 @@ package cql
 		cql.CompiledStreamValue method DecodeInto(*cql.StreamValueReader, *T) error
 		cql.CompiledStreamValue method Reset(*T)
 	type cql.Compression uint8
+		cql.Compression method (T) MarshalText() ([]byte, error)
 		cql.Compression method (T) String() string
+		cql.Compression method (*T) UnmarshalText(text []byte) error
 	const cql.ConditionalStatement cql.StatementKind = 2
 	type cql.Consistency uint16
 		cql.Consistency method (T) IsSerial() bool
@@ -525,6 +542,7 @@ package cql
 		cql.ParamWriter method (*T) WriteParam[T any](encoder cql.Encoder[T], value T) error
 	func cql.Params[P any](fields ...cql.InputField[P]) cql.ParamEncoder[P]
 	func cql.ParamsOf[P any](opts ...cql.StructOption) (cql.ParamEncoder[P], error)
+	func cql.ParseCompression(s string) (cql.Compression, error)
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
 	func cql.ParseDataType(s string) (cql.DataType, error)
 	func cql.ParseDecimal(s string) (cql.Decimal, error)
@@ -1162,6 +1180,8 @@ package endpoint
 		endpoint.Peer field Port uint16
 		endpoint.Peer field ShardAwarePort uint16
 		endpoint.Peer field ShardAwarePortTLS uint16
+	type endpoint.ReconnectFunc func(attempt int) (time.Duration, bool)
+		endpoint.ReconnectFunc method (T) Delay(attempt int) (time.Duration, bool)
 	type endpoint.ReconnectPolicy interface
 		endpoint.ReconnectPolicy method Delay(attempt int) (time.Duration, bool)
 	type endpoint.Resolver interface

@@ -26,7 +26,7 @@ func v2ConfigureRouting(t testing.TB, cfg *config.ConfigBuilder, options routing
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(policy) })
+	editDefaultProfile(cfg, func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 	return policy
 }
 

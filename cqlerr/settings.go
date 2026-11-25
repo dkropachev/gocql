@@ -7,7 +7,10 @@ package cqlerr
 // its server cannot honor. The driver returns it filled in; its zero value is
 // an error without detail.
 type UnsupportedSettingError struct {
-	// Setting names the setting, such as "schema metadata".
+	// Setting names what to change: the config.ConfigBuilder or
+	// config.ProfileBuilder setter that chose the setting, such as
+	// "WithCompression" ("New" for the dialect), or the exec.Options or
+	// gocql.PrepareOptions field, such as "Keyspace".
 	Setting string
 	// Reason says why it cannot be honored.
 	Reason string

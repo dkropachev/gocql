@@ -47,7 +47,7 @@ func BenchmarkConn(b *testing.B) {
 			if err != nil {
 				b.Fatal(err)
 			}
-			cfg.WithConnectionsPerHost(1).ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithRouting(policy) })
+			editDefaultProfile(cfg.WithConnectionsPerHost(1), func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 		})
 		defer session.Close()
 		table := testTableName(b)

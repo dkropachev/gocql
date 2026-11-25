@@ -254,7 +254,7 @@ func (s *startupCoordinator) startup(ctx context.Context, startupCompleted *atom
 
 		if _, ok := m["COMPRESSION"]; !ok {
 			if s.conn.InternalCfg.TypedConfig != nil {
-				return &connectivity.UnsupportedSettingError{Setting: "compression", Reason: "server does not advertise requested " + name}
+				return &connectivity.UnsupportedSettingError{Setting: "WithCompression", Reason: "server does not advertise requested " + name}
 			}
 			s.conn.logger().Warn("server does not support requested compression; continuing uncompressed",
 				"requested", name, "offered", comp)

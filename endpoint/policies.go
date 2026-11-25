@@ -25,6 +25,19 @@ type ReconnectPolicy interface {
 	Delay(attempt int) (time.Duration, bool)
 }
 
+// ReconnectFunc adapts a function to ReconnectPolicy, for
+// config.ConfigBuilder.WithReconnect:
+//
+//	endpoint.ReconnectFunc(func(attempt int) (time.Duration, bool) {
+//		return min(time.Duration(attempt)*time.Second, 10*time.Second), true
+//	})
+//
+// A nil ReconnectFunc panics when called.
+type ReconnectFunc func(attempt int) (time.Duration, bool)
+
+// Delay calls f.
+func (f ReconnectFunc) Delay(attempt int) (time.Duration, bool) { return f(attempt) }
+
 // TLSSource supplies the TLS configuration of each new connection, so the
 // configuration can change while sessions run. The driver calls TLSConfig on
 // every dial, from many goroutines, and copies the result; it must be fast and
@@ -45,9 +58,9 @@ type TLSSource interface {
 type ConvictionSource uint8
 
 const (
-	// ConvictionPool is a host pool connection. An event with Shard set is
-	// one shard's connection; an event without it means the pool lost its
-	// last connection to the host.
+	// ConvictionPool is a host pool connection. An event with ShardID set
+	// is one shard's connection; an event without it means the pool lost
+	// its last connection to the host.
 	ConvictionPool ConvictionSource = iota
 	// ConvictionControl is the control connection's dial to the host.
 	ConvictionControl
@@ -90,10 +103,10 @@ type ConvictionEvent struct {
 //
 // When the pool asks for a specific shard, which takes a shard-aware port and
 // a known shard count, it reports each failed attempt to open that connection
-// with Shard set, once per attempt after reconnection retries, before the
-// event without Shard that follows when the host has no connection left. A
+// with ShardID set, once per attempt after reconnection retries, before the
+// event without ShardID that follows when the host has no connection left. A
 // new pool does not know the shard count, so the failure of its first
-// connection has no Shard.
+// connection has no ShardID.
 //
 // Delivery is at most once: the policy never sees the same event twice, but
 // it does not see every failure. A failed shard dial is reported once as a
@@ -116,7 +129,7 @@ type ConvictionPolicy interface {
 	// shard without a connection already uses another shard of the host,
 	// unless it names a shard or is conditional.
 	AddFailure(ConvictionEvent) bool
-	// Reset reports that connections opened again: with Shard set, the
+	// Reset reports that connections opened again: with ShardID set, the
 	// connection to a shard whose failure was reported; without it, the
 	// first connection of a pool that had none, such as a new pool at
 	// startup or after the host was marked down, or a pool that lost every

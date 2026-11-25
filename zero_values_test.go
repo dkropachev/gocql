@@ -124,7 +124,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	_, err = new(config.ConfigBuilder).Build()
 	requireValidation(t, "zero ConfigBuilder.Build", err)
 	_, err = new(config.ConfigBuilder).
-		ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithPageSize(10) }).
+		WithDefaultProfile(config.NewProfile().WithPageSize(10).MustBuild()).
 		WithPartitioner("p", nil).
 		Build()
 	requireValidation(t, "zero ConfigBuilder with settings", err)

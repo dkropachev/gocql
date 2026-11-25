@@ -70,10 +70,8 @@ v2:
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 	WithKeyspace("app").
 	WithAuth(auth.Password("u", "p")).
-	WithLocalDatacenter("dc1", "").
-	ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
-		p.WithConsistency(cql.LocalQuorum)
-	}).
+	WithLocalDatacenter("dc1").
+	WithDefaultProfile(config.NewProfile().WithConsistency(cql.LocalQuorum).MustBuild()).
 	Build()
 if err != nil {
 	return err
@@ -87,20 +85,21 @@ defer session.Close()
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort` (9042 by default). v1 learned the port from hosts that all named one; v2 does not, and `Build` rejects such hosts when their port differs from `WithPort`, which is also the port of discovered nodes: call `WithPort(port)` |
+| `gocql.NewCluster(hosts...)` | `config.New(config.ScyllaV4, hosts...)`; a host without a port uses `WithPort`. As in v1, hosts that all name one port make it the default, which is also the port of discovered nodes; otherwise the default is 9042. `Build` rejects such hosts when `WithPort` names another port |
 | `cluster.CreateSession()` | `cfg, err := builder.Build()`, then `gocql.Connect(ctx, cfg)` |
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
-| `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `ConfigureDefaultProfile` with `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
+| `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `WithDefaultProfile` with a profile from `config.NewProfile()` and `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
+| `cluster.DefaultIdempotence` | `WithIdempotent(true)` on the default profile's `config.NewProfile()` builder: every statement the profile runs is idempotent unless `exec.Options.Idempotent` says otherwise |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |
-| `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; other mechanisms implement `auth.Provider` |
-| `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFileSource` to reload certificate files |
+| `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; v1's `AllowedAuthenticators` follow the password, `auth.Password(user, password, allowed...)`, and as in v1 none allows any. Other mechanisms implement `auth.Provider` |
+| `cluster.SslOpts` | `WithTLS(*tls.Config)`; `config.LoadTLSFiles(base, config.TLSFiles{CertFile, KeyFile, CAFile})` reads v1's `CertPath`, `KeyPath` and `CaPath`, and `WithTLSSource` with a source from `config.NewTLSFileSource` reloads them. v1 skipped verification unless `EnableHostVerification` was set; v2 verifies by default: without a `ServerName` each connection checks that the node's certificate names its IP address, so a node certificate without its IP address needs the base's `ServerName` set to a name it carries. `InsecureSkipVerify` reproduces v1's default and is not recommended |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
-| `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc, rack)` sets its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
+| `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc)` and `WithLocalRack(rack)` set its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
 | `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; `WithRetry(nil)` is the default, and `retry.Never{}` disables retries; see [retries](retry-policy.md) |
-| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
+| `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`, or `endpoint.ReconnectFunc` for a function; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
 | `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
 | `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |
@@ -312,10 +311,10 @@ whether a retry could apply a write twice. See [errors](errors.md).
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | the default policy with `config.ConfigBuilder.WithLocalDatacenter(dc, "")`, or `routing.NewPolicy(routing.Options{Datacenter: dc})` |
+| `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | the default policy with `config.ConfigBuilder.WithLocalDatacenter(dc)`, or `routing.NewPolicy(routing.Options{Datacenter: dc})` |
 | `gocql.TokenAwareHostPolicy(fallback, gocql.ShuffleReplicas())` | the default: replicas are shuffled unless `routing.Options.FixedReplicaOrder` is set |
 | `gocql.DCAwareRoundRobinPolicy(dc)` without token awareness | `routing.Options{Datacenter: dc, NoTokenAware: true}` |
-| `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc, rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
+| `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.AttemptObserver`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |

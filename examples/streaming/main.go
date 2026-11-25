@@ -13,10 +13,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 	"time"
 
@@ -43,8 +41,10 @@ func main() {
 func run() (resultErr error) {
 	hosts := flag.String("hosts", "127.0.0.1:9042", "comma-separated native endpoints")
 	incremental := flag.Bool("incremental", false, "use bounded incremental receive instead of page buffering")
-	dialect := flag.String("dialect", "scylla-v4", "scylla-v4, cassandra-v4 or cassandra-v5")
-	compression := flag.String("compression", "none", "none, lz4 or snappy")
+	var d config.Dialect
+	flag.TextVar(&d, "dialect", config.ScyllaV4, "ScyllaV4, CassandraV4 or CassandraV5")
+	var frameCompression cql.Compression
+	flag.TextVar(&frameCompression, "compression", cql.NoCompression, "none, lz4 or snappy")
 	username := flag.String("username", "", "authentication username")
 	password := flag.String("password", "", "authentication password (prefer GOCQL_PASSWORD)")
 	ca := flag.String("ca", "", "TLS CA PEM file")
@@ -53,39 +53,11 @@ func run() (resultErr error) {
 	serverName := flag.String("server-name", "", "TLS server DNS identity")
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
-	var d config.Dialect
-	switch *dialect {
-	case "scylla-v4":
-		d = config.ScyllaV4
-	case "cassandra-v4":
-		d = config.CassandraV4
-	case "cassandra-v5":
-		d = config.CassandraV5
-	default:
-		return fmt.Errorf("unknown dialect %q", *dialect)
-	}
 	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
 		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
-	if _, port, err := net.SplitHostPort(strings.Split(*hosts, ",")[0]); err == nil {
-		n, err := strconv.ParseUint(port, 10, 16)
-		if err != nil {
-			return err
-		}
-		builder.WithPort(uint16(n))
-	}
-	frameCompression := cql.NoCompression
-	switch *compression {
-	case "none":
-	case "lz4":
-		frameCompression = cql.LZ4Compression
-	case "snappy":
-		frameCompression = cql.SnappyCompression
-	default:
-		return fmt.Errorf("unknown compression %q", *compression)
-	}
 	if *password == "" {
 		*password = os.Getenv("GOCQL_PASSWORD")
 	}
@@ -94,23 +66,13 @@ func run() (resultErr error) {
 		builder.WithAuth(auth.Password(*username, *password))
 	}
 	if *ca != "" {
-		pem, err := os.ReadFile(*ca)
+		tlsConfig, err := config.LoadTLSFiles(&tls.Config{ServerName: *serverName, MinVersion: tls.VersionTLS12},
+			config.TLSFiles{CertFile: *cert, KeyFile: *key, CAFile: *ca})
 		if err != nil {
 			return err
 		}
-		roots := x509.NewCertPool()
-		if !roots.AppendCertsFromPEM(pem) {
-			return fmt.Errorf("invalid CA PEM")
-		}
-		tlsConfig := &tls.Config{RootCAs: roots, ServerName: *serverName, MinVersion: tls.VersionTLS12}
-		if *cert != "" {
-			pair, err := tls.LoadX509KeyPair(*cert, *key)
-			if err != nil {
-				return err
-			}
-			tlsConfig.Certificates = []tls.Certificate{pair}
-		}
 		if *uri != "" {
+			roots := tlsConfig.RootCAs
 			// Explicit URI identity verification also verifies the complete CA chain.
 			tlsConfig.InsecureSkipVerify = true
 			tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {

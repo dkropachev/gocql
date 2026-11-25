@@ -711,6 +711,7 @@ owns its type:
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
 | `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `config.LoadTLSFiles(*tls.Config, config.TLSFiles) (*tls.Config, error)` | a TLS configuration loaded from files once, for `WithTLS` |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
 Package `cql` also exports `func StartPage() PageState` (the zero `PageState`);
@@ -1375,7 +1376,7 @@ type Options struct {
     PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
     PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
-    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
+    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent and Profile.Idempotent
     Timestamp cql.Option[time.Time]               // sent in microseconds; workers reject it
     NowInSeconds cql.Option[int32]
     Keyspace string
@@ -1405,13 +1406,15 @@ type Profile struct {
     Retry retry.Policy
     Routing routing.Policy
     Speculation SpeculationPolicy
+    Idempotent bool // every statement the profile runs; v1 DefaultIdempotence
     /* unexported built mark */
 }
 func NewProfile() *ProfileBuilder
+func (*ProfileBuilder) MustBuild() Profile // Build that panics on error
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
-// WithSpeculation; zero turns WithTimeout and WithPrefetch off, and
+// WithSpeculation, WithIdempotent; zero turns WithTimeout and WithPrefetch off, and
 // NoSerialConsistency clears the serial consistency. A nil WithRetry or
 // WithRouting, or a nil Retry or Routing field, is the default policy;
 // retry.Never{} disables retries.
@@ -1631,8 +1634,8 @@ acquisition still rechecks current availability and target strictness. Custom
 policies implement Pick and Fallback themselves and account for their own work.
 A request pinned with exec.Options.HostID follows the pinned plan without
 consulting any policy. The session validates a policy that implements
-routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter sets
-the session's locality, which every built-in policy without a Datacenter of
+routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter and
+WithLocalRack set the session's locality, which every built-in policy without a Datacenter of
 its own takes; Connect logs a warning for a multi-datacenter cluster without
 one.
 
@@ -1907,8 +1910,11 @@ Authorization/protocol/validation failures are terminal. Each retry takes a
 fresh snapshot. Automatic handling of a successful DDL result additionally
 requires that exact coordinator host identity to report successfully, even if a
 later topology excludes or temporarily loses it; absence cannot count as
-agreement. Manual agreement does not refresh metadata. Automatic
-agreement/refresh runs within the original operation context; failure reports
+agreement. Manual agreement does not refresh metadata.
+`ConfigBuilder.WithSchemaChangeWait` chooses what a successful DDL waits for:
+`SchemaChangeWaitNone`, `SchemaChangeWaitAgreement`, or
+`SchemaChangeWaitRefresh` (the default), agreement and then a metadata
+refresh. Automatic agreement/refresh runs within the original operation context; failure reports
 that the DDL already succeeded and never retries the successful DDL.
 
 Session.Close atomically rejects new session work, sets Closed()==true, cancels
@@ -1928,7 +1934,7 @@ Package `config` holds the configuration API. A `config.Config` is an
 opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`
-and `ConfigureDefaultProfile`. An on/off setting takes a bool
+and `Clone`. An on/off setting takes a bool
 (`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
 interval whose zero has no other meaning turns its feature off at zero
 (`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
@@ -1948,10 +1954,13 @@ message the limit. Correcting a setting clears the error on the next Build.
 Optional zero durations disable their budget. `Build` parses the contact
 points and asks the reconnect policy for `Delay(1)` once, rejecting a negative
 delay. `WithPort` is also the port of discovered nodes whose metadata reports
-none, so `Build` rejects contact points that all name one other port, unless
-discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
+none. Without it, contact points that all name one port make that port the
+default; with it, `Build` rejects contact points that all name one other port,
+unless discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
-`ConfigureDefaultProfile` composes callbacks, and a nil callback resets the profile. Slice inputs are copied; Build snapshots
+`Config.DefaultProfile()` reads a built configuration's profile back, and
+`Profile.Builder()` starts a builder from a profile's values to derive another.
+`Config.Observer()` returns the observer, as `Session.Observer` does. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
 These functions are the entry points:
 
@@ -1959,9 +1968,13 @@ These functions are the entry points:
 // package config
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
+func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
-func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
-func (*ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder
+func (Config) DefaultProfile() Profile
+func (Config) Observer() observe.Observer
+func (Profile) Builder() *ProfileBuilder
+func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
+func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
@@ -2057,7 +2070,9 @@ A Unix maintenance target is the single contact point `unix:/absolute/path`;
 a bare absolute path is accepted as a convenience. `Build` turns host discovery
 off unless `WithDiscovery` is set explicitly; explicit discovery, TLS, and an
 explicit `WithLocalAddress` on this transport fail with
-cqlerr.UnsupportedSettingError, and mixing Unix and TCP contact points fails
+cqlerr.UnsupportedSettingError, whose `Setting` names the setter
+(`WithDiscovery`, `WithTLS`, `WithLocalAddress`), as every
+UnsupportedSettingError's does, and mixing Unix and TCP contact points fails
 validation. Default shard settings do not target a Unix socket. An
 endpoint.Dialer receives an endpoint.DialTarget with Network `unix` and the
 exact path as Address; an unknown bootstrap host address is invalid rather
@@ -2104,7 +2119,7 @@ type Exchange interface {
     Success(context.Context, cql.Nullable[cql.Bytes]) error
     Close()
 }
-func Password(username, password string) Provider
+func Password(username, password string, allowed ...string) Provider // none allowed: any authenticator class
 ```
 
 The context-aware endpoint.Dialer contract applies to all new connections.

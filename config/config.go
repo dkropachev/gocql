@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/netip"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +53,8 @@ type ConfigBuilder struct {
 	shardAwarenessChosen bool
 	sourcePortsChosen    bool
 	maxExcessChosen      bool
+	portChosen           bool
+	schemaChangeWait     SchemaChangeWait
 	perHost              bool
 	dialect              Dialect
 	// started reports that New made the builder.
@@ -63,7 +66,24 @@ type ConfigBuilder struct {
 // path (optionally prefixed with "unix:"); for a socket, no host discovery is
 // filled in unless chosen. Build rejects the zero Dialect.
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder {
-	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, started: true}
+	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, schemaChangeWait: SchemaChangeWaitRefresh, started: true}
+}
+
+// Clone returns an independent copy of the builder, so a shared base can be
+// specialized without changing it: settings chosen on the copy do not reach
+// b, and those chosen on b later do not reach the copy. Providers, policies
+// and callbacks stay shared, as in a Config. The clone of a zero
+// ConfigBuilder is zero too, and Build rejects it.
+func (b *ConfigBuilder) Clone() *ConfigBuilder {
+	c := *b
+	c.settings = b.settings.Snapshot()
+	if b.profile != nil {
+		profile := *b.profile
+		c.profile = &profile
+	}
+	c.ignoredEvents = slices.Clone(b.ignoredEvents)
+	c.routes = slices.Clone(b.routes)
+	return &c
 }
 
 // Build validates the final settings and returns the Config or the first
@@ -80,6 +100,11 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	}
 	settings := b.settings
 	settings.Server, settings.Protocol = server, protocol
+	if !b.portChosen {
+		if port, ok := implSettings.CommonContactPort(settings.ContactPoints); ok {
+			settings.Port = port
+		}
+	}
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
 	settings.ClientRoutes = clientRoutesOptions(b.routes)
@@ -135,6 +160,13 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		keep := settings.HostFilter
 		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.HostID == id && (keep == nil || keep(host)) }
 	}
+	switch b.schemaChangeWait {
+	case SchemaChangeWaitNone, SchemaChangeWaitAgreement, SchemaChangeWaitRefresh:
+		settings.Metadata.AutomaticAgreement = b.schemaChangeWait >= SchemaChangeWaitAgreement
+		settings.Metadata.RefreshAfterAgreement = b.schemaChangeWait == SchemaChangeWaitRefresh
+	default:
+		return Config{}, &cql.ValidationError{Field: "WithSchemaChangeWait", Err: fmt.Errorf("%v is not SchemaChangeWaitNone, SchemaChangeWaitAgreement or SchemaChangeWaitRefresh", b.schemaChangeWait)}
+	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
 		case event.KindTopology:
@@ -164,9 +196,12 @@ func (b *ConfigBuilder) Build() (Config, error) {
 // system.peers does not. Contact points that all name one port other than
 // port would have the driver dial the nodes it discovers on the wrong port,
 // so Build rejects them unless WithDiscovery(false) or WithClientRoutes is
-// set; name no port in them, or set WithPort to theirs. Default 9042.
+// set; name no port in them, or set WithPort to theirs. Default the port
+// every TCP contact point names, when they all name the same one, and 9042
+// otherwise; Config.String shows the port in effect.
 func (b *ConfigBuilder) WithPort(port uint16) *ConfigBuilder {
 	b.settings.Port = port
+	b.portChosen = true
 	return b
 }
 
@@ -462,18 +497,26 @@ func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 	return b
 }
 
-// WithLocalDatacenter sets the session's local datacenter and, when rack is
-// not empty, its local rack. Every built-in routing policy whose
-// routing.Options name no datacenter of their own, the default profile's and
-// every other profile's alike, prefers replicas there and, unless AllowRemote
-// is set, routes only there. Connect fails when the cluster has no eligible
-// host in dc, or in rack; Build rejects a rack without a datacenter. Set it
-// on a cluster with more than one datacenter: the default LOCAL_QUORUM
-// consistency is local to the coordinator's datacenter. Default none: every
-// datacenter is local, and Connect logs a warning when the cluster has more
-// than one.
-func (b *ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder {
-	b.settings.LocalDatacenter, b.settings.LocalRack = dc, rack
+// WithLocalDatacenter sets the session's local datacenter. Every built-in
+// routing policy whose routing.Options name no datacenter of their own, the
+// default profile's and every other profile's alike, prefers replicas there
+// and, unless AllowRemote is set, routes only there. Connect fails when the
+// cluster has no eligible host in dc. Set it on a cluster with more than one
+// datacenter: the default LOCAL_QUORUM consistency is local to the
+// coordinator's datacenter. Default none: every datacenter is local, and
+// Connect logs a warning when the cluster has more than one.
+func (b *ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder {
+	b.settings.LocalDatacenter = dc
+	return b
+}
+
+// WithLocalRack sets the session's local rack within WithLocalDatacenter,
+// which the same built-in policies prefer within the local datacenter.
+// Connect fails when the datacenter has no eligible host in rack; Build
+// rejects a rack without a datacenter. Default none: every rack of the local
+// datacenter is local.
+func (b *ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder {
+	b.settings.LocalRack = rack
 	return b
 }
 
@@ -516,11 +559,10 @@ func (b *ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder {
 // WithReconnect sets the delay between attempts to reopen a node's
 // connections; see endpoint.ReconnectPolicy for how the driver calls it.
 // Build calls Delay(1) once and rejects a negative delay. A nil policy
-// restores the default. To never reconnect, pass a policy that declines:
+// restores the default. endpoint.ReconnectFunc adapts a function; to never
+// reconnect, pass one that declines:
 //
-//	type noReconnect struct{}
-//
-//	func (noReconnect) Delay(int) (time.Duration, bool) { return 0, false }
+//	endpoint.ReconnectFunc(func(int) (time.Duration, bool) { return 0, false })
 //
 // Default jittered backoff from 1s to 32s.
 func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBuilder {
@@ -614,43 +656,25 @@ func (b *ConfigBuilder) WithSchemaAgreement(poll, timeout time.Duration) *Config
 	return b
 }
 
-// WithAutomaticSchemaAgreement chooses whether a DDL statement waits for
-// schema agreement before it returns. With false, call
-// Session.AwaitSchemaAgreement where agreement matters. Default true.
-func (b *ConfigBuilder) WithAutomaticSchemaAgreement(on bool) *ConfigBuilder {
-	b.settings.Metadata.AutomaticAgreement = on
-	return b
-}
-
-// WithRefreshAfterAgreement chooses whether metadata is reloaded once schema
-// agreement is reached. Default true.
-func (b *ConfigBuilder) WithRefreshAfterAgreement(on bool) *ConfigBuilder {
-	b.settings.Metadata.RefreshAfterAgreement = on
+// WithSchemaChangeWait chooses what a statement that changes the schema
+// waits for before it returns: nothing, schema agreement among the nodes
+// (WithSchemaAgreement bounds the wait), or agreement and then a reload of
+// the changed keyspace's metadata, so Session.Metadata shows the change.
+// Build rejects a value it does not define. Default SchemaChangeWaitRefresh.
+func (b *ConfigBuilder) WithSchemaChangeWait(wait SchemaChangeWait) *ConfigBuilder {
+	b.schemaChangeWait = wait
 	return b
 }
 
 // WithDefaultProfile replaces the complete execution defaults for statements
 // that pass no Profile. The profile is copied now; policy objects stay shared.
 // Build validates the final settings and rejects a profile that
-// ProfileBuilder.Build did not make; start one with NewProfile.
+// ProfileBuilder.Build did not make; start one with NewProfile. To change a
+// few fields of a built configuration's profile, derive it with
+// Config.DefaultProfile and Profile.Builder. Default the profile NewProfile
+// builds.
 func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
 	b.profile = &ProfileBuilder{profile: internalProfile(profile), started: true}
-	return b
-}
-
-// ConfigureDefaultProfile chooses execution defaults for statements that pass no
-// Profile. choose receives the builder's default profile, so several calls
-// add to the same profile, and edits apply on top of the profile an earlier
-// WithDefaultProfile set. A nil choose resets the entire default profile.
-func (b *ConfigBuilder) ConfigureDefaultProfile(choose func(*ProfileBuilder)) *ConfigBuilder {
-	switch {
-	case choose == nil:
-		b.profile = NewProfile()
-	case b.profile == nil: // a zero ConfigBuilder, which Build rejects
-		choose(new(ProfileBuilder))
-	default:
-		choose(b.profile)
-	}
 	return b
 }
 
@@ -742,6 +766,7 @@ func (c Config) String() string {
 	s := c.settings
 	var w strings.Builder
 	fmt.Fprintf(&w, "dialect=%v contact points=%v port=%d keyspace=%q compression=%v", Dialect(implSettings.DialectOf(s.Server, s.Protocol)), s.ContactPoints, s.Port, s.Keyspace, s.Compression)
+	fmt.Fprintf(&w, " local datacenter=%q local rack=%q", s.LocalDatacenter, s.LocalRack)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
 	fmt.Fprintf(&w, " discovery=%t metadata=%v prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)
@@ -749,6 +774,27 @@ func (c Config) String() string {
 		fmt.Fprintf(&w, " consistency=%v timeout=%v page size=%d", p.Consistency, p.Timeout, p.PageSize)
 	}
 	return w.String()
+}
+
+// DefaultProfile returns the execution defaults of statements that pass no
+// Profile: the profile WithDefaultProfile chose, or the driver's. Derive
+// another profile from it with Profile.Builder. The zero Config returns the
+// zero Profile, which is not built.
+func (c Config) DefaultProfile() Profile {
+	if c.settings == nil || c.settings.DefaultProfile == nil {
+		return Profile{}
+	}
+	return publicProfile(*c.settings.DefaultProfile)
+}
+
+// Observer returns the observer WithObserver chose, which a session
+// connected with c also returns from Session.Observer; nil without one or
+// for the zero Config.
+func (c Config) Observer() observe.Observer {
+	if c.settings == nil {
+		return nil
+	}
+	return c.settings.Observer
 }
 
 // resolved returns the settings to connect with, or an error for the zero
@@ -774,6 +820,16 @@ type ProfileBuilder struct {
 // NewProfile starts a profile.
 func NewProfile() *ProfileBuilder {
 	return &ProfileBuilder{profile: *implSettings.DefaultConfig().DefaultProfile, started: true}
+}
+
+// MustBuild is Build that panics on error, for package-level profiles and
+// profiles written from constants.
+func (p *ProfileBuilder) MustBuild() Profile {
+	profile, err := p.Build()
+	if err != nil {
+		panic(err)
+	}
+	return profile
 }
 
 // Build validates the profile, for use as Options.Profile.
@@ -860,6 +916,17 @@ func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 		return p
 	}
 	p.profile.Routing = implRouting.EngineOf(policy)
+	return p
+}
+
+// WithIdempotent chooses whether every statement the profile runs is safe to
+// run more than once, as cql.Statement.Idempotent marks one statement: with
+// true, retry.Safe retries and speculation applies to all of them. With
+// false, each statement's own Idempotent decides. exec.Options.Idempotent
+// overrides both for one execution. It is v1's ClusterConfig
+// DefaultIdempotence. Default false.
+func (p *ProfileBuilder) WithIdempotent(on bool) *ProfileBuilder {
+	p.profile.Idempotent = on
 	return p
 }
 

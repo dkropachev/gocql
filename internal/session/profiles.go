@@ -124,7 +124,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if p.PageSize == cql.Unpaged {
 		if options.Prefetch.Set && options.Prefetch.Value != 0 {
-			return InternalResolvedOptions{}, &settings.UnsupportedSettingError{Setting: "prefetch", Reason: "an unpaged result has no next page"}
+			return InternalResolvedOptions{}, &settings.UnsupportedSettingError{Setting: "Prefetch", Reason: "an unpaged result has no next page"}
 		}
 		// The resolved profile carries no page size, so requests omit it.
 		p.PageSize = 0

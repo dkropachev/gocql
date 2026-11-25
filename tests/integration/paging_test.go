@@ -54,7 +54,7 @@ func TestPaging(t *testing.T) {
 		// leave a replica that a ONE read can reach before it has every row
 		// (W+R must exceed RF), so the fixture is written at ALL.
 		session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *config.ConfigBuilder) {
-			c.ConfigureDefaultProfile(func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
+			editDefaultProfile(c, func(p *config.ProfileBuilder) { p.WithConsistency(cql.All) })
 		}), t, false)
 		defer session.Close()
 		table := testTableName(t)
