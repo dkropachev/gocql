@@ -692,11 +692,10 @@ func TestPrepared(t *testing.T) {
 	t.Run("Metadata", func(t *testing.T) {
 		t.Run("ConditionalAbsentResult", func(t *testing.T) {
 			for _, tc := range []struct {
-				name         string
-				kind         implCql.StatementKind
-				initial      bool
-				badResult    bool
-				prepareError bool
+				name      string
+				kind      implCql.StatementKind
+				initial   bool
+				badResult bool
 				// rejected: the kind contradicts the CASRows decoder and
 				// the IF, so Prepare fails before it sends anything.
 				rejected bool
@@ -739,7 +738,7 @@ func TestPrepared(t *testing.T) {
 							done <- fmt.Errorf("expected PREPARE got %d", op)
 							return
 						}
-						if _, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("cas"), implCql.NewColumns(), initial))); err != nil || tc.prepareError {
+						if _, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("cas"), implCql.NewColumns(), initial))); err != nil {
 							done <- err
 							return
 						}
@@ -771,35 +770,29 @@ func TestPrepared(t *testing.T) {
 						done <- err
 					}()
 					prepared, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
-					if tc.prepareError {
+					if err != nil {
+						t.Fatal(err)
+					}
+					if PreparedData(prepared).plans.plan != nil {
+						t.Fatal("absent shape compiled eagerly")
+					}
+					bound := codecTestMust(BindOwned(prepared, implCql.EmptyRow{}))
+					defer bound.Close()
+					rows, err := Run(ctx, s, bound, CompiledOptions{})
+					if tc.badResult {
 						if !hasErrorType[*implCql.ValidationError](err) {
-							t.Fatalf("eager metadata validation: %v", err)
+							t.Fatalf("actual metadata was not validated before output: %v", err)
 						}
 					} else {
 						if err != nil {
 							t.Fatal(err)
 						}
-						if PreparedData(prepared).plans.plan != nil {
-							t.Fatal("absent shape compiled eagerly")
+						var out implCql.CASResult[implCql.DynamicRow]
+						if !rows.NextInto(&out) || !out.Applied || out.Previous.Set {
+							t.Fatal("conditional result", out, rows.Err())
 						}
-						bound := codecTestMust(BindOwned(prepared, implCql.EmptyRow{}))
-						defer bound.Close()
-						rows, err := Run(ctx, s, bound, CompiledOptions{})
-						if tc.badResult {
-							if !hasErrorType[*implCql.ValidationError](err) {
-								t.Fatalf("actual metadata was not validated before output: %v", err)
-							}
-						} else {
-							if err != nil {
-								t.Fatal(err)
-							}
-							var out implCql.CASResult[implCql.DynamicRow]
-							if !rows.NextInto(&out) || !out.Applied || out.Previous.Set {
-								t.Fatal("conditional result", out, rows.Err())
-							}
-							if rows.NextInto(&out) || rows.Close() != nil {
-								t.Fatal("conditional result completion", rows.Err())
-							}
+						if rows.NextInto(&out) || rows.Close() != nil {
+							t.Fatal("conditional result completion", rows.Err())
 						}
 					}
 					if err := <-done; err != nil {
