@@ -367,10 +367,15 @@ func (p *Prepared[P, R]) Routing(value P, options CompiledOptions) (routing2.Inf
 // fillOptionRouting completes info with what resolved options add to an
 // execution's routing, as executions do: the keyspace when the statement
 // names none, the consistency, the host and shard pins, and the conditional
-// routing of a SERIAL or LOCAL_SERIAL read. A keyspace override that differs
-// from the statement's is rejected, as an execution rejects it.
+// routing of a SERIAL or LOCAL_SERIAL read. Options the session's dialect
+// does not support, which options compiled for another session can hold, and
+// a keyspace override that differs from the statement's are rejected, as an
+// execution rejects them.
 func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved *InternalResolvedOptions) error {
 	values := &resolved.InternalOptions
+	if err := checkDialectOptions(&rt.config, values); err != nil {
+		return err
+	}
 	if values.Keyspace != "" && info.Keyspace != "" && values.Keyspace != info.Keyspace {
 		return cqltype.TypeValidation("keyspace", "override differs from bound statement")
 	}

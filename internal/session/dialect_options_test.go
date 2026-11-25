@@ -14,13 +14,15 @@ import (
 	"github.com/scylladb/gocql/v2/internal/binding"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 // An execution option one dialect lacks fails compiling for a session of
 // that dialect, and executing there options compiled without a session or for
 // a session of another dialect, with an UnsupportedSettingError naming the
 // option and the dialect, before anything is sent. A session of the dialect
-// that has it compiles and admits it.
+// that has it compiles and admits it. Prepared.Routing checks options as an
+// execution does.
 func TestDialectOnlyOptions(t *testing.T) {
 	host := cql.Some(cql.UUID{15: 1})
 	for name, tc := range map[string]struct {
@@ -70,6 +72,13 @@ func TestDialectOnlyOptions(t *testing.T) {
 				}
 				return err
 			}
+			// route checks options as Prepared.Routing does, for a
+			// statement that names no keyspace.
+			route := func(s *implCluster.Core, options CompiledOptions) error {
+				rt := InternalRuntimeFor(s)
+				var scratch InternalResolvedOptions
+				return fillOptionRouting(new(routing2.Info), rt, options.resolve(rt, &scratch))
+			}
 			check := func(t *testing.T, config settings.Config, stage string, err error) {
 				t.Helper()
 				unsupported, ok := errors.AsType[*cqlerr.UnsupportedSettingError](err)
@@ -93,6 +102,7 @@ func TestDialectOnlyOptions(t *testing.T) {
 				check(t, config, "compile", err)
 				check(t, config, "execute unbound", admit(t, s, unbound))
 				check(t, config, "execute compiled for "+settings.DialectName(supporting.Server, supporting.Protocol), admit(t, s, foreign))
+				check(t, config, "route compiled for "+settings.DialectName(supporting.Server, supporting.Protocol), route(s, foreign))
 			}
 			for _, config := range tc.accepted {
 				s := session(t, config.Server, config.Protocol)
@@ -103,6 +113,9 @@ func TestDialectOnlyOptions(t *testing.T) {
 				for stage, options := range map[string]CompiledOptions{"compiled": compiled, "unbound": unbound} {
 					if err := admit(t, s, options); err != nil {
 						t.Fatalf("%v over protocol %d: execute %s: %v", config.Server, config.Protocol, stage, err)
+					}
+					if err := route(s, options); err != nil {
+						t.Fatalf("%v over protocol %d: route %s: %v", config.Server, config.Protocol, stage, err)
 					}
 				}
 			}
