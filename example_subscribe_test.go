@@ -11,7 +11,6 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/event"
 )
 
@@ -46,7 +45,7 @@ func ExampleSession_Subscribe() {
 		"CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}",
 		"CREATE TABLE IF NOT EXISTS app.events (id int PRIMARY KEY, body text)",
 	} {
-		if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
+		if _, err := session.UnpreparedCommand(ctx, stmt); err != nil {
 			log.Fatal(err)
 		}
 	}

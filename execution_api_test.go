@@ -294,3 +294,34 @@ func TestPreparedWith(t *testing.T) {
 		t.Fatalf("One on a view of a zero Prepared = %v, want a cql.ValidationError", err)
 	}
 }
+
+// TestUnpreparedCommand sends CQL text with nothing to bind as one QUERY,
+// with the options passed, and rejects a second options value before
+// sending anything.
+func TestUnpreparedCommand(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	void := binary.BigEndian.AppendUint32(nil, 1)
+	srv := newGridServer(t, peers[0], func(r gridRequest) []byte {
+		return typedTestResponse(t, 4, r.stream, void)
+	})
+	defer srv.stop(t, peers[0])
+	defer func() { _ = s.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.Options{Consistency: cql.Some(cql.All)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Attempts != 1 {
+		t.Fatalf("Result = %+v, want one attempt", result)
+	}
+	if sent := srv.sent(); len(sent) != 1 || sent[0].consistency != cql.All || sent[0].batch {
+		t.Fatalf("sent %+v, want one QUERY at ALL", sent)
+	}
+	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.Options{}, exec.Options{}); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("UnpreparedCommand with two options = %v, want a cql.ValidationError", err)
+	}
+	if len(srv.sent()) != 1 {
+		t.Fatal("UnpreparedCommand with two options sent a request")
+	}
+}

@@ -57,7 +57,8 @@
 // Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll run
 // occasional CQL text statements without server preparation and without a
 // worker to close; prepare a statement that runs repeatedly. Parameters are
-// copied during execution admission.
+// copied during execution admission. Session.UnpreparedCommand runs CQL text
+// with nothing to bind and no result, such as DDL.
 //
 // Prepared.AddToBatch, Worker.AddToBatch and Session.UnpreparedAddToBatch
 // append statements to a Batch; Session.ExecBatch sends it. A conditional

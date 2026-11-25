@@ -9,10 +9,9 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
-	"github.com/scylladb/gocql/v2/cql"
 )
 
-func ExampleSession_UnpreparedExec() {
+func ExampleSession_UnpreparedCommand() {
 	ctx := context.Background()
 	cfg, err := config.New(config.ScyllaV4, "localhost:9042").Build()
 	if err != nil {
@@ -23,8 +22,8 @@ func ExampleSession_UnpreparedExec() {
 		log.Fatal(err)
 	}
 	defer session.Close()
-	// An occasional command needs no preparation or reusable query to close.
-	_, err = session.UnpreparedExec(ctx, cql.Command("CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}"), cql.EmptyParams{})
+	// An occasional command needs no preparation, parameters or worker to close.
+	_, err = session.UnpreparedCommand(ctx, "CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}")
 	if err != nil {
 		log.Fatal(err)
 	}

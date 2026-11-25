@@ -114,7 +114,8 @@ response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
 `session.UnpreparedAll` handle occasional CQL text executions without leaving a worker to close; prepare
-a statement that runs repeatedly. Each call copies its parameters during admission. A worker call while
+a statement that runs repeatedly; `session.UnpreparedCommand(ctx, text)` runs
+text with nothing to bind, such as DDL. Each call copies its parameters during admission. A worker call while
 a `Rows`, `Page` or stream of the worker is open, or while another goroutine's
 call runs, returns `ErrBusy`; a call after an execution that already returned
 waits until that execution's accepted writes drain. `worker.Close()`

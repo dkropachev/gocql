@@ -94,7 +94,7 @@ func benchConfig(d endpoint.Dialer) config.Config {
 const benchDialect = config.ScyllaV4
 
 func benchExec(ctx context.Context, s *gocql.Session, text string) error {
-	_, e := s.UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})
+	_, e := s.UnpreparedCommand(ctx, text)
 	return e
 }
 func InitializeCluster(ctx context.Context, s *gocql.Session) error {

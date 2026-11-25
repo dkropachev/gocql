@@ -40,16 +40,24 @@ var gridVerbs = map[string][]string{
 }
 
 // gridNonExecution lists the exported methods of the grid's types that are
-// not grid cells. Batches follow their own rules, and the rest execute
-// nothing.
+// not grid cells. They execute nothing, or are the exceptions of
+// gridExceptions.
 var gridNonExecution = map[string][]string{
 	"Session": {
 		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "Dialect",
 		"ID", "Metadata", "Metrics", "Prepare", "PrepareStream",
-		"RefreshMetadata", "Subscribe", "UnpreparedAddToBatch",
+		"RefreshMetadata", "Subscribe", "UnpreparedAddToBatch", "UnpreparedCommand",
 	},
 	"Worker":   {"AddToBatch", "Close", "Wait"},
 	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Routing", "With", "Worker"},
+}
+
+// gridExceptions are the execution methods outside the grid that
+// docs/api-surface.md documents as exceptions, each with the options form it
+// must end in.
+var gridExceptions = map[string]string{
+	// The throwaway none cell for a statement with nothing to bind.
+	"Session.UnpreparedCommand": "options ...exec.Options",
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI
@@ -64,7 +72,7 @@ var apiMethod = regexp.MustCompile(`^\t\tgocql\.(\w+) method \(\*?T\) (\w+)(.*)$
 // it. The throwaway and batch pages cells are empty by design, and the
 // throwaway many-rows cell lacks Run because Run returns a handle.
 func TestExecutionGrid(t *testing.T) {
-	cells := parseGrid(t)
+	cells, exceptionsDoc := parseGrid(t)
 	params := map[string]string{} // "Type.Method" → parameter list
 	raw, err := os.ReadFile(apiGoldenPath)
 	if err != nil {
@@ -147,6 +155,14 @@ func TestExecutionGrid(t *testing.T) {
 			t.Errorf("%s(%s) is neither a cell of the grid in docs/api-surface.md nor a known non-execution method", method, p)
 		}
 	}
+	for method, options := range gridExceptions {
+		if p, ok := params[method]; !ok || !optionsForm(p, options) {
+			t.Errorf("exception %s(%s) is missing or does not end in %q", method, p, options)
+		}
+		if !strings.Contains(exceptionsDoc, "`"+method+"`") {
+			t.Errorf("docs/api-surface.md does not document %s as an exception to the grid", method)
+		}
+	}
 	for typ, names := range gridNonExecution {
 		for _, name := range names {
 			if _, ok := params[typ+"."+name]; !ok {
@@ -189,8 +205,9 @@ func optionsForm(params, options string) bool {
 }
 
 // parseGrid returns the cells of the table under "## The grid" in
-// docs/api-surface.md: row → column → methods.
-func parseGrid(t *testing.T) map[string]map[string][]string {
+// docs/api-surface.md, row → column → methods, and the text of its
+// "## Exceptions" section.
+func parseGrid(t *testing.T) (map[string]map[string][]string, string) {
 	t.Helper()
 	raw, err := os.ReadFile("docs/api-surface.md")
 	if err != nil {
@@ -201,6 +218,8 @@ func parseGrid(t *testing.T) map[string]map[string][]string {
 		t.Fatal(`docs/api-surface.md has no "## The grid" section`)
 	}
 	section, _, _ = strings.Cut(section, "\n## ")
+	_, exceptions, _ := strings.Cut(string(raw), "\n## Exceptions\n")
+	exceptions, _, _ = strings.Cut(exceptions, "\n## ")
 	var header []string
 	cells := map[string]map[string][]string{}
 	for _, line := range strings.Split(section, "\n") {
@@ -235,5 +254,5 @@ func parseGrid(t *testing.T) map[string]map[string][]string {
 	if len(cells) != len(gridRows) {
 		t.Fatalf("grid has rows %v, want %d", cells, len(gridRows))
 	}
-	return cells
+	return cells, exceptions
 }

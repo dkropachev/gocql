@@ -782,6 +782,7 @@ func (p *Prepared[P, R]) With(exec.CompiledOptions) *Prepared[P, R] // a view wi
 
 // Worker-owned reusable executions.
 func (p *Prepared[P, R]) Worker(...exec.Options) (*Worker[P, R], error) // at most one
+func (s *Session) UnpreparedCommand(context.Context, string, ...exec.Options) (Result, error) // UnpreparedExec of cql.Command
 func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
 func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)

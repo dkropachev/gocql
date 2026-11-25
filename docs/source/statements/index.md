@@ -71,7 +71,9 @@ request-timeouts
 For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 `UnpreparedEach` execute typed CQL text and own their cleanup. Parameters must
 be described by `Statement.BindMarkers`: a statement with parameters and no
-markers fails before it is sent, unless it binds `cql.DynamicParams`. They take at most one plain `exec.Options`,
+markers fails before it is sent, unless it binds `cql.DynamicParams`.
+`Session.UnpreparedCommand(ctx, text)` runs text with nothing to bind and
+no result, such as DDL, without a statement value. They take at most one plain `exec.Options`,
 validated during the call. Frequent statements should be prepared
 once and shared. Create workers once per goroutine, rather than once per
 HTTP request, and close each one. A worker dropped without `Close` is closed

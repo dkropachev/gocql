@@ -87,6 +87,7 @@ package gocql
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error
 		gocql.Session method (*T) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) iter.Seq2[*R, error]
+		gocql.Session method (*T) UnpreparedCommand(ctx context.Context, statement string, options ...exec.Options) (cql.Result, error)
 		gocql.Session method (*T) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error)
 		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error)
 		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error)

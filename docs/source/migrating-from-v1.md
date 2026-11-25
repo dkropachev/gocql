@@ -159,7 +159,7 @@ if !found {
 | v1 | v2 |
 | --- | --- |
 | `session.Query(stmt, values...)` | `session.Prepare(ctx, cql.Statement[P, R]{...})` once, then calls on the `*Prepared` |
-| `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text such as DDL (`cql.Command(text)`) |
+| `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text, or `session.UnpreparedCommand(ctx, text)` for text without bind markers such as DDL |
 | `query.Scan(&a, &b)` | `prepared.One(ctx, params, &row)`; `found` is false instead of `gocql.ErrNotFound` |
 | `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &row, fn)`, `for row, err := range prepared.All(ctx, params, &row)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
 | `iter.MapScan(m)`, `iter.SliceMap()` | rows decoded with `cql.DynamicRows`; `row.Get(name)` returns a `cql.Value` |

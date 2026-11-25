@@ -76,7 +76,7 @@ func TestClusterExamples(t *testing.T) {
 	defer s.Close()
 	exec := func(t *testing.T, stmt string) {
 		t.Helper()
-		if _, err := s.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
+		if _, err := s.UnpreparedCommand(ctx, stmt); err != nil {
 			t.Fatalf("%s: %v", stmt, err)
 		}
 	}
@@ -89,7 +89,7 @@ func TestClusterExamples(t *testing.T) {
 	// Without tablets where the version has them, so the LWT examples run
 	// on versions without LWT on tablets too.
 	keyspace := "CREATE KEYSPACE example WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}"
-	if _, err := s.UnpreparedExec(ctx, cql.Command(keyspace+" AND tablets = {'enabled': false}"), cql.EmptyParams{}); err != nil {
+	if _, err := s.UnpreparedCommand(ctx, keyspace+" AND tablets = {'enabled': false}"); err != nil {
 		t.Logf("creating keyspace example without tablets: %v; creating it with the defaults", err)
 		exec(t, keyspace)
 	}
@@ -109,7 +109,7 @@ func TestClusterExamples(t *testing.T) {
 	exec(t, "INSERT INTO example.table1 (id, name, score) VALUES (1, 'first', 1.5)")
 	defer func() {
 		for _, stmt := range []string{"DROP KEYSPACE IF EXISTS example", "DROP KEYSPACE IF EXISTS app"} {
-			if _, err := s.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
+			if _, err := s.UnpreparedCommand(ctx, stmt); err != nil {
 				t.Errorf("%s: %v", stmt, err)
 			}
 		}
@@ -175,7 +175,7 @@ func TestClusterExamples(t *testing.T) {
 			},
 		},
 		{
-			name: "SessionUnpreparedExec", run: ExampleSession_UnpreparedExec,
+			name: "SessionUnpreparedCommand", run: ExampleSession_UnpreparedCommand,
 			check: func(t *testing.T) {
 				if err := s.RefreshMetadata(ctx); err != nil {
 					t.Fatal(err)

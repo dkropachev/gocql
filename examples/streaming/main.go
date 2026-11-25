@@ -165,7 +165,7 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 		return fmt.Errorf("invalid owned namespace %q", namespace)
 	}
 	execContext := func(operation context.Context, text string) error {
-		_, err := s.UnpreparedExec(operation, cql.Command(text), cql.EmptyParams{})
+		_, err := s.UnpreparedCommand(operation, text)
 		return err
 	}
 	runDDL := func(text string) error { return execContext(ctx, text) }

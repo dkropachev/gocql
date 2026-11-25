@@ -221,6 +221,20 @@ and no options.
   table and token. Members must share one session, checked at `AddToBatch`;
   they may span keyspaces, as a logged batch may.
 
+## Exceptions
+
+An exception is an execution method outside the grid, kept because it
+removes boilerplate from a common call without adding a way to execute.
+`TestExecutionGrid` lists each one, with the options form of its row.
+
+- `Session.UnpreparedCommand` runs CQL text, given as a string, with no
+  bind markers and no result columns, such as DDL. It is the
+  throwaway none cell, `UnpreparedExec`, with `cql.Command(statement)` and
+  `cql.EmptyParams{}` filled in, so it takes the throwaway row's
+  `...exec.Options`. Schema setup and occasional commands are most of the
+  throwaway calls, and spelling the statement type and the empty parameters
+  out in each one hid the CQL.
+
 ## Current deviations
 
 None.
