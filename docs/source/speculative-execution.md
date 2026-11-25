@@ -7,21 +7,15 @@ default. Set `Profile.Speculation`, with `ProfileBuilder.WithSpeculation`, to a
 `Delay(started)` receives the number of attempts started so far and returns how
 long to wait before starting another and whether to start one at all.
 
+`retry.SpeculationPolicyFunc` makes one from a function:
+
 ```go
-// fixedSpeculation starts up to max attempts, delay apart.
-type fixedSpeculation struct {
-	delay time.Duration
-	max   int
-}
-
-func (p fixedSpeculation) Delay(started int) (time.Duration, bool) {
-	return p.delay, started < p.max
-}
-
+// Start up to two attempts, 50ms apart.
+speculation := retry.SpeculationPolicyFunc(func(started int) (time.Duration, bool) {
+	return 50 * time.Millisecond, started < 2
+})
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
-	WithDefaultProfile(config.NewProfile().
-		WithSpeculation(fixedSpeculation{delay: 50 * time.Millisecond, max: 2}).
-		MustBuild()).
+	WithDefaultProfile(config.NewProfile().WithSpeculation(speculation).MustBuild()).
 	Build()
 ```
 

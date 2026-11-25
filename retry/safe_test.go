@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -174,4 +175,16 @@ func TestSafe(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestSpeculationPolicyFunc(t *testing.T) {
+	var policy retry.SpeculationPolicy = retry.SpeculationPolicyFunc(func(started int) (time.Duration, bool) {
+		return time.Duration(started) * time.Millisecond, started < 2
+	})
+	if d, ok := policy.Delay(1); d != time.Millisecond || !ok {
+		t.Fatalf("Delay(1) = %v, %v", d, ok)
+	}
+	if _, ok := policy.Delay(2); ok {
+		t.Fatal("Delay(2) started another attempt")
+	}
 }

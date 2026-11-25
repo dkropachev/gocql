@@ -55,7 +55,9 @@ A policy may also implement two optional interfaces:
 - `routing.Learner`: `Learn` receives every attempt's outcome.
 
 Package `routing/routingtest` builds snapshots from hosts, schema, token
-ranges and tablets, so a policy can be tested without a cluster.
+ranges and tablets, so a policy can be tested without a cluster;
+`routingtest.Host` makes an up, connected host and `Cluster.Tables` adds
+tables without writing their schema.
 
 The session combines Pick and Fallback into the plan a request follows.
 `Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
@@ -66,8 +68,22 @@ when the route has no shard, and does not move to another shard or host on its o
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
 `routing.ReplicaRoutes` (the replicas of a request's token, each to the shard
-that owns the token when the host's sharding is known), and narrows them
-with `WithShardID` and `ShardOf`.
+that owns the token when the host's sharding is known; `AppendReplicaRoutes`
+appends them to a buffer the policy reuses) and `routing.RouteTo` (one host,
+or one shard of it), and narrows them with `WithShardID` and `ShardOf`.
+`Route.Datacenter` and `Route.Rack` name a route's locality.
+`routing.FilterPlan` drops routes from a plan lazily, and `routing.Routes`
+ranges over one:
+
+```go
+// Fallback tries the built-in plan's hosts outside dc2 only.
+func (p *notDC2) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
+	return routing.FilterPlan(p.Builtin.Fallback(info, m), func(r metadata.Route) bool {
+		return r.Datacenter() != "dc2"
+	})
+}
+```
+
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
 and leaders. Its Pick routes to one random replica when that replica is up and in the

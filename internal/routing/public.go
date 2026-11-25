@@ -35,6 +35,11 @@ func PublicRoutes(routes []Route) []metadata.Route {
 	return unsafe.Slice((*metadata.Route)(unsafe.Pointer(unsafe.SliceData(routes))), len(routes))
 }
 
+// EngineRoutes returns routes as Routes, sharing their storage.
+func EngineRoutes(routes []metadata.Route) []Route {
+	return unsafe.Slice((*Route)(unsafe.Pointer(unsafe.SliceData(routes))), cap(routes))[:len(routes)]
+}
+
 // EngineOf returns the engine policy of p: the session's own for a policy
 // routing.NewPolicy or routing.SingleTarget made, an adapter for an
 // application's.
@@ -86,8 +91,15 @@ func init() {
 	link.Set(link.HostRoutes, func(m *metadata.Snapshot) []metadata.Route {
 		return PublicRoutes(SnapshotOf(m).HostRoutes())
 	})
-	link.Set(link.ReplicaRoutes, func(m *metadata.Snapshot, info routing.Info) []metadata.Route {
-		return PublicRoutes(SnapshotOf(m).ReplicaRoutes(info))
+	link.Set(link.ReplicaRoutes, func(dst []metadata.Route, m *metadata.Snapshot, info routing.Info) []metadata.Route {
+		return PublicRoutes(SnapshotOf(m).AppendReplicaRoutes(EngineRoutes(dst), info))
+	})
+	link.Set(link.RouteTo, func(m *metadata.Snapshot, id cql.UUID) (metadata.Route, bool) {
+		r, ok := SnapshotOf(m).RouteTo(id)
+		return PublicRoute(r), ok
+	})
+	link.Set(link.RouteLocality, func(host unsafe.Pointer) (string, string) {
+		return (*pool.HostRoute)(host).Locality()
 	})
 	link.Set(link.RouteHost, func(host unsafe.Pointer) (cql.UUID, bool) {
 		h := (*pool.HostRoute)(host)

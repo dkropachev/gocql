@@ -102,14 +102,21 @@ func (m *MetadataSnapshot) HostRoutes() []Route {
 // that owns the token on its host. A route goes to any shard when the host's
 // sharding is not known, as on Cassandra.
 func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
+	return m.AppendReplicaRoutes(nil, info)
+}
+
+// AppendReplicaRoutes appends ReplicaRoutes(info) to out.
+func (m *MetadataSnapshot) AppendReplicaRoutes(out []Route, info routing.Info) []Route {
 	if m == nil || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
-		return nil
+		return out
 	}
 	lookup := InternalLookupTablet(m, info)
 	replicas, _ := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
 	x := m.routingIndex()
 	hosts := SnapshotData(m).InternalHosts
-	out := make([]Route, 0, len(replicas))
+	if out == nil {
+		out = make([]Route, 0, len(replicas))
+	}
 	for _, t := range replicas {
 		i, ok := x.host(t.HostID)
 		if !ok || i >= len(hosts) {
@@ -118,6 +125,20 @@ func (m *MetadataSnapshot) ReplicaRoutes(info routing.Info) []Route {
 		out = append(out, replicaRoute(x.routes[i], t, &hosts[i], cql.Option[uint32]{}, info.Token.Value))
 	}
 	return out
+}
+
+// RouteTo returns a route to any shard of the host with id, and false when
+// the snapshot has no such host.
+func (m *MetadataSnapshot) RouteTo(id cql.UUID) (Route, bool) {
+	if m == nil {
+		return Route{}, false
+	}
+	x := m.routingIndex()
+	i, ok := x.host(id)
+	if !ok || i >= len(x.routes) {
+		return Route{}, false
+	}
+	return Route{host: x.routes[i], shard: AnyShard}, true
 }
 
 // InternalNextTarget returns the target of plan's next route, leaving out

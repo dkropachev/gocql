@@ -15,6 +15,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/scylladb/gocql/v2/cql"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
@@ -25,8 +26,12 @@ import (
 // The zero Cluster has no hosts and no schema.
 type Cluster struct {
 	// Keyspaces holds the schema by keyspace name. Replicas and routing find
-	// only the tables and views listed here.
+	// only the tables and views listed here and in Tables.
 	Keyspaces map[string]*metadata.Keyspace
+	// Tables lists tables to add to Keyspaces without columns, enough for
+	// routing by a token; a missing keyspace is added too. A table Keyspaces
+	// already holds is kept as it is, and Keyspaces itself is not modified.
+	Tables []Table
 	// TokenRanges holds the token ranges of each keyspace with their
 	// replicas, as a token ring places them. The last range wraps around to
 	// the first.
@@ -74,6 +79,24 @@ func NewSnapshot(c Cluster) *metadata.Snapshot {
 	if state.InternalKeyspaces == nil {
 		state.InternalKeyspaces = make(map[string]*metadata.Keyspace)
 	}
+	for _, t := range c.Tables {
+		ks := state.InternalKeyspaces[t.Keyspace]
+		if ks == nil {
+			ks = &metadata.Keyspace{Name: t.Keyspace}
+		} else if ks.Tables[t.Name] != nil {
+			continue
+		} else {
+			// The caller's keyspace is shared; add the table to a copy.
+			clone := *ks
+			ks = &clone
+		}
+		ks.Tables = maps.Clone(ks.Tables)
+		if ks.Tables == nil {
+			ks.Tables = make(map[string]*metadata.Table)
+		}
+		ks.Tables[t.Name] = &metadata.Table{Keyspace: t.Keyspace, Name: t.Name}
+		state.InternalKeyspaces[t.Keyspace] = ks
+	}
 	for ks, r := range c.TokenRanges {
 		state.InternalRanges[ks] = sorted(r)
 	}
@@ -81,6 +104,12 @@ func NewSnapshot(c Cluster) *metadata.Snapshot {
 		state.InternalTablets[implRouting.InternalMetadataTable{InternalKeyspace: t.Keyspace, InternalTable: t.Name}] = sorted(r)
 	}
 	return implRouting.NewMetadataSnapshot(state).Public()
+}
+
+// Host returns a host of the cluster with id, in datacenter and rack, that
+// is enabled, up and connected, as a host a session routes to is.
+func Host(id cql.UUID, datacenter, rack string) metadata.HostSnapshot {
+	return metadata.HostSnapshot{HostID: id, Datacenter: datacenter, Rack: rack, Enabled: true, Up: true, Connected: true}
 }
 
 const murmur3 = "org.apache.cassandra.dht.Murmur3Partitioner"

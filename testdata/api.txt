@@ -1398,7 +1398,9 @@ package metadata
 	const metadata.ModeKeyspaces metadata.Mode = 1
 	const metadata.ModeNone metadata.Mode = 0
 	type metadata.Route struct
+		metadata.Route method (T) Datacenter() string
 		metadata.Route method (T) HostID() cql.UUID
+		metadata.Route method (T) Rack() string
 		metadata.Route method (T) ShardID() cql.Option[uint32]
 		metadata.Route method (T) ShardOf(token int64) cql.Option[uint32]
 		metadata.Route method (T) Target() metadata.Target
@@ -1552,9 +1554,12 @@ package retry
 	const retry.Same retry.Action = 1
 	type retry.SpeculationPolicy interface
 		retry.SpeculationPolicy method Delay(started int) (time.Duration, bool)
+	type retry.SpeculationPolicyFunc func(started int) (time.Duration, bool)
+		retry.SpeculationPolicyFunc method (T) Delay(started int) (time.Duration, bool)
 	const retry.Stop retry.Action = 0
 
 package routing
+	func routing.AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
 	type routing.AttemptEvent struct
 		routing.AttemptEvent field Started time.Time
 		routing.AttemptEvent field Err error
@@ -1575,6 +1580,7 @@ package routing
 		routing.Builtin method (*T) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool)
 		routing.Builtin method (*T) Validate(m *metadata.Snapshot) error
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
+	func routing.FilterPlan(plan routing.Plan, keep func(metadata.Route) bool) routing.Plan
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
 		routing.Info field Keyspace string
@@ -1613,6 +1619,8 @@ package routing
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
+	func routing.RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool)
+	func routing.Routes(plan routing.Plan) iter.Seq[metadata.Route]
 	func routing.SingleTarget(target metadata.Target) *routing.Builtin
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
@@ -1624,12 +1632,14 @@ package routing
 package routing/routingtest
 	type routing/routingtest.Cluster struct
 		routing/routingtest.Cluster field Keyspaces map[string]*metadata.Keyspace
+		routing/routingtest.Cluster field Tables []routing/routingtest.Table
 		routing/routingtest.Cluster field TokenRanges map[string][]metadata.TokenRange
 		routing/routingtest.Cluster field Tablets map[routing/routingtest.Table][]metadata.TokenRange
 		routing/routingtest.Cluster field LocalDatacenter string
 		routing/routingtest.Cluster field LocalRack string
 		routing/routingtest.Cluster field Hosts []metadata.HostSnapshot
 		routing/routingtest.Cluster field Generation uint64
+	func routing/routingtest.Host(id cql.UUID, datacenter string, rack string) metadata.HostSnapshot
 	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) *metadata.Snapshot
 	type routing/routingtest.Table struct
 		routing/routingtest.Table field Keyspace string

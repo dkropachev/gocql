@@ -34,6 +34,9 @@ func TestWithoutSession(t *testing.T) {
 	if r := routing.ReplicaRoutes(nil, routing.Info{}); r != nil {
 		t.Errorf("ReplicaRoutes = %v", r)
 	}
+	if _, ok := routing.RouteTo(nil, metadata.Target{HostID: cql.UUID{1}}); ok {
+		t.Error("RouteTo found a route without a session")
+	}
 }
 
 func TestNewPolicyValidates(t *testing.T) {

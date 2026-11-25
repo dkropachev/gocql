@@ -22,11 +22,34 @@ const AnyShard int32 = -1
 type HostRoute struct {
 	owner *InternalPolicyConnPool // nil for a route made outside a session
 	pool  atomic.Pointer[InternalHostConnPool]
-	id    cql.UUID
+	// locality is the host's datacenter and rack from the latest metadata
+	// snapshot indexed, nil until one is.
+	locality atomic.Pointer[hostLocality]
+	id       cql.UUID
 	// sharding is the host's shard count and ignored token bits from the
 	// latest metadata snapshot indexed, as shards<<8 | msbIgnore, which
 	// ShardOf uses while the host has no typed pool.
 	sharding atomic.Uint64
+}
+
+// hostLocality is a host's datacenter and rack.
+type hostLocality struct{ datacenter, rack string }
+
+// SetLocality records the host's datacenter and rack from a metadata
+// snapshot.
+func (r *HostRoute) SetLocality(datacenter, rack string) {
+	if l := r.locality.Load(); l == nil || l.datacenter != datacenter || l.rack != rack {
+		r.locality.Store(&hostLocality{datacenter: datacenter, rack: rack})
+	}
+}
+
+// Locality returns the host's datacenter and rack from the latest metadata
+// snapshot indexed, empty before one is.
+func (r *HostRoute) Locality() (datacenter, rack string) {
+	if l := r.locality.Load(); l != nil {
+		return l.datacenter, l.rack
+	}
+	return "", ""
 }
 
 // SetSharding records the host's shard count and ignored most significant

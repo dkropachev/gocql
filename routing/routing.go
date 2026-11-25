@@ -8,14 +8,16 @@
 // SingleTarget one that always routes to a single host; both are implemented
 // by the session. An application can implement Policy itself, often by
 // wrapping a built-in one, and test it on snapshots from package
-// routing/routingtest. In a program that links no session, such as the tests
-// of a policy library that do not import routingtest, the built-in policies
-// find no route and fail validation, and HostRoutes and ReplicaRoutes return
-// no routes.
+// routing/routingtest. HostRoutes, ReplicaRoutes, AppendReplicaRoutes and
+// RouteTo give a policy routes from a snapshot, and FilterPlan and Routes
+// work on plans. In a program that links no session, such as the tests of a
+// policy library that do not import routingtest, the built-in policies find
+// no route and fail validation, and those functions return no routes.
 package routing
 
 import (
 	"errors"
+	"iter"
 	"sync"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -101,13 +103,70 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 // from metadata.HostSnapshot.Shards. A route goes to any shard when the
 // host's sharding is not known. It returns none when info has no token,
 // keyspace or table, or when no replica of the token is known; HostRoutes
-// then gives every host.
+// then gives every host. AppendReplicaRoutes does the same without
+// allocating, for a policy's Pick.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
-	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
+	return AppendReplicaRoutes(nil, snapshot, info)
+}
+
+// AppendReplicaRoutes appends the routes ReplicaRoutes returns to dst and
+// returns the extended slice, so that a policy can reuse a buffer across
+// requests.
+func AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info Info) []metadata.Route {
+	replicaRoutes, ok := link.Lookup[func([]metadata.Route, *metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
 	if !ok {
-		return nil
+		return dst
 	}
-	return replicaRoutes(snapshot, info)
+	return replicaRoutes(dst, snapshot, info)
+}
+
+// RouteTo returns the route to target: to its shard when ShardID is set,
+// else to any shard of its host. It returns false when snapshot has no host
+// with target.HostID, which a policy pinning requests should treat as a
+// route it cannot take.
+func RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool) {
+	routeTo, ok := link.Lookup[func(*metadata.Snapshot, cql.UUID) (metadata.Route, bool)](link.RouteTo)
+	if !ok {
+		return metadata.Route{}, false
+	}
+	r, ok := routeTo(snapshot, target.HostID)
+	if !ok {
+		return metadata.Route{}, false
+	}
+	return r.WithShardID(target.ShardID), true
+}
+
+// Routes returns the routes plan has left, in order, as an iterator that
+// consumes the plan.
+func Routes(plan Plan) iter.Seq[metadata.Route] {
+	return func(yield func(metadata.Route) bool) {
+		for r, ok := plan.Next(); ok; r, ok = plan.Next() {
+			if !yield(r) {
+				return
+			}
+		}
+	}
+}
+
+// FilterPlan returns a plan of the routes of plan that keep reports true for,
+// in order. It reads plan lazily, one route per Next, so a policy can drop
+// hosts from a built-in plan without building the whole plan.
+func FilterPlan(plan Plan, keep func(metadata.Route) bool) Plan {
+	return &filterPlan{plan: plan, keep: keep}
+}
+
+type filterPlan struct {
+	plan Plan
+	keep func(metadata.Route) bool
+}
+
+func (p *filterPlan) Next() (metadata.Route, bool) {
+	for {
+		r, ok := p.plan.Next()
+		if !ok || p.keep(r) {
+			return r, ok
+		}
+	}
 }
 
 // PlanOf returns a plan of routes, in order. The plan keeps the slice
