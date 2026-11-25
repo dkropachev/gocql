@@ -41,7 +41,7 @@ func TestPageAPI(t *testing.T) {
 			released := false
 			owner := wire.NewLease(chain, func() { released = true })
 			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: cql.PageState(cql.PageStateFromToken([]byte{1}))}}
-			page, err := newPage(response, cql.OneColumn(cql.BlobCodec), nil)
+			page, err := newPage(response, cql.OneColumn(cql.BytesCodec), nil)
 			if err != nil {
 				t.Fatal(err)
 			}

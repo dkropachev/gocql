@@ -117,9 +117,9 @@ func TestStructOptionTargets(t *testing.T) {
 	}{
 		{"ParamsOf ReuseBuffers", "ReuseBuffers", func() error { _, err := ParamsOf[row](ReuseBuffers()); return err }},
 		{"ParamsOf IgnoreExtraColumns", "IgnoreExtraColumns", func() error { _, err := ParamsOf[row](IgnoreExtraColumns()); return err }},
-		{"ParamsOf WithStreamCodec", "WithStreamCodec", func() error { _, err := ParamsOf[row](WithStreamCodec(StreamInt32)); return err }},
+		{"ParamsOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := ParamsOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"RowOf WithEncoder", "WithEncoder", func() error { _, err := RowOf[row](WithEncoder(Int32Codec)); return err }},
-		{"RowOf WithStreamCodec", "WithStreamCodec", func() error { _, err := RowOf[row](WithStreamCodec(StreamInt32)); return err }},
+		{"RowOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := RowOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"StreamRowOf WithCodec", "WithCodec", func() error { _, err := StreamRowOf[row](codec); return err }},
 		{"StreamRowOf ReuseBuffers", "ReuseBuffers", func() error { _, err := StreamRowOf[row](ReuseBuffers()); return err }},
 		{"UDTCodecOf ReuseBuffers", "ReuseBuffers", func() error { _, err := UDTCodecOf[row](UDTOptions{Name: "u"}, ReuseBuffers()); return err }},
@@ -141,7 +141,7 @@ func TestStructOptionTargets(t *testing.T) {
 	if _, err := RowOf[row](codec, ReuseBuffers(), IgnoreExtraColumns()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := StreamRowOf[row](WithStreamCodec(StreamInt32), IgnoreExtraColumns()); err != nil {
+	if _, err := StreamRowOf[row](WithStreamDecoder(StreamInt32), IgnoreExtraColumns()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := UDTCodecOf[row](UDTOptions{Name: "u"}, codec); err != nil {

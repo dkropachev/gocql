@@ -227,7 +227,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 							// Borrowed column values, valid until the callback returns: no
 							// per-row copy. Measurement only; master's client copies.
 							pageOptions := testOptions(Options{PageSize: loopbackPageRows, Prefetch: cql.Option[int]{Set: true, Value: 0}, Timeout: cql.Option[time.Duration]{Set: true, Value: 10 * time.Second}})
-							statement := binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}
+							statement := binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}
 							query := codecTestMust(unpreparedQuery(s, statement, pageOptions.Values()))
 							b.Cleanup(query.Close)
 							var dst cql.Bytes

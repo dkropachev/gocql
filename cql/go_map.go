@@ -317,7 +317,7 @@ var goMapBuiltins = sync.OnceValue(func() []goMapBuiltin {
 	keys(&out, mapElement[TimeUUID]{TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec"})
 	keys(&out, mapElement[netip.Addr]{InetCodec, "netip.Addr", "InetCodec"})
 	keys(&out, mapElement[Date]{DateCodec, "cql.Date", "DateCodec"})
-	keys(&out, mapElement[TimeOfDay]{TimeCodec, "cql.TimeOfDay", "TimeCodec"})
+	keys(&out, mapElement[TimeOfDay]{TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec"})
 	keys(&out, mapElement[Timestamp]{TimestampCodec, "cql.Timestamp", "TimestampCodec"})
 	return out
 })
@@ -336,7 +336,7 @@ func keys[K comparable](out *[]goMapBuiltin, key mapElement[K]) {
 	pair(out, key, mapElement[TimeUUID]{TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec"})
 	pair(out, key, mapElement[netip.Addr]{InetCodec, "netip.Addr", "InetCodec"})
 	pair(out, key, mapElement[Date]{DateCodec, "cql.Date", "DateCodec"})
-	pair(out, key, mapElement[TimeOfDay]{TimeCodec, "cql.TimeOfDay", "TimeCodec"})
+	pair(out, key, mapElement[TimeOfDay]{TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec"})
 	pair(out, key, mapElement[Timestamp]{TimestampCodec, "cql.Timestamp", "TimestampCodec"})
 	pair(out, key, mapElement[Duration]{DurationCodec, "cql.Duration", "DurationCodec"})
 	pair(out, key, mapElement[time.Time]{TimestampTimeCodec, "time.Time", "TimestampTimeCodec"})

@@ -18,7 +18,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	cols, input := columns(t), value()
 	input.MaybeText = cql.Nullable[string]{Value: "nullable", Valid: true}
 	codecFor := func(prefix string) cql.Codec[string] {
-		return cql.NamedScalar(cql.StringCodec, func(v string) string { return prefix + v }, func(v string) string { return strings.TrimPrefix(v, prefix) })
+		return cql.ConvertCodec(cql.StringCodec, func(v string) string { return prefix + v }, func(v string) string { return strings.TrimPrefix(v, prefix) })
 	}
 	first := cql.WithCodec(codecFor("first/"))
 	second := cql.WithCodec(codecFor("second/"))
@@ -62,7 +62,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	// Optional fields and embedded offsets use column names, independently of
 	// both declaration order and the physical order selected by the server.
 	subset := cql.NewColumns(cql.ColumnSpec{Name: "created_at", Type: cql.TimestampType}, cql.ColumnSpec{Name: "text", Type: cql.TextType})
-	shift := cql.WithCodec(cql.NamedScalar(cql.TimestampCodec,
+	shift := cql.WithCodec(cql.ConvertCodec(cql.TimestampCodec,
 		func(v cql.Timestamp) cql.Timestamp { return v + 100 }, func(v cql.Timestamp) cql.Timestamp { return v - 100 }))
 	partial, _ := encode(t, subset, cql.MustParamsOf[Fixture](first, shift), input)
 	raw := decode(t, subset, cql.MustRowOf[Fixture](), partial)
@@ -136,8 +136,8 @@ func TestGeneratedStreamMappingOptions(t *testing.T) {
 	}
 	for _, amount := range []int32{10, 20, 0} {
 		rows := cql.MustStreamRowOf[StreamFixture](
-			cql.WithStreamCodec(offsetStreamInt[int32]{base: cql.StreamInt32, amount: amount}),
-			cql.WithStreamCodec(offsetStreamInt[int64]{base: cql.StreamInt64, amount: int64(amount)}),
+			cql.WithStreamDecoder(offsetStreamInt[int32]{base: cql.StreamInt32, amount: amount}),
+			cql.WithStreamDecoder(offsetStreamInt[int64]{base: cql.StreamInt64, amount: int64(amount)}),
 		)
 		scope, err := wire.NewStream(context.Background(), bytes.NewReader(data), int64(len(data)), wire.StreamLimits{MaxDepth: 8})
 		if err != nil {

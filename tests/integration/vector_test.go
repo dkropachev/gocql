@@ -66,8 +66,8 @@ func serializationVectorGate(t *testing.T, allTypes bool) {
 	}
 }
 
-var serializationBlob = cql.NamedScalar(cql.BlobCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
-var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
@@ -76,7 +76,7 @@ var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Tim
 }, func(v cql.Timestamp) time.Time {
 	return v.Time()
 })
-var serializationDate = cql.NamedScalar(cql.DateCodec, func(v time.Time) cql.Date {
+var serializationDate = cql.ConvertCodec(cql.DateCodec, func(v time.Time) cql.Date {
 	n, e := cql.DateFromTime(v)
 	if e != nil {
 		panic(e)
@@ -85,7 +85,7 @@ var serializationDate = cql.NamedScalar(cql.DateCodec, func(v time.Time) cql.Dat
 }, func(v cql.Date) time.Time {
 	return v.Time()
 })
-var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
+var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
 	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
 }, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
 
@@ -279,8 +279,8 @@ func TestVector(t *testing.T) {
 			times := []time.Time{parse("15:04:05", "01:00:00"), parse("15:04:05", "15:23:59"), parse("15:04:05.000", "10:31:45.987")}
 			// The historical time subcase stores timestamp values anchored at year zero.
 			// Preserve that wire coverage alongside the scalar time fixtures above.
-			ascii := cql.NamedScalar(cql.TextCodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
-			uintVarint := cql.NamedScalar(cql.VarintCodec, func(n uint64) cql.Varint { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n cql.Varint) uint64 { return n.BigInt().Uint64() })
+			ascii := cql.ConvertCodec(cql.TextCodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
+			uintVarint := cql.ConvertCodec(cql.VarintCodec, func(n uint64) cql.Varint { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n cql.Varint) uint64 { return n.BigInt().Uint64() })
 			type triple struct {
 				Text  string
 				Int   int32

@@ -1108,7 +1108,7 @@ func TestStream(t *testing.T) {
 					bound := func() *Bound[cql.Bytes] {
 						opaqueStorageValuex := new(Bound[cql.Bytes])
 						BoundData(opaqueStorageValuex).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
-						BoundData(opaqueStorageValuex).InternalRows = cql.OneColumn(cql.BlobCodec)
+						BoundData(opaqueStorageValuex).InternalRows = cql.OneColumn(cql.BytesCodec)
 						return opaqueStorageValuex
 					}()
 					decoder := &countStreamDecoder{}
@@ -1163,7 +1163,7 @@ func TestStream(t *testing.T) {
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cql.Bytes])
 			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
-			BoundData(bound).InternalRows = cql.OneColumn(cql.BlobCodec)
+			BoundData(bound).InternalRows = cql.OneColumn(cql.BytesCodec)
 			id := cql.UUID{15: 11}
 			done := make(chan struct{})
 			go func() {
@@ -1215,7 +1215,7 @@ func TestStream(t *testing.T) {
 				PreparedData(opaqueStorageValuexx).InternalState = state
 				PreparedData(opaqueStorageValuexx).kind = cql.OrdinaryStatement
 				PreparedData(opaqueStorageValuexx).params = params
-				PreparedData(opaqueStorageValuexx).rows = cql.OneColumn(cql.BlobCodec)
+				PreparedData(opaqueStorageValuexx).rows = cql.OneColumn(cql.BytesCodec)
 				return opaqueStorageValuexx
 			}()
 			input := []byte("canonical-input")
@@ -1625,7 +1625,7 @@ func TestStream(t *testing.T) {
 			state, _ := preparedState(t, s, columns)
 			bound := new(Bound[cql.Bytes])
 			BoundData(bound).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
-			BoundData(bound).InternalRows = cql.OneColumn(cql.BlobCodec)
+			BoundData(bound).InternalRows = cql.OneColumn(cql.BytesCodec)
 			defer bound.Close()
 			// The first page is empty. The next omits metadata, then an equal full
 			// metadata page is canonicalized, then a renamed column changes the plan.
@@ -1700,7 +1700,7 @@ func TestStream(t *testing.T) {
 		t.Run("IncrementalScalarParity", func(t *testing.T) {
 			scalarParity(t, cql.TypeBoolean, cql.BoolCodec, cql.StreamBool, []byte{0}, []byte{1}, []byte{2})
 			scalarParity(t, cql.TypeDate, cql.DateCodec, cql.StreamDate, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
-			scalarParity(t, cql.TypeTime, cql.TimeCodec, cql.StreamTime, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
+			scalarParity(t, cql.TypeTime, cql.TimeOfDayCodec, cql.StreamTime, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
 			scalarParity(t, cql.TypeTimeUUID, cql.TimeUUIDCodec, cql.StreamTimeUUID, make([]byte, 16), []byte{0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 			scalarParity(t, cql.TypeInet, cql.InetCodec, cql.StreamInet, []byte{127, 0, 0, 1}, make([]byte, 16))
 			scalarParity(t, cql.TypeDuration, cql.DurationCodec, cql.StreamDuration,

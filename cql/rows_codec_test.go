@@ -72,7 +72,7 @@ func (failingRowEncoder) Encode(w *ValueWriter, value int32) error {
 func TestRowsCodec(t *testing.T) {
 	t.Run("Clone", func(t *testing.T) {
 		t.Run("PairRows", func(t *testing.T) {
-			rows := PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))
+			rows := PairRows(OneColumn(TextCodec), OneColumn(BytesCodec))
 			name, payload := []byte("name"), []byte("payload")
 			value := Pair[Text, Bytes]{First: Text{bytes: BorrowBytes(name)}, Second: BorrowBytes(payload)}
 			cloned := rows.Clone(value)
@@ -406,12 +406,12 @@ func TestRowsCodec(t *testing.T) {
 				"unset":     rowScalarFrame(-2, nil),
 				"truncated": rowScalarFrame(5, []byte("byte")),
 			} {
-				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, TypeBlob, BlobCodec, input, false, false) })
+				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, TypeBlob, BytesCodec, input, false, false) })
 			}
-			checkRowScalarEquivalent(t, TypeBlob, BlobCodec, rowScalarFrame(1, []byte{1}), false, true)
-			checkRowScalarEquivalent(t, TypeInt, BlobCodec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
+			checkRowScalarEquivalent(t, TypeBlob, BytesCodec, rowScalarFrame(1, []byte{1}), false, true)
+			checkRowScalarEquivalent(t, TypeInt, BytesCodec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
 			checkRowScalarEquivalent(t, TypeFloat, Float32Codec, rowScalarFrame(4, []byte{0, 0, 0, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeBlob, BlobCodec, nil, true, false)
+			checkRowScalarEquivalent(t, TypeBlob, BytesCodec, nil, true, false)
 
 			columns := NewColumns(ColumnSpec{Name: "value", Type: rowTestType(t, TypeBlob)})
 			chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte("abc"))))
@@ -421,7 +421,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 			reader := newRowReader(columns, chain, lease)
 			var value Bytes
-			if err := readColumnInto(reader, BlobCodec, &value); err != nil {
+			if err := readColumnInto(reader, BytesCodec, &value); err != nil {
 				t.Fatal(err)
 			}
 			lease.Release()
@@ -541,7 +541,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			value, err := newRowReader(columns, chain, nil).ReadColumn(BlobCodec)
+			value, err := newRowReader(columns, chain, nil).ReadColumn(BytesCodec)
 			if err != nil || string(value.OwnedBytes()) != "original" {
 				t.Fatalf("value=%q err=%v", value.OwnedBytes(), err)
 			}
@@ -583,7 +583,7 @@ func TestRowsCodec(t *testing.T) {
 			lease := wire.NewLease(chain, nil)
 			rows := Row(
 				Column("key", Int32Codec, func(v *output) *int32 { return &v.Key }),
-				Column("body", BlobCodec, func(v *output) *Bytes { return &v.Body }),
+				Column("body", BytesCodec, func(v *output) *Bytes { return &v.Body }),
 			)
 			plan, err := rows.Compile(columns)
 			if err != nil {

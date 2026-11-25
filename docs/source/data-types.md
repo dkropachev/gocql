@@ -16,7 +16,7 @@ column, so an `int64` field maps one. A non-nullable destination, such as an
 `int64` field, fails on NULL with an error matching `cql.ErrNull`; use
 `Nullable[T]` (or `cql.NonNull(v)` to build a present one) for a column that
 may be NULL. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
-an owned copy; TextCodec and BlobCodec decode a borrowed Text and Bytes
+an owned copy; TextCodec and BytesCodec decode a borrowed Text and Bytes
 without copying. The text codecs, `StreamText` included, map both text and
 ascii, and check a value is valid UTF-8 for text and ASCII for ascii.
 `UUIDCodec` maps uuid and timeuuid; it rejects encoding a UUID that is not
@@ -105,7 +105,7 @@ to `RowOf`, keeping slice field storage between rows (`cql.StreamRowOf`
 always reuses that storage); `IgnoreExtraColumns` to `RowOf`,
 `cql.StreamRowOf` and `UDTCodecOf`, which otherwise require a field for every
 result column or UDT field, so `SELECT *` keeps working after
-`ALTER TABLE ADD`; and `cql.WithStreamCodec` to
+`ALTER TABLE ADD`; and `cql.WithStreamDecoder` to
 `cql.StreamRowOf`.
 
 See [custom codec contracts](custom-codecs.md) for extension interfaces and plan

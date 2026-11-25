@@ -30,7 +30,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	bound := func() *Bound[cql.Bytes] {
 		opaqueStorageValue := new(Bound[cql.Bytes])
 		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
-		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BlobCodec)
+		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BytesCodec)
 		return opaqueStorageValue
 	}()
 	defer bound.Close()

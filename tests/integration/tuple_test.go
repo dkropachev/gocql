@@ -154,14 +154,14 @@ func TestTuple(t *testing.T) {
 			table := tupleTable(t, s, "list<frozen<tuple<int,text>>>")
 			// Each historical representation has an explicit typed adapter. Slice/array
 			// members use Value's discriminant instead of untyped heterogeneous elements.
-			sliceCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v []cql.Value) serializationMixedTuple {
+			sliceCodec := cql.ConvertCodec(serializationMixedTupleCodec, func(v []cql.Value) serializationMixedTuple {
 				n, _ := v[0].Signed()
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
 			}, func(v serializationMixedTuple) []cql.Value {
 				return []cql.Value{cql.IntValue(v.A), cql.TextValue(v.B)}
 			})
-			arrayCodec := cql.NamedScalar(serializationMixedTupleCodec, func(v [2]cql.Value) serializationMixedTuple {
+			arrayCodec := cql.ConvertCodec(serializationMixedTupleCodec, func(v [2]cql.Value) serializationMixedTuple {
 				n, _ := v[0].Signed()
 				x, _ := v[1].Text()
 				return serializationMixedTuple{int32(n), x.String()}
@@ -201,8 +201,8 @@ func TestTuple(t *testing.T) {
 			table := tupleTable(t, s, "list<frozen<tuple<text,text>>>")
 			valid := func(s string) cql.Nullable[string] { return cql.Nullable[string]{Value: s, Valid: true} }
 			input := []serializationTextPair{{valid("1"), cql.Nullable[string]{}}, {cql.Nullable[string]{}, valid("2")}, {valid("3"), valid("")}}
-			sliceCodec := cql.NamedScalar(serializationTextPairCodec, func(v []cql.Nullable[string]) serializationTextPair { return serializationTextPair{v[0], v[1]} }, func(v serializationTextPair) []cql.Nullable[string] { return []cql.Nullable[string]{v.A, v.B} })
-			arrayCodec := cql.NamedScalar(serializationTextPairCodec, func(v [2]cql.Nullable[string]) serializationTextPair { return serializationTextPair{v[0], v[1]} }, func(v serializationTextPair) [2]cql.Nullable[string] { return [2]cql.Nullable[string]{v.A, v.B} })
+			sliceCodec := cql.ConvertCodec(serializationTextPairCodec, func(v []cql.Nullable[string]) serializationTextPair { return serializationTextPair{v[0], v[1]} }, func(v serializationTextPair) []cql.Nullable[string] { return []cql.Nullable[string]{v.A, v.B} })
+			arrayCodec := cql.ConvertCodec(serializationTextPairCodec, func(v [2]cql.Nullable[string]) serializationTextPair { return serializationTextPair{v[0], v[1]} }, func(v serializationTextPair) [2]cql.Nullable[string] { return [2]cql.Nullable[string]{v.A, v.B} })
 			t.Run("slice", func(t *testing.T) {
 				v := [][]cql.Nullable[string]{{input[0].A, input[0].B}, {input[1].A, input[1].B}, {input[2].A, input[2].B}}
 				got := serializationRoundTrip(t, s, table, "val", 0, serializationList(sliceCodec), v)

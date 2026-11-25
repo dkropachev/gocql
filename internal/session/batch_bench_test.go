@@ -76,7 +76,7 @@ func BenchmarkBatch(b *testing.B) {
 		session := InternalWrapSession(s)
 		ctx := context.Background()
 		type row struct{ V cql.Bytes }
-		decoder := cql.Row(cql.Column("value", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.V }))
+		decoder := cql.Row(cql.Column("value", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.V }))
 		var batch Batch
 		if err := q.AddToBatch(&batch, []byte("0123456789abcdef")); err != nil {
 			b.Fatal(err)

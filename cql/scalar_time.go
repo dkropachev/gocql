@@ -28,8 +28,8 @@ var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
 	},
 }
 
-// TimeCodec maps time to TimeOfDay, rejecting a value outside one day.
-var TimeCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
+// TimeOfDayCodec maps time to TimeOfDay, rejecting a value outside one day.
+var TimeOfDayCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 	encode: func(w *ValueWriter, v TimeOfDay) error {
 		if int64(v) < 0 || int64(v) >= nanosecondsPerDay {
 			return errors.New("gocql: time outside one day")

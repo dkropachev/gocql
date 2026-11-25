@@ -669,7 +669,7 @@ func TestStream(t *testing.T) {
 			streamScalarCase(t, TypeDouble, Float64Codec, StreamFloat64, math.Inf(-1))
 			streamScalarCase(t, TypeCounter, Int64Codec, StreamInt64, int64(-1))
 			streamScalarCase(t, TypeDate, DateCodec, StreamDate, Date(math.MinInt32))
-			streamScalarCase(t, TypeTime, TimeCodec, StreamTime, TimeOfDay(nanosecondsPerDay-1))
+			streamScalarCase(t, TypeTime, TimeOfDayCodec, StreamTime, TimeOfDay(nanosecondsPerDay-1))
 			streamScalarCase(t, TypeTimestamp, TimestampCodec, StreamTimestamp, Timestamp(math.MinInt64))
 			streamScalarCase(t, TypeDuration, DurationCodec, StreamDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64})
 			streamScalarCase(t, TypeUUID, UUIDCodec, StreamUUID, UUID{1, 2, 3, 4, 5})

@@ -557,7 +557,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatal("unmapped streaming column accepted")
 			}
 			type text struct{ Name string }
-			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamCodec") {
+			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamDecoder") {
 				t.Fatalf("string field: %v", err)
 			}
 			type badTag struct {
@@ -567,7 +567,7 @@ func TestStructMapping(t *testing.T) {
 				t.Fatalf("wrong stream tag: %v", err)
 			}
 		})
-		t.Run("WithStreamCodec", func(t *testing.T) {
+		t.Run("WithStreamDecoder", func(t *testing.T) {
 			type hitCount int64 // a type with no built-in streaming decoder
 			type counted struct {
 				ID   int32
@@ -584,7 +584,7 @@ func TestStructMapping(t *testing.T) {
 			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42}))
 			hits := streamInteger[hitCount](TypeBigInt, 8)
 			var dst counted
-			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamCodec(hits)), data, &dst)
+			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamDecoder(hits)), data, &dst)
 			if dst != (counted{ID: 1, Hits: 42}) {
 				t.Fatalf("custom stream codec: %+v", dst)
 			}

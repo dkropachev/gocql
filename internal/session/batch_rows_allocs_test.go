@@ -20,7 +20,7 @@ import (
 func TestRunBatchAllocs(t *testing.T) {
 	session, batch := newRunBatch(t)
 	type borrowed struct{ V cql.Bytes }
-	decoder := cql.Row(cql.Column("value", cql.BlobCodec, func(r *borrowed) *cql.Bytes { return &r.V }))
+	decoder := cql.Row(cql.Column("value", cql.BytesCodec, func(r *borrowed) *cql.Bytes { return &r.V }))
 	var row borrowed
 	send := func() {
 		rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})
@@ -42,7 +42,7 @@ func TestRunBatchAllocs(t *testing.T) {
 func TestRunConditionalBatchAllocs(t *testing.T) {
 	session, batch := newCASBatch(t, casRowsBody(casBatchRow{true, "a"}, casBatchRow{true, "b"}))
 	type borrowed struct{ V cql.Bytes }
-	decoder := cql.CASRows(cql.Row(cql.Column("value", cql.BlobCodec, func(r *borrowed) *cql.Bytes { return &r.V })))
+	decoder := cql.CASRows(cql.Row(cql.Column("value", cql.BytesCodec, func(r *borrowed) *cql.Bytes { return &r.V })))
 	var row cql.CASResult[borrowed]
 	plain := func() {
 		rows, err := session.RunBatch(context.Background(), batch, decoder, CompiledOptions{})

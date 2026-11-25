@@ -287,7 +287,7 @@ func TestCodecMatrix(t *testing.T) {
 	asciiStr.emptyDecodes, asciiStr.noEmptyCodec, asciiStr.badValues = true, true, []string{"é"}
 	varcharStr := matrixOf("legacy-text/string", cql.Type(0x000A), cql.StringCodec, cql.TypeBlob, "v")
 	varcharStr.emptyDecodes, varcharStr.noEmptyCodec = true, true
-	blob := matrixOf("blob/Bytes", cql.TypeBlob, cql.BlobCodec, cql.TypeText, cql.BorrowBytes([]byte{1, 2, 3}))
+	blob := matrixOf("blob/Bytes", cql.TypeBlob, cql.BytesCodec, cql.TypeText, cql.BorrowBytes([]byte{1, 2, 3}))
 	blob.emptyDecodes, blob.noEmptyCodec, blob.equal = true, true, bytesEq
 	byteSlice := matrixOf("blob/[]byte", cql.TypeBlob, cql.ByteSliceCodec, cql.TypeText, []byte{1, 2, 3})
 	byteSlice.emptyDecodes, byteSlice.noEmptyCodec = true, true
@@ -300,7 +300,7 @@ func TestCodecMatrix(t *testing.T) {
 	f32.equal = floatEq32
 	f64 := matrixOf("double/float64", cql.TypeDouble, cql.Float64Codec, cql.TypeFloat, 0, math.Inf(1), math.NaN(), math.MaxFloat64, -math.SmallestNonzeroFloat64)
 	f64.equal = floatEq64
-	timeOfDay := matrixOf("time/TimeOfDay", cql.TypeTime, cql.TimeCodec, cql.TypeBigInt, 0, cql.TimeOfDay(24*3600*1e9-1))
+	timeOfDay := matrixOf("time/TimeOfDay", cql.TypeTime, cql.TimeOfDayCodec, cql.TypeBigInt, 0, cql.TimeOfDay(24*3600*1e9-1))
 	timeOfDay.badValues = []cql.TimeOfDay{-1, cql.TimeOfDay(24 * 3600 * 1e9)}
 	inet := matrixOf("inet/netip.Addr", cql.TypeInet, cql.InetCodec, cql.TypeBlob, netip.MustParseAddr("10.0.0.1"), netip.MustParseAddr("::1"))
 	inet.badValues = []netip.Addr{{}}

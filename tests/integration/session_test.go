@@ -273,7 +273,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, exec.PrepareOptions{}))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, exec.PrepareOptions{}))
 			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
@@ -1039,7 +1039,7 @@ func TestSession(t *testing.T) {
 			Value cql.Bytes
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
-		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BlobCodec, func(v *output) *cql.Bytes { return &v.Value }))
+		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BytesCodec, func(v *output) *cql.Bytes { return &v.Value }))
 		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)

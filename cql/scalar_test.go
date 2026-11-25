@@ -130,7 +130,7 @@ func TestScalar(t *testing.T) {
 		if err != nil || !bytes.Equal(frame, []byte{0, 0, 0, 0}) {
 			t.Fatalf("nil blob should be present empty: %x %v", frame, err)
 		}
-		empty, err := BlobCodec.Decode(ScalarReader(t, TypeBlob, Present))
+		empty, err := BytesCodec.Decode(ScalarReader(t, TypeBlob, Present))
 		if err != nil || empty.Len() != 0 {
 			t.Fatal("empty blob rejected")
 		}
@@ -184,7 +184,7 @@ func TestScalar(t *testing.T) {
 			t.Fatal("EmptyCodec accepted text")
 		}
 		type customID int32
-		named := NamedScalar(Int32Codec, func(v customID) int32 { return int32(v) }, func(v int32) customID { return customID(v) })
+		named := ConvertCodec(Int32Codec, func(v customID) int32 { return int32(v) }, func(v int32) customID { return customID(v) })
 		scalarGolden(t, named, TypeInt, customID(-7), "fffffff9")
 	})
 	t.Run("CalendarBoundaries", func(t *testing.T) {
@@ -356,7 +356,7 @@ func TestScalar(t *testing.T) {
 		t.Run("date_epoch", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(0), "80000000") })
 		t.Run("date_min", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(math.MinInt32), "00000000") })
 		t.Run("date_max", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(math.MaxInt32), "ffffffff") })
-		t.Run("time", func(t *testing.T) { scalarGolden(t, TimeCodec, TypeTime, TimeOfDay(1), "0000000000000001") })
+		t.Run("time", func(t *testing.T) { scalarGolden(t, TimeOfDayCodec, TypeTime, TimeOfDay(1), "0000000000000001") })
 		t.Run("timestamp", func(t *testing.T) {
 			scalarGolden(t, TimestampCodec, TypeTimestamp, Timestamp(-1), "ffffffffffffffff")
 		})
@@ -395,7 +395,7 @@ func TestScalar(t *testing.T) {
 		scalarRejectLengths(t, Float64Codec, TypeDouble, 8)
 		scalarRejectLengths(t, Int64Codec, TypeCounter, 8)
 		scalarRejectLengths(t, DateCodec, TypeDate, 4)
-		scalarRejectLengths(t, TimeCodec, TypeTime, 8)
+		scalarRejectLengths(t, TimeOfDayCodec, TypeTime, 8)
 		scalarRejectLengths(t, TimestampCodec, TypeTimestamp, 8)
 		scalarRejectLengths(t, UUIDCodec, TypeUUID, 16)
 		scalarRejectLengths(t, TimeUUIDCodec, TypeTimeUUID, 16)
@@ -403,12 +403,12 @@ func TestScalar(t *testing.T) {
 			t.Fatal("accepted boolean 2")
 		}
 		for _, v := range []TimeOfDay{-1, TimeOfDay(nanosecondsPerDay)} {
-			if _, err := scalarEncode(t, TimeCodec, TypeTime, v); err == nil {
+			if _, err := scalarEncode(t, TimeOfDayCodec, TypeTime, v); err == nil {
 				t.Fatal("accepted invalid time")
 			}
 			var data [8]byte
 			binary.BigEndian.PutUint64(data[:], uint64(v))
-			if _, err := TimeCodec.Decode(ScalarReader(t, TypeTime, Present, data[:])); err == nil {
+			if _, err := TimeOfDayCodec.Decode(ScalarReader(t, TypeTime, Present, data[:])); err == nil {
 				t.Fatal("decoded invalid time")
 			}
 		}
@@ -523,11 +523,11 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			source[0] = 4
-			borrowedBytes, err := DecodeValue(BlobCodec, borrowed)
+			borrowedBytes, err := DecodeValue(BytesCodec, borrowed)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ownedBytes, err := DecodeValue(BlobCodec, owned)
+			ownedBytes, err := DecodeValue(BytesCodec, owned)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -50,7 +50,7 @@ type Fixture struct { //nolint:govet // field order mirrors the column list, not
 // Point packs into a bigint, standing in for a type with no built-in codec.
 type Point struct{ X, Y int32 }
 
-var PointCodec cql.Codec[Point] = cql.NamedScalar(cql.Int64Codec,
+var PointCodec cql.Codec[Point] = cql.ConvertCodec(cql.Int64Codec,
 	func(p Point) int64 { return int64(p.X)<<32 | int64(uint32(p.Y)) },
 	func(v int64) Point { return Point{X: int32(v >> 32), Y: int32(v)} })
 

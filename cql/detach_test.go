@@ -26,7 +26,7 @@ func TestDetachRow(t *testing.T) {
 		text := CodecTestMust(BorrowText("nested"))
 		input := row{View: BorrowBytes([]byte("view")), Owned: []byte("owned"), Nested: []Text{text}}
 		encoder := Params(
-			Param("view", BlobCodec, func(r row) Bytes { return r.View }),
+			Param("view", BytesCodec, func(r row) Bytes { return r.View }),
 			Param("owned", ByteSliceCodec, func(r row) []byte { return r.Owned }),
 			Param("nested", ListEncoder(TextCodec), func(r row) []Text { return r.Nested }),
 		)
@@ -34,7 +34,7 @@ func TestDetachRow(t *testing.T) {
 		lease := wire.NewLease(body, nil)
 		defer lease.Release()
 		plan := CodecTestMust(RowInto(func(*row) {},
-			Column("view", BlobCodec, func(r *row) *Bytes { return &r.View }),
+			Column("view", BytesCodec, func(r *row) *Bytes { return &r.View }),
 			Column("owned", ByteSliceCodec, func(r *row) *[]byte { return &r.Owned }),
 			Column("nested", ListCodec(TextCodec), func(r *row) *[]Text { return &r.Nested }),
 		).Compile(columns))
@@ -62,9 +62,9 @@ func TestDetachRow(t *testing.T) {
 		lease := wire.NewLease(body, nil)
 		defer lease.Release()
 		// The wrapper hides the built-in plan's own detach.
-		plan := struct{ CompiledRow[Bytes] }{CodecTestMust(OneColumn(BlobCodec).Compile(columns))}
+		plan := struct{ CompiledRow[Bytes] }{CodecTestMust(OneColumn(BytesCodec).Compile(columns))}
 		calls := 0
-		decoder := cloneCountingDecoder{RowDecoder: OneColumn(BlobCodec), calls: &calls}
+		decoder := cloneCountingDecoder{RowDecoder: OneColumn(BytesCodec), calls: &calls}
 		var dst Bytes
 		if err := plan.DecodeInto(newRowReader(columns, body, lease), &dst); err != nil {
 			t.Fatal(err)
@@ -133,19 +133,19 @@ func TestDetachNestedValues(t *testing.T) {
 	)
 	text := CodecTestMust(BorrowText("name"))
 	blob := BorrowBytes([]byte("payload"))
-	pairParams := PairParams(OneParam(TextCodec), OneParam(BlobCodec))
-	pairRows := PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))
+	pairParams := PairParams(OneParam(TextCodec), OneParam(BytesCodec))
+	pairRows := PairRows(OneColumn(TextCodec), OneColumn(BytesCodec))
 	input := row{Name: Nullable[Text]{Valid: true, Value: text}, Amount: Decimal{Scale: 2, Unscaled: CodecTestMust(VarintFromBytes([]byte{42}))}, Mapping: []Entry[Text, Bytes]{{Key: text, Value: blob}}, Record: Pair[Text, Bytes]{First: text, Second: blob}}
 	params := Params(
 		Param("name", NullableEncoder(TextCodec), func(r row) Nullable[Text] { return r.Name }),
 		Param("amount", DecimalCodec, func(r row) Decimal { return r.Amount }),
-		Param("mapping", MapEncoder(TextCodec, BlobCodec), func(r row) []Entry[Text, Bytes] { return r.Mapping }),
+		Param("mapping", MapEncoder(TextCodec, BytesCodec), func(r row) []Entry[Text, Bytes] { return r.Mapping }),
 		Param("record", TupleEncoder(pairParams), func(r row) Pair[Text, Bytes] { return r.Record }),
 	)
 	decoder := Row(
 		Column("name", NullableCodec(TextCodec), func(r *row) *Nullable[Text] { return &r.Name }),
 		Column("amount", DecimalCodec, func(r *row) *Decimal { return &r.Amount }),
-		Column("mapping", MapCodec(TextCodec, BlobCodec), func(r *row) *[]Entry[Text, Bytes] { return &r.Mapping }),
+		Column("mapping", MapCodec(TextCodec, BytesCodec), func(r *row) *[]Entry[Text, Bytes] { return &r.Mapping }),
 		Column("record", TupleDecoder(pairRows), func(r *row) *Pair[Text, Bytes] { return &r.Record }),
 	)
 	body := encodeTestParams(t, columns, params, input)

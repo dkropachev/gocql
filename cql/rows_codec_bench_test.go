@@ -32,7 +32,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		}
 		integer, blob := IntType, BlobType
 		cols := NewColumns(ColumnSpec{Name: "number", Type: integer}, ColumnSpec{Name: "payload", Type: blob})
-		decoder := Row(Column("number", Int32Codec, func(r *row) *int32 { return &r.Number }), Column("payload", BlobCodec, func(r *row) *Bytes { return &r.Payload }))
+		decoder := Row(Column("number", Int32Codec, func(r *row) *int32 { return &r.Number }), Column("payload", BytesCodec, func(r *row) *Bytes { return &r.Payload }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		payload := bytes.Repeat([]byte{0x31}, 512000)
 		framed := append(streamEncodedFixture(b, integer, Int32Codec, int32(1)), streamEncodedFixture(b, blob, ByteSliceCodec, payload)...)
@@ -164,7 +164,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				var integer Decoder[int32] = Int32Codec
-				var blob Decoder[Bytes] = BlobCodec
+				var blob Decoder[Bytes] = BytesCodec
 				if !direct {
 					integer = genericRowScalar[int32]{integer}
 					blob = genericRowScalar[Bytes]{blob}
@@ -210,7 +210,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 					index := i
 					names := [4]string{fmt.Sprint("n", i), fmt.Sprint("t", i), fmt.Sprint("b", i), fmt.Sprint("l", i)}
 					specs = append(specs, ColumnSpec{Name: names[0], Type: integer}, ColumnSpec{Name: names[1], Type: text}, ColumnSpec{Name: names[2], Type: blob}, ColumnSpec{Name: names[3], Type: list})
-					fields = append(fields, Column(names[0], Int32Codec, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *Text { return &r.Texts[index] }), Column(names[2], BlobCodec, func(r *wideRow) *Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32Codec), func(r *wideRow) *[]int32 { return &r.Lists[index] }))
+					fields = append(fields, Column(names[0], Int32Codec, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *Text { return &r.Texts[index] }), Column(names[2], BytesCodec, func(r *wideRow) *Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32Codec), func(r *wideRow) *[]int32 { return &r.Lists[index] }))
 					values = append(values, IntValue(int32(i)), TextValue("safe-🙂"), BlobValue(make([]byte, 4096)), CodecTestMust(ListValue(list, []Value{IntValue(1), IntValue(2)})))
 				}
 				columns := NewColumns(specs...)

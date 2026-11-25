@@ -39,7 +39,7 @@ func TestRoutingPolicy(t *testing.T) {
 			s.ConfigureV2Peripheral(config)
 			typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
-			encoder := cql.OneParam(cql.BlobCodec)
+			encoder := cql.OneParam(cql.BytesCodec)
 			params := codecTestMust(encoder.Compile(columns))
 			state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalParameters: columns, partitioner: "old", InternalInfo: PreparedInfo{Keyspace: "ks", Table: "table", PartitionKeyIndexes: []int{0}}}
 			prepared := func() *Prepared[cql.Bytes,

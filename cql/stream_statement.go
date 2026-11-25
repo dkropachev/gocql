@@ -39,7 +39,7 @@ type StreamStatement[P, R any] struct {
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
 // mapping is used; otherwise R is reflected once, here. StreamRowOf applies
-// WithStreamCodec and IgnoreExtraColumns, and rejects other options.
+// WithStreamDecoder and IgnoreExtraColumns, and rejects other options.
 func StreamRowOf[R any](opts ...StructOption) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]
 	if g, ok := any(new(R)).(interface{ CQLStreamColumns() []StreamOutputField[R] }); ok {

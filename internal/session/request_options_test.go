@@ -144,7 +144,7 @@ func TestStreamOptionsOverrideIsolated(t *testing.T) {
 		isolated(t, "compiled", &options.p.resolved)
 	})
 	t.Run("Query", func(t *testing.T) {
-		q, err := unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, Options{CQLTrace: true})
+		q, err := unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, Options{CQLTrace: true})
 		if err != nil {
 			t.Fatal(err)
 		}

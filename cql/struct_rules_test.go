@@ -100,7 +100,7 @@ func TestStructMappingRules(t *testing.T) {
 		if row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](), value)); row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
 			t.Fatalf("named type: %+v", row)
 		}
-		opt := cql.WithCodec(cql.NamedScalar(cql.StringCodec,
+		opt := cql.WithCodec(cql.ConvertCodec(cql.StringCodec,
 			func(v RuleText) string { return string(v) }, func(v string) RuleText { return RuleText(v) }))
 		row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](opt), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](opt), value))
 		if row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {

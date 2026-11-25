@@ -239,7 +239,6 @@ package cql
 	type cql.BindValue[T any] struct
 		cql.BindValue field Value T
 		cql.BindValue field State cql.CellState
-	var cql.BlobCodec cql.Codec[cql.Bytes]
 	var cql.BlobType cql.DataType
 	func cql.BlobValue(b []byte) cql.Value
 	var cql.BoolCodec cql.Codec[bool]
@@ -257,6 +256,7 @@ package cql
 		cql.Bytes method (T) OwnedBytes() []byte
 		cql.Bytes method (T) Slice(offset int64, length int64) (cql.Bytes, error)
 		cql.Bytes method (T) WriteTo(w io.Writer) (int64, error)
+	var cql.BytesCodec cql.Codec[cql.Bytes]
 	type cql.CASResult[R any] struct
 		cql.CASResult field Previous cql.Option[R]
 		cql.CASResult field Applied bool
@@ -318,6 +318,7 @@ package cql
 		cql.Consistency method (T) MarshalText() (text []byte, err error)
 		cql.Consistency method (T) String() string
 		cql.Consistency method (*T) UnmarshalText(text []byte) error
+	func cql.ConvertCodec[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
 	func cql.ConvertParams[A, B any](codec cql.ParamEncoder[B], mapValue func(A) B) cql.ParamEncoder[A]
 	func cql.ConvertRows[A, B any](codec cql.RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) cql.RowDecoder[B]
 	const cql.CounterBatch cql.BatchKind = 2
@@ -444,7 +445,6 @@ package cql
 	func cql.MustTupleCodecOf[T any](opts ...cql.StructOption) cql.Codec[T]
 	func cql.MustUDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) cql.Codec[T]
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
-	func cql.NamedScalar[A, B any](base cql.Codec[B], to func(A) B, from func(B) A) cql.Codec[A]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body cql.Bytes) (cql.EncodedValue, error)
 	func cql.NewTimeUUID() cql.TimeUUID
@@ -638,9 +638,9 @@ package cql
 	var cql.TextType cql.DataType
 	func cql.TextValue(s string) cql.Value
 	const cql.Three cql.Consistency = 3
-	var cql.TimeCodec cql.Codec[cql.TimeOfDay]
 	type cql.TimeOfDay int64
 		cql.TimeOfDay method (T) String() string
+	var cql.TimeOfDayCodec cql.Codec[cql.TimeOfDay]
 	var cql.TimeType cql.DataType
 	type cql.TimeUUID [16]byte
 		cql.TimeUUID method (T) Bytes() []byte
@@ -826,7 +826,7 @@ package cql
 	func cql.VectorValue(t cql.DataType, v []cql.Value) (cql.Value, error)
 	func cql.WithCodec[V any](codec cql.Codec[V]) cql.StructOption
 	func cql.WithEncoder[V any](encoder cql.Encoder[V]) cql.StructOption
-	func cql.WithStreamCodec[V any](decoder cql.StreamDecoder[V]) cql.StructOption
+	func cql.WithStreamDecoder[V any](decoder cql.StreamDecoder[V]) cql.StructOption
 
 package cqlerr
 	type cqlerr.AlreadyExistsError struct

@@ -379,7 +379,7 @@ var IntCodec Codec[int]                  // bigint and counter; decode checks th
 var Float32Codec Codec[float32]
 var Float64Codec Codec[float64]
 var DateCodec Codec[Date]
-var TimeCodec Codec[TimeOfDay]
+var TimeOfDayCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
 var TimestampTimeCodec Codec[time.Time] // UTC on decode; millisecond instant on encode
 var DurationCodec Codec[Duration]
@@ -392,8 +392,8 @@ var DecimalCodec Codec[Decimal]
 var StringCodec Codec[string]                 // text and ascii; decodes an owned copy
 var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
 var TextCodec Codec[Text]                     // text and ascii; borrowed view
-var BlobCodec Codec[Bytes]
-func NamedScalar[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
+var BytesCodec Codec[Bytes]
+func ConvertCodec[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
 func VarintFromBigInt(*big.Int) Varint
 func (v Varint) BigInt() *big.Int
 func VarintFromBytes([]byte) (Varint, error)

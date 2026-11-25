@@ -45,7 +45,7 @@ func builtinFields[P any]() []builtinField[P] {
 	add(builtin[P](StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
 	add(builtin[P](TextCodec, "cql.Text", "TextCodec", true)...)
 	add(builtin[P](ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
-	add(builtin[P](BlobCodec, "cql.Bytes", "BlobCodec", true)...)
+	add(builtin[P](BytesCodec, "cql.Bytes", "BytesCodec", true)...)
 	add(builtin[P](UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
 	add(builtin[P](TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
 	add(builtin[P](InetCodec, "netip.Addr", "InetCodec", true)...)
@@ -53,7 +53,7 @@ func builtinFields[P any]() []builtinField[P] {
 	add(builtin[P](VarintBigIntCodec, "*big.Int", "VarintBigIntCodec", true)...)
 	add(builtin[P](DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
 	add(builtin[P](DateCodec, "cql.Date", "DateCodec", true)...)
-	add(builtin[P](TimeCodec, "cql.TimeOfDay", "TimeCodec", true)...)
+	add(builtin[P](TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec", true)...)
 	add(builtin[P](TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
 	add(builtin[P](DurationCodec, "cql.Duration", "DurationCodec", true)...)
 	add(builtin[P](TimestampTimeCodec, "time.Time", "TimestampTimeCodec", true)...)
@@ -164,7 +164,7 @@ func fieldColumn[R, V any](dec Decoder[V]) func(string, uintptr) OutputField[R] 
 //   - WithEncoder: ParamsOf.
 //   - ReuseBuffers: RowOf.
 //   - IgnoreExtraColumns: RowOf, StreamRowOf and UDTCodecOf.
-//   - WithStreamCodec: StreamRowOf.
+//   - WithStreamDecoder: StreamRowOf.
 //
 // Each call builds an independent mapping; options never change a generated
 // mapping in place.
@@ -380,7 +380,7 @@ func mapValues[V any](c *structOptionSet, value Codec[V]) {
 	mapValue(c, TimeUUIDCodec, value)
 	mapValue(c, InetCodec, value)
 	mapValue(c, DateCodec, value)
-	mapValue(c, TimeCodec, value)
+	mapValue(c, TimeOfDayCodec, value)
 	mapValue(c, TimestampCodec, value)
 }
 
@@ -397,7 +397,7 @@ func mapValue[K comparable, V any](c *structOptionSet, key Codec[K], value Codec
 // precedence. The option also applies to generated mappings; other
 // generated custom-expression codecs remain defaults. ParamsOf, RowOf,
 // UDTCodecOf and TupleCodecOf apply it; StreamRowOf decodes with stream
-// decoders, so it rejects it: use WithStreamCodec.
+// decoders, so it rejects it: use WithStreamDecoder.
 func WithCodec[V any](codec Codec[V]) StructOption {
 	return codecOption[V]{enc: codec, codec: codec, name: "WithCodec"}
 }
@@ -882,18 +882,18 @@ func fieldStreamColumn[R, V any](dec StreamDecoder[V]) func(string, uintptr) Str
 
 type streamCodecOption[V any] struct{ decoder StreamDecoder[V] }
 
-func (streamCodecOption[V]) option() (string, structTarget) { return "WithStreamCodec", targetStream }
+func (streamCodecOption[V]) option() (string, structTarget) { return "WithStreamDecoder", targetStream }
 func (o streamCodecOption[V]) apply(c *structOptionSet) {
 	c.streams[reflect.TypeFor[V]()] = erasedStreamEntry{column: erasedStreamColumnOf(o.decoder)}
 	c.streams[reflect.TypeFor[Nullable[V]]()] = erasedStreamEntry{column: erasedStreamColumnOf(StreamNullable(o.decoder))}
 	c.streams[reflect.TypeFor[[]V]()] = erasedStreamEntry{column: erasedStreamColumnOf(StreamList(o.decoder))}
 }
 
-// WithStreamCodec maps the struct's fields of type V, Nullable[V] and []V
+// WithStreamDecoder maps the struct's fields of type V, Nullable[V] and []V
 // (as a list) with decoder in StreamRowOf. V is inferred from decoder.
 // Recognized built-in stream tags take precedence, including in generated
 // mappings. Only StreamRowOf applies it.
-func WithStreamCodec[V any](decoder StreamDecoder[V]) StructOption {
+func WithStreamDecoder[V any](decoder StreamDecoder[V]) StructOption {
 	return streamCodecOption[V]{decoder: decoder}
 }
 
@@ -923,7 +923,7 @@ func reflectStreamRow[R any](config structConfig[R]) (StreamRowDecoder[R], error
 	builtins := streamBuiltinFields[R]()
 	var columns []StreamOutputField[R]
 	err := eachStructField(reflect.TypeFor[R](), func(sf reflect.StructField, tag structmap.FieldTag) error {
-		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "cql.WithStreamCodec")
+		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "cql.WithStreamDecoder")
 		if err == nil {
 			columns = append(columns, entry.column(tag.Column, sf.Offset))
 		}

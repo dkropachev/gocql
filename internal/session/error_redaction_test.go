@@ -125,7 +125,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 						Kind:   cql.OrdinaryStatement,
 						CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
 						Params: cql.OneParam(cql.StringCodec),
-						Rows:   cql.OneColumn(cql.BlobCodec),
+						Rows:   cql.OneColumn(cql.BytesCodec),
 					}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
 					if err != nil {
 						t.Fatal(err)
@@ -193,7 +193,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 			Kind:   cql.OrdinaryStatement,
 			CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
 			Params: cql.OneParam(cql.StringCodec),
-			Rows:   cql.OneColumn(cql.BlobCodec),
+			Rows:   cql.OneColumn(cql.BytesCodec),
 		}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.ASCIIType}), redactionSecret+"\xff")
 		if err == nil {
 			t.Fatal("invalid ASCII bound")

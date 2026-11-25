@@ -30,7 +30,7 @@ func BenchmarkSerialization(b *testing.B) {
 		for _, size := range []int{100, 1024, 1024 * 1024} {
 			body := bytes.Repeat([]byte("x"), size)
 			b.Run(fmt.Sprintf("Blob/%d", size), func(b *testing.B) {
-				benchmarkValue(b, scalar(cql.TypeBlob), cql.BlobCodec, cql.BlobCodec, cql.BorrowBytes(body))
+				benchmarkValue(b, scalar(cql.TypeBlob), cql.BytesCodec, cql.BytesCodec, cql.BorrowBytes(body))
 			})
 			b.Run(fmt.Sprintf("Text/%d", size), func(b *testing.B) {
 				benchmarkValue(b, scalar(cql.TypeText), cql.StringCodec, cql.TextCodec, string(body))

@@ -676,7 +676,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		}
 		return w.borrowView(v.bytes)
 	case TypeBlob:
-		return encodeDynamicScalar(w, BlobCodec, v.bytes)
+		return encodeDynamicScalar(w, BytesCodec, v.bytes)
 	case TypeUUID:
 		return encodeDynamicScalar(w, UUIDCodec, v.uuid)
 	case TypeTimeUUID:
@@ -686,7 +686,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 	case TypeDate:
 		return encodeDynamicScalar(w, DateCodec, Date(v.bits))
 	case TypeTime:
-		return encodeDynamicScalar(w, TimeCodec, TimeOfDay(v.bits))
+		return encodeDynamicScalar(w, TimeOfDayCodec, TimeOfDay(v.bits))
 	case TypeTimestamp:
 		return encodeDynamicScalar(w, TimestampCodec, Timestamp(v.bits))
 	case TypeDuration:
@@ -758,7 +758,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	case TypeText, TypeASCII:
 		return decodeDynamicScalar(r, TextCodec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
 	case TypeBlob:
-		return decodeDynamicScalar(r, BlobCodec, func(b Bytes) Value { return Value{bytes: b} })
+		return decodeDynamicScalar(r, BytesCodec, func(b Bytes) Value { return Value{bytes: b} })
 	case TypeUUID:
 		return decodeDynamicScalar(r, UUIDCodec, UUIDValue)
 	case TypeTimeUUID:
@@ -768,7 +768,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	case TypeDate:
 		return decodeDynamicScalar(r, DateCodec, DateValue)
 	case TypeTime:
-		return decodeDynamicScalar(r, TimeCodec, func(n TimeOfDay) Value { return Value{bits: uint64(n)} })
+		return decodeDynamicScalar(r, TimeOfDayCodec, func(n TimeOfDay) Value { return Value{bits: uint64(n)} })
 	case TypeTimestamp:
 		return decodeDynamicScalar(r, TimestampCodec, TimestampValue)
 	case TypeDuration:

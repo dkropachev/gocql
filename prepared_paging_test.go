@@ -33,7 +33,7 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], err
 	if d.hook != nil {
 		d.hook()
 	}
-	return cql.OneColumn(cql.BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BytesCodec).Compile(c)
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 

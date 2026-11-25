@@ -68,7 +68,7 @@ func fuzzDecoders(t *testing.T) []func(ColumnSpec, wire.Chain, *wire.Lease) {
 	return []func(ColumnSpec, wire.Chain, *wire.Lease){
 		fuzzDecoder(CodecTestMust(ListType(intType)), ListCodec(Int32Codec)),
 		fuzzDecoder(CodecTestMust(SetType(textType)), SetCodec(StringCodec)),
-		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BlobCodec))),
+		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BytesCodec))),
 		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, TextCodec)),
 		fuzzDecoder(CodecTestMust(MapType(intType, textType)), GoMapCodec(Int32Codec, StringCodec)),
 		fuzzDecoder(CodecTestMust(VectorType(floatType, 3)), VectorCodec(Float32Codec)),

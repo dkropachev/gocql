@@ -350,10 +350,10 @@ var (
 	// StringCodec detach it.
 	TextCodec Codec[Text] = textCodec{}
 
-	// BlobCodec maps blob to Bytes. A decoded Bytes borrows the response, and
+	// BytesCodec maps blob to Bytes. A decoded Bytes borrows the response, and
 	// encoding borrows the Bytes as ValueWriter.BorrowBytes does; Clone
 	// detaches it.
-	BlobCodec Codec[Bytes] = scalarCodec[Bytes]{kind: TypeBlob,
+	BytesCodec Codec[Bytes] = scalarCodec[Bytes]{kind: TypeBlob,
 		decodeRow: blobColumn,
 		encode:    func(w *ValueWriter, v Bytes) error { return w.borrowView(v) },
 		decode:    func(r ValueReader) (Bytes, error) { return r.Bytes(), nil },
@@ -415,6 +415,7 @@ func decodeUUID(r ValueReader) (UUID, error) {
 	binary.BigEndian.PutUint64(v[8:], lo)
 	return v, nil
 }
+
 // encodeAnyUUID writes a UUID into a uuid or a timeuuid, which must hold a
 // version 1 UUID.
 func encodeAnyUUID(w *ValueWriter, v UUID) error {
@@ -642,12 +643,15 @@ func validateText(b Bytes, ascii bool) error {
 	return v.finish()
 }
 
-// NamedScalar adapts a named application type through explicitly typed conversions.
-func NamedScalar[A, B any](base Codec[B], to func(A) B, from func(B) A) Codec[A] {
-	return namedScalar[A, B]{base: base, to: to, from: from}
+// ConvertCodec maps A through base, which maps B: to converts a value
+// before base encodes it, and from converts what base decodes. Use it for an
+// application type with no built-in codec, such as one that wraps or packs
+// a built-in type. Clone clones through base.
+func ConvertCodec[A, B any](base Codec[B], to func(A) B, from func(B) A) Codec[A] {
+	return convertCodec[A, B]{base: base, to: to, from: from}
 }
 
-type namedScalar[A, B any] struct {
+type convertCodec[A, B any] struct {
 	base    Codec[B]
 	to      func(A) B
 	from    func(B) A
@@ -656,7 +660,7 @@ type namedScalar[A, B any] struct {
 	typ     DataType
 }
 
-func (c namedScalar[A, B]) CheckType(t DataType) error {
+func (c convertCodec[A, B]) CheckType(t DataType) error {
 	perfCheckType()
 
 	if descriptorOf(c.typ) != nil {
@@ -670,7 +674,7 @@ func (c namedScalar[A, B]) CheckType(t DataType) error {
 	}
 	return c.base.CheckType(t)
 }
-func (c namedScalar[A, B]) Encode(w *ValueWriter, v A) error {
+func (c convertCodec[A, B]) Encode(w *ValueWriter, v A) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
@@ -680,7 +684,7 @@ func (c namedScalar[A, B]) Encode(w *ValueWriter, v A) error {
 	}
 	return encoder.Encode(w, c.to(v))
 }
-func (c namedScalar[A, B]) Decode(r ValueReader) (A, error) {
+func (c convertCodec[A, B]) Decode(r ValueReader) (A, error) {
 	var zero A
 	if e := c.typeGuard(r.Type()); e != nil {
 		return zero, e
@@ -695,7 +699,7 @@ func (c namedScalar[A, B]) Decode(r ValueReader) (A, error) {
 	}
 	return c.from(v), nil
 }
-func (c namedScalar[A, B]) Clone(v A) A { return c.from(c.base.Clone(c.to(v))) }
+func (c convertCodec[A, B]) Clone(v A) A { return c.from(c.base.Clone(c.to(v))) }
 
 // NullableCodec adds NULL encoding and decoding to base.
 func NullableCodec[T any](base Codec[T]) Codec[Nullable[T]] {
@@ -1010,7 +1014,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *MaybeEmpty[T]) error {
 	return decodeValueInto(decoder, r, &dst.Value)
 }
 
-func (c namedScalar[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
+func (c convertCodec[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
 	if c.to == nil || c.from == nil {
 		return nil, typeValidation("codec", "nil scalar mapping")
 	}
@@ -1021,7 +1025,7 @@ func (c namedScalar[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
 	c.encoder, c.typ = base, t
 	return c, nil
 }
-func (c namedScalar[A, B]) compileValueDecoder(t DataType) (Decoder[A], error) {
+func (c convertCodec[A, B]) compileValueDecoder(t DataType) (Decoder[A], error) {
 	if c.to == nil || c.from == nil {
 		return nil, typeValidation("codec", "nil scalar mapping")
 	}
@@ -1090,7 +1094,7 @@ func (c stringCodec) compileValueEncoder(t DataType) (Encoder[string], error) {
 	return c, nil
 }
 
-func (c namedScalar[A, B]) typeGuard(t DataType) error {
+func (c convertCodec[A, B]) typeGuard(t DataType) error {
 	if descriptorOf(c.typ) == nil {
 		return c.CheckType(t)
 	}

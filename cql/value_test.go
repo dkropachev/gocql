@@ -296,7 +296,7 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := DecodeValue(BlobCodec, unset); err == nil {
+			if _, err := DecodeValue(BytesCodec, unset); err == nil {
 				t.Fatal("unset result accepted")
 			}
 			chain := FoundationChain(t, []byte("leased"))
@@ -307,14 +307,14 @@ func TestValue(t *testing.T) {
 			}
 			detached := leased.Clone()
 			lease.Release()
-			if _, err := DecodeValue(BlobCodec, leased); !errors.Is(err, ErrReleased) {
+			if _, err := DecodeValue(BytesCodec, leased); !errors.Is(err, ErrReleased) {
 				t.Fatalf("decode released: %v", err)
 			}
 			if _, err := NewEncodedValue(blob, Present, leased.Bytes()); !errors.Is(err, ErrReleased) {
 				t.Fatalf("construct released: %v", err)
 			}
 			foundationPanicReleased(t, func() { leased.Clone() })
-			if got, err := DecodeValue(BlobCodec, detached); err != nil || string(got.OwnedBytes()) != "leased" {
+			if got, err := DecodeValue(BytesCodec, detached); err != nil || string(got.OwnedBytes()) != "leased" {
 				t.Fatalf("owned decode: %v", err)
 			}
 		})

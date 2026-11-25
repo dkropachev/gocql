@@ -56,11 +56,11 @@ func TestContainer(t *testing.T) {
 			chain, _ := wire.NewChain(spans...)
 			lease := wire.NewLease(chain, nil)
 			leased, _ := NewEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
-			sequence, err := DecodeValue(ListDecoder(BlobCodec), leased)
+			sequence, err := DecodeValue(ListDecoder(BytesCodec), leased)
 			if err != nil {
 				t.Fatal(err)
 			}
-			clone := ListDecoder(BlobCodec).Clone(sequence)
+			clone := ListDecoder(BytesCodec).Clone(sequence)
 			fragments := 0
 			eachBytes(sequence[0], func(s wire.Span) error {
 				if &s.Bytes()[0] != &body[8+fragments] {
@@ -97,7 +97,7 @@ func TestContainer(t *testing.T) {
 		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(bytesChain(encoded.body), nil)
 		borrowed := EncodedValue{typ: list, state: Present, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
-		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))))
+		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BytesCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
 		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
@@ -235,7 +235,7 @@ func TestContainer(t *testing.T) {
 		blob := rowTestType(t, TypeBlob)
 		mapType, _ := MapType(text, blob)
 		encoded := containerGolden(t, mapType, MapEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
-		mapping, err := DecodeValue(MapDecoder(TextCodec, BlobCodec), encoded)
+		mapping, err := DecodeValue(MapDecoder(TextCodec, BytesCodec), encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -342,7 +342,7 @@ func TestContainer(t *testing.T) {
 				spans[index] = wire.Borrow(data[index : index+1])
 			}
 			chain, _ := wire.NewChain(spans...)
-			sequence, err := VectorDecoder(BlobCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
+			sequence, err := VectorDecoder(BytesCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
 			if err != nil {
 				t.Fatal(err)
 			}

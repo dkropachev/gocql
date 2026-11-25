@@ -1067,7 +1067,7 @@ func TestPrepared(t *testing.T) {
 					implCql.Bytes])
 				PreparedData(opaqueStorageValuexxxxx).InternalState = state
 				PreparedData(opaqueStorageValuexxxxx).params = params
-				PreparedData(opaqueStorageValuexxxxx).rows = implCql.OneColumn(implCql.BlobCodec)
+				PreparedData(opaqueStorageValuexxxxx).rows = implCql.OneColumn(implCql.BytesCodec)
 				PreparedData(opaqueStorageValuexxxxx).plans = &InternalResultPlanCache[implCql.Bytes]{}
 				return opaqueStorageValuexxxxx
 			}()

@@ -104,7 +104,7 @@ func (w *WikiTest) CreatePages(n int) {
 	}
 }
 
-var wikiRatingCodec = cql.NamedScalar(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) cql.Nullable[inf.Dec] {
+var wikiRatingCodec = cql.ConvertCodec(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) cql.Nullable[inf.Dec] {
 	if v == nil {
 		return cql.Nullable[inf.Dec]{}
 	}
@@ -115,9 +115,9 @@ var wikiRatingCodec = cql.NamedScalar(cql.NullableCodec(serializationDecimal), f
 	}
 	return &v.Value
 })
-var wikiTagsCodec = cql.NamedScalar(cql.NullableCodec(serializationSet(serializationString)), func(v []string) cql.Nullable[[]string] { return cql.Nullable[[]string]{Value: v, Valid: v != nil} }, func(v cql.Nullable[[]string]) []string { return v.Value })
-var wikiAttachmentCodec = cql.NamedScalar(serializationBlob, func(v WikiAttachment) []byte { return []byte(v) }, func(v []byte) WikiAttachment { return WikiAttachment(v) })
-var wikiAttachmentsCodec = cql.NamedScalar(cql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) cql.Nullable[map[string]WikiAttachment] {
+var wikiTagsCodec = cql.ConvertCodec(cql.NullableCodec(serializationSet(serializationString)), func(v []string) cql.Nullable[[]string] { return cql.Nullable[[]string]{Value: v, Valid: v != nil} }, func(v cql.Nullable[[]string]) []string { return v.Value })
+var wikiAttachmentCodec = cql.ConvertCodec(serializationBlob, func(v WikiAttachment) []byte { return []byte(v) }, func(v []byte) WikiAttachment { return WikiAttachment(v) })
+var wikiAttachmentsCodec = cql.ConvertCodec(cql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) cql.Nullable[map[string]WikiAttachment] {
 	return cql.Nullable[map[string]WikiAttachment]{Value: v, Valid: v != nil}
 }, func(v cql.Nullable[map[string]WikiAttachment]) map[string]WikiAttachment { return v.Value })
 var wikiParams = cql.Params(

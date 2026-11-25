@@ -60,7 +60,7 @@ func BenchmarkScalar(b *testing.B) {
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
 		for b.Loop() {
-			v, err := BlobCodec.Decode(r)
+			v, err := BytesCodec.Decode(r)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -125,7 +125,7 @@ func BenchmarkScalar(b *testing.B) {
 								}
 								scalarTextSink = v
 							} else {
-								v, e := BlobCodec.Decode(reader)
+								v, e := BytesCodec.Decode(reader)
 								if e != nil {
 									b.Fatal(e)
 								}

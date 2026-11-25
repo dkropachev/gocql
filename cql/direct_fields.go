@@ -22,7 +22,7 @@ type directKind uint8
 const (
 	directNone      directKind = iota
 	directInt                  // a built-in signed integer codec of width bytes
-	directBlob                 // BlobCodec: a view borrowing the response
+	directBlob                 // BytesCodec: a view borrowing the response
 	directText                 // TextCodec: a validated view borrowing the response
 	directOwnedBlob            // ByteSliceCodec: a copy into the field's capacity
 	directBytes                // ByteSliceCodec

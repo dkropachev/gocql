@@ -79,7 +79,7 @@ func TestFixedWidthSplitBodies(t *testing.T) {
 			{body: []byte{0x7f, 0xff, 0xff, 0xff}, want: Date(-1)},
 			{body: []byte{1, 2, 3, 4, 5}, err: "gocql: date requires 4 bytes, got 5"},
 		}},
-		{TypeTime, decodeAny(TimeCodec), []fixedWidthCase{
+		{TypeTime, decodeAny(TimeOfDayCodec), []fixedWidthCase{
 			{body: []byte{0, 0, 0, 0, 0, 0, 0, 9}, want: TimeOfDay(9)},
 			{body: []byte{0xff, 0, 0, 0, 0, 0, 0, 0}, err: badTime},
 			{body: []byte{1, 2}, err: "gocql: time requires 8 bytes, got 2"},

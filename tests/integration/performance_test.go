@@ -83,7 +83,7 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}()
-		decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
+		decoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BytesCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BytesCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}, exec.PrepareOptions{}))
 		streamDecoder := cql.StreamRowInto(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=4096 AND id<128", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: streamDecoder}))
@@ -380,7 +380,7 @@ func TestPerformance(t *testing.T) {
 				}
 			}
 		}
-		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BlobCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BlobCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
+		borrowedDecoder := cql.Row(cql.Column("id", cql.Int32Codec, func(v *testBorrowed) *int32 { return &v.ID }), cql.Column("payload", cql.BytesCodec, func(v *testBorrowed) *cql.Bytes { return &v.Payload }), cql.Column("pieces", cql.ListDecoder(cql.BytesCodec), func(v *testBorrowed) *[]cql.Bytes { return &v.Pieces }))
 		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[testQuery, testBorrowed]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: borrowedDecoder}, exec.PrepareOptions{}))
 		streamDecoder := cql.StreamRowInto(func(*testOutput) {}, cql.StreamColumn("id", cql.StreamInt32, func(v *testOutput) *int32 { return &v.ID }), cql.StreamColumn("payload", cql.StreamBlob, func(v *testOutput) *[]byte { return &v.Payload }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(v *testOutput) *[][]byte { return &v.Pieces }))
 		streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[testQuery, testOutput]{CQL: "SELECT id,payload,pieces FROM " + ks + ".records WHERE cell=? AND id<?", Kind: cql.OrdinaryStatement, Params: cql.Params(cql.Param("cell", cql.Int32Codec, func(v testQuery) int32 { return v.Cell }), cql.Param("id", cql.Int32Codec, func(v testQuery) int32 { return v.Rows })), Rows: streamDecoder}))

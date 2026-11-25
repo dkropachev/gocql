@@ -879,7 +879,7 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], err
 	if d.hook != nil {
 		d.hook()
 	}
-	return cql.OneColumn(cql.BlobCodec).Compile(c)
+	return cql.OneColumn(cql.BytesCodec).Compile(c)
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
@@ -1544,8 +1544,8 @@ func (p person) String() string {
 	return fmt.Sprintf("Person{firstName: %s, lastName: %s, Age: %d}", p.FirstName, p.LastName, p.Age)
 }
 
-var serializationBlob = cql.NamedScalar(cql.BlobCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
-var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
@@ -1555,6 +1555,6 @@ var serializationTimestamp = cql.NamedScalar(cql.TimestampCodec, func(v time.Tim
 	return v.Time()
 })
 
-var serializationDecimal = cql.NamedScalar(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
+var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
 	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
 }, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })

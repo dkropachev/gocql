@@ -96,8 +96,8 @@ func TestBuiltinPlansManageDestination(t *testing.T) {
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: blob}, cql.ColumnSpec{Name: "b", Type: blob})
 	cas := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "v", Type: blob})
 	type row struct{ V cql.Bytes }
-	field := cql.Column("v", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.V })
-	single := cql.OneColumn(cql.BlobCodec)
+	field := cql.Column("v", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.V })
+	single := cql.OneColumn(cql.BytesCodec)
 	cases := []struct {
 		name string
 		plan func() (bool, error)
@@ -143,7 +143,7 @@ func TestBuiltinPlansClearStaleRow(t *testing.T) {
 		V     cql.Nullable[cql.Bytes]
 		Extra int
 	}
-	blobs := cql.NullableCodec(cql.BlobCodec)
+	blobs := cql.NullableCodec(cql.BytesCodec)
 	field := cql.Column("v", blobs, func(r *row) *cql.Nullable[cql.Bytes] { return &r.V })
 	single := cql.OneColumn(blobs)
 	value := []byte{0, 0, 0, 1, 'x'}

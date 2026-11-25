@@ -775,7 +775,7 @@ func TestExecution(t *testing.T) {
 						time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
 						_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 					}()
-					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}

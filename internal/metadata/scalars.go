@@ -125,10 +125,10 @@ func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) 
 func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
 func (v2MetadataExtensions) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).CheckType(t)
+	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).CheckType(t)
 }
 func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).Decode(r)
+	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
