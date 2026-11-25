@@ -555,8 +555,8 @@ func dynamicAggregateChecked(t DataType, kind Kind, values []Value) (Value, erro
 }
 
 // ListValue constructs a dynamic list of element values, validating each
-// against element. Borrowed values must remain immutable until captured;
-// Clone detaches them.
+// against element. The value keeps a slice passed as values..., so it and
+// borrowed values must remain unchanged until captured; Clone detaches them.
 func ListValue(element DataType, values ...Value) (Value, error) {
 	t, err := ListType(element)
 	if err != nil {
@@ -566,8 +566,8 @@ func ListValue(element DataType, values ...Value) (Value, error) {
 }
 
 // SetValue constructs a dynamic set of element values, validating each
-// against element. Borrowed values must remain immutable until captured;
-// Clone detaches them.
+// against element. The value keeps a slice passed as values..., so it and
+// borrowed values must remain unchanged until captured; Clone detaches them.
 func SetValue(element DataType, values ...Value) (Value, error) {
 	t, err := SetType(element)
 	if err != nil {
@@ -584,7 +584,8 @@ func TupleValue(t DataType, v []Value) (Value, error) {
 
 // VectorValue constructs a dynamic vector of element values, whose
 // dimension is the number of values, validating each against element.
-// Borrowed values must remain immutable until captured; Clone detaches them.
+// The value keeps a slice passed as values..., so it and borrowed values
+// must remain unchanged until captured; Clone detaches them.
 func VectorValue(element DataType, values ...Value) (Value, error) {
 	if len(values) > math.MaxUint16 {
 		return Value{}, typeValidation("dimension", "vector dimension %d exceeds 65535", len(values))
