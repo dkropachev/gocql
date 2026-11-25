@@ -351,8 +351,9 @@ field-alignment lint requires.
 
 A seventh pass, with one reviewer per area, made about 80 proposals; all
 are taken and land in six changes before `v2.0.0-rc.1`. This first part
-fixes silent run-time failures, with little or no API change. Rows marked
-**reverses** undo a decision of an earlier pass.
+fixes silent run-time failures, with little or no API change; the second
+reworks the `cql` types and codecs. Rows marked **reverses** undo a decision
+of an earlier pass.
 
 ### transport / config
 
@@ -395,6 +396,25 @@ fixes silent run-time failures, with little or no API change. Rows marked
 |---|---|
 | `exec.Options.Timestamp` was microseconds in an `int64`, and a worker query stamped all its writes with it | `Timestamp` is a `cql.Option[time.Time]`; `Prepared.Query` and `PreparedStream.Query` reject it with a `ValidationError`. |
 | `exec.Options.Keyspace` and `PrepareOptions.Keyspace` on protocol 4 failed only per attempt, or did nothing for a qualified statement | `CompileOptions`, admission and `Prepare` reject a keyspace other than the session's on ScyllaV4 and CassandraV4 with an `UnsupportedSettingError`; both fields document it. |
+
+### cql types and codecs
+
+| Finding | Outcome |
+|---|---|
+| Text and varchar were two kinds, so `DataType.Equal` told a text column from a varchar one and every text path checked both | One kind, `KindText`, with varchar's ID 0x000D; the protocol's text ID 0x000A and the schema names `text` and `varchar` decode to it, and `String` prints `text`. `TypeVarchar` and `VarcharType` are removed. |
+| `ASCIIStringCodec`, `ASCIICodec` and `StreamASCII` differed from the text codecs only in the kind they accepted | `StringCodec`, `TextCodec` and `StreamText` take text and ascii and validate UTF-8 or ASCII for the column, both ways; the three are removed, and the `codec=ASCIIStringCodec` and `stream=ASCII` tags stay as aliases. |
+| `UUIDCodec` rejected a timeuuid column, so a `cql.UUID` field could not map one | `UUIDCodec` and `StreamUUID` read timeuuid; encoding into one checks for version 1. **Reverses** the codec-per-kind split between `UUID` and `TimeUUID` columns; the two Go types stay distinct. |
+| A `[]V` field mapped only a list unless tagged | It maps whichever of list, set or vector the column is, through the new `SliceCodec` and `StreamSlice`; `codec=ListCodec`, `SetCodec` or `VectorCodec` requires one. |
+| A named type such as `type Status string` needed its own codec, and `int`, `*V`, `cql.Text` and `*big.Int` fields had none | A named type maps like its underlying type when that has a built-in codec, reading the field as that type; cqlgen converts in the accessors. Added `IntCodec` (bigint; decode checks the range), `PointerCodec` (nil is NULL) and `VarintBigIntCodec`; `cql.Text` maps with `TextCodec`. `int` maps bigint on every platform, not `int` on 32-bit ones, so a struct maps one column type everywhere. **Reverses** "a field maps by its exact Go type". |
+| `WithCodec` of a UDT codec did not reach `[]V` or map values of it | `WithCodec[V]` also maps `[]V`, `*V` and `map[K]V` for the built-in key types; `WithEncoder` maps `[]V`. |
+| `UDTOptions.Name` was required though metadata carries it, and `UDTCodecOf` rejected `IgnoreExtraColumns` | An empty `Name` matches any UDT, so the zero options match by fields; `UDTCodecOf` takes `IgnoreExtraColumns` as `AllowExtraDatabaseFields`. **Reverses** the required UDT name. |
+| A tuple mapped to a struct only through `TupleCodec` with hand-written fields | Added `TupleCodecOf[T]`/`MustTupleCodecOf`, which map members to fields by position, and `PairCodec` for a two-member tuple. |
+| `BlobCodec`, `TimeCodec`, `NamedScalar` and `WithStreamCodec` named something other than what they map | `BytesCodec`, `TimeOfDayCodec`, `ConvertCodec` and `WithStreamDecoder`. The custom codec example converts through `ConvertCodec`. |
+| `ListValue`, `SetValue` and `VectorValue` needed the collection type first; `Elements`, `Entries` and `Fields` returned an iterator and an error; `At(i)` rescanned a decoded value per call | The constructors take the element type and variadic values, a vector's dimension being their count. The three return `iter.Seq2[..., error]`; `ValueIterator` and `Value.At` are removed. Added `Value.Str`, an owned string; the examples copy text with `Copy` or `Str` instead of `Text.String`. |
+| Reading a small varint or a decimal from text took `big.Int` arithmetic | Added `VarintFromInt64`, `Varint.Int64`, `ParseDecimal` and `Decimal.Rat`. |
+| `EncodeValueBorrowed` exposed a zero-copy mode only routing needs; `NewEncodedValue` took a `Bytes`; `Bytes.OwnedBytes` was `Copy` with a panic | `EncodeValueBorrowed` is internal, through `internal/link`; `NewEncodedValue` takes a `[]byte`, which it borrows; `OwnedBytes` is removed. |
+| A nested type took one constructor and error check per level | Added `ParseDataType` and `MustParseDataType` for scalars, collections, tuples, vectors and `frozen`; a UDT needs its fields, so they reject one. |
+| `cql.Type` named a kind next to `DataType`, so `DataType.Kind` returned a `Type` | `cql.Kind` with `KindText`, `KindInt`, ...; the last change of this part, being mechanical. |
 
 ## Decisions
 
