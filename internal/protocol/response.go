@@ -621,7 +621,7 @@ func (p *TypedParser) ReadErrorMap() cqlerr.ErrorMap {
 		}
 		// The length check above guarantees AddrFromSlice accepts it.
 		ip, _ := netip.AddrFromSlice(p.Copy(length))
-		out[ip.Unmap()] = p.U16()
+		out[ip.Unmap()] = cqlerr.FailureReason(p.U16())
 	}
 	return out
 }

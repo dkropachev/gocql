@@ -27,7 +27,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		return nil, err
 	}
 	config = config.Snapshot()
-	config.Logger = logging.Wrap(config.Logger)
+	config.Logger = logging.Wrap(config.Logger, config.LogRateLimit)
 	contacts := config.ContactPoints
 	if path, _ := config.UnixContact(); path != "" {
 		contacts = []string{"127.0.0.1"}

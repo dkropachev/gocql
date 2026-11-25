@@ -9,47 +9,47 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/metadata"
-	routing2 "github.com/scylladb/gocql/v2/routing"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
-// Observer instruments requests and their attempts from the client side; it
-// is the hook for client-side tracing such as OpenTelemetry. An Observer is
-// any value that implements one or more of the hook interfaces,
-// RequestObserver and AttemptObserver; RequestObserverFunc and
-// AttemptObserverFunc make one from a function, and Join combines several.
-// config.ConfigBuilder.Build and gocql.Session.CompileOptions reject one that
-// implements none. The driver finds the hooks once, when the observer is
-// installed, and skips the call and the event of a hook the observer does not
-// implement. A later release adds hooks as new interfaces, so existing
-// observers keep compiling.
+// Hooks instruments requests and their attempts from the client side; it is
+// the hook for client-side tracing such as OpenTelemetry, and for metrics
+// finer than package metrics keeps. Each field is one hook, and a nil field
+// is a hook the driver skips, with the work of filling its event. Join
+// combines several Hooks. A later release adds hooks as new fields, so
+// existing Hooks keep compiling and observe what they did.
 //
-// Implementations are shared between executions and must be safe for
+// The functions are shared between executions and must be safe for
 // concurrent use. A speculative attempt that loses can start or end after
-// its request has ended. A panic in any hook is logged and otherwise
-// ignored.
-type Observer any
-
-// RequestObserver is the hook of an Observer called for each request.
-type RequestObserver interface {
-	// StartRequest is called once per request as it is admitted, with the
-	// caller's context. The context it returns is passed to StartAttempt for
-	// each of the request's attempts, so a span started for the request can
+// its request has ended.
+//
+// A panic in a hook, or in a function a hook returns, neither reaches the
+// caller nor stops the request: the driver recovers it and logs it at error
+// level with the request's context, the one Request returned or the caller's
+// without a Request hook. The driver calls each end function a hook returns
+// once, as its request or attempt ends, so a panic that Join recovers in a
+// start hook and raises from the end function it returns is logged then.
+//
+// The zero Hooks observes nothing.
+type Hooks struct {
+	// Request is called once per request as it is admitted, with the
+	// caller's context. The context it returns is passed to Attempt for each
+	// of the request's attempts, so a span started for the request can
 	// parent the attempts' spans; the driver uses it for nothing else and
 	// never derives cancellation from it. The function it returns, if not
 	// nil, is called once with the completed request.
-	StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+	Request func(ctx context.Context, start RequestStart) (context.Context, func(RequestEvent))
+	// Attempt is called as each attempt, retry or speculative attempt is
+	// sent, with the context Request returned, or the caller's context
+	// without a Request hook. The function it returns, if not nil, is called
+	// once with the completed attempt; routing.AttemptEvent.CQLTraceID links
+	// it to the server-side CQL trace session when the request runs with
+	// exec.Options.CQLTrace.
+	Attempt func(ctx context.Context, start AttemptStart) func(routing.AttemptEvent)
 }
 
-// AttemptObserver is the hook of an Observer called for each attempt.
-type AttemptObserver interface {
-	// StartAttempt is called as each attempt, retry or speculative attempt
-	// is sent, with the context StartRequest returned, or the caller's
-	// context when the observer is no RequestObserver. The function it
-	// returns, if not nil, is called once with the completed attempt;
-	// routing.AttemptEvent.CQLTraceID links it to the server-side CQL trace
-	// session when the request runs with exec.Options.CQLTrace.
-	StartAttempt(context.Context, AttemptStart) func(routing2.AttemptEvent)
-}
+// IsZero reports whether h has no hook.
+func (h Hooks) IsZero() bool { return h.Request == nil && h.Attempt == nil }
 
 // AttemptStart describes an attempt as it is sent to its target.
 //
@@ -57,12 +57,17 @@ type AttemptObserver interface {
 type AttemptStart struct {
 	// Started is when the attempt was sent.
 	Started time.Time
+	// Address is the host:port of the connection the attempt is sent on, or
+	// the socket path of a Unix socket connection.
+	Address string
 	// RequestID is the ID of the attempt's request.
 	RequestID uint64
 	// Attempt is the 1-based number of the attempt within its request.
 	Attempt int
 	// Target is the host, and shard, the attempt was sent to.
 	Target metadata.Target
+	// Consistency is the consistency level the attempt uses.
+	Consistency cql.Consistency
 	// Speculative reports a speculative attempt.
 	Speculative bool
 }
@@ -84,7 +89,7 @@ type RequestStart struct {
 	// Routing describes the request for routing. A field the driver does
 	// not know is empty or unset, such as Token when it cannot compute the
 	// request's partition key.
-	Routing routing2.Info
+	Routing routing.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.
 	ID uint64
@@ -111,7 +116,7 @@ type RequestEvent struct {
 	Result cql.Result
 	// Routing describes the request for routing, as RequestStart.Routing
 	// does.
-	Routing routing2.Info
+	Routing routing.Info
 	// ID identifies the request within the session; its attempts carry it as
 	// RequestID.
 	ID uint64

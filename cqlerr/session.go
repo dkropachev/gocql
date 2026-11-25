@@ -36,7 +36,7 @@ var (
 	ErrUseStmt = errors.New("gocql: USE statements are not supported: set the session keyspace in the cluster config, or qualify table names")
 	// ErrNoConnections reports that no connection in the pool could take
 	// the request.
-	ErrNoConnections = errors.New("gocql: no hosts available in the pool")
+	ErrNoConnections = errors.New("gocql: no connections available")
 	// ErrNoKeyspace reports a missing keyspace: an empty keyspace name, or
 	// one the loaded metadata does not have.
 	ErrNoKeyspace = errors.New("gocql: keyspace not found or not set")

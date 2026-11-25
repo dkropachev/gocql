@@ -24,11 +24,11 @@ type QueryPlan interface{ Next() (Route, bool) }
 //     driver calls it only when the picked route fails or Pick returned
 //     false, and skips the picked route if Fallback returns it again.
 //
-// Observe receives the outcome of every attempt. NewPlan combines Pick and
+// Learn receives the outcome of every attempt. NewPlan combines Pick and
 // Fallback into the plan a request follows.
 type RoutingPolicy interface {
 	Validate(*MetadataSnapshot) error
 	Pick(routing.Info, *MetadataSnapshot) (Route, bool)
 	Fallback(routing.Info, *MetadataSnapshot) QueryPlan
-	Observe(routing.AttemptEvent)
+	Learn(routing.AttemptEvent)
 }

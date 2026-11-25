@@ -25,7 +25,7 @@ func TestRetryAPI(t *testing.T) {
 			}{{cqlerr.CodeOverloaded, true, retry.Next}, {cqlerr.CodeBootstrapping, true, retry.Next}, {cqlerr.CodeOverloaded, false, retry.Next}, {cqlerr.CodeWriteTimeout, false, retry.Stop}, {cqlerr.CodeSyntax, true, retry.Stop}, {cqlerr.CodeInvalid, true, retry.Stop}, {cqlerr.CodeProtocol, true, retry.Stop}} {
 				server := cqlerr.NewOtherServerError(test.code, "test error")
 				err := runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: server, InternalPotentiallyExecuted: true})
-				decision := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: test.idempotent, ExecutionStatus: cqlerr.ExecutionStatusOf(err)})
+				decision := policy.Decide(retry.Attempt{Err: err, Attempt: 1, Idempotent: test.idempotent, ExecutionStatus: cqlerr.ExecutionStatusOf(err)})
 				if decision.Action != test.want {
 					t.Fatalf("code %x idempotent %t got %d want %d", test.code, test.idempotent, decision.Action, test.want)
 				}
@@ -34,7 +34,7 @@ func TestRetryAPI(t *testing.T) {
 				}
 			}
 			for _, err := range []error{context.Canceled, context.DeadlineExceeded, &cql.ProtocolError{Stage: "response", Err: errors.New("invalid frame")}, &cql.ValidationError{Field: "page size", Err: errors.New("invalid")}} {
-				if got := policy.Decide(retry.Attempt{Err: err, Number: 1, Idempotent: true}); got.Action != retry.Stop {
+				if got := policy.Decide(retry.Attempt{Err: err, Attempt: 1, Idempotent: true}); got.Action != retry.Stop {
 					t.Fatalf("retry deterministic error %v", err)
 				}
 			}

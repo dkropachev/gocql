@@ -8,14 +8,16 @@
 // SingleTarget one that always routes to a single host; both are implemented
 // by the session. An application can implement Policy itself, often by
 // wrapping a built-in one, and test it on snapshots from package
-// routing/routingtest. In a program that links no session, such as the tests
-// of a policy library that do not import routingtest, the built-in policies
-// find no route and fail validation, and HostRoutes and ReplicaRoutes return
-// no routes.
+// routing/routingtest. HostRoutes, ReplicaRoutes, AppendReplicaRoutes and
+// RouteTo give a policy routes from a snapshot, and FilterPlan and Routes
+// work on plans. In a program that links no session, such as the tests of a
+// policy library that do not import routingtest, the built-in policies find
+// no route and fail validation, and those functions return no routes.
 package routing
 
 import (
 	"errors"
+	"iter"
 	"sync"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -37,7 +39,7 @@ type Plan interface {
 // (exec.Options.HostID) goes there without consulting the policy. Methods
 // may be called concurrently.
 //
-// A Policy may also implement Validator and AttemptObserver.
+// A Policy may also implement Validator and Learner.
 type Policy interface {
 	// Pick returns the first route, cheaply: without building a plan and
 	// without allocating. It returns false when it has no cheap answer, and
@@ -59,12 +61,12 @@ type Validator interface {
 	Validate(*metadata.Snapshot) error
 }
 
-// AttemptObserver is implemented by a Policy that learns from attempts, such
-// as one that tracks latency. The session calls Observe with the outcome of
-// every attempt of the requests of the profiles that use the policy.
-type AttemptObserver interface {
-	// Observe receives the outcome of an attempt.
-	Observe(AttemptEvent)
+// Learner is implemented by a Policy that learns from attempts, such as one
+// that tracks latency. The session calls Learn with the outcome of every
+// attempt of the requests of the profiles that use the policy.
+type Learner interface {
+	// Learn receives the outcome of an attempt.
+	Learn(AttemptEvent)
 }
 
 // NewPolicy builds the default token- and tablet-aware policy with options.
@@ -79,9 +81,12 @@ func NewPolicy(options Options) (*Builtin, error) {
 	return &Builtin{options: options}, nil
 }
 
-// SingleTarget routes every request to target. When target.StrictShard is
-// set, a request goes to target's shard only. Its Validate checks that target
-// is an eligible host.
+// SingleTarget routes every request to target: to target's shard only when
+// it names one, unless target.AnyShardFallback lets a request use another
+// shard of the host. Its Validate checks that target is an eligible host. A
+// request pinned with exec.Options.HostID goes to that host instead, without
+// consulting the policy, and with exec.Options.AnyShardFallback, not
+// target's, deciding whether it may leave its shard.
 func SingleTarget(target metadata.Target) *Builtin {
 	return &Builtin{single: true, target: target}
 }
@@ -101,13 +106,71 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 // from metadata.HostSnapshot.Shards. A route goes to any shard when the
 // host's sharding is not known. It returns none when info has no token,
 // keyspace or table, or when no replica of the token is known; HostRoutes
-// then gives every host.
+// then gives every host. AppendReplicaRoutes does the same without
+// allocating, for a policy's Pick.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
-	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
+	return AppendReplicaRoutes(nil, snapshot, info)
+}
+
+// AppendReplicaRoutes appends the routes ReplicaRoutes returns to dst and
+// returns the extended slice, so that a policy can reuse a buffer across
+// requests. Pick and Fallback may run concurrently, so a buffer must not be
+// shared between calls in flight: take one from a sync.Pool, for example.
+func AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info Info) []metadata.Route {
+	replicaRoutes, ok := link.Lookup[func([]metadata.Route, *metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
 	if !ok {
-		return nil
+		return dst
 	}
-	return replicaRoutes(snapshot, info)
+	return replicaRoutes(dst, snapshot, info)
+}
+
+// RouteTo returns the route to target: to its shard when ShardID is set,
+// else to any shard of its host. It returns false when snapshot has no host
+// with target.HostID, which a policy pinning requests should treat as a
+// route it cannot take.
+func RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool) {
+	routeTo, ok := link.Lookup[func(*metadata.Snapshot, cql.UUID) (metadata.Route, bool)](link.RouteTo)
+	if !ok {
+		return metadata.Route{}, false
+	}
+	r, ok := routeTo(snapshot, target.HostID)
+	if !ok {
+		return metadata.Route{}, false
+	}
+	return r.WithShardID(target.ShardID), true
+}
+
+// Routes returns the routes plan has left, in order, as an iterator that
+// consumes the plan.
+func Routes(plan Plan) iter.Seq[metadata.Route] {
+	return func(yield func(metadata.Route) bool) {
+		for r, ok := plan.Next(); ok; r, ok = plan.Next() {
+			if !yield(r) {
+				return
+			}
+		}
+	}
+}
+
+// FilterPlan returns a plan of the routes of plan that keep reports true for,
+// in order. It reads plan lazily, one route per Next, so a policy can drop
+// hosts from a built-in plan without building the whole plan.
+func FilterPlan(plan Plan, keep func(metadata.Route) bool) Plan {
+	return &filterPlan{plan: plan, keep: keep}
+}
+
+type filterPlan struct {
+	plan Plan
+	keep func(metadata.Route) bool
+}
+
+func (p *filterPlan) Next() (metadata.Route, bool) {
+	for {
+		r, ok := p.plan.Next()
+		if !ok || p.keep(r) {
+			return r, ok
+		}
+	}
 }
 
 // PlanOf returns a plan of routes, in order. The plan keeps the slice
@@ -132,7 +195,7 @@ type emptyPlan struct{}
 func (emptyPlan) Next() (metadata.Route, bool) { return metadata.Route{}, false }
 
 // Builtin is a policy the session implements, from NewPolicy or
-// SingleTarget. It implements Policy, Validator and AttemptObserver, so a
+// SingleTarget. It implements Policy, Validator and Learner, so a
 // policy that embeds a *Builtin to override Pick or Fallback keeps the
 // built-in validation and latency tracking without forwarding them.
 //
@@ -149,9 +212,9 @@ type Builtin struct {
 }
 
 var (
-	_ Policy          = (*Builtin)(nil)
-	_ Validator       = (*Builtin)(nil)
-	_ AttemptObserver = (*Builtin)(nil)
+	_ Policy    = (*Builtin)(nil)
+	_ Validator = (*Builtin)(nil)
+	_ Learner   = (*Builtin)(nil)
 )
 
 func init() {
@@ -208,9 +271,9 @@ func (b *Builtin) Fallback(info Info, m *metadata.Snapshot) Plan {
 	return p.Fallback(info, m)
 }
 
-// Observe feeds an attempt's outcome to latency-aware routing.
-func (b *Builtin) Observe(e AttemptEvent) {
+// Learn feeds an attempt's outcome to latency-aware routing.
+func (b *Builtin) Learn(e AttemptEvent) {
 	if p := b.policy(); p != nil {
-		p.(AttemptObserver).Observe(e)
+		p.(Learner).Learn(e)
 	}
 }

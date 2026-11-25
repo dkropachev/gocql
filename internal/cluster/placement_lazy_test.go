@@ -4,6 +4,7 @@
 package cluster
 
 import (
+	"context"
 	"sync/atomic"
 	"testing"
 
@@ -26,14 +27,14 @@ func TestTabletIdentityLazy(t *testing.T) {
 	features := transport.InternalFramerConfig{InternalTabletsRoutingV1: true, InternalTabletsRoutingV2: true}
 
 	stamp := s.CaptureTabletFeedback(info, s.Metadata())
-	s.ApplyTypedFeedbackStamped(&transport.InternalResponsePage{}, info, stamp, features)
+	s.ApplyTypedFeedbackStamped(context.Background(), &transport.InternalResponsePage{}, info, stamp, features)
 	if n := lookups.Load(); n != 0 {
 		t.Fatalf("a response without a tablet hint read the schema identity %d times", n)
 	}
 
 	h := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, hTarget(1, 0))
 	page := &transport.InternalResponsePage{ResponseData: model.ResponseData{Extras: &model.ResponseExtras{Payload: []cql.PayloadEntry{{Key: "tablets-routing-v2", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(testPayload(h))}}}}}}
-	s.ApplyTypedFeedbackStamped(page, info, stamp, features)
+	s.ApplyTypedFeedbackStamped(context.Background(), page, info, stamp, features)
 	if lookups.Load() == 0 {
 		t.Fatal("a tablet hint was checked without the schema identity")
 	}
@@ -67,7 +68,7 @@ func TestTabletIdentityCapturedSource(t *testing.T) {
 
 	h := testHint(t, 0, 100, cql.Option[uint64]{Value: 1, Set: true}, hTarget(1, 0))
 	page := &transport.InternalResponsePage{ResponseData: model.ResponseData{Extras: &model.ResponseExtras{Payload: []cql.PayloadEntry{{Key: "tablets-routing-v2", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(testPayload(h))}}}}}}
-	s.ApplyTypedFeedbackStamped(page, info, stamp, features)
+	s.ApplyTypedFeedbackStamped(context.Background(), page, info, stamp, features)
 	p := s.Peripheral()
 	p.InternalFeedbackMu.Lock()
 	pending := len(p.InternalFeedback)

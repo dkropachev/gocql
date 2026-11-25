@@ -254,11 +254,11 @@ func (s *Session) Closed() bool { return s.internal().Closed() }
 // Metadata returns the current immutable cluster metadata snapshot.
 func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata().Public() }
 
-// Observer returns the observer the session was configured with
-// (config.ConfigBuilder.WithObserver), nil without one or for a zero
-// Session. Every execution calls it unless its exec.Options set
+// Observer returns the hooks the session was configured with
+// (config.ConfigBuilder.WithObserver), the zero Hooks without them or for a
+// zero Session. Every execution calls them unless its exec.Options set
 // NoSessionObserver.
-func (s *Session) Observer() observe.Observer { return s.internal().Observer() }
+func (s *Session) Observer() observe.Hooks { return s.internal().Observer() }
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }
@@ -277,8 +277,14 @@ func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }
 // RefreshMetadata also returns ctx's error, cqlerr.ErrClosed once the
 // session closes, and cqlerr.ErrNoControl when the session has no control
 // connection.
-func (s *Session) RefreshMetadata(ctx context.Context) error {
-	return s.internal().RefreshMetadata(ctx)
+//
+// It returns the session's snapshot once the refresh ended, as Metadata
+// would: the one published with what reloaded, also beside a
+// PartialRefreshError, or an earlier one when the refresh did not run to its
+// publication. A zero Session returns nil.
+func (s *Session) RefreshMetadata(ctx context.Context) (*metadata.Snapshot, error) {
+	err := s.internal().RefreshMetadata(ctx)
+	return s.Metadata(), err
 }
 
 // Subscribe subscribes to matching session events. Close the subscription when

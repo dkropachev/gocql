@@ -114,7 +114,7 @@ type sessionTestRetry struct {
 }
 
 func (p sessionTestRetry) Decide(e retry.Attempt) retry.Decision {
-	if e.Number >= p.maxAttempts {
+	if e.Attempt >= p.maxAttempts {
 		return retry.Decision{Action: retry.Stop}
 	}
 	return retry.Decision{Action: p.action}
@@ -430,7 +430,7 @@ func TestSession(t *testing.T) {
 				}
 				defer s.Close()
 
-				err = s.RefreshMetadata(context.Background())
+				_, err = s.RefreshMetadata(context.Background())
 				if err != nil {
 					t.Fatalf("failed to refresh ring: %v", err)
 				}

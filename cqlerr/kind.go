@@ -76,13 +76,12 @@ func (k Kind) String() string {
 // ExecutionStatusOf.
 //
 // KindTimeout is transient, and it also covers the caller's own expired
-// context deadline, which no retry under that context can outlive. A retry
-// loop checks its context first:
-//
-//	for cqlerr.KindOf(err).Transient() && ctx.Err() == nil { ... }
-//
+// context deadline, which no retry under that context can outlive.
 // errors.Is(err, ErrRequestTimeout) holds only when the driver's own Timeout
-// or PageTimeout ran out.
+// or PageTimeout ran out. Retryable tells the two apart and also checks the
+// execution status, so a retry loop needs only it:
+//
+//	for cqlerr.Retryable(err, idempotent) { ... }
 func (k Kind) Transient() bool {
 	switch k {
 	case KindTimeout, KindUnavailable, KindOverloaded, KindRateLimited, KindConnection:

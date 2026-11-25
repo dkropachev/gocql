@@ -19,3 +19,9 @@ type SpeculationPolicy interface {
 	// the number of attempts started so far, and false to start no more.
 	Delay(started int) (time.Duration, bool)
 }
+
+// SpeculationPolicyFunc adapts a function to SpeculationPolicy.
+type SpeculationPolicyFunc func(started int) (time.Duration, bool)
+
+// Delay calls f.
+func (f SpeculationPolicyFunc) Delay(started int) (time.Duration, bool) { return f(started) }

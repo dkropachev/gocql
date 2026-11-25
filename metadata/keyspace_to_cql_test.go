@@ -341,7 +341,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				Tables: map[string]*Table{
 					"users": {
 						Name:           "users",
-						OrderedColumns: []string{"id", "home"},
+						OrderedColumns: []*Column{col("id", "uuid", ColumnKindPartitionKey), col("home", "frozen<addr>", ColumnKindRegular)},
 						Columns: map[string]*Column{
 							"id":   col("id", "uuid", ColumnKindPartitionKey),
 							"home": col("home", "frozen<addr>", ColumnKindRegular),
@@ -375,7 +375,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 					"users_by_zip": {
 						Keyspace: "ks", Name: "users_by_zip", BaseTable: "users",
 						WhereClause:    "home IS NOT NULL",
-						OrderedColumns: []string{"id", "home"},
+						OrderedColumns: []*Column{{Name: "id"}, {Name: "home"}},
 						PartitionKey:   []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					},
 				},
@@ -454,7 +454,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				for _, n := range []string{"a_t", "b_t", "c_t"} {
 					ks.Types[n] = &Type{Keyspace: "ks", Name: n, FieldNames: []string{"f"}, FieldTypes: []string{"int"}}
 					ks.Tables[n] = &Table{
-						Name: n, OrderedColumns: []string{"id"},
+						Name: n, OrderedColumns: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 						Columns:      map[string]*Column{"id": col("id", "uuid", ColumnKindPartitionKey)},
 						PartitionKey: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					}
@@ -474,7 +474,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 					}
 					ks.Views[n+"_v"] = &View{
 						Keyspace: "ks", Name: n + "_v", BaseTable: n,
-						WhereClause: "id IS NOT NULL", OrderedColumns: []string{"id"},
+						WhereClause: "id IS NOT NULL", OrderedColumns: []*Column{{Name: "id"}},
 						PartitionKey: []*Column{col("id", "uuid", ColumnKindPartitionKey)},
 					}
 				}
@@ -517,7 +517,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						Name:              "my-tbl",
 						PartitionKey:      []*Column{{Name: "pk", Type: "int"}},
 						ClusteringColumns: []*Column{{Name: "Order", Type: "int", ClusteringOrder: ColumnOrderDesc}},
-						OrderedColumns:    []string{"pk", "Order", "select"},
+						OrderedColumns:    []*Column{{Name: "pk", Type: "int", Kind: ColumnKindPartitionKey}, {Name: "Order", Type: "int", Kind: ColumnKindClusteringKey}, {Name: "select", Type: "text", Kind: ColumnKindRegular}},
 						Columns: map[string]*Column{
 							"pk":     {Name: "pk", Type: "int", Kind: ColumnKindPartitionKey},
 							"Order":  {Name: "Order", Type: "int", Kind: ColumnKindClusteringKey},
@@ -535,7 +535,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 					"my-view": {
 						Keyspace: "my-ks", Name: "my-view", BaseTable: "my-tbl",
 						WhereClause:    `"Order" IS NOT NULL`,
-						OrderedColumns: []string{"pk", "Order"},
+						OrderedColumns: []*Column{{Name: "pk"}, {Name: "Order"}},
 						PartitionKey:   []*Column{{Name: "pk"}},
 					},
 				},
@@ -602,7 +602,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 				// output would mention this table.
 				Tables: map[string]*Table{"t": {
 					Name:           "t",
-					OrderedColumns: []string{"id"},
+					OrderedColumns: []*Column{col("id", "int", ColumnKindPartitionKey)},
 					Columns:        map[string]*Column{"id": col("id", "int", ColumnKindPartitionKey)},
 					PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 				}},
@@ -831,7 +831,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			vm := &View{
 				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause:    "id IS NOT NULL",
-				OrderedColumns: []string{"id", "name"},
+				OrderedColumns: []*Column{{Name: "id"}, {Name: "name"}},
 				PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 			}
 			var sb strings.Builder
@@ -857,7 +857,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 			vm := &View{
 				Keyspace: "ks", Name: "v", BaseTable: "t",
 				WhereClause: "id IS NOT NULL", IncludeAllColumns: true,
-				OrderedColumns: []string{"id"},
+				OrderedColumns: []*Column{{Name: "id"}},
 				PartitionKey:   []*Column{col("id", "int", ColumnKindPartitionKey)},
 			}
 			var sb strings.Builder

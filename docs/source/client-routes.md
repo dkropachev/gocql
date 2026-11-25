@@ -9,6 +9,9 @@ its `port`. `Build` rejects an empty or repeated connection ID and client
 routes together with `WithAddressTranslator`, and `Build` with a Cassandra
 dialect fails with `*cqlerr.UnsupportedSettingError`.
 
+<!-- snippet
+var tlsConfig *tls.Config
+-->
 ```go
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	WithTLS(tlsConfig).

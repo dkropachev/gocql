@@ -388,6 +388,7 @@ func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved
 	info.Consistency = resolved.InternalProfile.Consistency
 	info.HostID = values.HostID
 	info.ShardID = values.ShardID
+	info.AnyShardFallback = values.AnyShardFallback
 	if info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial {
 		info.Kind = cql.ConditionalStatement
 	}

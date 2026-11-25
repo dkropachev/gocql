@@ -35,6 +35,11 @@ func PublicRoutes(routes []Route) []metadata.Route {
 	return unsafe.Slice((*metadata.Route)(unsafe.Pointer(unsafe.SliceData(routes))), len(routes))
 }
 
+// EngineRoutes returns routes as Routes, sharing their storage.
+func EngineRoutes(routes []metadata.Route) []Route {
+	return unsafe.Slice((*Route)(unsafe.Pointer(unsafe.SliceData(routes))), cap(routes))[:len(routes)]
+}
+
 // EngineOf returns the engine policy of p: the session's own for a policy
 // routing.NewPolicy or routing.SingleTarget made, an adapter for an
 // application's.
@@ -52,7 +57,7 @@ func EngineOf(p routing.Policy) RoutingPolicy {
 	}
 	a := &applicationPolicy{p: p}
 	a.validator, _ = p.(routing.Validator)
-	a.observer, _ = p.(routing.AttemptObserver)
+	a.observer, _ = p.(routing.Learner)
 	return a
 }
 
@@ -86,8 +91,15 @@ func init() {
 	link.Set(link.HostRoutes, func(m *metadata.Snapshot) []metadata.Route {
 		return PublicRoutes(SnapshotOf(m).HostRoutes())
 	})
-	link.Set(link.ReplicaRoutes, func(m *metadata.Snapshot, info routing.Info) []metadata.Route {
-		return PublicRoutes(SnapshotOf(m).ReplicaRoutes(info))
+	link.Set(link.ReplicaRoutes, func(dst []metadata.Route, m *metadata.Snapshot, info routing.Info) []metadata.Route {
+		return PublicRoutes(SnapshotOf(m).AppendReplicaRoutes(EngineRoutes(dst), info))
+	})
+	link.Set(link.RouteTo, func(m *metadata.Snapshot, id cql.UUID) (metadata.Route, bool) {
+		r, ok := SnapshotOf(m).RouteTo(id)
+		return PublicRoute(r), ok
+	})
+	link.Set(link.RouteLocality, func(host unsafe.Pointer) (string, string) {
+		return (*pool.HostRoute)(host).Locality()
 	})
 	link.Set(link.RouteHost, func(host unsafe.Pointer) (cql.UUID, bool) {
 		h := (*pool.HostRoute)(host)
@@ -112,14 +124,14 @@ func (v publicPolicy) Fallback(info routing.Info, m *metadata.Snapshot) routing.
 	return publicPlan{v.p.Fallback(info, SnapshotOf(m))}
 }
 
-func (v publicPolicy) Observe(e routing.AttemptEvent) { v.p.Observe(e) }
+func (v publicPolicy) Learn(e routing.AttemptEvent) { v.p.Learn(e) }
 
 // applicationPolicy is an application's routing.Policy seen as an engine
 // policy, with the optional interfaces it implements.
 type applicationPolicy struct {
 	p         routing.Policy
 	validator routing.Validator
-	observer  routing.AttemptObserver
+	observer  routing.Learner
 	// validated is the last snapshot the policy validated without error.
 	validated atomic.Pointer[MetadataSnapshot]
 }
@@ -154,9 +166,9 @@ func (a *applicationPolicy) Fallback(info routing.Info, m *MetadataSnapshot) Que
 	return applicationPlan{plan}
 }
 
-func (a *applicationPolicy) Observe(e routing.AttemptEvent) {
+func (a *applicationPolicy) Learn(e routing.AttemptEvent) {
 	if a.observer != nil {
-		a.observer.Observe(e)
+		a.observer.Learn(e)
 	}
 }
 

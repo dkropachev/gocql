@@ -48,18 +48,18 @@ func (a Action) String() string {
 type Attempt struct {
 	// Err is the attempt's error.
 	Err error
-	// Number is the 1-based number of the failed attempt.
-	Number int
+	// Attempt is the 1-based number of the failed attempt.
+	Attempt int
 	// Idempotent reports that the request was marked idempotent.
 	Idempotent bool
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
-	// Kind classifies the request's statement, or a batch's statements
+	// StatementKind classifies the request's statement, or a batch's statements
 	// together: ConditionalStatement when one of them is conditional, else
 	// OrdinaryStatement. The driver resolves an UnknownStatement before
 	// sending it (see cql.UnknownStatement); a policy should still treat
 	// anything but OrdinaryStatement as a possible lightweight transaction.
-	Kind cql.StatementKind
+	StatementKind cql.StatementKind
 	// Batch is the kind of batch the request sends; it is unset for any
 	// other request.
 	Batch cql.Option[cql.BatchKind]

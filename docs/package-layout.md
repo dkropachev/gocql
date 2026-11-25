@@ -247,9 +247,9 @@ documented methods.
 ### `routing` (layer 1)
 
 - **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces, the
-  optional `Validator` and `AttemptObserver` interfaces of a policy,
+  optional `Validator` and `Learner` interfaces of a policy,
   `TokenPartitionerFunc`, `Options`, `LatencyOptions`, `Info`, `PartitionKey`
-  and `AttemptEvent` (which `AttemptObserver.Observe` consumes), the built-in policy
+  and `AttemptEvent` (which `Learner.Learn` consumes), the built-in policy
   constructors (`NewPolicy`, `SingleTarget`) and the `*Builtin` they return,
   and the functions a custom policy picks with (`PlanOf`, `HostRoutes`,
   `ReplicaRoutes`). The built-in policies are the session's: `NewPolicy`
@@ -278,17 +278,15 @@ documented methods.
 
 ### `observe` (layer 1)
 
-- **Contains:** `Observer`, any value implementing one or more of the hook
-  interfaces `RequestObserver` and `AttemptObserver`; their function
-  adapters `RequestObserverFunc` and `AttemptObserverFunc`; `Join`, which
-  combines observers; and their event payloads (`RequestStart`,
-  `RequestEvent`, `AttemptStart`). `AttemptObserver.StartAttempt` ends with
-  `routing.AttemptEvent`, which routing policies also observe, and
+- **Contains:** `Hooks`, a struct of the hook functions `Request` and
+  `Attempt`; `Join`, which combines several; and their event payloads
+  (`RequestStart`, `RequestEvent`, `AttemptStart`). The `Attempt` hook ends with
+  `routing.AttemptEvent`, which routing policies also learn from, and
   `endpoint.ConvictionEvent` stays with the conviction policy.
 - **Must not contain:** exporters. OpenTelemetry and Prometheus integrations
-  are `contrib/` modules that implement these interfaces.
-- **Future:** new hooks as new hook interfaces, never as methods added to an
-  existing one.
+  are `contrib/` modules that fill these hooks.
+- **Future:** new hooks as new fields of `Hooks`, which a zero value leaves
+  unset.
 
 ### `event` (layer 1)
 

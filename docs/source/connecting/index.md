@@ -96,7 +96,7 @@ default profile back:
 reads := cfg.DefaultProfile().Builder().WithConsistency(cql.One).MustBuild()
 ```
 
-`Config.Observer` returns the observer `WithObserver` chose, which
+`Config.Observer` returns the hooks `WithObserver` chose, which
 `Session.Observer` also returns. `WithIgnoreEvents` replaces the complete ignored-event
 list; calling it without arguments restores all events.
 

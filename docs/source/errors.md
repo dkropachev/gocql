@@ -31,12 +31,18 @@ not say whether a retry is safe; combine it with the execution status.
 `KindTimeout` covers both the driver's own budget and the caller's expired
 context. When the profile's `Timeout` or `exec.Options.Timeout` (or
 `PageTimeout`) runs out, the error matches `cqlerr.ErrRequestTimeout`; it
-also matches `context.DeadlineExceeded`, as the caller's deadline does. A
-retry under a context that has ended cannot succeed, so a retry loop checks
-the context first:
+also matches `context.DeadlineExceeded`, as the caller's deadline does.
 
+`cqlerr.Retryable(err, idempotent)` puts the two questions together: the error
+is transient, it is not the caller's own cancellation or deadline, and the
+request was not executed or is idempotent. A retry loop needs nothing else:
+
+<!-- snippet
+var insert *gocql.Prepared[int32, cql.EmptyRow]
+var row int32
+-->
 ```go
-for attempt := 0; err != nil && cqlerr.KindOf(err).Transient() && ctx.Err() == nil && attempt < 3; attempt++ {
+for attempt := 0; cqlerr.Retryable(err, true) && attempt < 3; attempt++ {
 	_, err = insert.Exec(ctx, row)
 }
 ```
@@ -64,6 +70,12 @@ if timeout, ok := errors.AsType[*cqlerr.WriteTimeoutError](err); ok {
 }
 ```
 
+Every server error also reports its `Kind`, the one `cqlerr.KindOf` gives it.
+A read or write failure on protocol 5 maps each failed replica to a
+`cqlerr.FailureReason` in its `ErrorMap`, such as
+`FailureReasonReadTooManyTombstones`; a code the driver does not name, such
+as one of ScyllaDB's own, prints as a number.
+
 Messages start with the code's name, e.g.
 `write timeout: Operation timed out ...`.
 
@@ -79,17 +91,21 @@ stopped, the error `KindOf` classifies; read an earlier attempt's error from
 `Attempts`. `cqlerr.IsCASWriteUnknown` checks every attempt, so it still
 reports an LWT timeout that the caller's cancellation ended.
 
+<!-- snippet
+var insert *gocql.Prepared[int32, cql.EmptyRow]
+var row int32
+-->
 ```go
 _, err := insert.Exec(ctx, row)
 if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 	log.Printf("stopped: %v (%s)", failure.Err, failure.ExecutionStatus())
 	for _, a := range failure.Attempts {
 		shard := "-"
-		if a.ShardID.Set {
-			shard = strconv.FormatUint(uint64(a.ShardID.Value), 10)
+		if a.Target.ShardID.Set {
+			shard = strconv.FormatUint(uint64(a.Target.ShardID.Value), 10)
 		}
 		log.Printf("attempt %d: host %s (%s) shard %s at %s: %s: %v",
-			a.Number, a.HostID, a.Address, shard, a.Consistency, a.ExecutionStatus, a.Err)
+			a.Attempt, a.Target.HostID, a.Address, shard, a.Consistency, a.ExecutionStatus, a.Err)
 	}
 }
 ```
@@ -121,7 +137,7 @@ To test code that handles these errors, such as a `retry.Policy` or a
 fallback path, build one with `cqlerr.NewExecutionError(err, status,
 attempts...)`, and a server error with its type or
 `cqlerr.NewOtherServerError(code, message)`. A successful call names its coordinator host
-in `Result.HostID`; an `Observer` sees the shard of every attempt in
+in `Result.HostID`; an `observe.Hooks` attempt hook sees the shard of every attempt in
 `AttemptEvent.Target`.
 
 ## Connecting

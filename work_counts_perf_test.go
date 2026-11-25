@@ -157,7 +157,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						options = exec.Options{}
 					}
 					if enabled {
-						options.Observer = observer
+						options.Observer = observe.Hooks{Request: observer.StartRequest, Attempt: observer.StartAttempt}
 					}
 					bound := runtimeQuery(t)
 					defer bound.Close()

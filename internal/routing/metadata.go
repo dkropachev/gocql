@@ -84,6 +84,30 @@ func (m *MetadataSnapshot) Table(keyspace, table string) (*metadata.Table, bool)
 	return implMetadata.InternalCloneV2Table(t), true
 }
 
+// View returns a copy of the schema of the materialized view keyspace.view.
+func (m *MetadataSnapshot) View(keyspace, view string) (*metadata.View, bool) {
+	if m == nil {
+		return nil, false
+	}
+	ks := SnapshotData(m).InternalKeyspaces[keyspace]
+	if ks == nil || ks.Views[view] == nil {
+		return nil, false
+	}
+	return implMetadata.InternalCloneV2View(ks.Views[view]), true
+}
+
+// Type returns a copy of the user-defined type keyspace.name.
+func (m *MetadataSnapshot) Type(keyspace, name string) (*metadata.Type, bool) {
+	if m == nil {
+		return nil, false
+	}
+	ks := SnapshotData(m).InternalKeyspaces[keyspace]
+	if ks == nil || ks.Types[name] == nil {
+		return nil, false
+	}
+	return implMetadata.InternalCloneV2Type(ks.Types[name]), true
+}
+
 // Host returns a copy of the host with id.
 func (m *MetadataSnapshot) Host(id cql.UUID) (HostSnapshot, bool) {
 	if m == nil {

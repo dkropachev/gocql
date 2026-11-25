@@ -18,7 +18,8 @@ package logging
 
 import "log/slog"
 
-// Attribute keys shared by every driver log record.
+// Attribute keys shared by every driver log record. The package gocql doc
+// promises them stable: never rename one.
 const (
 	KeyLogger     = "logger"
 	KeyHost       = "host"

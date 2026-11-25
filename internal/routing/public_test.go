@@ -111,7 +111,7 @@ func TestPublicRouteShard(t *testing.T) {
 }
 
 // appPolicy is an application policy that routes nowhere and counts its
-// calls, with optional Validate and Observe.
+// calls, with optional Validate and Learn.
 type appPolicy struct {
 	picks, fallbacks int
 }
@@ -134,7 +134,7 @@ type validatingPolicy struct {
 }
 
 func (p *validatingPolicy) Validate(*metadata.Snapshot) error { p.validates++; return p.err }
-func (p *validatingPolicy) Observe(routing.AttemptEvent)      { p.observed++ }
+func (p *validatingPolicy) Learn(routing.AttemptEvent)        { p.observed++ }
 
 // TestPinnedBeforePolicy checks that a request pinned to a host follows the
 // pinned plan without consulting an application's policy.
@@ -160,7 +160,7 @@ func TestPinnedBeforePolicy(t *testing.T) {
 	}
 }
 
-// TestApplicationPolicyInterfaces checks that Validate and Observe are
+// TestApplicationPolicyInterfaces checks that Validate and Learn are
 // optional, and that Validate runs once per snapshot until it passes.
 func TestApplicationPolicyInterfaces(t *testing.T) {
 	m, next := v2TestMetadata(), v2TestMetadata()
@@ -168,7 +168,7 @@ func TestApplicationPolicyInterfaces(t *testing.T) {
 	if err := plain.Validate(m); err != nil {
 		t.Fatal(err)
 	}
-	plain.Observe(routing.AttemptEvent{})
+	plain.Learn(routing.AttemptEvent{})
 
 	v := &validatingPolicy{err: errors.New("not yet")}
 	p := EngineOf(v)
@@ -189,9 +189,9 @@ func TestApplicationPolicyInterfaces(t *testing.T) {
 	if err := p.Validate(next); err != nil || v.validates != 4 {
 		t.Fatalf("a new snapshot: %v, %d validations", err, v.validates)
 	}
-	p.Observe(routing.AttemptEvent{})
+	p.Learn(routing.AttemptEvent{})
 	if v.observed != 1 {
-		t.Fatalf("Observe ran %d times", v.observed)
+		t.Fatalf("Learn ran %d times", v.observed)
 	}
 	if PublicPolicy(p) != routing.Policy(v) {
 		t.Fatal("PublicPolicy does not return the application's policy")

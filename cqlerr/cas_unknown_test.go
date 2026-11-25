@@ -38,7 +38,7 @@ func TestIsCASWriteUnknown(t *testing.T) {
 // attempt: an LWT timeout the caller's cancellation ended is still reported.
 func TestIsCASWriteUnknownInAttempts(t *testing.T) {
 	timeout := &WriteTimeoutError{WriteType: WriteTypeCAS}
-	err := NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: timeout, Number: 1})
+	err := NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: timeout, Attempt: 1})
 	if errors.Is(err, CodeWriteTimeout) {
 		t.Fatal("ExecutionError unwraps an earlier attempt")
 	}

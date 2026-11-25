@@ -49,13 +49,13 @@ type Options struct {
 	// Retry replaces the profile's retry policy; nil keeps it. Use
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
-	// Observer observes the execution as well as the session's observer
-	// (config.ConfigBuilder.WithObserver), joined after it as observe.Join
-	// joins them: each hook calls the session's observer first, then this
-	// one, and the context this one's StartRequest receives is the one the
-	// session's returned. Nil adds nothing. To observe an execution with
+	// Observer observes the execution as well as the session's hooks
+	// (config.ConfigBuilder.WithObserver), joined after them as observe.Join
+	// joins them: each hook calls the session's first, then this one's, and
+	// the context this Request hook receives is the one the session's
+	// returned. The zero Hooks adds nothing. To observe an execution with
 	// Observer alone, set NoSessionObserver too.
-	Observer observe.Observer
+	Observer observe.Hooks
 	// Profile replaces the session's default profile before other overrides.
 	// It must come from config.ProfileBuilder.Build; a config.Profile literal
 	// is rejected.
@@ -92,13 +92,18 @@ type Options struct {
 	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
 	NowInSeconds cql.Option[int32]
 	// ShardID sends the request on a connection of this shard of the node
-	// HostID names; it requires HostID. Only ScyllaDB has shards: on a
-	// session of another dialect, Session.CompileOptions and every execution
-	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
+	// HostID names; it requires HostID. The request stays on the shard,
+	// failing when it has no connection, unless AnyShardFallback is set.
+	// Only ScyllaDB has shards: on a session of another dialect,
+	// Session.CompileOptions and every execution fail with a
+	// cqlerr.UnsupportedSettingError, and nothing is sent.
 	ShardID cql.Option[uint32]
 	// Consistency replaces the profile's consistency level when set.
 	Consistency cql.Option[cql.Consistency]
-	// HostID sends the request to the host with this host ID when set.
+	// HostID sends the request to the host with this host ID when set,
+	// without consulting the profile's routing policy: a pin here takes
+	// precedence over a routing.SingleTarget policy, whose target and
+	// AnyShardFallback then do not apply.
 	HostID cql.Option[cql.UUID]
 	// SerialConsistency overrides the profile's serial consistency of
 	// conditional statements. The zero value, SerialInherit, keeps it.
@@ -115,11 +120,18 @@ type Options struct {
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
-	// instrumentation such as OpenTelemetry, which hooks observe.Observer.
+	// instrumentation such as OpenTelemetry, which uses observe.Hooks.
 	CQLTrace bool
-	// NoSessionObserver leaves the session's observer out of the
-	// execution, so Observer alone observes it, or nothing does when
-	// Observer is nil.
+	// AnyShardFallback lets a request pinned to ShardID use another shard of
+	// HostID when ShardID has no connection or the host has no such shard,
+	// as metadata.Target.AnyShardFallback does for a routing.SingleTarget
+	// policy. It requires ShardID. The zero value keeps the request on
+	// ShardID. A conditional request, or one with SERIAL or LOCAL_SERIAL
+	// consistency, stays on ShardID regardless.
+	AnyShardFallback bool
+	// NoSessionObserver leaves the session's hooks out of the execution, so
+	// Observer alone observes it, or nothing does when Observer is the zero
+	// Hooks.
 	NoSessionObserver bool
 }
 
@@ -248,7 +260,7 @@ func publicOptions(o implSession.Options) Options {
 		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
-		NoSessionObserver: o.NoSessionObserver,
+		NoSessionObserver: o.NoSessionObserver, AnyShardFallback: o.AnyShardFallback,
 	}
 	if o.Timestamp.Set {
 		v.Timestamp = cql.Some(time.UnixMicro(o.Timestamp.Value).UTC())

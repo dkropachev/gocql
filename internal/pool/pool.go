@@ -303,7 +303,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, rou
 	if requested.Set {
 		if uint64(requested.Value) < uint64(len(p.InternalConns)) {
 			shard = int(requested.Value)
-		} else if target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement {
+		} else if StrictTarget(target) || PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement {
 			return nil
 		}
 	} else if routing.Token.Set {
@@ -322,7 +322,7 @@ func (p *InternalTypedConnPicker) InternalPickTarget(target metadata.Target, rou
 			return preferred
 		}
 	}
-	if (target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement) && shard >= 0 {
+	if (StrictTarget(target) || PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement) && shard >= 0 {
 		return preferred
 	}
 
@@ -376,7 +376,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		if p, ok := pool.InternalConnPicker.(*InternalTypedConnPicker); ok {
 			p.InternalMu.RLock()
 			shard := -1
-			strict := target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement
+			strict := StrictTarget(target) || PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement
 			requested := target.ShardID
 			if routing.ShardID.Set {
 				requested = routing.ShardID
@@ -414,7 +414,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 			if routing.ShardID.Set {
 				shard = routing.ShardID
 			}
-			strict := target.StrictShard || routing.ShardID.Set
+			strict := StrictTarget(target) || PinnedShard(routing)
 			for _, c := range p.InternalConns {
 				if shard.Set && strict && uint32(implEndpoint.ScyllaConnectionFeaturesData(&c.InternalScyllaSupported).InternalShard) != shard.Value {
 					continue
@@ -576,4 +576,16 @@ type HostPoolInfo interface {
 	InFlight() int
 	Host() implEndpoint.HostInformation
 	IsClosed() bool
+}
+
+// StrictTarget reports whether a request for target must stay on its
+// shard: it names one without AnyShardFallback.
+func StrictTarget(target metadata.Target) bool {
+	return target.ShardID.Set && !target.AnyShardFallback
+}
+
+// PinnedShard reports whether a request info describes is pinned to its
+// shard: it names one without AnyShardFallback.
+func PinnedShard(info routing.Info) bool {
+	return info.ShardID.Set && !info.AnyShardFallback
 }

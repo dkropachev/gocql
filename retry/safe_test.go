@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
@@ -20,7 +21,7 @@ import (
 // attempt on one connection reports it, with the status the driver derives.
 func attempt(err error, sent bool, idempotent bool) retry.Attempt {
 	err = runtimeerrors.NewQueryError(runtimeerrors.QueryErrorState{InternalErr: err, InternalPotentiallyExecuted: sent})
-	return retry.Attempt{Err: err, Number: 1, Idempotent: idempotent, ExecutionStatus: cqlerr.ExecutionStatusOf(err)}
+	return retry.Attempt{Err: err, Attempt: 1, Idempotent: idempotent, ExecutionStatus: cqlerr.ExecutionStatusOf(err)}
 }
 
 // TestSafe pins retry.Safe's decision for every class of failure, for
@@ -105,7 +106,7 @@ func TestSafe(t *testing.T) {
 	// status proves nothing was applied: the status, not the error, decides.
 	t.Run("StatusDecides", func(t *testing.T) {
 		for _, status := range []cqlerr.ExecutionStatus{cqlerr.MaybeExecuted, cqlerr.PartiallyExecuted, cqlerr.NotExecuted} {
-			got := (retry.Safe{}).Decide(retry.Attempt{Err: errors.New("broken"), Number: 1, ExecutionStatus: status})
+			got := (retry.Safe{}).Decide(retry.Attempt{Err: errors.New("broken"), Attempt: 1, ExecutionStatus: status})
 			want := retry.Stop
 			if status == cqlerr.NotExecuted {
 				want = retry.Next
@@ -115,7 +116,7 @@ func TestSafe(t *testing.T) {
 			}
 		}
 		// The zero Attempt is the safe assumption: maybe executed.
-		if got := (retry.Safe{}).Decide(retry.Attempt{Err: errors.New("broken"), Number: 1}); got.Action != retry.Stop {
+		if got := (retry.Safe{}).Decide(retry.Attempt{Err: errors.New("broken"), Attempt: 1}); got.Action != retry.Stop {
 			t.Errorf("zero status replayed: %v", got.Action)
 		}
 	})
@@ -153,7 +154,7 @@ func TestSafe(t *testing.T) {
 			{"Unlogged/Conditional", unavailable, cql.Some(cql.UnloggedBatch), false, cql.ConditionalStatement, retry.Stop},
 		} {
 			a := attempt(tc.err, true, tc.idempotent)
-			a.Batch, a.Kind = tc.batch, tc.kind
+			a.Batch, a.StatementKind = tc.batch, tc.kind
 			if got := (retry.Safe{}).Decide(a); got.Action != tc.want {
 				t.Errorf("%s: %v, want %v", tc.name, got.Action, tc.want)
 			}
@@ -162,16 +163,28 @@ func TestSafe(t *testing.T) {
 
 	t.Run("MaxAttempts", func(t *testing.T) {
 		for _, tc := range []struct{ max, number int }{{0, 3}, {-1, 3}, {1, 1}, {5, 5}} {
-			a := retry.Attempt{Err: &cqlerr.UnavailableError{}, Number: tc.number - 1, ExecutionStatus: cqlerr.NotExecuted}
-			if a.Number > 0 {
+			a := retry.Attempt{Err: &cqlerr.UnavailableError{}, Attempt: tc.number - 1, ExecutionStatus: cqlerr.NotExecuted}
+			if a.Attempt > 0 {
 				if got := (retry.Safe{MaxAttempts: tc.max}).Decide(a); got.Action != retry.Next {
-					t.Errorf("max %d: attempt %d stopped", tc.max, a.Number)
+					t.Errorf("max %d: attempt %d stopped", tc.max, a.Attempt)
 				}
 			}
-			a.Number = tc.number
+			a.Attempt = tc.number
 			if got := (retry.Safe{MaxAttempts: tc.max}).Decide(a); got.Action != retry.Stop {
-				t.Errorf("max %d: attempt %d retried", tc.max, a.Number)
+				t.Errorf("max %d: attempt %d retried", tc.max, a.Attempt)
 			}
 		}
 	})
+}
+
+func TestSpeculationPolicyFunc(t *testing.T) {
+	var policy retry.SpeculationPolicy = retry.SpeculationPolicyFunc(func(started int) (time.Duration, bool) {
+		return time.Duration(started) * time.Millisecond, started < 2
+	})
+	if d, ok := policy.Delay(1); d != time.Millisecond || !ok {
+		t.Fatalf("Delay(1) = %v, %v", d, ok)
+	}
+	if _, ok := policy.Delay(2); ok {
+		t.Fatal("Delay(2) started another attempt")
+	}
 }

@@ -2,11 +2,12 @@
 
 `Profile.Retry` is a `retry.Policy`: `Decide(retry.Attempt) retry.Decision`.
 The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
-`ProfileBuilder.WithRetry`. `retry.Attempt` carries the failed attempt's error,
-1-based number, idempotence (`Statement.Idempotent` or the profile's
-`Idempotent`, or `exec.Options.Idempotent` when set), consistency, whether
-it is conditional, the kind of batch it sends (`Batch`, unset for a single
-statement), and `ExecutionStatus`, which reports whether the attempt
+`ProfileBuilder.WithRetry`. `retry.Attempt` carries the failed attempt's error
+(`Err`), its 1-based number (`Attempt`), idempotence (`Idempotent`: the
+statement's or the profile's, or `exec.Options.Idempotent` when set), its
+`Consistency`, its `StatementKind` (`cql.ConditionalStatement` when it or a
+batch member is conditional), the kind of batch it sends (`Batch`, unset for a
+single statement), and `ExecutionStatus`, which reports whether the attempt
 may have changed data (see [Errors](errors.md)). A `retry.Decision` selects
 `retry.Stop` (the zero value), `retry.Same` (the same host) or `retry.Next`
 (the next host of the plan), with an optional `Consistency` for the next attempt and a
@@ -36,7 +37,7 @@ attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
 
 ```go
 policy := retry.PolicyFunc(func(a retry.Attempt) retry.Decision {
-	if a.Number < 5 && cqlerr.KindOf(a.Err) == cqlerr.KindOverloaded {
+	if a.Attempt < 5 && cqlerr.KindOf(a.Err) == cqlerr.KindOverloaded {
 		return retry.Decision{Action: retry.Next, Delay: 100 * time.Millisecond}
 	}
 	return retry.Safe{}.Decide(a)
@@ -48,8 +49,7 @@ Overloaded. Cassandra checks such a batch one partition at a time and can
 reject it after it sent the earlier partitions' writes, so a replay could
 apply them twice; the attempt reports `cqlerr.MaybeExecuted`. The rule applies
 to ScyllaDB as well: the driver does not rely on the order in which a server
-checks a batch's partitions, and it covers conditional batches too, since a
-batch whose statements the driver did not classify counts as conditional. A
+checks a batch's partitions, and it covers conditional batches too. A
 logged batch is checked whole before its batch log is written, so it is
 retried as other requests are. A batch is idempotent when every member's
 statement is (`Statement.Idempotent`) or its profile is; `exec.Options.Idempotent` overrides

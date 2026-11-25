@@ -7,6 +7,10 @@ session may share a batch, and may write tables of different keyspaces. A
 member of another session is rejected with a `*cql.ValidationError`, as is
 the statement after `gocql.MaxBatchStatements`:
 
+<!-- snippet
+var insert *gocql.Prepared[int32, cql.EmptyRow]
+var rows []int32
+-->
 ```go
 batch := gocql.Batch{Kind: cql.UnloggedBatch}
 for _, r := range rows {
@@ -42,8 +46,11 @@ page, so paging options are ignored and the options you compiled for
 statements work for batches too. Compile them once and reuse them, for a
 one-off batch as well:
 
+<!-- snippet
+var batch gocql.Batch
+-->
 ```go
-idempotent, err := session.CompileOptions(exec.Options{Idempotent: true})
+idempotent, err := session.CompileOptions(exec.Options{Idempotent: cql.Some(true)})
 // ...
 _, err = session.ExecBatch(ctx, &batch, idempotent)
 ```

@@ -64,8 +64,9 @@ type InternalSessionRuntime struct {
 	// batchPool keeps the queries that run the session's batches, created
 	// by the first batch.
 	batchPool *queryPool[cql.EmptyRow, cql.EmptyRow]
-	// observerHooks are config.Observer's hooks; setConfig finds them.
-	observerHooks *settings.ObserverHooks
+	// observerHooks points at config.Observer, nil when it has no hook;
+	// setConfig sets it.
+	observerHooks *observe.Hooks
 	batchErr      error
 	// closing is closed when Close starts stopping executions.
 	closing              chan struct{}
@@ -192,11 +193,14 @@ func (rt *InternalSessionRuntime) countErrorKind(err error) {
 	rt.errorKinds[kind].Add(1)
 }
 
-// attemptEnded fills the outcome fields of an attempt event from its error.
-func attemptEnded(event *routing2.AttemptEvent) {
+// attemptEnded fills the outcome fields of an attempt event from its error;
+// partial reports a batch a server may apply in part (see attemptStatus).
+func attemptEnded(event *routing2.AttemptEvent, partial bool) {
 	if event.Err == nil {
+		event.ExecutionStatus = cqlerr.Executed
 		return
 	}
+	event.ExecutionStatus = attemptStatus(event.Err, partial)
 	switch cqlerr.KindOf(event.Err) {
 	case cqlerr.KindCanceled:
 		event.Canceled = true
@@ -571,10 +575,11 @@ func selectPreparedMetadata(state *InternalPreparedState, host cql.UUID, prepare
 
 type logicalExecution struct {
 	started time.Time
-	// hooks are the observer's hooks, nil without an observer.
-	hooks *settings.ObserverHooks
-	// observerCtx and requestEnd are what the observer's StartRequest
-	// returned; observerCtx is the caller's context without that hook.
+	// hooks are the execution's hooks, nil without any.
+	hooks *observe.Hooks
+	// observerCtx and requestEnd are what the Request hook returned;
+	// observerCtx is the caller's context without that hook. Log records of
+	// the request carry observerCtx.
 	observerCtx    context.Context
 	requestEnd     func(observe.RequestEvent)
 	ddlCoordinator atomic.Pointer[cql.UUID]
@@ -610,7 +615,7 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
 		event := observe.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
-		rt.ObserveSafely(func() { end(event) })
+		rt.ObserveSafely(l.observerCtx, func() { end(event) })
 	}
 }
 
@@ -618,13 +623,22 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
 	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
-	l.rt.ObserveSafely(func() {
-		observerCtx, end := l.hooks.Request.StartRequest(ctx, start)
+	l.rt.ObserveSafely(ctx, func() {
+		observerCtx, end := l.hooks.Request(ctx, start)
 		if observerCtx != nil {
 			l.observerCtx = observerCtx
 		}
 		l.requestEnd = end
 	})
+}
+
+// logContext returns the context the request's log records carry: the
+// one the Request hook returned, or the caller's.
+func (l *logicalExecution) logContext() context.Context {
+	if l == nil || l.observerCtx == nil {
+		return context.Background()
+	}
+	return l.observerCtx
 }
 
 // observesAttempts reports whether the observer has an attempt hook.
@@ -639,7 +653,7 @@ func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing
 		return nil
 	}
 	var end func(routing2.AttemptEvent)
-	l.rt.ObserveSafely(func() { end = l.hooks.Attempt.StartAttempt(l.observerCtx, start) })
+	l.rt.ObserveSafely(l.observerCtx, func() { end = l.hooks.Attempt(l.observerCtx, start) })
 	return end
 }
 
@@ -765,6 +779,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	request.routing.Consistency = resolved.InternalProfile.Consistency
 	request.routing.HostID = values.HostID
 	request.routing.ShardID = values.ShardID
+	request.routing.AnyShardFallback = values.AnyShardFallback
 	// SERIAL/LOCAL_SERIAL main consistency is a Paxos read. It is routed and
 	// retried like a conditional statement (strict replica order, no
 	// speculation, no client timestamp), but its result is ordinary rows, so
@@ -778,11 +793,7 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 		// resolved for another session find them here.
 		hooks = resolved.observerHooks
 		if hooks == nil {
-			h, err := executionHooks(rt, values)
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			hooks = h
+			hooks = executionHooks(rt, values)
 		}
 	}
 	if err := request.InternalOwner.InternalAdmit(); err != nil {
@@ -826,12 +837,10 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	}
 	rt.requests.Add(1)
 	rt.inflight.Add(1)
-	if hooks != nil {
-		if hooks.Request != nil {
-			logical.startRequest(ctx)
-		} else {
-			logical.observerCtx = ctx
-		}
+	if hooks != nil && hooks.Request != nil {
+		logical.startRequest(ctx)
+	} else {
+		logical.observerCtx = ctx
 	}
 	if values.Timestamp.Set {
 		request.timestamp, request.hasTimestamp = values.Timestamp.Value, true
@@ -1078,7 +1087,7 @@ type typedAttemptOutcome struct {
 
 // beginAttempt tells the request's observer that an attempt on conn starts
 // and returns its target, start time and the observer's end callback.
-func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
+func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest, conn *transport.Conn, index int, consistency cql.Consistency, speculative bool) (metadata.Target, time.Time, func(routing2.AttemptEvent)) {
 	target := attemptTarget(request, conn)
 	var requestID uint64
 	if request.InternalLogical != nil {
@@ -1088,7 +1097,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
@@ -1099,14 +1108,14 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
-	attemptEnded(&event)
+	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
+	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)
-		s.Core.ObserveSafely(func() { end(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; policy != nil {
-		s.Core.ObserveSafely(func() { policy.Observe(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { policy.Learn(event) })
 	}
 	return typedAttemptOutcome{response: response, err: err, conn: conn, event: event, consistency: consistency}
 }
@@ -1317,7 +1326,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		}
 		go func() {
 			defer request.InternalOwner.InternalRelease()
-			target, started, end := s.beginAttempt(request, conn, index, speculative)
+			target, started, end := s.beginAttempt(request, conn, index, consistency, speculative)
 			response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
 			outcome := s.attemptOutcome(request, conn, target, index, started, response, err, consistency, speculative, end)
 			if err == nil && spec.claimWin(outcome, cancel) {
@@ -1358,7 +1367,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		} else {
 			startedCount, active = 1, 1
 			s.attempts.Add(1)
-			target, started, end := s.beginAttempt(request, conn, 1, false)
+			target, started, end := s.beginAttempt(request, conn, 1, consistency, false)
 			// The callback takes spec.mu, so even after a zero delay it runs
 			// only once the timer is stored.
 			spec.mu.Lock()
@@ -1576,7 +1585,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Number: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {
@@ -1694,7 +1703,7 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		}
 		response, executeErr := conn.InternalExecuteTypedInto(ctx, wireRequest, request.responseDest)
 		if len(wireRequest.PreparedID) > 0 && wireRequest.Batch == nil {
-			s.Core.ApplyTypedFeedbackStamped(response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
+			s.Core.ApplyTypedFeedbackStamped(ctx, response, request.routing, request.tabletFeedback, conn.InternalFramers.InternalDefaults)
 		}
 		if unprepared, ok := errors.AsType[*cqlerr.UnpreparedError](executeErr); ok && repair < repairs && !bytes.Equal(unprepared.StatementID, repaired) {
 			repaired = unprepared.StatementID

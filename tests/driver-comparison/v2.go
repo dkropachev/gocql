@@ -77,7 +77,7 @@ func connect(hosts []string) (adapter, error) {
 		return nil, e
 	}
 	// Populate table/partitioner metadata before creating immutable prepared handles.
-	if e = s.RefreshMetadata(ctx); e != nil {
+	if _, e = s.RefreshMetadata(ctx); e != nil {
 		s.Close()
 		return nil, e
 	}

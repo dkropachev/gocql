@@ -67,7 +67,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	}
 	// The no-keyspace bootstrap validates its original ring assertions above.
 	// Explicit refresh loads schema for the additional qualified-query checks.
-	if err := session.RefreshMetadata(ctx); err != nil {
+	if _, err := session.RefreshMetadata(ctx); err != nil {
 		t.Fatal(err)
 	}
 	metadata = session.Metadata()

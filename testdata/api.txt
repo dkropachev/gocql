@@ -81,10 +81,10 @@ package gocql
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
-		gocql.Session method (*T) Observer() observe.Observer
+		gocql.Session method (*T) Observer() observe.Hooks
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
-		gocql.Session method (*T) RefreshMetadata(ctx context.Context) error
+		gocql.Session method (*T) RefreshMetadata(ctx context.Context) (*metadata.Snapshot, error)
 		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error
@@ -129,7 +129,7 @@ package config
 		config.ClientRoute field Hostname string
 	type config.Config struct
 		config.Config method (T) DefaultProfile() config.Profile
-		config.Config method (T) Observer() observe.Observer
+		config.Config method (T) Observer() observe.Hooks
 		config.Config method (T) String() string
 	type config.ConfigBuilder struct
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
@@ -161,6 +161,7 @@ package config
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalRack(rack string) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLogRateLimit(window time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxDecompressedSize(bytes int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
@@ -176,7 +177,7 @@ package config
 		config.ConfigBuilder method (*T) WithMetadataServerTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMetadataTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithNagle(on bool) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithObserver(observer observe.Observer) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithObserver(hooks observe.Hooks) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithOnlyHost(id cql.UUID) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPartitioner(name string, partitioner routing.TokenPartitioner) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPort(port uint16) *config.ConfigBuilder
@@ -866,12 +867,11 @@ package cqlerr
 	type cqlerr.AttemptFailure struct
 		cqlerr.AttemptFailure field Err error
 		cqlerr.AttemptFailure field Address string
-		cqlerr.AttemptFailure field HostID cql.UUID
-		cqlerr.AttemptFailure field Number int
-		cqlerr.AttemptFailure field ShardID cql.Option[uint32]
+		cqlerr.AttemptFailure field Attempt int
+		cqlerr.AttemptFailure field Target metadata.Target
 		cqlerr.AttemptFailure field Consistency cql.Consistency
-		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
+		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure method (T) String() string
 	type cqlerr.CASWriteUnknownError struct
 		cqlerr.CASWriteUnknownError field Consistency cql.Consistency
@@ -933,7 +933,7 @@ package cqlerr
 	var cqlerr.ErrUseStmt error
 	type cqlerr.ErrorCode uint16
 		cqlerr.ErrorCode method (T) Error() string
-	type cqlerr.ErrorMap map[net/netip.Addr]uint16
+	type cqlerr.ErrorMap map[net/netip.Addr]cqlerr.FailureReason
 	const cqlerr.Executed cqlerr.ExecutionStatus = 3
 	type cqlerr.ExecutionError struct
 		cqlerr.ExecutionError field Err error
@@ -947,6 +947,19 @@ package cqlerr
 	type cqlerr.ExecutionStatus uint8
 		cqlerr.ExecutionStatus method (T) String() string
 	func cqlerr.ExecutionStatusOf(err error) cqlerr.ExecutionStatus
+	type cqlerr.FailureReason uint16
+		cqlerr.FailureReason method (T) String() string
+	const cqlerr.FailureReasonCoordinatorBehind cqlerr.FailureReason = 10
+	const cqlerr.FailureReasonIncompatibleSchema cqlerr.FailureReason = 3
+	const cqlerr.FailureReasonIndexNotAvailable cqlerr.FailureReason = 6
+	const cqlerr.FailureReasonInvalidRouting cqlerr.FailureReason = 9
+	const cqlerr.FailureReasonNodeDown cqlerr.FailureReason = 5
+	const cqlerr.FailureReasonNotCMS cqlerr.FailureReason = 8
+	const cqlerr.FailureReasonReadSize cqlerr.FailureReason = 4
+	const cqlerr.FailureReasonReadTooManyIndexes cqlerr.FailureReason = 7
+	const cqlerr.FailureReasonReadTooManyTombstones cqlerr.FailureReason = 1
+	const cqlerr.FailureReasonTimeout cqlerr.FailureReason = 2
+	const cqlerr.FailureReasonUnknown cqlerr.FailureReason = 0
 	type cqlerr.FunctionFailureError struct
 		cqlerr.FunctionFailureError field Keyspace string
 		cqlerr.FunctionFailureError field Function string
@@ -1039,6 +1052,7 @@ package cqlerr
 		cqlerr.ReadTimeoutError method (*T) Kind() cqlerr.Kind
 		cqlerr.ReadTimeoutError method (*T) Message() string
 		cqlerr.ReadTimeoutError method (*T) Warnings() []string
+	func cqlerr.Retryable(err error, idempotent bool) bool
 	type cqlerr.SchemaChangedError struct
 		cqlerr.SchemaChangedError field Statement string
 		cqlerr.SchemaChangedError field Previous cql.Columns
@@ -1048,6 +1062,7 @@ package cqlerr
 	type cqlerr.ServerError interface (sealed)
 		cqlerr.ServerError method Code() cqlerr.ErrorCode
 		cqlerr.ServerError method Error() string
+		cqlerr.ServerError method Kind() cqlerr.Kind
 		cqlerr.ServerError method Message() string
 		cqlerr.ServerError method Warnings() []string
 	type cqlerr.ServerMismatchError struct
@@ -1123,11 +1138,13 @@ package cqltrace
 		cqltrace.Event field Elapsed time.Duration
 		cqltrace.Event field ID cql.TimeUUID
 	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+	func cqltrace.FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Fetcher struct
 		cqltrace.Fetcher field Poll time.Duration
 		cqltrace.Fetcher field Settle time.Duration
 		cqltrace.Fetcher field Consistency cql.Consistency
 		cqltrace.Fetcher method (T) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+		cqltrace.Fetcher method (T) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Info struct
 		cqltrace.Info field Started time.Time
 		cqltrace.Info field Coordinator net/netip.Addr
@@ -1252,7 +1269,7 @@ package exec
 		exec.CompiledOptions method (T) Values() exec.Options
 	type exec.Options struct
 		exec.Options field Retry retry.Policy
-		exec.Options field Observer observe.Observer
+		exec.Options field Observer observe.Hooks
 		exec.Options field Profile *config.Profile
 		exec.Options field Keyspace string
 		exec.Options field Timestamp cql.Option[time.Time]
@@ -1269,6 +1286,7 @@ package exec
 		exec.Options field IncludeMetadata bool
 		exec.Options field Idempotent cql.Option[bool]
 		exec.Options field CQLTrace bool
+		exec.Options field AnyShardFallback bool
 		exec.Options field NoSessionObserver bool
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string
@@ -1349,7 +1367,7 @@ package metadata
 		metadata.Index field Kind metadata.IndexKind
 		metadata.Index field Options map[string]string
 		metadata.Index field Columns map[string]*metadata.Column
-		metadata.Index field OrderedColumns []string
+		metadata.Index field OrderedColumns []*metadata.Column
 		metadata.Index field PartitionKey []*metadata.Column
 		metadata.Index field ClusteringColumns []*metadata.Column
 	type metadata.IndexKind string
@@ -1381,7 +1399,9 @@ package metadata
 	const metadata.ModeKeyspaces metadata.Mode = 1
 	const metadata.ModeNone metadata.Mode = 0
 	type metadata.Route struct
+		metadata.Route method (T) Datacenter() string
 		metadata.Route method (T) HostID() cql.UUID
+		metadata.Route method (T) Rack() string
 		metadata.Route method (T) ShardID() cql.Option[uint32]
 		metadata.Route method (T) ShardOf(token int64) cql.Option[uint32]
 		metadata.Route method (T) Target() metadata.Target
@@ -1398,6 +1418,8 @@ package metadata
 		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
+		metadata.Snapshot method (*T) Type(keyspace string, name string) (*metadata.Type, bool)
+		metadata.Snapshot method (*T) View(keyspace string, name string) (*metadata.View, bool)
 	type metadata.Table struct
 		metadata.Table field Columns map[string]*metadata.Column
 		metadata.Table field Extensions map[string][]byte
@@ -1405,7 +1427,7 @@ package metadata
 		metadata.Table field Name string
 		metadata.Table field PartitionKey []*metadata.Column
 		metadata.Table field ClusteringColumns []*metadata.Column
-		metadata.Table field OrderedColumns []string
+		metadata.Table field OrderedColumns []*metadata.Column
 		metadata.Table field Flags []string
 		metadata.Table field Options metadata.TableOptions
 		metadata.Table field ID cql.UUID
@@ -1431,9 +1453,9 @@ package metadata
 		metadata.TableOptions field InMemory bool
 		metadata.TableOptions method (*T) Equal(other *metadata.TableOptions) bool
 	type metadata.Target struct
-		metadata.Target field StrictShard bool
 		metadata.Target field HostID cql.UUID
 		metadata.Target field ShardID cql.Option[uint32]
+		metadata.Target field AnyShardFallback bool
 	type metadata.TokenRange struct
 		metadata.TokenRange field Replicas []metadata.Target
 		metadata.TokenRange field Start int64
@@ -1450,7 +1472,7 @@ package metadata
 		metadata.View field BaseTable string
 		metadata.View field Keyspace string
 		metadata.View field Name string
-		metadata.View field OrderedColumns []string
+		metadata.View field OrderedColumns []*metadata.Column
 		metadata.View field PartitionKey []*metadata.Column
 		metadata.View field ClusteringColumns []*metadata.Column
 		metadata.View field Options metadata.TableOptions
@@ -1470,23 +1492,25 @@ package metrics
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
 		metrics.Snapshot field InFlight int64
+		metrics.Snapshot field Connections int
 		metrics.Snapshot field LatencyP50 time.Duration
 		metrics.Snapshot field LatencyP95 time.Duration
 		metrics.Snapshot field LatencyP99 time.Duration
 
 package observe
-	type observe.AttemptObserver interface
-		observe.AttemptObserver method StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
-	type observe.AttemptObserverFunc func(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
-		observe.AttemptObserverFunc method (T) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
 	type observe.AttemptStart struct
 		observe.AttemptStart field Started time.Time
+		observe.AttemptStart field Address string
 		observe.AttemptStart field RequestID uint64
 		observe.AttemptStart field Attempt int
 		observe.AttemptStart field Target metadata.Target
+		observe.AttemptStart field Consistency cql.Consistency
 		observe.AttemptStart field Speculative bool
-	func observe.Join(observers ...observe.Observer) observe.Observer
-	type observe.Observer interface
+	type observe.Hooks struct
+		observe.Hooks field Request func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
+		observe.Hooks field Attempt func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
+		observe.Hooks method (T) IsZero() bool
+	func observe.Join(hooks ...observe.Hooks) observe.Hooks
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
 		observe.RequestEvent field Statement string
@@ -1495,10 +1519,6 @@ package observe
 		observe.RequestEvent field Result cql.Result
 		observe.RequestEvent field Routing routing.Info
 		observe.RequestEvent field ID uint64
-	type observe.RequestObserver interface
-		observe.RequestObserver method StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
-	type observe.RequestObserverFunc func(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent))
-		observe.RequestObserverFunc method (T) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
@@ -1513,10 +1533,10 @@ package retry
 		retry.Action method (T) String() string
 	type retry.Attempt struct
 		retry.Attempt field Err error
-		retry.Attempt field Number int
+		retry.Attempt field Attempt int
 		retry.Attempt field Idempotent bool
 		retry.Attempt field Consistency cql.Consistency
-		retry.Attempt field Kind cql.StatementKind
+		retry.Attempt field StatementKind cql.StatementKind
 		retry.Attempt field Batch cql.Option[cql.BatchKind]
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
 	type retry.Decision struct
@@ -1536,37 +1556,43 @@ package retry
 	const retry.Same retry.Action = 1
 	type retry.SpeculationPolicy interface
 		retry.SpeculationPolicy method Delay(started int) (time.Duration, bool)
+	type retry.SpeculationPolicyFunc func(started int) (time.Duration, bool)
+		retry.SpeculationPolicyFunc method (T) Delay(started int) (time.Duration, bool)
 	const retry.Stop retry.Action = 0
 
 package routing
+	func routing.AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
 	type routing.AttemptEvent struct
 		routing.AttemptEvent field Started time.Time
 		routing.AttemptEvent field Err error
+		routing.AttemptEvent field Address string
 		routing.AttemptEvent field RequestID uint64
 		routing.AttemptEvent field Attempt int
 		routing.AttemptEvent field Latency time.Duration
 		routing.AttemptEvent field Target metadata.Target
 		routing.AttemptEvent field CQLTraceID cql.Option[cql.UUID]
+		routing.AttemptEvent field Consistency cql.Consistency
+		routing.AttemptEvent field ExecutionStatus cqlerr.ExecutionStatus
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool
-	type routing.AttemptObserver interface
-		routing.AttemptObserver method Observe(routing.AttemptEvent)
 	type routing.Builtin struct
 		routing.Builtin method (*T) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan
-		routing.Builtin method (*T) Observe(e routing.AttemptEvent)
+		routing.Builtin method (*T) Learn(e routing.AttemptEvent)
 		routing.Builtin method (*T) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool)
 		routing.Builtin method (*T) Validate(m *metadata.Snapshot) error
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
+	func routing.FilterPlan(plan routing.Plan, keep func(metadata.Route) bool) routing.Plan
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
 		routing.Info field Keyspace string
 		routing.Info field Table string
 		routing.Info field Token cql.Option[int64]
-		routing.Info field Kind cql.StatementKind
-		routing.Info field Consistency cql.Consistency
-		routing.Info field HostID cql.Option[cql.UUID]
 		routing.Info field ShardID cql.Option[uint32]
+		routing.Info field Consistency cql.Consistency
+		routing.Info field Kind cql.StatementKind
+		routing.Info field HostID cql.Option[cql.UUID]
+		routing.Info field AnyShardFallback bool
 	type routing.LatencyOptions struct
 		routing.LatencyOptions field Enabled bool
 		routing.LatencyOptions field ExclusionThreshold float64
@@ -1574,6 +1600,8 @@ package routing
 		routing.LatencyOptions field Scale time.Duration
 		routing.LatencyOptions field RetryPeriod time.Duration
 		routing.LatencyOptions field UpdateInterval time.Duration
+	type routing.Learner interface
+		routing.Learner method Learn(routing.AttemptEvent)
 	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
 	func routing.NewPolicy(options routing.Options) (*routing.Builtin, error)
 	type routing.Options struct
@@ -1594,6 +1622,8 @@ package routing
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
+	func routing.RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool)
+	func routing.Routes(plan routing.Plan) iter.Seq[metadata.Route]
 	func routing.SingleTarget(target metadata.Target) *routing.Builtin
 	type routing.TokenPartitioner interface
 		routing.TokenPartitioner method Token(routing.PartitionKey) (int64, error)
@@ -1605,12 +1635,14 @@ package routing
 package routing/routingtest
 	type routing/routingtest.Cluster struct
 		routing/routingtest.Cluster field Keyspaces map[string]*metadata.Keyspace
+		routing/routingtest.Cluster field Tables []routing/routingtest.Table
 		routing/routingtest.Cluster field TokenRanges map[string][]metadata.TokenRange
 		routing/routingtest.Cluster field Tablets map[routing/routingtest.Table][]metadata.TokenRange
 		routing/routingtest.Cluster field LocalDatacenter string
 		routing/routingtest.Cluster field LocalRack string
 		routing/routingtest.Cluster field Hosts []metadata.HostSnapshot
 		routing/routingtest.Cluster field Generation uint64
+	func routing/routingtest.Host(id cql.UUID, datacenter string, rack string) metadata.HostSnapshot
 	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) *metadata.Snapshot
 	type routing/routingtest.Table struct
 		routing/routingtest.Table field Keyspace string

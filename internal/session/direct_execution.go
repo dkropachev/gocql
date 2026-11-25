@@ -114,12 +114,12 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		var end func(routing2.AttemptEvent)
 		var observed time.Time
 		if observe {
-			end, observed = startDirectAttempt(request, conn, attempt)
+			end, observed = startDirectAttempt(request, conn, attempt, consistency)
 		}
 		response, err := s.executeTypedAttempt(ctx, conn, request, state, consistency)
 		latency := time.Since(started)
 		if observe {
-			s.endDirectAttempt(request, conn, attempt, observed, response, err, end)
+			s.endDirectAttempt(request, conn, attempt, consistency, observed, response, err, end)
 		}
 		aggregate.Attempts = attempt
 		aggregate.AttemptLatency += latency
@@ -166,7 +166,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Number: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, Kind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		switch decision.Action {
 		case retry.Stop:
@@ -262,24 +262,24 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) meta
 // although the execution's own latency may include it.
 //
 //go:noinline
-func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int) (func(routing2.AttemptEvent), time.Time) {
+func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, consistency cql.Consistency) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started}), started
+	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), Consistency: consistency, Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end
 // callback and to a latency-aware routing policy, on the calling goroutine.
 //
 //go:noinline
-func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
-	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response)}
-	attemptEnded(&event)
+func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, consistency cql.Consistency, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
+	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response)}
+	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)
-		s.Core.ObserveSafely(func() { end(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
 	}
 	if policy := request.options.InternalProfile.Routing; routingObservesLatency(policy) {
-		s.Core.ObserveSafely(func() { policy.Observe(event) })
+		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { policy.Learn(event) })
 	}
 }

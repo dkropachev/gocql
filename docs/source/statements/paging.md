@@ -20,6 +20,12 @@ does not retain worker input storage.
 For explicit paging use `RunPage(ctx, parameters, cql.StartPage(), pageSize)` and
 carry the returned page state to the next call:
 
+<!-- snippet
+var prepared *gocql.Prepared[int32, string]
+var parameters int32
+var state cql.PageState
+func use(*string) {}
+-->
 ```go
 page, err := prepared.RunPage(ctx, parameters, state, 50)
 if err != nil {

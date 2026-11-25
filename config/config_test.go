@@ -60,15 +60,15 @@ func editedProfile(edit func(*Profile)) Profile {
 // observer back, and derives a profile from it.
 func TestConfigReadBack(t *testing.T) {
 	var zero Config
-	if p := zero.DefaultProfile(); p != (Profile{}) || zero.Observer() != nil {
-		t.Fatalf("zero Config: profile %+v, observer %v", p, zero.Observer())
+	if p := zero.DefaultProfile(); p != (Profile{}) || !zero.Observer().IsZero() {
+		t.Fatalf("zero Config: profile %+v, observer %+v", p, zero.Observer())
 	}
-	observer := observe.RequestObserverFunc(func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	observer := observe.Hooks{Request: func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 		return ctx, func(observe.RequestEvent) {}
-	})
+	}}
 	cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithObserver(observer).
 		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.Never{}).MustBuild()))
-	if cfg.Observer() == nil {
+	if cfg.Observer().Request == nil {
 		t.Fatal("Observer() = nil, want the configured observer")
 	}
 	p := cfg.DefaultProfile()
@@ -131,6 +131,19 @@ func TestConfigBuilder(t *testing.T) {
 		}
 		mustBuildConfig(t, b.WithApplication("app", "1.0.0"))
 		mustBuildConfig(t, b.WithApplication("", ""))
+	})
+
+	t.Run("LogRateLimit", func(t *testing.T) {
+		if _, err := New(ScyllaV4, "h").WithLogRateLimit(-time.Second).Build(); err == nil {
+			t.Fatal("Build accepted a negative log rate limit")
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLogRateLimit" {
+			t.Fatalf("Build = %v, want a WithLogRateLimit ValidationError", err)
+		}
+		for _, d := range []time.Duration{0, time.Minute} {
+			if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLogRateLimit(d)).settings; c.LogRateLimit != d {
+				t.Fatalf("LogRateLimit = %v, want %v", c.LogRateLimit, d)
+			}
+		}
 	})
 
 	t.Run("ErrorStatementText", func(t *testing.T) {
@@ -270,7 +283,8 @@ func TestConfigBuilder(t *testing.T) {
 			"WithApplication none":                                                      c.Identity.ApplicationName == "" && c.Identity.ApplicationVersion == "",
 			"WithClientID none":                                                         c.Identity.ClientID == "",
 			"WithLogger slog.Default":                                                   c.Logger == nil,
-			"WithObserver none":                                                         c.Observer == nil,
+			"WithLogRateLimit 10s":                                                      c.LogRateLimit == 10*time.Second,
+			"WithObserver none":                                                         c.Observer.IsZero(),
 			"WithConfigReport true":                                                     c.ReportConfiguration,
 			"WithErrorStatementText off":                                                c.ErrorStatementBytes == 0,
 			"Profile WithConsistency LOCAL_QUORUM":                                      p.Consistency == cql.LocalQuorum,

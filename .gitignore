@@ -16,6 +16,9 @@ testdata/pki/*.key
 testdata/pki/*.p12
 testdata/pki/*.srl
 
+# Packages TestDocSnippets builds from docs/source, left behind if it is killed
+testdata/snippets-*/
+
 docs/_build/
 docs/source/.doctrees
 

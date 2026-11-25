@@ -177,7 +177,7 @@ func populatedTableMetadata() *metadata.Table {
 			"pk": partitionKey,
 			"ck": clustering,
 		},
-		OrderedColumns: []string{"pk", "ck"},
+		OrderedColumns: []*metadata.Column{partitionKey, clustering},
 		Flags:          []string{"compound"},
 		Extensions:     map[string][]byte{"scylla_encryption_options": []byte("blob")},
 		Options:        *populatedTableMetadataOptions(),
@@ -204,7 +204,11 @@ func deepCopyTableMetadata(src *metadata.Table) *metadata.Table {
 		col := *c
 		dst.Columns[k] = &col
 	}
-	dst.OrderedColumns = append([]string(nil), src.OrderedColumns...)
+	dst.OrderedColumns = make([]*metadata.Column, len(src.OrderedColumns))
+	for i, c := range src.OrderedColumns {
+		col := *c
+		dst.OrderedColumns[i] = &col
+	}
 	dst.Flags = append([]string(nil), src.Flags...)
 	dst.Extensions = make(map[string][]byte, len(src.Extensions))
 	for k, v := range src.Extensions {

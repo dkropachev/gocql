@@ -421,7 +421,7 @@ func TestQuery(t *testing.T) {
 			require.Zero(t, zero.AttemptLatency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: observer}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: hooksOf(observer)}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
@@ -606,7 +606,7 @@ func TestQuery(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					observer := &cassandraObserver{}
 					insert := cql.Command("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')")
-					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: observer})
+					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: hooksOf(observer)})
 					require.Error(t, err)
 					events, attempts := observer.snapshot()
 					require.Len(t, attempts, tc.attempts)
@@ -627,7 +627,7 @@ func TestQuery(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 						observer := new(sessionTestObserver)
 						retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
-						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retryPolicy, Observer: observer})
+						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retryPolicy, Observer: hooksOf(observer)})
 						require.Error(t, err)
 						var server cqlerr.ServerError
 						require.ErrorAs(t, err, &server)
@@ -694,7 +694,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 		for attempt := 0; ; attempt++ {
-			err := session.RefreshMetadata(ctx)
+			_, err := session.RefreshMetadata(ctx)
 			if err == nil {
 				break
 			}

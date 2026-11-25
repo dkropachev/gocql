@@ -111,12 +111,12 @@ func assertColumns(t *testing.T, keyspaceName, tableName string, actual, expecte
 	}
 }
 
-func assertOrderedColumns(t *testing.T, keyspaceName, tableName string, actual, expected []string) {
+func assertOrderedColumns(t *testing.T, keyspaceName, tableName string, actual, expected []*metadata.Column) {
 	if len(expected) != len(actual) {
 		t.Errorf("Expected len(%s.Tables[%s].OrderedColumns to be %v but was %v", keyspaceName, tableName, len(expected), len(actual))
 	} else {
-		for i, eoc := range expected {
-			aoc := actual[i]
+		for i, e := range expected {
+			eoc, aoc := e.Name, actual[i].Name
 			if eoc != aoc {
 				t.Errorf("Expected %s.Tables[%s].OrderedColumns[%d] to be %s, but was %s", keyspaceName, tableName, i, eoc, aoc)
 			}

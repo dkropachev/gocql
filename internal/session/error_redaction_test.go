@@ -133,7 +133,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					defer bound.Close()
 					ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 					defer cancel()
-					opts := Options{Profile: new(profile), Idempotent: cql.Some(true), Observer: panickingObserver{}}
+					opts := Options{Profile: new(profile), Idempotent: cql.Some(true), Observer: hooksOf(panickingObserver{})}
 					if tc.timeout > 0 {
 						opts.Timeout = cql.Some(tc.timeout)
 					}
@@ -176,10 +176,10 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 					for _, a := range failure.Attempts {
 						target := a.Address
 						if target == "" {
-							target = a.HostID.String()
+							target = a.Target.HostID.String()
 						}
-						if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Number, target)) {
-							t.Errorf("message %q does not name attempt #%d on %s", err, a.Number, target)
+						if !strings.Contains(err.Error(), fmt.Sprintf("#%d %s", a.Attempt, target)) {
+							t.Errorf("message %q does not name attempt #%d on %s", err, a.Attempt, target)
 						}
 					}
 				})

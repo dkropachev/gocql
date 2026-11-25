@@ -35,7 +35,11 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 A custom `routing.Policy` implements Pick and Fallback against
 immutable `metadata.Snapshot` and `routing.Info` values. A request pinned to a
 host with `exec.Options.HostID` goes there, to `ShardID` when set, without
-consulting the policy. The split serves the happy
+consulting the policy; it takes precedence over a `routing.SingleTarget`
+policy too. A pinned shard is strict: the request fails rather than use
+another shard of the host, unless `exec.Options.AnyShardFallback` is set,
+just as for `SingleTarget` and `metadata.Target.AnyShardFallback`. The split
+serves the happy
 path, where the first route serves the request:
 
 - `Pick` returns the first route without building a plan or allocating, or
@@ -52,10 +56,12 @@ A policy may also implement two optional interfaces:
   session calls it once per snapshot before routing with the policy; while it
   fails, so do the requests the policy would route, and Connect fails when it
   fails for the default profile's policy.
-- `routing.AttemptObserver`: `Observe` receives every attempt's outcome.
+- `routing.Learner`: `Learn` receives every attempt's outcome.
 
 Package `routing/routingtest` builds snapshots from hosts, schema, token
-ranges and tablets, so a policy can be tested without a cluster.
+ranges and tablets, so a policy can be tested without a cluster;
+`routingtest.Host` makes an up, connected host and `Cluster.Tables` adds
+tables without writing their schema.
 
 The session combines Pick and Fallback into the plan a request follows.
 `Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
@@ -66,8 +72,26 @@ when the route has no shard, and does not move to another shard or host on its o
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
 `routing.ReplicaRoutes` (the replicas of a request's token, each to the shard
-that owns the token when the host's sharding is known), and narrows them
-with `WithShardID` and `ShardOf`.
+that owns the token when the host's sharding is known; `AppendReplicaRoutes`
+appends them to a buffer the policy reuses, one per concurrent call, as from
+a `sync.Pool`) and `routing.RouteTo` (one host,
+or one shard of it), and narrows them with `WithShardID` and `ShardOf`.
+`Route.Datacenter` and `Route.Rack` name a route's locality.
+`routing.FilterPlan` drops routes from a plan lazily, and `routing.Routes`
+ranges over one:
+
+```go
+// notDC2 tries no host in dc2 once its first route fails.
+type notDC2 struct{ *routing.Builtin }
+
+// Fallback tries the built-in plan's hosts outside dc2 only.
+func (p *notDC2) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
+	return routing.FilterPlan(p.Builtin.Fallback(info, m), func(r metadata.Route) bool {
+		return r.Datacenter() != "dc2"
+	})
+}
+```
+
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
 and leaders. Its Pick routes to one random replica when that replica is up and in the
@@ -105,8 +129,9 @@ keep the replicas' order and do not rotate the hosts.
   token, followed by a route to any shard of the same host, except for a
   conditional request, a statement not known to be ordinary, a request that
   names its shard, and a leader.
-  `SingleTarget` routes only to its host: to its shard first when it names one
-  and the host has it, then to any shard, unless `StrictShard` is set.
+  `SingleTarget` routes only to its host and, when its target names a shard,
+  only to that shard, unless the target sets `AnyShardFallback`: then to the
+  shard first when the host has it, then to any shard.
 
 A tablet hint in a response replaces every tablet its range overlaps, so a
 migrated, split or merged tablet takes effect once a background worker
@@ -184,17 +209,17 @@ Each stage of a request has its own answer:
   about 7%, so it comes from the observer below. A
   failed call's `*cqlerr.ExecutionError` lists each attempt's host, shard,
   status and error (see [Errors](errors.md)). For every attempt as it happens,
-  including speculative and cancelled ones, implement
-  `observe.AttemptObserver.StartAttempt` (see [Tracing](tracing.md)).
+  including speculative and cancelled ones, set
+  an `observe.Hooks` `Attempt` hook (see [Tracing](tracing.md)).
 
 ## Writing your own policy
 
 `routing.Policy` is a public interface, so a health-weighted or pool-based
 policy, such as an adapter for a host-pool library, can live outside the
 driver. Embed the `*routing.Builtin` that `routing.NewPolicy` returns to keep
-token awareness and override what you need; its `Validate` and `Observe` are
+token awareness and override what you need; its `Validate` and `Learn` are
 promoted, so the wrapper keeps the built-in validation and latency tracking.
-A wrapper that overrides `Observe` calls the built-in one itself:
+A wrapper that overrides `Learn` calls the built-in one itself:
 
 ```go
 // skipFailed avoids, for its first route, a host whose last attempt failed.
@@ -211,7 +236,7 @@ func (p *skipFailed) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Rou
 	return r, ok
 }
 
-func (p *skipFailed) Observe(e routing.AttemptEvent) {
+func (p *skipFailed) Learn(e routing.AttemptEvent) {
 	switch {
 	case e.Canceled:
 	case e.Err != nil:
@@ -219,9 +244,9 @@ func (p *skipFailed) Observe(e routing.AttemptEvent) {
 	default:
 		p.failed.Delete(e.Target.HostID)
 	}
-	p.Builtin.Observe(e)
+	p.Builtin.Learn(e)
 }
 ```
 
-Pick, Fallback, `Plan.Next` and Observe run concurrently for many requests,
+Pick, Fallback, `Plan.Next` and Learn run concurrently for many requests,
 so a policy's own state must be safe for concurrent use.

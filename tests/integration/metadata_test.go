@@ -120,7 +120,7 @@ func TestMetadata(t *testing.T) {
 		}()
 		runDDL("CREATE TYPE " + keyspace + ".record (value text)")
 		runDDL("CREATE TABLE " + keyspace + ".records (id int PRIMARY KEY,value frozen<record>)")
-		if err := s.RefreshMetadata(ctx); err != nil {
+		if _, err := s.RefreshMetadata(ctx); err != nil {
 			t.Fatal(err)
 		}
 		snapshot := s.Metadata()
@@ -155,7 +155,7 @@ func TestMetadata(t *testing.T) {
 			}
 		}
 		runDDL("DROP TABLE " + keyspace + ".records")
-		if err := s.RefreshMetadata(ctx); err != nil {
+		if _, err := s.RefreshMetadata(ctx); err != nil {
 			t.Fatal(err)
 		}
 		if current, _ := s.Metadata().Keyspace(keyspace); current.Tables["records"] != nil {
@@ -251,7 +251,7 @@ func TestMetadata(t *testing.T) {
 			cluster := createV2Cluster()
 			session := createV2SessionFromConfig(cluster, t, false)
 			defer session.Close()
-			if err := session.RefreshMetadata(context.Background()); err != nil {
+			if _, err := session.RefreshMetadata(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 			hosts := session.Metadata().Hosts()
@@ -517,7 +517,7 @@ func TestMetadata(t *testing.T) {
 				if err := session.AwaitSchemaAgreement(context.Background()); err != nil {
 					t.Fatal(err)
 				}
-				if err := session.RefreshMetadata(context.Background()); err != nil {
+				if _, err := session.RefreshMetadata(context.Background()); err != nil {
 					t.Fatal(err)
 				}
 				km, ok := session.Metadata().Keyspace(ks)
@@ -595,7 +595,7 @@ func TestMetadata(t *testing.T) {
 				if err != nil {
 					t.Fatal("failed to await for schema agreement", err)
 				}
-				err = session.RefreshMetadata(context.Background())
+				_, err = session.RefreshMetadata(context.Background())
 				if err != nil {
 					t.Fatal("failed to read schema for keyspace", err)
 				}
@@ -639,7 +639,8 @@ func TestMetadata(t *testing.T) {
 			if err := session.AwaitSchemaAgreement(context.Background()); err != nil {
 				t.Logf("schema agreement warning: %v", err)
 			}
-			require.NoError(t, session.RefreshMetadata(context.Background()))
+			_, err := session.RefreshMetadata(context.Background())
+			require.NoError(t, err)
 		}
 
 		t.Run("TableMetadata", func(t *testing.T) {
@@ -718,7 +719,8 @@ func TestMetadata(t *testing.T) {
 
 				waitForSchemaRefresh()
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err := session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err := cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata failed: %v", err)
@@ -761,7 +763,8 @@ func TestMetadata(t *testing.T) {
 					t.Errorf("expected table name %q, got %q", baseTable, tm.Name)
 				}
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err = session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err := cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata failed: %v", err)
@@ -862,7 +865,8 @@ func TestMetadata(t *testing.T) {
 
 				waitForSchemaRefresh()
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err := session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err := cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata failed: %v", err)
@@ -881,7 +885,8 @@ func TestMetadata(t *testing.T) {
 
 				waitForSchemaRefresh()
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err := session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err := cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata before drop failed: %v", err)
@@ -896,7 +901,8 @@ func TestMetadata(t *testing.T) {
 
 				waitForSchemaRefresh()
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err = session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err = cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata after drop failed: %v", err)
@@ -918,7 +924,8 @@ func TestMetadata(t *testing.T) {
 
 				waitForSchemaRefresh()
 
-				require.NoError(t, session.RefreshMetadata(context.Background()))
+				_, err := session.RefreshMetadata(context.Background())
+				require.NoError(t, err)
 				km, err := cassandraKeyspace(session, ks)
 				if err != nil {
 					t.Fatalf("KeyspaceMetadata failed: %v", err)

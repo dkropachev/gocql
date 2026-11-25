@@ -19,7 +19,7 @@ import (
 // Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
-	Observer             observe.Observer
+	Observer             observe.Hooks
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
 	Keyspace             string
@@ -37,6 +37,9 @@ type Options struct {
 	IncludeMetadata   bool
 	Idempotent        cql.Option[bool]
 	CQLTrace          bool
+	// AnyShardFallback lets a request pinned to ShardID use another shard
+	// of HostID.
+	AnyShardFallback bool
 	// NoSessionObserver leaves the session's observer out of the
 	// execution, so Observer alone, or nothing, observes it.
 	NoSessionObserver bool
@@ -65,7 +68,7 @@ type InternalResolvedOptions struct {
 	// the session they were resolved for, as executionHooks finds them; nil
 	// when the options leave the session's hooks, or were resolved for
 	// another session.
-	observerHooks   *settings.ObserverHooks
+	observerHooks   *observe.Hooks
 	InternalProfile settings.Profile
 	InternalOptions Options
 }
@@ -137,6 +140,9 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if options.ShardID.Set && !options.HostID.Set {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("shard", "requires a host ID")
+	}
+	if options.AnyShardFallback && !options.ShardID.Set {
+		return InternalResolvedOptions{}, cqltype.TypeValidation("AnyShardFallback", "requires a shard ID")
 	}
 	keys := make(map[string]bool, len(options.CustomPayload))
 	for _, entry := range options.CustomPayload {

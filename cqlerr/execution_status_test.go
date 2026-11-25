@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 func TestServerErrorExecutionStatus(t *testing.T) {
@@ -146,8 +147,8 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	overloaded := newQueryError(queryErrorState{InternalErr: NewOtherServerError(CodeOverloaded, "overloaded"), InternalPotentiallyExecuted: true})
 	timeout := newQueryError(queryErrorState{InternalErr: ErrTimeoutNoResponse, InternalPotentiallyExecuted: true})
 	attempts := []AttemptFailure{
-		{Err: overloaded, Address: "10.0.0.1:9042", Number: 1, ExecutionStatus: NotExecuted},
-		{Err: timeout, Address: "10.0.0.2:9042", ShardID: cql.Option[uint32]{Value: 3, Set: true}, Number: 2, ExecutionStatus: MaybeExecuted},
+		{Err: overloaded, Address: "10.0.0.1:9042", Attempt: 1, ExecutionStatus: NotExecuted},
+		{Err: timeout, Address: "10.0.0.2:9042", Target: metadata.Target{ShardID: cql.Option[uint32]{Value: 3, Set: true}}, Attempt: 2, ExecutionStatus: MaybeExecuted},
 	}
 
 	t.Run("LastAttemptIsCause", func(t *testing.T) {
@@ -197,7 +198,7 @@ func TestExecutionErrorAttempts(t *testing.T) {
 	t.Run("Bounded", func(t *testing.T) {
 		many := make([]AttemptFailure, 10)
 		for i := range many {
-			many[i] = AttemptFailure{Err: overloaded, Address: "h", Number: i + 1}
+			many[i] = AttemptFailure{Err: overloaded, Address: "h", Attempt: i + 1}
 		}
 		got := NewExecutionError(context.Canceled, NotExecuted, many...).Error()
 		if !strings.Contains(got, "(7 not shown)") || strings.Count(got, "overloaded: overloaded") != 3 || !strings.Contains(got, "#10 h") {

@@ -56,7 +56,7 @@ func TestRequestTimeout(t *testing.T) {
 func TestExecutionErrorUnwrap(t *testing.T) {
 	t.Parallel()
 	unavailable := &UnavailableError{}
-	err := NewExecutionError(ErrTimeoutNoResponse, MaybeExecuted, AttemptFailure{Err: unavailable, Number: 1, ExecutionStatus: NotExecuted}, AttemptFailure{Err: ErrTimeoutNoResponse, Number: 2, ExecutionStatus: MaybeExecuted})
+	err := NewExecutionError(ErrTimeoutNoResponse, MaybeExecuted, AttemptFailure{Err: unavailable, Attempt: 1, ExecutionStatus: NotExecuted}, AttemptFailure{Err: ErrTimeoutNoResponse, Attempt: 2, ExecutionStatus: MaybeExecuted})
 	if !errors.Is(err, ErrTimeoutNoResponse) || errors.Unwrap(err) != ErrTimeoutNoResponse {
 		t.Fatal("cause not reachable")
 	}

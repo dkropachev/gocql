@@ -26,6 +26,12 @@ func TestEmptySnapshot(t *testing.T) {
 		if _, ok := s.Table("ks", "t"); ok {
 			t.Errorf("%s: Table found a table", name)
 		}
+		if _, ok := s.View("ks", "v"); ok {
+			t.Errorf("%s: View found a view", name)
+		}
+		if _, ok := s.Type("ks", "u"); ok {
+			t.Errorf("%s: Type found a type", name)
+		}
 		if _, ok := s.Host(cql.UUID{1}); ok {
 			t.Errorf("%s: Host found a host", name)
 		}
@@ -41,8 +47,8 @@ func TestEmptySnapshot(t *testing.T) {
 	}
 }
 
-// TestSnapshotLookups checks Keyspaces, Table and Host, and that what they
-// return is a copy.
+// TestSnapshotLookups checks Keyspaces, Table, View, Type and Host, and that
+// what they return is a copy.
 func TestSnapshotLookups(t *testing.T) {
 	column := &metadata.Column{Name: "id", Kind: metadata.ColumnKindPartitionKey, Type: "int"}
 	table := &metadata.Table{Name: "t", Columns: map[string]*metadata.Column{"id": column}, PartitionKey: []*metadata.Column{column}}
@@ -50,7 +56,11 @@ func TestSnapshotLookups(t *testing.T) {
 	s := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts: hosts,
 		Keyspaces: map[string]*metadata.Keyspace{
-			"b": {Name: "b", Tables: map[string]*metadata.Table{"t": table}, Views: map[string]*metadata.View{"v": {Name: "v"}}},
+			"b": {
+				Name: "b", Tables: map[string]*metadata.Table{"t": table},
+				Views: map[string]*metadata.View{"v": {Name: "v", OrderedColumns: []*metadata.Column{{Name: "id"}}}},
+				Types: map[string]*metadata.Type{"u": {Name: "u", FieldNames: []string{"f"}, FieldTypes: []string{"int"}}},
+			},
 			"a": {Name: "a"},
 		},
 	})
@@ -69,6 +79,30 @@ func TestSnapshotLookups(t *testing.T) {
 	for _, miss := range [][2]string{{"a", "t"}, {"b", "v"}, {"c", "t"}} {
 		if _, ok := s.Table(miss[0], miss[1]); ok {
 			t.Errorf("Table(%s, %s) found a table", miss[0], miss[1])
+		}
+	}
+	view, ok := s.View("b", "v")
+	if !ok || view.Name != "v" || view.OrderedColumns[0].Name != "id" {
+		t.Fatalf("View(b, v) = %+v, %v", view, ok)
+	}
+	view.OrderedColumns[0].Name = "changed"
+	if again, _ := s.View("b", "v"); again.OrderedColumns[0].Name != "id" {
+		t.Error("View returned the snapshot's view, not a copy")
+	}
+	typ, ok := s.Type("b", "u")
+	if !ok || typ.Name != "u" || !slices.Equal(typ.FieldNames, []string{"f"}) {
+		t.Fatalf("Type(b, u) = %+v, %v", typ, ok)
+	}
+	typ.FieldNames[0] = "changed"
+	if again, _ := s.Type("b", "u"); again.FieldNames[0] != "f" {
+		t.Error("Type returned the snapshot's type, not a copy")
+	}
+	for _, miss := range [][2]string{{"b", "t"}, {"a", "v"}, {"c", "v"}} {
+		if _, ok := s.View(miss[0], miss[1]); ok {
+			t.Errorf("View(%s, %s) found a view", miss[0], miss[1])
+		}
+		if _, ok := s.Type(miss[0], miss[1]); ok {
+			t.Errorf("Type(%s, %s) found a type", miss[0], miss[1])
 		}
 	}
 	h, ok := s.Host(cql.UUID{2})

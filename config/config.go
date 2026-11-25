@@ -720,16 +720,28 @@ func (b *ConfigBuilder) WithClientID(id string) *ConfigBuilder {
 //
 //	slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl}))
 //
-// Records at Info and above are rate-limited per message and host; handler
-// panics are contained.
+// Records at Info and above are rate-limited per message and host (see
+// WithLogRateLimit); handler panics are contained.
 func (b *ConfigBuilder) WithLogger(logger *slog.Logger) *ConfigBuilder {
 	b.settings.Logger = logger
 	return b
 }
 
-// WithObserver receives every request and attempt. Default none.
-func (b *ConfigBuilder) WithObserver(observer observe.Observer) *ConfigBuilder {
-	b.settings.Observer = observer
+// WithLogRateLimit collapses log records of Info and above that repeat the
+// same level, message and host within window into the first one; the next
+// one after the window carries a suppressed count of those dropped. Debug
+// records are never limited. Zero turns the limit off, so every record
+// reaches the logger; Build rejects a negative window. Default 10s.
+func (b *ConfigBuilder) WithLogRateLimit(window time.Duration) *ConfigBuilder {
+	b.settings.LogRateLimit = window
+	return b
+}
+
+// WithObserver installs hooks that observe every request and attempt of the
+// session; observe.Join combines several. The zero Hooks observes nothing.
+// Default none.
+func (b *ConfigBuilder) WithObserver(hooks observe.Hooks) *ConfigBuilder {
+	b.settings.Observer = hooks
 	return b
 }
 
@@ -787,12 +799,12 @@ func (c Config) DefaultProfile() Profile {
 	return publicProfile(*c.settings.DefaultProfile)
 }
 
-// Observer returns the observer WithObserver chose, which a session
-// connected with c also returns from Session.Observer; nil without one or
+// Observer returns the hooks WithObserver chose, which a session connected
+// with c also returns from Session.Observer; the zero Hooks without them or
 // for the zero Config.
-func (c Config) Observer() observe.Observer {
+func (c Config) Observer() observe.Hooks {
 	if c.settings == nil {
-		return nil
+		return observe.Hooks{}
 	}
 	return c.settings.Observer
 }

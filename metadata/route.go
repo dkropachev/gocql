@@ -52,6 +52,26 @@ func (r Route) Usable() bool {
 	return usable
 }
 
+// Datacenter returns the datacenter of the route's host, as the latest
+// snapshot that indexed the host has it, and empty for a route with no host.
+func (r Route) Datacenter() string {
+	if r.host == nil {
+		return ""
+	}
+	dc, _ := link.Get[func(unsafe.Pointer) (string, string)](link.RouteLocality)(r.host)
+	return dc
+}
+
+// Rack returns the rack of the route's host, as Datacenter does its
+// datacenter.
+func (r Route) Rack() string {
+	if r.host == nil {
+		return ""
+	}
+	_, rack := link.Get[func(unsafe.Pointer) (string, string)](link.RouteLocality)(r.host)
+	return rack
+}
+
 // ShardID returns the route's shard, unset when any connection of its host
 // will do or the route has no host.
 func (r Route) ShardID() cql.Option[uint32] {

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 type executionStatusReporter interface {
@@ -91,20 +92,20 @@ type AttemptFailure struct {
 	// Address is the host:port the attempt was sent to, or the socket path
 	// of a Unix socket connection, which is why it is text.
 	Address string
-	// HostID is the host ID of the host the attempt was sent to.
-	HostID cql.UUID
-	// Number is the 1-based attempt number.
-	Number int
-	// ShardID is the shard of the connection, when the host is shard-aware.
-	ShardID cql.Option[uint32]
+	// Attempt is the 1-based attempt number.
+	Attempt int
+	// Target is the host the attempt was sent to and, when the host is
+	// shard-aware, the shard of the connection, as in
+	// routing.AttemptEvent.Target.
+	Target metadata.Target
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
-	// ExecutionStatus reports what the attempt may have done on the cluster.
-	ExecutionStatus ExecutionStatus
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
 	// error. Read it with package cqltrace.
 	CQLTraceID cql.Option[cql.UUID]
+	// ExecutionStatus reports what the attempt may have done on the cluster.
+	ExecutionStatus ExecutionStatus
 }
 
 // String returns the attempt's number, its host, its shard on a shard-aware
@@ -121,11 +122,11 @@ func (a AttemptFailure) String() string {
 func (a AttemptFailure) writeTarget(b *strings.Builder) {
 	target := a.Address
 	if target == "" {
-		target = a.HostID.String()
+		target = a.Target.HostID.String()
 	}
-	fmt.Fprintf(b, "#%d %s", a.Number, target)
-	if a.ShardID.Set {
-		fmt.Fprintf(b, "/shard%d", a.ShardID.Value)
+	fmt.Fprintf(b, "#%d %s", a.Attempt, target)
+	if a.Target.ShardID.Set {
+		fmt.Fprintf(b, "/shard%d", a.Target.ShardID.Value)
 	}
 }
 

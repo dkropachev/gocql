@@ -126,13 +126,20 @@ var (
 	BuiltinPolicy = NewSlot("routing.builtinPolicy")
 	// HostRoutes holds func(*metadata.Snapshot) []metadata.Route.
 	HostRoutes = NewSlot("routing.hostRoutes")
-	// ReplicaRoutes holds func(*metadata.Snapshot, routing.Info) []metadata.Route.
+	// ReplicaRoutes holds func(dst []metadata.Route, *metadata.Snapshot,
+	// routing.Info) []metadata.Route, which appends to dst.
 	ReplicaRoutes = NewSlot("routing.replicaRoutes")
+	// RouteTo holds func(*metadata.Snapshot, cql.UUID) (metadata.Route,
+	// bool): a route to any shard of the host with the ID.
+	RouteTo = NewSlot("routing.routeTo")
 	// RouteHost holds func(host unsafe.Pointer) (id cql.UUID, usable bool):
 	// what a metadata.Route's host reports.
 	RouteHost = NewSlot("metadata.routeHost")
 	// RouteShardOf holds func(host unsafe.Pointer, token int64) int32.
 	RouteShardOf = NewSlot("metadata.routeShardOf")
+	// RouteLocality holds func(host unsafe.Pointer) (datacenter, rack
+	// string).
+	RouteLocality = NewSlot("metadata.routeLocality")
 )
 
 // NewSubscription holds func(events <-chan event.Event, close func())

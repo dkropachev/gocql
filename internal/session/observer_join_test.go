@@ -12,7 +12,6 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/observe"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -72,10 +71,10 @@ func TestObserverJoin(t *testing.T) {
 	log := new(orderLog)
 	sessionObserver := &orderObserver{name: "session", log: log}
 	rt := InternalRuntimeFor(s)
-	rt.config.Observer = sessionObserver
-	rt.observerHooks, _ = settings.NewObserverHooks(sessionObserver)
-	if got := InternalWrapSession(s).Observer(); got != observe.Observer(sessionObserver) {
-		t.Fatalf("Session.Observer = %v, want the configured one", got)
+	rt.config.Observer = hooksOf(sessionObserver)
+	rt.observerHooks = hooksPtr(sessionObserver)
+	if got := InternalWrapSession(s).Observer(); got.Request == nil || got.Attempt == nil {
+		t.Fatalf("Session.Observer = %+v, want the configured hooks", got)
 	}
 	call := &orderObserver{name: "call", after: "session", log: log}
 	alone := &orderObserver{name: "call", log: log}
@@ -94,10 +93,10 @@ func TestObserverJoin(t *testing.T) {
 		want    []string
 	}{
 		{"none", CompiledOptions{}, []string{"session request", "session attempt", "session attempt end", "session request end"}},
-		{"compiled", compile(Options{Observer: call}), joined},
-		{"unbound", testOptions(Options{Observer: call}), joined},
-		{"NoSessionObserver", compile(Options{Observer: alone, NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
-		{"NoSessionObserver unbound", testOptions(Options{Observer: alone, NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
+		{"compiled", compile(Options{Observer: hooksOf(call)}), joined},
+		{"unbound", testOptions(Options{Observer: hooksOf(call)}), joined},
+		{"NoSessionObserver", compile(Options{Observer: hooksOf(alone), NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
+		{"NoSessionObserver unbound", testOptions(Options{Observer: hooksOf(alone), NoSessionObserver: true}), []string{"call request", "call attempt", "call attempt end", "call request end"}},
 		{"NoSessionObserver alone", compile(Options{NoSessionObserver: true}), nil},
 	} {
 		b := runtimeQuery(t)
@@ -110,7 +109,7 @@ func TestObserverJoin(t *testing.T) {
 		}
 	}
 
-	for name, options := range map[string]CompiledOptions{"compiled": compile(Options{Observer: call}), "unbound": testOptions(Options{Observer: call})} {
+	for name, options := range map[string]CompiledOptions{"compiled": compile(Options{Observer: hooksOf(call)}), "unbound": testOptions(Options{Observer: hooksOf(call)})} {
 		statement := binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1"}
 		q, err := newUnpreparedQuery(s, statement, options)
 		if err != nil {
@@ -123,5 +122,34 @@ func TestObserverJoin(t *testing.T) {
 		if got := log.take(); !slices.Equal(got, joined) {
 			t.Errorf("reusable query, %s options: hooks %q, want %q", name, got, joined)
 		}
+	}
+}
+
+// TestInlineExecutionDropsContext checks that a reusable query's inline
+// execution, kept for the query's next one, does not keep the caller's
+// context or the Request hook's end function once it has finished.
+func TestInlineExecutionDropsContext(t *testing.T) {
+	s, _, peers := runtimeTestSession(t, 1)
+	void := binary.BigEndian.AppendUint32(nil, 1)
+	go serveLoopback(peers[0], func([]byte) []byte { return void }, nil)
+	hooks := observe.Hooks{Request: func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+		return ctx, func(observe.RequestEvent) {}
+	}}
+	options, err := NewCompiledOptions(s, Options{Observer: hooks})
+	if err != nil {
+		t.Fatal(err)
+	}
+	statement := binding.Statement[cql.EmptyRow, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1"}
+	q, err := newUnpreparedQuery(s, statement, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer q.Close()
+	ctx := context.WithValue(context.Background(), orderCtxKey{}, "caller")
+	if _, err := q.Exec(ctx, cql.EmptyRow{}); err != nil {
+		t.Fatal(err)
+	}
+	if l := &q.state.inlineLogical; l.observerCtx != nil || l.requestEnd != nil {
+		t.Fatalf("finished inline execution keeps observerCtx %v, requestEnd set %t", l.observerCtx, l.requestEnd != nil)
 	}
 }

@@ -114,7 +114,7 @@ func (w *Worker[P, R]) Close() { w.internal().Close() }
 // Wait waits until the worker's last execution has drained: accepted writes,
 // attempts in flight and observer callbacks. It returns ctx.Err() if ctx ends
 // first. Wait after Close when code that follows must not race those
-// callbacks, for example before tearing down state an Observer uses.
+// callbacks, for example before tearing down state an observe.Hooks uses.
 func (w *Worker[P, R]) Wait(ctx context.Context) error { return w.internal().Wait(ctx) }
 
 // StreamWorker owns reusable state for streaming into seeded caller storage.

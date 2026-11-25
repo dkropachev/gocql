@@ -22,6 +22,7 @@ import (
 	"github.com/scylladb/gocql/v2/endpoint"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/observe"
@@ -37,7 +38,7 @@ type Config struct {
 	Reconnect         ReconnectPolicy
 	Conviction        endpoint.ConvictionPolicy
 	AddressTranslator endpoint.Translator
-	Observer          observe.Observer
+	Observer          observe.Hooks
 	Logger            *slog.Logger
 	DialHost          func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS               *tls.Config
@@ -86,6 +87,9 @@ type Config struct {
 	// ErrorStatementBytes is how much of a statement's CQL text request
 	// errors carry; zero leaves it out.
 	ErrorStatementBytes int
+	// LogRateLimit is the window within which repeated log records of Info
+	// and above are collapsed; zero turns the limit off.
+	LogRateLimit time.Duration
 }
 
 type PoolOptions = connectivity.PoolOptions
@@ -118,7 +122,7 @@ type TLSSource = endpoint.TLSSource
 func DefaultConfig(contactPoints ...string) Config {
 	profile := InternalDefaultProfile()
 	profile.Routing = DefaultRouting()
-	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: metadata.ModeFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing2.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing2.CDCTokenPartitioner, "CDCPartitioner": routing2.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps()}
+	return Config{ContactPoints: append([]string(nil), contactPoints...), Port: 9042, Protocol: 4, CQLVersion: "3.0.0", ConnectTimeout: 5 * time.Second, DNSTimeout: 5 * time.Second, KeepaliveInterval: 30 * time.Second, KeepaliveTimeout: 30 * time.Second, NoDelay: true, Pool: PoolOptions{ConnectionsPerShard: 1, MaxExcessPerShard: 2, MaxRequestsPerConnection: 32768, MaxOrphanedStreams: 1024, AdvancedShardAwareness: AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 49152, SourcePortEnd: 65535}}, Metadata: MetadataOptions{Mode: metadata.ModeFull, InitialDiscovery: true, PeriodicRefresh: 60 * time.Second, RequestTimeout: 31 * time.Second, AgreementTimeout: 60 * time.Second, AgreementPoll: 200 * time.Millisecond, AutomaticAgreement: true, RefreshAfterAgreement: true, TopologyEvents: true, StatusEvents: true, SchemaEvents: true, ClientRouteEvents: true}, Limits: ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 64, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}, PreparedCacheSize: 1000, Partitioners: map[string]routing2.TokenPartitioner{"org.apache.cassandra.dht.Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "Murmur3Partitioner": routing2.Murmur3TokenPartitioner, "com.scylladb.dht.CDCPartitioner": routing2.CDCTokenPartitioner, "CDCPartitioner": routing2.CDCTokenPartitioner}, DefaultProfile: &profile, Identity: IdentityOptions{DriverName: InternalDefaultDriverName, DriverVersion: InternalDefaultDriverVersion}, Reconnect: defaultReconnectPolicy{}, ReportConfiguration: true, Timestamps: DriverTimestamps(), LogRateLimit: logging.DefaultRateLimit}
 }
 
 // TimestampMode is where client timestamps come from.
@@ -163,9 +167,6 @@ func (c ClientTimestamps) Generator() func() int64 { return c.next }
 // Field, the config.ConfigBuilder setter that chose the invalid value, and
 // says the limit it broke.
 func (config Config) Validate() error {
-	if _, err := NewObserverHooks(config.Observer); err != nil {
-		return err
-	}
 	path, err := config.UnixContact()
 	if err != nil {
 		return err
@@ -336,6 +337,9 @@ func (config Config) Validate() error {
 	}
 	if config.ErrorStatementBytes < 0 {
 		return cqltype.TypeValidation("WithErrorStatementText", "must not be negative, got %d", config.ErrorStatementBytes)
+	}
+	if config.LogRateLimit < 0 {
+		return cqltype.TypeValidation("WithLogRateLimit", "must not be negative, got %v", config.LogRateLimit)
 	}
 	pool := config.Pool
 	switch {

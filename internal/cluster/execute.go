@@ -112,17 +112,21 @@ func sessionPickRoute(s *Core, r implRouting.Route, routing routing.Info) *trans
 	}
 	// A pool without a typed picker picks the legacy way, strictly when
 	// the route names a shard.
-	target := r.Target()
-	target.StrictShard = target.ShardID.Set
-	return s.PickTypedPool(pool, target, routing)
+	return s.PickTypedPool(pool, r.Target(), routing)
 }
 
-func (s *Core) ObserveSafely(fn func()) {
+// ObserveSafely calls fn, an observer hook or a policy's Learn, logging a
+// panic in it with ctx, the request's context, instead of raising it. A nil
+// ctx logs without one.
+func (s *Core) ObserveSafely(ctx context.Context, fn func()) {
 	defer func() {
 		if v := recover(); v != nil && s.privateStorage.InternalLogger != nil {
 			func() {
 				defer func() { _ = recover() }()
-				s.logger().Error("observer panicked", "panic", v)
+				if ctx == nil {
+					ctx = context.Background()
+				}
+				s.logger().ErrorContext(ctx, "observer panicked", "panic", v)
 			}()
 		}
 	}()
@@ -162,7 +166,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 		if routing.ShardID.Set {
 			shard = routing.ShardID
 		}
-		if conn != nil && shard.Set && (target.StrictShard || routing.ShardID.Set) && uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard) != shard.Value {
+		if conn != nil && shard.Set && (implPool.StrictTarget(target) || implPool.PinnedShard(routing)) && uint32(implEndpoint.ScyllaConnectionFeaturesData(&conn.InternalScyllaSupported).InternalShard) != shard.Value {
 			return nil
 		}
 		return conn
@@ -187,7 +191,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	if shard.Set {
 		if uint64(shard.Value) < uint64(len(picker.InternalConns)) {
 			index = int(shard.Value)
-		} else if target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement {
+		} else if implPool.StrictTarget(target) || implPool.PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement {
 			return nil
 		}
 	} else if routing.Token.Set {
@@ -200,13 +204,13 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 		}
 		return picker.InternalMaybeReplaceWithLessBusyConnection(conn)
 	}
-	if index >= 0 && (target.StrictShard || routing.ShardID.Set || routing.Kind != cql.OrdinaryStatement) {
+	if index >= 0 && (implPool.StrictTarget(target) || implPool.PinnedShard(routing) || routing.Kind != cql.OrdinaryStatement) {
 		return nil
 	}
 	return picker.InternalLeastBusyConn()
 }
 
-func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePage, routing routing.Info, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
+func (s *Core) ApplyTypedFeedbackStamped(ctx context.Context, response *transport.InternalResponsePage, routing routing.Info, stamp implRouting.InternalTabletFeedbackStamp, features transport.InternalFramerConfig) {
 	if response == nil || routing.Keyspace == "" || routing.Table == "" || s.privateStorage.InternalMetadataDescriber == nil {
 		return
 	}
@@ -223,7 +227,7 @@ func (s *Core) ApplyTypedFeedbackStamped(response *transport.InternalResponsePag
 		hint, err := transport.InternalParseTypedTabletPayload(entry.Value.Value, routing.Keyspace, routing.Table, features.InternalTabletsRoutingV2)
 		if err != nil {
 			if s.privateStorage.InternalLogger != nil {
-				s.logger().Warn("tablet hint rejected", logging.KeyKeyspace, routing.Keyspace, logging.KeyTable, routing.Table, logging.Err(err))
+				s.logger().WarnContext(ctx, "tablet hint rejected", logging.KeyKeyspace, routing.Keyspace, logging.KeyTable, routing.Table, logging.Err(err))
 			}
 			return
 		}

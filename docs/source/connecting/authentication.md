@@ -5,6 +5,9 @@ Call `WithAuth(auth.Password(username, password))` (package
 authenticator classes the credentials may go to after the password, and a
 server that asks for another class fails the connection before they are sent:
 
+<!-- snippet
+var username, password string
+-->
 ```go
 auth.Password(username, password, "org.apache.cassandra.auth.PasswordAuthenticator")
 ```

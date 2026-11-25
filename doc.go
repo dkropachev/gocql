@@ -82,11 +82,30 @@
 // per-connection detail such as shard dialing; Info reports cluster changes
 // such as nodes going up or down; Warn reports degraded but continuing
 // operation; Error reports a subsystem that will not recover by itself.
-// Context is in attributes (host, shard, keyspace, err, ...), and every record
-// carries logger=gocql. Repeated Info-or-higher records with the same message
-// and host are collapsed to one per 10 seconds with a suppressed count, and a
-// panicking handler cannot break the driver. To log through a *log.Logger l
-// at level lvl, use the standard library's text handler:
+// Context is in attributes, and every record carries logger=gocql. These
+// attribute keys are stable: a later release keeps their names and meaning,
+// so handlers and log queries may rely on them:
+//
+//	logger      always "gocql"
+//	host        the address of the node
+//	host_id     the node's host ID
+//	dc          the node's datacenter
+//	shard       the shard of a connection
+//	keyspace    a keyspace
+//	table       a table
+//	stream      a connection's stream ID
+//	err         the error that caused the record
+//	suppressed  how many records like this one the rate limit dropped
+//
+// Messages and other attributes describe the event for a reader and may
+// change. A record that one request causes, such as a panic in one of its
+// observe.Hooks, is logged with the request's context, or the context its
+// Request hook returned, so a handler can correlate it with the caller's
+// trace. Repeated Info-or-higher records with the same message and host are
+// collapsed to one per 10 seconds with a suppressed count
+// (config.ConfigBuilder.WithLogRateLimit changes the window or turns it off),
+// and a panicking handler cannot break the driver. To log through a
+// *log.Logger l at level lvl, use the standard library's text handler:
 //
 //	builder.WithLogger(slog.New(slog.NewTextHandler(l.Writer(), &slog.HandlerOptions{Level: lvl})))
 package gocql

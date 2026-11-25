@@ -130,7 +130,7 @@ func TestLocalDatacenter(t *testing.T) {
 	}
 }
 
-// wrapped overrides only Pick; Validate and Observe come from the embedded
+// wrapped overrides only Pick; Validate and Learn come from the embedded
 // *routing.Builtin.
 type wrapped struct{ *routing.Builtin }
 
@@ -139,7 +139,7 @@ func (w wrapped) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
 }
 
 // TestEmbeddedBuiltin checks that a policy embedding *routing.Builtin keeps
-// the built-in Validate and Observe, and that the zero Builtin routes as the
+// the built-in Validate and Learn, and that the zero Builtin routes as the
 // default policy.
 func TestEmbeddedBuiltin(t *testing.T) {
 	builtin, err := routing.NewPolicy(routing.Options{})
@@ -151,11 +151,11 @@ func TestEmbeddedBuiltin(t *testing.T) {
 	if !ok {
 		t.Fatal("the wrapper lost Validate")
 	}
-	observer, ok := policy.(routing.AttemptObserver)
+	observer, ok := policy.(routing.Learner)
 	if !ok {
-		t.Fatal("the wrapper lost Observe")
+		t.Fatal("the wrapper lost Learn")
 	}
-	observer.Observe(routing.AttemptEvent{})
+	observer.Learn(routing.AttemptEvent{})
 
 	c := cluster()
 	c.LocalDatacenter = "x"
@@ -234,5 +234,64 @@ func TestReplicaRoutesWithoutTableSchema(t *testing.T) {
 	c.Keyspaces["ks"].TabletBased = true
 	if routes := routing.ReplicaRoutes(routingtest.NewSnapshot(c), info); len(routes) != 0 {
 		t.Fatalf("a tablet keyspace routed a table it has no placement for: %v", routes)
+	}
+}
+
+// TestRouteHelpers checks RouteTo, AppendReplicaRoutes, FilterPlan, Routes,
+// Route.Datacenter and Route.Rack, on a snapshot built with Host and Tables.
+func TestRouteHelpers(t *testing.T) {
+	hosts := []metadata.HostSnapshot{
+		routingtest.Host(cql.UUID{15: 1}, "a", "r1"),
+		routingtest.Host(cql.UUID{15: 2}, "b", "r2"),
+	}
+	m := routingtest.NewSnapshot(routingtest.Cluster{
+		Hosts:  hosts,
+		Tables: []routingtest.Table{{Keyspace: "ks", Name: "t"}},
+		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{
+			{HostID: hosts[1].HostID}, {HostID: hosts[0].HostID},
+		}}}},
+	})
+	if _, ok := m.Table("ks", "t"); !ok {
+		t.Fatal("Tables added no table")
+	}
+
+	r, ok := routing.RouteTo(m, metadata.Target{HostID: hosts[1].HostID, ShardID: cql.Some[uint32](3)})
+	if !ok || r.HostID() != hosts[1].HostID || r.ShardID() != cql.Some[uint32](3) || r.Datacenter() != "b" || r.Rack() != "r2" {
+		t.Fatalf("RouteTo = %v %v %v %q %q", ok, r.HostID(), r.ShardID(), r.Datacenter(), r.Rack())
+	}
+	if r, ok := routing.RouteTo(m, metadata.Target{HostID: hosts[0].HostID}); !ok || r.ShardID().Set {
+		t.Fatalf("RouteTo without a shard = %v, %v", r.ShardID(), ok)
+	}
+	if _, ok := routing.RouteTo(m, metadata.Target{HostID: cql.UUID{15: 9}}); ok {
+		t.Fatal("RouteTo found an unknown host")
+	}
+	if (metadata.Route{}).Datacenter() != "" || (metadata.Route{}).Rack() != "" {
+		t.Fatal("the zero Route has a locality")
+	}
+
+	buf := make([]metadata.Route, 1, 8)
+	routes := routing.AppendReplicaRoutes(buf, m, info)
+	if len(routes) != 3 || &routes[0] != &buf[0] || routes[1].HostID() != hosts[1].HostID || routes[2].HostID() != hosts[0].HostID {
+		t.Fatalf("AppendReplicaRoutes = %v", routes)
+	}
+	if got := routing.AppendReplicaRoutes(buf[:0], m, routing.Info{}); len(got) != 0 {
+		t.Fatalf("AppendReplicaRoutes without a token = %v", got)
+	}
+
+	plan := routing.FilterPlan(routing.PlanOf(routing.HostRoutes(m)...), func(r metadata.Route) bool { return r.Datacenter() == "a" })
+	var ids []byte
+	for r := range routing.Routes(plan) {
+		ids = append(ids, r.HostID()[15])
+	}
+	if !slices.Equal(ids, []byte{1}) {
+		t.Fatalf("filtered plan routes to %v", ids)
+	}
+	// Routes stops consuming the plan when the loop breaks.
+	all := routing.PlanOf(routing.HostRoutes(m)...)
+	for range routing.Routes(all) {
+		break
+	}
+	if r, ok := all.Next(); !ok || r.HostID() != hosts[1].HostID {
+		t.Fatalf("after a break the plan continues with %v, %v", r.HostID(), ok)
 	}
 }

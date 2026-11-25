@@ -177,10 +177,11 @@ func TestClusterExamples(t *testing.T) {
 		{
 			name: "SessionUnpreparedCommand", run: ExampleSession_UnpreparedCommand,
 			check: func(t *testing.T) {
-				if err := s.RefreshMetadata(ctx); err != nil {
+				m, err := s.RefreshMetadata(ctx)
+				if err != nil {
 					t.Fatal(err)
 				}
-				if _, ok := s.Metadata().Keyspace("app"); !ok {
+				if _, ok := m.Keyspace("app"); !ok {
 					t.Error("no keyspace app")
 				}
 			},

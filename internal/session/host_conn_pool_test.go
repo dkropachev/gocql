@@ -351,14 +351,24 @@ func TestHostConnPool(t *testing.T) {
 			_ = p.Put(a)
 			_ = p.Put(b)
 			a.InternalSetExclusive(true)
-			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != b {
+			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}, AnyShardFallback: true}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != b {
 				t.Fatal("advisory hint could not use free capacity")
 			}
-			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != a {
+			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != a {
 				t.Fatal("strict target relaxed while reserved")
 			}
-			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: math.MaxUint32, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != nil {
+			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: math.MaxUint32, Set: true}}, routing2.Info{Kind: implCql.OrdinaryStatement}); got != nil {
 				t.Fatal("invalid strict target relaxed")
+			}
+			// A request pinned to a shard stays on it unless it allows the
+			// fallback, as exec.Options.AnyShardFallback does.
+			pinned := routing2.Info{Kind: implCql.OrdinaryStatement, ShardID: implCql.Option[uint32]{Value: 9, Set: true}}
+			if got := p.InternalPickTarget(metadata.Target{}, pinned); got != nil {
+				t.Fatal("a pin to a missing shard fell back")
+			}
+			pinned.AnyShardFallback = true
+			if got := p.InternalPickTarget(metadata.Target{}, pinned); got != b {
+				t.Fatalf("a pin with AnyShardFallback did not fall back: %v", got)
 			}
 		})
 
@@ -384,7 +394,7 @@ func TestHostConnPool(t *testing.T) {
 			if got := p.InternalPickTarget(metadata.Target{}, routing); got != second {
 				t.Fatal("non-strict selection waited despite idle eligible connection")
 			}
-			if got := p.InternalPickTarget(metadata.Target{StrictShard: true, ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
+			if got := p.InternalPickTarget(metadata.Target{ShardID: implCql.Option[uint32]{Value: 0, Set: true}}, routing); got != first {
 				t.Fatal("strict shard was not preserved")
 			}
 		})
@@ -405,7 +415,7 @@ func TestHostConnPool(t *testing.T) {
 			pool.InternalConnPicker = codecTestMust(implPool.InternalNewTypedConnPicker(c, config.Pool))
 			pool.InternalConnPicker.Put(c)
 			c.InternalErrorHandler = pool
-			target := metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: implCql.Option[uint32]{Value: 0, Set: true}, StrictShard: true}
+			target := metadata.Target{HostID: implEndpoint.InternalHostInfoHostUUID(c.InternalHost), ShardID: implCql.Option[uint32]{Value: 0, Set: true}}
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			first := codecTestMust(pool.InternalReserveStream(ctx, target, routing2.Info{}))

@@ -172,9 +172,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 								Type: "text",
 							},
 						},
-						OrderedColumns: []string{
-							"ColPK", "ColCK", "ColReg",
-						},
+						OrderedColumns: []*metadata.Column{{Name: "ColPK"}, {Name: "ColCK"}, {Name: "ColReg"}},
 						Columns: map[string]*metadata.Column{
 							"ColPK": {
 								Name: "ColPK",
@@ -215,9 +213,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 								Kind: metadata.ColumnKindPartitionKey,
 							},
 						},
-						OrderedColumns: []string{
-							"Key1",
-						},
+						OrderedColumns: []*metadata.Column{{Name: "Key1"}},
 					},
 					"Table2": {
 						PartitionKey: []*metadata.Column{
@@ -260,9 +256,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 								Kind: metadata.ColumnKindRegular,
 							},
 						},
-						OrderedColumns: []string{
-							"Column1", "Column2", "Column3", "Column4",
-						},
+						OrderedColumns: []*metadata.Column{{Name: "Column1"}, {Name: "Column2"}, {Name: "Column3"}, {Name: "Column4"}},
 					},
 				},
 				Indexes: map[string]*metadata.Index{
@@ -276,9 +270,7 @@ func TestKeyspaceMetadata(t *testing.T) {
 							{Name: "idx_token", Type: "bigint", ClusteringOrder: metadata.ColumnOrderAsc},
 							{Name: "name", Type: "text", ClusteringOrder: metadata.ColumnOrderAsc},
 						},
-						OrderedColumns: []string{
-							"owner", "idx_token", "name",
-						},
+						OrderedColumns: []*metadata.Column{{Name: "owner"}, {Name: "idx_token"}, {Name: "name"}},
 						Columns: map[string]*metadata.Column{
 							"owner": {
 								Name: "owner",

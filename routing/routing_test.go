@@ -27,12 +27,15 @@ func TestWithoutSession(t *testing.T) {
 	if _, ok := p.Fallback(routing.Info{}, nil).Next(); ok {
 		t.Error("Fallback found a route without a session")
 	}
-	p.Observe(routing.AttemptEvent{})
+	p.Learn(routing.AttemptEvent{})
 	if r := routing.HostRoutes(nil); r != nil {
 		t.Errorf("HostRoutes = %v", r)
 	}
 	if r := routing.ReplicaRoutes(nil, routing.Info{}); r != nil {
 		t.Errorf("ReplicaRoutes = %v", r)
+	}
+	if _, ok := routing.RouteTo(nil, metadata.Target{HostID: cql.UUID{1}}); ok {
+		t.Error("RouteTo found a route without a session")
 	}
 }
 

@@ -51,6 +51,7 @@ packages are named `gocql`.
 
 v1:
 
+<!-- snippet: skip -->
 ```go
 cluster := gocql.NewCluster("10.0.0.1", "10.0.0.2")
 cluster.Keyspace = "app"
@@ -107,8 +108,8 @@ defer session.Close()
 | `cluster.SocketKeepalive` | `WithTCPKeepalive(period)` |
 | `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
 | `cluster.ClientRoutesConfig` | `WithClientRoutes(config.ClientRoute{ConnectionID: id, Hostname: host}, ...)` |
-| `cluster.Logger` | `WithLogger(*slog.Logger)` |
-| `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Observer)` |
+| `cluster.Logger` | `WithLogger(*slog.Logger)`; `WithLogRateLimit(d)` sets how repeated records are collapsed, zero for none |
+| `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Hooks{...})` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |
 | `cluster.DefaultTimestamp = false` | `WithTimestampGenerator(nil)` |
 
@@ -120,6 +121,7 @@ their defaults. See [connecting](connecting/index.md).
 
 v1:
 
+<!-- snippet: skip -->
 ```go
 var name string
 err := session.Query("SELECT name FROM users WHERE id = ?", id).
@@ -131,6 +133,9 @@ if errors.Is(err, gocql.ErrNotFound) {
 
 v2:
 
+<!-- snippet
+var id int32
+-->
 ```go
 selectName, err := session.Prepare(ctx, cql.Select(
 	"SELECT name FROM users WHERE id = ?",
@@ -236,6 +241,10 @@ explicitly. See [data types](data-types.md).
 v1 resumed with `query.PageState(state)` and read `iter.PageState()`. In v2,
 `RunPage` takes the state and the page size, and returns one `*gocql.Page`:
 
+<!-- snippet
+var listUsers *gocql.Prepared[cql.EmptyParams, string]
+var state cql.PageState
+-->
 ```go
 page, err := listUsers.RunPage(ctx, cql.EmptyParams{}, state, 100)
 if err != nil {
@@ -300,7 +309,7 @@ conditional statements in prepared metadata: set
 | `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
 | `gocql.ErrKeyspaceDoesNotExist` | removed: a schema refresh treats a keyspace the server no longer has as dropped; a missing keyspace is `cqlerr.ErrNoKeyspace` |
 | `RequestErrWriteTimeout.WriteType`, `RequestErrWriteFailure.WriteType` (strings) | `cqlerr.WriteType` constants (`cqlerr.WriteTypeSimple`, `WriteTypeBatchLog`, `WriteTypeCAS`, ...); its `String` returns the server's name; a type the driver does not know is `WriteTypeUnknown` |
-| `ErrorMap` keyed by an address string | `cqlerr.ErrorMap` keyed by `netip.Addr`; an IPv4 replica is keyed by its 4-byte address |
+| `ErrorMap` keyed by an address string | `cqlerr.ErrorMap` keyed by `netip.Addr`, an IPv4 replica by its 4-byte address, with a `cqlerr.FailureReason` for each replica in place of the raw code |
 | `gocql.ErrNoHosts` | `ConfigBuilder.Build` rejects an empty contact point list with a `*cql.ValidationError` |
 
 A failed execution returns a `*cqlerr.ExecutionError` that lists every attempt.
@@ -315,7 +324,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TokenAwareHostPolicy(fallback, gocql.ShuffleReplicas())` | the default: replicas are shuffled unless `routing.Options.FixedReplicaOrder` is set |
 | `gocql.DCAwareRoundRobinPolicy(dc)` without token awareness | `routing.Options{Datacenter: dc, NoTokenAware: true}` |
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
-| `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.AttemptObserver`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
+| `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.Learner`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
@@ -334,7 +343,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TypeVarchar` and `gocql.TypeText` | `cql.KindText`: text and varchar are one CQL type, and a column of either has that kind, so their types compare `Equal` |
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
-| `gocql.ObservedQuery`, `QueryObserver` | `observe.RequestObserver`, `observe.AttemptObserver` |
+| `gocql.ObservedQuery`, `QueryObserver` | the `Request` and `Attempt` hooks of `observe.Hooks`; `observe.Join` combines several |
 | `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangeConnected`) or the host marked down (`ChangeDown`), `KindStatus` and `KindTopology` the cluster's own events |
 
 ## Not carried over

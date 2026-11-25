@@ -149,7 +149,11 @@ func TestZeroValuesRejected(t *testing.T) {
 	}
 	requireValidation(t, "zero Session.Close", session.Close())
 	requireValidation(t, "zero Session.AwaitSchemaAgreement", session.AwaitSchemaAgreement(ctx))
-	requireValidation(t, "zero Session.RefreshMetadata", session.RefreshMetadata(ctx))
+	snapshot, err := session.RefreshMetadata(ctx)
+	requireValidation(t, "zero Session.RefreshMetadata", err)
+	if snapshot != nil {
+		t.Errorf("zero Session.RefreshMetadata returned a snapshot")
+	}
 	_, err = session.Subscribe(event.Filter{})
 	requireValidation(t, "zero Session.Subscribe", err)
 	_, err = session.CompileOptions(exec.Options{})
@@ -241,10 +245,10 @@ func TestZeroValuesUsable(t *testing.T) {
 		t.Error("the zero Decision does not stop")
 	}
 	unavailable := &cqlerr.UnavailableError{}
-	if d := (retry.Safe{}).Decide(retry.Attempt{Number: 2, Err: unavailable}); d.Action != retry.Next {
+	if d := (retry.Safe{}).Decide(retry.Attempt{Attempt: 2, Err: unavailable}); d.Action != retry.Next {
 		t.Errorf("zero Safe stopped after attempt 2: %v", d.Action)
 	}
-	if d := (retry.Safe{}).Decide(retry.Attempt{Number: 3, Err: unavailable}); d.Action != retry.Stop {
+	if d := (retry.Safe{}).Decide(retry.Attempt{Attempt: 3, Err: unavailable}); d.Action != retry.Stop {
 		t.Errorf("zero Safe retried after attempt 3: %v", d.Action)
 	}
 	if !new(endpoint.SimpleConvictionPolicy).AddFailure(endpoint.ConvictionEvent{}) {

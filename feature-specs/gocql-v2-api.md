@@ -744,7 +744,7 @@ type Session struct { /* opaque */ }
 func Connect(context.Context, config.Config) (*Session, error)
 func (s *Session) Dialect() config.Dialect
 func (s *Session) ID() cql.UUID
-func (s *Session) Observer() observe.Observer // the configured one
+func (s *Session) Observer() observe.Hooks    // the configured ones
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each
@@ -1384,9 +1384,10 @@ type Options struct {
     CustomPayload []cql.PayloadEntry
     IncludeMetadata bool                          // request full result metadata
     HostID cql.Option[cql.UUID]
-    ShardID cql.Option[uint32]
+    ShardID cql.Option[uint32]                    // strict unless AnyShardFallback
+    AnyShardFallback bool                         // requires ShardID: may use another shard of HostID
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
-    Observer observe.Observer                     // joined after the session's observer
+    Observer observe.Hooks                        // joined after the session's hooks
     NoSessionObserver bool                        // leave the session's observer out
 }
 // package cql
@@ -1481,12 +1482,13 @@ Keyspace affects prepare/cache identity and v5 QUERY/BATCH flags; an
 incompatible post-bind override is rejected. v3/v4 nondefault keyspace requires
 a qualified CQL statement or a session established in that keyspace. No
 concurrently mutable session-wide USE operation exists. Host pinning still
-validates host eligibility; a shard ID is a hint unless routing.Target.StrictShard is
-set by the routing policy. StrictShard requires a present shard ID; absent,
+validates host eligibility; a shard ID is strict unless metadata.Target.AnyShardFallback
+(for routing.SingleTarget) or exec.Options.AnyShardFallback (for a pinned
+request) is set. AnyShardFallback requires a present shard ID; absent,
 out-of-range or unavailable strict shards return a typed target error without
-same-host shard fallback. HostID pinning never falls back to a different host.
-Target strictness survives plan, attempt and pool seams; routing.SingleTarget
-honors its target's StrictShard unchanged. Unsupported version options fail
+same-host shard fallback. HostID pinning never falls back to a different host,
+and an exec.Options pin takes precedence over a SingleTarget policy.
+Target strictness survives plan, attempt and pool seams. Unsupported version options fail
 before send. Timestamps use one value per logical execution reused across
 retries; generated timestamps are concurrency-safe.
 
@@ -1521,12 +1523,14 @@ type Info struct {
     Consistency cql.Consistency
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]
+    AnyShardFallback bool
 }
-type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; StrictShard bool }
+type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool }
 type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
 func (r Route) Usable() bool
+func (r Route) Datacenter() string                  // and Rack, from the latest snapshot that indexed the host
 func (r Route) Shard() cql.Option[uint32]           // unset: any connection of the host
 func (r Route) ShardOf(token int64) cql.Option[uint32]
 func (r Route) WithShard(shard cql.Option[uint32]) Route
@@ -1536,15 +1540,22 @@ type Policy interface {
     Fallback(Info, *metadata.Snapshot) Plan          // every route, in order
 }
 type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
-type AttemptObserver interface { Observe(AttemptEvent) }        // optional
+type Learner interface { Learn(AttemptEvent) }                  // optional
 func PlanOf(routes ...Route) Plan                    // a plan of routes, in order
+func AppendReplicaRoutes(dst []Route, *metadata.Snapshot, Info) []Route // ReplicaRoutes into a buffer
+func RouteTo(*metadata.Snapshot, Target) (Route, bool) // false: no such host
+func FilterPlan(Plan, keep func(Route) bool) Plan    // lazy
+func Routes(Plan) iter.Seq[Route]                    // consumes the plan
 type AttemptEvent struct {
     RequestID uint64
     Attempt int
     Target Target
+    Address string
+    Consistency cql.Consistency
     Started time.Time
     Latency time.Duration
     Err error
+    ExecutionStatus cqlerr.ExecutionStatus // Executed when Err is nil
     CQLTraceID cql.Option[cql.UUID]
     Canceled, TimedOut, Speculative bool // by cqlerr.KindOf(Err)
 }
@@ -1554,17 +1565,18 @@ type AttemptStart struct {
     RequestID uint64
     Attempt int
     Target Target
+    Address string
+    Consistency cql.Consistency
     Started time.Time
     Speculative bool
 }
 type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
-type Observer any // one or more of the hook interfaces below; hooks are found once at install
-type RequestObserver interface {
-    StartRequest(context.Context, RequestStart) (context.Context, func(RequestEvent))
+type SpeculationPolicyFunc func(started int) (time.Duration, bool)
+type Hooks struct { // a nil hook is skipped; later hooks are new fields
+    Request func(context.Context, RequestStart) (context.Context, func(RequestEvent))
+    Attempt func(context.Context, AttemptStart) func(routing.AttemptEvent)
 }
-type AttemptObserver interface {
-    StartAttempt(context.Context, AttemptStart) func(routing.AttemptEvent)
-}
+func (Hooks) IsZero() bool
 type RequestStart struct {
     ID uint64
     Started time.Time
@@ -1583,12 +1595,9 @@ type RequestEvent struct {
     Result Result
     Err error
 }
-type RequestObserverFunc func(context.Context, RequestStart) (context.Context, func(RequestEvent))
-type AttemptObserverFunc func(context.Context, AttemptStart) func(routing.AttemptEvent)
-// Join calls every observer's hooks in order; it implements the union of
-// their hooks. A pool connecting or a host marked down is an event.KindPool
-// event, not an observer hook.
-func Join(observers ...Observer) Observer
+// Join calls every argument's hooks in order, field by field. A pool
+// connecting or a host marked down is an event.KindPool event, not a hook.
+func Join(hooks ...Hooks) Hooks
 ```
 
 Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
@@ -1602,10 +1611,10 @@ type Action uint8
 const (Stop Action = iota; Same; Next)
 type Attempt struct {
     Err error
-    Number int // 1-based
+    Attempt int // 1-based
     Idempotent bool
     Consistency cql.Consistency
-    Kind cql.StatementKind
+    StatementKind cql.StatementKind
     ExecutionStatus cqlerr.ExecutionStatus
 }
 type Decision struct {
@@ -1668,6 +1677,7 @@ var CDCTokenPartitioner TokenPartitioner
 // package routing/routingtest
 type Cluster struct {
     Keyspaces map[string]*metadata.Keyspace
+    Tables []Table // added without columns; Keyspaces is not modified
     TokenRanges map[string][]metadata.TokenRange
     Tablets map[Table][]metadata.TokenRange
     LocalDatacenter, LocalRack string
@@ -1676,6 +1686,7 @@ type Cluster struct {
 }
 type Table struct { Keyspace, Name string }
 func NewSnapshot(Cluster) *metadata.Snapshot // links the built-in policies' engine
+func Host(id cql.UUID, datacenter, rack string) metadata.HostSnapshot // enabled, up, connected
 ```
 
 Tablet v2 takes precedence over v1 when both are negotiated. Every EXECUTE on a
@@ -1713,17 +1724,17 @@ partitioners must consume it synchronously and not retain borrowed spans.
 
 Policies may not mutate request inputs; no observer receives `[]any`. Observer
 callbacks are synchronous and must not block; panic containment logs observer
-failure without corrupting execution. StartRequest receives the caller's
+failure without corrupting execution. The Request hook receives the caller's
 context as the request is admitted; the context it returns is passed to
-StartAttempt for every attempt of that request and is never used for
+the Attempt hook for every attempt of that request and is never used for
 cancellation. There is one terminal request event and one terminal event per
 started attempt, including cancellation and speculative losers, for each
 configured observer, delivered through the functions the start hooks return.
-Observer is the seam for client-side tracing such as OpenTelemetry, which lives
+observe.Hooks is the seam for client-side tracing such as OpenTelemetry, which lives
 outside the core module; AttemptEvent.CQLTraceID links an attempt to the
 server-side CQL trace session it produced. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
-Observe feedback, metrics and Result accounting still run. Latency percentile
+Learn feedback, metrics and Result accounting still run. Latency percentile
 snapshots are maintained outside individual request completion; disabled
 speculation does not create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
@@ -1789,12 +1800,15 @@ type Fetcher struct {
 }
 func (f Fetcher) Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
 func Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
+// FetchAll reads every session of refs in order, one Info per reference, the
+// failures joined; Fetcher has the same method.
+func FetchAll(context.Context, *gocql.Session, []cql.CQLTraceRef) ([]Info, error)
 var ErrNotReady error // ctx ended before the session was ready
 ```
 
 ```go
 func (s *Session) Metadata() *metadata.Snapshot
-func (s *Session) RefreshMetadata(context.Context) error
+func (s *Session) RefreshMetadata(context.Context) (*metadata.Snapshot, error)
 func (s *Session) AwaitSchemaAgreement(context.Context) error
 func (s *Session) Subscribe(event.Filter) (*event.Subscription, error)
 func (s *Session) Metrics() metrics.Snapshot // session-wide counters
@@ -1827,6 +1841,8 @@ func (m *Snapshot) Host(cql.UUID) (routing.HostSnapshot, bool)
 func (m *Snapshot) Keyspaces() []string // sorted names
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
 func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
+func (m *Snapshot) View(keyspace, name string) (*View, bool)
+func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
 func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
 func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
 func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
@@ -1851,6 +1867,7 @@ type Snapshot struct {
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64
+    Connections int // of every host pool, the control connection not included
     LatencyP50, LatencyP95, LatencyP99 time.Duration
 }
 
@@ -1960,7 +1977,7 @@ unless discovery is off or client routes are set. `WithIgnoreEvents` replaces it
 list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
 `Config.DefaultProfile()` reads a built configuration's profile back, and
 `Profile.Builder()` starts a builder from a profile's values to derive another.
-`Config.Observer()` returns the observer, as `Session.Observer` does. Slice inputs are copied; Build snapshots
+`Config.Observer()` returns the hooks, as `Session.Observer` does. Slice inputs are copied; Build snapshots
 configuration values while callback/provider objects remain shared and concurrency-safe.
 These functions are the entry points:
 
@@ -1971,7 +1988,7 @@ func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (Config) DefaultProfile() Profile
-func (Config) Observer() observe.Observer
+func (Config) Observer() observe.Hooks
 func (Profile) Builder() *ProfileBuilder
 func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
 func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
@@ -2040,7 +2057,9 @@ numeric order is not the severity order). `NewExecutionError(err, status,
 attempts...)` builds one for tests. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
-...), and `Kind.Transient` reports whether trying again can help. Driver
+...), and `Kind.Transient` reports whether trying again can help;
+`Retryable(err, idempotent)` adds the execution status and rules out the
+caller's own cancellation or deadline. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
 `ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
@@ -2054,14 +2073,16 @@ conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `StreamCapacityError`. `cqlerr` exports only sentinels the driver returns.
 
 Every server error implements the sealed `ServerError` (`Code() ErrorCode`,
-`Message() string`, `Warnings() []string`) and is a concrete `XxxError` type
+`Message() string`, `Warnings() []string`, `Kind() Kind`) and is a concrete `XxxError` type
 per code with its details (`WriteTimeoutError`, `UnavailableError`, ...);
 codes without details are `OtherServerError`. `ErrorCode` is a typed `uint16`
 with one `CodeXxx` constant per native protocol code; it implements `error`,
 and each server error matches its own code, so
 `errors.Is(err, cqlerr.CodeOverloaded)` works through any wrapper.
 Unrecognized future server errors are `OtherServerError` and retain their code
-and message. Invalid lengths and metadata never panic or allocate based on
+and message. A read or write failure's `ErrorMap` maps each failed replica's
+`netip.Addr` to a `FailureReason`, a typed `uint16` whose `String` prints the
+server's name, or the number for a code the driver does not name. Invalid lengths and metadata never panic or allocate based on
 unbounded advertised counts.
 
 ### Transport setup details

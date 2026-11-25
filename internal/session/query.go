@@ -232,6 +232,9 @@ func (s *queryState) idle() {
 	}
 	s.retire()
 	s.logical = nil
+	// The inline execution is kept for the next one; it must not keep the
+	// caller's context, or what the Request hook returned, until then.
+	s.inlineLogical.observerCtx, s.inlineLogical.requestEnd = nil, nil
 	s.busy = false
 	if s.done != nil {
 		close(s.done)

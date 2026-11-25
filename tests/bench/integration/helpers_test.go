@@ -264,7 +264,7 @@ func (o *cassandraObserver) snapshot() ([]observe.RequestEvent, []routing.Attemp
 type cassandraRetry struct{}
 
 func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
-	if a.Idempotent && a.Number < 6 {
+	if a.Idempotent && a.Attempt < 6 {
 		return retry.Decision{Action: retry.Same}
 	}
 	return retry.Decision{Action: retry.Stop}
@@ -602,7 +602,7 @@ func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDis
 		session.Close()
 		t.Fatalf("wait for typed integration schema agreement: %v", err)
 	}
-	if err := session.RefreshMetadata(ctx); err != nil {
+	if _, err := session.RefreshMetadata(ctx); err != nil {
 		session.Close()
 		t.Fatalf("refresh typed integration metadata: %v", err)
 	}
@@ -684,7 +684,8 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
 		return err
 	}
-	return session.RefreshMetadata(ctx)
+	_, err := session.RefreshMetadata(ctx)
+	return err
 }
 
 // incompletePeerDialer appends an incomplete peer to real database responses.
@@ -1417,7 +1418,7 @@ type sessionTestRetry struct {
 }
 
 func (p sessionTestRetry) Decide(e retry.Attempt) retry.Decision {
-	if e.Number >= p.maxAttempts {
+	if e.Attempt >= p.maxAttempts {
 		return retry.Decision{Action: retry.Stop}
 	}
 	return retry.Decision{Action: p.action}
