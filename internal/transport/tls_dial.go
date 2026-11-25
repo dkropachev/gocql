@@ -83,7 +83,7 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 		a, ok := c.LocalAddr().(*net.TCPAddr)
 		if !ok || (target.LocalAddress.Port() != 0 && a.Port != int(target.LocalAddress.Port())) || (!target.LocalAddress.Addr().IsUnspecified() && a.AddrPort().Addr().Unmap() != target.LocalAddress.Addr().Unmap()) {
 			c.Close()
-			return nil, &connectivity.UnsupportedSettingError{Setting: "dial source", Reason: "hook did not honor selected source " + target.LocalAddress.String()}
+			return nil, &connectivity.UnsupportedSettingError{Setting: "WithDialer", Reason: "the dialer did not honor the selected source " + target.LocalAddress.String()}
 		}
 	}
 	if err = InternalApplyV2SocketOptions(c, d.InternalConfig, target.Network); err != nil {
@@ -115,19 +115,19 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 			return err
 		}
 	} else if chosen(connectivity.SocketNoDelay) {
-		return unsupported("TCP_NODELAY")
+		return unsupported("WithNagle")
 	}
 	if keepalive, ok := socketControl[interface{ SetKeepAlive(bool) error }](c); ok {
 		if err := keepalive.SetKeepAlive(config.SocketKeepalive > 0); err != nil {
 			return err
 		}
 	} else if chosen(connectivity.SocketKeepalive) || config.SocketKeepalive > 0 {
-		return unsupported("TCP keepalive")
+		return unsupported("WithTCPKeepalive")
 	}
 	if config.SocketKeepalive > 0 {
 		period, ok := socketControl[interface{ SetKeepAlivePeriod(time.Duration) error }](c)
 		if !ok {
-			return unsupported("TCP keepalive period")
+			return unsupported("WithTCPKeepalive")
 		}
 		if err := period.SetKeepAlivePeriod(config.SocketKeepalive); err != nil {
 			return err
@@ -136,7 +136,7 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 	if config.ReceiveBuffer > 0 {
 		setter, ok := socketControl[interface{ SetReadBuffer(int) error }](c)
 		if !ok {
-			return unsupported("receive buffer")
+			return unsupported("WithReceiveBuffer")
 		}
 		if err := setter.SetReadBuffer(config.ReceiveBuffer); err != nil {
 			return err
@@ -145,7 +145,7 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 	if config.SendBuffer > 0 {
 		setter, ok := socketControl[interface{ SetWriteBuffer(int) error }](c)
 		if !ok {
-			return unsupported("send buffer")
+			return unsupported("WithSendBuffer")
 		}
 		if err := setter.SetWriteBuffer(config.SendBuffer); err != nil {
 			return err
@@ -154,7 +154,7 @@ func InternalApplyV2SocketOptions(c net.Conn, config connectivity.Config, networ
 	if config.Linger.Set {
 		setter, ok := socketControl[interface{ SetLinger(int) error }](c)
 		if !ok {
-			return unsupported("linger")
+			return unsupported("WithLinger")
 		}
 		if err := setter.SetLinger(int(config.Linger.Value / time.Second)); err != nil {
 			return err
@@ -199,7 +199,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 		snapshot.Address = netip.AddrPort{}
 		if d.InternalUnixHostID != nil {
 			if local := d.InternalUnixHostID(); !local.IsZero() && !snapshot.HostID.IsZero() && local != snapshot.HostID {
-				return nil, &connectivity.UnsupportedSettingError{Setting: "Unix remote host", Reason: "one local socket cannot represent a remote node"}
+				return nil, &connectivity.UnsupportedSettingError{Setting: "WithContactPoints", Reason: "a Unix socket contact point reaches only its local node, not another one"}
 			}
 		}
 		c, e := d.raw(ctx, endpoint.DialTarget{Host: snapshot, Network: "unix", Address: path})

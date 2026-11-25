@@ -2070,7 +2070,9 @@ A Unix maintenance target is the single contact point `unix:/absolute/path`;
 a bare absolute path is accepted as a convenience. `Build` turns host discovery
 off unless `WithDiscovery` is set explicitly; explicit discovery, TLS, and an
 explicit `WithLocalAddress` on this transport fail with
-cqlerr.UnsupportedSettingError, and mixing Unix and TCP contact points fails
+cqlerr.UnsupportedSettingError, whose `Setting` names the setter
+(`WithDiscovery`, `WithTLS`, `WithLocalAddress`), as every
+UnsupportedSettingError's does, and mixing Unix and TCP contact points fails
 validation. Default shard settings do not target a Unix socket. An
 endpoint.Dialer receives an endpoint.DialTarget with Network `unix` and the
 exact path as Address; an unknown bootstrap host address is invalid rather

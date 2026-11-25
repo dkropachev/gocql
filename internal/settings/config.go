@@ -177,7 +177,7 @@ func (config Config) Validate() error {
 		return cqltype.TypeValidation("New", "supported protocol versions are 4 and 5")
 	}
 	if config.Server == ServerScylla && config.Protocol == 5 {
-		return &UnsupportedSettingError{Setting: "protocol", Reason: "ScyllaDB speaks native protocol 4"}
+		return &UnsupportedSettingError{Setting: "New", Reason: "ScyllaDB speaks native protocol 4"}
 	}
 	if config.ClientRoutes != nil {
 		if err := ScyllaOnly(&config, "WithClientRoutes"); err != nil {

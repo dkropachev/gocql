@@ -949,7 +949,7 @@ func (rt *InternalSessionRuntime) runSinglePageOnce[R any](ctx context.Context, 
 		return nil, notSent(cqltype.TypeValidation("page size", "must not be negative"))
 	}
 	if v := options.values(); v.Prefetch.Set && v.Prefetch.Value != 0 {
-		return nil, notSent(&settings.UnsupportedSettingError{Setting: "prefetch", Reason: "single-page execution has no automatic pager"})
+		return nil, notSent(&settings.UnsupportedSettingError{Setting: "Prefetch", Reason: "single-page execution has no automatic pager"})
 	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {

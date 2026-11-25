@@ -65,7 +65,7 @@ func TestSocketOptionsOnWrappedConnections(t *testing.T) {
 		for _, tc := range []struct {
 			option  connectivity.SocketOptions
 			setting string
-		}{{connectivity.SocketNoDelay, "TCP_NODELAY"}, {connectivity.SocketKeepalive, "TCP keepalive"}} {
+		}{{connectivity.SocketNoDelay, "WithNagle"}, {connectivity.SocketKeepalive, "WithTCPKeepalive"}} {
 			a, b := net.Pipe()
 			config := defaults
 			config.ChosenSocketOptions = tc.option

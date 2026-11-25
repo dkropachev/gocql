@@ -111,13 +111,13 @@ func UnixContact(config Config) (string, error) {
 	}
 	if path != "" {
 		if config.Metadata.InitialDiscovery {
-			return "", &UnsupportedSettingError{Setting: "Unix discovery", Reason: "one local socket requires InitialDiscovery=false"}
+			return "", &UnsupportedSettingError{Setting: "WithDiscovery", Reason: "a Unix socket contact point reaches one node, so it discovers none"}
 		}
 		if config.TLS != nil {
-			return "", &UnsupportedSettingError{Setting: "Unix TLS", Reason: "maintenance sockets carry plaintext native protocol"}
+			return "", &UnsupportedSettingError{Setting: "WithTLS", Reason: "a Unix maintenance socket carries plaintext native protocol, so neither WithTLS nor WithTLSSource applies"}
 		}
 		if config.LocalAddress.IsValid() {
-			return "", &UnsupportedSettingError{Setting: "Unix local address", Reason: "source address/port selection requires TCP"}
+			return "", &UnsupportedSettingError{Setting: "WithLocalAddress", Reason: "a source address requires TCP, not a Unix socket"}
 		}
 	}
 	return path, nil

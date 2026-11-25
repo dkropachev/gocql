@@ -42,7 +42,7 @@ func (c *Conn) InternalExecuteV2System(ctx context.Context, request *model.Attem
 	}
 	if server.Set && server.Value > 0 {
 		if !c.InternalIsScyllaConn() {
-			return nil, &connectivity.UnsupportedSettingError{Setting: "metadata server timeout", Reason: "server does not support USING TIMEOUT"}
+			return nil, &connectivity.UnsupportedSettingError{Setting: "WithMetadataServerTimeout", Reason: "server does not support USING TIMEOUT"}
 		}
 		if strings.HasPrefix(strings.ToUpper(strings.TrimSpace(request.Statement)), "SELECT") {
 			copyRequest := *request

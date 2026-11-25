@@ -18,6 +18,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/auth"
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
@@ -383,7 +384,7 @@ func TestConfigBuilder(t *testing.T) {
 			want string
 		}{
 			"NoConfig":   {New(ScyllaV4, "h").WithTLSSource(staticTLS{}), "returned no config"},
-			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "Unix TLS"},
+			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "WithTLS"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -1042,5 +1043,21 @@ func TestSchemaChangeWait(t *testing.T) {
 	_, err := New(ScyllaV4, "h").WithSchemaChangeWait(SchemaChangeWait(3)).Build()
 	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithSchemaChangeWait" || !strings.Contains(err.Error(), "SchemaChangeWait(3)") {
 		t.Fatalf("Build = %v, want a WithSchemaChangeWait ValidationError", err)
+	}
+}
+
+// TestUnixSocketSettingErrors checks that a setting a Unix socket contact
+// point cannot honor fails Build with an UnsupportedSettingError naming the
+// setter to drop.
+func TestUnixSocketSettingErrors(t *testing.T) {
+	for setter, b := range map[string]*ConfigBuilder{
+		"WithDiscovery":    New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithDiscovery(true),
+		"WithTLS":          New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithTLS(&tls.Config{ServerName: "node"}),
+		"WithLocalAddress": New(ScyllaV4, "unix:/var/lib/scylla/cql.m").WithLocalAddress(netip.MustParseAddr("127.0.0.1")),
+	} {
+		_, err := b.Build()
+		if unsupported, ok := errors.AsType[*cqlerr.UnsupportedSettingError](err); !ok || unsupported.Setting != setter {
+			t.Errorf("Build = %v, want an UnsupportedSettingError naming %s", err, setter)
+		}
 	}
 }

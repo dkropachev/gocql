@@ -337,7 +337,7 @@ func (p v2SchemaParams) Encode(w *cql.ParamWriter, values []string) error {
 func InternalQueryV2SchemaRows[R any](ctx context.Context, s Source, stmt string, args []string, decoder cql.RowDecoder[R]) ([]R, error) {
 	settings := s.InternalSchemaSettings()
 	if !settings.SystemSchema {
-		return nil, &cqlerr.UnsupportedSettingError{Setting: "schema metadata", Reason: "server does not provide system_schema tables"}
+		return nil, &cqlerr.UnsupportedSettingError{Setting: "WithMetadataMode", Reason: "the server does not provide the system_schema tables that schema metadata is read from"}
 	}
 	if ctx == nil {
 		ctx = context.Background()
