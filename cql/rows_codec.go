@@ -579,12 +579,12 @@ func (p singleColumnPlan[T]) DecodeInto(reader *RowReader, dst *T) error {
 	return nil
 }
 
-// EmptyParamsEncoder encodes the parameters of a statement without bind
-// markers.
-var EmptyParamsEncoder ParamEncoder[EmptyRow] = Params[EmptyRow]()
-
-// EmptyRowDecoder decodes rows without columns.
-var EmptyRowDecoder RowDecoder[EmptyRow] = Row[EmptyRow]()
+// emptyParams and emptyRows are the encoder and decoder of a statement
+// without bind markers or result columns.
+var (
+	emptyParams = Params[EmptyParams]()
+	emptyRows   = Row[EmptyRow]()
+)
 
 type mappedParams[A, B any] struct {
 	codec    ParamEncoder[B]

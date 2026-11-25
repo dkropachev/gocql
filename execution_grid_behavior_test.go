@@ -350,7 +350,6 @@ func gridUpdate(kind cql.StatementKind) cql.Statement[int32, cql.EmptyRow] {
 	return cql.Statement[int32, cql.EmptyRow]{
 		CQL:         "UPDATE ks.tbl SET value = 0x00 WHERE k = ?",
 		Params:      cql.OneParam(cql.Int32Codec),
-		Rows:        cql.EmptyRowDecoder,
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType}),
 		Kind:        kind,
 	}

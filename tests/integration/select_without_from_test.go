@@ -296,7 +296,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 		session := createSessionWithoutKeyspace(t)
 		defer session.Close()
 		const stmt = "SELECT 1, 'a', true"
-		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: stmt, Params: cql.NoParams, Rows: cql.DynamicRows}
 		var baseline cql.Columns
 		for _, mode := range []string{"prepared", "prepared with metadata", "not prepared"} {
 			t.Run(mode, func(t *testing.T) {

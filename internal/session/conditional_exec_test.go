@@ -37,7 +37,7 @@ func TestConditionalExecRejected(t *testing.T) {
 		// The session has no connections: a request that was sent would fail
 		// with a connection error instead.
 		s, _, _ := runtimeTestSession(t, 0)
-		b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.ConditionalStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1 IF v = 0", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, cql.NewColumns(), cql.EmptyRow{})
+		b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.ConditionalStatement, CQL: "UPDATE ks.tbl SET v = 1 WHERE k = 1 IF v = 0", Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}, cql.NewColumns(), cql.EmptyRow{})
 		if err != nil {
 			t.Fatal(err)
 		}

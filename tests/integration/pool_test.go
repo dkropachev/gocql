@@ -161,7 +161,7 @@ func TestPool(t *testing.T) {
 				t.Errorf("cleanup unique stream table: %v", err)
 			}
 		}()
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec)), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec))}, exec.PrepareOptions{}))
 		size := 400 << 10
 		for i := 0; i < 4; i++ {
 			payload := bytes.Repeat([]byte{byte(i + 1)}, size)
@@ -255,7 +255,7 @@ func TestPool(t *testing.T) {
 			}
 		}
 		var id int32
-		if found, _, err := s.UnpreparedOne(ctx, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.Int32Codec)}, cql.EmptyParams{}, &id); err != nil || !found {
+		if found, _, err := s.UnpreparedOne(ctx, cql.Statement[cql.EmptyParams, int32]{CQL: "SELECT id FROM " + qualified + " LIMIT 1", Params: cql.NoParams, Rows: cql.OneColumn(cql.Int32Codec)}, cql.EmptyParams{}, &id); err != nil || !found {
 			t.Fatal("shared execution after repair", found, err)
 		}
 		t.Logf("live streaming proto=%d TLS=%v compression=%s rows=%d pages=%d", *flagProto, *flagRunSslTest, compression, len(seen), pages)

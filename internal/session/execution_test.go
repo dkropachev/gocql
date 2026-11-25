@@ -136,7 +136,7 @@ func TestExecution(t *testing.T) {
 							cols := implCql.NewColumns(implCql.ColumnSpec{Name: "v", Type: typ})
 							calls := 0
 							input := bytes.Repeat([]byte{0x71}, size)
-							statement := binding.Statement[[]byte, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: implCql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: implCql.EmptyRowDecoder}
+							statement := binding.Statement[[]byte, implCql.EmptyRow]{Kind: implCql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(v)VALUES(?)", Params: implCql.OneParam[[]byte](countingBlobEncoder{calls: &calls})}
 							var bound *Bound[implCql.EmptyRow]
 							if owned {
 								bound = codecTestMust(BindUnpreparedOwned(statement, cols, input))
@@ -195,7 +195,7 @@ func TestExecution(t *testing.T) {
 		t.Run("KindDeclarationAndServerRefinement", func(t *testing.T) {
 			for _, kind := range []implCql.StatementKind{implCql.UnknownStatement, implCql.OrdinaryStatement, implCql.ConditionalStatement} {
 				for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
-					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.EmptyParamsEncoder, Rows: implCql.EmptyRowDecoder}, implCql.NewColumns(), implCql.EmptyRow{})
+					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.NoParams}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -775,7 +775,7 @@ func TestExecution(t *testing.T) {
 						time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
 						_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 					}()
-					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}

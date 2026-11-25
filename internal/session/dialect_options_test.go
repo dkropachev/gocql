@@ -124,7 +124,7 @@ func TestSessionKeyspaceOption(t *testing.T) {
 	if _, err := NewCompiledOptions(s, Options{Keyspace: "other"}); err == nil {
 		t.Fatal("protocol 4 compiled a keyspace other than the session's")
 	}
-	statement := binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT * FROM t", Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}
+	statement := binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT * FROM t", Params: cql.NoParams}
 	_, err := Prepare(context.Background(), s, statement, PrepareOptions{Keyspace: "other"})
 	if unsupported, ok := errors.AsType[*cqlerr.UnsupportedSettingError](err); !ok || unsupported.Setting != "Keyspace" {
 		t.Fatalf("Prepare in another keyspace on protocol 4: %v", err)

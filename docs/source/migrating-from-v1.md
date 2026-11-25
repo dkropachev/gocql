@@ -133,11 +133,11 @@ if errors.Is(err, gocql.ErrNotFound) {
 v2:
 
 ```go
-selectName, err := session.Prepare(ctx, cql.Statement[int32, string]{
-	CQL:    "SELECT name FROM users WHERE id = ?",
-	Params: cql.OneParam(cql.Int32Codec),
-	Rows:   cql.OneColumn(cql.StringCodec),
-})
+selectName, err := session.Prepare(ctx, cql.Select(
+	"SELECT name FROM users WHERE id = ?",
+	cql.OneParam(cql.Int32Codec),
+	cql.OneColumn(cql.StringCodec),
+))
 if err != nil {
 	return err
 }
@@ -198,10 +198,10 @@ type User struct {
 	Name string   `cql:"name"`
 }
 
-insertUser, err := session.Prepare(ctx, cql.Statement[User, cql.EmptyRow]{
-	CQL:    "INSERT INTO users (id, name) VALUES (?, ?)",
-	Params: cql.MustParamsOf[User](),
-})
+insertUser, err := session.Prepare(ctx, cql.Write(
+	"INSERT INTO users (id, name) VALUES (?, ?)",
+	cql.MustParamsOf[User](),
+))
 ```
 
 An untagged field maps the column named by its name in snake_case, as gocqlx

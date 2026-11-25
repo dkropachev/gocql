@@ -382,9 +382,7 @@ package cql
 	const cql.EmptyCell cql.CellState = 3
 	func cql.EmptyCodec[T any](base cql.Codec[T]) cql.Codec[cql.MaybeEmpty[T]]
 	type cql.EmptyParams = cql.EmptyRow
-	var cql.EmptyParamsEncoder cql.ParamEncoder[cql.EmptyRow]
 	type cql.EmptyRow struct
-	var cql.EmptyRowDecoder cql.RowDecoder[cql.EmptyRow]
 	func cql.EmptyValue(t cql.DataType) (cql.Value, error)
 	func cql.EncodeValue[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
 	type cql.EncodedValue struct
@@ -479,8 +477,10 @@ package cql
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
 	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body []byte) (cql.EncodedValue, error)
+	func cql.NewStatement[P, R any](text string, params cql.ParamEncoder[P], rows cql.RowDecoder[R]) cql.Statement[P, R]
 	func cql.NewTimeUUID() cql.TimeUUID
 	const cql.NoCompression cql.Compression = 0
+	var cql.NoParams cql.ParamEncoder[cql.EmptyParams]
 	func cql.NonNull[T any](v T) cql.Nullable[T]
 	const cql.Null cql.CellState = 1
 	func cql.NullValue(t cql.DataType) cql.Value
@@ -559,6 +559,7 @@ package cql
 		cql.RowReader method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		cql.RowReader method (*T) SkipColumn() error
 	func cql.ScalarType(kind cql.Kind) (cql.DataType, error)
+	func cql.Select[P, R any](text string, params cql.ParamEncoder[P], rows cql.RowDecoder[R]) cql.Statement[P, R]
 	const cql.Serial cql.Consistency = 8
 	func cql.SetCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.SetDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
@@ -828,6 +829,7 @@ package cql
 	func cql.WithCodec[V any](codec cql.Codec[V]) cql.StructOption
 	func cql.WithEncoder[V any](encoder cql.Encoder[V]) cql.StructOption
 	func cql.WithStreamDecoder[V any](decoder cql.StreamDecoder[V]) cql.StructOption
+	func cql.Write[P any](text string, params cql.ParamEncoder[P]) cql.Statement[P, cql.EmptyRow]
 
 package cqlerr
 	type cqlerr.AlreadyExistsError struct

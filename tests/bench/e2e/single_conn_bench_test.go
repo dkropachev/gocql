@@ -245,7 +245,7 @@ func benchWrite(s *gocql.Session, id int32) error {
 	return benchWriteContext(context.Background(), s, id)
 }
 func benchWriteContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32Codec, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32Codec, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringCodec, func(v benchInsert) string { return v.Value })), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[benchInsert, cql.EmptyRow]{CQL: "INSERT INTO " + corpus.Namespace + ".table1 (pk, ck, v) VALUES (?, ?, ?);", Params: cql.Params(cql.Param("pk", cql.Int32Codec, func(v benchInsert) int32 { return v.PK }), cql.Param("ck", cql.Int32Codec, func(v benchInsert) int32 { return v.CK }), cql.Param("v", cql.StringCodec, func(v benchInsert) string { return v.Value }))}, exec.PrepareOptions{})
 	if e != nil {
 		return e
 	}

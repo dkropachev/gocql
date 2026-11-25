@@ -48,7 +48,7 @@ func TestRoutingPolicy(t *testing.T) {
 					cql.EmptyRow])
 				PreparedData(opaqueStorageValuexxxxxxxx).InternalState = state
 				PreparedData(opaqueStorageValuexxxxxxxx).params = params
-				PreparedData(opaqueStorageValuexxxxxxxx).rows = cql.EmptyRowDecoder
+				PreparedData(opaqueStorageValuexxxxxxxx).rows = cql.Row[cql.EmptyRow]()
 				PreparedData(opaqueStorageValuexxxxxxxx).
 					// Later metadata selects a different partitioner. Existing preparation and
 					// binding still consume the canonical original parameter spans exactly once.

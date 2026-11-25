@@ -54,7 +54,7 @@ func (p *pinServe) take() []string {
 }
 
 func pinTestQuery(t *testing.T, s *cluster.Core, options CompiledOptions) *Query[cql.EmptyRow, []byte] {
-	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+	statement := binding.Statement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
 	q := codecTestMust(unpreparedQuery(s, statement, options.Values()))
 	t.Cleanup(q.Close)
 	return q

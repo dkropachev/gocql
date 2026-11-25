@@ -33,7 +33,7 @@ func TestBindAPI(t *testing.T) {
 			typ := cql.BlobType
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: typ})
 			calls := 0
-			statement := cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls}), Rows: cql.EmptyRowDecoder}
+			statement := cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO ks.tbl(v) VALUES (?)", Params: cql.OneParam[[]byte](countingBlobEncoder{calls: &calls})}
 			input := []byte("original")
 			borrowed, err := BindUnpreparedBorrowed(statement, columns, input)
 			if err != nil {

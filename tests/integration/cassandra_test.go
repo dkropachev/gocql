@@ -158,7 +158,7 @@ func injectInvalidPreparedStatement(t *testing.T, session *gocql.Session, table 
 	t.Helper()
 	cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(foo varchar,bar int,PRIMARY KEY(foo,bar))", table))
 	conn := getRandomConn(t, session)
-	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.EmptyRowDecoder}, *func() *implSession.PrepareOptions {
+	prepared := cassandraPrepared(t, session, cql.Statement[string, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,7)", table), Params: cql.OneParam(cql.StringCodec)}, *func() *implSession.PrepareOptions {
 		opaqueStorageValuex := new(implSession.PrepareOptions)
 		opaqueStorageValuex.HostID = cql.Option[cql.UUID]{Value: implEndpoint.InternalHostInfoHostUUID(conn.InternalHost), Set: true}
 		implSession.PrepareOptionsData(opaqueStorageValuex).InternalConnection = conn
@@ -218,7 +218,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
 	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", prepareOptions).Exec(ctx, []cql.Value{cql.IntValue(1)}, bindOptions(session, options))
 	require.NoError(t, err)
-	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, prepareOptions)
+	prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM " + qualified, Params: cql.NoParams, Rows: cql.DynamicRows}, prepareOptions)
 	row := cassandraReadOne(t, session, prepared, cql.EmptyParams{}, options)
 	require.Equal(t, 1, row.Columns().Len())
 	require.Equal(t, int64(1), cassandraInt(t, row, "id"))

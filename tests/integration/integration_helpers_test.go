@@ -298,7 +298,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 // Statements with values are prepared; v2Exec and v2ReadOne run statements
 // without values unprepared.
 func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (cql.Result, error) {
-	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}
+	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams}
 	if len(values) == 0 {
 		return session.UnpreparedExec(ctx, statement, values)
 	}

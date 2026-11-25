@@ -243,7 +243,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, Rows: cql.EmptyRowDecoder, BindMarkers: rowColumns}
+		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			_, err := a.s.UnpreparedExec(ctx, statement, row{K: k, P: payload(false, k, 0)}, a.metadata)

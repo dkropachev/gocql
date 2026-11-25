@@ -61,7 +61,7 @@ func testBatchRejected(t *testing.T, kind cql.BatchKind, code cqlerr.ErrorCode, 
 	s, conns, peers := runtimeTestSession(t, 1)
 	defer s.Close()
 	partial := kind != cql.LoggedBatch
-	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: member, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
+	q, err := unpreparedQuery(s, binding.Statement[[]byte, cql.EmptyRow]{Kind: member, CQL: "INSERT INTO ks.t(v) VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "v", Type: cql.BlobType})}, Options{})
 	if err != nil {
 		t.Fatal(err)
 	}

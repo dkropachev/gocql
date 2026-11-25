@@ -758,7 +758,7 @@ func TestPrepared(t *testing.T) {
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, body))
 						done <- err
 					}()
-					prepared, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.EmptyParamsEncoder, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
+					prepared, err := Prepare(ctx, s, binding.Statement[implCql.EmptyRow, implCql.CASResult[implCql.DynamicRow]]{CQL: "INSERT INTO ks.tbl(id)VALUES(1)IF NOT EXISTS", Kind: tc.kind, Params: implCql.NoParams, Rows: implCql.CASRows(implCql.DynamicRows)}, PrepareOptions{})
 					if tc.prepareError {
 						if !hasErrorType[*implCql.ValidationError](err) {
 							t.Fatalf("eager metadata validation: %v", err)

@@ -267,6 +267,10 @@ const (UnknownStatement StatementKind = iota; OrdinaryStatement; ConditionalStat
 // Unknown. A batch is idempotent when every member is; exec.Options.Idempotent,
 // when set, overrides the statement's flag.
 func Command(text string) Statement[EmptyParams, EmptyRow]
+func NewStatement[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R]
+func Select[P, R any](text string, params ParamEncoder[P], rows RowDecoder[R]) Statement[P, R] // Ordinary, Idempotent
+func Write[P any](text string, params ParamEncoder[P]) Statement[P, EmptyRow]
+var NoParams ParamEncoder[EmptyParams] // the driver fills nil Params and Rows with its own
 
 type EmptyParams = EmptyRecord   // EmptyRecord is struct{}
 type EmptyRow = EmptyRecord
@@ -288,8 +292,6 @@ func PairParams[A, B any](a ParamEncoder[A], b ParamEncoder[B]) ParamEncoder[Pai
 func PairRows[A, B any](a RowDecoder[A], b RowDecoder[B]) RowDecoder[Pair[A, B]]
 func ConvertParams[A, B any](ParamEncoder[B], func(A) B) ParamEncoder[A]
 func ConvertRows[A, B any](RowDecoder[A], func(A) B, func(B) B) RowDecoder[B]
-var EmptyParamsEncoder ParamEncoder[EmptyParams]
-var EmptyRowDecoder RowDecoder[EmptyRow]
 
 // Struct mapping.
 type StructFields[P any] struct { Params []InputField[P]; Columns []OutputField[P] }
@@ -339,7 +341,7 @@ Compile, and concatenate positional plans. Compile rejects any other left side
 with "left side has no fixed arity"; named composition
 uses `Params`/`Row` with accessors. `ConvertRows`' final function is its
 ownership-detaching clone; omitting correct clone semantics is a custom codec
-contract violation. `EmptyRowDecoder` accepts only results with zero physical columns;
+contract violation. The empty row decoder (a nil `Rows` of a `Statement[P, EmptyRow]`) accepts only results with zero physical columns;
 use a real decoder for conditional writes. Ignored result fields still have
 validated framing.
 

@@ -153,7 +153,7 @@ func hotPathPrepare[R any](t *testing.T, ctx context.Context, session *Session, 
 func TestHotPathAllocs(t *testing.T) {
 	t.Run("Exec", func(t *testing.T) {
 		session, ctx := hotPathSession(t), hotPathContext(t)
-		p := hotPathPrepare(t, ctx, session, "E", cql.EmptyRowDecoder)
+		p := hotPathPrepare(t, ctx, session, "E", cql.Row[cql.EmptyRow]())
 		q := hotPathQuery(t, p, Options{})
 		options := testOptions(Options{})
 		gateAllocs(t, "Prepared.Exec", 0, func() {

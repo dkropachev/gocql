@@ -134,7 +134,7 @@ func cassandraUnpreparedAll[R any](t testing.TB, s *gocql.Session, stmt string, 
 	t.Helper()
 	var result []R
 	var cur R
-	statement := cql.Statement[cql.EmptyParams, R]{CQL: stmt, Params: cql.EmptyParamsEncoder, Rows: decoder}
+	statement := cql.Statement[cql.EmptyParams, R]{CQL: stmt, Params: cql.NoParams, Rows: decoder}
 	if _, err := s.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &cur, func(row *R) error {
 		result = append(result, decoder.Clone(*row))
 		return nil
@@ -157,7 +157,7 @@ func cassandraDynamicPrepared[O fixturePrepareOptions](t testing.TB, s *gocql.Se
 }
 func cassandraWritePrepared[O fixturePrepareOptions](t testing.TB, s *gocql.Session, stmt string, options O) *gocql.Prepared[[]cql.Value, cql.EmptyRow] {
 	t.Helper()
-	return cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.EmptyRowDecoder}, options)
+	return cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams}, options)
 }
 func cassandraRows[P any, O fixtureOptions](t testing.TB, s *gocql.Session, p *gocql.Prepared[P, cql.DynamicRow], value P, options O) []cql.DynamicRow {
 	t.Helper()

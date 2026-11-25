@@ -69,7 +69,7 @@ func TestStrongConsistency(t *testing.T) {
 	}
 	prepared := map[string]statement{}
 	for _, ks := range []string{global, eventual} {
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(pk, v) VALUES(?, 7)", Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(pk, v) VALUES(?, 7)", Params: cql.OneParam(cql.Int32Codec)}, exec.PrepareOptions{}))
 		selectV := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, exec.PrepareOptions{}))
 		prepared[ks] = statement{
 			write: func(_ string, c cql.Consistency) (cql.Result, error) { return insert.Exec(ctx, 1, consistency(c)) },

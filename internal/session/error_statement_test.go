@@ -67,7 +67,7 @@ func TestErrorStatementPrepared(t *testing.T) {
 	handle := new(Prepared[cql.EmptyRow, cql.Bytes])
 	storage := PreparedData(handle)
 	storage.InternalState = state
-	storage.params = codecTestMust(cql.EmptyParamsEncoder.Compile(cql.NewColumns()))
+	storage.params = codecTestMust(cql.NoParams.Compile(cql.NewColumns()))
 	storage.rows = cql.OneColumn(cql.BytesCodec)
 	bound := codecTestMust(BindBorrowed(handle, cql.EmptyRow{}))
 	defer bound.Close()
@@ -185,7 +185,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		if err := batchTestQuery(t, s).AddToBatch(&batch, []byte(redactionSecret)); err != nil {
 			t.Fatal(err)
 		}
-		_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows(cql.EmptyRowDecoder), CompiledOptions{})
+		_, err := InternalWrapSession(s).RunConditionalBatch(ctx, &batch, cql.CASRows(cql.Row[cql.EmptyRow]()), CompiledOptions{})
 		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 		if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {
 			t.Fatalf("RunConditionalBatch of an ordinary batch = %v", err)
@@ -261,7 +261,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		s.Close()
 		session := InternalWrapSession(s)
 		_, execErr := session.ExecBatch(ctx, &batch, CompiledOptions{})
-		_, runErr := session.RunBatch(ctx, &batch, cql.EmptyRowDecoder, CompiledOptions{})
+		_, runErr := session.RunBatch(ctx, &batch, cql.Row[cql.EmptyRow](), CompiledOptions{})
 		for name, err := range map[string]error{"ExecBatch": execErr, "RunBatch": runErr} {
 			failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 			if !ok || failure.Statement != "INSERT INTO ks.t(v) VALUES(?)" || failure.BatchSize != 1 {

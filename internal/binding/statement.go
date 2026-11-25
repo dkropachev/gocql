@@ -76,16 +76,24 @@ type Statement[P, R any] struct {
 	Idempotent  bool
 }
 
+// emptyParams and emptyRows fill a nil Params or Rows of a statement without
+// bind markers or result columns. They are the driver's own, so a package
+// variable an application reassigns cannot change them.
+var (
+	emptyParams = cql.Params[cql.EmptyParams]()
+	emptyRows   = cql.Row[cql.EmptyRow]()
+)
+
 // statementDefaults fills a nil Params or Rows that has an empty
 // default.
 func statementDefaults[P, R any](s *Statement[P, R]) {
 	if s.Params == nil {
-		if e, ok := any(cql.EmptyParamsEncoder).(cql.ParamEncoder[P]); ok {
+		if e, ok := any(emptyParams).(cql.ParamEncoder[P]); ok {
 			s.Params = e
 		}
 	}
 	if s.Rows == nil {
-		if d, ok := any(cql.EmptyRowDecoder).(cql.RowDecoder[R]); ok {
+		if d, ok := any(emptyRows).(cql.RowDecoder[R]); ok {
 			s.Rows = d
 		}
 	}

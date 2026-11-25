@@ -86,7 +86,7 @@ func TestPaging(t *testing.T) {
 			cassandraWrite(t, session, fmt.Sprintf("DELETE FROM %s WHERE p1=? AND p2=? AND c1>=? AND c1<?", table), cql.IntValue(targetP1), cql.IntValue(targetP2), cql.IntValue(deletedRangeStart), cql.IntValue(deletedRangeEnd))
 		})
 		// Manual paging needs a page cursor, which only prepared statements return.
-		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: selectCQL, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: selectCQL, Params: cql.NoParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 		t.Run("AutoPagination", func(t *testing.T) {
 			for _, c := range []cql.Consistency{cql.One, cql.Quorum} {
 				t.Run(c.String(), func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestPaging(t *testing.T) {
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(i), cql.IntValue(i*i))
 		}
 		// Manual paging needs a page cursor, which only prepared statements return.
-		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,count FROM " + table, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}, exec.PrepareOptions{})
+		prepared := cassandraPrepared(t, session, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,count FROM " + table, Params: cql.NoParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
 		state := cql.StartPage()
 		fetched := 0
 		for {
@@ -284,7 +284,7 @@ func TestPaging(t *testing.T) {
 		keyspace := testKeyspaceName(t, fmt.Sprintf("%x", time.Now().UnixNano()))
 		runDDL := func(stmt string) {
 			t.Helper()
-			if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); err != nil {
+			if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -292,7 +292,7 @@ func TestPaging(t *testing.T) {
 		defer func() {
 			cleanup, stop := context.WithTimeout(context.Background(), 30*time.Second)
 			defer stop()
-			_, err := s.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{})
+			_, err := s.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + keyspace, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{})
 			if err != nil {
 				t.Error("unique keyspace cleanup", err)
 			}
@@ -305,7 +305,7 @@ func TestPaging(t *testing.T) {
 			Text   string
 		}
 		params := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }), cql.Param("pieces", cql.ListEncoder(cql.ByteSliceCodec), func(v input) [][]byte { return v.Pieces }), cql.Param("txt", cql.StringCodec, func(v input) string { return v.Text }))
-		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{}))
+		prepared := codecTestMust(s.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".records(id,value,pieces,txt)VALUES(?,?,?,?)", Kind: cql.OrdinaryStatement, Params: params}, exec.PrepareOptions{}))
 		payload := bytes.Repeat([]byte("segment-crossing"), 30000)
 		textPayload := strings.Repeat("stream-🙂-", 24000)
 		for i := 0; i < 5; i++ {
@@ -313,7 +313,7 @@ func TestPaging(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+		statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value,pieces,txt FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}
 		selectPrepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
 		type output struct {
 			ID     int32
@@ -323,7 +323,7 @@ func TestPaging(t *testing.T) {
 		}
 		decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *output) *[][]byte { return &r.Pieces }), cql.StreamColumn("txt", cql.StreamText, func(r *output) *[]byte { return &r.Text }))
 		options := exec.StreamOptions{Incremental: true, Options: exec.Options{PageSize: 2}}
-		streamStatement := cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}
+		streamStatement := cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: decoder}
 		streamPrepared, err := s.PrepareStream(ctx, streamStatement)
 		if err != nil {
 			t.Fatal(err)

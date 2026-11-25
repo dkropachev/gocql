@@ -43,7 +43,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	defer s.Close()
 	runDDL := func(stmt string) {
 		t.Helper()
-		if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.EmptyRowDecoder}, cql.EmptyParams{}); err != nil {
+		if _, err := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{}); err != nil {
 			t.Fatal(stmt, err)
 		}
 	}
@@ -67,7 +67,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	}
 	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
-	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: cql.DynamicRows}
+	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}
 	prepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
 	type output struct {
 		ID    int32
@@ -76,7 +76,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }))
 	streamOptions := pinned
 	streamOptions.PageSize = 1
-	streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.EmptyParamsEncoder, Rows: decoder}))
+	streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: decoder}))
 	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: streamOptions})
 	if err != nil {
 		t.Fatal(err)

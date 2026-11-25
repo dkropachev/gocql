@@ -78,7 +78,7 @@ func TestTypes(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id double PRIMARY KEY,test double)", table))
 			testNum := 7500.0
 			params := cql.Params(cql.Param("id", cql.Float64Codec, func(v *float64) float64 { return *v }), cql.Param("test", cql.Float64Codec, func(v *float64) float64 { return *v }))
-			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), &testNum)
 			require.NoError(t, err)
 			got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float()
