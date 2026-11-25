@@ -73,7 +73,8 @@ moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
 `routing.ReplicaRoutes` (the replicas of a request's token, each to the shard
 that owns the token when the host's sharding is known; `AppendReplicaRoutes`
-appends them to a buffer the policy reuses) and `routing.RouteTo` (one host,
+appends them to a buffer the policy reuses, one per concurrent call, as from
+a `sync.Pool`) and `routing.RouteTo` (one host,
 or one shard of it), and narrows them with `WithShardID` and `ShardOf`.
 `Route.Datacenter` and `Route.Rack` name a route's locality.
 `routing.FilterPlan` drops routes from a plan lazily, and `routing.Routes`

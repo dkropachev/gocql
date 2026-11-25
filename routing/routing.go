@@ -114,7 +114,8 @@ func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 
 // AppendReplicaRoutes appends the routes ReplicaRoutes returns to dst and
 // returns the extended slice, so that a policy can reuse a buffer across
-// requests.
+// requests. Pick and Fallback may run concurrently, so a buffer must not be
+// shared between calls in flight: take one from a sync.Pool, for example.
 func AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	replicaRoutes, ok := link.Lookup[func([]metadata.Route, *metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)
 	if !ok {
