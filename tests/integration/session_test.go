@@ -430,7 +430,7 @@ func TestSession(t *testing.T) {
 				}
 				defer s.Close()
 
-				err = s.RefreshMetadata(context.Background())
+				_, err = s.RefreshMetadata(context.Background())
 				if err != nil {
 					t.Fatalf("failed to refresh ring: %v", err)
 				}

@@ -83,10 +83,36 @@ func InternalCloneV2Table(t *metadata.Table) *metadata.Table {
 	v.Extensions = cloneV2Extensions(t.Extensions)
 	v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
 	v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-	v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
+	v.OrderedColumns = cloneV2ColumnList(t.OrderedColumns)
 	v.Flags = append([]string(nil), t.Flags...)
 	v.Options = cloneV2TableOptions(t.Options)
 	return &v
+}
+
+// InternalCloneV2View returns a deep copy of v.
+func InternalCloneV2View(v *metadata.View) *metadata.View {
+	if v == nil {
+		return nil
+	}
+	r := *v
+	r.Columns = cloneV2Columns(v.Columns)
+	r.Extensions = cloneV2Extensions(v.Extensions)
+	r.PartitionKey = cloneV2ColumnList(v.PartitionKey)
+	r.ClusteringColumns = cloneV2ColumnList(v.ClusteringColumns)
+	r.OrderedColumns = cloneV2ColumnList(v.OrderedColumns)
+	r.Options = cloneV2TableOptions(v.Options)
+	return &r
+}
+
+// InternalCloneV2Type returns a deep copy of t.
+func InternalCloneV2Type(t *metadata.Type) *metadata.Type {
+	if t == nil {
+		return nil
+	}
+	r := *t
+	r.FieldNames = append([]string(nil), t.FieldNames...)
+	r.FieldTypes = append([]string(nil), t.FieldTypes...)
+	return &r
 }
 
 // shallowCloneKeyspace copies k and its maps, but not the values in them, so
@@ -142,29 +168,11 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 	}
 	r.Types = make(map[string]*metadata.Type, len(k.Types))
 	for n, t := range k.Types {
-		if t == nil {
-			r.Types[n] = nil
-			continue
-		}
-		v := *t
-		v.FieldNames = append([]string(nil), t.FieldNames...)
-		v.FieldTypes = append([]string(nil), t.FieldTypes...)
-		r.Types[n] = &v
+		r.Types[n] = InternalCloneV2Type(t)
 	}
 	r.Views = make(map[string]*metadata.View, len(k.Views))
 	for n, t := range k.Views {
-		if t == nil {
-			r.Views[n] = nil
-			continue
-		}
-		v := *t
-		v.Columns = cloneV2Columns(t.Columns)
-		v.Extensions = cloneV2Extensions(t.Extensions)
-		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
-		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-		v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
-		v.Options = cloneV2TableOptions(t.Options)
-		r.Views[n] = &v
+		r.Views[n] = InternalCloneV2View(t)
 	}
 	r.Indexes = make(map[string]*metadata.Index, len(k.Indexes))
 	for n, t := range k.Indexes {
@@ -177,7 +185,7 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 		v.Columns = cloneV2Columns(t.Columns)
 		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
 		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-		v.OrderedColumns = append([]string(nil), t.OrderedColumns...)
+		v.OrderedColumns = cloneV2ColumnList(t.OrderedColumns)
 		r.Indexes[n] = &v
 	}
 	return &r

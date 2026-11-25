@@ -182,7 +182,7 @@ func compileMetadata(
 				ix, ok := keyspace.Indexes[indexName]
 				if ok {
 					ix.Columns[col.Name] = col
-					ix.OrderedColumns = append(ix.OrderedColumns, col.Name)
+					ix.OrderedColumns = append(ix.OrderedColumns, col)
 					continue
 				}
 			}
@@ -194,12 +194,12 @@ func compileMetadata(
 			}
 
 			view.Columns[col.Name] = col
-			view.OrderedColumns = append(view.OrderedColumns, col.Name)
+			view.OrderedColumns = append(view.OrderedColumns, col)
 			continue
 		}
 
 		table.Columns[col.Name] = col
-		table.OrderedColumns = append(table.OrderedColumns, col.Name)
+		table.OrderedColumns = append(table.OrderedColumns, col)
 	}
 
 	for i := range tables {
@@ -276,7 +276,7 @@ func InternalCompileTableMetadata(
 				ix, ok := keyspace.Indexes[indexName]
 				if ok {
 					ix.Columns[col.Name] = col
-					ix.OrderedColumns = append(ix.OrderedColumns, col.Name)
+					ix.OrderedColumns = append(ix.OrderedColumns, col)
 					continue
 				}
 			}
@@ -287,12 +287,12 @@ func InternalCompileTableMetadata(
 			}
 
 			view.Columns[col.Name] = col
-			view.OrderedColumns = append(view.OrderedColumns, col.Name)
+			view.OrderedColumns = append(view.OrderedColumns, col)
 			continue
 		}
 
 		table.Columns[col.Name] = col
-		table.OrderedColumns = append(table.OrderedColumns, col.Name)
+		table.OrderedColumns = append(table.OrderedColumns, col)
 	}
 
 	for i := range tables {
@@ -309,36 +309,29 @@ func InternalCompileTableMetadata(
 	}
 }
 
-func compileColumns(columns map[string]*metadata2.Column, orderedColumns []string) (
-	partitionKey, clusteringColumns []*metadata2.Column, sortedColumns []string) {
+func compileColumns(columns map[string]*metadata2.Column, orderedColumns []*metadata2.Column) (
+	partitionKey, clusteringColumns, sortedColumns []*metadata2.Column) {
 	clusteringColumnCount := componentColumnCountOfType(columns, metadata2.ColumnKindClusteringKey)
 	clusteringColumns = make([]*metadata2.Column, clusteringColumnCount)
 
 	partitionKeyCount := componentColumnCountOfType(columns, metadata2.ColumnKindPartitionKey)
 	partitionKey = make([]*metadata2.Column, partitionKeyCount)
 
-	var otherColumns []string
-	for _, columnName := range orderedColumns {
-		column := columns[columnName]
+	var otherColumns []*metadata2.Column
+	for _, column := range orderedColumns {
 		if column.Kind == metadata2.ColumnKindPartitionKey {
 			partitionKey[column.ComponentIndex] = column
 		} else if column.Kind == metadata2.ColumnKindClusteringKey {
 			clusteringColumns[column.ComponentIndex] = column
 		} else {
-			otherColumns = append(otherColumns, columnName)
+			otherColumns = append(otherColumns, column)
 		}
 	}
 
 	sortedColumns = orderedColumns[:0]
-	for _, pk := range partitionKey {
-		sortedColumns = append(sortedColumns, pk.Name)
-	}
-	for _, ck := range clusteringColumns {
-		sortedColumns = append(sortedColumns, ck.Name)
-	}
-	for _, oc := range otherColumns {
-		sortedColumns = append(sortedColumns, oc)
-	}
+	sortedColumns = append(sortedColumns, partitionKey...)
+	sortedColumns = append(sortedColumns, clusteringColumns...)
+	sortedColumns = append(sortedColumns, otherColumns...)
 
 	return
 }

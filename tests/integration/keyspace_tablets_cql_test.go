@@ -58,7 +58,7 @@ func TestKeyspaceToCQLTablets(t *testing.T) {
 			}()
 			check := func(stage string) string {
 				t.Helper()
-				if err := s.RefreshMetadata(ctx); err != nil {
+				if _, err := s.RefreshMetadata(ctx); err != nil {
 					t.Fatal(stage, err)
 				}
 				ks, ok := s.Metadata().Keyspace(keyspace)

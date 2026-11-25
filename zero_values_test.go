@@ -149,7 +149,11 @@ func TestZeroValuesRejected(t *testing.T) {
 	}
 	requireValidation(t, "zero Session.Close", session.Close())
 	requireValidation(t, "zero Session.AwaitSchemaAgreement", session.AwaitSchemaAgreement(ctx))
-	requireValidation(t, "zero Session.RefreshMetadata", session.RefreshMetadata(ctx))
+	snapshot, err := session.RefreshMetadata(ctx)
+	requireValidation(t, "zero Session.RefreshMetadata", err)
+	if snapshot != nil {
+		t.Errorf("zero Session.RefreshMetadata returned a snapshot")
+	}
 	_, err = session.Subscribe(event.Filter{})
 	requireValidation(t, "zero Session.Subscribe", err)
 	_, err = session.CompileOptions(exec.Options{})

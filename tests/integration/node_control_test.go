@@ -135,7 +135,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	// The deferred DROP KEYSPACE refreshes metadata on the control
 	// connection, which returns on its own schedule, after the pool may have.
 	for deadline := time.Now().Add(40 * time.Second); ; time.Sleep(100 * time.Millisecond) {
-		err := s.RefreshMetadata(ctx)
+		_, err := s.RefreshMetadata(ctx)
 		if err == nil {
 			break
 		}

@@ -187,7 +187,7 @@ func TestMetadataEqualsAPI(t *testing.T) {
 					m.ClusteringColumns = nil
 				},
 				"columns":         func(m *metadata.Table) { delete(m.Columns, "pk") },
-				"ordered columns": func(m *metadata.Table) { m.OrderedColumns = []string{"pk"} },
+				"ordered columns": func(m *metadata.Table) { m.OrderedColumns = m.OrderedColumns[:1] },
 				"flags":           func(m *metadata.Table) { m.Flags = nil },
 				"extensions":      func(m *metadata.Table) { m.Extensions = nil },
 			}
@@ -250,8 +250,10 @@ func TestMetadataEqualsAPI(t *testing.T) {
 					},
 				},
 				{
-					name:   "ordered columns reordered",
-					mutate: func(m *metadata.Table) { m.OrderedColumns = []string{"ck", "pk"} },
+					name: "ordered columns reordered",
+					mutate: func(m *metadata.Table) {
+						m.OrderedColumns = []*metadata.Column{m.OrderedColumns[1], m.OrderedColumns[0]}
+					},
 				},
 				{name: "flags", mutate: func(m *metadata.Table) { m.Flags = []string{"dense"} }},
 				{

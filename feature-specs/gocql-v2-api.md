@@ -1794,7 +1794,7 @@ var ErrNotReady error // ctx ended before the session was ready
 
 ```go
 func (s *Session) Metadata() *metadata.Snapshot
-func (s *Session) RefreshMetadata(context.Context) error
+func (s *Session) RefreshMetadata(context.Context) (*metadata.Snapshot, error)
 func (s *Session) AwaitSchemaAgreement(context.Context) error
 func (s *Session) Subscribe(event.Filter) (*event.Subscription, error)
 func (s *Session) Metrics() metrics.Snapshot // session-wide counters

@@ -381,7 +381,7 @@ CREATE MATERIALIZED VIEW {{ ident .vm.Keyspace }}.{{ ident .vm.Name }} AS
     SELECT {{ if .vm.IncludeAllColumns }}*{{ else }}
     {{- range $i, $col := .vm.OrderedColumns }}
     {{- if ne $i 0 }}, {{ end }}
-    {{ ident $col }}
+    {{ ident $col.Name }}
     {{- end }}
     {{- end }}
     FROM {{ ident .vm.Keyspace }}.{{ ident .vm.BaseTable }}
@@ -825,9 +825,8 @@ func (h toCQLHelpers) tableColumnToCQL(tm *Table) string {
 	var sb strings.Builder
 
 	var columns []string
-	for _, cn := range tm.OrderedColumns {
-		cm := tm.Columns[cn]
-		column := fmt.Sprintf("%s %s", h.ident(cn), cm.Type)
+	for _, cm := range tm.OrderedColumns {
+		column := fmt.Sprintf("%s %s", h.ident(cm.Name), cm.Type)
 		if cm.Kind == ColumnKindStatic {
 			column += " static"
 		}

@@ -588,7 +588,7 @@ func TestRouting(t *testing.T) {
 			if err != nil || !slices.Equal(actual, expectedReplicas) {
 				t.Fatalf("mutating returned range changed snapshot: %v, %v", actual, err)
 			}
-			if err := session.RefreshMetadata(ctx); err != nil {
+			if _, err := session.RefreshMetadata(ctx); err != nil {
 				t.Fatal(err)
 			}
 			actual, err = snapshot.Replicas(prepared.Info().Keyspace, table, firstRange.End)

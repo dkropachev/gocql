@@ -84,7 +84,7 @@ package gocql
 		gocql.Session method (*T) Observer() observe.Hooks
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
-		gocql.Session method (*T) RefreshMetadata(ctx context.Context) error
+		gocql.Session method (*T) RefreshMetadata(ctx context.Context) (*metadata.Snapshot, error)
 		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error
@@ -1366,7 +1366,7 @@ package metadata
 		metadata.Index field Kind metadata.IndexKind
 		metadata.Index field Options map[string]string
 		metadata.Index field Columns map[string]*metadata.Column
-		metadata.Index field OrderedColumns []string
+		metadata.Index field OrderedColumns []*metadata.Column
 		metadata.Index field PartitionKey []*metadata.Column
 		metadata.Index field ClusteringColumns []*metadata.Column
 	type metadata.IndexKind string
@@ -1415,6 +1415,8 @@ package metadata
 		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
+		metadata.Snapshot method (*T) Type(keyspace string, name string) (*metadata.Type, bool)
+		metadata.Snapshot method (*T) View(keyspace string, name string) (*metadata.View, bool)
 	type metadata.Table struct
 		metadata.Table field Columns map[string]*metadata.Column
 		metadata.Table field Extensions map[string][]byte
@@ -1422,7 +1424,7 @@ package metadata
 		metadata.Table field Name string
 		metadata.Table field PartitionKey []*metadata.Column
 		metadata.Table field ClusteringColumns []*metadata.Column
-		metadata.Table field OrderedColumns []string
+		metadata.Table field OrderedColumns []*metadata.Column
 		metadata.Table field Flags []string
 		metadata.Table field Options metadata.TableOptions
 		metadata.Table field ID cql.UUID
@@ -1467,7 +1469,7 @@ package metadata
 		metadata.View field BaseTable string
 		metadata.View field Keyspace string
 		metadata.View field Name string
-		metadata.View field OrderedColumns []string
+		metadata.View field OrderedColumns []*metadata.Column
 		metadata.View field PartitionKey []*metadata.Column
 		metadata.View field ClusteringColumns []*metadata.Column
 		metadata.View field Options metadata.TableOptions

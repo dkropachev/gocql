@@ -250,7 +250,7 @@ func TestToCQLHelpers(t *testing.T) {
 			{
 				name: "single partition key is declared inline",
 				tm: &Table{
-					OrderedColumns: []string{"id", "v"},
+					OrderedColumns: []*Column{col("id", "int", ColumnKindPartitionKey), col("v", "text", ColumnKindRegular)},
 					Columns: map[string]*Column{
 						"id": col("id", "int", ColumnKindPartitionKey),
 						"v":  col("v", "text", ColumnKindRegular),
@@ -262,7 +262,7 @@ func TestToCQLHelpers(t *testing.T) {
 			{
 				name: "static column carries the static keyword",
 				tm: &Table{
-					OrderedColumns: []string{"id", "c", "s"},
+					OrderedColumns: []*Column{col("id", "int", ColumnKindPartitionKey), col("c", "int", ColumnKindClusteringKey), col("s", "text", ColumnKindStatic)},
 					Columns: map[string]*Column{
 						"id": col("id", "int", ColumnKindPartitionKey),
 						"c":  col("c", "int", ColumnKindClusteringKey),
@@ -276,7 +276,7 @@ func TestToCQLHelpers(t *testing.T) {
 			{
 				name: "composite partition key moves to a PRIMARY KEY clause",
 				tm: &Table{
-					OrderedColumns: []string{"a", "b", "v"},
+					OrderedColumns: []*Column{col("a", "int", ColumnKindPartitionKey), col("b", "int", ColumnKindPartitionKey), col("v", "text", ColumnKindRegular)},
 					Columns: map[string]*Column{
 						"a": col("a", "int", ColumnKindPartitionKey),
 						"b": col("b", "int", ColumnKindPartitionKey),
@@ -292,7 +292,7 @@ func TestToCQLHelpers(t *testing.T) {
 			{
 				name: "clustering columns follow the partition key",
 				tm: &Table{
-					OrderedColumns: []string{"a", "c", "d", "v"},
+					OrderedColumns: []*Column{col("a", "int", ColumnKindPartitionKey), col("c", "int", ColumnKindClusteringKey), col("d", "int", ColumnKindClusteringKey), col("v", "text", ColumnKindRegular)},
 					Columns: map[string]*Column{
 						"a": col("a", "int", ColumnKindPartitionKey),
 						"c": col("c", "int", ColumnKindClusteringKey),

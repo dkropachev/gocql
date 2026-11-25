@@ -131,9 +131,9 @@ type Table struct {
 	PartitionKey []*Column
 	// ClusteringColumns lists the clustering columns, in key order.
 	ClusteringColumns []*Column
-	// OrderedColumns lists the column names: the partition key, then the
+	// OrderedColumns lists the columns: the partition key, then the
 	// clustering columns, then the others.
-	OrderedColumns []string
+	OrderedColumns []*Column
 	// Flags holds the table's flags, such as "compound".
 	Flags []string
 	// Options holds the table's options.
@@ -244,8 +244,8 @@ type View struct {
 	Keyspace string
 	// Name is the view's name.
 	Name string
-	// OrderedColumns lists the column names in Table.OrderedColumns order.
-	OrderedColumns []string
+	// OrderedColumns lists the columns in Table.OrderedColumns order.
+	OrderedColumns []*Column
 	// PartitionKey lists the partition key columns, in key order.
 	PartitionKey []*Column
 	// ClusteringColumns lists the clustering columns, in key order.
@@ -378,9 +378,9 @@ type Index struct {
 	// Columns holds, on ScyllaDB, the columns of the view that backs the
 	// index, by name.
 	Columns map[string]*Column
-	// OrderedColumns lists the backing view's column names in
+	// OrderedColumns lists the backing view's columns in
 	// Table.OrderedColumns order.
-	OrderedColumns []string
+	OrderedColumns []*Column
 	// PartitionKey lists the backing view's partition key columns, in key
 	// order.
 	PartitionKey []*Column
@@ -413,7 +413,7 @@ func (t *Table) Equal(other *Table) bool {
 		return false
 	}
 
-	if len(t.OrderedColumns) != len(other.OrderedColumns) || !compareStringSlices(t.OrderedColumns, other.OrderedColumns) {
+	if len(t.OrderedColumns) != len(other.OrderedColumns) || !compareColumnSlices(t.OrderedColumns, other.OrderedColumns) {
 		return false
 	}
 

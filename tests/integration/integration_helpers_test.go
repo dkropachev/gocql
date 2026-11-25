@@ -269,7 +269,7 @@ func createV2SessionFromConfig(b *config.ConfigBuilder, t testing.TB, tabletsDis
 		session.Close()
 		t.Fatalf("wait for typed integration schema agreement: %v", err)
 	}
-	if err := session.RefreshMetadata(ctx); err != nil {
+	if _, err := session.RefreshMetadata(ctx); err != nil {
 		session.Close()
 		t.Fatalf("refresh typed integration metadata: %v", err)
 	}
@@ -386,7 +386,8 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
 		return err
 	}
-	return session.RefreshMetadata(ctx)
+	_, err := session.RefreshMetadata(ctx)
+	return err
 }
 
 // skipIfTabletsReject skips tb when err is ScyllaDB refusing a feature on a

@@ -694,7 +694,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal(err)
 		}
 		for attempt := 0; ; attempt++ {
-			err := session.RefreshMetadata(ctx)
+			_, err := session.RefreshMetadata(ctx)
 			if err == nil {
 				break
 			}

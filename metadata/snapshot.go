@@ -26,6 +26,8 @@ type snapshotSource interface {
 	Keyspaces() []string
 	Keyspace(name string) (*Keyspace, bool)
 	Table(keyspace, name string) (*Table, bool)
+	View(keyspace, name string) (*View, bool)
+	Type(keyspace, name string) (*Type, bool)
 	Replicas(keyspace, table string, token int64) ([]Target, error)
 	Token(keyspace, table string, key ...cql.Value) (int64, error)
 	TokenRanges(keyspace, table string) ([]TokenRange, error)
@@ -95,6 +97,24 @@ func (s *Snapshot) Table(keyspace, name string) (*Table, bool) {
 		return nil, false
 	}
 	return s.src.Table(keyspace, name)
+}
+
+// View returns the schema of the materialized view keyspace.name, as far as
+// Mode loads it. A view that backs a secondary index is not a View; see
+// Keyspace.Indexes.
+func (s *Snapshot) View(keyspace, name string) (*View, bool) {
+	if s.empty() {
+		return nil, false
+	}
+	return s.src.View(keyspace, name)
+}
+
+// Type returns the user-defined type keyspace.name, as far as Mode loads it.
+func (s *Snapshot) Type(keyspace, name string) (*Type, bool) {
+	if s.empty() {
+		return nil, false
+	}
+	return s.src.Type(keyspace, name)
 }
 
 // Replicas returns the replicas of token in keyspace.table, from the token
