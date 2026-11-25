@@ -13,7 +13,7 @@ import (
 // datacenter, so the session's does not apply to it.
 func ExampleConfigBuilder_WithLocalDatacenter() {
 	cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
-		WithLocalDatacenter("dc1", "").
+		WithLocalDatacenter("dc1").
 		Build()
 	if err != nil {
 		panic(err)

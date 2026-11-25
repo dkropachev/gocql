@@ -190,7 +190,7 @@ func (config Config) Validate() error {
 		}
 	}
 	if config.LocalRack != "" && config.LocalDatacenter == "" {
-		return cqltype.TypeValidation("WithLocalDatacenter", "a rack requires a datacenter")
+		return cqltype.TypeValidation("WithLocalRack", "a rack requires WithLocalDatacenter")
 	}
 	if config.Port == 0 {
 		return cqltype.TypeValidation("WithPort", "must be 1 to 65535")

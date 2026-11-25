@@ -471,18 +471,26 @@ func (b *ConfigBuilder) WithDiscovery(on bool) *ConfigBuilder {
 	return b
 }
 
-// WithLocalDatacenter sets the session's local datacenter and, when rack is
-// not empty, its local rack. Every built-in routing policy whose
-// routing.Options name no datacenter of their own, the default profile's and
-// every other profile's alike, prefers replicas there and, unless AllowRemote
-// is set, routes only there. Connect fails when the cluster has no eligible
-// host in dc, or in rack; Build rejects a rack without a datacenter. Set it
-// on a cluster with more than one datacenter: the default LOCAL_QUORUM
-// consistency is local to the coordinator's datacenter. Default none: every
-// datacenter is local, and Connect logs a warning when the cluster has more
-// than one.
-func (b *ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder {
-	b.settings.LocalDatacenter, b.settings.LocalRack = dc, rack
+// WithLocalDatacenter sets the session's local datacenter. Every built-in
+// routing policy whose routing.Options name no datacenter of their own, the
+// default profile's and every other profile's alike, prefers replicas there
+// and, unless AllowRemote is set, routes only there. Connect fails when the
+// cluster has no eligible host in dc. Set it on a cluster with more than one
+// datacenter: the default LOCAL_QUORUM consistency is local to the
+// coordinator's datacenter. Default none: every datacenter is local, and
+// Connect logs a warning when the cluster has more than one.
+func (b *ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder {
+	b.settings.LocalDatacenter = dc
+	return b
+}
+
+// WithLocalRack sets the session's local rack within WithLocalDatacenter,
+// which the same built-in policies prefer within the local datacenter.
+// Connect fails when the datacenter has no eligible host in rack; Build
+// rejects a rack without a datacenter. Default none: every rack of the local
+// datacenter is local.
+func (b *ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder {
+	b.settings.LocalRack = rack
 	return b
 }
 
@@ -751,6 +759,7 @@ func (c Config) String() string {
 	s := c.settings
 	var w strings.Builder
 	fmt.Fprintf(&w, "dialect=%v contact points=%v port=%d keyspace=%q compression=%v", Dialect(implSettings.DialectOf(s.Server, s.Protocol)), s.ContactPoints, s.Port, s.Keyspace, s.Compression)
+	fmt.Fprintf(&w, " local datacenter=%q local rack=%q", s.LocalDatacenter, s.LocalRack)
 	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
 	fmt.Fprintf(&w, " discovery=%t metadata=%v prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)

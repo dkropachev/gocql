@@ -13,8 +13,8 @@ default policy. `routing.SingleTarget` pins a typed host/shard target.
 
 ## Local datacenter
 
-`config.ConfigBuilder.WithLocalDatacenter(dc, rack)` sets the session's local
-datacenter, and optionally rack. Every built-in policy whose `routing.Options`
+`config.ConfigBuilder.WithLocalDatacenter(dc)` sets the session's local
+datacenter, and `WithLocalRack(rack)` optionally its rack. Every built-in policy whose `routing.Options`
 name no `Datacenter` of their own takes it: the default profile's, and those
 of every profile built with `config.NewProfile`. Such a policy prefers
 replicas in that datacenter and, unless `AllowRemote` is set, routes only
@@ -26,7 +26,7 @@ has no eligible host; `Build` rejects a rack without a datacenter.
 
 ```go
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
-	WithLocalDatacenter("dc1", "").
+	WithLocalDatacenter("dc1").
 	Build()
 ```
 

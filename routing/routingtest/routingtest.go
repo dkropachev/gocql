@@ -36,7 +36,7 @@ type Cluster struct {
 	// has no replicas.
 	Tablets map[Table][]metadata.TokenRange
 	// LocalDatacenter and LocalRack are the session's locality, as
-	// config.ConfigBuilder.WithLocalDatacenter sets it. A built-in policy
+	// config.ConfigBuilder.WithLocalDatacenter and WithLocalRack set them. A built-in policy
 	// without a datacenter of its own prefers them.
 	LocalDatacenter, LocalRack string
 	// Hosts lists the cluster's hosts, in the order of metadata.Snapshot.Hosts.

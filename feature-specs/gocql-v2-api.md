@@ -1631,8 +1631,8 @@ acquisition still rechecks current availability and target strictness. Custom
 policies implement Pick and Fallback themselves and account for their own work.
 A request pinned with exec.Options.HostID follows the pinned plan without
 consulting any policy. The session validates a policy that implements
-routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter sets
-the session's locality, which every built-in policy without a Datacenter of
+routing.Validator once per snapshot. ConfigBuilder.WithLocalDatacenter and
+WithLocalRack set the session's locality, which every built-in policy without a Datacenter of
 its own takes; Connect logs a warning for a multi-datacenter cluster without
 one.
 
@@ -1962,7 +1962,8 @@ func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
 func (*ConfigBuilder) ConfigureDefaultProfile(func(*ProfileBuilder)) *ConfigBuilder
-func (*ConfigBuilder) WithLocalDatacenter(dc, rack string) *ConfigBuilder
+func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
+func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder

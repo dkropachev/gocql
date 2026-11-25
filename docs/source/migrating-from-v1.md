@@ -70,7 +70,7 @@ v2:
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 	WithKeyspace("app").
 	WithAuth(auth.Password("u", "p")).
-	WithLocalDatacenter("dc1", "").
+	WithLocalDatacenter("dc1").
 	ConfigureDefaultProfile(func(p *config.ProfileBuilder) {
 		p.WithConsistency(cql.LocalQuorum)
 	}).
@@ -98,7 +98,7 @@ defer session.Close()
 | `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; other mechanisms implement `auth.Provider` |
 | `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFileSource` to reload certificate files |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
-| `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc, rack)` sets its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
+| `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc)` and `WithLocalRack(rack)` set its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
 | `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; `WithRetry(nil)` is the default, and `retry.Never{}` disables retries; see [retries](retry-policy.md) |
 | `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
 | `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
@@ -312,10 +312,10 @@ whether a retry could apply a write twice. See [errors](errors.md).
 
 | v1 | v2 |
 | --- | --- |
-| `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | the default policy with `config.ConfigBuilder.WithLocalDatacenter(dc, "")`, or `routing.NewPolicy(routing.Options{Datacenter: dc})` |
+| `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | the default policy with `config.ConfigBuilder.WithLocalDatacenter(dc)`, or `routing.NewPolicy(routing.Options{Datacenter: dc})` |
 | `gocql.TokenAwareHostPolicy(fallback, gocql.ShuffleReplicas())` | the default: replicas are shuffled unless `routing.Options.FixedReplicaOrder` is set |
 | `gocql.DCAwareRoundRobinPolicy(dc)` without token awareness | `routing.Options{Datacenter: dc, NoTokenAware: true}` |
-| `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc, rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
+| `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.AttemptObserver`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |

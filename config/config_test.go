@@ -103,16 +103,22 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("LocalDatacenter", func(t *testing.T) {
-		if _, err := New(ScyllaV4, "h").WithLocalDatacenter("", "r1").Build(); err == nil {
+		if _, err := New(ScyllaV4, "h").WithLocalRack("r1").Build(); err == nil {
 			t.Fatal("Build accepted a local rack without a datacenter")
-		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLocalDatacenter" {
-			t.Fatalf("Build = %v, want a WithLocalDatacenter ValidationError", err)
+		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithLocalRack" {
+			t.Fatalf("Build = %v, want a WithLocalRack ValidationError", err)
 		}
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1")).settings
-		if c.LocalDatacenter != "dc1" || c.LocalRack != "r1" {
+		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalRack("r1").WithLocalDatacenter("dc1"))
+		if c := cfg.settings; c.LocalDatacenter != "dc1" || c.LocalRack != "r1" {
 			t.Fatalf("locality %q/%q", c.LocalDatacenter, c.LocalRack)
 		}
-		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1", "r1").WithLocalDatacenter("", "")).settings; c.LocalDatacenter != "" || c.LocalRack != "" {
+		if want := `local datacenter="dc1" local rack="r1"`; !strings.Contains(cfg.String(), want) {
+			t.Fatalf("String() = %q, want it to contain %s", cfg.String(), want)
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1").WithLocalRack("r1").WithLocalDatacenter("dc2")).settings; c.LocalDatacenter != "dc2" || c.LocalRack != "r1" {
+			t.Fatalf("WithLocalDatacenter changed the rack: %q/%q", c.LocalDatacenter, c.LocalRack)
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLocalDatacenter("dc1").WithLocalRack("r1").WithLocalRack("").WithLocalDatacenter("")).settings; c.LocalDatacenter != "" || c.LocalRack != "" {
 			t.Fatalf("cleared locality %q/%q", c.LocalDatacenter, c.LocalRack)
 		}
 	})

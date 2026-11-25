@@ -158,7 +158,8 @@ package config
 		config.ConfigBuilder method (*T) WithKeyspace(name string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLinger(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLocalAddress(address net/netip.Addr) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string, rack string) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalDatacenter(dc string) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithLocalRack(rack string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxDecompressedSize(bytes int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
