@@ -358,7 +358,7 @@ fixes silent run-time failures, with little or no API change. Rows marked
 
 | Finding | Outcome |
 |---|---|
-| A dialer's connection whose `LocalAddr` is a `*net.TCPAddr` but that lacks `SetNoDelay` or `SetKeepAlive` failed to open, though the user chose neither option | The defaults (TCP_NODELAY on, keepalive off) are applied best-effort; only an option a setter chose (`WithNagle`, `WithTCPKeepalive`, buffers, linger) fails an `UnsupportedSettingError`. Controls are also found through an `Unwrap() net.Conn` chain. |
+| A dialer's connection whose `LocalAddr` is a `*net.TCPAddr` but that lacks `SetNoDelay` or `SetKeepAlive` failed to open, though the user chose neither option | The defaults (TCP_NODELAY on, keepalive off) are applied best-effort; only an option a setter chose (`WithNagle`, `WithTCPKeepalive`, buffers, linger) fails with an `UnsupportedSettingError`. Controls are also found through an `Unwrap() net.Conn` chain. |
 | `WithShardAwareSourcePorts` was accepted where advanced shard awareness is off and on Cassandra | `Build` rejects it under `WithConnectionsPerHost`, `WithAdvancedShardAwareness(false)` and `WithClientRoutes`, and with a Cassandra dialect as an `UnsupportedSettingError`. |
 | `WithMetadataKeyspaces` under `metadata.ModeNone` did nothing | `Build` rejects it. |
 | Zero for `WithConnectTimeout`, `WithDNSTimeout` or `WithMetadataTimeout` removed the bound | `Build` rejects zero. **Reverses** zero meaning "no limit" for these three; zero still turns `WithMetadataRefresh` and `WithMetadataServerTimeout` off. |
