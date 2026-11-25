@@ -332,6 +332,9 @@ func serializationFixtureValue(kind cql.Kind, input any) (cql.Value, error) {
 	if err != nil {
 		return cql.Value{}, err
 	}
+	// The corpus still names text by its pre-v3 wire ID 0x000A, which
+	// ScalarType maps to KindText; switch on the resolved kind.
+	kind = typ.Kind()
 	null := func() (cql.Value, error) { return cql.NullValue(typ), nil }
 	switch v := input.(type) {
 	case *bool:
