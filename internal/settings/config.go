@@ -77,9 +77,12 @@ type Config struct {
 	PreparedCacheSize                                 int
 	Port                                              uint16
 	NoDelay                                           bool
-	Compression                                       cql.Compression
-	ReportConfiguration                               bool
-	Server                                            Server
+	// ChosenSocketOptions are the socket options a setter chose. The others
+	// are applied best-effort.
+	ChosenSocketOptions connectivity.SocketOptions
+	Compression         cql.Compression
+	ReportConfiguration bool
+	Server              Server
 	// ErrorStatementBytes is how much of a statement's CQL text request
 	// errors carry; zero leaves it out.
 	ErrorStatementBytes int
@@ -103,6 +106,13 @@ type MetadataOptions struct {
 
 type IdentityOptions struct{ DriverName, DriverVersion, ApplicationName, ApplicationVersion, ClientID string }
 type ClientRoutesOptions = connectivity.ClientRoutesOptions
+type SocketOptions = connectivity.SocketOptions
+
+const (
+	SocketNoDelay   = connectivity.SocketNoDelay
+	SocketKeepalive = connectivity.SocketKeepalive
+)
+
 type TLSSource = endpoint.TLSSource
 
 func DefaultConfig(contactPoints ...string) Config {

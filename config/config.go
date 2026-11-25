@@ -291,14 +291,26 @@ func (b *ConfigBuilder) WithDNSTimeout(d time.Duration) *ConfigBuilder {
 
 // WithNagle turns Nagle's algorithm on or off. Off sets TCP_NODELAY. Default
 // off.
+//
+// The default is applied best-effort: a connection from WithDialer that does
+// not expose SetNoDelay, directly or through an Unwrap() net.Conn method,
+// keeps the OS's setting. Once this setter is called, such a connection
+// fails to open with an UnsupportedSettingError.
 func (b *ConfigBuilder) WithNagle(on bool) *ConfigBuilder {
 	b.settings.NoDelay = !on
+	b.settings.ChosenSocketOptions |= implSettings.SocketNoDelay
 	return b
 }
 
-// WithTCPKeepalive enables TCP keepalive probes with period. Default off.
+// WithTCPKeepalive enables TCP keepalive probes with period; zero turns them
+// off. Default off.
+//
+// The default is applied best-effort, as for WithNagle: a connection that
+// does not expose SetKeepAlive keeps the OS's setting unless this setter was
+// called.
 func (b *ConfigBuilder) WithTCPKeepalive(period time.Duration) *ConfigBuilder {
 	b.settings.SocketKeepalive = period
+	b.settings.ChosenSocketOptions |= implSettings.SocketKeepalive
 	return b
 }
 

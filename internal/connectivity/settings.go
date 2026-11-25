@@ -51,6 +51,18 @@ type MetadataIO struct {
 	ServerTimeout    Option[time.Duration]
 }
 
+// SocketOptions records which socket options the user chose with a setter.
+// The driver applies its defaults for the others best-effort: a connection
+// that does not expose the control keeps the OS's behaviour.
+type SocketOptions uint8
+
+const (
+	// SocketNoDelay is set when WithNagle chose TCP_NODELAY.
+	SocketNoDelay SocketOptions = 1 << iota
+	// SocketKeepalive is set when WithTCPKeepalive chose TCP keepalive.
+	SocketKeepalive
+)
+
 type ClientRoutesOptions struct {
 	HostnameOverrides map[string]string
 	ConnectionIDs     []string
@@ -73,4 +85,7 @@ type Config struct {
 	Protocol                                                                         int
 	ConnectTimeout, DNSTimeout, KeepaliveInterval, KeepaliveTimeout, SocketKeepalive time.Duration
 	NoDelay                                                                          bool
+	// ChosenSocketOptions are the socket options a setter chose; a connection
+	// that cannot apply one of them fails to open.
+	ChosenSocketOptions SocketOptions
 }
