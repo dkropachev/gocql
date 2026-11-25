@@ -115,7 +115,7 @@ func (v Value) format(b *strings.Builder) {
 		quoted(textView(v.bytes).String())
 	case TypeBlob:
 		b.WriteString("0x")
-		b.WriteString(hex.EncodeToString(v.bytes.OwnedBytes()))
+		b.WriteString(hex.EncodeToString(v.bytes.ownedBytes()))
 	case TypeUUID, TypeTimeUUID:
 		b.WriteString(v.uuid.String())
 	case TypeInet:

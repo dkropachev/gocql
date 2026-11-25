@@ -38,7 +38,7 @@ func scalarParity[T any](t *testing.T, kind cql.Type, buffered cql.Decoder[T], i
 	for _, body := range bodies {
 		for length := 0; length <= len(body); length++ {
 			prefix := body[:length]
-			encoded, err := cql.NewEncodedValue(typ, cql.Present, cql.BorrowBytes(prefix))
+			encoded, err := cql.NewEncodedValue(typ, cql.Present, prefix)
 			if err != nil {
 				t.Fatal(err)
 			}

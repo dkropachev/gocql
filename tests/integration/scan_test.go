@@ -218,7 +218,7 @@ func TestScan(t *testing.T) {
 				if i == 0 {
 					b, e := data.Bytes()
 					require.NoError(t, e)
-					require.Equal(t, []byte(`{"foo": "bar"}`), b.OwnedBytes())
+					require.Equal(t, []byte(`{"foo": "bar"}`), ownedBytesForTest(b))
 				} else {
 					require.Equal(t, cql.Null, data.State())
 				}
@@ -296,7 +296,7 @@ func TestScan(t *testing.T) {
 				got, err := cql.EncodeValue(actual.Type(), cql.DynamicCodec, actual)
 				require.NoError(t, err, field.Name)
 				require.Equal(t, want.State(), got.State(), field.Name)
-				require.Equal(t, want.Bytes().OwnedBytes(), got.Bytes().OwnedBytes(), field.Name)
+				require.Equal(t, ownedBytesForTest(want.Bytes()), ownedBytesForTest(got.Bytes()), field.Name)
 			}
 		}
 		// Preserve the three result-consumption forms as cloned slices, a cursor,

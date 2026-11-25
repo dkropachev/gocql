@@ -28,7 +28,7 @@ func dynamicTestType(kind Type) DataType {
 func dynamicTestHex(s string) []byte { return dynamicTestMust(hex.DecodeString(s)) }
 func dynamicTestDecode(t *testing.T, typ DataType, body []byte) Value {
 	t.Helper()
-	encoded := dynamicTestMust(NewEncodedValue(typ, Present, BorrowBytes(body)))
+	encoded := dynamicTestMust(newEncodedValue(typ, Present, BorrowBytes(body)))
 	v, err := DecodeValue(DynamicCodec, encoded)
 	if err != nil {
 		t.Fatal(err)
@@ -37,11 +37,11 @@ func dynamicTestDecode(t *testing.T, typ DataType, body []byte) Value {
 }
 func dynamicTestRoundTrip(t *testing.T, value Value, golden string) Value {
 	t.Helper()
-	encoded, err := EncodeValueBorrowed(value.Type(), DynamicCodec, value)
+	encoded, err := encodeValueBorrowed(value.Type(), DynamicCodec, value)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := hex.EncodeToString(encoded.Bytes().OwnedBytes()); got != golden {
+	if got := hex.EncodeToString(encoded.Bytes().ownedBytes()); got != golden {
 		t.Fatalf("wire body: got %s, want %s", got, golden)
 	}
 	decoded, err := DecodeValue(DynamicCodec, encoded)
@@ -51,11 +51,11 @@ func dynamicTestRoundTrip(t *testing.T, value Value, golden string) Value {
 	if !decoded.Type().Equal(value.Type()) || decoded.State() != value.State() {
 		t.Fatalf("type/state changed: %s/%d", decoded.Type(), decoded.State())
 	}
-	reencoded, err := EncodeValueBorrowed(decoded.Type(), DynamicCodec, decoded)
+	reencoded, err := encodeValueBorrowed(decoded.Type(), DynamicCodec, decoded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(reencoded.Bytes().OwnedBytes(), encoded.Bytes().OwnedBytes()) {
+	if !bytes.Equal(reencoded.Bytes().ownedBytes(), encoded.Bytes().ownedBytes()) {
 		t.Fatal("reencoding changed canonical wire body")
 	}
 	return decoded
@@ -87,7 +87,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal(err)
 			}
 			chain := dynamicTestMust(builder.Freeze())
-			if got := hex.EncodeToString((bytesView(chain, wire.Ref{})).OwnedBytes()); got != "000000040000000900000001780000000400000009" {
+			if got := hex.EncodeToString((bytesView(chain, wire.Ref{})).ownedBytes()); got != "000000040000000900000001780000000400000009" {
 				t.Fatalf("server marker order: %s", got)
 			}
 			tests := []struct {
@@ -148,14 +148,14 @@ func TestDynamic(t *testing.T) {
 		t.Run("ComposeWithTypedRecords", func(t *testing.T) {
 			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
 			tuple := dynamicTestMust(TupleType(integer, text))
-			encoded := dynamicTestMust(NewEncodedValue(tuple, Present, BorrowBytes(dynamicTestHex("0000000400000001"))))
+			encoded := dynamicTestMust(newEncodedValue(tuple, Present, BorrowBytes(dynamicTestHex("0000000400000001"))))
 			tupleRow := dynamicTestMust(DecodeValue(TupleDecoder(DynamicRows), encoded))
 			trailing := dynamicTestMust(tupleRow.At(1))
 			if trailing.State() != Null || !trailing.Type().Equal(text) {
 				t.Fatal("dynamic tuple row lost omitted trailing null")
 			}
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}))
-			encoded = dynamicTestMust(EncodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: TextValue("borrowed")}, {Name: "n", Value: IntValue(2)}}))
+			encoded = dynamicTestMust(encodeValueBorrowed(udt, UDTEncoder(NamedDynamicParams, UDTOptions{Keyspace: "ks", Name: "record"}), []ValueField{{Name: "s", Value: TextValue("borrowed")}, {Name: "n", Value: IntValue(2)}}))
 			lease := wire.NewLease(bytesChain(encoded.Bytes()), nil)
 			encoded.body = bytesView(bytesChain(encoded.body), wire.RefOf(lease))
 			codec := UDTDecoder(DynamicRows, UDTOptions{Keyspace: "ks", Name: "record"})
@@ -304,7 +304,7 @@ func TestDynamic(t *testing.T) {
 			tuple := dynamicTestMust(TupleType(integer, text))
 			cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
 			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), TextValue("hello"), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), TextValue("nested")}))})
-			data := (bytesView(source, wire.Ref{})).OwnedBytes()
+			data := (bytesView(source, wire.Ref{})).ownedBytes()
 			spans := make([]wire.Span, len(data))
 			for i := range data {
 				spans[i] = wire.Borrow(data[i : i+1])
@@ -362,7 +362,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatalf("text access after release: %v", err)
 			}
 			// Binding skips revalidating decoded text but still checks its page.
-			if _, err := EncodeValueBorrowed(second.Type(), DynamicCodec, second); !errors.Is(err, ErrReleased) {
+			if _, err := encodeValueBorrowed(second.Type(), DynamicCodec, second); !errors.Is(err, ErrReleased) {
 				t.Fatalf("text bind after release: %v", err)
 			}
 			if iterator.Next() || !errors.Is(iterator.Err(), ErrReleased) {
@@ -467,10 +467,10 @@ func TestDynamic(t *testing.T) {
 			}
 			other := dynamicTestMust(UDTType("ks", "other", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "number", Type: integer}))
 			value := tests[4].value
-			if _, err := EncodeValueBorrowed(other, DynamicCodec, value); err == nil {
+			if _, err := encodeValueBorrowed(other, DynamicCodec, value); err == nil {
 				t.Fatal("wrong UDT identity accepted")
 			}
-			if _, err := EncodeValueBorrowed(dynamicTestMust(ListType(text)), DynamicCodec, tests[1].value); err == nil {
+			if _, err := encodeValueBorrowed(dynamicTestMust(ListType(text)), DynamicCodec, tests[1].value); err == nil {
 				t.Fatal("set variant encoded as list")
 			}
 		})
@@ -538,28 +538,28 @@ func TestDynamic(t *testing.T) {
 			descriptors := []Value{BlobValue(payload)}
 			input := dynamicTestMust(ListValue(blob, descriptors...))
 			inputClone := input.Clone()
-			borrowed := dynamicTestMust(EncodeValueBorrowed(blobs, DynamicCodec, input))
+			borrowed := dynamicTestMust(encodeValueBorrowed(blobs, DynamicCodec, input))
 			owned := dynamicTestMust(EncodeValue(blobs, DynamicCodec, input))
 			payload[0] = 'X'
 			descriptors[0] = BlobValue([]byte("replaced"))
 			clonedInputValues := dynamicTestMust(dynamicTestMust(inputClone.iterElements()).Collect())
 			cloneBytes := dynamicTestMust(clonedInputValues[0].Bytes())
-			if string(cloneBytes.OwnedBytes()) != "payload" {
+			if string(cloneBytes.ownedBytes()) != "payload" {
 				t.Fatal("input Clone kept borrowed descriptors or payload")
 			}
 			ownedValues := dynamicTestMust(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, owned)).iterElements()).Collect())
-			if b, _ := ownedValues[0].Bytes(); string(b.OwnedBytes()) != "payload" {
+			if b, _ := ownedValues[0].Bytes(); string(b.ownedBytes()) != "payload" {
 				t.Fatal("owned encoding retained caller payload")
 			}
 			borrowedValues := dynamicTestMust(dynamicTestMust(dynamicTestMust(DecodeValue(DynamicCodec, borrowed)).iterElements()).Collect())
-			if b, _ := borrowedValues[0].Bytes(); string(b.OwnedBytes()) != "Xayload" {
+			if b, _ := borrowedValues[0].Bytes(); string(b.ownedBytes()) != "Xayload" {
 				t.Fatal("borrowed encoding did not retain source payload")
 			}
 		})
 		t.Run("ChecksTypeWithoutPayload", func(t *testing.T) {
 			invalid := DataType{}
 			for _, value := range []Value{NullValue(invalid), UnsetValue(invalid)} {
-				if _, err := EncodeValueBorrowed(dynamicTestType(TypeInt), DynamicCodec, value); err == nil {
+				if _, err := encodeValueBorrowed(dynamicTestType(TypeInt), DynamicCodec, value); err == nil {
 					t.Fatal("invalid descriptor accepted for payload-free value")
 				}
 			}
@@ -569,7 +569,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("vector aggregate width overflow was accepted")
 			}
 			for _, value := range []Value{NullValue(tooWide), UnsetValue(tooWide)} {
-				if _, err := EncodeValueBorrowed(tooWide, DynamicCodec, value); err == nil {
+				if _, err := encodeValueBorrowed(tooWide, DynamicCodec, value); err == nil {
 					t.Fatal("invalid vector type bypassed by null/unset")
 				}
 			}
@@ -602,7 +602,7 @@ func TestDynamic(t *testing.T) {
 			}
 			for _, test := range tests {
 				t.Run(test.typ.String()+"/"+test.body, func(t *testing.T) {
-					encoded := dynamicTestMust(NewEncodedValue(test.typ, Present, BorrowBytes(dynamicTestHex(test.body))))
+					encoded := dynamicTestMust(newEncodedValue(test.typ, Present, BorrowBytes(dynamicTestHex(test.body))))
 					if v, err := DecodeValue(DynamicCodec, encoded); err == nil {
 						t.Fatalf("malformed body published a value: %s state %d", v.Type(), v.State())
 					}
@@ -624,7 +624,7 @@ func TestDynamic(t *testing.T) {
 			if descriptorOf(it.Value().Type()) != nil {
 				t.Fatal("partial malformed value was published")
 			}
-			if _, err := EncodeValueBorrowed(listBool, DynamicCodec, lazy); err == nil {
+			if _, err := encodeValueBorrowed(listBool, DynamicCodec, lazy); err == nil {
 				t.Fatal("binding forwarded an unvalidated malformed child")
 			}
 			if values, err := dynamicTestMust(lazy.iterElements()).Collect(); err == nil || values != nil {
@@ -691,7 +691,7 @@ func TestDynamic(t *testing.T) {
 						}
 					case TypeBlob:
 						a, e := got.Bytes()
-						if e != nil || !bytes.Equal(a.OwnedBytes(), []byte{0, 1}) {
+						if e != nil || !bytes.Equal(a.ownedBytes(), []byte{0, 1}) {
 							t.Fatalf("Bytes: %v", e)
 						}
 					case TypeUUID, TypeTimeUUID:
@@ -726,7 +726,7 @@ func TestDynamic(t *testing.T) {
 				})
 			}
 			legacy := dynamicTestType(Type(0x000A))
-			encoded, err := EncodeValueBorrowed(legacy, DynamicCodec, TextValue("v"))
+			encoded, err := encodeValueBorrowed(legacy, DynamicCodec, TextValue("v"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -762,7 +762,7 @@ func TestDynamic(t *testing.T) {
 			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
 			list := dynamicTestMust(ListType(integer))
 			for _, typ := range []DataType{integer, text, list} {
-				encoded, err := EncodeValueBorrowed(typ, DynamicCodec, NullValue(typ))
+				encoded, err := encodeValueBorrowed(typ, DynamicCodec, NullValue(typ))
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -770,7 +770,7 @@ func TestDynamic(t *testing.T) {
 				if err != nil || decoded.State() != Null {
 					t.Fatal("null state lost", err)
 				}
-				unset, err := EncodeValueBorrowed(typ, DynamicCodec, UnsetValue(typ))
+				unset, err := encodeValueBorrowed(typ, DynamicCodec, UnsetValue(typ))
 				if err != nil || unset.State() != Unset {
 					t.Fatal("standalone unset failed", err)
 				}
@@ -832,7 +832,7 @@ func TestDynamicCodecContracts(t *testing.T) {
 		// checks the type and calls Encode on every value.
 		wrapped := struct{ Codec[Value] }{DynamicCodec}
 		encoded := dynamicTestMust(EncodeValue(integer, wrapped, IntValue(7)))
-		if got := hex.EncodeToString(encoded.Bytes().OwnedBytes()); got != "00000007" {
+		if got := hex.EncodeToString(encoded.Bytes().ownedBytes()); got != "00000007" {
 			t.Fatalf("wire body %s", got)
 		}
 		if decoded := dynamicTestMust(DecodeValue(wrapped, encoded)); dynamicTestMust(decoded.Signed()) != 7 {
@@ -852,11 +852,11 @@ func TestDynamicCodecContracts(t *testing.T) {
 		decoder := dynamicTestMust(compileValueDecoder(DynamicCodec, blob))
 		compiledClone := decoder.Clone(value)
 		body[0] = 'P'
-		if got := dynamicTestMust(value.Bytes()).OwnedBytes(); string(got) != "Payload" {
+		if got := dynamicTestMust(value.Bytes()).ownedBytes(); string(got) != "Payload" {
 			t.Fatalf("decoded value %q does not borrow the body", got)
 		}
 		for name, v := range map[string]Value{"Codec": cloned, "Compiled": compiledClone} {
-			if got := dynamicTestMust(v.Bytes()).OwnedBytes(); string(got) != "payload" {
+			if got := dynamicTestMust(v.Bytes()).ownedBytes(); string(got) != "payload" {
 				t.Errorf("%s Clone = %q, want a copy taken before the body changed", name, got)
 			}
 		}

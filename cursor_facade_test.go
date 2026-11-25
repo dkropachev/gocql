@@ -153,7 +153,7 @@ func TestCASBatchRows(t *testing.T) {
 	if !rows.NextInto(&dst) {
 		t.Fatal(rows.Err())
 	}
-	if dst.Applied || !dst.Previous.Set || string(dst.Previous.Value.OwnedBytes()) != "first" {
+	if dst.Applied || !dst.Previous.Set || string(ownedBytesForTest(dst.Previous.Value)) != "first" {
 		t.Fatalf("first row = %+v", dst)
 	}
 	cloned, err := rows.Clone()
@@ -174,7 +174,7 @@ func TestCASBatchRows(t *testing.T) {
 	if info := rows.Info(); info.Rows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
 		t.Fatalf("Info = %+v, want two rows from one attempt on the fake node", info)
 	}
-	if cloned.Applied || !cloned.Previous.Set || string(cloned.Previous.Value.OwnedBytes()) != "first" {
+	if cloned.Applied || !cloned.Previous.Set || string(ownedBytesForTest(cloned.Previous.Value)) != "first" {
 		t.Fatalf("Clone = %+v, want the first row", cloned)
 	}
 	// The lease keeps the page, and so the borrowed second row, alive after
@@ -186,7 +186,7 @@ func TestCASBatchRows(t *testing.T) {
 	if _, err := second.Previous.Value.Copy(); !errors.Is(err, cql.ErrReleased) {
 		t.Fatalf("borrowed row after the lease closed: %v, want cql.ErrReleased", err)
 	}
-	if string(cloned.Previous.Value.OwnedBytes()) != "first" {
+	if string(ownedBytesForTest(cloned.Previous.Value)) != "first" {
 		t.Fatal("the cloned row borrowed the released page")
 	}
 	// NextInto reported the end before Close, so Applied still answers.
@@ -277,7 +277,7 @@ func TestCursorAll(t *testing.T) {
 			if row.Applied {
 				t.Fatalf("row %+v applied", row)
 			}
-			got += string(row.Previous.Value.OwnedBytes()) + ","
+			got += string(ownedBytesForTest(row.Previous.Value)) + ","
 		}
 		if got != "first,second," {
 			t.Fatalf("CASBatchRows.All = %q", got)

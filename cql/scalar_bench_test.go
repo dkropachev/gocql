@@ -102,11 +102,11 @@ func BenchmarkScalar(b *testing.B) {
 						b.SetBytes(int64(size))
 						for b.Loop() {
 							if text {
-								if _, e := EncodeValueBorrowed(typ, StringCodec, stringData); e != nil {
+								if _, e := encodeValueBorrowed(typ, StringCodec, stringData); e != nil {
 									b.Fatal(e)
 								}
 							} else {
-								if _, e := EncodeValueBorrowed(typ, ByteSliceCodec, data); e != nil {
+								if _, e := encodeValueBorrowed(typ, ByteSliceCodec, data); e != nil {
 									b.Fatal(e)
 								}
 							}

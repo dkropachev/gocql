@@ -52,7 +52,7 @@ func TestGoMapCodec(t *testing.T) {
 		if !reflect.DeepEqual(dst, map[string]int64{"fresh": 1}) || reflect.ValueOf(dst).UnsafePointer() != before {
 			t.Fatalf("dst %v was not cleared and reused", dst)
 		}
-		null := CodecTestMust(NewEncodedValue(typ, Null, Bytes{}))
+		null := CodecTestMust(newEncodedValue(typ, Null, Bytes{}))
 		if err := codec.(interface {
 			DecodeInto(ValueReader, *map[string]int64) error
 		}).DecodeInto(reader(null), &dst); err != nil || len(dst) != 0 || reflect.ValueOf(dst).UnsafePointer() != before {

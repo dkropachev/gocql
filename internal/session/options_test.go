@@ -90,8 +90,8 @@ func TestOptions(t *testing.T) {
 			payload[0] = 'X'
 			values.CustomPayload[0].Key = "changed"
 			got := o.Values()
-			if got.Profile.PageSize != 10 || got.CustomPayload[0].Key != "k" || string(got.CustomPayload[0].Value.Value.OwnedBytes()) != "value" {
-				t.Fatalf("frozen options changed: page size %d, payload %q=%q", got.Profile.PageSize, got.CustomPayload[0].Key, got.CustomPayload[0].Value.Value.OwnedBytes())
+			if got.Profile.PageSize != 10 || got.CustomPayload[0].Key != "k" || string(ownedBytesForTest(got.CustomPayload[0].Value.Value)) != "value" {
+				t.Fatalf("frozen options changed: page size %d, payload %q=%q", got.Profile.PageSize, got.CustomPayload[0].Key, ownedBytesForTest(got.CustomPayload[0].Value.Value))
 			}
 			got.Profile.PageSize = 30
 			got.CustomPayload[0].Key = "other"

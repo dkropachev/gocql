@@ -12,6 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
+	"github.com/scylladb/gocql/v2/internal/link"
 	implMetadata "github.com/scylladb/gocql/v2/internal/metadata"
 	model "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -162,7 +163,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 		if key[i].State() != cql.Present {
 			return 0, cqltype.TypeValidation("partition key", "column %q must have a value", column.Name)
 		}
-		encoded, err := cql.EncodeValueBorrowed(typ, cql.DynamicCodec, key[i])
+		encoded, err := link.Get[func(cql.DataType, cql.Value) (cql.EncodedValue, error)](link.EncodeDynamicBorrowed)(typ, key[i])
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}

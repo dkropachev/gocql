@@ -91,7 +91,7 @@ func TestPrepared(t *testing.T) {
 			if err := state.reconcilePendingConflict(); !hasErrorType[*implCql.ProtocolError](err) {
 				t.Fatal("future operation silently bypassed unresolved conflict", err)
 			}
-			if string(view.OwnedBytes()) != "retained" {
+			if string(ownedBytesForTest(view)) != "retained" {
 				t.Fatal("earlier delivered page invalidated")
 			}
 			p.InternalMu.Lock()
@@ -1124,7 +1124,7 @@ func TestPrepared(t *testing.T) {
 			var dst implCql.Bytes
 			var values []string
 			for rows.NextInto(&dst) {
-				values = append(values, string(dst.OwnedBytes()))
+				values = append(values, string(ownedBytesForTest(dst)))
 			}
 			if err := rows.Err(); err != nil {
 				t.Fatal(err)

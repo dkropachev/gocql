@@ -159,7 +159,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 		t.Fatal(err)
 	}
 	var row cql.Bytes
-	if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
+	if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "winner" {
 		t.Fatal(page.Err())
 	}
 	bound.Close()

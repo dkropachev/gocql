@@ -58,7 +58,7 @@ func TestResultPlanCache(t *testing.T) {
 			p := codecTestMust(newPageWithPlans(response, cql.OneColumn(cql.BytesCodec), &InternalResultPlanCache[cql.Bytes]{}, nil))
 			defer p.Close()
 			var dst cql.Bytes
-			if !p.NextInto(&dst) || string(dst.OwnedBytes()) != "old" {
+			if !p.NextInto(&dst) || string(ownedBytesForTest(dst)) != "old" {
 				t.Fatal("old matching page lost", p.Err())
 			}
 		})

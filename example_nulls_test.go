@@ -34,7 +34,7 @@ import (
 
 func Example_nulls() {
 	codec := cql.NullableCodec(cql.TextCodec)
-	null, err := cql.NewEncodedValue(cql.TextType, cql.Null, cql.BorrowBytes(nil))
+	null, err := cql.NewEncodedValue(cql.TextType, cql.Null, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func Example_nulls() {
 		log.Fatal(err)
 	}
 	fmt.Println(value.Valid)
-	empty, err := cql.NewEncodedValue(cql.TextType, cql.Present, cql.BorrowBytes([]byte{}))
+	empty, err := cql.NewEncodedValue(cql.TextType, cql.Present, []byte{})
 	if err != nil {
 		log.Fatal(err)
 	}

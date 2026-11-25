@@ -1080,7 +1080,7 @@ func TestSession(t *testing.T) {
 		var detached output
 		var row output
 		for result.NextInto(&row) {
-			if !bytes.Equal(row.Value.OwnedBytes(), payload) {
+			if !bytes.Equal(ownedBytesForTest(row.Value), payload) {
 				t.Fatal("large payload changed")
 			}
 			if count == 0 {
@@ -1108,11 +1108,11 @@ func TestSession(t *testing.T) {
 		if err = result.Close(); err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(view.OwnedBytes(), payload) {
+		if !bytes.Equal(ownedBytesForTest(view), payload) {
 			t.Fatal("retained page changed")
 		}
 		retained.Close()
-		if !bytes.Equal(detached.Value.OwnedBytes(), payload) {
+		if !bytes.Equal(ownedBytesForTest(detached.Value), payload) {
 			t.Fatal("clone changed")
 		}
 	})

@@ -104,7 +104,7 @@ func TestBuiltinPlansManageDestination(t *testing.T) {
 	}{
 		{"single column", func() (bool, error) { return manages(single, one) }},
 		{"mapped", func() (bool, error) {
-			return manages(cql.ConvertRows(single, func(b cql.Bytes) string { return string(b.OwnedBytes()) }, func(s string) string { return s }), one)
+			return manages(cql.ConvertRows(single, func(b cql.Bytes) string { return string(ownedBytesForTest(b)) }, func(s string) string { return s }), one)
 		}},
 		{"row", func() (bool, error) { return manages(cql.Row(field), one) }},
 		{"row into", func() (bool, error) { return manages(cql.RowInto(func(*row) {}, field), one) }},
@@ -164,7 +164,7 @@ func TestBuiltinPlansClearStaleRow(t *testing.T) {
 	staleNullable := func(v *cql.Nullable[cql.Bytes]) { v.Valid = true }
 	t.Run("single column", func(t *testing.T) { clearsStaleRow(t, single, one, oneRows, staleNullable) })
 	t.Run("mapped", func(t *testing.T) {
-		mapped := cql.ConvertRows(single, func(b cql.Nullable[cql.Bytes]) string { return string(b.Value.OwnedBytes()) }, func(s string) string { return s })
+		mapped := cql.ConvertRows(single, func(b cql.Nullable[cql.Bytes]) string { return string(ownedBytesForTest(b.Value)) }, func(s string) string { return s })
 		clearsStaleRow(t, mapped, one, oneRows, func(s *string) { *s = "stale" })
 	})
 	t.Run("row", func(t *testing.T) { clearsStaleRow(t, cql.Row(field), one, oneRows, stale) })

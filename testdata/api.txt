@@ -253,7 +253,6 @@ package cql
 		cql.Bytes method (T) Copy() ([]byte, error)
 		cql.Bytes method (T) CopyTo(dst []byte) (int, error)
 		cql.Bytes method (T) Len() int64
-		cql.Bytes method (T) OwnedBytes() []byte
 		cql.Bytes method (T) Slice(offset int64, length int64) (cql.Bytes, error)
 		cql.Bytes method (T) WriteTo(w io.Writer) (int64, error)
 	var cql.BytesCodec cql.Codec[cql.Bytes]
@@ -385,7 +384,6 @@ package cql
 	var cql.EmptyRowDecoder cql.RowDecoder[cql.EmptyRow]
 	func cql.EmptyValue(t cql.DataType) (cql.Value, error)
 	func cql.EncodeValue[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
-	func cql.EncodeValueBorrowed[T any](typ cql.DataType, encoder cql.Encoder[T], value T) (cql.EncodedValue, error)
 	type cql.EncodedValue struct
 		cql.EncodedValue method (T) Bytes() cql.Bytes
 		cql.EncodedValue method (T) Clone() cql.EncodedValue
@@ -447,7 +445,7 @@ package cql
 	func cql.MustUDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) cql.Codec[T]
 	var cql.NamedDynamicParams cql.ParamEncoder[[]cql.ValueField]
 	func cql.NewColumns(columns ...cql.ColumnSpec) cql.Columns
-	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body cql.Bytes) (cql.EncodedValue, error)
+	func cql.NewEncodedValue(typ cql.DataType, state cql.CellState, body []byte) (cql.EncodedValue, error)
 	func cql.NewTimeUUID() cql.TimeUUID
 	const cql.NoCompression cql.Compression = 0
 	func cql.NonNull[T any](v T) cql.Nullable[T]

@@ -19,9 +19,17 @@ type EncodedValue struct {
 	state CellState
 }
 
-// NewEncodedValue checks the descriptor and state/body framing. Scalar content
-// is checked by the selected decoder when DecodeValue is called.
-func NewEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, error) {
+// NewEncodedValue checks the descriptor and state/body framing of body, the
+// value's encoded bytes, which it borrows: keep them unchanged while the
+// value is used. Scalar content is checked by the selected decoder when
+// DecodeValue is called.
+func NewEncodedValue(typ DataType, state CellState, body []byte) (EncodedValue, error) {
+	return newEncodedValue(typ, state, BorrowBytes(body))
+}
+
+// newEncodedValue is NewEncodedValue for a body view, which may borrow a
+// response.
+func newEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, error) {
 	if err := validateDataType(typ); err != nil {
 		return EncodedValue{}, err
 	}
@@ -58,15 +66,15 @@ func (v EncodedValue) Clone() EncodedValue {
 	return EncodedValue{typ: v.typ, state: v.state, body: v.body.Clone()}
 }
 
-// EncodeValueBorrowed encodes one value without copying borrowed input payloads.
-// The caller must keep those payloads immutable while the encoded value is used.
-func EncodeValueBorrowed[T any](typ DataType, encoder Encoder[T], value T) (EncodedValue, error) {
+// encodeValueBorrowed encodes one value without copying borrowed input
+// payloads. The caller must keep those payloads immutable while the encoded
+// value is used.
+func encodeValueBorrowed[T any](typ DataType, encoder Encoder[T], value T) (EncodedValue, error) {
 	return encodeValue(typ, encoder, value, false)
 }
 
 // EncodeValue encodes one value and copies every borrowed input payload, so the
-// result does not depend on the caller's buffers. Use EncodeValueBorrowed to
-// skip the copy.
+// result does not depend on the caller's buffers.
 func EncodeValue[T any](typ DataType, encoder Encoder[T], value T) (EncodedValue, error) {
 	return encodeValue(typ, encoder, value, true)
 }

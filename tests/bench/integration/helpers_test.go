@@ -1313,7 +1313,11 @@ func (serializationRawDecoder) CheckType(t cql.DataType) error {
 	return cql.DynamicCodec.CheckType(t)
 }
 func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
-	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
+	body, err := r.Bytes().Copy()
+	if err != nil {
+		return cql.EncodedValue{}, err
+	}
+	return cql.NewEncodedValue(r.Type(), r.State(), body)
 }
 func (serializationRawDecoder) Clone(v cql.EncodedValue) cql.EncodedValue { return v.Clone() }
 
@@ -1544,7 +1548,7 @@ func (p person) String() string {
 	return fmt.Sprintf("Person{firstName: %s, lastName: %s, Age: %d}", p.FirstName, p.LastName, p.Age)
 }
 
-var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return ownedBytesForTest(v) })
 var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {

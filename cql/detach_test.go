@@ -46,7 +46,7 @@ func TestDetachRow(t *testing.T) {
 		borrowed := dst.View
 		detachRowFor(plan, nil, &dst)
 		lease.Release()
-		if string(dst.View.OwnedBytes()) != "view" || string(dst.Owned) != "owned" || dst.Nested[0].String() != "nested" {
+		if string(dst.View.ownedBytes()) != "view" || string(dst.Owned) != "owned" || dst.Nested[0].String() != "nested" {
 			t.Fatalf("detached row: %+v", dst)
 		}
 		if &dst.Owned[0] != ownedBacking || &dst.Nested[0] != nestedBacking {
@@ -71,8 +71,8 @@ func TestDetachRow(t *testing.T) {
 		}
 		detachRowFor[Bytes](plan, decoder, &dst)
 		lease.Release()
-		if calls != 1 || string(dst.OwnedBytes()) != "custom" {
-			t.Fatalf("clone calls %d, value %q", calls, dst.OwnedBytes())
+		if calls != 1 || string(dst.ownedBytes()) != "custom" {
+			t.Fatalf("clone calls %d, value %q", calls, dst.ownedBytes())
 		}
 	})
 	t.Run("BorrowedNumericScalars", func(t *testing.T) {
@@ -110,7 +110,7 @@ func TestDetachRow(t *testing.T) {
 			t.Fatal(err)
 		}
 		blob, err := value.Bytes()
-		if err != nil || string(blob.OwnedBytes()) != "dynamic" {
+		if err != nil || string(blob.ownedBytes()) != "dynamic" {
 			t.Fatal(blob, err)
 		}
 	})
@@ -159,8 +159,8 @@ func TestDetachNestedValues(t *testing.T) {
 	detachRowFor(plan, nil, &dst)
 	lease.Release()
 	if !dst.Name.Valid || dst.Name.Value.String() != "name" || dst.Amount.Unscaled.BigInt().Int64() != 42 || dst.Amount.Scale != 2 ||
-		dst.Mapping[0].Key.String() != "name" || string(dst.Mapping[0].Value.OwnedBytes()) != "payload" ||
-		dst.Record.First.String() != "name" || string(dst.Record.Second.OwnedBytes()) != "payload" {
+		dst.Mapping[0].Key.String() != "name" || string(dst.Mapping[0].Value.ownedBytes()) != "payload" ||
+		dst.Record.First.String() != "name" || string(dst.Record.Second.ownedBytes()) != "payload" {
 		t.Fatal("nested result changed or expired")
 	}
 }

@@ -31,7 +31,7 @@ func BenchmarkDynamic(b *testing.B) {
 						values[i] = BlobValue(make([]byte, (1<<20)/n))
 					}
 					columns := NewColumns(cols...)
-					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).ownedBytes()
 					parts := make([]wire.Span, fragments)
 					for i := range parts {
 						parts[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -65,7 +65,7 @@ func BenchmarkDynamic(b *testing.B) {
 						values[i] = BlobValue(bytes.Repeat([]byte{'x'}, 32))
 					}
 					columns := NewColumns(cols...)
-					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+					raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).ownedBytes()
 					spans := make([]wire.Span, fragments)
 					for i := range spans {
 						spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])

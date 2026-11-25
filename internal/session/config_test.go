@@ -195,7 +195,7 @@ func TestConfig(t *testing.T) {
 			for _, include := range []bool{false, true, false} {
 				page := codecTestMust(RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{IncludeMetadata: include, PageSize: implCql.Unpaged})))
 				var row implCql.Bytes
-				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
+				if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "value" {
 					t.Fatal(page.Err())
 				}
 				if err := page.Close(); err != nil {

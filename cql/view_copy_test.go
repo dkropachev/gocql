@@ -57,8 +57,8 @@ func TestViewCopyExpired(t *testing.T) {
 		t.Fatalf("Text.String = %q; want <released>", s)
 	}
 	for name, f := range map[string]func(){
-		"Bytes.OwnedBytes": func() { _ = b.OwnedBytes() },
-		"Bytes.Clone":      func() { _ = b.Clone() },
+		"ownedBytes":  func() { _ = b.ownedBytes() },
+		"Bytes.Clone": func() { _ = b.Clone() },
 	} {
 		func() {
 			defer func() {

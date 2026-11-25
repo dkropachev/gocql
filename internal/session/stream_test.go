@@ -1281,7 +1281,7 @@ func TestStream(t *testing.T) {
 			}
 			t.Logf("canonical stream attempts=3 payload_backing_bytes=%d", spy.bytes.Load())
 			info := cursor.Info()
-			if len(info.Result.Warnings()) != 1 || info.Result.Warnings()[0] != "terminal" || len(info.Result.CQLTraces()) != 1 || info.Result.CQLTraces()[0].ID[15] != 7 || !info.Result.CQLTraces()[0].Failed || len(info.Result.CustomPayload()) != 1 || string(info.Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "new" {
+			if len(info.Result.Warnings()) != 1 || info.Result.Warnings()[0] != "terminal" || len(info.Result.CQLTraces()) != 1 || info.Result.CQLTraces()[0].ID[15] != 7 || !info.Result.CQLTraces()[0].Failed || len(info.Result.CustomPayload()) != 1 || string(ownedBytesForTest(info.Result.CustomPayload()[0].Value.Value)) != "new" {
 				t.Fatal("terminal attempt metadata missing", info)
 			}
 			bound.Close()

@@ -37,7 +37,7 @@ func (c foundationCustomBlob) Decode(r ValueReader) ([]byte, error) {
 	if c.decodes != nil {
 		*c.decodes++
 	}
-	return r.Bytes().OwnedBytes(), nil
+	return r.Bytes().ownedBytes(), nil
 }
 func (c foundationCustomBlob) Clone(v []byte) []byte { return append([]byte(nil), v...) }
 

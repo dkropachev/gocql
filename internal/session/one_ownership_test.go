@@ -37,7 +37,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 			if found, _, err := read(&second); err != nil || !found {
 				t.Fatal(found, err)
 			}
-			if string(first.OwnedBytes()) != loopbackValue || string(second.OwnedBytes()) != loopbackValue {
+			if string(ownedBytesForTest(first)) != loopbackValue || string(ownedBytesForTest(second)) != loopbackValue {
 				t.Fatal("result expired after return or next execution")
 			}
 		})

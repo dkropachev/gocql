@@ -33,7 +33,7 @@ func TestTupleUDT(t *testing.T) {
 		tuple, _ := TupleType(list)
 		encoder := TupleEncoder(OneParam(ListEncoder(StringCodec)))
 		decoder := TupleDecoder(OneColumn(ListDecoder(TextCodec)))
-		encoded, err := EncodeValueBorrowed(tuple, encoder, []string{"first", "second"})
+		encoded, err := encodeValueBorrowed(tuple, encoder, []string{"first", "second"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +252,7 @@ func TestTupleUDT(t *testing.T) {
 		params := Params(Param("v", Int32Codec, func(v int32) int32 { return v }))
 		rows := Row(Column("v", Int32Codec, func(v *int32) *int32 { return v }))
 		for _, options := range []UDTOptions{{Keyspace: "other"}, {Keyspace: "other", Name: "record"}, {Keyspace: "ks", Name: "wrong"}} {
-			if _, err := EncodeValueBorrowed(typ, NullableEncoder(UDTEncoder(params, options)), Nullable[int32]{}); err == nil {
+			if _, err := encodeValueBorrowed(typ, NullableEncoder(UDTEncoder(params, options)), Nullable[int32]{}); err == nil {
 				t.Fatal("invalid UDT identity hidden by null")
 			}
 			if _, err := compileValueDecoder(NullableDecoder(UDTDecoder(rows, options)), typ); err == nil {

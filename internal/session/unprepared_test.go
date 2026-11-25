@@ -31,7 +31,7 @@ func TestUnpreparedCalls(t *testing.T) {
 		for _, callbackError := range []error{nil, sentinel} {
 			var dst cql.Bytes
 			result, err := s.UnpreparedEach(context.Background(), statement, int32(1), &dst, func(row *cql.Bytes) error {
-				if string(row.OwnedBytes()) != loopbackValue {
+				if string(ownedBytesForTest(*row)) != loopbackValue {
 					t.Error("bad borrowed value during callback")
 				}
 				return callbackError

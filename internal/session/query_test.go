@@ -718,7 +718,7 @@ func TestQuery(t *testing.T) {
 			var dst cql.Bytes
 			var values []string
 			result, err := q.Each(ctx, []byte("key"), &dst, func(row *cql.Bytes) error {
-				values = append(values, string(row.OwnedBytes()))
+				values = append(values, string(ownedBytesForTest(*row)))
 				return nil
 			})
 			if err != nil || fmt.Sprint(values) != "[one uno two]" || result.Rows != 3 {
@@ -1041,7 +1041,7 @@ func TestQuery(t *testing.T) {
 			defer cancel()
 			first := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
 			var row cql.Bytes
-			if !first.NextInto(&row) || string(row.OwnedBytes()) != "first" {
+			if !first.NextInto(&row) || string(ownedBytesForTest(row)) != "first" {
 				t.Fatal(first.Err())
 			}
 			if err := first.Close(); err != nil {
@@ -1068,7 +1068,7 @@ func TestQuery(t *testing.T) {
 			if err := first.Close(); err != nil {
 				t.Fatal("stale close", err)
 			}
-			if !second.NextInto(&row) || string(row.OwnedBytes()) != "second" {
+			if !second.NextInto(&row) || string(ownedBytesForTest(row)) != "second" {
 				t.Fatal("stale close disturbed the new execution", second.Err())
 			}
 			if second.NextInto(&row) || second.Err() != nil {

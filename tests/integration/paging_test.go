@@ -240,7 +240,7 @@ func TestPaging(t *testing.T) {
 		var first cql.Bytes
 		count := 0
 		for rows.NextInto(&dst) {
-			if dst.Value != int32(count) || !bytes.Equal(dst.Payload.OwnedBytes(), payload) {
+			if dst.Value != int32(count) || !bytes.Equal(ownedBytesForTest(dst.Payload), payload) {
 				t.Fatal("row mismatch", count, dst.Value)
 			}
 			if count == 0 {
@@ -265,7 +265,7 @@ func TestPaging(t *testing.T) {
 		if err := <-churn; err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(first.OwnedBytes(), payload) {
+		if !bytes.Equal(ownedBytesForTest(first), payload) {
 			t.Fatal("retained output lost during DDL")
 		}
 	})

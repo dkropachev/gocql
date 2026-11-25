@@ -47,7 +47,7 @@ func fixtureBody[T any](typ implCql.DataType, codec implCql.Encoder[T], v T) ([]
 	if err != nil {
 		return nil, err
 	}
-	return encoded.Bytes().OwnedBytes(), nil
+	return ownedBytesForTest(encoded.Bytes()), nil
 }
 func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	typ, err := cqltype.DataTypeFromInfo(info)

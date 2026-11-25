@@ -18,11 +18,11 @@ import (
 func TestErrNull(t *testing.T) {
 	null := []byte{0xff, 0xff, 0xff, 0xff}
 	t.Run("Decoder", func(t *testing.T) {
-		_, err := DecodeValue(Int64Codec, CodecTestMust(NewEncodedValue(BigIntType, Null, Bytes{})))
+		_, err := DecodeValue(Int64Codec, CodecTestMust(newEncodedValue(BigIntType, Null, Bytes{})))
 		if !errors.Is(err, ErrNull) || err.Error() != "gocql: nonnullable bigint cannot decode cell state null" {
 			t.Fatalf("got %v", err)
 		}
-		if _, err := DecodeValue(NullableDecoder(Int64Codec), CodecTestMust(NewEncodedValue(BigIntType, Null, Bytes{}))); err != nil {
+		if _, err := DecodeValue(NullableDecoder(Int64Codec), CodecTestMust(newEncodedValue(BigIntType, Null, Bytes{}))); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -299,7 +299,7 @@ func TestValueTimeAccessors(t *testing.T) {
 func TestDecodeValueEmptyShape(t *testing.T) {
 	var seen ValueReader
 	calls := 0
-	empty := CodecTestMust(NewEncodedValue(IntType, EmptyCell, Bytes{}))
+	empty := CodecTestMust(newEncodedValue(IntType, EmptyCell, Bytes{}))
 	if _, err := DecodeValue(Decoder[int32](capturedRowInt{Decoder: Int32Codec, seen: &seen, calls: &calls}), empty); err == nil {
 		t.Fatal("Int32Codec decoded an empty int")
 	}

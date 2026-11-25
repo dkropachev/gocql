@@ -514,7 +514,7 @@ func TestScalar(t *testing.T) {
 		t.Run("PublicValue", func(t *testing.T) {
 			typ := scalarType(t, TypeBlob)
 			source := []byte{1, 2, 3}
-			borrowed, err := EncodeValueBorrowed(typ, ByteSliceCodec, source)
+			borrowed, err := encodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -537,7 +537,7 @@ func TestScalar(t *testing.T) {
 			if b, _ := ownedBytes.At(0); b != 1 {
 				t.Fatal("owned encoding retained input alias")
 			}
-			empty, err := EncodeValueBorrowed(scalarType(t, TypeInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
+			empty, err := encodeValueBorrowed(scalarType(t, TypeInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil || empty.State() != EmptyCell || empty.Bytes().Len() != 0 {
 				t.Fatalf("explicit Empty state lost: %v", err)
 			}
@@ -548,10 +548,10 @@ func TestScalar(t *testing.T) {
 			if _, err := DecodeValue(Int32Codec, empty); err == nil {
 				t.Fatal("nonempty decoder accepted Empty")
 			}
-			if _, err := NewEncodedValue(typ, EmptyCell, Bytes{}); err == nil {
+			if _, err := newEncodedValue(typ, EmptyCell, Bytes{}); err == nil {
 				t.Fatal("blob admitted a distinct Empty state")
 			}
-			if _, err := NewEncodedValue(scalarType(t, TypeInt), Null, BorrowBytes([]byte{1})); err == nil {
+			if _, err := newEncodedValue(scalarType(t, TypeInt), Null, BorrowBytes([]byte{1})); err == nil {
 				t.Fatal("null admitted payload bytes")
 			}
 		})
@@ -589,7 +589,7 @@ func TestScalar(t *testing.T) {
 			if got != "héllo" {
 				t.Fatalf("decoded %q", got)
 			}
-			null, err := NewEncodedValue(typ, Null, BorrowBytes(nil))
+			null, err := newEncodedValue(typ, Null, BorrowBytes(nil))
 			if err != nil {
 				t.Fatal(err)
 			}

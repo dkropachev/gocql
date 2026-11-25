@@ -56,14 +56,14 @@ func streamCellBytes(body []byte) []byte {
 }
 func streamEncodedFixture[T any](t testing.TB, typ DataType, encoder Encoder[T], value T) []byte {
 	t.Helper()
-	v, err := EncodeValueBorrowed(typ, encoder, value)
+	v, err := encodeValueBorrowed(typ, encoder, value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v.state == Null {
 		return []byte{255, 255, 255, 255}
 	}
-	return streamCellBytes(v.Bytes().OwnedBytes())
+	return streamCellBytes(v.Bytes().ownedBytes())
 }
 func streamReaderFixture(t testing.TB, columns Columns, source io.Reader, size int) (*StreamRowReader, *wire.Stream) {
 	t.Helper()

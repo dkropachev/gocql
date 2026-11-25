@@ -71,7 +71,7 @@ func TestPageAPI(t *testing.T) {
 			if _, err = view.At(0); !errors.Is(err, cql.ErrReleased) {
 				t.Fatal(err)
 			}
-			if string(clone.OwnedBytes()) != "value" {
+			if string(ownedBytesForTest(clone)) != "value" {
 				t.Fatal("clone changed")
 			}
 			if page.State().Token()[0] != 1 {

@@ -266,7 +266,9 @@ func TestCodecMatrix(t *testing.T) {
 	textType := matrixType(cql.TypeText)
 	bigVarint := cql.VarintFromBigInt(new(big.Int).Lsh(big.NewInt(-3), 100))
 	textEq := func(a, b cql.Text) bool { return a.String() == b.String() }
-	bytesEq := func(a, b cql.Bytes) bool { return string(a.OwnedBytes()) == string(b.OwnedBytes()) }
+	bytesEq := func(a, b cql.Bytes) bool {
+		return string(cql.CodecTestMust(a.Copy())) == string(cql.CodecTestMust(b.Copy()))
+	}
 	varintEq := func(a, b cql.Varint) bool { return a.BigInt().Cmp(b.BigInt()) == 0 }
 	decimalEq := func(a, b cql.Decimal) bool { return a.Scale == b.Scale && varintEq(a.Unscaled, b.Unscaled) }
 	floatEq32 := func(a, b float32) bool { return math.Float32bits(a) == math.Float32bits(b) }

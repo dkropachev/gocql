@@ -26,6 +26,9 @@ func init() {
 	link.Set(link.ParamCellType, func() reflect.Type { return reflect.TypeFor[paramCell]() })
 	link.Set(link.SetParamOwnership, setParamOwnership)
 	link.Set(link.ReadValue, readValue)
+	link.Set(link.EncodeDynamicBorrowed, func(typ DataType, v Value) (EncodedValue, error) {
+		return encodeValueBorrowed(typ, DynamicCodec, v)
+	})
 	link.Set(link.NewValueReader, valueReaderFromLease)
 	link.Set(link.RowReaderFromCursor, rowReaderFromCursor)
 	link.Set(link.NewRowReader, newRowReader)

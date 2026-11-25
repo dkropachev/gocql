@@ -88,7 +88,7 @@ func TestInlineSpeculation(t *testing.T) {
 			t.Fatal(err)
 		}
 		var row cql.Bytes
-		if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
+		if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "winner" {
 			t.Fatal("page is not the speculative winner's", page.Err())
 		}
 		traces := page.Info().CQLTraces()

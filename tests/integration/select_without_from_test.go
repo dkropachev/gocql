@@ -42,7 +42,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 				t.Fatal("blob type expected")
 			}
 			blob, err := noFromValue(t, row, 0).Bytes()
-			if err != nil || !bytes.Equal(blob.OwnedBytes(), []byte{0, 0, 0, 42}) {
+			if err != nil || !bytes.Equal(ownedBytesForTest(blob), []byte{0, 0, 0, 42}) {
 				t.Fatalf("blob=%v err=%v", blob, err)
 			}
 		})

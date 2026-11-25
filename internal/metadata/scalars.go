@@ -134,11 +134,16 @@ func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error)
 	}
 	out := make(map[string][]byte, len(v))
 	for _, entry := range v {
-		key := entry.Key.String()
+		key, err := entry.Key.Copy()
+		if err != nil {
+			return nil, err
+		}
 		if _, ok := out[key]; ok {
 			return nil, cqltype.TypeValidation("schema extensions", "duplicate key %q", key)
 		}
-		out[key] = entry.Value.OwnedBytes()
+		if out[key], err = entry.Value.Copy(); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

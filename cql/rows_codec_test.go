@@ -77,11 +77,11 @@ func TestRowsCodec(t *testing.T) {
 			value := Pair[Text, Bytes]{First: Text{bytes: BorrowBytes(name)}, Second: BorrowBytes(payload)}
 			cloned := rows.Clone(value)
 			name[0], payload[0] = 'N', 'P'
-			if value.First.String() != "Name" || string(value.Second.OwnedBytes()) != "Payload" {
+			if value.First.String() != "Name" || string(value.Second.ownedBytes()) != "Payload" {
 				t.Fatal("the original pair does not borrow its inputs")
 			}
-			if cloned.First.String() != "name" || string(cloned.Second.OwnedBytes()) != "payload" {
-				t.Fatalf("Clone = (%q, %q), want copies of both sides", cloned.First.String(), cloned.Second.OwnedBytes())
+			if cloned.First.String() != "name" || string(cloned.Second.ownedBytes()) != "payload" {
+				t.Fatalf("Clone = (%q, %q), want copies of both sides", cloned.First.String(), cloned.Second.ownedBytes())
 			}
 		})
 		t.Run("ConvertRows", func(t *testing.T) {
@@ -425,7 +425,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatal(err)
 			}
 			lease.Release()
-			if !bytes.Equal(value.OwnedBytes(), []byte("abc")) {
+			if !bytes.Equal(value.ownedBytes(), []byte("abc")) {
 				t.Fatal("retained view invalid")
 			}
 			lease.Release()
@@ -542,8 +542,8 @@ func TestRowsCodec(t *testing.T) {
 			}
 			payload[0] = 'X'
 			value, err := newRowReader(columns, chain, nil).ReadColumn(BytesCodec)
-			if err != nil || string(value.OwnedBytes()) != "original" {
-				t.Fatalf("value=%q err=%v", value.OwnedBytes(), err)
+			if err != nil || string(value.ownedBytes()) != "original" {
+				t.Fatalf("value=%q err=%v", value.ownedBytes(), err)
 			}
 		})
 	})
@@ -600,7 +600,7 @@ func TestRowsCodec(t *testing.T) {
 			if err := reader.cursor.RequireEnd(); err != nil {
 				t.Fatal(err)
 			}
-			if row.Key != 42 || !bytes.Equal(row.Body.OwnedBytes(), payload) {
+			if row.Key != 42 || !bytes.Equal(row.Body.ownedBytes(), payload) {
 				t.Fatalf("wrong row: %+v", row)
 			}
 			clone := rows.Clone(row)
@@ -609,7 +609,7 @@ func TestRowsCodec(t *testing.T) {
 				t.Fatalf("expired row: %v", err)
 			}
 			payload[0] = 'X'
-			if got := string(clone.Body.OwnedBytes()); got != "borrowed payload" {
+			if got := string(clone.Body.ownedBytes()); got != "borrowed payload" {
 				t.Fatalf("clone retained borrowed input: %q", got)
 			}
 		})

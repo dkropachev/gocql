@@ -34,7 +34,7 @@ func TestContainer(t *testing.T) {
 			blob := rowTestType(t, TypeBlob)
 			list, _ := ListType(blob)
 			payload := []byte("fragmented")
-			encoded, err := EncodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
+			encoded, err := encodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,14 +48,14 @@ func TestContainer(t *testing.T) {
 			if !alias {
 				t.Fatal("container encoder copied borrowed payload")
 			}
-			body := encoded.Bytes().OwnedBytes()
+			body := encoded.Bytes().ownedBytes()
 			spans := make([]wire.Span, len(body))
 			for i := range body {
 				spans[i] = wire.Borrow(body[i : i+1])
 			}
 			chain, _ := wire.NewChain(spans...)
 			lease := wire.NewLease(chain, nil)
-			leased, _ := NewEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
+			leased, _ := newEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
 			sequence, err := DecodeValue(ListDecoder(BytesCodec), leased)
 			if err != nil {
 				t.Fatal(err)
@@ -76,7 +76,7 @@ func TestContainer(t *testing.T) {
 			if err := checkBytesAlive(sequence[0]); !errors.Is(err, ErrReleased) {
 				t.Fatalf("released element: %v", err)
 			}
-			if string(clone[0].OwnedBytes()) != "fragmented" {
+			if string(clone[0].ownedBytes()) != "fragmented" {
 				t.Fatal("detached clone failed")
 			}
 			owned, err := EncodeValue(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
@@ -84,7 +84,7 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			if got := owned.Bytes().OwnedBytes(); string(got[8:]) != "fragmented" {
+			if got := owned.Bytes().ownedBytes(); string(got[8:]) != "fragmented" {
 				t.Fatal("owned collection retained source")
 			}
 		})
@@ -94,7 +94,7 @@ func TestContainer(t *testing.T) {
 		tuple := CodecTestMust(TupleType(text, blob))
 		list := CodecTestMust(ListType(tuple))
 		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
-		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
+		encoded := CodecTestMust(encodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(bytesChain(encoded.body), nil)
 		borrowed := EncodedValue{typ: list, state: Present, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
 		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BytesCodec))))
@@ -103,7 +103,7 @@ func TestContainer(t *testing.T) {
 		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
 		dynamicValues := CodecTestMust(CodecTestMust(dynamic.iterElements()).Collect())
 		lease.Release()
-		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.OwnedBytes(), []byte("more")) {
+		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.ownedBytes(), []byte("more")) {
 			t.Fatal("typed Clone retained lease")
 		}
 		fields := CodecTestMust(CodecTestMust(dynamicValues[0].iterFields()).Collect())
@@ -117,7 +117,7 @@ func TestContainer(t *testing.T) {
 		input := CodecTestMust(CodecTestMust(value.iterElements()).Collect())
 		payload[0] = 'X'
 		b := CodecTestMust(input[0].Bytes())
-		if string(b.OwnedBytes()) != "input" {
+		if string(b.ownedBytes()) != "input" {
 			t.Fatal("input-side Collect did not detach")
 		}
 	})
@@ -186,7 +186,7 @@ func TestContainer(t *testing.T) {
 						t.Fatalf("%s accepted %s", test.typ, bad)
 					}
 				}
-				null, _ := NewEncodedValue(test.typ, Null, Bytes{})
+				null, _ := newEncodedValue(test.typ, Null, Bytes{})
 				if err := test.validate(null); err != nil {
 					t.Fatalf("%s rejected null collection: %v", test.typ, err)
 				}
@@ -194,14 +194,14 @@ func TestContainer(t *testing.T) {
 					t.Fatalf("empty collection rejected: %v", err)
 				}
 			}
-			encoded, err := EncodeValueBorrowed(list, ListEncoder(Int32Codec), nil)
-			if err != nil || !bytes.Equal(encoded.Bytes().OwnedBytes(), []byte{0, 0, 0, 0}) {
+			encoded, err := encodeValueBorrowed(list, ListEncoder(Int32Codec), nil)
+			if err != nil || !bytes.Equal(encoded.Bytes().ownedBytes(), []byte{0, 0, 0, 0}) {
 				t.Fatalf("nil slice must encode empty: %v", err)
 			}
-			if _, err := EncodeValueBorrowed(list, ListEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}}); err == nil {
+			if _, err := encodeValueBorrowed(list, ListEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}}); err == nil {
 				t.Fatal("null collection member accepted")
 			}
-			if _, err := EncodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{{State: Unset}}); err == nil {
+			if _, err := encodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{{State: Unset}}); err == nil {
 				t.Fatal("unset collection member accepted")
 			}
 		})
@@ -240,7 +240,7 @@ func TestContainer(t *testing.T) {
 			t.Fatal(err)
 		}
 		entries := mapping
-		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
+		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.ownedBytes()) != "y" {
 			t.Fatalf("entries=%v", entries)
 		}
 		tiny, _ := VectorType(rowTestType(t, TypeTinyInt), 2)
@@ -278,10 +278,10 @@ func TestContainer(t *testing.T) {
 					t.Fatalf("short/surplus vector accepted: %x", bad)
 				}
 			}
-			if _, err := EncodeValueBorrowed(vector, VectorEncoder(Int32Codec), []int32{1}); err == nil {
+			if _, err := encodeValueBorrowed(vector, VectorEncoder(Int32Codec), []int32{1}); err == nil {
 				t.Fatal("short vector encoded")
 			}
-			if _, err := EncodeValueBorrowed(vector, VectorEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}, {}}); err == nil {
+			if _, err := encodeValueBorrowed(vector, VectorEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}, {}}); err == nil {
 				t.Fatal("null vector member encoded")
 			}
 			text := rowTestType(t, TypeText)
@@ -310,11 +310,11 @@ func TestContainer(t *testing.T) {
 			vector, _ := VectorType(rowTestType(t, TypeBlob), 2)
 			payload := bytes.Repeat([]byte{'x'}, 128)
 			input := [][]byte{payload, {}}
-			borrowed, err := EncodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)
+			borrowed, err := encodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			data := borrowed.Bytes().OwnedBytes()
+			data := borrowed.Bytes().ownedBytes()
 			if len(data) != 131 || data[0] != 0x80 || data[1] != 0x80 || data[130] != 0 {
 				t.Fatalf("unsigned vint body = %x", data)
 			}
@@ -333,7 +333,7 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'Y'
-			if got := owned.Bytes().OwnedBytes(); got[2] != 'x' {
+			if got := owned.Bytes().ownedBytes(); got[2] != 'x' {
 				t.Fatal("owned vector retained borrowed payload")
 			}
 			// Every scalar and vint can straddle receive segments without gathering.

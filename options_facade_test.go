@@ -43,7 +43,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	profile.PageSize = 99
 	payload[0] = 'X'
 	got := bound.Values()
-	if got.Profile.PageSize != 11 || string(got.CustomPayload[0].Value.Value.OwnedBytes()) != "original" {
+	if got.Profile.PageSize != 11 || string(ownedBytesForTest(got.CustomPayload[0].Value.Value)) != "original" {
 		t.Fatal("bound public options borrowed caller profile or payload")
 	}
 	got.Profile.PageSize = 100

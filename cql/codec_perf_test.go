@@ -31,9 +31,9 @@ func TestCodecPerf(t *testing.T) {
 						var encoded EncodedValue
 						var err error
 						if text {
-							encoded, err = EncodeValueBorrowed(typ, StringCodec, string(data))
+							encoded, err = encodeValueBorrowed(typ, StringCodec, string(data))
 						} else {
-							encoded, err = EncodeValueBorrowed(typ, ByteSliceCodec, data)
+							encoded, err = encodeValueBorrowed(typ, ByteSliceCodec, data)
 						}
 						if err != nil {
 							t.Fatal(err)
@@ -157,7 +157,7 @@ func TestCodecPerf(t *testing.T) {
 							values[i] = BlobValue(make([]byte, (1<<20)/n))
 						}
 						cols := NewColumns(specs...)
-						raw := bytesView(dynamicTestRowBody(t, cols, values), wire.Ref{}).OwnedBytes()
+						raw := bytesView(dynamicTestRowBody(t, cols, values), wire.Ref{}).ownedBytes()
 						spans := make([]wire.Span, fragments)
 						for i := range spans {
 							spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -250,7 +250,7 @@ func TestCodecPerf(t *testing.T) {
 				for i := range values {
 					values[i] = Entry[int32, int32]{Key: int32(i), Value: int32(i)}
 				}
-				encoded := CodecTestMust(EncodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), values))
+				encoded := CodecTestMust(encodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), values))
 				compiled := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
 				ResetPerfCounters()
 				wire.ResetPerfCounters()
@@ -277,8 +277,8 @@ func TestCodecPerf(t *testing.T) {
 						v = CodecTestMust(ListValue(typ, v))
 						typ = CodecTestMust(ListType(typ))
 					}
-					encoded := CodecTestMust(EncodeValueBorrowed(typ, DynamicCodec, v))
-					raw := encoded.Bytes().OwnedBytes()
+					encoded := CodecTestMust(encodeValueBorrowed(typ, DynamicCodec, v))
+					raw := encoded.Bytes().ownedBytes()
 					spans := make([]wire.Span, fragments)
 					for i := range spans {
 						spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])

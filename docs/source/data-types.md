@@ -42,9 +42,9 @@ a varint that fits an `int64`, `VarintFromBigInt` and `BigInt` any other;
 `ParseDecimal` reads a decimal as `Decimal.String` prints it, and
 `Decimal.Rat` returns its exact value. A vector type has kind `TypeVector`, the
 driver's own kind: the protocol sends a vector as a custom type. Standalone
-`EncodeValue` (copies caller payloads),
-`EncodeValueBorrowed` (zero-copy) and `DecodeValue` use the same codec
-implementation as execution. A decoder sees an empty value as a response holds
+`EncodeValue`, which copies caller payloads, and `DecodeValue` use the same
+codec implementation as execution; `NewEncodedValue` wraps an encoded body,
+borrowing it. A decoder sees an empty value as a response holds
 it, Present with an empty body, including one `DecodeValue` reads from an
 `EncodedValue` in `EmptyCell`. Explicit owned
 conversion/Clone detaches payloads. Custom codecs use checked reader/writer

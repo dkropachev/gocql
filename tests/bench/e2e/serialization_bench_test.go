@@ -107,14 +107,14 @@ func BenchmarkSerialization(b *testing.B) {
 // benchmarkValue measures explicit borrowed encoding and borrowed decoding.
 // Owned conversions have separate names so their copy costs remain visible.
 func benchmarkValue[P, R any](b *testing.B, typ cql.DataType, enc cql.Encoder[P], dec cql.Decoder[R], value P) {
-	encoded, err := cql.EncodeValueBorrowed(typ, enc, value)
+	encoded, err := cql.EncodeValue(typ, enc, value)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Run("EncodeBorrowed", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			if _, err := cql.EncodeValueBorrowed(typ, enc, value); err != nil {
+			if _, err := cql.EncodeValue(typ, enc, value); err != nil {
 				b.Fatal(err)
 			}
 		}

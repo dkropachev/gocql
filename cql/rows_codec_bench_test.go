@@ -216,7 +216,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 				columns := NewColumns(specs...)
 				decoder := Row(fields...)
 				plan := CodecTestMust(decoder.Compile(columns))
-				raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+				raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).ownedBytes()
 				spans := make([]wire.Span, fragments)
 				for i := range spans {
 					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])

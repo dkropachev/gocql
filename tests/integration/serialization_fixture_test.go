@@ -239,7 +239,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 	case cql.TypeBlob:
 		a, e := want.Bytes()
 		b, f := got.Bytes()
-		equal = e == nil && f == nil && bytes.Equal(a.OwnedBytes(), b.OwnedBytes())
+		equal = e == nil && f == nil && bytes.Equal(ownedBytesForTest(a), ownedBytesForTest(b))
 	case cql.TypeUUID, cql.TypeTimeUUID:
 		a, e := want.UUID()
 		b, f := got.UUID()
@@ -271,7 +271,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 			if e != nil {
 				t.Fatal(e)
 			}
-			return string(encoded.Bytes().OwnedBytes())
+			return string(ownedBytesForTest(encoded.Bytes()))
 		}
 		values := make(map[string]cql.Value, len(b))
 		for _, entry := range b {
@@ -310,7 +310,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 				if e != nil {
 					t.Fatal(e)
 				}
-				return string(x.Bytes().OwnedBytes())
+				return string(ownedBytesForTest(x.Bytes()))
 			}
 			sort.Slice(a, func(i, j int) bool { return key(a[i]) < key(a[j]) })
 			sort.Slice(b, func(i, j int) bool { return key(b[i]) < key(b[j]) })
@@ -641,7 +641,11 @@ func (serializationRawDecoder) CheckType(t cql.DataType) error {
 	return cql.DynamicCodec.CheckType(t)
 }
 func (serializationRawDecoder) Decode(r cql.ValueReader) (cql.EncodedValue, error) {
-	return cql.NewEncodedValue(r.Type(), r.State(), r.Bytes())
+	body, err := r.Bytes().Copy()
+	if err != nil {
+		return cql.EncodedValue{}, err
+	}
+	return cql.NewEncodedValue(r.Type(), r.State(), body)
 }
 func (serializationRawDecoder) Clone(v cql.EncodedValue) cql.EncodedValue { return v.Clone() }
 

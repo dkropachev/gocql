@@ -91,7 +91,7 @@ func TestMapDecoders(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	malformed, err := cql.NewEncodedValue(typ, cql.Present, cql.BorrowBytes(body))
+	malformed, err := cql.NewEncodedValue(typ, cql.Present, body)
 	if err != nil {
 		t.Fatal(err)
 	}

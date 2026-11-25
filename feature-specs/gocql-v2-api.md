@@ -211,12 +211,11 @@ standalone representation or a top-level binding, never in a result decode.
 ```go
 // package cql
 type EncodedValue struct { /* private type, state and Bytes */ }
-func NewEncodedValue(DataType, CellState, Bytes) (EncodedValue, error)
+func NewEncodedValue(DataType, CellState, []byte) (EncodedValue, error) // borrows the body
 func (v EncodedValue) Type() DataType
 func (v EncodedValue) State() CellState
 func (v EncodedValue) Bytes() Bytes
 func (v EncodedValue) Clone() EncodedValue
-func EncodeValueBorrowed[T any](DataType, Encoder[T], T) (EncodedValue, error)
 func EncodeValue[T any](DataType, Encoder[T], T) (EncodedValue, error) // owned
 func DecodeValue[T any](Decoder[T], EncodedValue) (T, error)
 ```
@@ -460,8 +459,8 @@ values.
 Public type descriptions use DataType and ColumnSpec only; protocol metadata
 descriptors are internal.
 ParseConsistency and ParseUUID return errors; MustParseConsistency and
-MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
-EncodeValueBorrowed preserves borrowed inputs.
+MustParseUUID panic on invalid input. EncodeValue owns its output payloads; the
+driver's own zero-copy encoding is internal.
 
 The wrapper roles are separate: Option is for inherited settings and for result values that may be unknown; Nullable is
 for nullable application data and decoded results; BindValue controls binding
@@ -485,7 +484,6 @@ func (b Bytes) Slice(offset, length int64) (Bytes, error)
 func (b Bytes) WriteTo(io.Writer) (int64, error)
 func (b Bytes) CopyTo([]byte) (int, error)
 func (b Bytes) Clone() Bytes          // panics with cqlerr.ErrReleased on an expired view
-func (b Bytes) OwnedBytes() []byte    // panics likewise
 func (b Bytes) Copy() ([]byte, error) // checked form: returns cqlerr.ErrReleased
 func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
@@ -543,7 +541,7 @@ declared dimension and reject NULL without a Nullable wrapper.
 
 Eager materialization does not detach borrowed elements. Decoder.Clone
 recursively copies collection storage and borrowed Text, Bytes, Value and
-nested aggregates so they survive page release. String(), OwnedBytes(), Clone()
+nested aggregates so they survive page release. String(), Copy(), Clone()
 and explicit big.Int/calendar adapters are requested materializations.
 Collection framing and all selected child decoders run before Decode succeeds;
 a malformed element returns an error and no partial slice. DecodeInto may reuse

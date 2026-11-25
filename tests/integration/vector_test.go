@@ -66,7 +66,7 @@ func serializationVectorGate(t *testing.T, allTypes bool) {
 	}
 }
 
-var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return v.OwnedBytes() })
+var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return ownedBytesForTest(v) })
 var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {
