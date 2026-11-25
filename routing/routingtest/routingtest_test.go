@@ -210,3 +210,29 @@ func TestVnodeReplicaShards(t *testing.T) {
 		}
 	}
 }
+
+// TestReplicaRoutesWithoutTableSchema checks that a vnode keyspace whose
+// tables are not loaded, as under metadata.ModeKeyspaces, still routes by the
+// keyspace's ring.
+func TestReplicaRoutesWithoutTableSchema(t *testing.T) {
+	c := cluster()
+	c.Keyspaces = map[string]*metadata.Keyspace{"ks": {Name: "ks"}}
+	c.TokenRanges = map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{{HostID: c.Hosts[2].HostID}}}}}
+	m := routingtest.NewSnapshot(c)
+	if routes := routing.ReplicaRoutes(m, info); len(routes) != 1 || routes[0].HostID()[15] != 3 {
+		t.Fatalf("ReplicaRoutes without table schema = %v", routes)
+	}
+	policy, err := routing.NewPolicy(routing.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for range 10 {
+		if got := planHosts(t, policy, m); len(got) == 0 || got[0] != 3 {
+			t.Fatalf("built-in plan without table schema: %v", got)
+		}
+	}
+	c.Keyspaces["ks"].TabletBased = true
+	if routes := routing.ReplicaRoutes(routingtest.NewSnapshot(c), info); len(routes) != 0 {
+		t.Fatalf("a tablet keyspace routed a table it has no placement for: %v", routes)
+	}
+}

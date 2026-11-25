@@ -77,11 +77,25 @@ func TestRoutingCacheInvalidatesOnSnapshotChange(t *testing.T) {
 	if got := replicaHosts(cachedReplicas(before, &c)); string(got) != "\x01\x02" {
 		t.Fatalf("earlier snapshot: replicas %v", got)
 	}
-	// A table missing from the snapshot has no replicas.
+	// A table missing from the snapshot, as under metadata.ModeKeyspaces,
+	// routes by its vnode keyspace's ring.
+	unloaded := vnodeCacheSnapshot(1, 2, 3)
+	SnapshotData(unloaded).InternalKeyspaces["ks"].Tables = nil
+	if got := replicaHosts(cachedReplicas(unloaded, &c)); string(got) != "\x01\x02\x03" {
+		t.Fatalf("table not loaded: replicas %v", got)
+	}
+	// A tablet keyspace's table needs its own placement.
+	tablets := vnodeCacheSnapshot(1, 2, 3)
+	SnapshotData(tablets).InternalKeyspaces["ks"].Tables = nil
+	SnapshotData(tablets).InternalKeyspaces["ks"].TabletBased = true
+	if got := cachedReplicas(tablets, &c); got != nil {
+		t.Fatalf("tablet keyspace without the table: replicas %v", got)
+	}
+	// A keyspace missing from the snapshot has no replicas.
 	dropped := vnodeCacheSnapshot(1, 2, 3)
-	SnapshotData(dropped).InternalKeyspaces["ks"].Tables = nil
+	delete(SnapshotData(dropped).InternalKeyspaces, "ks")
 	if got := cachedReplicas(dropped, &c); got != nil {
-		t.Fatalf("dropped table: replicas %v", got)
+		t.Fatalf("dropped keyspace: replicas %v", got)
 	}
 }
 

@@ -522,7 +522,8 @@ func (b *ConfigBuilder) WithConviction(policy endpoint.ConvictionPolicy) *Config
 }
 
 // WithMetadataMode selects how much schema metadata is loaded. Default
-// metadata.ModeFull.
+// metadata.ModeFull. Loading less costs routing: the metadata.Mode values say
+// what each mode keeps.
 func (b *ConfigBuilder) WithMetadataMode(mode metadata.Mode) *ConfigBuilder {
 	b.settings.Metadata.Mode = mode
 	return b
