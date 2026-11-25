@@ -382,3 +382,16 @@ func TestUnpreparedCommand(t *testing.T) {
 		t.Fatal("UnpreparedCommand with two options sent a request")
 	}
 }
+
+// TestSessionObserver reads back the observer a session was configured
+// with: none for a session built without one, and none for a zero Session.
+func TestSessionObserver(t *testing.T) {
+	if o := new(Session).Observer(); o != nil {
+		t.Fatalf("zero Session.Observer() = %v, want nil", o)
+	}
+	s, _, _ := runtimeTestSession(t, 1)
+	defer func() { _ = s.Close() }()
+	if o := s.Observer(); o != nil {
+		t.Fatalf("Session.Observer() = %v, want nil without WithObserver", o)
+	}
+}
