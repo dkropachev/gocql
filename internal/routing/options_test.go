@@ -375,7 +375,8 @@ func TestTabletMigration(t *testing.T) {
 
 // TestReplicaRoutes pins routing.ReplicaRoutes, which custom policies build
 // plans from: a token's replicas, to the tablet's shard where tablets place
-// the table, and no routes without a token or known replicas.
+// the table and to the token's shard on each 4-shard host for vnodes, and no
+// routes without a token or known replicas.
 func TestReplicaRoutes(t *testing.T) {
 	m := optionsSnapshot(t, nil)
 	for _, test := range []struct {
@@ -383,7 +384,7 @@ func TestReplicaRoutes(t *testing.T) {
 		info   routing.Info
 		routes [][2]int
 	}{
-		{"vnode", routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1)}, [][2]int{{3, -1}, {2, -1}, {1, -1}}},
+		{"vnode", routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1)}, [][2]int{{3, 2}, {2, 2}, {1, 2}}},
 		{"tablet", routing.Info{Keyspace: "ks", Table: "tt", Token: cql.Some[int64](50)}, [][2]int{{4, 2}, {5, 1}}},
 		{"unknown tablet", routing.Info{Keyspace: "ks", Table: "tt", Token: cql.Some[int64](200)}, nil},
 		{"no token", routing.Info{Keyspace: "ks", Table: "t"}, nil},

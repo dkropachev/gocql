@@ -23,6 +23,18 @@ type HostRoute struct {
 	owner *InternalPolicyConnPool // nil for a route made outside a session
 	pool  atomic.Pointer[InternalHostConnPool]
 	id    cql.UUID
+	// sharding is the host's shard count and ignored token bits from the
+	// latest metadata snapshot indexed, as shards<<8 | msbIgnore, which
+	// ShardOf uses while the host has no typed pool.
+	sharding atomic.Uint64
+}
+
+// SetSharding records the host's shard count and ignored most significant
+// token bits from a metadata snapshot; zero shards means not known.
+func (r *HostRoute) SetSharding(shards uint32, msbIgnore uint8) {
+	if v := uint64(shards)<<8 | uint64(msbIgnore); r.sharding.Load() != v {
+		r.sharding.Store(v)
+	}
 }
 
 // NewHostRoute returns a route of id that belongs to no session; it has no
@@ -115,11 +127,15 @@ func shardOf(token int64, shards int, msbIgnore uint64) int {
 	return int(sum >> 32)
 }
 
-// ShardOf returns the shard of token on the route's host, or AnyShard when
-// the host has no typed pool.
+// ShardOf returns the shard of token on the route's host: from its typed
+// pool's sharding, else from the sharding of the latest metadata snapshot,
+// else AnyShard.
 func (r *HostRoute) ShardOf(token int64) int32 {
 	if v := r.view(); v != nil {
 		return int32(shardOf(token, v.shards, v.msbIgnore))
+	}
+	if s := r.sharding.Load(); s>>8 > 0 {
+		return int32(shardOf(token, int(s>>8), s&0xff))
 	}
 	return AnyShard
 }

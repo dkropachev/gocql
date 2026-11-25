@@ -61,8 +61,9 @@ func (r Route) ShardID() cql.Option[uint32] {
 	return shardOption(r.shard)
 }
 
-// ShardOf returns the shard owning token on the route's host, unset when its
-// sharding is not known.
+// ShardOf returns the shard owning token on the route's host, from its
+// connections' sharding or else from HostSnapshot.Shards and
+// ShardingIgnoreMSB, unset when neither is known.
 func (r Route) ShardOf(token int64) cql.Option[uint32] {
 	if r.host == nil {
 		return cql.Option[uint32]{}

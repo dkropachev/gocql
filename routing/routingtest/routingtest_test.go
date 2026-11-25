@@ -175,3 +175,38 @@ func TestEmbeddedBuiltin(t *testing.T) {
 		t.Fatal("SingleTarget validated a host the snapshot does not hold")
 	}
 }
+
+// TestVnodeReplicaShards checks that vnode replica routes carry the shard
+// that owns the token, from the hosts' sharding, and that Route.ShardOf
+// works without connections.
+func TestVnodeReplicaShards(t *testing.T) {
+	c := cluster()
+	for i := range c.Hosts {
+		c.Hosts[i].Shards = 8
+		c.Hosts[i].ShardingIgnoreMSB = 12
+	}
+	m := routingtest.NewSnapshot(c)
+	const token = int64(-4611686018427387904)
+	want := routing.HostRoutes(m)[0].ShardOf(token)
+	if !want.Set || want.Value >= 8 {
+		t.Fatalf("ShardOf without connections = %v", want)
+	}
+	routes := routing.ReplicaRoutes(m, routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some(token), Kind: cql.OrdinaryStatement})
+	if len(routes) != 4 {
+		t.Fatalf("ReplicaRoutes = %v", routes)
+	}
+	for _, r := range routes {
+		if r.ShardID() != want {
+			t.Fatalf("vnode replica route to shard %v, want %v", r.ShardID(), want)
+		}
+	}
+	// Without sharding, as on Cassandra, routes go to any shard.
+	for _, r := range routing.ReplicaRoutes(routingtest.NewSnapshot(cluster()), info) {
+		if r.ShardID().Set {
+			t.Fatalf("a host without sharding got shard %v", r.ShardID())
+		}
+		if r.ShardOf(42).Set {
+			t.Fatal("ShardOf on a host without sharding is set")
+		}
+	}
+}

@@ -96,8 +96,10 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 }
 
 // ReplicaRoutes returns routes to the replicas of the token of the request
-// info describes, to the replica's shard when tablet placement names one. It
-// returns none when info has no token, keyspace or table, or when no replica
+// info describes, each to the replica's shard: the one tablet placement
+// names, or for a vnode replica the shard that owns the token on the host,
+// from metadata.HostSnapshot.Shards. A route goes to any shard when the
+// host's sharding is not known. It returns none when info has no token, keyspace or table, or when no replica
 // of the token is known; HostRoutes then gives every host.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	replicaRoutes, ok := link.Lookup[func(*metadata.Snapshot, Info) []metadata.Route](link.ReplicaRoutes)

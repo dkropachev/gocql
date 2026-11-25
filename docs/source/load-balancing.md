@@ -65,7 +65,8 @@ connection for exactly that shard of that host, or any connection of the host
 when the route has no shard, and does not move to another shard or host on its own;
 moving on is the plan's next Route. A plan takes routes from the snapshot, with
 `routing.HostRoutes` (every host, in the order of `Hosts`) and
-`routing.ReplicaRoutes` (the replicas of a request's token), and narrows them
+`routing.ReplicaRoutes` (the replicas of a request's token, each to the shard
+that owns the token when the host's sharding is known), and narrows them
 with `WithShardID` and `ShardOf`.
 Built-in routing follows a route to a replica's shard with a route to any shard
 of the same host, except for conditional requests, requests that name a shard
