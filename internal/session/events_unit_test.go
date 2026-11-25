@@ -40,23 +40,23 @@ import (
 )
 
 var (
-	typeVarchar = cqltype.NewCustomType(4, cql.TypeText, "")
-	typeBoolean = cqltype.NewCustomType(4, cql.TypeBoolean, "")
-	typeDouble  = cqltype.NewCustomType(4, cql.TypeDouble, "")
-	typeInt     = cqltype.NewCustomType(4, cql.TypeInt, "")
+	typeVarchar = cqltype.NewCustomType(4, cql.KindText, "")
+	typeBoolean = cqltype.NewCustomType(4, cql.KindBoolean, "")
+	typeDouble  = cqltype.NewCustomType(4, cql.KindDouble, "")
+	typeInt     = cqltype.NewCustomType(4, cql.KindInt, "")
 	typeMapSS   = cqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, cql.TypeText, ""),
-		Elem:       cqltype.NewCustomType(4, cql.TypeText, ""),
+		NativeType: cqltype.NewCustomType(4, cql.KindMap, ""),
+		Key:        cqltype.NewCustomType(4, cql.KindText, ""),
+		Elem:       cqltype.NewCustomType(4, cql.KindText, ""),
 	}
 	typeMapSB = cqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, cql.TypeMap, ""),
-		Key:        cqltype.NewCustomType(4, cql.TypeText, ""),
-		Elem:       cqltype.NewCustomType(4, cql.TypeBlob, ""),
+		NativeType: cqltype.NewCustomType(4, cql.KindMap, ""),
+		Key:        cqltype.NewCustomType(4, cql.KindText, ""),
+		Elem:       cqltype.NewCustomType(4, cql.KindBlob, ""),
 	}
 	typeSetS = cqltype.CollectionType{
-		NativeType: cqltype.NewCustomType(4, cql.TypeSet, ""),
-		Elem:       cqltype.NewCustomType(4, cql.TypeText, ""),
+		NativeType: cqltype.NewCustomType(4, cql.KindSet, ""),
+		Elem:       cqltype.NewCustomType(4, cql.KindText, ""),
 	}
 )
 
@@ -86,7 +86,7 @@ var tableMeta = protocol.ResultMetadata{
 		{Name: "speculative_retry", TypeInfo: typeVarchar},
 		{Name: "flags", TypeInfo: typeSetS},
 		{Name: "extensions", TypeInfo: typeMapSB},
-		{Name: "id", TypeInfo: cqltype.NewCustomType(4, cql.TypeUUID, "")},
+		{Name: "id", TypeInfo: cqltype.NewCustomType(4, cql.KindUUID, "")},
 	},
 	ActualColCount: 16,
 	ColCount:       16,

@@ -82,14 +82,14 @@ func columnOrderFromSchema(order string) metadata.ColumnOrder {
 }
 
 func (v2MetadataStrings) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeSet {
+	if t.Kind() == cql.KindSet {
 		return cql.SetDecoder[cql.Text](cql.TextCodec).CheckType(t)
 	}
 	return cql.ListDecoder[cql.Text](cql.TextCodec).CheckType(t)
 }
 func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
 	decoder := cql.ListDecoder[cql.Text](cql.TextCodec)
-	if r.Type().Kind() == cql.TypeSet {
+	if r.Type().Kind() == cql.KindSet {
 		decoder = cql.SetDecoder[cql.Text](cql.TextCodec)
 	}
 	v, err := decoder.Decode(r)

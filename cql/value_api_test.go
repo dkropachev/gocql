@@ -16,7 +16,7 @@ func (c foundationCustomBlob) CheckType(t DataType) error {
 	if c.checks != nil {
 		*c.checks++
 	}
-	if c.reject || t.Kind() != TypeBlob {
+	if c.reject || t.Kind() != KindBlob {
 		return errors.New("unexpected type")
 	}
 	return nil

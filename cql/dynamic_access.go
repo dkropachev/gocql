@@ -18,7 +18,7 @@ func (v Value) Len() int {
 		return 0
 	}
 	switch v.typ.Kind() {
-	case TypeList, TypeSet, TypeMap, TypeTuple, TypeUDT, TypeVector:
+	case KindList, KindSet, KindMap, KindTuple, KindUDT, KindVector:
 		return v.count
 	}
 	return 0
@@ -29,7 +29,7 @@ func (v Value) Len() int {
 // from its start up to the field, so a loop over every field should use
 // Fields. A decoded field may borrow the response; see Clone.
 func (v Value) Field(name string) (Value, error) {
-	if err := v.require(TypeUDT); err != nil {
+	if err := v.require(KindUDT); err != nil {
 		return Value{}, err
 	}
 	index := -1
@@ -103,41 +103,41 @@ func (v Value) format(b *strings.Builder) {
 		return
 	}
 	switch v.typ.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		b.WriteString(strconv.FormatBool(v.bits != 0))
-	case TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeCounter:
+	case KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter:
 		b.WriteString(strconv.FormatInt(int64(v.bits), 10))
-	case TypeFloat:
+	case KindFloat:
 		b.WriteString(strconv.FormatFloat(float64(math.Float32frombits(uint32(v.bits))), 'g', -1, 32))
-	case TypeDouble:
+	case KindDouble:
 		b.WriteString(strconv.FormatFloat(math.Float64frombits(v.bits), 'g', -1, 64))
-	case TypeText, TypeASCII:
+	case KindText, KindASCII:
 		quoted(textView(v.bytes).String())
-	case TypeBlob:
+	case KindBlob:
 		b.WriteString("0x")
 		b.WriteString(hex.EncodeToString(v.bytes.ownedBytes()))
-	case TypeUUID, TypeTimeUUID:
+	case KindUUID, KindTimeUUID:
 		b.WriteString(v.uuid.String())
-	case TypeInet:
+	case KindInet:
 		quoted(v.inet.String())
-	case TypeDate:
+	case KindDate:
 		quoted(Date(int32(v.bits)).String())
-	case TypeTime:
+	case KindTime:
 		quoted(TimeOfDay(int64(v.bits)).String())
-	case TypeTimestamp:
+	case KindTimestamp:
 		quoted(Timestamp(int64(v.bits)).String())
-	case TypeDuration:
+	case KindDuration:
 		b.WriteString(v.duration.String())
-	case TypeVarint:
+	case KindVarint:
 		b.WriteString(varintView(v.bytes).String())
-	case TypeDecimal:
+	case KindDecimal:
 		b.WriteString(Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)}.String())
-	case TypeList, TypeVector, TypeSet, TypeTuple:
+	case KindList, KindVector, KindSet, KindTuple:
 		open, end := "[", "]"
 		switch v.typ.Kind() {
-		case TypeSet:
+		case KindSet:
 			open, end = "{", "}"
-		case TypeTuple:
+		case KindTuple:
 			open, end = "(", ")"
 		}
 		b.WriteString(open)
@@ -152,7 +152,7 @@ func (v Value) format(b *strings.Builder) {
 			e.format(b)
 		}
 		b.WriteString(end)
-	case TypeMap:
+	case KindMap:
 		b.WriteString("{")
 		sep := ""
 		for e, err := range v.Entries() {
@@ -167,7 +167,7 @@ func (v Value) format(b *strings.Builder) {
 			e.Value.format(b)
 		}
 		b.WriteString("}")
-	case TypeUDT:
+	case KindUDT:
 		b.WriteString("{")
 		sep := ""
 		for f, err := range v.Fields() {

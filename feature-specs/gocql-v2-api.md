@@ -32,7 +32,7 @@ names belong to the package the block names, or to `gocql` when it names none;
 
 ## Type metadata and codec contracts
 
-The signatures below are normative. Existing `Type` constants denote CQL kinds;
+The signatures below are normative. `Kind` constants denote CQL kinds;
 `DataType` is the immutable descriptor of all wire-available type structure. It
 contains nested element/key and value types, ordered tuple/UDT fields, UDT
 identity, vector dimension and frozen state. Construction and access copy
@@ -49,7 +49,7 @@ compared structure and names; equality never relies solely on a hash.
 type DataType struct { /* immutable private descriptor */ }
 type ColumnSpec struct { Keyspace, Table, Name string; Type DataType }
 type Columns struct { /* immutable private ordered column specs */ }
-func ScalarType(kind Type) (DataType, error) // shared descriptor; fails only for non-scalar kinds
+func ScalarType(kind Kind) (DataType, error) // shared descriptor; fails only for non-scalar kinds
 var ASCIIType, BigIntType, BlobType, BooleanType, CounterType, DecimalType,
     DoubleType, FloatType, IntType, TextType, TimestampType, UUIDType,
     VarintType, TimeUUIDType, InetType, DateType, TimeType,
@@ -63,7 +63,7 @@ func VectorType(element DataType, dimension uint16) (DataType, error)
 func NewColumns(columns ...ColumnSpec) Columns
 func ParseDataType(string) (DataType, error) // "map<text, frozen<list<int>>>"; no UDTs
 func MustParseDataType(string) DataType
-func (t DataType) Kind() Type
+func (t DataType) Kind() Kind
 func (t DataType) Equal(other DataType) bool
 func (t DataType) Frozen() bool
 func (t DataType) FrozenKnown() bool
@@ -429,9 +429,9 @@ not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
-VectorType has Kind TypeVector, a driver-defined kind that is not a native
-protocol type ID, plus Dimension. The zero DataType has Kind TypeCustom;
-ScalarType(TypeCustom) rejects an incomplete custom descriptor.
+VectorType has Kind KindVector, a driver-defined kind that is not a native
+protocol type ID, plus Dimension. The zero DataType has Kind KindCustom;
+ScalarType(KindCustom) rejects an incomplete custom descriptor.
 
 A counter is a bigint the server only adds to: Int64Codec, StreamInt64 and
 BigIntValue accept it, and there is no separate counter Go type.

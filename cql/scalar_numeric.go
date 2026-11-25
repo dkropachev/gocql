@@ -23,7 +23,7 @@ func decodeVarint(r ValueReader) (Varint, error) { return canonicalVarint(r.Byte
 
 // VarintCodec maps varint to Varint. A decoded Varint borrows the response;
 // use VarintCodec.Clone to detach it.
-var VarintCodec Codec[Varint] = scalarCodec[Varint]{kind: TypeVarint, encode: encodeVarint, decode: decodeVarint, clone: cloneVarint}
+var VarintCodec Codec[Varint] = scalarCodec[Varint]{kind: KindVarint, encode: encodeVarint, decode: decodeVarint, clone: cloneVarint}
 
 // VarintBigIntCodec maps varint to *big.Int. A nil *big.Int encodes NULL,
 // and NULL decodes to nil, as PointerCodec does; a present value decodes
@@ -67,7 +67,7 @@ func (varintBigIntCodec) Clone(v *big.Int) *big.Int {
 
 // DecimalCodec maps decimal to Decimal. A decoded Decimal borrows the
 // response; use DecimalCodec.Clone to detach it.
-var DecimalCodec Codec[Decimal] = scalarCodec[Decimal]{kind: TypeDecimal,
+var DecimalCodec Codec[Decimal] = scalarCodec[Decimal]{kind: KindDecimal,
 	encode: func(w *ValueWriter, v Decimal) error {
 		if err := w.Uint32(uint32(v.Scale)); err != nil {
 			return err

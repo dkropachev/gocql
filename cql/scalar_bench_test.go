@@ -41,7 +41,7 @@ func BenchmarkScalar(b *testing.B) {
 			}
 		})
 		b.Run("UUID", func(b *testing.B) {
-			r := ScalarReader(b, TypeUUID, Present, make([]byte, 16))
+			r := ScalarReader(b, KindUUID, Present, make([]byte, 16))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
@@ -55,7 +55,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("BlobDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
-		r := ScalarReader(b, TypeBlob, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindBlob, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -69,7 +69,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("BlobEncodeBorrowed", func(b *testing.B) {
 		data := make([]byte, 1<<20)
-		typ := scalarType(b, TypeBlob)
+		typ := scalarType(b, KindBlob)
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -139,7 +139,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("Int64Decode", func(b *testing.B) {
 		data := []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-		r := ScalarReader(b, TypeBigInt, Present, data[:3], data[3:])
+		r := ScalarReader(b, KindBigInt, Present, data[:3], data[3:])
 		b.ReportAllocs()
 		b.SetBytes(8)
 		b.ResetTimer()
@@ -156,7 +156,7 @@ func BenchmarkScalar(b *testing.B) {
 		for i := range data {
 			data[i] = 'a'
 		}
-		r := ScalarReader(b, TypeText, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindText, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -171,7 +171,7 @@ func BenchmarkScalar(b *testing.B) {
 	b.Run("VarintDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
 		data[0] = 0x01
-		r := ScalarReader(b, TypeVarint, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindVarint, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()

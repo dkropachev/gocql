@@ -26,7 +26,7 @@ import (
 // without that instrumentation; ownership and concurrency tests also run with it.
 func TestContainerAllocs(t *testing.T) {
 	t.Run("TupleDecode", func(t *testing.T) {
-		integer := FoundationScalar(t, TypeInt)
+		integer := FoundationScalar(t, KindInt)
 		tuple := CodecTestMust(TupleType(integer))
 		list := CodecTestMust(ListType(tuple))
 		allocated := func(count int) float64 {

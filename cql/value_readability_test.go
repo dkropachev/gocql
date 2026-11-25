@@ -59,7 +59,7 @@ func TestCounterIsInt64(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n, err := decoded.Signed(); err != nil || n != -5 || decoded.Type().Kind() != TypeCounter {
+	if n, err := decoded.Signed(); err != nil || n != -5 || decoded.Type().Kind() != KindCounter {
 		t.Fatalf("decoded %v (%s), %v", decoded, decoded.Type(), err)
 	}
 	if n, err := DecodeValue(Int64Codec, encoded); err != nil || n != -5 {
@@ -158,7 +158,7 @@ func TestValueString(t *testing.T) {
 		if got := test.value.String(); got != test.want {
 			t.Errorf("got %q, want %q", got, test.want)
 		}
-		if test.value.State() != Present || test.value.Type().Kind() < TypeList {
+		if test.value.State() != Present || test.value.Type().Kind() < KindList {
 			continue
 		}
 		// A decoded aggregate prints as the one it was encoded from.
@@ -316,10 +316,10 @@ func TestDecodeValueEmptyShape(t *testing.T) {
 
 func TestTypeVector(t *testing.T) {
 	vector := CodecTestMust(VectorType(FloatType, 3))
-	if vector.Kind() != TypeVector || TypeVector.String() != "vector" || vector.String() != "vector<float,3>" {
+	if vector.Kind() != KindVector || KindVector.String() != "vector" || vector.String() != "vector<float,3>" {
 		t.Fatal(vector.Kind(), vector)
 	}
-	if (DataType{}).Kind() != TypeCustom {
+	if (DataType{}).Kind() != KindCustom {
 		t.Fatal("zero DataType kind")
 	}
 }
@@ -337,7 +337,7 @@ func TestNonNullAndIsZero(t *testing.T) {
 // read through Elements or Fields.
 func valueAt(v Value, index int) (Value, error) {
 	i := 0
-	if k := v.Type().Kind(); k == TypeUDT || k == TypeTuple {
+	if k := v.Type().Kind(); k == KindUDT || k == KindTuple {
 		for f, err := range v.Fields() {
 			if err != nil {
 				return Value{}, err

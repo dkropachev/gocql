@@ -19,7 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func scalarType(t testing.TB, kind Type) DataType {
+func scalarType(t testing.TB, kind Kind) DataType {
 	t.Helper()
 	typ, err := ScalarType(kind)
 	if err != nil {
@@ -35,7 +35,7 @@ func scalarHex(t testing.TB, s string) []byte {
 	}
 	return b
 }
-func ScalarReader(t testing.TB, kind Type, state CellState, chunks ...[]byte) ValueReader {
+func ScalarReader(t testing.TB, kind Kind, state CellState, chunks ...[]byte) ValueReader {
 	t.Helper()
 	spans := make([]wire.Span, len(chunks))
 	for i, b := range chunks {
@@ -47,7 +47,7 @@ func ScalarReader(t testing.TB, kind Type, state CellState, chunks ...[]byte) Va
 	}
 	return valueReaderFromLease(scalarType(t, kind), state, chain, nil)
 }
-func scalarEncode[T any](t testing.TB, codec Encoder[T], kind Type, v T) ([]byte, error) {
+func scalarEncode[T any](t testing.TB, codec Encoder[T], kind Kind, v T) ([]byte, error) {
 	t.Helper()
 	builder := wire.NewBuilder(16)
 	w := newValueWriter(builder, scalarType(t, kind), true)
@@ -69,7 +69,7 @@ func scalarEncode[T any](t testing.TB, codec Encoder[T], kind Type, v T) ([]byte
 	_, err = chain.CopyTo(b)
 	return b, err
 }
-func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind Type, value T, encoded string) {
+func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind Kind, value T, encoded string) {
 	t.Helper()
 	want := scalarHex(t, encoded)
 	frame, err := scalarEncode(t, codec, kind, value)
@@ -96,7 +96,7 @@ func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind Type, value T
 	}
 }
 
-func scalarRejectLengths[T any](t *testing.T, codec Codec[T], kind Type, width int) {
+func scalarRejectLengths[T any](t *testing.T, codec Codec[T], kind Kind, width int) {
 	t.Helper()
 	for n := 0; n <= width+1; n++ {
 		if n == width {
@@ -114,7 +114,7 @@ func FuzzV2ScalarUTF8(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, data []byte, splitPoint uint32) {
 		split := int(uint64(splitPoint) % uint64(len(data)+1))
-		decoded, err := TextCodec.Decode(ScalarReader(t, TypeText, Present, data[:split], data[split:]))
+		decoded, err := TextCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:]))
 		if (err == nil) != utf8.Valid(data) {
 			t.Fatalf("UTF-8 validation disagreed at split %d: %x", split, data)
 		}
@@ -126,66 +126,66 @@ func FuzzV2ScalarUTF8(f *testing.F) {
 
 func TestScalar(t *testing.T) {
 	t.Run("ByteSliceCodec", func(t *testing.T) {
-		frame, err := scalarEncode(t, ByteSliceCodec, TypeBlob, []byte(nil))
+		frame, err := scalarEncode(t, ByteSliceCodec, KindBlob, []byte(nil))
 		if err != nil || !bytes.Equal(frame, []byte{0, 0, 0, 0}) {
 			t.Fatalf("nil blob should be present empty: %x %v", frame, err)
 		}
-		empty, err := BytesCodec.Decode(ScalarReader(t, TypeBlob, Present))
+		empty, err := BytesCodec.Decode(ScalarReader(t, KindBlob, Present))
 		if err != nil || empty.Len() != 0 {
 			t.Fatal("empty blob rejected")
 		}
 		nullable := NullableCodec(Int32Codec)
-		frame, err = scalarEncode(t, nullable, TypeInt, Nullable[int32]{})
+		frame, err = scalarEncode(t, nullable, KindInt, Nullable[int32]{})
 		if err != nil || !bytes.Equal(frame, []byte{255, 255, 255, 255}) {
 			t.Fatal("nullable did not encode null")
 		}
-		null, err := nullable.Decode(ScalarReader(t, TypeInt, Null))
+		null, err := nullable.Decode(ScalarReader(t, KindInt, Null))
 		if err != nil || null.Valid {
 			t.Fatal("nullable null decoded incorrectly")
 		}
-		valid, err := nullable.Decode(ScalarReader(t, TypeInt, Present, []byte{0, 0, 0, 0}))
+		valid, err := nullable.Decode(ScalarReader(t, KindInt, Present, []byte{0, 0, 0, 0}))
 		if err != nil || !valid.Valid {
 			t.Fatal("nullable lost present zero")
 		}
-		if _, err := nullable.Decode(ScalarReader(t, TypeInt, Unset)); err == nil {
+		if _, err := nullable.Decode(ScalarReader(t, KindInt, Unset)); err == nil {
 			t.Fatal("nullable accepted unset")
 		}
-		if _, err := scalarEncode(t, nullable, TypeBlob, Nullable[int32]{}); err == nil {
+		if _, err := scalarEncode(t, nullable, KindBlob, Nullable[int32]{}); err == nil {
 			t.Fatal("null bypassed type checking")
 		}
-		if _, err := scalarEncode(t, BindEncoder(Int32Codec), TypeBlob, BindValue[int32]{State: Unset}); err == nil {
+		if _, err := scalarEncode(t, BindEncoder(Int32Codec), KindBlob, BindValue[int32]{State: Unset}); err == nil {
 			t.Fatal("unset bypassed type checking")
 		}
-		frame, err = scalarEncode(t, BindEncoder(Int32Codec), TypeInt, BindValue[int32]{State: Unset})
+		frame, err = scalarEncode(t, BindEncoder(Int32Codec), KindInt, BindValue[int32]{State: Unset})
 		if err != nil || !bytes.Equal(frame, []byte{255, 255, 255, 254}) {
 			t.Fatal("unset marker incorrect")
 		}
 		builder := wire.NewBuilder(16)
-		writer := newValueWriter(builder, scalarType(t, TypeInt), false)
+		writer := newValueWriter(builder, scalarType(t, KindInt), false)
 		if err := BindEncoder(Int32Codec).Encode(writer, BindValue[int32]{State: Unset}); err == nil {
 			t.Fatal("nested unset accepted")
 		}
 		abortValueWriter(writer)
 		wrapped := EmptyCodec(Int32Codec)
-		frame, err = scalarEncode(t, wrapped, TypeInt, MaybeEmpty[int32]{Empty: true})
+		frame, err = scalarEncode(t, wrapped, KindInt, MaybeEmpty[int32]{Empty: true})
 		if err != nil || len(frame) != 4 {
 			t.Fatal("empty encoding incorrect")
 		}
 		// A decoder sees an empty value as a response holds it.
-		if v, err := wrapped.Decode(ScalarReader(t, TypeInt, Present)); err != nil || !v.Empty {
+		if v, err := wrapped.Decode(ScalarReader(t, KindInt, Present)); err != nil || !v.Empty {
 			t.Fatal("empty decoding incorrect")
 		}
-		for _, kind := range []Type{TypeText, TypeASCII, TypeBlob, TypeCounter, TypeDuration} {
+		for _, kind := range []Kind{KindText, KindASCII, KindBlob, KindCounter, KindDuration} {
 			if emptySupported(scalarType(t, kind)) {
 				t.Fatalf("unexpected empty support for %s", kind)
 			}
 		}
-		if err := EmptyCodec(TextCodec).CheckType(scalarType(t, TypeText)); err == nil {
+		if err := EmptyCodec(TextCodec).CheckType(scalarType(t, KindText)); err == nil {
 			t.Fatal("EmptyCodec accepted text")
 		}
 		type customID int32
 		named := ConvertCodec(Int32Codec, func(v customID) int32 { return int32(v) }, func(v int32) customID { return customID(v) })
-		scalarGolden(t, named, TypeInt, customID(-7), "fffffff9")
+		scalarGolden(t, named, KindInt, customID(-7), "fffffff9")
 	})
 	t.Run("CalendarBoundaries", func(t *testing.T) {
 		for _, d := range []Date{math.MinInt32, -1, 0, 1, math.MaxInt32} {
@@ -319,104 +319,104 @@ func TestScalar(t *testing.T) {
 	t.Run("FloatBits", func(t *testing.T) {
 		for _, bits := range []uint32{0, 1 << 31, 0x7f800000, 0xff800000, 0x7fc00042} {
 			value := math.Float32frombits(bits)
-			frame, err := scalarEncode(t, Float32Codec, TypeFloat, value)
+			frame, err := scalarEncode(t, Float32Codec, KindFloat, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := Float32Codec.Decode(ScalarReader(t, TypeFloat, Present, frame[4:5], frame[5:]))
+			actual, err := Float32Codec.Decode(ScalarReader(t, KindFloat, Present, frame[4:5], frame[5:]))
 			if err != nil || math.Float32bits(actual) != bits {
 				t.Fatalf("float bits %x changed", bits)
 			}
 		}
 		for _, bits := range []uint64{0, 1 << 63, 0x7ff0000000000000, 0xfff0000000000000, 0x7ff8000000000042} {
 			value := math.Float64frombits(bits)
-			frame, err := scalarEncode(t, Float64Codec, TypeDouble, value)
+			frame, err := scalarEncode(t, Float64Codec, KindDouble, value)
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := Float64Codec.Decode(ScalarReader(t, TypeDouble, Present, frame[4:7], frame[7:]))
+			actual, err := Float64Codec.Decode(ScalarReader(t, KindDouble, Present, frame[4:7], frame[7:]))
 			if err != nil || math.Float64bits(actual) != bits {
 				t.Fatalf("float bits %x changed", bits)
 			}
 		}
 	})
 	t.Run("Golden", func(t *testing.T) {
-		t.Run("boolean", func(t *testing.T) { scalarGolden(t, BoolCodec, TypeBoolean, true, "01") })
-		t.Run("tinyint", func(t *testing.T) { scalarGolden(t, Int8Codec, TypeTinyInt, int8(-128), "80") })
-		t.Run("smallint", func(t *testing.T) { scalarGolden(t, Int16Codec, TypeSmallInt, int16(-32768), "8000") })
-		t.Run("int", func(t *testing.T) { scalarGolden(t, Int32Codec, TypeInt, int32(-2147483648), "80000000") })
+		t.Run("boolean", func(t *testing.T) { scalarGolden(t, BoolCodec, KindBoolean, true, "01") })
+		t.Run("tinyint", func(t *testing.T) { scalarGolden(t, Int8Codec, KindTinyInt, int8(-128), "80") })
+		t.Run("smallint", func(t *testing.T) { scalarGolden(t, Int16Codec, KindSmallInt, int16(-32768), "8000") })
+		t.Run("int", func(t *testing.T) { scalarGolden(t, Int32Codec, KindInt, int32(-2147483648), "80000000") })
 		t.Run("bigint", func(t *testing.T) {
-			scalarGolden(t, Int64Codec, TypeBigInt, int64(math.MinInt64), "8000000000000000")
+			scalarGolden(t, Int64Codec, KindBigInt, int64(math.MinInt64), "8000000000000000")
 		})
 		t.Run("counter", func(t *testing.T) {
-			scalarGolden(t, Int64Codec, TypeCounter, int64(-42), "ffffffffffffffd6")
+			scalarGolden(t, Int64Codec, KindCounter, int64(-42), "ffffffffffffffd6")
 		})
-		t.Run("float", func(t *testing.T) { scalarGolden(t, Float32Codec, TypeFloat, float32(1.5), "3fc00000") })
-		t.Run("double", func(t *testing.T) { scalarGolden(t, Float64Codec, TypeDouble, -2.5, "c004000000000000") })
-		t.Run("date_epoch", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(0), "80000000") })
-		t.Run("date_min", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(math.MinInt32), "00000000") })
-		t.Run("date_max", func(t *testing.T) { scalarGolden(t, DateCodec, TypeDate, Date(math.MaxInt32), "ffffffff") })
-		t.Run("time", func(t *testing.T) { scalarGolden(t, TimeOfDayCodec, TypeTime, TimeOfDay(1), "0000000000000001") })
+		t.Run("float", func(t *testing.T) { scalarGolden(t, Float32Codec, KindFloat, float32(1.5), "3fc00000") })
+		t.Run("double", func(t *testing.T) { scalarGolden(t, Float64Codec, KindDouble, -2.5, "c004000000000000") })
+		t.Run("date_epoch", func(t *testing.T) { scalarGolden(t, DateCodec, KindDate, Date(0), "80000000") })
+		t.Run("date_min", func(t *testing.T) { scalarGolden(t, DateCodec, KindDate, Date(math.MinInt32), "00000000") })
+		t.Run("date_max", func(t *testing.T) { scalarGolden(t, DateCodec, KindDate, Date(math.MaxInt32), "ffffffff") })
+		t.Run("time", func(t *testing.T) { scalarGolden(t, TimeOfDayCodec, KindTime, TimeOfDay(1), "0000000000000001") })
 		t.Run("timestamp", func(t *testing.T) {
-			scalarGolden(t, TimestampCodec, TypeTimestamp, Timestamp(-1), "ffffffffffffffff")
+			scalarGolden(t, TimestampCodec, KindTimestamp, Timestamp(-1), "ffffffffffffffff")
 		})
 		t.Run("uuid", func(t *testing.T) {
-			scalarGolden(t, UUIDCodec, TypeUUID, UUID{0, 1, 2, 3, 4, 5, 0x46, 7, 8, 9, 10, 11, 12, 13, 14, 15}, "000102030405460708090a0b0c0d0e0f")
+			scalarGolden(t, UUIDCodec, KindUUID, UUID{0, 1, 2, 3, 4, 5, 0x46, 7, 8, 9, 10, 11, 12, 13, 14, 15}, "000102030405460708090a0b0c0d0e0f")
 		})
 		t.Run("timeuuid", func(t *testing.T) {
-			scalarGolden(t, TimeUUIDCodec, TypeTimeUUID, TimeUUID{0, 1, 2, 3, 4, 5, 0x16, 7, 8, 9, 10, 11, 12, 13, 14, 15}, "000102030405160708090a0b0c0d0e0f")
+			scalarGolden(t, TimeUUIDCodec, KindTimeUUID, TimeUUID{0, 1, 2, 3, 4, 5, 0x16, 7, 8, 9, 10, 11, 12, 13, 14, 15}, "000102030405160708090a0b0c0d0e0f")
 		})
 		t.Run("ipv4", func(t *testing.T) {
-			scalarGolden(t, InetCodec, TypeInet, netip.MustParseAddr("192.0.2.1"), "c0000201")
+			scalarGolden(t, InetCodec, KindInet, netip.MustParseAddr("192.0.2.1"), "c0000201")
 		})
 		t.Run("ipv6", func(t *testing.T) {
-			scalarGolden(t, InetCodec, TypeInet, netip.MustParseAddr("2001:db8::1"), "20010db8000000000000000000000001")
+			scalarGolden(t, InetCodec, KindInet, netip.MustParseAddr("2001:db8::1"), "20010db8000000000000000000000001")
 		})
 		t.Run("ipv4_mapped", func(t *testing.T) {
-			scalarGolden(t, InetCodec, TypeInet, netip.MustParseAddr("::ffff:192.0.2.1"), "00000000000000000000ffffc0000201")
+			scalarGolden(t, InetCodec, KindInet, netip.MustParseAddr("::ffff:192.0.2.1"), "00000000000000000000ffffc0000201")
 		})
 		t.Run("duration", func(t *testing.T) {
-			scalarGolden(t, DurationCodec, TypeDuration, Duration{Months: 1, Days: 2, Nanoseconds: 3}, "020406")
+			scalarGolden(t, DurationCodec, KindDuration, Duration{Months: 1, Days: 2, Nanoseconds: 3}, "020406")
 		})
 		t.Run("negative_duration", func(t *testing.T) {
-			scalarGolden(t, DurationCodec, TypeDuration, Duration{Months: -1, Days: -2, Nanoseconds: -3}, "010305")
+			scalarGolden(t, DurationCodec, KindDuration, Duration{Months: -1, Days: -2, Nanoseconds: -3}, "010305")
 		})
 		t.Run("duration_min", func(t *testing.T) {
-			scalarGolden(t, DurationCodec, TypeDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64}, "f0fffffffff0ffffffffffFFFFFFFFFFFFFFFF")
+			scalarGolden(t, DurationCodec, KindDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64}, "f0fffffffff0ffffffffffFFFFFFFFFFFFFFFF")
 		})
 	})
 	t.Run("Malformed", func(t *testing.T) {
-		scalarRejectLengths(t, BoolCodec, TypeBoolean, 1)
-		scalarRejectLengths(t, Int8Codec, TypeTinyInt, 1)
-		scalarRejectLengths(t, Int16Codec, TypeSmallInt, 2)
-		scalarRejectLengths(t, Int32Codec, TypeInt, 4)
-		scalarRejectLengths(t, Int64Codec, TypeBigInt, 8)
-		scalarRejectLengths(t, Float32Codec, TypeFloat, 4)
-		scalarRejectLengths(t, Float64Codec, TypeDouble, 8)
-		scalarRejectLengths(t, Int64Codec, TypeCounter, 8)
-		scalarRejectLengths(t, DateCodec, TypeDate, 4)
-		scalarRejectLengths(t, TimeOfDayCodec, TypeTime, 8)
-		scalarRejectLengths(t, TimestampCodec, TypeTimestamp, 8)
-		scalarRejectLengths(t, UUIDCodec, TypeUUID, 16)
-		scalarRejectLengths(t, TimeUUIDCodec, TypeTimeUUID, 16)
-		if _, err := BoolCodec.Decode(ScalarReader(t, TypeBoolean, Present, []byte{2})); err == nil {
+		scalarRejectLengths(t, BoolCodec, KindBoolean, 1)
+		scalarRejectLengths(t, Int8Codec, KindTinyInt, 1)
+		scalarRejectLengths(t, Int16Codec, KindSmallInt, 2)
+		scalarRejectLengths(t, Int32Codec, KindInt, 4)
+		scalarRejectLengths(t, Int64Codec, KindBigInt, 8)
+		scalarRejectLengths(t, Float32Codec, KindFloat, 4)
+		scalarRejectLengths(t, Float64Codec, KindDouble, 8)
+		scalarRejectLengths(t, Int64Codec, KindCounter, 8)
+		scalarRejectLengths(t, DateCodec, KindDate, 4)
+		scalarRejectLengths(t, TimeOfDayCodec, KindTime, 8)
+		scalarRejectLengths(t, TimestampCodec, KindTimestamp, 8)
+		scalarRejectLengths(t, UUIDCodec, KindUUID, 16)
+		scalarRejectLengths(t, TimeUUIDCodec, KindTimeUUID, 16)
+		if _, err := BoolCodec.Decode(ScalarReader(t, KindBoolean, Present, []byte{2})); err == nil {
 			t.Fatal("accepted boolean 2")
 		}
 		for _, v := range []TimeOfDay{-1, TimeOfDay(nanosecondsPerDay)} {
-			if _, err := scalarEncode(t, TimeOfDayCodec, TypeTime, v); err == nil {
+			if _, err := scalarEncode(t, TimeOfDayCodec, KindTime, v); err == nil {
 				t.Fatal("accepted invalid time")
 			}
 			var data [8]byte
 			binary.BigEndian.PutUint64(data[:], uint64(v))
-			if _, err := TimeOfDayCodec.Decode(ScalarReader(t, TypeTime, Present, data[:])); err == nil {
+			if _, err := TimeOfDayCodec.Decode(ScalarReader(t, KindTime, Present, data[:])); err == nil {
 				t.Fatal("decoded invalid time")
 			}
 		}
-		if _, err := scalarEncode(t, TimeUUIDCodec, TypeTimeUUID, TimeUUID{}); err == nil {
+		if _, err := scalarEncode(t, TimeUUIDCodec, KindTimeUUID, TimeUUID{}); err == nil {
 			t.Fatal("encoded invalid timeuuid")
 		}
 		for _, v := range []netip.Addr{{}, netip.MustParseAddr("fe80::1%eth0")} {
-			if _, err := scalarEncode(t, InetCodec, TypeInet, v); err == nil {
+			if _, err := scalarEncode(t, InetCodec, KindInet, v); err == nil {
 				t.Fatal("encoded invalid inet")
 			}
 		}
@@ -424,41 +424,41 @@ func TestScalar(t *testing.T) {
 			if n == 4 || n == 16 {
 				continue
 			}
-			if _, err := InetCodec.Decode(ScalarReader(t, TypeInet, Present, make([]byte, n))); err == nil {
+			if _, err := InetCodec.Decode(ScalarReader(t, KindInet, Present, make([]byte, n))); err == nil {
 				t.Fatalf("inet accepted %d bytes", n)
 			}
 		}
 		for _, data := range [][]byte{nil, {0}, {0, 0}, {0, 0, 0, 0}, {1, 2, 0}, {0xff}, {0xf1, 0, 0, 0, 0, 0, 0}} {
-			if _, err := DurationCodec.Decode(ScalarReader(t, TypeDuration, Present, data)); err == nil {
+			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, data)); err == nil {
 				t.Fatalf("accepted malformed duration %x", data)
 			}
 		}
 		durationMax := scalarHex(t, "f0fffffffef0fffffffefffffffffffffffffe")
 		for n := 0; n < len(durationMax); n++ {
-			if _, err := DurationCodec.Decode(ScalarReader(t, TypeDuration, Present, durationMax[:n])); err == nil {
+			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, durationMax[:n])); err == nil {
 				t.Fatalf("duration accepted truncated prefix of %d bytes", n)
 			}
 		}
-		if value, err := DurationCodec.Decode(ScalarReader(t, TypeDuration, Present, durationMax)); err != nil || value != (Duration{Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64}) {
+		if value, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, durationMax)); err != nil || value != (Duration{Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64}) {
 			t.Fatalf("duration maximum failed: %v", err)
 		}
 		for _, v := range []Duration{{Months: 1, Days: -1}, {Days: 1, Nanoseconds: -1}, {Months: -1, Nanoseconds: 1}} {
-			if _, err := scalarEncode(t, DurationCodec, TypeDuration, v); err == nil {
+			if _, err := scalarEncode(t, DurationCodec, KindDuration, v); err == nil {
 				t.Fatal("accepted mixed duration signs")
 			}
 		}
 		for _, data := range [][]byte{nil, {0}, {0, 0, 0, 0}} {
-			if _, err := DecimalCodec.Decode(ScalarReader(t, TypeDecimal, Present, data)); err == nil {
+			if _, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, Present, data)); err == nil {
 				t.Fatal("accepted malformed decimal")
 			}
 		}
 		if _, err := VarintFromBytes(nil); err == nil {
 			t.Fatal("accepted empty varint input")
 		}
-		if _, err := VarintCodec.Decode(ScalarReader(t, TypeVarint, Present)); err == nil {
+		if _, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present)); err == nil {
 			t.Fatal("decoded empty varint")
 		}
-		if _, err := BoolCodec.Decode(valueReaderFromLease(scalarType(t, TypeBoolean), Null, bytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
+		if _, err := BoolCodec.Decode(valueReaderFromLease(scalarType(t, KindBoolean), Null, bytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
 			t.Fatal("accepted null with bytes")
 		}
 	})
@@ -470,7 +470,7 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			lease := wire.NewLease(chain, nil)
-			value, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, TypeText), Present, chain, lease))
+			value, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -482,12 +482,12 @@ func TestScalar(t *testing.T) {
 			if clone.String() != "borrowed" {
 				t.Fatal("clone did not detach")
 			}
-			if _, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, TypeText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
+			if _, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
 				t.Fatal("decode accepted released lease")
 			}
 			builder := wire.NewBuilder(16)
 			large := []byte(strings.Repeat("a", 1<<20))
-			w := newValueWriter(builder, scalarType(t, TypeBlob), true)
+			w := newValueWriter(builder, scalarType(t, KindBlob), true)
 			if err := ByteSliceCodec.Encode(w, large); err != nil {
 				t.Fatal(err)
 			}
@@ -512,7 +512,7 @@ func TestScalar(t *testing.T) {
 			}
 		})
 		t.Run("PublicValue", func(t *testing.T) {
-			typ := scalarType(t, TypeBlob)
+			typ := scalarType(t, KindBlob)
 			source := []byte{1, 2, 3}
 			borrowed, err := encodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
@@ -537,7 +537,7 @@ func TestScalar(t *testing.T) {
 			if b, _ := ownedBytes.At(0); b != 1 {
 				t.Fatal("owned encoding retained input alias")
 			}
-			empty, err := encodeValueBorrowed(scalarType(t, TypeInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
+			empty, err := encodeValueBorrowed(scalarType(t, KindInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil || empty.State() != EmptyCell || empty.Bytes().Len() != 0 {
 				t.Fatalf("explicit Empty state lost: %v", err)
 			}
@@ -551,7 +551,7 @@ func TestScalar(t *testing.T) {
 			if _, err := newEncodedValue(typ, EmptyCell, Bytes{}); err == nil {
 				t.Fatal("blob admitted a distinct Empty state")
 			}
-			if _, err := newEncodedValue(scalarType(t, TypeInt), Null, BorrowBytes([]byte{1})); err == nil {
+			if _, err := newEncodedValue(scalarType(t, KindInt), Null, BorrowBytes([]byte{1})); err == nil {
 				t.Fatal("null admitted payload bytes")
 			}
 		})
@@ -613,50 +613,50 @@ func TestScalar(t *testing.T) {
 	t.Run("TextCodec", func(t *testing.T) {
 		for _, s := range []string{"", "plain ASCII", "é€😀\x00", "\u007f\u0080\u07ff\u0800\ud7ff\ue000\uffff\U00010000\U0010ffff"} {
 			for split := 0; split <= len(s); split++ {
-				value, err := TextCodec.Decode(ScalarReader(t, Type(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
+				value, err := TextCodec.Decode(ScalarReader(t, Kind(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
 				if err != nil || value.String() != s {
 					t.Fatalf("valid UTF-8 split %d: %v", split, err)
 				}
 			}
-			frame, err := scalarEncode(t, StringCodec, TypeText, s)
+			frame, err := scalarEncode(t, StringCodec, KindText, s)
 			if err != nil || !bytes.Equal(frame[4:], []byte(s)) {
 				t.Fatalf("text encode: %v", err)
 			}
 		}
 		for _, data := range [][]byte{{0x80}, {0xc0, 0x80}, {0xc1, 0xbf}, {0xe0, 0x9f, 0xbf}, {0xed, 0xa0, 0x80}, {0xf0, 0x8f, 0xbf, 0xbf}, {0xf4, 0x90, 0x80, 0x80}, {0xf5, 0x80, 0x80, 0x80}, {0xe2, 0x82}, {0xc2, 0x41}} {
 			for split := 0; split <= len(data); split++ {
-				if _, err := TextCodec.Decode(ScalarReader(t, TypeText, Present, data[:split], data[split:])); err == nil {
+				if _, err := TextCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:])); err == nil {
 					t.Fatalf("accepted invalid UTF-8 %x split %d", data, split)
 				}
 			}
-			if _, err := scalarEncode(t, StringCodec, TypeText, string(data)); err == nil {
+			if _, err := scalarEncode(t, StringCodec, KindText, string(data)); err == nil {
 				t.Fatal("encoded invalid UTF-8")
 			}
 		}
-		if _, err := scalarEncode(t, StringCodec, TypeASCII, "café"); err == nil {
+		if _, err := scalarEncode(t, StringCodec, KindASCII, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
-		if _, err := TextCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
+		if _, err := TextCodec.Decode(ScalarReader(t, KindASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
 			t.Fatal("decoded non-ASCII")
 		}
-		if _, err := scalarEncode(t, TextCodec, TypeASCII, CodecTestMust(BorrowText("é"))); err == nil {
+		if _, err := scalarEncode(t, TextCodec, KindASCII, CodecTestMust(BorrowText("é"))); err == nil {
 			t.Fatal("borrowed Text bypassed ASCII validation")
 		}
 		// The text codecs take ascii too, validating ASCII both ways.
-		if err := StringCodec.CheckType(scalarType(t, TypeASCII)); err != nil {
+		if err := StringCodec.CheckType(scalarType(t, KindASCII)); err != nil {
 			t.Fatal("StringCodec rejected ASCII metadata:", err)
 		}
-		if got, err := StringCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte("pl"), []byte("ain"))); err != nil || got != "plain" {
+		if got, err := StringCodec.Decode(ScalarReader(t, KindASCII, Present, []byte("pl"), []byte("ain"))); err != nil || got != "plain" {
 			t.Fatalf("ascii decode = %q, %v", got, err)
 		}
-		if _, err := StringCodec.Decode(ScalarReader(t, TypeASCII, Present, []byte("caf\xc3\xa9"))); err == nil {
+		if _, err := StringCodec.Decode(ScalarReader(t, KindASCII, Present, []byte("caf\xc3\xa9"))); err == nil {
 			t.Fatal("StringCodec decoded non-ASCII from ascii")
 		}
-		if _, err := scalarEncode(t, StringCodec, TypeText, "café"); err != nil {
+		if _, err := scalarEncode(t, StringCodec, KindText, "café"); err != nil {
 			t.Fatal("StringCodec rejected UTF-8 for text:", err)
 		}
 		source := []byte("hello")
-		value, err := TextCodec.Decode(ScalarReader(t, TypeText, Present, source[:2], source[2:]))
+		value, err := TextCodec.Decode(ScalarReader(t, KindText, Present, source[:2], source[2:]))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -674,7 +674,7 @@ func TestScalar(t *testing.T) {
 				t.Fatal("bad fixture")
 			}
 			v := VarintFromBigInt(value)
-			frame, err := scalarEncode(t, VarintCodec, TypeVarint, v)
+			frame, err := scalarEncode(t, VarintCodec, KindVarint, v)
 			want := scalarHex(t, test.wire)
 			if err != nil || !bytes.Equal(frame[4:], want) {
 				t.Fatalf("varint %s: %x %v", test.decimal, frame, err)
@@ -683,7 +683,7 @@ func TestScalar(t *testing.T) {
 				t.Fatalf("BigInt %s roundtrip failed", test.decimal)
 			}
 			for split := 0; split <= len(want); split++ {
-				decoded, err := VarintCodec.Decode(ScalarReader(t, TypeVarint, Present, want[:split], want[split:]))
+				decoded, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present, want[:split], want[split:]))
 				if err != nil || decoded.BigInt().Cmp(value) != 0 {
 					t.Fatalf("varint %s split %d: %v", test.decimal, split, err)
 				}
@@ -691,21 +691,21 @@ func TestScalar(t *testing.T) {
 		}
 		for _, test := range []struct{ in, out string }{{"0000007f", "7f"}, {"ffffff80", "80"}, {"00000080", "0080"}, {"ffffff7f", "ff7f"}} {
 			data := scalarHex(t, test.in)
-			v, err := VarintCodec.Decode(ScalarReader(t, TypeVarint, Present, data[:1], data[1:2], data[2:]))
+			v, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present, data[:1], data[1:2], data[2:]))
 			if err != nil {
 				t.Fatal(err)
 			}
-			frame, err := scalarEncode(t, VarintCodec, TypeVarint, v)
+			frame, err := scalarEncode(t, VarintCodec, KindVarint, v)
 			if err != nil || hex.EncodeToString(frame[4:]) != test.out {
 				t.Fatalf("canonicalization: %x %v", frame, err)
 			}
 		}
 		decimal := Decimal{Scale: -2, Unscaled: VarintFromBigInt(big.NewInt(-129))}
-		frame, err := scalarEncode(t, DecimalCodec, TypeDecimal, decimal)
+		frame, err := scalarEncode(t, DecimalCodec, KindDecimal, decimal)
 		if err != nil || hex.EncodeToString(frame[4:]) != "fffffffeff7f" {
 			t.Fatal("decimal signed scale incorrect")
 		}
-		decoded, err := DecimalCodec.Decode(ScalarReader(t, TypeDecimal, Present, frame[4:6], frame[6:9], frame[9:]))
+		decoded, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, Present, frame[4:6], frame[6:9], frame[9:]))
 		if err != nil || decoded.Scale != -2 || decoded.Unscaled.BigInt().Int64() != -129 {
 			t.Fatal("decimal decode failed")
 		}
@@ -732,17 +732,17 @@ func TestScalar(t *testing.T) {
 func TestUUIDCodecTimeUUID(t *testing.T) {
 	v1 := UUID(NewTimeUUID())
 	v4 := RandomUUID()
-	frame, err := scalarEncode(t, UUIDCodec, TypeTimeUUID, v1)
+	frame, err := scalarEncode(t, UUIDCodec, KindTimeUUID, v1)
 	if err != nil {
 		t.Fatal("encode version 1 into timeuuid:", err)
 	}
-	if _, err := scalarEncode(t, UUIDCodec, TypeTimeUUID, v4); err == nil {
+	if _, err := scalarEncode(t, UUIDCodec, KindTimeUUID, v4); err == nil {
 		t.Fatal("encoded a version 4 UUID into timeuuid")
 	}
-	if _, err := scalarEncode(t, UUIDCodec, TypeUUID, v4); err != nil {
+	if _, err := scalarEncode(t, UUIDCodec, KindUUID, v4); err != nil {
 		t.Fatal("encode version 4 into uuid:", err)
 	}
-	got, err := UUIDCodec.Decode(ScalarReader(t, TypeTimeUUID, Present, frame[4:]))
+	got, err := UUIDCodec.Decode(ScalarReader(t, KindTimeUUID, Present, frame[4:]))
 	if err != nil || got != v1 {
 		t.Fatalf("decode timeuuid = %v, %v; want %v", got, err, v1)
 	}

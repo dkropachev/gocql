@@ -32,7 +32,7 @@ import (
 )
 
 type TypeInfo interface {
-	Type() cql.Type
+	Type() cql.Kind
 	Version() byte
 	Custom() string
 }
@@ -40,30 +40,30 @@ type TypeInfo interface {
 type NativeType struct {
 	//only used for TypeCustom
 	custom string
-	typ    cql.Type
+	typ    cql.Kind
 	proto  byte
 }
 
 // legacyText is the protocol's text ID. Text and varchar are one CQL type,
-// which the driver numbers cql.TypeText (varchar's ID).
-const legacyText cql.Type = 0x000A
+// which the driver numbers cql.KindText (varchar's ID).
+const legacyText cql.Kind = 0x000A
 
-func wireKind(typ cql.Type) cql.Type {
+func wireKind(typ cql.Kind) cql.Kind {
 	if typ == legacyText {
-		return cql.TypeText
+		return cql.KindText
 	}
 	return typ
 }
 
-func NewNativeType(proto byte, typ cql.Type) NativeType {
+func NewNativeType(proto byte, typ cql.Kind) NativeType {
 	return NativeType{proto: proto, typ: wireKind(typ), custom: ""}
 }
 
-func NewCustomType(proto byte, typ cql.Type, custom string) NativeType {
+func NewCustomType(proto byte, typ cql.Kind, custom string) NativeType {
 	return NativeType{proto: proto, typ: wireKind(typ), custom: custom}
 }
 
-func (t NativeType) Type() cql.Type {
+func (t NativeType) Type() cql.Kind {
 	return t.typ
 }
 
@@ -77,7 +77,7 @@ func (t NativeType) Custom() string {
 
 func (t NativeType) String() string {
 	switch t.typ {
-	case cql.TypeCustom:
+	case cql.KindCustom:
 		return fmt.Sprintf("%s(%s)", t.typ, t.custom)
 	default:
 		return t.typ.String()
@@ -109,11 +109,11 @@ type VectorType struct {
 // Zero returns the zero value for the vector CQL type.
 func (t CollectionType) String() string {
 	switch t.typ {
-	case cql.TypeMap:
+	case cql.KindMap:
 		return fmt.Sprintf("%s(%s, %s)", t.typ, t.Key, t.Elem)
-	case cql.TypeList, cql.TypeSet:
+	case cql.KindList, cql.KindSet:
 		return fmt.Sprintf("%s(%s)", t.typ, t.Elem)
-	case cql.TypeCustom:
+	case cql.KindCustom:
 		return fmt.Sprintf("%s(%s)", t.typ, t.custom)
 	default:
 		return t.typ.String()
@@ -143,7 +143,7 @@ type UDTField struct {
 
 func NewUDTType(proto byte, name, keySpace string, elems ...UDTField) UDTTypeInfo {
 	return UDTTypeInfo{
-		NativeType: NativeType{proto: proto, typ: cql.TypeUDT, custom: ""},
+		NativeType: NativeType{proto: proto, typ: cql.KindUDT, custom: ""},
 		Name:       name,
 		KeySpace:   keySpace,
 		Elements:   elems,

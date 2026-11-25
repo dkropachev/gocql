@@ -85,7 +85,7 @@ func TestErrorsDoNotLeakBoundValues(t *testing.T) {
 			// The rows say the blob column is an int, which the
 			// statement's blob decoder rejects.
 			body := runtimeRowsBody(nil, "abc")
-			body[len(body)-12] = byte(cql.TypeInt) // low byte of the column type
+			body[len(body)-12] = byte(cql.KindInt) // low byte of the column type
 			return typedTestResponse(t, 4, stream, body)
 		})},
 	} {

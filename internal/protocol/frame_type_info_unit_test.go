@@ -8,18 +8,18 @@ import (
 // typeOption writes a CQL [option] type description the way a server does.
 type typeOption func(f *framer)
 
-func optNative(t cql.Type) typeOption {
+func optNative(t cql.Kind) typeOption {
 	return func(f *framer) { f.WriteShort(uint16(t)) }
 }
 
 func optCustom(class string) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(cql.TypeCustom))
+		f.WriteShort(uint16(cql.KindCustom))
 		f.WriteString(class)
 	}
 }
 
-func optCollection(t cql.Type, elems ...typeOption) typeOption {
+func optCollection(t cql.Kind, elems ...typeOption) typeOption {
 	return func(f *framer) {
 		f.WriteShort(uint16(t))
 		for _, e := range elems {
@@ -30,7 +30,7 @@ func optCollection(t cql.Type, elems ...typeOption) typeOption {
 
 func optTuple(elems ...typeOption) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(cql.TypeTuple))
+		f.WriteShort(uint16(cql.KindTuple))
 		f.WriteShort(uint16(len(elems)))
 		for _, e := range elems {
 			e(f)
@@ -45,7 +45,7 @@ type optField struct {
 
 func optUDT(keyspace, name string, fields ...optField) typeOption {
 	return func(f *framer) {
-		f.WriteShort(uint16(cql.TypeUDT))
+		f.WriteShort(uint16(cql.KindUDT))
 		f.WriteString(keyspace)
 		f.WriteString(name)
 		f.WriteShort(uint16(len(fields)))

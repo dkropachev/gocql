@@ -25,13 +25,13 @@ type timeRow struct {
 
 func timeColumns(t *testing.T) Columns {
 	t.Helper()
-	ts := rowTestType(t, TypeTimestamp)
+	ts := rowTestType(t, KindTimestamp)
 	return NewColumns(
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
 		ColumnSpec{Name: "at", Type: ts},
 		ColumnSpec{Name: "maybe", Type: ts},
 		ColumnSpec{Name: "history", Type: CodecTestMust(ListType(ts))},
-		ColumnSpec{Name: "versions", Type: CodecTestMust(MapType(rowTestType(t, TypeText), ts))},
+		ColumnSpec{Name: "versions", Type: CodecTestMust(MapType(rowTestType(t, KindText), ts))},
 	)
 }
 
@@ -49,7 +49,7 @@ func TestTimestampTimeCodec(t *testing.T) {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 	// The bytes are those of the Timestamp the time converts to.
-	one := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, TypeTimestamp)})
+	one := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, KindTimestamp)})
 	ts := CodecTestMust(TimestampFromTime(at))
 	if a, b := chainBytes(t, encodeTestParams(t, one, OneParam(TimestampTimeCodec), at)), chainBytes(t, encodeTestParams(t, one, OneParam(TimestampCodec), ts)); !bytes.Equal(a, b) {
 		t.Fatalf("encoding %x, want %x", a, b)
@@ -59,7 +59,7 @@ func TestTimestampTimeCodec(t *testing.T) {
 	if err := plan.Encode(newParamWriter(wire.NewBuilder(8), one, false), time.Date(400_000_000, 1, 1, 0, 0, 0, 0, time.UTC)); err == nil {
 		t.Fatal("encoded a time outside the millisecond range")
 	}
-	if err := TimestampTimeCodec.CheckType(rowTestType(t, TypeDate)); err == nil {
+	if err := TimestampTimeCodec.CheckType(rowTestType(t, KindDate)); err == nil {
 		t.Fatal("TimestampTimeCodec accepted a date column")
 	}
 }
@@ -75,9 +75,9 @@ type bindRow struct {
 // such a field.
 func TestBindValueFields(t *testing.T) {
 	columns := NewColumns(
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
-		ColumnSpec{Name: "point", Type: rowTestType(t, TypeBigInt)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
+		ColumnSpec{Name: "point", Type: rowTestType(t, KindBigInt)},
 	)
 	value := bindRow{ID: 1, Name: BindValue[string]{State: Unset}, Point: BindValue[structPoint]{State: Null}}
 	for name, opt := range map[string]StructOption{"WithCodec": WithCodec(Codec[structPoint](pointCodec{})), "WithEncoder": WithEncoder(Encoder[structPoint](pointCodec{}))} {
@@ -157,7 +157,7 @@ func TestStructOptionConcurrentEncode(t *testing.T) {
 		ID     int64
 		Origin structPoint
 	}
-	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)}, ColumnSpec{Name: "origin", Type: rowTestType(t, TypeBigInt)})
+	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)}, ColumnSpec{Name: "origin", Type: rowTestType(t, KindBigInt)})
 	params := MustParamsOf[shape](WithCodec(Codec[structPoint](pointCodec{})))
 	rows := MustRowOf[shape](WithCodec(Codec[structPoint](pointCodec{})))
 	var wg sync.WaitGroup
@@ -183,9 +183,9 @@ func TestIgnoreExtraColumns(t *testing.T) {
 		Name string
 	}
 	columns := NewColumns(
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "added", Type: rowTestType(t, TypeBlob)},
-		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "added", Type: rowTestType(t, KindBlob)},
+		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
 	)
 	if _, err := MustRowOf[row]().Compile(columns); err == nil {
 		t.Fatal("RowOf accepted a column without a field")
@@ -217,12 +217,12 @@ func TestIgnoreExtraColumns(t *testing.T) {
 // TestStreamRowIntoStrict maps every column of a StreamRowInto, as RowInto
 // does, unless StreamIgnoreColumn skips it, and accepts a nil reset.
 func TestStreamRowIntoStrict(t *testing.T) {
-	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "extra", Type: rowTestType(t, TypeBlob)})
+	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "extra", Type: rowTestType(t, KindBlob)})
 	id := StreamColumn("id", StreamInt32, func(v *int32) *int32 { return v })
 	if _, err := StreamRowInto(nil, id).Compile(columns); err == nil {
 		t.Fatal("StreamRowInto accepted a column without a field")
 	}
-	if _, err := StreamRowInto(nil, id, StreamColumn("missing", StreamInt32, func(v *int32) *int32 { return v })).Compile(NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)})); err == nil {
+	if _, err := StreamRowInto(nil, id, StreamColumn("missing", StreamInt32, func(v *int32) *int32 { return v })).Compile(NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)})); err == nil {
 		t.Fatal("StreamRowInto accepted a field without a column")
 	}
 	data := append(streamCellBytes([]byte{0, 0, 0, 9}), streamCellBytes([]byte{1, 2})...)
@@ -248,12 +248,12 @@ type udtPerson struct {
 func TestUDTCodecOf(t *testing.T) {
 	address := func(keyspace string) DataType {
 		return CodecTestMust(UDTType(keyspace, "address",
-			ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)},
-			ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)}))
+			ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
+			ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)}))
 	}
 	value := udtPerson{Name: "n", Address: udtAddress{Street: "s", ZipCode: 12345}}
 	for _, keyspace := range []string{"ks1", "ks2"} {
-		columns := NewColumns(ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)}, ColumnSpec{Name: "address", Type: address(keyspace)})
+		columns := NewColumns(ColumnSpec{Name: "name", Type: rowTestType(t, KindText)}, ColumnSpec{Name: "address", Type: address(keyspace)})
 		opt := WithCodec(MustUDTCodecOf[udtAddress](UDTOptions{Name: "address"}))
 		chain := encodeTestParams(t, columns, MustParamsOf[udtPerson](opt), value)
 		if got := decodeTestRow(t, columns, MustRowOf[udtPerson](opt), chain); got != value {
@@ -267,7 +267,7 @@ func TestUDTCodecOf(t *testing.T) {
 	if err := codec.CheckType(address("ks2")); err == nil {
 		t.Fatal("a codec naming ks1 accepted the UDT of ks2")
 	}
-	other := CodecTestMust(UDTType("ks1", "other", ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)}, ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)}))
+	other := CodecTestMust(UDTType("ks1", "other", ColumnSpec{Name: "street", Type: rowTestType(t, KindText)}, ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)}))
 	if err := MustUDTCodecOf[udtAddress](UDTOptions{Name: "address"}).CheckType(other); err == nil {
 		t.Fatal("accepted a UDT of another name")
 	}
@@ -279,7 +279,7 @@ func TestUDTCodecOf(t *testing.T) {
 		t.Fatal("zero options rejected a UDT:", err)
 	}
 	// The struct's fields and the UDT's must match unless options relax it.
-	narrow := CodecTestMust(UDTType("ks1", "address", ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)}))
+	narrow := CodecTestMust(UDTType("ks1", "address", ColumnSpec{Name: "street", Type: rowTestType(t, KindText)}))
 	if err := codec.CheckType(narrow); err == nil {
 		t.Fatal("accepted a UDT without a struct field's field")
 	}
@@ -295,15 +295,15 @@ func TestTupleCodec(t *testing.T) {
 		ID   int32
 		Pair Pair[int32, string]
 	}
-	tuple := CodecTestMust(TupleType(rowTestType(t, TypeInt), rowTestType(t, TypeText)))
-	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "pair", Type: tuple})
+	tuple := CodecTestMust(TupleType(rowTestType(t, KindInt), rowTestType(t, KindText)))
+	columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "pair", Type: tuple})
 	codec := TupleCodec(PairParams(OneParam(Int32Codec), OneParam(StringCodec)), PairRows(OneColumn(Int32Codec), OneColumn(StringCodec)))
 	value := row{ID: 1, Pair: Pair[int32, string]{First: 2, Second: "x"}}
 	chain := encodeTestParams(t, columns, MustParamsOf[row](WithCodec(codec)), value)
 	if got := decodeTestRow(t, columns, MustRowOf[row](WithCodec(codec)), chain); got != value {
 		t.Fatalf("got %+v", got)
 	}
-	if err := codec.CheckType(rowTestType(t, TypeInt)); err == nil {
+	if err := codec.CheckType(rowTestType(t, KindInt)); err == nil {
 		t.Fatal("TupleCodec accepted an int")
 	}
 }
@@ -312,8 +312,8 @@ func TestTupleCodec(t *testing.T) {
 // UDTCodecOf takes IgnoreExtraColumns for extra UDT fields.
 func TestUDTCodecCollections(t *testing.T) {
 	address := CodecTestMust(UDTType("ks", "address",
-		ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)},
-		ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)}))
+		ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
+		ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)}))
 	type holder struct {
 		List []udtAddress
 		Set  []udtAddress
@@ -326,7 +326,7 @@ func TestUDTCodecCollections(t *testing.T) {
 		ColumnSpec{Name: "set", Type: CodecTestMust(SetType(address.WithFrozen(true)))},
 		ColumnSpec{Name: "ptr", Type: address},
 		ColumnSpec{Name: "none", Type: address},
-		ColumnSpec{Name: "by_id", Type: CodecTestMust(MapType(rowTestType(t, TypeInt), address))},
+		ColumnSpec{Name: "by_id", Type: CodecTestMust(MapType(rowTestType(t, KindInt), address))},
 	)
 	a, b := udtAddress{Street: "a", ZipCode: 1}, udtAddress{Street: "b", ZipCode: 2}
 	value := holder{List: []udtAddress{a, b}, Set: []udtAddress{b}, Ptr: &a, ByID: map[int32]udtAddress{7: b}}
@@ -338,9 +338,9 @@ func TestUDTCodecCollections(t *testing.T) {
 
 	// A UDT with a field the struct has not.
 	wide := CodecTestMust(UDTType("ks", "address",
-		ColumnSpec{Name: "street", Type: rowTestType(t, TypeText)},
-		ColumnSpec{Name: "zip_code", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "country", Type: rowTestType(t, TypeText)}))
+		ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
+		ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "country", Type: rowTestType(t, KindText)}))
 	if err := MustUDTCodecOf[udtAddress](UDTOptions{}).CheckType(wide); err == nil {
 		t.Fatal("accepted an extra UDT field")
 	}
@@ -358,7 +358,7 @@ func TestTupleCodecOf(t *testing.T) {
 		Skip  int    `cql:"-"`
 		Tags  []string
 	}
-	typ := CodecTestMust(TupleType(rowTestType(t, TypeInt), rowTestType(t, TypeText), CodecTestMust(SetType(rowTestType(t, TypeText)))))
+	typ := CodecTestMust(TupleType(rowTestType(t, KindInt), rowTestType(t, KindText), CodecTestMust(SetType(rowTestType(t, KindText)))))
 	codec := MustTupleCodecOf[point]()
 	encoded, err := EncodeValue(typ, codec, point{X: 3, Label: "l", Skip: 9, Tags: []string{"t"}})
 	if err != nil {
@@ -368,7 +368,7 @@ func TestTupleCodecOf(t *testing.T) {
 	if err != nil || got.X != 3 || got.Label != "l" || got.Skip != 0 || len(got.Tags) != 1 {
 		t.Fatalf("got %+v, %v", got, err)
 	}
-	short := CodecTestMust(TupleType(rowTestType(t, TypeInt), rowTestType(t, TypeText)))
+	short := CodecTestMust(TupleType(rowTestType(t, KindInt), rowTestType(t, KindText)))
 	if err := codec.CheckType(short); err == nil {
 		t.Fatal("accepted a tuple without a member for every field")
 	}

@@ -249,9 +249,9 @@ func TestResponse(t *testing.T) {
 				fr.WriteString("test_ks")
 				fr.WriteString("test_tbl")
 				fr.WriteString("pk_a")
-				fr.WriteShort(uint16(cql.TypeInt))
+				fr.WriteShort(uint16(cql.KindInt))
 				fr.WriteString("pk_b")
-				fr.WriteShort(uint16(cql.TypeText))
+				fr.WriteShort(uint16(cql.KindText))
 				// result metadata
 				fr.WriteInt(int32(frm.FlagNoMetaData))
 				fr.WriteInt(0)
@@ -331,7 +331,7 @@ func TestResponse(t *testing.T) {
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_a")
-			fr.WriteShort(uint16(cql.TypeInt))
+			fr.WriteShort(uint16(cql.KindInt))
 
 			meta := fr.ParseResultMetadata()
 
@@ -400,7 +400,7 @@ func TestResponse(t *testing.T) {
 					fr.WriteString(keyspace)
 					fr.WriteString(table)
 					fr.WriteString("col_a")
-					fr.WriteShort(uint16(cql.TypeInt))
+					fr.WriteShort(uint16(cql.KindInt))
 
 					meta := fr.ParseResultMetadata()
 
@@ -437,19 +437,19 @@ func TestResponse(t *testing.T) {
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_a")
-			fr.WriteShort(uint16(cql.TypeInt))
+			fr.WriteShort(uint16(cql.KindInt))
 
 			// Column 1: same keyspace/table (will be skipped by optimization)
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_b")
-			fr.WriteShort(uint16(cql.TypeText))
+			fr.WriteShort(uint16(cql.KindText))
 
 			// Column 2: same keyspace/table
 			fr.WriteString("test_ks")
 			fr.WriteString("test_tbl")
 			fr.WriteString("col_c")
-			fr.WriteShort(uint16(cql.TypeBoolean))
+			fr.WriteShort(uint16(cql.KindBoolean))
 
 			meta := fr.ParseResultMetadata()
 
@@ -479,7 +479,7 @@ func TestResponse(t *testing.T) {
 			}
 
 			// Verify column types
-			expectedTypes := []cql.Type{cql.TypeInt, cql.TypeText, cql.TypeBoolean}
+			expectedTypes := []cql.Kind{cql.KindInt, cql.KindText, cql.KindBoolean}
 			for i, col := range meta.Columns {
 				nt, ok := col.TypeInfo.(NativeType)
 				if !ok {
@@ -551,14 +551,14 @@ func TestResponse(t *testing.T) {
 			{
 				name:   "not a vector type",
 				custom: vp + "Xxx(" + p + "FloatType, 3)",
-				want:   NewCustomType(protoVersion4, cql.TypeCustom, vp+"Xxx("+p+"FloatType, 3)"),
+				want:   NewCustomType(protoVersion4, cql.KindCustom, vp+"Xxx("+p+"FloatType, 3)"),
 			},
 			{
 				name:   "float vector",
 				custom: vp + "(" + p + "FloatType, 3)",
 				want: VectorType{
-					NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp+"("+p+"FloatType, 3)"),
-					SubType:    NewNativeType(protoVersion4, cql.TypeFloat),
+					NativeType: NewCustomType(protoVersion4, cql.KindCustom, vp+"("+p+"FloatType, 3)"),
+					SubType:    NewNativeType(protoVersion4, cql.KindFloat),
 					Dimensions: 3,
 				},
 			},
@@ -566,10 +566,10 @@ func TestResponse(t *testing.T) {
 				name:   "nested vector",
 				custom: vp + "(" + vp + "(" + p + "InetAddressType, 2), 3)",
 				want: VectorType{
-					NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp+"("+vp+"("+p+"InetAddressType, 2), 3)"),
+					NativeType: NewCustomType(protoVersion4, cql.KindCustom, vp+"("+vp+"("+p+"InetAddressType, 2), 3)"),
 					SubType: VectorType{
-						NativeType: NewCustomType(protoVersion4, cql.TypeCustom, vp),
-						SubType:    NewNativeType(protoVersion4, cql.TypeInet),
+						NativeType: NewCustomType(protoVersion4, cql.KindCustom, vp),
+						SubType:    NewNativeType(protoVersion4, cql.KindInet),
 						Dimensions: 2,
 					},
 					Dimensions: 3,
@@ -681,46 +681,46 @@ func TestResponse(t *testing.T) {
 	t.Run("ReadTypeInfo", func(t *testing.T) {
 		t.Parallel()
 
-		native := func(t cql.Type) NativeType { return cqltype.NewCustomType(protoVersion4, t, "") }
+		native := func(t cql.Kind) NativeType { return cqltype.NewCustomType(protoVersion4, t, "") }
 
 		tests := []struct {
 			name string
 			opt  typeOption
 			want TypeInfo
 		}{
-			{"Native", optNative(cql.TypeInt), native(cql.TypeInt)},
-			{"NativeDuration", optNative(cql.TypeDuration), native(cql.TypeDuration)},
+			{"Native", optNative(cql.KindInt), native(cql.KindInt)},
+			{"NativeDuration", optNative(cql.KindDuration), native(cql.KindDuration)},
 			// Cassandra's marshal class names for native types resolve to the
 			// native type, keeping the class name.
-			{"CustomNativeClass", optCustom("org.apache.cassandra.db.marshal.Int32Type"), cqltype.NewCustomType(protoVersion4, cql.TypeInt, "org.apache.cassandra.db.marshal.Int32Type")},
-			{"CustomUnknownClass", optCustom("com.example.MyType"), cqltype.NewCustomType(protoVersion4, cql.TypeCustom, "com.example.MyType")},
-			{"List", optCollection(cql.TypeList, optNative(cql.TypeText)),
-				CollectionType{NativeType: native(cql.TypeList), Elem: native(cql.TypeText)}},
-			{"Set", optCollection(cql.TypeSet, optNative(cql.TypeUUID)),
-				CollectionType{NativeType: native(cql.TypeSet), Elem: native(cql.TypeUUID)}},
-			{"Map", optCollection(cql.TypeMap, optNative(cql.TypeText), optNative(cql.TypeBigInt)),
-				CollectionType{NativeType: native(cql.TypeMap), Key: native(cql.TypeText), Elem: native(cql.TypeBigInt)}},
-			{"Tuple", optTuple(optNative(cql.TypeInt), optNative(cql.TypeBoolean)),
-				TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{native(cql.TypeInt), native(cql.TypeBoolean)}}},
-			{"EmptyTuple", optTuple(), TupleTypeInfo{NativeType: native(cql.TypeTuple), Elems: []TypeInfo{}}},
+			{"CustomNativeClass", optCustom("org.apache.cassandra.db.marshal.Int32Type"), cqltype.NewCustomType(protoVersion4, cql.KindInt, "org.apache.cassandra.db.marshal.Int32Type")},
+			{"CustomUnknownClass", optCustom("com.example.MyType"), cqltype.NewCustomType(protoVersion4, cql.KindCustom, "com.example.MyType")},
+			{"List", optCollection(cql.KindList, optNative(cql.KindText)),
+				CollectionType{NativeType: native(cql.KindList), Elem: native(cql.KindText)}},
+			{"Set", optCollection(cql.KindSet, optNative(cql.KindUUID)),
+				CollectionType{NativeType: native(cql.KindSet), Elem: native(cql.KindUUID)}},
+			{"Map", optCollection(cql.KindMap, optNative(cql.KindText), optNative(cql.KindBigInt)),
+				CollectionType{NativeType: native(cql.KindMap), Key: native(cql.KindText), Elem: native(cql.KindBigInt)}},
+			{"Tuple", optTuple(optNative(cql.KindInt), optNative(cql.KindBoolean)),
+				TupleTypeInfo{NativeType: native(cql.KindTuple), Elems: []TypeInfo{native(cql.KindInt), native(cql.KindBoolean)}}},
+			{"EmptyTuple", optTuple(), TupleTypeInfo{NativeType: native(cql.KindTuple), Elems: []TypeInfo{}}},
 			{"UDT", optUDT("ks", "addr",
-				optField{"street", optNative(cql.TypeText)},
-				optField{"zip", optNative(cql.TypeInt)},
-			), UDTTypeInfo{NativeType: native(cql.TypeUDT), KeySpace: "ks", Name: "addr", Elements: []UDTField{
-				{Name: "street", Type: native(cql.TypeText)},
-				{Name: "zip", Type: native(cql.TypeInt)},
+				optField{"street", optNative(cql.KindText)},
+				optField{"zip", optNative(cql.KindInt)},
+			), UDTTypeInfo{NativeType: native(cql.KindUDT), KeySpace: "ks", Name: "addr", Elements: []UDTField{
+				{Name: "street", Type: native(cql.KindText)},
+				{Name: "zip", Type: native(cql.KindInt)},
 			}}},
-			{"Nested", optCollection(cql.TypeMap,
-				optNative(cql.TypeText),
-				optCollection(cql.TypeList, optTuple(optNative(cql.TypeInt), optUDT("ks", "u", optField{"f", optNative(cql.TypeBlob)}))),
+			{"Nested", optCollection(cql.KindMap,
+				optNative(cql.KindText),
+				optCollection(cql.KindList, optTuple(optNative(cql.KindInt), optUDT("ks", "u", optField{"f", optNative(cql.KindBlob)}))),
 			), CollectionType{
-				NativeType: native(cql.TypeMap),
-				Key:        native(cql.TypeText),
-				Elem: CollectionType{NativeType: native(cql.TypeList), Elem: TupleTypeInfo{
-					NativeType: native(cql.TypeTuple),
-					Elems: []TypeInfo{native(cql.TypeInt), UDTTypeInfo{
-						NativeType: native(cql.TypeUDT), KeySpace: "ks", Name: "u",
-						Elements: []UDTField{{Name: "f", Type: native(cql.TypeBlob)}},
+				NativeType: native(cql.KindMap),
+				Key:        native(cql.KindText),
+				Elem: CollectionType{NativeType: native(cql.KindList), Elem: TupleTypeInfo{
+					NativeType: native(cql.KindTuple),
+					Elems: []TypeInfo{native(cql.KindInt), UDTTypeInfo{
+						NativeType: native(cql.KindUDT), KeySpace: "ks", Name: "u",
+						Elements: []UDTField{{Name: "f", Type: native(cql.KindBlob)}},
 					}},
 				}},
 			}},
@@ -758,8 +758,8 @@ func TestResponse(t *testing.T) {
 	t.Run("TypeString", func(t *testing.T) {
 		t.Parallel()
 
-		if got := cql.Type(0x00ff).String(); got != "Type(255)" {
-			t.Fatalf("String() = %q, want Type(255)", got)
+		if got := cql.Kind(0x00ff).String(); got != "Kind(255)" {
+			t.Fatalf("String() = %q, want Kind(255)", got)
 		}
 	})
 }

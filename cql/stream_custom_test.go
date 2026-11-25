@@ -97,7 +97,7 @@ type streamWords struct {
 type streamWordsDecoder struct{}
 
 func (streamWordsDecoder) Compile(t DataType) (CompiledStreamValue[streamWords], error) {
-	if t.Kind() != TypeBlob {
+	if t.Kind() != KindBlob {
 		return nil, errors.New("expected blob")
 	}
 	return streamWordsDecoder{}, nil

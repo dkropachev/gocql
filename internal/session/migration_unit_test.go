@@ -32,7 +32,7 @@ func (*customRetry) Decide(retry.Attempt) retry.Decision {
 
 // scalarParity checks canonical validation against incremental conversion
 // across every short read and every truncated scalar body.
-func scalarParity[T any](t *testing.T, kind cql.Type, buffered cql.Decoder[T], incremental cql.StreamDecoder[T], bodies ...[]byte) {
+func scalarParity[T any](t *testing.T, kind cql.Kind, buffered cql.Decoder[T], incremental cql.StreamDecoder[T], bodies ...[]byte) {
 	t.Helper()
 	typ := foundationScalar(t, kind)
 	for _, body := range bodies {

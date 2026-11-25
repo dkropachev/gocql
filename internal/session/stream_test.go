@@ -1698,12 +1698,12 @@ func TestStream(t *testing.T) {
 		})
 
 		t.Run("IncrementalScalarParity", func(t *testing.T) {
-			scalarParity(t, cql.TypeBoolean, cql.BoolCodec, cql.StreamBool, []byte{0}, []byte{1}, []byte{2})
-			scalarParity(t, cql.TypeDate, cql.DateCodec, cql.StreamDate, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
-			scalarParity(t, cql.TypeTime, cql.TimeOfDayCodec, cql.StreamTime, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
-			scalarParity(t, cql.TypeTimeUUID, cql.TimeUUIDCodec, cql.StreamTimeUUID, make([]byte, 16), []byte{0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0})
-			scalarParity(t, cql.TypeInet, cql.InetCodec, cql.StreamInet, []byte{127, 0, 0, 1}, make([]byte, 16))
-			scalarParity(t, cql.TypeDuration, cql.DurationCodec, cql.StreamDuration,
+			scalarParity(t, cql.KindBoolean, cql.BoolCodec, cql.StreamBool, []byte{0}, []byte{1}, []byte{2})
+			scalarParity(t, cql.KindDate, cql.DateCodec, cql.StreamDate, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
+			scalarParity(t, cql.KindTime, cql.TimeOfDayCodec, cql.StreamTime, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
+			scalarParity(t, cql.KindTimeUUID, cql.TimeUUIDCodec, cql.StreamTimeUUID, make([]byte, 16), []byte{0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0})
+			scalarParity(t, cql.KindInet, cql.InetCodec, cql.StreamInet, []byte{127, 0, 0, 1}, make([]byte, 16))
+			scalarParity(t, cql.KindDuration, cql.DurationCodec, cql.StreamDuration,
 				[]byte{0, 0, 0}, []byte{1, 2, 0}, []byte{128, 0, 0, 0}, // accepted nonminimal zero prefix
 				[]byte{240, 255, 255, 255, 255, 240, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255},
 				[]byte{248, 1, 0, 0, 0, 0, 0, 0}, // months overflow

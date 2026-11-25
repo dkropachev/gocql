@@ -57,15 +57,15 @@ func integerWidth[V any]() int64 {
 
 // isIntegerKind reports whether kind is a CQL type of a built-in integer
 // codec, whose width the codec fixes.
-func isIntegerKind(kind Type, width int64) bool {
+func isIntegerKind(kind Kind, width int64) bool {
 	switch kind {
-	case TypeTinyInt:
+	case KindTinyInt:
 		return width == 1
-	case TypeSmallInt:
+	case KindSmallInt:
 		return width == 2
-	case TypeInt:
+	case KindInt:
 		return width == 4
-	case TypeBigInt, TypeCounter:
+	case KindBigInt, KindCounter:
 		return width == 8
 	}
 	return false
@@ -113,7 +113,7 @@ type rowOp[R any] struct {
 	field           OutputField[R] // directNone: the field itself
 	access          unsafe.Pointer // the field accessor, a func(*R) *V
 	width           int64
-	columnKind, alt Type
+	columnKind, alt Kind
 	kind            directKind
 	compiled        bool
 }
@@ -129,7 +129,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		}
 		if width := integerWidth[V](); width > 0 && isIntegerKind(c.kind, width) {
 			op.kind, op.width = directInt, width
-		} else if _, blob := any(f.codec).(scalarCodec[Bytes]); blob && c.kind == TypeBlob {
+		} else if _, blob := any(f.codec).(scalarCodec[Bytes]); blob && c.kind == KindBlob {
 			op.kind = directBlob
 		} else {
 			return rowOp[R]{}, false
@@ -141,7 +141,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		// The field stays for columns of another kind, whose type error the
 		// codec reports in its own words.
 		op.kind, op.field, op.compiled = directText, f, c.compiled
-		op.columnKind, op.alt = TypeText, TypeASCII
+		op.columnKind, op.alt = KindText, KindASCII
 	default:
 		return rowOp[R]{}, false
 	}
@@ -206,7 +206,7 @@ type paramOp[P any] struct {
 	field           InputField[P]  // directNone, or a precondition the op does not cover
 	get             unsafe.Pointer // the field getter, a func(P) V
 	width           int64
-	columnKind, alt Type // directInt: the codec's types
+	columnKind, alt Kind // directInt: the codec's types
 	kind            directKind
 }
 
@@ -273,7 +273,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 			}
 		}
 	case directBytes:
-		if column.Type.Kind() != TypeBlob {
+		if column.Type.Kind() != KindBlob {
 			return op.field.encode(w, value)
 		}
 		b := (*(*func(P) []byte)(unsafe.Pointer(&get)))(value)
@@ -285,7 +285,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 			return op.field.encode(w, value)
 		}
 		s := (*(*func(P) string)(unsafe.Pointer(&get)))(value)
-		if column.Type.Kind() == TypeASCII {
+		if column.Type.Kind() == KindASCII {
 			for i := 0; i < len(s); i++ {
 				if s[i] >= utf8.RuneSelf {
 					return columnError(CodecStageEncode, w.index, column.Name, errors.New("gocql: invalid ASCII"))

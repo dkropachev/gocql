@@ -217,7 +217,7 @@ func TestPrepared(t *testing.T) {
 					rt := InternalRuntimeFor(s)
 					rt.InternalSetProfile(settings.DefaultConfig("localhost").DefaultProfile)
 					rt.config.PreparedCacheSize = capacity
-					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 					serverDone := make(chan error, 1)
 					go func() {
 						streams := make([]int, 2)
@@ -320,7 +320,7 @@ func TestPrepared(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
 			rt := InternalRuntimeFor(s)
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			options := new(PrepareOptions)
 			PrepareOptionsData(options).InternalConnection = conns[0]
 			const statement = "SELECT value FROM ks.tbl"
@@ -398,7 +398,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("StaleFailurePreservesBound", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, _ := preparedState(t, s, cols)
 			rt := InternalRuntimeFor(s)
 			rt.config.PreparedCacheSize = 1
@@ -463,7 +463,7 @@ func TestPrepared(t *testing.T) {
 
 		t.Run("WarmHandleSurvivesCacheLock", func(t *testing.T) {
 			s, conns, _ := runtimeTestSession(t, 1)
-			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, hp := preparedState(t, s, cols)
 			rt := InternalRuntimeFor(s)
 			rt.InternalMu.Lock()
@@ -494,7 +494,7 @@ func TestPrepared(t *testing.T) {
 				t.Run(fmt.Sprint(incompatible), func(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
 					conn := conns[0]
-					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 					state, old := preparedState(t, s, columns)
 					entered, release := make(chan struct{}), make(chan struct{})
 					serverDone := make(chan error, 1)
@@ -512,7 +512,7 @@ func TestPrepared(t *testing.T) {
 						<-release
 						params := implCql.NewColumns()
 						if incompatible {
-							params = implCql.NewColumns(implCql.ColumnSpec{Name: "new", Type: codecTestMust(implCql.ScalarType(implCql.TypeInt))})
+							params = implCql.NewColumns(implCql.ColumnSpec{Name: "new", Type: codecTestMust(implCql.ScalarType(implCql.KindInt))})
 						}
 						_, err = peers[0].Write(typedTestResponse(t, 4, stream, preparedBody([]byte("new"), params, columns)))
 						serverDone <- err
@@ -573,7 +573,7 @@ func TestPrepared(t *testing.T) {
 
 		t.Run("ColdHostsDoNotSerialize", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 2)
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, old := preparedState(t, s, columns)
 			firstRead, release := make(chan struct{}), make(chan struct{})
 			servers := make(chan error, 2)
@@ -624,12 +624,12 @@ func TestPrepared(t *testing.T) {
 			}()
 			implCluster.SessionData(s).InternalCtx, implCluster.SessionData(s).InternalCancel = context.WithCancel(context.Background())
 			defer s.Close()
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, old := preparedState(t, s, columns)
 			host := implCql.UUID{15: 2}
 			second := *old
 			state.publishHost(host, &second, false, nil)
-			changed := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeInt))})
+			changed := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindInt))})
 			for i := 0; i < 100; i++ {
 				response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("conflict")}}
 				if err := selectPreparedResponse(state, host, &second, second.InternalMetadataID, true, response); err != nil {
@@ -655,7 +655,7 @@ func TestPrepared(t *testing.T) {
 
 		t.Run("WorkerShutdownJoins", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, old := preparedState(t, s, cols)
 			requested := make(chan struct{})
 			go func() { _, _, _, _ = readRequest(peers[0]); close(requested) }()
@@ -710,7 +710,7 @@ func TestPrepared(t *testing.T) {
 					defer peers[0].Close()
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
-					boolType := codecTestMust(implCql.ScalarType(implCql.TypeBoolean))
+					boolType := codecTestMust(implCql.ScalarType(implCql.KindBoolean))
 					columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "wrong", Type: boolType})
 					initial := implCql.NewColumns()
 					if tc.initial {
@@ -751,7 +751,7 @@ func TestPrepared(t *testing.T) {
 							body = binary.BigEndian.AppendUint16(body, uint16(len(v)))
 							body = append(body, v...)
 						}
-						body = binary.BigEndian.AppendUint16(body, uint16(implCql.TypeBoolean))
+						body = binary.BigEndian.AppendUint16(body, uint16(implCql.KindBoolean))
 						body = binary.BigEndian.AppendUint32(body, 1)
 						body = binary.BigEndian.AppendUint32(body, 1)
 						body = append(body, 1)
@@ -803,7 +803,7 @@ func TestPrepared(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexx
 			}()
-			integer := codecTestMust(implCql.ScalarType(implCql.TypeInt))
+			integer := codecTestMust(implCql.ScalarType(implCql.KindInt))
 			udt := codecTestMust(implCql.UDTType("ks", "wanted", implCql.ColumnSpec{Name: "n", Type: integer}))
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "v", Type: udt})
 			_, hp := preparedState(t, s, columns)
@@ -842,9 +842,9 @@ func TestPrepared(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxx
 			}()
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, old := preparedState(t, s, columns)
-			udt := codecTestMust(implCql.UDTType("ks", "introduced", implCql.ColumnSpec{Name: "n", Type: codecTestMust(implCql.ScalarType(implCql.TypeInt))}))
+			udt := codecTestMust(implCql.UDTType("ks", "introduced", implCql.ColumnSpec{Name: "n", Type: codecTestMust(implCql.ScalarType(implCql.KindInt))}))
 			changed := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("next")}}
 			if err := selectPreparedResponse(state, implCql.UUID{15: 1}, old, old.InternalMetadataID, true, response, state.InternalDependencies.InternalTracker.InternalStart()); err != nil {
@@ -866,7 +866,7 @@ func TestPrepared(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValue).InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, hp := preparedState(t, s, columns)
 			s.InvalidatePreparedSchema(event.Event{Keyspace: "other", Object: "other", ObjectKind: event.ObjectTable})
 			if !hp.InternalEpoch.InternalCurrent() {
@@ -899,7 +899,7 @@ func TestPrepared(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuex).InternalLogger = logging.Nop()
 				return opaqueStorageValuex
 			}()
-			blob := codecTestMust(implCql.ScalarType(implCql.TypeBlob))
+			blob := codecTestMust(implCql.ScalarType(implCql.KindBlob))
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
 			state, old := preparedState(t, s, columns)
 			id := implCql.UUID{15: 1}
@@ -933,7 +933,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("InitialDoesNotCacheChangedEpoch", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			serverDone := make(chan error, 1)
 			go func() {
 				_, stream, _, err := readRequest(peers[0])
@@ -974,11 +974,11 @@ func TestPrepared(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxx
 			}()
-			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 			state, old := preparedState(t, s, columns)
 			started := state.InternalDependencies.InternalTracker.InternalStart()
 			s.InvalidatePreparedSchema(event.Event{Keyspace: "ks", ObjectKind: event.ObjectType, Object: "introduced"})
-			udt := codecTestMust(implCql.UDTType("ks", "introduced", implCql.ColumnSpec{Name: "n", Type: codecTestMust(implCql.ScalarType(implCql.TypeInt))}))
+			udt := codecTestMust(implCql.UDTType("ks", "introduced", implCql.ColumnSpec{Name: "n", Type: codecTestMust(implCql.ScalarType(implCql.KindInt))}))
 			changed := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: udt})
 			response := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("stale")}}
 			if err := selectPreparedResponse(state, implCql.UUID{15: 1}, old, old.InternalMetadataID, true, response, started); err != nil {
@@ -996,7 +996,7 @@ func TestPrepared(t *testing.T) {
 			for _, change := range []string{"entry", "epoch"} {
 				t.Run(change, func(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
-					cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.TypeBlob))})
+					cols := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(implCql.ScalarType(implCql.KindBlob))})
 					state, old := preparedState(t, s, cols)
 					received, release := make(chan struct{}), make(chan struct{})
 					serverDone := make(chan error, 1)
@@ -1054,7 +1054,7 @@ func TestPrepared(t *testing.T) {
 		t.Run("PagingNeverReencodes", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-			typ := codecTestMust(implCql.ScalarType(implCql.TypeBlob))
+			typ := codecTestMust(implCql.ScalarType(implCql.KindBlob))
 			columns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 			state, old := preparedState(t, s, columns)
 			state.InternalParameters = columns
@@ -1151,7 +1151,7 @@ func TestPrepared(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
 			defer s.Close()
 			defer peers[0].Close()
-			typ := codecTestMust(implCql.ScalarType(implCql.TypeBlob))
+			typ := codecTestMust(implCql.ScalarType(implCql.KindBlob))
 			oldColumns := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: typ})
 			state, old := preparedState(t, s, oldColumns)
 			state.partitioner = "known-before-schema-invalidation"
@@ -1182,7 +1182,7 @@ func TestPrepared(t *testing.T) {
 			for _, mode := range []string{"partition-key-order", "table", "type", "partitioner", "conditional"} {
 				t.Run(mode, func(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
-					typ := codecTestMust(implCql.ScalarType(implCql.TypeBlob))
+					typ := codecTestMust(implCql.ScalarType(implCql.KindBlob))
 					parameters := implCql.NewColumns(implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "a", Type: typ}, implCql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "b", Type: typ})
 					columns := implCql.NewColumns(cqltype.ColumnSlice(parameters)[0])
 					state, old := preparedState(t, s, columns)
@@ -1198,7 +1198,7 @@ func TestPrepared(t *testing.T) {
 						current = implCql.NewColumns(changed...)
 					case "type":
 						changed := append([]implCql.ColumnSpec(nil), cqltype.ColumnSlice(parameters)...)
-						changed[1].Type = codecTestMust(implCql.ScalarType(implCql.TypeInt))
+						changed[1].Type = codecTestMust(implCql.ScalarType(implCql.KindInt))
 						current = implCql.NewColumns(changed...)
 					case "partitioner":
 						state.partitioner = "different"

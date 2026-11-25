@@ -28,7 +28,7 @@ func alternationRows(name string, cols int) []byte {
 		n := fmt.Sprintf("%s%d", name, i)
 		b = binary.BigEndian.AppendUint16(b, uint16(len(n)))
 		b = append(b, n...)
-		b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
+		b = binary.BigEndian.AppendUint16(b, uint16(cql.KindBlob))
 	}
 	b = binary.BigEndian.AppendUint32(b, 1)
 	for i := 0; i < cols; i++ {
@@ -174,7 +174,7 @@ func BenchmarkPreparedAlternation(b *testing.B) {
 
 // typedRowsBody is a ROWS result with one column "value" of type typ, a
 // paging state when token is set, and one row per value.
-func typedRowsBody(token []byte, typ cql.Type, values ...[]byte) []byte {
+func typedRowsBody(token []byte, typ cql.Kind, values ...[]byte) []byte {
 	b := binary.BigEndian.AppendUint32(nil, 2)
 	flags := uint32(frm.FlagGlobalTableSpec)
 	if token != nil {
@@ -225,9 +225,9 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 	responses := [][]byte{
 		preparedBody([]byte("id"), key, blob, 0),
 		// Warm the connection's reuse with the old shape, unpaged.
-		typedRowsBody(nil, cql.TypeBlob, []byte("warm")),
-		typedRowsBody([]byte("p"), cql.TypeBlob, []byte("one")),
-		typedRowsBody(nil, cql.TypeInt, intValue),
+		typedRowsBody(nil, cql.KindBlob, []byte("warm")),
+		typedRowsBody([]byte("p"), cql.KindBlob, []byte("one")),
+		typedRowsBody(nil, cql.KindInt, intValue),
 	}
 	serverDone := make(chan error, 1)
 	go func() {
@@ -252,14 +252,14 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	read := func() []cql.Type {
+	read := func() []cql.Kind {
 		t.Helper()
 		bound := codecTestMust(BindBorrowed(p, 1))
 		defer bound.Close()
 		rows := codecTestMust(Run(ctx, s, bound, testOptions(Options{})))
 		defer rows.Close()
 		var dst cql.Value
-		var values []cql.Type
+		var values []cql.Kind
 		for rows.NextInto(&dst) {
 			values = append(values, dst.Type().Kind())
 		}
@@ -268,11 +268,11 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 		}
 		return values
 	}
-	if got := read(); len(got) != 1 || got[0] != cql.TypeBlob {
+	if got := read(); len(got) != 1 || got[0] != cql.KindBlob {
 		t.Fatal(got)
 	}
 	compiled = compiled[:0]
-	if got := read(); len(got) != 2 || got[0] != cql.TypeBlob || got[1] != cql.TypeInt {
+	if got := read(); len(got) != 2 || got[0] != cql.KindBlob || got[1] != cql.KindInt {
 		t.Fatalf("value types %v", got)
 	}
 	if err := <-serverDone; err != nil {
@@ -282,7 +282,7 @@ func TestMetadataReuseDetectsChangedColumns(t *testing.T) {
 		t.Fatal("no plan compiled for the changed page")
 	}
 	last := compiled[len(compiled)-1]
-	if spec, _ := last.At(0); spec.Type.Kind() != cql.TypeInt {
+	if spec, _ := last.At(0); spec.Type.Kind() != cql.KindInt {
 		t.Fatalf("second page decoded with a plan for %v, want int", spec.Type)
 	}
 }

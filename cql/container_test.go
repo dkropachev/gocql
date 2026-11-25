@@ -31,7 +31,7 @@ import (
 func TestContainer(t *testing.T) {
 	t.Run("Clone", func(t *testing.T) {
 		t.Run("FragmentAliasingAndLease", func(t *testing.T) {
-			blob := rowTestType(t, TypeBlob)
+			blob := rowTestType(t, KindBlob)
 			list, _ := ListType(blob)
 			payload := []byte("fragmented")
 			encoded, err := encodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
@@ -90,7 +90,7 @@ func TestContainer(t *testing.T) {
 		})
 	})
 	t.Run("Collect", func(t *testing.T) {
-		text, blob := FoundationScalar(t, TypeText), FoundationScalar(t, TypeBlob)
+		text, blob := FoundationScalar(t, KindText), FoundationScalar(t, KindBlob)
 		tuple := CodecTestMust(TupleType(text, blob))
 		list := CodecTestMust(ListType(tuple))
 		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
@@ -124,7 +124,7 @@ func TestContainer(t *testing.T) {
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("ChecksOnceConcurrently", func(t *testing.T) {
 			var checks atomic.Int64
-			list, _ := ListType(rowTestType(t, TypeInt))
+			list, _ := ListType(rowTestType(t, KindInt))
 			columns := NewColumns(ColumnSpec{Name: "items", Type: list})
 			codec := OneColumn(ListDecoder(containerCheckedInt{checks: &checks}))
 			plan, err := codec.Compile(columns)
@@ -159,7 +159,7 @@ func TestContainer(t *testing.T) {
 	})
 	t.Run("Decode", func(t *testing.T) {
 		t.Run("ElementFailureIsEager", func(t *testing.T) {
-			list, _ := ListType(rowTestType(t, TypeInt))
+			list, _ := ListType(rowTestType(t, KindInt))
 			// Valid enclosing frames, but the second integer body is too short.
 			body, _ := hex.DecodeString("00000002000000040000000700000003010203")
 			values, err := DecodeValue(ListDecoder(Int32Codec), containerValue(t, list, body))
@@ -168,7 +168,7 @@ func TestContainer(t *testing.T) {
 			}
 		})
 		t.Run("StrictEnclosingFraming", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			list, _ := ListType(integer)
 			set, _ := SetType(integer)
 			mapType, _ := MapType(integer, integer)
@@ -207,7 +207,7 @@ func TestContainer(t *testing.T) {
 		})
 	})
 	t.Run("Golden", func(t *testing.T) {
-		integer := rowTestType(t, TypeInt)
+		integer := rowTestType(t, KindInt)
 		list, _ := ListType(integer)
 		set, _ := SetType(integer)
 		vector, _ := VectorType(integer, 2)
@@ -231,8 +231,8 @@ func TestContainer(t *testing.T) {
 				t.Fatalf("values=%v", values)
 			}
 		}
-		text := rowTestType(t, TypeText)
-		blob := rowTestType(t, TypeBlob)
+		text := rowTestType(t, KindText)
+		blob := rowTestType(t, KindBlob)
 		mapType, _ := MapType(text, blob)
 		encoded := containerGolden(t, mapType, MapEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
 		mapping, err := DecodeValue(MapDecoder(TextCodec, BytesCodec), encoded)
@@ -243,7 +243,7 @@ func TestContainer(t *testing.T) {
 		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.ownedBytes()) != "y" {
 			t.Fatalf("entries=%v", entries)
 		}
-		tiny, _ := VectorType(rowTestType(t, TypeTinyInt), 2)
+		tiny, _ := VectorType(rowTestType(t, KindTinyInt), 2)
 		containerGolden(t, tiny, VectorEncoder(Int8Codec), []int8{1, -1}, "010101ff")
 		texts, _ := VectorType(text, 2)
 		encoded = containerGolden(t, texts, VectorEncoder(StringCodec), []string{"", "é"}, "0002c3a9")
@@ -271,7 +271,7 @@ func TestContainer(t *testing.T) {
 
 	t.Run("Vector", func(t *testing.T) {
 		t.Run("StrictDimensionsAndLengths", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			vector, _ := VectorType(integer, 2)
 			for _, bad := range [][]byte{nil, {0, 0, 0, 1}, make([]byte, 7), make([]byte, 9)} {
 				if _, err := DecodeValue(VectorDecoder(NullableDecoder(Int32Codec)), containerValue(t, vector, bad)); err == nil {
@@ -284,7 +284,7 @@ func TestContainer(t *testing.T) {
 			if _, err := encodeValueBorrowed(vector, VectorEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}, {}}); err == nil {
 				t.Fatal("null vector member encoded")
 			}
-			text := rowTestType(t, TypeText)
+			text := rowTestType(t, KindText)
 			texts, _ := VectorType(text, 1)
 			for _, bad := range []string{"", "02ff", "8000", "ff0000000000000000", "f080000000", "0000"} {
 				body, _ := hex.DecodeString(bad)
@@ -307,7 +307,7 @@ func TestContainer(t *testing.T) {
 			}
 		})
 		t.Run("VariablePayloadBorrowingAndOwnedDetach", func(t *testing.T) {
-			vector, _ := VectorType(rowTestType(t, TypeBlob), 2)
+			vector, _ := VectorType(rowTestType(t, KindBlob), 2)
 			payload := bytes.Repeat([]byte{'x'}, 128)
 			input := [][]byte{payload, {}}
 			borrowed, err := encodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)

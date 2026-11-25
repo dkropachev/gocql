@@ -330,7 +330,7 @@ package cql
 		cql.DataType method (T) Frozen() bool
 		cql.DataType method (T) FrozenKnown() bool
 		cql.DataType method (T) KeyValue() (cql.DataType, cql.DataType, bool)
-		cql.DataType method (T) Kind() cql.Type
+		cql.DataType method (T) Kind() cql.Kind
 		cql.DataType method (T) String() string
 		cql.DataType method (T) UDTName() (keyspace string, name string, ok bool)
 		cql.DataType method (T) WithFrozen(frozen bool) cql.DataType
@@ -415,6 +415,35 @@ package cql
 	var cql.IntCodec cql.Codec[int]
 	var cql.IntType cql.DataType
 	func cql.IntValue(n int32) cql.Value
+	type cql.Kind uint16
+		cql.Kind method (T) String() string
+	const cql.KindASCII cql.Kind = 1
+	const cql.KindBigInt cql.Kind = 2
+	const cql.KindBlob cql.Kind = 3
+	const cql.KindBoolean cql.Kind = 4
+	const cql.KindCounter cql.Kind = 5
+	const cql.KindCustom cql.Kind = 0
+	const cql.KindDate cql.Kind = 17
+	const cql.KindDecimal cql.Kind = 6
+	const cql.KindDouble cql.Kind = 7
+	const cql.KindDuration cql.Kind = 21
+	const cql.KindFloat cql.Kind = 8
+	const cql.KindInet cql.Kind = 16
+	const cql.KindInt cql.Kind = 9
+	const cql.KindList cql.Kind = 32
+	const cql.KindMap cql.Kind = 33
+	const cql.KindSet cql.Kind = 34
+	const cql.KindSmallInt cql.Kind = 19
+	const cql.KindText cql.Kind = 13
+	const cql.KindTime cql.Kind = 18
+	const cql.KindTimeUUID cql.Kind = 15
+	const cql.KindTimestamp cql.Kind = 11
+	const cql.KindTinyInt cql.Kind = 20
+	const cql.KindTuple cql.Kind = 49
+	const cql.KindUDT cql.Kind = 48
+	const cql.KindUUID cql.Kind = 12
+	const cql.KindVarint cql.Kind = 14
+	const cql.KindVector cql.Kind = 256
 	const cql.LZ4Compression cql.Compression = 1
 	func cql.ListCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.ListDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
@@ -526,7 +555,7 @@ package cql
 	type cql.RowReader struct
 		cql.RowReader method (*T) ReadColumn[T any](decoder cql.Decoder[T]) (T, error)
 		cql.RowReader method (*T) SkipColumn() error
-	func cql.ScalarType(kind cql.Type) (cql.DataType, error)
+	func cql.ScalarType(kind cql.Kind) (cql.DataType, error)
 	const cql.Serial cql.Consistency = 8
 	func cql.SetCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	func cql.SetDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
@@ -682,35 +711,6 @@ package cql
 	func cql.TupleType(fields ...cql.DataType) (cql.DataType, error)
 	func cql.TupleValue(t cql.DataType, v []cql.Value) (cql.Value, error)
 	const cql.Two cql.Consistency = 2
-	type cql.Type uint16
-		cql.Type method (T) String() string
-	const cql.TypeASCII cql.Type = 1
-	const cql.TypeBigInt cql.Type = 2
-	const cql.TypeBlob cql.Type = 3
-	const cql.TypeBoolean cql.Type = 4
-	const cql.TypeCounter cql.Type = 5
-	const cql.TypeCustom cql.Type = 0
-	const cql.TypeDate cql.Type = 17
-	const cql.TypeDecimal cql.Type = 6
-	const cql.TypeDouble cql.Type = 7
-	const cql.TypeDuration cql.Type = 21
-	const cql.TypeFloat cql.Type = 8
-	const cql.TypeInet cql.Type = 16
-	const cql.TypeInt cql.Type = 9
-	const cql.TypeList cql.Type = 32
-	const cql.TypeMap cql.Type = 33
-	const cql.TypeSet cql.Type = 34
-	const cql.TypeSmallInt cql.Type = 19
-	const cql.TypeText cql.Type = 13
-	const cql.TypeTime cql.Type = 18
-	const cql.TypeTimeUUID cql.Type = 15
-	const cql.TypeTimestamp cql.Type = 11
-	const cql.TypeTinyInt cql.Type = 20
-	const cql.TypeTuple cql.Type = 49
-	const cql.TypeUDT cql.Type = 48
-	const cql.TypeUUID cql.Type = 12
-	const cql.TypeVarint cql.Type = 14
-	const cql.TypeVector cql.Type = 256
 	func cql.UDTCodecOf[T any](options cql.UDTOptions, opts ...cql.StructOption) (cql.Codec[T], error)
 	func cql.UDTDecoder[T any](codec cql.RowDecoder[T], options cql.UDTOptions) cql.Decoder[T]
 	func cql.UDTEncoder[T any](codec cql.ParamEncoder[T], options cql.UDTOptions) cql.Encoder[T]

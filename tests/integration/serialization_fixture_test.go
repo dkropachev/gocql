@@ -211,7 +211,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		t.Fatalf("state: expected %v, got %v", want.State(), got.State())
 	}
 	wk, gk := want.Type().Kind(), got.Type().Kind()
-	textKinds := func(k cql.Type) bool { return k == cql.TypeText }
+	textKinds := func(k cql.Kind) bool { return k == cql.KindText }
 	if wk != gk && !(textKinds(wk) && textKinds(gk)) {
 		t.Fatalf("type: expected %s, got %s", want.Type(), got.Type())
 	}
@@ -220,47 +220,47 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 	}
 	var equal bool
 	switch wk {
-	case cql.TypeBoolean:
+	case cql.KindBoolean:
 		a, e := want.Bool()
 		b, f := got.Bool()
 		equal = e == nil && f == nil && a == b
-	case cql.TypeTinyInt, cql.TypeSmallInt, cql.TypeInt, cql.TypeBigInt, cql.TypeCounter, cql.TypeDate, cql.TypeTime, cql.TypeTimestamp:
+	case cql.KindTinyInt, cql.KindSmallInt, cql.KindInt, cql.KindBigInt, cql.KindCounter, cql.KindDate, cql.KindTime, cql.KindTimestamp:
 		a, e := want.Signed()
 		b, f := got.Signed()
 		equal = e == nil && f == nil && a == b
-	case cql.TypeFloat, cql.TypeDouble:
+	case cql.KindFloat, cql.KindDouble:
 		a, e := want.Float()
 		b, f := got.Float()
 		equal = e == nil && f == nil && math.Float64bits(a) == math.Float64bits(b)
-	case cql.TypeText, cql.TypeASCII:
+	case cql.KindText, cql.KindASCII:
 		a, e := want.Text()
 		b, f := got.Text()
 		equal = e == nil && f == nil && a.String() == b.String()
-	case cql.TypeBlob:
+	case cql.KindBlob:
 		a, e := want.Bytes()
 		b, f := got.Bytes()
 		equal = e == nil && f == nil && bytes.Equal(ownedBytesForTest(a), ownedBytesForTest(b))
-	case cql.TypeUUID, cql.TypeTimeUUID:
+	case cql.KindUUID, cql.KindTimeUUID:
 		a, e := want.UUID()
 		b, f := got.UUID()
 		equal = e == nil && f == nil && a == b
-	case cql.TypeInet:
+	case cql.KindInet:
 		a, e := want.Inet()
 		b, f := got.Inet()
 		equal = e == nil && f == nil && a == b
-	case cql.TypeDuration:
+	case cql.KindDuration:
 		a, e := want.Duration()
 		b, f := got.Duration()
 		equal = e == nil && f == nil && a == b
-	case cql.TypeVarint:
+	case cql.KindVarint:
 		a, e := want.Varint()
 		b, f := got.Varint()
 		equal = e == nil && f == nil && a.BigInt().Cmp(b.BigInt()) == 0
-	case cql.TypeDecimal:
+	case cql.KindDecimal:
 		a, e := want.Decimal()
 		b, f := got.Decimal()
 		equal = e == nil && f == nil && a.Scale == b.Scale && a.Unscaled.BigInt().Cmp(b.Unscaled.BigInt()) == 0
-	case cql.TypeMap:
+	case cql.KindMap:
 		a, e := collectSeq(want.Entries())
 		b, f := collectSeq(got.Entries())
 		if e != nil || f != nil || len(a) != len(b) {
@@ -285,7 +285,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 			assertSerializationValue(t, entry.Value, v)
 		}
 		return
-	case cql.TypeUDT:
+	case cql.KindUDT:
 		a, e := collectSeq(want.Fields())
 		b, f := collectSeq(got.Fields())
 		if e != nil || f != nil || len(a) != len(b) {
@@ -304,7 +304,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("elements: %d %d %v %v", len(a), len(b), e, f)
 		}
-		if wk == cql.TypeSet {
+		if wk == cql.KindSet {
 			key := func(v cql.Value) string {
 				x, e := cql.EncodeValue(v.Type(), cql.DynamicCodec, v)
 				if e != nil {
@@ -327,7 +327,7 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 
 // serializationFixtureValue translates only the finite historical scalar corpus.
 // Conversions are explicit fixture setup, outside driver binding and decoding.
-func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
+func serializationFixtureValue(kind cql.Kind, input any) (cql.Value, error) {
 	typ, err := cql.ScalarType(kind)
 	if err != nil {
 		return cql.Value{}, err
@@ -416,7 +416,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 			return null()
 		}
 		switch kind {
-		case cql.TypeVarint:
+		case cql.KindVarint:
 			return cql.VarintValue(cql.VarintFromBigInt(v)), nil
 		default:
 			if !v.IsInt64() {
@@ -431,40 +431,40 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 	case int16:
 		return serializationFixtureValue(kind, int64(v))
 	case int32:
-		if kind == cql.TypeDate {
+		if kind == cql.KindDate {
 			return cql.DateValue(cql.Date(int32(uint32(v) ^ uint32(1<<31)))), nil
 		}
 		return serializationFixtureValue(kind, int64(v))
 	case uint32:
-		if kind == cql.TypeDate {
+		if kind == cql.KindDate {
 			return cql.DateValue(cql.Date(int32(v ^ uint32(1<<31)))), nil
 		}
 	case int64:
 		switch kind {
-		case cql.TypeTinyInt:
+		case cql.KindTinyInt:
 			if v < math.MinInt8 || v > math.MaxInt8 {
 				break
 			}
 			return cql.TinyIntValue(int8(v)), nil
-		case cql.TypeSmallInt:
+		case cql.KindSmallInt:
 			if v < math.MinInt16 || v > math.MaxInt16 {
 				break
 			}
 			return cql.SmallIntValue(int16(v)), nil
-		case cql.TypeInt:
+		case cql.KindInt:
 			if v < math.MinInt32 || v > math.MaxInt32 {
 				break
 			}
 			return cql.IntValue(int32(v)), nil
-		case cql.TypeBigInt:
+		case cql.KindBigInt:
 			return cql.BigIntValue(v), nil
-		case cql.TypeVarint:
+		case cql.KindVarint:
 			return cql.VarintValue(cql.VarintFromBigInt(big.NewInt(v))), nil
-		case cql.TypeTime:
+		case cql.KindTime:
 			return cql.TimeValue(cql.TimeOfDay(v)), nil
-		case cql.TypeTimestamp:
+		case cql.KindTimestamp:
 			return cql.TimestampValue(cql.Timestamp(v)), nil
-		case cql.TypeDuration:
+		case cql.KindDuration:
 			const day = int64(24 * time.Hour)
 			return cql.DurationValue(cql.Duration{Days: int32(v / day), Nanoseconds: v % day}), nil
 		}
@@ -477,7 +477,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 	case inf.Dec:
 		return cql.DecimalValue(cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}), nil
 	case [16]byte:
-		if kind == cql.TypeTimeUUID {
+		if kind == cql.KindTimeUUID {
 			return cql.TimeUUIDValue(cql.TimeUUID(v)), nil
 		}
 		return cql.UUIDValue(cql.UUID(v)), nil
@@ -491,7 +491,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		}
 		return cql.InetValue(a.Unmap()), nil
 	case time.Time:
-		if kind == cql.TypeDate {
+		if kind == cql.KindDate {
 			d, e := cql.DateFromTime(v)
 			if e != nil {
 				return cql.Value{}, e
@@ -507,24 +507,24 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 		return cql.DurationValue(v), nil
 	case string:
 		switch kind {
-		case cql.TypeText:
+		case cql.KindText:
 			return cql.TextValue(v), nil
-		case cql.TypeASCII:
+		case cql.KindASCII:
 			return cql.ASCIIValue(v), nil
-		case cql.TypeBlob:
+		case cql.KindBlob:
 			return cql.BlobValue([]byte(v)), nil
 		}
 		if v == "" {
 			return null()
 		}
 		switch kind {
-		case cql.TypeVarint:
+		case cql.KindVarint:
 			n, ok := new(big.Int).SetString(v, 10)
 			if !ok {
 				break
 			}
 			return cql.VarintValue(cql.VarintFromBigInt(n)), nil
-		case cql.TypeDecimal:
+		case cql.KindDecimal:
 			parts := strings.Split(v, ";")
 			if len(parts) != 2 {
 				break
@@ -538,22 +538,22 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 				break
 			}
 			return cql.DecimalValue(cql.Decimal{Scale: int32(scale), Unscaled: cql.VarintFromBigInt(n)}), nil
-		case cql.TypeUUID, cql.TypeTimeUUID:
+		case cql.KindUUID, cql.KindTimeUUID:
 			u, e := cql.ParseUUID(v)
 			if e != nil {
 				return cql.Value{}, e
 			}
-			if kind == cql.TypeTimeUUID {
+			if kind == cql.KindTimeUUID {
 				return cql.TimeUUIDValue(cql.TimeUUID(u)), nil
 			}
 			return cql.UUIDValue(u), nil
-		case cql.TypeInet:
+		case cql.KindInet:
 			a, e := netip.ParseAddr(v)
 			if e != nil {
 				return cql.Value{}, e
 			}
 			return cql.InetValue(a), nil
-		case cql.TypeDate:
+		case cql.KindDate:
 			dayPos := strings.LastIndex(v, "-")
 			monthPos := strings.LastIndex(v[:dayPos], "-")
 			y, e := strconv.Atoi(v[:monthPos])
@@ -573,7 +573,7 @@ func serializationFixtureValue(kind cql.Type, input any) (cql.Value, error) {
 				return cql.Value{}, e
 			}
 			return cql.DateValue(date), nil
-		case cql.TypeDuration:
+		case cql.KindDuration:
 			d, e := serializationDurationLiteral(v)
 			if e != nil {
 				return cql.Value{}, e

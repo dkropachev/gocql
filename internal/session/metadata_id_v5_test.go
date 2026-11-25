@@ -135,7 +135,7 @@ func testResultMetadataIDV5(t *testing.T, run func(context.Context, *cluster.Cor
 			b = binary.BigEndian.AppendUint16(b, uint16(len(s)))
 			b = append(b, s...)
 		}
-		return binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
+		return binary.BigEndian.AppendUint16(b, uint16(cql.KindBlob))
 	}
 	prepared := binary.BigEndian.AppendUint32(nil, uint32(frm.ResultKindPrepared))
 	prepared = appendShortBytes(prepared, preparedID)
@@ -149,7 +149,7 @@ func testResultMetadataIDV5(t *testing.T, run func(context.Context, *cluster.Cor
 		prepared = binary.BigEndian.AppendUint16(prepared, uint16(len(s)))
 		prepared = append(prepared, s...)
 	}
-	prepared = binary.BigEndian.AppendUint16(prepared, uint16(cql.TypeInt))
+	prepared = binary.BigEndian.AppendUint16(prepared, uint16(cql.KindInt))
 	// <result_metadata>
 	prepared = binary.BigEndian.AppendUint32(prepared, uint32(frm.FlagGlobalTableSpec))
 	prepared = binary.BigEndian.AppendUint32(prepared, 1)

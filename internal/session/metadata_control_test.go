@@ -44,7 +44,7 @@ func uuidRows(id, version cql.UUID) []byte {
 	str("local")
 	for _, name := range []string{"host_id", "schema_version"} {
 		str(name)
-		body = binary.BigEndian.AppendUint16(body, uint16(cql.TypeUUID))
+		body = binary.BigEndian.AppendUint16(body, uint16(cql.KindUUID))
 	}
 	body = binary.BigEndian.AppendUint32(body, 1)
 	for _, id := range []cql.UUID{id, version} {

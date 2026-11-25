@@ -26,19 +26,19 @@ type directRow struct {
 }
 
 func directColumns(t testing.TB) Columns {
-	typ := func(kind Type) DataType { return CodecTestMust(ScalarType(kind)) }
+	typ := func(kind Kind) DataType { return CodecTestMust(ScalarType(kind)) }
 	return NewColumns(
-		ColumnSpec{Name: "i8", Type: typ(TypeTinyInt)},
-		ColumnSpec{Name: "i16", Type: typ(TypeSmallInt)},
-		ColumnSpec{Name: "i32", Type: typ(TypeInt)},
-		ColumnSpec{Name: "i64", Type: typ(TypeBigInt)},
-		ColumnSpec{Name: "count", Type: typ(TypeCounter)},
-		ColumnSpec{Name: "view", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "owned", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "text", Type: typ(TypeText)},
-		ColumnSpec{Name: "ascii", Type: typ(TypeASCII)},
-		ColumnSpec{Name: "blob", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "skipped", Type: typ(TypeInt)},
+		ColumnSpec{Name: "i8", Type: typ(KindTinyInt)},
+		ColumnSpec{Name: "i16", Type: typ(KindSmallInt)},
+		ColumnSpec{Name: "i32", Type: typ(KindInt)},
+		ColumnSpec{Name: "i64", Type: typ(KindBigInt)},
+		ColumnSpec{Name: "count", Type: typ(KindCounter)},
+		ColumnSpec{Name: "view", Type: typ(KindBlob)},
+		ColumnSpec{Name: "owned", Type: typ(KindBlob)},
+		ColumnSpec{Name: "text", Type: typ(KindText)},
+		ColumnSpec{Name: "ascii", Type: typ(KindASCII)},
+		ColumnSpec{Name: "blob", Type: typ(KindBlob)},
+		ColumnSpec{Name: "skipped", Type: typ(KindInt)},
 	)
 }
 

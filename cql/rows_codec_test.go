@@ -29,7 +29,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func rowTestType(t testing.TB, kind Type) DataType {
+func rowTestType(t testing.TB, kind Kind) DataType {
 	t.Helper()
 	v, err := ScalarType(kind)
 	if err != nil {
@@ -105,13 +105,13 @@ func TestRowsCodec(t *testing.T) {
 	})
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("ConcurrentAndMetadataSpecific", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, TypeInt)})
+			columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, KindInt)})
 			codec := OneColumn(Int32Codec)
 			plan, err := codec.Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
-			changed := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, TypeText)})
+			changed := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(t, KindText)})
 			if _, err := codec.Compile(changed); err == nil {
 				t.Fatal("accepted incompatible changed result type")
 			}
@@ -133,7 +133,7 @@ func TestRowsCodec(t *testing.T) {
 			wg.Wait()
 		})
 		t.Run("RepeatedMarkersAndAmbiguousAliases", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "key", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "key", Type: rowTestType(t, TypeInt)})
+			columns := NewColumns(ColumnSpec{Name: "key", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "key", Type: rowTestType(t, KindInt)})
 			chain := encodeTestParams(t, columns, Params(Param("key", Int32Codec, func(v int32) int32 { return v })), int32(9))
 			if _, err := Row(Column("key", Int32Codec, func(v *int32) *int32 { return v })).Compile(columns); err == nil {
 				t.Fatal("named duplicate aliases must require positional mapping")
@@ -153,7 +153,7 @@ func TestRowsCodec(t *testing.T) {
 		// The split is the left side's fixed arity; a left side without one
 		// fails at Compile.
 		t.Run("PairArity", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			columns := NewColumns(
 				ColumnSpec{Name: "a", Type: integer},
 				ColumnSpec{Name: "b", Type: integer},
@@ -200,7 +200,7 @@ func TestRowsCodec(t *testing.T) {
 	})
 	t.Run("DecodeInto", func(t *testing.T) {
 		t.Run("CompositionPropagatesDestinations", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			cols := NewColumns(ColumnSpec{Name: "a", Type: integer}, ColumnSpec{Name: "b", Type: integer})
 			body := encodeTestParams(t, cols, PairParams(OneParam(Int32Codec), OneParam(Int32Codec)), Pair[int32, int32]{1, 2})
 			var dst Pair[int32, int32]
@@ -212,7 +212,7 @@ func TestRowsCodec(t *testing.T) {
 			if err := plan.DecodeInto(newRowReader(cols, body, nil), &dst); err != nil || dst.First != 1 || dst.Second != 2 || decodes != 0 || into != 1 {
 				t.Fatal("pair destination", dst, decodes, into, err)
 			}
-			applied := FoundationScalar(t, TypeBoolean)
+			applied := FoundationScalar(t, KindBoolean)
 			casCols := NewColumns(ColumnSpec{Name: "[applied]", Type: applied}, ColumnSpec{Name: "a", Type: integer})
 			casBody := encodeTestParams(t, casCols, PairParams(OneParam(BoolCodec), OneParam(Int32Codec)), Pair[bool, int32]{false, 7})
 			var cas CASResult[int32]
@@ -232,7 +232,7 @@ func TestRowsCodec(t *testing.T) {
 				Unused  int
 				Padding [128]int64
 			}
-			integer, text := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeText)
+			integer, text := FoundationScalar(t, KindInt), FoundationScalar(t, KindText)
 			tuple := CodecTestMust(TupleType(integer, text))
 			columns := NewColumns(ColumnSpec{Name: "record", Type: tuple})
 			var dst outer
@@ -406,14 +406,14 @@ func TestRowsCodec(t *testing.T) {
 				"unset":     rowScalarFrame(-2, nil),
 				"truncated": rowScalarFrame(5, []byte("byte")),
 			} {
-				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, TypeBlob, BytesCodec, input, false, false) })
+				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, KindBlob, BytesCodec, input, false, false) })
 			}
-			checkRowScalarEquivalent(t, TypeBlob, BytesCodec, rowScalarFrame(1, []byte{1}), false, true)
-			checkRowScalarEquivalent(t, TypeInt, BytesCodec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
-			checkRowScalarEquivalent(t, TypeFloat, Float32Codec, rowScalarFrame(4, []byte{0, 0, 0, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeBlob, BytesCodec, nil, true, false)
+			checkRowScalarEquivalent(t, KindBlob, BytesCodec, rowScalarFrame(1, []byte{1}), false, true)
+			checkRowScalarEquivalent(t, KindInt, BytesCodec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
+			checkRowScalarEquivalent(t, KindFloat, Float32Codec, rowScalarFrame(4, []byte{0, 0, 0, 0}), false, false)
+			checkRowScalarEquivalent(t, KindBlob, BytesCodec, nil, true, false)
 
-			columns := NewColumns(ColumnSpec{Name: "value", Type: rowTestType(t, TypeBlob)})
+			columns := NewColumns(ColumnSpec{Name: "value", Type: rowTestType(t, KindBlob)})
 			chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte("abc"))))
 			lease := wire.NewLease(chain, nil)
 			if !lease.Retain() {
@@ -434,13 +434,13 @@ func TestRowsCodec(t *testing.T) {
 			}
 		})
 		t.Run("CompiledGuardsAndDestination", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "value", Type: rowTestType(t, TypeInt)})
-			compiled, err := compileValueDecoder(Int32Codec, rowTestType(t, TypeInt))
+			columns := NewColumns(ColumnSpec{Name: "value", Type: rowTestType(t, KindInt)})
+			compiled, err := compileValueDecoder(Int32Codec, rowTestType(t, KindInt))
 			if err != nil {
 				t.Fatal(err)
 			}
 			for _, decoder := range []Decoder[int32]{Int32Codec, compiled} {
-				checkRowScalarEquivalent(t, TypeBlob, decoder, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
+				checkRowScalarEquivalent(t, KindBlob, decoder, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
 				chain, _ := wire.NewChain(wire.Borrow(rowScalarFrame(3, []byte{1, 2, 3})))
 				value := int32(99)
 				if err := readColumnInto(newRowReader(columns, chain, nil), decoder, &value); err == nil || value != 99 {
@@ -454,8 +454,8 @@ func TestRowsCodec(t *testing.T) {
 		})
 		t.Run("CustomDecoderSnapshot", func(t *testing.T) {
 			columns := NewColumns(
-				ColumnSpec{Name: "first", Type: rowTestType(t, TypeInt)},
-				ColumnSpec{Name: "second", Type: rowTestType(t, TypeInt)},
+				ColumnSpec{Name: "first", Type: rowTestType(t, KindInt)},
+				ColumnSpec{Name: "second", Type: rowTestType(t, KindInt)},
 			)
 			data := append(rowScalarFrame(4, []byte{0, 0, 0, 17}), rowScalarFrame(4, []byte{0, 0, 0, 29})...)
 			chain, _ := wire.NewChain(wire.Borrow(data))
@@ -491,21 +491,21 @@ func TestRowsCodec(t *testing.T) {
 				"truncated_body":   rowScalarFrame(4, []byte{1, 2, 3}),
 				"truncated_prefix": []byte{0, 0, 0},
 			} {
-				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, TypeInt, Int32Codec, input, false, false) })
+				t.Run(name, func(t *testing.T) { checkRowScalarEquivalent(t, KindInt, Int32Codec, input, false, false) })
 			}
-			checkRowScalarEquivalent(t, TypeInt, Int32Codec, nil, true, false)
-			checkRowScalarEquivalent(t, TypeInt, Int32Codec, nil, true, true)
-			checkRowScalarEquivalent(t, TypeInt, Int32Codec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, true)
-			checkRowScalarEquivalent(t, TypeBlob, Int32Codec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
-			checkRowScalarEquivalent(t, TypeTinyInt, Int8Codec, rowScalarFrame(1, []byte{0x80}), false, false)
-			checkRowScalarEquivalent(t, TypeSmallInt, Int16Codec, rowScalarFrame(2, []byte{0x80, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeBigInt, Int64Codec, rowScalarFrame(8, []byte{0x80, 0, 0, 0, 0, 0, 0, 0}), false, false)
-			checkRowScalarEquivalent(t, TypeCounter, Int64Codec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
+			checkRowScalarEquivalent(t, KindInt, Int32Codec, nil, true, false)
+			checkRowScalarEquivalent(t, KindInt, Int32Codec, nil, true, true)
+			checkRowScalarEquivalent(t, KindInt, Int32Codec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, true)
+			checkRowScalarEquivalent(t, KindBlob, Int32Codec, rowScalarFrame(4, []byte{1, 2, 3, 4}), false, false)
+			checkRowScalarEquivalent(t, KindTinyInt, Int8Codec, rowScalarFrame(1, []byte{0x80}), false, false)
+			checkRowScalarEquivalent(t, KindSmallInt, Int16Codec, rowScalarFrame(2, []byte{0x80, 0}), false, false)
+			checkRowScalarEquivalent(t, KindBigInt, Int64Codec, rowScalarFrame(8, []byte{0x80, 0, 0, 0, 0, 0, 0, 0}), false, false)
+			checkRowScalarEquivalent(t, KindCounter, Int64Codec, rowScalarFrame(8, []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe}), false, false)
 		})
 	})
 	t.Run("Params", func(t *testing.T) {
 		t.Run("FailureRollsBackWholePlan", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "a", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "b", Type: rowTestType(t, TypeInt)})
+			columns := NewColumns(ColumnSpec{Name: "a", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "b", Type: rowTestType(t, KindInt)})
 			codec := PairParams(OneParam(Int32Codec), OneParam[int32](failingRowEncoder{}))
 			plan, err := codec.Compile(columns)
 			if err != nil {
@@ -524,7 +524,7 @@ func TestRowsCodec(t *testing.T) {
 			}
 		})
 		t.Run("OwnedDetachesOnlyBorrowed", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "blob", Type: rowTestType(t, TypeBlob)})
+			columns := NewColumns(ColumnSpec{Name: "blob", Type: rowTestType(t, KindBlob)})
 			plan, err := OneParam(ByteSliceCodec).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
@@ -549,7 +549,7 @@ func TestRowsCodec(t *testing.T) {
 	})
 	t.Run("Row", func(t *testing.T) {
 		t.Run("TruncatedIgnoredCellIsError", func(t *testing.T) {
-			columns := NewColumns(ColumnSpec{Name: "unused", Type: rowTestType(t, TypeBlob)})
+			columns := NewColumns(ColumnSpec{Name: "unused", Type: rowTestType(t, KindBlob)})
 			plan, err := Row[EmptyRow](IgnoreColumn[EmptyRow]("unused")).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
@@ -571,8 +571,8 @@ func TestRowsCodec(t *testing.T) {
 				Body Bytes
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "body", Type: rowTestType(t, TypeBlob)},
-				ColumnSpec{Name: "key", Type: rowTestType(t, TypeInt)},
+				ColumnSpec{Name: "body", Type: rowTestType(t, KindBlob)},
+				ColumnSpec{Name: "key", Type: rowTestType(t, KindInt)},
 			)
 			params := Params(
 				Param("key", Int32Codec, func(v input) int32 { return v.Key }),

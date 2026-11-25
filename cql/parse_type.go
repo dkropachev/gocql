@@ -35,13 +35,13 @@ func ParseDataType(s string) (DataType, error) {
 // package-level variables.
 func MustParseDataType(s string) DataType { return must(ParseDataType(s)) }
 
-var parsedScalarKinds = map[string]Type{
-	"ascii": TypeASCII, "bigint": TypeBigInt, "blob": TypeBlob, "boolean": TypeBoolean,
-	"counter": TypeCounter, "date": TypeDate, "decimal": TypeDecimal, "double": TypeDouble,
-	"duration": TypeDuration, "float": TypeFloat, "inet": TypeInet, "int": TypeInt,
-	"smallint": TypeSmallInt, "text": TypeText, "varchar": TypeText, "time": TypeTime,
-	"timestamp": TypeTimestamp, "timeuuid": TypeTimeUUID, "tinyint": TypeTinyInt,
-	"uuid": TypeUUID, "varint": TypeVarint,
+var parsedScalarKinds = map[string]Kind{
+	"ascii": KindASCII, "bigint": KindBigInt, "blob": KindBlob, "boolean": KindBoolean,
+	"counter": KindCounter, "date": KindDate, "decimal": KindDecimal, "double": KindDouble,
+	"duration": KindDuration, "float": KindFloat, "inet": KindInet, "int": KindInt,
+	"smallint": KindSmallInt, "text": KindText, "varchar": KindText, "time": KindTime,
+	"timestamp": KindTimestamp, "timeuuid": KindTimeUUID, "tinyint": KindTinyInt,
+	"uuid": KindUUID, "varint": KindVarint,
 }
 
 type typeParser struct {

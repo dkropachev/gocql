@@ -115,7 +115,7 @@ func (t *InternalPreparedSchemaTracker) InternalDependencies(keyspace string, pa
 			return
 		}
 		visited[d] = true
-		if d.Kind == cql.TypeUDT {
+		if d.Kind == cql.KindUDT {
 			add(InternalPreparedDependencyKey{InternalKind: 'k', InternalKeyspace: d.Keyspace, InternalName: ""})
 			add(InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: d.Keyspace, InternalName: d.Name})
 		}

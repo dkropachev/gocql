@@ -130,8 +130,8 @@ func TestPage(t *testing.T) {
 		})
 
 		t.Run("PartialErrorClears", func(t *testing.T) {
-			integer := codecTestMust(cql.ScalarType(cql.TypeInt))
-			blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
+			integer := codecTestMust(cql.ScalarType(cql.KindInt))
+			blob := codecTestMust(cql.ScalarType(cql.KindBlob))
 			type row struct {
 				Number int32
 				Value  cql.Bytes

@@ -29,7 +29,7 @@ func wantColumnError(t *testing.T, err error, stage CodecStage, index int, colum
 	}
 }
 
-func matrixType(kind Type) DataType { return mustMatrixType(ScalarType(kind)) }
+func matrixType(kind Kind) DataType { return mustMatrixType(ScalarType(kind)) }
 
 func mustMatrixType(t DataType, err error) DataType {
 	if err != nil {
@@ -42,7 +42,7 @@ func mustMatrixType(t DataType, err error) DataType {
 // mapping, a custom plan and a tuple or UDT member name the outer column,
 // with the member's path.
 func TestColumnErrorPaths(t *testing.T) {
-	intType, textType := matrixType(TypeInt), matrixType(TypeText)
+	intType, textType := matrixType(KindInt), matrixType(KindText)
 	t.Run("Struct", func(t *testing.T) {
 		type record struct {
 			ID   int32
@@ -87,7 +87,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		wantColumnError(t, err, "decode", 1, "b")
 	})
 	t.Run("CAS", func(t *testing.T) {
-		columns := NewColumns(ColumnSpec{Name: "[applied]", Type: matrixType(TypeBoolean)}, ColumnSpec{Name: "v", Type: intType})
+		columns := NewColumns(ColumnSpec{Name: "[applied]", Type: matrixType(KindBoolean)}, ColumnSpec{Name: "v", Type: intType})
 		chain := matrixRaw([]byte{0}, []byte{1, 2, 3})
 		plan, err := CASRows(OneColumn(Int32Codec)).Compile(columns)
 		if err != nil {
@@ -241,7 +241,7 @@ func matrixRaw(cells ...[]byte) wire.Chain {
 // member when no column encloses it: the message names the member's path,
 // and the member's own error stays reachable through Unwrap.
 func TestMemberError(t *testing.T) {
-	tuple := mustMatrixType(TupleType(matrixType(TypeInt), matrixType(TypeText)))
+	tuple := mustMatrixType(TupleType(matrixType(KindInt), matrixType(KindText)))
 	decoder := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextCodec)))
 	for name, test := range map[string]struct {
 		body []byte

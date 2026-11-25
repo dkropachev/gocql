@@ -21,24 +21,24 @@ type sliceCodec[T any] struct {
 // capacity (see ReuseBuffers). ListDecoder uses the same eager decoding path.
 func ListCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
-		enc: sequenceEncoder[T]{kind: TypeList, element: element},
-		dec: sequenceDecoder[T]{kind: TypeList, element: element},
+		enc: sequenceEncoder[T]{kind: KindList, element: element},
+		dec: sequenceDecoder[T]{kind: KindList, element: element},
 	}
 }
 
 // SetCodec is ListCodec for a set; elements keep the order the server sends.
 func SetCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
-		enc: sequenceEncoder[T]{kind: TypeSet, element: element},
-		dec: sequenceDecoder[T]{kind: TypeSet, element: element},
+		enc: sequenceEncoder[T]{kind: KindSet, element: element},
+		dec: sequenceDecoder[T]{kind: KindSet, element: element},
 	}
 }
 
 // VectorCodec encodes and decodes a vector as a []T of its declared dimension.
 func VectorCodec[T any](element Codec[T]) Codec[[]T] {
 	return sliceCodec[T]{
-		enc: sequenceEncoder[T]{kind: TypeVector, element: element},
-		dec: sequenceDecoder[T]{kind: TypeVector, element: element},
+		enc: sequenceEncoder[T]{kind: KindVector, element: element},
+		dec: sequenceDecoder[T]{kind: KindVector, element: element},
 	}
 }
 
@@ -111,7 +111,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	} else if !dec.typ.Equal(r.Type()) {
 		return typeValidation("type", "sequence metadata changed after compilation")
 	}
-	if dec.kind != TypeVector && r.err == nil && r.State() == Null {
+	if dec.kind != KindVector && r.err == nil && r.State() == Null {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
@@ -133,7 +133,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	for i := range out {
 		var child ValueReader
 		var err error
-		if dec.kind == TypeVector {
+		if dec.kind == KindVector {
 			child, err = readVectorElement(&cursor, element, dec.width)
 		} else {
 			child, err = validatedChild(&cursor, element)

@@ -31,13 +31,13 @@ type v2RouteRow struct {
 type v2RouteID struct{}
 
 func (v2RouteID) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeUUID {
+	if t.Kind() == cql.KindUUID {
 		return cql.UUIDCodec.CheckType(t)
 	}
 	return (metadata.InternalV2MetadataText{}).CheckType(t)
 }
 func (v2RouteID) Decode(r cql.ValueReader) (string, error) {
-	if r.Type().Kind() == cql.TypeUUID {
+	if r.Type().Kind() == cql.KindUUID {
 		return (metadata.InternalV2MetadataUUIDString{}).Decode(r)
 	}
 	return (metadata.InternalV2MetadataText{}).Decode(r)
@@ -65,7 +65,7 @@ func (p v2RouteParams) Encode(w *cql.ParamWriter, values [][]string) error {
 	for i, vs := range values {
 		c, _ := p.columns.At(i)
 		element, _ := c.Type.Element()
-		if element.Kind() == cql.TypeUUID {
+		if element.Kind() == cql.KindUUID {
 			ids := make([]cql.UUID, len(vs))
 			for j, v := range vs {
 				id, err := cql.ParseUUID(v)
@@ -93,10 +93,10 @@ func readV2ClientRoutes(ctx context.Context, c InternalControlConnection, table,
 	}
 	columns := make([]cql.ColumnSpec, len(bounds))
 	for i, vs := range bounds {
-		kind := cql.TypeUUID
+		kind := cql.KindUUID
 		for _, v := range vs {
 			if _, err := cql.ParseUUID(v); err != nil {
-				kind = cql.TypeText
+				kind = cql.KindText
 				break
 			}
 		}

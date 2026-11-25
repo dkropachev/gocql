@@ -13,7 +13,7 @@ import (
 const nanosecondsPerDay int64 = 24 * 60 * 60 * 1_000_000_000
 
 // DateCodec maps date to Date.
-var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
+var DateCodec Codec[Date] = scalarCodec[Date]{kind: KindDate,
 	encode: func(w *ValueWriter, v Date) error { return w.Uint32(uint32(v) ^ 0x80000000) },
 	decode: func(r ValueReader) (Date, error) {
 		if v, ok := fixedValue(r, 4); ok {
@@ -29,7 +29,7 @@ var DateCodec Codec[Date] = scalarCodec[Date]{kind: TypeDate,
 }
 
 // TimeOfDayCodec maps time to TimeOfDay, rejecting a value outside one day.
-var TimeOfDayCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
+var TimeOfDayCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: KindTime,
 	encode: func(w *ValueWriter, v TimeOfDay) error {
 		if int64(v) < 0 || int64(v) >= nanosecondsPerDay {
 			return errors.New("gocql: time outside one day")
@@ -55,14 +55,14 @@ var TimeOfDayCodec Codec[TimeOfDay] = scalarCodec[TimeOfDay]{kind: TypeTime,
 }
 
 // TimestampCodec maps timestamp to Timestamp.
-var TimestampCodec Codec[Timestamp] = integerCodec[Timestamp](TypeTimestamp, 8)
+var TimestampCodec Codec[Timestamp] = integerCodec[Timestamp](KindTimestamp, 8)
 
 // TimestampTimeCodec maps timestamp to time.Time, the default codec of
 // time.Time struct fields. It decodes a UTC time and encodes the time's
 // instant truncated to the millisecond, rejecting one outside the int64
 // millisecond range. The zero time.Time is an instant like any other, the
 // year 1; bind a Nullable[time.Time] for NULL.
-var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: TypeTimestamp,
+var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: KindTimestamp,
 	encode: func(w *ValueWriter, v time.Time) error {
 		ts, err := TimestampFromTime(v)
 		if err != nil {
@@ -86,7 +86,7 @@ var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: TypeTimes
 }
 
 // DurationCodec maps duration to Duration.
-var DurationCodec Codec[Duration] = scalarCodec[Duration]{kind: TypeDuration, encode: encodeDuration, decode: decodeDuration}
+var DurationCodec Codec[Duration] = scalarCodec[Duration]{kind: KindDuration, encode: encodeDuration, decode: decodeDuration}
 
 func durationSignsValid(v Duration) bool {
 	hasNegative := v.Months < 0 || v.Days < 0 || v.Nanoseconds < 0

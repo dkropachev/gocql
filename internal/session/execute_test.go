@@ -75,7 +75,7 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(name)))
 		b = append(b, name...)
 	}
-	b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
+	b = binary.BigEndian.AppendUint16(b, uint16(cql.KindBlob))
 	b = binary.BigEndian.AppendUint32(b, uint32(len(values)))
 	for _, value := range values {
 		b = binary.BigEndian.AppendUint32(b, uint32(len(value)))

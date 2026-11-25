@@ -31,7 +31,7 @@ type DataTypeDescriptor struct {
 	Element, Key   cql.DataType
 	Keyspace, Name string
 	Fields         cql.Columns
-	Kind           cql.Type
+	Kind           cql.Kind
 	Dimension      uint16
 	frozen         bool
 	frozenKnown    bool

@@ -328,7 +328,7 @@ var nodeHostID = cql.MustParseUUID("8f3e2b1a-4c5d-4e6f-9a0b-1c2d3e4f5a6b")
 
 type column struct {
 	name string
-	typ  []cql.Type
+	typ  []cql.Kind
 }
 
 func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
@@ -341,22 +341,22 @@ func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
 			broadcast = rpc
 		}
 		writeRows(resp, stream, []column{
-			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"data_center", []cql.Type{cql.TypeText}},
-			{"rack", []cql.Type{cql.TypeText}},
-			{"rpc_address", []cql.Type{cql.TypeInet}},
-			{"broadcast_address", []cql.Type{cql.TypeInet}},
-			{"release_version", []cql.Type{cql.TypeText}},
-			{"partitioner", []cql.Type{cql.TypeText}},
-			{"tokens", []cql.Type{cql.TypeSet, cql.TypeText}},
+			{"host_id", []cql.Kind{cql.KindUUID}},
+			{"data_center", []cql.Kind{cql.KindText}},
+			{"rack", []cql.Kind{cql.KindText}},
+			{"rpc_address", []cql.Kind{cql.KindInet}},
+			{"broadcast_address", []cql.Kind{cql.KindInet}},
+			{"release_version", []cql.Kind{cql.KindText}},
+			{"partitioner", []cql.Kind{cql.KindText}},
+			{"tokens", []cql.Kind{cql.KindSet, cql.KindText}},
 		}, [][]byte{nodeHostID[:], []byte("dc1"), []byte("rack1"), rpc, broadcast, []byte("3.0.8"), []byte("org.apache.cassandra.dht.Murmur3Partitioner"), textSet("-100", "100")})
 	case strings.Contains(q, "system.client_routes"):
 		cols := []column{
-			{"connection_id", []cql.Type{cql.TypeUUID}},
-			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"address", []cql.Type{cql.TypeText}},
-			{"port", []cql.Type{cql.TypeInt}},
-			{"tls_port", []cql.Type{cql.TypeInt}},
+			{"connection_id", []cql.Kind{cql.KindUUID}},
+			{"host_id", []cql.Kind{cql.KindUUID}},
+			{"address", []cql.Kind{cql.KindText}},
+			{"port", []cql.Kind{cql.KindInt}},
+			{"tls_port", []cql.Kind{cql.KindInt}},
 		}
 		if n.route.IsZero() {
 			writeRows(resp, stream, cols)
@@ -365,12 +365,12 @@ func (n *fakeNode) query(q string, stream int, resp *protocol.Framer) {
 		writeRows(resp, stream, cols, [][]byte{n.route[:], nodeHostID[:], []byte("127.0.0.1"), binary.BigEndian.AppendUint32(nil, uint32(n.port(routePort))), nil})
 	case strings.Contains(q, "system.peers"):
 		writeRows(resp, stream, []column{
-			{"peer", []cql.Type{cql.TypeInet}},
-			{"data_center", []cql.Type{cql.TypeText}},
-			{"host_id", []cql.Type{cql.TypeUUID}},
-			{"rack", []cql.Type{cql.TypeText}},
-			{"rpc_address", []cql.Type{cql.TypeInet}},
-			{"tokens", []cql.Type{cql.TypeSet, cql.TypeText}},
+			{"peer", []cql.Kind{cql.KindInet}},
+			{"data_center", []cql.Kind{cql.KindText}},
+			{"host_id", []cql.Kind{cql.KindUUID}},
+			{"rack", []cql.Kind{cql.KindText}},
+			{"rpc_address", []cql.Kind{cql.KindInet}},
+			{"tokens", []cql.Kind{cql.KindSet, cql.KindText}},
 		})
 	default:
 		resp.WriteHeader(0, frm.OpResult, stream)

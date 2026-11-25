@@ -49,7 +49,7 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 	var expect [n]cql.Columns
 	for i := range bodies {
 		name := fmt.Sprintf("v%d", i)
-		bodies[i] = reuseMetadataBody(name, uint16(cql.TypeBlob))
+		bodies[i] = reuseMetadataBody(name, uint16(cql.KindBlob))
 		// Expected columns as a prepared statement holds them: equal to the
 		// parsed ones, never the same.
 		expect[i] = cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: name, Type: cql.BlobType})
@@ -99,13 +99,13 @@ func TestMetadataReuseInterleaved(t *testing.T) {
 			t.Fatal("statement has no entry of its own", i)
 		}
 	}
-	changedBody := reuseMetadataBody("v0", uint16(cql.TypeInt))
+	changedBody := reuseMetadataBody("v0", uint16(cql.KindInt))
 	for range 2 {
 		changed := parse(changedBody, expect[0])
 		if changed.Equal(expect[0]) {
 			t.Fatal("changed metadata returned stale columns")
 		}
-		if spec, _ := changed.At(0); spec.Type.Kind() != cql.TypeInt {
+		if spec, _ := changed.At(0); spec.Type.Kind() != cql.KindInt {
 			t.Fatal("changed metadata parsed to", spec.Type)
 		}
 	}

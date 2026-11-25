@@ -23,17 +23,17 @@ type streamFixture struct {
 
 func streamFixtureColumns(t testing.TB) Columns {
 	t.Helper()
-	blobs := CodecTestMust(ListType(rowTestType(t, TypeBlob)))
-	ints := CodecTestMust(SetType(rowTestType(t, TypeInt)))
+	blobs := CodecTestMust(ListType(rowTestType(t, KindBlob)))
+	ints := CodecTestMust(SetType(rowTestType(t, KindInt)))
 	return NewColumns(
-		ColumnSpec{Name: "payload", Type: rowTestType(t, TypeBlob)},
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "key", Type: rowTestType(t, TypeUUID)},
-		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
+		ColumnSpec{Name: "payload", Type: rowTestType(t, KindBlob)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "key", Type: rowTestType(t, KindUUID)},
+		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
 		ColumnSpec{Name: "pieces", Type: blobs},
 		ColumnSpec{Name: "tags", Type: ints},
-		ColumnSpec{Name: "maybe", Type: rowTestType(t, TypeBigInt)},
-		ColumnSpec{Name: "at", Type: rowTestType(t, TypeTimestamp)},
+		ColumnSpec{Name: "maybe", Type: rowTestType(t, KindBigInt)},
+		ColumnSpec{Name: "at", Type: rowTestType(t, KindTimestamp)},
 	)
 }
 
@@ -89,9 +89,9 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 		Counts [][]byte `cql:"counts,stream=Varint"`
 	}
 	columns := NewColumns(
-		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, TypeText)))},
-		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, TypeASCII)))},
-		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, TypeVarint)))},
+		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, KindText)))},
+		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, KindASCII)))},
+		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, KindVarint)))},
 	)
 	type source struct{ Names, Codes []string }
 	params := Params(

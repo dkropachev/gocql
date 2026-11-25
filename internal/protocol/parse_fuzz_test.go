@@ -25,9 +25,9 @@ func deepListType(levels int) []byte {
 	f.WriteString("t")
 	f.WriteString("c")
 	for range levels {
-		f.WriteShort(uint16(cql.TypeList))
+		f.WriteShort(uint16(cql.KindList))
 	}
-	f.WriteShort(uint16(cql.TypeInt))
+	f.WriteShort(uint16(cql.KindInt))
 	f.WriteInt(0) // no rows
 	return f.Buf
 }
@@ -41,7 +41,7 @@ func customTypeResult(name string) []byte {
 	f.WriteString("ks")
 	f.WriteString("t")
 	f.WriteString("c")
-	f.WriteShort(uint16(cql.TypeCustom))
+	f.WriteShort(uint16(cql.KindCustom))
 	f.WriteString(name)
 	f.WriteInt(0)
 	return f.Buf

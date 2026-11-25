@@ -7,107 +7,107 @@ import (
 	"fmt"
 )
 
-// Type is the kind of a CQL data type, as the native protocol numbers it, so
-// the zero Type is TypeCustom. TypeVector is the driver's own: the protocol
+// Kind is the kind of a CQL data type, as the native protocol numbers it, so
+// the zero Kind is KindCustom. KindVector is the driver's own: the protocol
 // sends a vector as a custom type. CQL's text and varchar are one type, so
-// both are TypeText: the protocol's text ID 0x000A and the schema names text
+// both are KindText: the protocol's text ID 0x000A and the schema names text
 // and varchar all decode to it. Later releases may add values, so a switch
 // over them needs a default case.
-type Type uint16
+type Kind uint16
 
 // The kinds of CQL data types.
 const (
-	TypeCustom    Type = 0x0000
-	TypeASCII     Type = 0x0001
-	TypeBigInt    Type = 0x0002
-	TypeBlob      Type = 0x0003
-	TypeBoolean   Type = 0x0004
-	TypeCounter   Type = 0x0005
-	TypeDecimal   Type = 0x0006
-	TypeDouble    Type = 0x0007
-	TypeFloat     Type = 0x0008
-	TypeInt       Type = 0x0009
-	TypeTimestamp Type = 0x000B
-	TypeUUID      Type = 0x000C
-	TypeText      Type = 0x000D
-	TypeVarint    Type = 0x000E
-	TypeTimeUUID  Type = 0x000F
-	TypeInet      Type = 0x0010
-	TypeDate      Type = 0x0011
-	TypeTime      Type = 0x0012
-	TypeSmallInt  Type = 0x0013
-	TypeTinyInt   Type = 0x0014
-	TypeDuration  Type = 0x0015
-	TypeList      Type = 0x0020
-	TypeMap       Type = 0x0021
-	TypeSet       Type = 0x0022
-	TypeUDT       Type = 0x0030
-	TypeTuple     Type = 0x0031
+	KindCustom    Kind = 0x0000
+	KindASCII     Kind = 0x0001
+	KindBigInt    Kind = 0x0002
+	KindBlob      Kind = 0x0003
+	KindBoolean   Kind = 0x0004
+	KindCounter   Kind = 0x0005
+	KindDecimal   Kind = 0x0006
+	KindDouble    Kind = 0x0007
+	KindFloat     Kind = 0x0008
+	KindInt       Kind = 0x0009
+	KindTimestamp Kind = 0x000B
+	KindUUID      Kind = 0x000C
+	KindText      Kind = 0x000D
+	KindVarint    Kind = 0x000E
+	KindTimeUUID  Kind = 0x000F
+	KindInet      Kind = 0x0010
+	KindDate      Kind = 0x0011
+	KindTime      Kind = 0x0012
+	KindSmallInt  Kind = 0x0013
+	KindTinyInt   Kind = 0x0014
+	KindDuration  Kind = 0x0015
+	KindList      Kind = 0x0020
+	KindMap       Kind = 0x0021
+	KindSet       Kind = 0x0022
+	KindUDT       Kind = 0x0030
+	KindTuple     Kind = 0x0031
 
-	// TypeVector is the kind of a vector<element, dimension>. It is not a
+	// KindVector is the kind of a vector<element, dimension>. It is not a
 	// native protocol type ID.
-	TypeVector Type = 0x0100
+	KindVector Kind = 0x0100
 )
 
-// String returns the kind's CQL name, such as "bigint", or Type(n) for a
+// String returns the kind's CQL name, such as "bigint", or Kind(n) for a
 // value it does not define.
-func (t Type) String() string {
+func (t Kind) String() string {
 	switch t {
-	case TypeCustom:
+	case KindCustom:
 		return "custom"
-	case TypeASCII:
+	case KindASCII:
 		return "ascii"
-	case TypeBigInt:
+	case KindBigInt:
 		return "bigint"
-	case TypeBlob:
+	case KindBlob:
 		return "blob"
-	case TypeBoolean:
+	case KindBoolean:
 		return "boolean"
-	case TypeCounter:
+	case KindCounter:
 		return "counter"
-	case TypeDecimal:
+	case KindDecimal:
 		return "decimal"
-	case TypeDouble:
+	case KindDouble:
 		return "double"
-	case TypeFloat:
+	case KindFloat:
 		return "float"
-	case TypeInt:
+	case KindInt:
 		return "int"
-	case TypeText:
+	case KindText:
 		return "text"
-	case TypeTimestamp:
+	case KindTimestamp:
 		return "timestamp"
-	case TypeUUID:
+	case KindUUID:
 		return "uuid"
-	case TypeTimeUUID:
+	case KindTimeUUID:
 		return "timeuuid"
-	case TypeInet:
+	case KindInet:
 		return "inet"
-	case TypeDate:
+	case KindDate:
 		return "date"
-	case TypeDuration:
+	case KindDuration:
 		return "duration"
-	case TypeTime:
+	case KindTime:
 		return "time"
-	case TypeSmallInt:
+	case KindSmallInt:
 		return "smallint"
-	case TypeTinyInt:
+	case KindTinyInt:
 		return "tinyint"
-	case TypeList:
+	case KindList:
 		return "list"
-	case TypeMap:
+	case KindMap:
 		return "map"
-	case TypeSet:
+	case KindSet:
 		return "set"
-	case TypeVarint:
+	case KindVarint:
 		return "varint"
-	case TypeTuple:
+	case KindTuple:
 		return "tuple"
-	case TypeUDT:
+	case KindUDT:
 		return "udt"
-	case TypeVector:
+	case KindVector:
 		return "vector"
 	default:
-		return fmt.Sprintf("Type(%d)", int(t))
+		return fmt.Sprintf("Kind(%d)", int(t))
 	}
 }

@@ -29,7 +29,7 @@ func mapType(t *testing.T) cql.DataType {
 
 func columns(t *testing.T) cql.Columns {
 	t.Helper()
-	collection := func(name string, of func(cql.DataType) (cql.DataType, error), kind cql.Type) cql.ColumnSpec {
+	collection := func(name string, of func(cql.DataType) (cql.DataType, error), kind cql.Kind) cql.ColumnSpec {
 		element, _ := cql.ScalarType(kind)
 		typ, err := of(element)
 		if err != nil {
@@ -37,7 +37,7 @@ func columns(t *testing.T) cql.Columns {
 		}
 		return cql.ColumnSpec{Name: name, Type: typ}
 	}
-	spec := func(name string, kind cql.Type) cql.ColumnSpec {
+	spec := func(name string, kind cql.Kind) cql.ColumnSpec {
 		typ, err := cql.ScalarType(kind)
 		if err != nil {
 			t.Fatal(err)
@@ -45,17 +45,17 @@ func columns(t *testing.T) cql.Columns {
 		return cql.ColumnSpec{Name: name, Type: typ}
 	}
 	return cql.NewColumns(
-		spec("id", cql.TypeUUID), spec("text", cql.TypeText), spec("bool", cql.TypeBoolean),
-		spec("tiny", cql.TypeTinyInt), spec("small", cql.TypeSmallInt), spec("int", cql.TypeInt),
-		spec("big_value", cql.TypeBigInt), spec("float", cql.TypeFloat), spec("double", cql.TypeDouble),
-		spec("ascii", cql.TypeASCII), spec("blob", cql.TypeBlob), spec("bytes", cql.TypeBlob),
-		spec("time_id", cql.TypeTimeUUID), spec("addr", cql.TypeInet), spec("hits", cql.TypeCounter),
-		spec("varint", cql.TypeVarint), spec("decimal", cql.TypeDecimal), spec("day", cql.TypeDate),
-		spec("clock", cql.TypeTime), spec("at", cql.TypeTimestamp), spec("span", cql.TypeDuration),
-		spec("maybe_int", cql.TypeInt), spec("maybe_text", cql.TypeText),
-		spec("origin", cql.TypeBigInt), spec("corner", cql.TypeBigInt),
-		collection("names", cql.ListType, cql.TypeText), collection("scores", cql.SetType, cql.TypeInt),
-		cql.ColumnSpec{Name: "attrs", Type: mapType(t)}, spec("created_at", cql.TypeTimestamp),
+		spec("id", cql.KindUUID), spec("text", cql.KindText), spec("bool", cql.KindBoolean),
+		spec("tiny", cql.KindTinyInt), spec("small", cql.KindSmallInt), spec("int", cql.KindInt),
+		spec("big_value", cql.KindBigInt), spec("float", cql.KindFloat), spec("double", cql.KindDouble),
+		spec("ascii", cql.KindASCII), spec("blob", cql.KindBlob), spec("bytes", cql.KindBlob),
+		spec("time_id", cql.KindTimeUUID), spec("addr", cql.KindInet), spec("hits", cql.KindCounter),
+		spec("varint", cql.KindVarint), spec("decimal", cql.KindDecimal), spec("day", cql.KindDate),
+		spec("clock", cql.KindTime), spec("at", cql.KindTimestamp), spec("span", cql.KindDuration),
+		spec("maybe_int", cql.KindInt), spec("maybe_text", cql.KindText),
+		spec("origin", cql.KindBigInt), spec("corner", cql.KindBigInt),
+		collection("names", cql.ListType, cql.KindText), collection("scores", cql.SetType, cql.KindInt),
+		cql.ColumnSpec{Name: "attrs", Type: mapType(t)}, spec("created_at", cql.KindTimestamp),
 	)
 }
 
@@ -122,31 +122,31 @@ func decode(t *testing.T, cols cql.Columns, rows cql.RowDecoder[Fixture], chain 
 
 func streamColumns(t *testing.T) cql.Columns {
 	t.Helper()
-	scalar := func(kind cql.Type) cql.DataType {
+	scalar := func(kind cql.Kind) cql.DataType {
 		typ, err := cql.ScalarType(kind)
 		if err != nil {
 			t.Fatal(err)
 		}
 		return typ
 	}
-	blobs, err := cql.ListType(scalar(cql.TypeBlob))
+	blobs, err := cql.ListType(scalar(cql.KindBlob))
 	if err != nil {
 		t.Fatal(err)
 	}
-	ints, err := cql.SetType(scalar(cql.TypeInt))
+	ints, err := cql.SetType(scalar(cql.KindInt))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return cql.NewColumns(
-		cql.ColumnSpec{Name: "id", Type: scalar(cql.TypeInt)},
-		cql.ColumnSpec{Name: "key", Type: scalar(cql.TypeUUID)},
-		cql.ColumnSpec{Name: "payload", Type: scalar(cql.TypeBlob)},
-		cql.ColumnSpec{Name: "name", Type: scalar(cql.TypeText)},
+		cql.ColumnSpec{Name: "id", Type: scalar(cql.KindInt)},
+		cql.ColumnSpec{Name: "key", Type: scalar(cql.KindUUID)},
+		cql.ColumnSpec{Name: "payload", Type: scalar(cql.KindBlob)},
+		cql.ColumnSpec{Name: "name", Type: scalar(cql.KindText)},
 		cql.ColumnSpec{Name: "pieces", Type: blobs},
 		cql.ColumnSpec{Name: "tags", Type: ints},
-		cql.ColumnSpec{Name: "maybe", Type: scalar(cql.TypeBigInt)},
-		cql.ColumnSpec{Name: "at", Type: scalar(cql.TypeTimestamp)},
-		cql.ColumnSpec{Name: "addr", Type: scalar(cql.TypeInet)},
+		cql.ColumnSpec{Name: "maybe", Type: scalar(cql.KindBigInt)},
+		cql.ColumnSpec{Name: "at", Type: scalar(cql.KindTimestamp)},
+		cql.ColumnSpec{Name: "addr", Type: scalar(cql.KindInet)},
 	)
 }
 

@@ -58,8 +58,8 @@ type ruleDeep struct {
 // TestStructMappingRules pins how ParamsOf and RowOf match struct fields to
 // columns, next to the explicit Params and Row they are equivalent to.
 func TestStructMappingRules(t *testing.T) {
-	integer := ruleType(t, cql.TypeInt)
-	text := ruleType(t, cql.TypeText)
+	integer := ruleType(t, cql.KindInt)
+	text := ruleType(t, cql.KindText)
 	cols := func(names ...string) cql.Columns {
 		specs := make([]cql.ColumnSpec, len(names))
 		for i, name := range names {
@@ -234,7 +234,7 @@ func TestStructMappingRules(t *testing.T) {
 	})
 }
 
-func ruleType(t *testing.T, kind cql.Type) cql.DataType {
+func ruleType(t *testing.T, kind cql.Kind) cql.DataType {
 	t.Helper()
 	typ, err := cql.ScalarType(kind)
 	if err != nil {

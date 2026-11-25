@@ -18,7 +18,7 @@ var ErrReleased = errors.New("gocql: borrowed value has been released")
 var ErrNull = errors.New("gocql: value is null")
 
 // nullCellError is the failure of decoding NULL into a non-nullable value.
-type nullCellError struct{ kind Type }
+type nullCellError struct{ kind Kind }
 
 func (e nullCellError) Error() string {
 	return fmt.Sprintf("gocql: nonnullable %s cannot decode cell state null", e.kind)
@@ -153,16 +153,16 @@ func (e *memberError) Error() string { return fmt.Sprintf("gocql: member %s: %v"
 
 func (e *memberError) Unwrap() error { return e.err }
 
-// recordMemberError turns the CodecError of a tuple (kind TypeTuple) or UDT
+// recordMemberError turns the CodecError of a tuple (kind KindTuple) or UDT
 // member into a memberError, so that the enclosing column names the member
 // by its path instead of being hidden by it.
-func recordMemberError(kind Type, err error) error {
+func recordMemberError(kind Kind, err error) error {
 	e, ok := err.(*CodecError) //nolint:errorlint // only the member plan's own CodecError names a member; a wrapped one belongs to a deeper value
 	if !ok {
 		return err
 	}
 	path := fmt.Sprintf("[%d]", e.Index)
-	if kind == TypeUDT {
+	if kind == KindUDT {
 		path = "." + e.Column
 	}
 	return &memberError{err: e.Err, path: path + e.Path, stage: e.Stage}

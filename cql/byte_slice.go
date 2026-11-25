@@ -19,7 +19,7 @@ type byteSliceCodec struct{ compiled bool }
 func (byteSliceCodec) CheckType(t DataType) error {
 	perfCheckType()
 
-	if t.Kind() != TypeBlob {
+	if t.Kind() != KindBlob {
 		return fmt.Errorf("gocql: blob codec cannot use %s", t.Kind())
 	}
 	return nil
@@ -32,7 +32,7 @@ func (c byteSliceCodec) Encode(w *ValueWriter, v []byte) error {
 }
 func (c byteSliceCodec) typeGuard(t DataType) error {
 	if c.compiled {
-		return checkScalarType(t, TypeBlob, 0)
+		return checkScalarType(t, KindBlob, 0)
 	}
 	return c.CheckType(t)
 }
@@ -52,7 +52,7 @@ func (c byteSliceCodec) DecodeInto(r ValueReader, dst *[]byte) error {
 	if dst == nil {
 		return typeValidation("destination", "nil blob destination")
 	}
-	if err := checkScalarType(r.Type(), TypeBlob, 0); err != nil {
+	if err := checkScalarType(r.Type(), KindBlob, 0); err != nil {
 		return err
 	}
 	if err := requirePresent(r); err != nil {
@@ -68,7 +68,7 @@ func (c byteSliceCodec) DecodeInto(r ValueReader, dst *[]byte) error {
 	return err
 }
 func (byteSliceCodec) decodeColumnInto(r *RowReader, dst *[]byte) error {
-	n, err := r.scalarColumn(TypeBlob, 0, true, 0)
+	n, err := r.scalarColumn(KindBlob, 0, true, 0)
 	if err != nil {
 		return err
 	}

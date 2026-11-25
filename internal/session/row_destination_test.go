@@ -46,7 +46,7 @@ func dirtyResponse(t *testing.T, rows int) *transport.InternalResponsePage {
 		body = append(body, 0, 0, 0, 1, 7)
 	}
 	chain := typedTestChain(t, body)
-	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 	return &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: cols, Rows: chain, RowCount: int32(rows), Owner: wire.NewLease(chain, nil)}}
 }
 
@@ -90,8 +90,8 @@ func TestCustomPlanStillGetsZeroedDestination(t *testing.T) {
 // TestBuiltinPlansManageDestination checks that every built-in row plan
 // clears its own destination, so the session skips its per-row clear.
 func TestBuiltinPlansManageDestination(t *testing.T) {
-	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
-	boolean := codecTestMust(cql.ScalarType(cql.TypeBoolean))
+	blob := codecTestMust(cql.ScalarType(cql.KindBlob))
+	boolean := codecTestMust(cql.ScalarType(cql.KindBoolean))
 	one := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: blob})
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: blob}, cql.ColumnSpec{Name: "b", Type: blob})
 	cas := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "v", Type: blob})
@@ -134,8 +134,8 @@ func TestBuiltinPlansManageDestination(t *testing.T) {
 // produces the same value as decoding it into a zeroed destination, so no
 // field of the previous row survives the skipped clear.
 func TestBuiltinPlansClearStaleRow(t *testing.T) {
-	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
-	boolean := codecTestMust(cql.ScalarType(cql.TypeBoolean))
+	blob := codecTestMust(cql.ScalarType(cql.KindBlob))
+	boolean := codecTestMust(cql.ScalarType(cql.KindBoolean))
 	one := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: blob})
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: blob}, cql.ColumnSpec{Name: "b", Type: blob})
 	cas := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "v", Type: blob})

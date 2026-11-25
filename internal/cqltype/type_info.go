@@ -54,11 +54,11 @@ func dataTypeFromInfoDepth(info TypeInfo, depth int) (cql.DataType, error) {
 			return cql.DataType{}, err
 		}
 		switch t.Type() {
-		case cql.TypeList:
+		case cql.KindList:
 			return cql.ListType(e)
-		case cql.TypeSet:
+		case cql.KindSet:
 			return cql.SetType(e)
-		case cql.TypeMap:
+		case cql.KindMap:
 			k, err := child(t.Key)
 			if err != nil {
 				return cql.DataType{}, err
@@ -119,7 +119,7 @@ func ColumnsFromInfo(info []ColumnInfo) (cql.Columns, error) {
 }
 
 // NativeKind returns n's type kind.
-func NativeKind(n NativeType) cql.Type { return n.Type() }
+func NativeKind(n NativeType) cql.Kind { return n.Type() }
 
 // NativeCustom returns n's custom class name, for a custom type.
 func NativeCustom(n NativeType) string { return n.Custom() }

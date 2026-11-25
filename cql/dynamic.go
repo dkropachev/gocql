@@ -74,15 +74,15 @@ func (v Value) Type() DataType { return v.typ }
 // State returns the value's cell state.
 func (v Value) State() CellState { return v.state }
 
-var dynamicScalarTypes = func() [TypeDuration + 1]DataType {
-	var result [TypeDuration + 1]DataType
-	for kind := TypeASCII; kind <= TypeDuration; kind++ {
+var dynamicScalarTypes = func() [KindDuration + 1]DataType {
+	var result [KindDuration + 1]DataType
+	for kind := KindASCII; kind <= KindDuration; kind++ {
 		result[kind], _ = ScalarType(kind)
 	}
 	return result
 }()
 
-func dynamicScalar(kind Type) Value { return Value{typ: dynamicScalarTypes[kind]} }
+func dynamicScalar(kind Kind) Value { return Value{typ: dynamicScalarTypes[kind]} }
 
 // NullValue constructs a NULL cell of t.
 func NullValue(t DataType) Value { return Value{typ: t, state: Null} }
@@ -103,7 +103,7 @@ func EmptyValue(t DataType) (Value, error) {
 
 // BooleanValue constructs a dynamic CQL boolean value.
 func BooleanValue(b bool) Value {
-	v := dynamicScalar(TypeBoolean)
+	v := dynamicScalar(KindBoolean)
 	if b {
 		v.bits = 1
 	}
@@ -112,35 +112,35 @@ func BooleanValue(b bool) Value {
 
 // TinyIntValue constructs a dynamic CQL tinyint value.
 func TinyIntValue(n int8) Value {
-	v := dynamicScalar(TypeTinyInt)
+	v := dynamicScalar(KindTinyInt)
 	v.bits = uint64(n)
 	return v
 }
 
 // SmallIntValue constructs a dynamic CQL smallint value.
 func SmallIntValue(n int16) Value {
-	v := dynamicScalar(TypeSmallInt)
+	v := dynamicScalar(KindSmallInt)
 	v.bits = uint64(n)
 	return v
 }
 
 // IntValue constructs a dynamic CQL int value.
-func IntValue(n int32) Value { v := dynamicScalar(TypeInt); v.bits = uint64(n); return v }
+func IntValue(n int32) Value { v := dynamicScalar(KindInt); v.bits = uint64(n); return v }
 
 // BigIntValue constructs a dynamic CQL bigint value. It also binds a counter
 // parameter, as in UPDATE ... SET c = c + ?.
-func BigIntValue(n int64) Value { v := dynamicScalar(TypeBigInt); v.bits = uint64(n); return v }
+func BigIntValue(n int64) Value { v := dynamicScalar(KindBigInt); v.bits = uint64(n); return v }
 
 // FloatValue constructs a dynamic CQL float value.
 func FloatValue(n float32) Value {
-	v := dynamicScalar(TypeFloat)
+	v := dynamicScalar(KindFloat)
 	v.bits = uint64(math.Float32bits(n))
 	return v
 }
 
 // DoubleValue constructs a dynamic CQL double value.
 func DoubleValue(n float64) Value {
-	v := dynamicScalar(TypeDouble)
+	v := dynamicScalar(KindDouble)
 	v.bits = math.Float64bits(n)
 	return v
 }
@@ -148,7 +148,7 @@ func DoubleValue(n float64) Value {
 // TextValue constructs a dynamic CQL text value. Invalid UTF-8 fails when the
 // value is bound or read with Text.
 func TextValue(s string) Value {
-	v := dynamicScalar(TypeText)
+	v := dynamicScalar(KindText)
 	c, _ := wire.NewChain(wire.BorrowString(s))
 	v.bytes = bytesView(c, wire.Ref{})
 	return v
@@ -158,24 +158,24 @@ func TextValue(s string) Value {
 // the value is bound or read with Text.
 func ASCIIValue(s string) Value {
 	v := TextValue(s)
-	v.typ = dynamicScalarTypes[TypeASCII]
+	v.typ = dynamicScalarTypes[KindASCII]
 	return v
 }
 
 // BlobValue constructs a dynamic CQL blob value. It borrows b until parameter capture; keep b immutable until then.
 func BlobValue(b []byte) Value {
-	v := dynamicScalar(TypeBlob)
+	v := dynamicScalar(KindBlob)
 	v.bytes = BorrowBytes(b)
 	return v
 }
 
 // UUIDValue constructs a dynamic CQL uuid value.
-func UUIDValue(u UUID) Value { v := dynamicScalar(TypeUUID); v.uuid = u; return v }
+func UUIDValue(u UUID) Value { v := dynamicScalar(KindUUID); v.uuid = u; return v }
 
 // TimeUUIDValue constructs a dynamic CQL timeuuid value. A UUID that is not
 // version 1 fails when the value is bound.
 func TimeUUIDValue(u TimeUUID) Value {
-	v := dynamicScalar(TypeTimeUUID)
+	v := dynamicScalar(KindTimeUUID)
 	v.uuid = UUID(u)
 	return v
 }
@@ -183,25 +183,25 @@ func TimeUUIDValue(u TimeUUID) Value {
 // InetValue constructs a dynamic CQL inet value. An invalid address, or one
 // with a zone, fails when the value is bound.
 func InetValue(a netip.Addr) Value {
-	v := dynamicScalar(TypeInet)
+	v := dynamicScalar(KindInet)
 	v.inet = a
 	return v
 }
 
 // DateValue constructs a dynamic CQL date value.
-func DateValue(n Date) Value { v := dynamicScalar(TypeDate); v.bits = uint64(n); return v }
+func DateValue(n Date) Value { v := dynamicScalar(KindDate); v.bits = uint64(n); return v }
 
 // TimeValue constructs a dynamic CQL time value. A time outside one day fails
 // when the value is bound.
 func TimeValue(n TimeOfDay) Value {
-	v := dynamicScalar(TypeTime)
+	v := dynamicScalar(KindTime)
 	v.bits = uint64(n)
 	return v
 }
 
 // TimestampValue constructs a dynamic CQL timestamp value.
 func TimestampValue(n Timestamp) Value {
-	v := dynamicScalar(TypeTimestamp)
+	v := dynamicScalar(KindTimestamp)
 	v.bits = uint64(n)
 	return v
 }
@@ -209,27 +209,27 @@ func TimestampValue(n Timestamp) Value {
 // DurationValue constructs a dynamic CQL duration value. Components with mixed
 // signs fail when the value is bound.
 func DurationValue(d Duration) Value {
-	v := dynamicScalar(TypeDuration)
+	v := dynamicScalar(KindDuration)
 	v.duration = d
 	return v
 }
 
 // VarintValue constructs a dynamic CQL varint value.
 func VarintValue(n Varint) Value {
-	v := dynamicScalar(TypeVarint)
+	v := dynamicScalar(KindVarint)
 	v.bytes = varintBytes(n)
 	return v
 }
 
 // DecimalValue constructs a dynamic CQL decimal value.
 func DecimalValue(n Decimal) Value {
-	v := dynamicScalar(TypeDecimal)
+	v := dynamicScalar(KindDecimal)
 	v.scale = n.Scale
 	v.bytes = varintBytes(n.Unscaled)
 	return v
 }
 
-func (v Value) require(kinds ...Type) error {
+func (v Value) require(kinds ...Kind) error {
 	if err := validateDataType(v.typ); err != nil {
 		return err
 	}
@@ -248,21 +248,21 @@ func (v Value) require(kinds ...Type) error {
 }
 
 // Bool returns a present boolean.
-func (v Value) Bool() (bool, error) { err := v.require(TypeBoolean); return v.bits != 0, err }
+func (v Value) Bool() (bool, error) { err := v.require(KindBoolean); return v.bits != 0, err }
 
 // Signed returns a present tinyint, smallint, int, bigint, counter, date,
 // time or timestamp as an int64.
 func (v Value) Signed() (int64, error) {
-	err := v.require(TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeCounter, TypeDate, TypeTime, TypeTimestamp)
+	err := v.require(KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter, KindDate, KindTime, KindTimestamp)
 	return int64(v.bits), err
 }
 
 // Float returns a present float or double as a float64.
 func (v Value) Float() (float64, error) {
-	if err := v.require(TypeFloat, TypeDouble); err != nil {
+	if err := v.require(KindFloat, KindDouble); err != nil {
 		return 0, err
 	}
-	if v.typ.Kind() == TypeFloat {
+	if v.typ.Kind() == KindFloat {
 		return float64(math.Float32frombits(uint32(v.bits))), nil
 	}
 	return math.Float64frombits(v.bits), nil
@@ -272,11 +272,11 @@ func (v Value) Float() (float64, error) {
 // response; see Clone, or Str for a string that does not. It fails for a
 // TextValue or ASCIIValue that is not valid for its type.
 func (v Value) Text() (Text, error) {
-	if err := v.require(TypeText, TypeASCII); err != nil {
+	if err := v.require(KindText, KindASCII); err != nil {
 		return Text{}, err
 	}
 	if !v.encoded {
-		if err := validateText(v.bytes, v.typ.Kind() == TypeASCII); err != nil {
+		if err := validateText(v.bytes, v.typ.Kind() == KindASCII); err != nil {
 			return Text{}, &ValidationError{Field: "value", Err: err}
 		}
 	}
@@ -297,7 +297,7 @@ func (v Value) Str() (string, error) {
 // Bytes returns a present blob. A decoded Bytes borrows the response; see
 // Clone.
 func (v Value) Bytes() (Bytes, error) {
-	if err := v.require(TypeBlob); err != nil {
+	if err := v.require(KindBlob); err != nil {
 		return Bytes{}, err
 	}
 	return v.bytes, nil
@@ -305,7 +305,7 @@ func (v Value) Bytes() (Bytes, error) {
 
 // UUID returns a present uuid or timeuuid.
 func (v Value) UUID() (UUID, error) {
-	if err := v.require(TypeUUID, TypeTimeUUID); err != nil {
+	if err := v.require(KindUUID, KindTimeUUID); err != nil {
 		return UUID{}, err
 	}
 	return v.uuid, nil
@@ -313,7 +313,7 @@ func (v Value) UUID() (UUID, error) {
 
 // TimeUUID returns a present timeuuid.
 func (v Value) TimeUUID() (TimeUUID, error) {
-	if err := v.require(TypeTimeUUID); err != nil {
+	if err := v.require(KindTimeUUID); err != nil {
 		return TimeUUID{}, err
 	}
 	return TimeUUID(v.uuid), nil
@@ -322,10 +322,10 @@ func (v Value) TimeUUID() (TimeUUID, error) {
 // Time returns a present timestamp, or the midnight of a present date, as a
 // UTC time.
 func (v Value) Time() (time.Time, error) {
-	if err := v.require(TypeTimestamp, TypeDate); err != nil {
+	if err := v.require(KindTimestamp, KindDate); err != nil {
 		return time.Time{}, err
 	}
-	if v.typ.Kind() == TypeDate {
+	if v.typ.Kind() == KindDate {
 		return Date(int32(v.bits)).Time(), nil
 	}
 	return Timestamp(int64(v.bits)).Time(), nil
@@ -333,7 +333,7 @@ func (v Value) Time() (time.Time, error) {
 
 // TimeOfDay returns a present time.
 func (v Value) TimeOfDay() (TimeOfDay, error) {
-	if err := v.require(TypeTime); err != nil {
+	if err := v.require(KindTime); err != nil {
 		return 0, err
 	}
 	return TimeOfDay(int64(v.bits)), nil
@@ -341,7 +341,7 @@ func (v Value) TimeOfDay() (TimeOfDay, error) {
 
 // Inet returns a present inet.
 func (v Value) Inet() (netip.Addr, error) {
-	if err := v.require(TypeInet); err != nil {
+	if err := v.require(KindInet); err != nil {
 		return netip.Addr{}, err
 	}
 	return v.inet, nil
@@ -349,7 +349,7 @@ func (v Value) Inet() (netip.Addr, error) {
 
 // Duration returns a present duration.
 func (v Value) Duration() (Duration, error) {
-	if err := v.require(TypeDuration); err != nil {
+	if err := v.require(KindDuration); err != nil {
 		return Duration{}, err
 	}
 	return v.duration, nil
@@ -358,7 +358,7 @@ func (v Value) Duration() (Duration, error) {
 // Varint returns a present varint. A decoded Varint borrows the response; see
 // Clone.
 func (v Value) Varint() (Varint, error) {
-	if err := v.require(TypeVarint); err != nil {
+	if err := v.require(KindVarint); err != nil {
 		return Varint{}, err
 	}
 	return varintView(v.bytes), nil
@@ -367,7 +367,7 @@ func (v Value) Varint() (Varint, error) {
 // Decimal returns a present decimal. A decoded Decimal borrows the response;
 // see Clone.
 func (v Value) Decimal() (Decimal, error) {
-	if err := v.require(TypeDecimal); err != nil {
+	if err := v.require(KindDecimal); err != nil {
 		return Decimal{}, err
 	}
 	return Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)}, nil
@@ -443,20 +443,20 @@ func checkedTypeHeight(t DataType, depth int, heights map[*dataTypeDescriptor]in
 	}
 	var err error
 	switch d.Kind {
-	case TypeList, TypeSet:
+	case KindList, KindSet:
 		err = child(d.Element)
-	case TypeMap:
+	case KindMap:
 		err = child(d.Key)
 		if err == nil {
 			err = child(d.Element)
 		}
-	case TypeTuple, TypeUDT:
-		if d.Kind == TypeUDT && (d.Keyspace == "" || d.Name == "") {
+	case KindTuple, KindUDT:
+		if d.Kind == KindUDT && (d.Keyspace == "" || d.Name == "") {
 			return 0, typeValidation("type", "UDT identity is incomplete")
 		}
 		names := make(map[string]bool)
 		for i, f := range columnSlice(d.Fields) {
-			if d.Kind == TypeUDT {
+			if d.Kind == KindUDT {
 				if f.Name == "" || names[f.Name] {
 					return 0, typeValidation("type", "empty or duplicate UDT field %q", f.Name)
 				}
@@ -466,7 +466,7 @@ func checkedTypeHeight(t DataType, depth int, heights map[*dataTypeDescriptor]in
 				return 0, fmt.Errorf("dynamic field %d: %w", i, err)
 			}
 		}
-	case TypeVector:
+	case KindVector:
 		if d.Dimension == 0 {
 			return 0, typeValidation("type", "incomplete vector type")
 		}
@@ -490,7 +490,7 @@ func dynamicCompatible(actual, wanted DataType) bool {
 	}
 	// A bigint binds a counter.
 	a, w := actual.Kind(), wanted.Kind()
-	return (a == TypeBigInt || a == TypeCounter) && (w == TypeBigInt || w == TypeCounter)
+	return (a == KindBigInt || a == KindCounter) && (w == KindBigInt || w == KindCounter)
 }
 func checkDynamicValue(t DataType, v Value, nested bool) error {
 	if err := validateDataType(v.typ); err != nil {
@@ -514,34 +514,34 @@ func checkDynamicValue(t DataType, v Value, nested bool) error {
 	}
 	return nil
 }
-func dynamicAggregate(t DataType, kind Type, values []Value) (Value, error) {
+func dynamicAggregate(t DataType, kind Kind, values []Value) (Value, error) {
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
 	}
 	return dynamicAggregateChecked(t, kind, values)
 }
-func dynamicAggregateChecked(t DataType, kind Type, values []Value) (Value, error) {
+func dynamicAggregateChecked(t DataType, kind Kind, values []Value) (Value, error) {
 	if t.Kind() != kind {
 		return Value{}, typeValidation("type", "expected %s, got %s", kind, t)
 	}
-	if kind == TypeVector && len(values) != int(descriptorOf(t).Dimension) {
+	if kind == KindVector && len(values) != int(descriptorOf(t).Dimension) {
 		return Value{}, typeValidation("vector", "expected %d elements, got %d", descriptorOf(t).Dimension, len(values))
 	}
-	if kind == TypeTuple && len(values) != descriptorOf(t).Fields.Len() {
+	if kind == KindTuple && len(values) != descriptorOf(t).Fields.Len() {
 		return Value{}, typeValidation("tuple", "expected %d fields, got %d", descriptorOf(t).Fields.Len(), len(values))
 	}
 	for i, v := range values {
 		typ := descriptorOf(t).Element
-		if kind == TypeTuple {
+		if kind == KindTuple {
 			typ = columnSlice(descriptorOf(t).Fields)[i].Type
 		}
 		if err := checkDynamicValue(typ, v, true); err != nil {
 			return Value{}, fmt.Errorf("dynamic element %d: %w", i, err)
 		}
-		if (kind == TypeList || kind == TypeSet) && v.state == Null {
+		if (kind == KindList || kind == KindSet) && v.state == Null {
 			return Value{}, typeValidation("element", "collection element %d cannot be null", i)
 		}
-		if kind == TypeVector && v.state != Present {
+		if kind == KindVector && v.state != Present {
 			width, err := vectorFixedWidth(typ)
 			if err != nil {
 				return Value{}, err
@@ -562,7 +562,7 @@ func ListValue(element DataType, values ...Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return dynamicAggregate(t, TypeList, values)
+	return dynamicAggregate(t, KindList, values)
 }
 
 // SetValue constructs a dynamic set of element values, validating each
@@ -573,13 +573,13 @@ func SetValue(element DataType, values ...Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return dynamicAggregate(t, TypeSet, values)
+	return dynamicAggregate(t, KindSet, values)
 }
 
 // TupleValue constructs a dynamic tuple value, validating its members against t.
 // Input storage is borrowed until captured; Clone recursively detaches it.
 func TupleValue(t DataType, v []Value) (Value, error) {
-	return dynamicAggregate(t, TypeTuple, v)
+	return dynamicAggregate(t, KindTuple, v)
 }
 
 // VectorValue constructs a dynamic vector of element values, whose
@@ -593,7 +593,7 @@ func VectorValue(element DataType, values ...Value) (Value, error) {
 	if err != nil {
 		return Value{}, err
 	}
-	return dynamicAggregate(t, TypeVector, values)
+	return dynamicAggregate(t, KindVector, values)
 }
 
 // MapValue constructs a dynamic map value, validating its members against t.
@@ -605,7 +605,7 @@ func MapValue(t DataType, entries []ValueEntry) (Value, error) {
 	return mapValueChecked(t, entries)
 }
 func mapValueChecked(t DataType, entries []ValueEntry) (Value, error) {
-	if t.Kind() != TypeMap {
+	if t.Kind() != KindMap {
 		return Value{}, typeValidation("type", "expected map, got %s", t)
 	}
 	for i, e := range entries {
@@ -631,7 +631,7 @@ func UDTValue(t DataType, fields []ValueField) (Value, error) {
 	return udtValueChecked(t, fields)
 }
 func udtValueChecked(t DataType, fields []ValueField) (Value, error) {
-	if t.Kind() != TypeUDT {
+	if t.Kind() != KindUDT {
 		return Value{}, typeValidation("type", "expected UDT, got %s", t)
 	}
 	if len(fields) != descriptorOf(t).Fields.Len() {
@@ -683,49 +683,49 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return w.emptyValue()
 	}
 	switch v.typ.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		return encodeDynamicScalar(w, BoolCodec, v.bits != 0)
-	case TypeTinyInt:
+	case KindTinyInt:
 		return encodeDynamicScalar(w, Int8Codec, int8(v.bits))
-	case TypeSmallInt:
+	case KindSmallInt:
 		return encodeDynamicScalar(w, Int16Codec, int16(v.bits))
-	case TypeInt:
+	case KindInt:
 		return encodeDynamicScalar(w, Int32Codec, int32(v.bits))
-	case TypeBigInt, TypeCounter:
+	case KindBigInt, KindCounter:
 		return encodeDynamicScalar(w, Int64Codec, int64(v.bits))
-	case TypeFloat:
+	case KindFloat:
 		return encodeDynamicScalar(w, Float32Codec, math.Float32frombits(uint32(v.bits)))
-	case TypeDouble:
+	case KindDouble:
 		return encodeDynamicScalar(w, Float64Codec, math.Float64frombits(v.bits))
-	case TypeText, TypeASCII:
+	case KindText, KindASCII:
 		// A decoded payload was validated for its kind, and
 		// checkDynamicValue matched that kind to the column, so it is
 		// written without validating it again.
 		if !v.encoded {
-			if err := validateText(v.bytes, v.typ.Kind() == TypeASCII); err != nil {
+			if err := validateText(v.bytes, v.typ.Kind() == KindASCII); err != nil {
 				return err
 			}
 		}
 		return w.borrowView(v.bytes)
-	case TypeBlob:
+	case KindBlob:
 		return encodeDynamicScalar(w, BytesCodec, v.bytes)
-	case TypeUUID:
+	case KindUUID:
 		return encodeDynamicScalar(w, UUIDCodec, v.uuid)
-	case TypeTimeUUID:
+	case KindTimeUUID:
 		return encodeDynamicScalar(w, TimeUUIDCodec, TimeUUID(v.uuid))
-	case TypeInet:
+	case KindInet:
 		return encodeDynamicScalar(w, InetCodec, v.inet)
-	case TypeDate:
+	case KindDate:
 		return encodeDynamicScalar(w, DateCodec, Date(v.bits))
-	case TypeTime:
+	case KindTime:
 		return encodeDynamicScalar(w, TimeOfDayCodec, TimeOfDay(v.bits))
-	case TypeTimestamp:
+	case KindTimestamp:
 		return encodeDynamicScalar(w, TimestampCodec, Timestamp(v.bits))
-	case TypeDuration:
+	case KindDuration:
 		return encodeDynamicScalar(w, DurationCodec, v.duration)
-	case TypeVarint:
+	case KindVarint:
 		return encodeDynamicScalar(w, VarintCodec, varintView(v.bytes))
-	case TypeDecimal:
+	case KindDecimal:
 		return encodeDynamicScalar(w, DecimalCodec, Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)})
 	default:
 		return encodeDynamicAggregate(w, v)
@@ -773,41 +773,41 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return Value{typ: r.Type(), state: EmptyCell}, nil
 	}
 	switch r.Type().Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		return decodeDynamicScalar(r, BoolCodec, BooleanValue)
-	case TypeTinyInt:
+	case KindTinyInt:
 		return decodeDynamicScalar(r, Int8Codec, TinyIntValue)
-	case TypeSmallInt:
+	case KindSmallInt:
 		return decodeDynamicScalar(r, Int16Codec, SmallIntValue)
-	case TypeInt:
+	case KindInt:
 		return decodeDynamicScalar(r, Int32Codec, IntValue)
-	case TypeBigInt, TypeCounter:
+	case KindBigInt, KindCounter:
 		return decodeDynamicScalar(r, Int64Codec, BigIntValue)
-	case TypeFloat:
+	case KindFloat:
 		return decodeDynamicScalar(r, Float32Codec, FloatValue)
-	case TypeDouble:
+	case KindDouble:
 		return decodeDynamicScalar(r, Float64Codec, DoubleValue)
-	case TypeText, TypeASCII:
+	case KindText, KindASCII:
 		return decodeDynamicScalar(r, TextCodec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
-	case TypeBlob:
+	case KindBlob:
 		return decodeDynamicScalar(r, BytesCodec, func(b Bytes) Value { return Value{bytes: b} })
-	case TypeUUID:
+	case KindUUID:
 		return decodeDynamicScalar(r, UUIDCodec, UUIDValue)
-	case TypeTimeUUID:
+	case KindTimeUUID:
 		return decodeDynamicScalar(r, TimeUUIDCodec, func(u TimeUUID) Value { return Value{uuid: UUID(u)} })
-	case TypeInet:
+	case KindInet:
 		return decodeDynamicScalar(r, InetCodec, func(a netip.Addr) Value { return Value{inet: a} })
-	case TypeDate:
+	case KindDate:
 		return decodeDynamicScalar(r, DateCodec, DateValue)
-	case TypeTime:
+	case KindTime:
 		return decodeDynamicScalar(r, TimeOfDayCodec, func(n TimeOfDay) Value { return Value{bits: uint64(n)} })
-	case TypeTimestamp:
+	case KindTimestamp:
 		return decodeDynamicScalar(r, TimestampCodec, TimestampValue)
-	case TypeDuration:
+	case KindDuration:
 		return decodeDynamicScalar(r, DurationCodec, func(d Duration) Value { return Value{duration: d} })
-	case TypeVarint:
+	case KindVarint:
 		return decodeDynamicScalar(r, VarintCodec, VarintValue)
-	case TypeDecimal:
+	case KindDecimal:
 		return decodeDynamicScalar(r, DecimalCodec, DecimalValue)
 	default:
 		return decodeDynamicAggregate(r, shape)
@@ -818,15 +818,15 @@ func decodeDynamicAggregate(r ValueReader, shape *streamValidationPlan) (Value, 
 	v := Value{typ: r.Type(), encoded: true, shape: shape}
 	var err error
 	switch r.Type().Kind() {
-	case TypeList, TypeSet, TypeVector:
+	case KindList, KindSet, KindVector:
 		if shape == nil {
 			v.bytes, v.count, v.vectorWidth, err = validateSequenceBody(r, r.Type().Kind())
 		} else {
 			v.bytes, v.count, v.vectorWidth, err = validateSequenceLayout(r, r.Type().Kind(), descriptorOf(r.Type()).Element, shape.width)
 		}
-	case TypeMap:
+	case KindMap:
 		v.bytes, v.count, err = validateMapBody(r)
-	case TypeTuple, TypeUDT:
+	case KindTuple, KindUDT:
 		v.bytes = r.Bytes()
 		v.count = descriptorOf(r.Type()).Fields.Len()
 		cursor := r.cursorValue()
@@ -903,7 +903,7 @@ func seqOf[T any](it *valueIterator[T], err error) iter.Seq2[T, error] {
 // iterElements returns an independent iterator over list, set, vector, or
 // tuple members. Tuple fields retain their physical ordinal and complete type.
 func (v Value) iterElements() (*valueIterator[Value], error) {
-	if err := v.require(TypeList, TypeSet, TypeVector, TypeTuple); err != nil {
+	if err := v.require(KindList, KindSet, KindVector, KindTuple); err != nil {
 		return nil, err
 	}
 	if !v.encoded {
@@ -911,12 +911,12 @@ func (v Value) iterElements() (*valueIterator[Value], error) {
 	}
 	typ := v.typ
 	return &valueIterator[Value]{clone: func(v Value) Value { return v.Clone() }, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (Value, error) {
-		if typ.Kind() == TypeTuple {
+		if typ.Kind() == KindTuple {
 			return dynamicField(c, columnSlice(descriptorOf(typ).Fields)[i].Type, dynamicShapeField(v.shape, i))
 		}
 		var r ValueReader
 		var err error
-		if typ.Kind() == TypeVector {
+		if typ.Kind() == KindVector {
 			r, err = readVectorElement(c, descriptorOf(typ).Element, v.vectorWidth)
 		} else {
 			r, err = c.Child(descriptorOf(typ).Element)
@@ -931,7 +931,7 @@ func (v Value) iterElements() (*valueIterator[Value], error) {
 // iterEntries returns an independent iterator over the key and value of each
 // entry of a map, in encoded order.
 func (v Value) iterEntries() (*valueIterator[ValueEntry], error) {
-	if err := v.require(TypeMap); err != nil {
+	if err := v.require(KindMap); err != nil {
 		return nil, err
 	}
 	if !v.encoded {
@@ -961,14 +961,14 @@ func (v Value) iterEntries() (*valueIterator[ValueEntry], error) {
 // iterFields returns an independent iterator over the fields of a tuple or
 // UDT, in type order. A tuple's fields have no names.
 func (v Value) iterFields() (*valueIterator[ValueField], error) {
-	if err := v.require(TypeTuple, TypeUDT); err != nil {
+	if err := v.require(KindTuple, KindUDT); err != nil {
 		return nil, err
 	}
 	columns := descriptorOf(v.typ).Fields
 	if !v.encoded {
 		return newValueIterator(columns.Len(), func(i int) (ValueField, error) {
 			field := columnSlice(columns)[i]
-			if v.typ.Kind() == TypeTuple {
+			if v.typ.Kind() == KindTuple {
 				if i >= len(v.values) {
 					return ValueField{}, typeValidation("tuple", "missing field %d", i)
 				}
@@ -998,7 +998,7 @@ func encodeDynamicChild(w *ValueWriter, typ DataType, v Value, shape *streamVali
 func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 	typ := w.Type()
 	switch typ.Kind() {
-	case TypeList, TypeSet, TypeVector, TypeTuple:
+	case KindList, KindSet, KindVector, KindTuple:
 		if !v.encoded {
 			if _, err := dynamicAggregateChecked(v.typ, v.typ.Kind(), v.values); err != nil {
 				return err
@@ -1013,24 +1013,24 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 			count = len(v.values)
 		}
 		switch typ.Kind() {
-		case TypeList, TypeSet:
+		case KindList, KindSet:
 			if uint64(count) > math.MaxInt32 {
 				return typeValidation("count", "too many elements")
 			}
 			if err := w.Uint32(uint32(count)); err != nil {
 				return err
 			}
-		case TypeTuple:
+		case KindTuple:
 			if count != descriptorOf(typ).Fields.Len() {
 				return typeValidation("tuple", "wrong field count")
 			}
-		case TypeVector:
+		case KindVector:
 			if count != int(descriptorOf(typ).Dimension) {
 				return typeValidation("vector", "wrong element count")
 			}
 		}
 		var width int64
-		if typ.Kind() == TypeVector {
+		if typ.Kind() == KindVector {
 			if v.shape != nil {
 				width = v.shape.width
 			} else {
@@ -1044,10 +1044,10 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 		for iterator.Next() {
 			value := iterator.Value()
 			childType := descriptorOf(typ).Element
-			if typ.Kind() == TypeTuple {
+			if typ.Kind() == KindTuple {
 				childType = columnSlice(descriptorOf(typ).Fields)[i].Type
 			}
-			if typ.Kind() == TypeVector {
+			if typ.Kind() == KindVector {
 				err = writeVectorElement(w, childType, width, checkedDynamicEncoder{typ: childType, shape: dynamicShapeChild(v.shape, childType)}, value)
 			} else {
 				err = encodeDynamicChild(w, childType, value, dynamicShapeChild(v.shape, childType))
@@ -1058,7 +1058,7 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 			i++
 		}
 		return iterator.Err()
-	case TypeMap:
+	case KindMap:
 		if !v.encoded {
 			if _, err := mapValueChecked(v.typ, v.entries); err != nil {
 				return err
@@ -1088,7 +1088,7 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 			}
 		}
 		return iterator.Err()
-	case TypeUDT:
+	case KindUDT:
 		if !v.encoded {
 			if _, err := udtValueChecked(v.typ, v.fields); err != nil {
 				return err

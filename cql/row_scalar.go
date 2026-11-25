@@ -43,9 +43,9 @@ func (c scalarCodec[T]) decodeColumnInto(r *RowReader, dst *T) error {
 // required width whose length prefix ends inside the cursor's head span. It
 // consumes nothing until all hold; any other cell goes to scalarColumnSlow,
 // which reproduces every error and cursor position. A zero DataType has kind
-// TypeCustom, which no scalar codec uses, so the kind check also covers
+// KindCustom, which no scalar codec uses, so the kind check also covers
 // ValidateDataType.
-func (r *RowReader) scalarColumn(kind, alternative Type, compiled bool, width int64) (int64, error) {
+func (r *RowReader) scalarColumn(kind, alternative Kind, compiled bool, width int64) (int64, error) {
 	if r != nil && r.cursor != nil {
 		if column, ok := r.columns.At(r.index); ok {
 			k := column.Type.Kind()
@@ -69,7 +69,7 @@ func (r *RowReader) scalarColumn(kind, alternative Type, compiled bool, width in
 // errors, nulls, missing cells and prefixes that reach a span boundary.
 //
 //go:noinline
-func (r *RowReader) scalarColumnSlow(kind, alternative Type, compiled bool, width int64) (int64, error) {
+func (r *RowReader) scalarColumnSlow(kind, alternative Kind, compiled bool, width int64) (int64, error) {
 	if r == nil || r.cursor == nil {
 		return 0, typeValidation("reader", "nil or zero row reader")
 	}

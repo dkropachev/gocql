@@ -259,7 +259,7 @@ func TestEvents(t *testing.T) {
 							if !strings.Contains(query, "system.client_routes") {
 								return false
 							}
-							columns := []rowsCol{{"connection_id", optNative(cql.TypeText)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeText)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
+							columns := []rowsCol{{"connection_id", optNative(cql.KindText)}, {"host_id", optNative(cql.KindUUID)}, {"address", optNative(cql.KindText)}, {"port", optNative(cql.KindInt)}, {"tls_port", optNative(cql.KindInt)}}
 							writeRows(response, stream, columns, [][][]byte{{[]byte("route"), testLocalHostID[:], []byte("127.0.0.1"), binary.BigEndian.AppendUint32(nil, uint32(srv.port())), nil}})
 							return true
 						}

@@ -6,7 +6,7 @@ predeclared scalars such as `TextType` and `IntType` need no error check.
 `ParseDataType("map<text, frozen<list<int>>>")` parses a type as CQL writes
 it; a user-defined type needs its fields, so it is built with `UDTType` or
 read from metadata.
-Text and varchar are one CQL type, `TypeText`: a column declared either way
+Text and varchar are one CQL type, `KindText`: a column declared either way
 has that kind.
 `UDTOptionsFor` derives UDT codec options from a UDT `DataType`.
 `Encoder[T]`/`Decoder[T]` compile typed value plans; `ParamEncoder[P]` and
@@ -43,7 +43,7 @@ and `Varint`, `Decimal`, `Date`, `TimeOfDay`, `Timestamp` and `Duration`
 print, in a CQL literal form. `VarintFromInt64` and `Varint.Int64` convert
 a varint that fits an `int64`, `VarintFromBigInt` and `BigInt` any other;
 `ParseDecimal` reads a decimal as `Decimal.String` prints it, and
-`Decimal.Rat` returns its exact value. A vector type has kind `TypeVector`, the
+`Decimal.Rat` returns its exact value. A vector type has kind `KindVector`, the
 driver's own kind: the protocol sends a vector as a custom type. Standalone
 `EncodeValue`, which copies caller payloads, and `DecodeValue` use the same
 codec implementation as execution; `NewEncodedValue` wraps an encoded body,

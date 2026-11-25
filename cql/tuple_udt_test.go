@@ -28,7 +28,7 @@ import (
 
 func TestTupleUDT(t *testing.T) {
 	t.Run("Clone", func(t *testing.T) {
-		text := rowTestType(t, TypeText)
+		text := rowTestType(t, KindText)
 		list, _ := ListType(text)
 		tuple, _ := TupleType(list)
 		encoder := TupleEncoder(OneParam(ListEncoder(StringCodec)))
@@ -56,7 +56,7 @@ func TestTupleUDT(t *testing.T) {
 	t.Run("Tuple", func(t *testing.T) {
 		t.Run("ConcurrentPlansCheckOnce", func(t *testing.T) {
 			var checks atomic.Int64
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			tuple, _ := TupleType(integer)
 			columns := NewColumns(ColumnSpec{Name: "record", Type: tuple})
 			decoder := TupleDecoder(OneColumn(containerCheckedInt{checks: &checks}))
@@ -93,7 +93,7 @@ func TestTupleUDT(t *testing.T) {
 				ID   int32
 				Name Nullable[Text]
 			}
-			integer, text := rowTestType(t, TypeInt), rowTestType(t, TypeText)
+			integer, text := rowTestType(t, KindInt), rowTestType(t, KindText)
 			tuple, _ := TupleType(integer, text)
 			encoder := TupleEncoder(Params(
 				ParamAt(0, Int32Codec, func(v input) int32 { return v.ID }),
@@ -150,7 +150,7 @@ func TestTupleUDT(t *testing.T) {
 	})
 	t.Run("UDTDecoder", func(t *testing.T) {
 		t.Run("IgnoredSuffixValidatesFraming", func(t *testing.T) {
-			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "ignored", Type: rowTestType(t, TypeBlob)})
+			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "ignored", Type: rowTestType(t, KindBlob)})
 			decoder := UDTDecoder(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true})
 			for _, bad := range []string{"000000040000000700", "00000004000000070000000401", "0000000400000007fffffffe", "0000000400000007ffffffff00"} {
 				body, _ := hex.DecodeString(bad)
@@ -164,7 +164,7 @@ func TestTupleUDT(t *testing.T) {
 				ID   int32
 				Body Text
 			}
-			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)}, ColumnSpec{Name: "body", Type: rowTestType(t, TypeText)})
+			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "body", Type: rowTestType(t, KindText)})
 			rows := Row(
 				Column("id", Int32Codec, func(v *record) *int32 { return &v.ID }),
 				Column("body", TextCodec, func(v *record) *Text { return &v.Body }),
@@ -194,7 +194,7 @@ func TestTupleUDT(t *testing.T) {
 				Body    Text
 				Missing int32
 			}
-			integer, text := rowTestType(t, TypeInt), rowTestType(t, TypeText)
+			integer, text := rowTestType(t, KindInt), rowTestType(t, KindText)
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "body", Type: text}, ColumnSpec{Name: "extra", Type: integer}, ColumnSpec{Name: "id", Type: integer})
 			params := Params(
 				Param("id", Int32Codec, func(v record) int32 { return v.ID }),
@@ -248,7 +248,7 @@ func TestTupleUDT(t *testing.T) {
 		})
 	})
 	t.Run("UDTEncoder", func(t *testing.T) {
-		typ := CodecTestMust(UDTType("ks", "record", ColumnSpec{Name: "v", Type: FoundationScalar(t, TypeInt)}))
+		typ := CodecTestMust(UDTType("ks", "record", ColumnSpec{Name: "v", Type: FoundationScalar(t, KindInt)}))
 		params := Params(Param("v", Int32Codec, func(v int32) int32 { return v }))
 		rows := Row(Column("v", Int32Codec, func(v *int32) *int32 { return v }))
 		for _, options := range []UDTOptions{{Keyspace: "other"}, {Keyspace: "other", Name: "record"}, {Keyspace: "ks", Name: "wrong"}} {
@@ -280,7 +280,7 @@ func TestTupleUDT(t *testing.T) {
 			}
 		})
 		t.Run("PropagateThroughComposition", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "extra", Type: integer})
 			options := UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true}
 			params := ConvertParams(Params(Param("id", Int32Codec, func(v int32) int32 { return v })), func(v int64) int32 { return int32(v) })

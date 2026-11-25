@@ -10,8 +10,8 @@ import (
 
 func TestDataType(t *testing.T) {
 	t.Run("Immutability", func(t *testing.T) {
-		integer := FoundationScalar(t, TypeInt)
-		text := FoundationScalar(t, TypeText)
+		integer := FoundationScalar(t, KindInt)
+		text := FoundationScalar(t, KindText)
 		fields := []ColumnSpec{{Name: "a", Type: integer}, {Name: "b", Type: text}}
 		udt, err := UDTType("ks", "record", fields...)
 		if err != nil {
@@ -72,8 +72,8 @@ func TestDataType(t *testing.T) {
 
 	t.Run("Constructors", func(t *testing.T) {
 		t.Run("Validation", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
-			cases := []func() (DataType, error){func() (DataType, error) { return ScalarType(TypeList) }, func() (DataType, error) { return ScalarType(TypeCustom) }, func() (DataType, error) { return ListType(DataType{}) }, func() (DataType, error) { return MapType(integer, DataType{}) }, func() (DataType, error) { return VectorType(integer, 0) }, func() (DataType, error) { return UDTType("", "record") }, func() (DataType, error) {
+			integer := FoundationScalar(t, KindInt)
+			cases := []func() (DataType, error){func() (DataType, error) { return ScalarType(KindList) }, func() (DataType, error) { return ScalarType(KindCustom) }, func() (DataType, error) { return ListType(DataType{}) }, func() (DataType, error) { return MapType(integer, DataType{}) }, func() (DataType, error) { return VectorType(integer, 0) }, func() (DataType, error) { return UDTType("", "record") }, func() (DataType, error) {
 				return UDTType("ks", "record", ColumnSpec{Name: "x", Type: integer}, ColumnSpec{Name: "x", Type: integer})
 			}}
 			for i, test := range cases {
@@ -89,7 +89,7 @@ func TestDataType(t *testing.T) {
 	})
 
 	t.Run("ValidateScalarKind", func(t *testing.T) {
-		for kind := TypeASCII; kind <= TypeDuration; kind++ {
+		for kind := KindASCII; kind <= KindDuration; kind++ {
 			if err := validateScalarKind(kind); err != nil {
 				t.Fatalf("valid scalar %v: %v", kind, err)
 			}
@@ -101,7 +101,7 @@ func TestDataType(t *testing.T) {
 				t.Fatalf("scalar %v validation allocated: %g", kind, allocations)
 			}
 		}
-		for _, kind := range []Type{TypeCustom, TypeDuration + 1, TypeList, TypeMap, TypeSet, TypeTuple, TypeUDT, 65535} {
+		for _, kind := range []Kind{KindCustom, KindDuration + 1, KindList, KindMap, KindSet, KindTuple, KindUDT, 65535} {
 			err := validateScalarKind(kind)
 			if validation, ok := errors.AsType[*ValidationError](err); !ok || validation.Field != "kind" {
 				t.Fatalf("unsupported scalar %v: expected kind ValidationError, got %v", kind, err)
@@ -114,15 +114,15 @@ func TestDataType(t *testing.T) {
 
 	t.Run("Predeclared", func(t *testing.T) {
 		t.Run("Shared", func(t *testing.T) {
-			predeclared := map[Type]DataType{
-				TypeASCII: ASCIIType, TypeBigInt: BigIntType, TypeBlob: BlobType, TypeBoolean: BooleanType,
-				TypeCounter: CounterType, TypeDecimal: DecimalType, TypeDouble: DoubleType, TypeFloat: FloatType,
-				TypeInt: IntType, TypeText: TextType, TypeTimestamp: TimestampType, TypeUUID: UUIDType,
-				TypeVarint: VarintType, TypeTimeUUID: TimeUUIDType, TypeInet: InetType,
-				TypeDate: DateType, TypeTime: TimeType, TypeSmallInt: SmallIntType, TypeTinyInt: TinyIntType,
-				TypeDuration: DurationType,
+			predeclared := map[Kind]DataType{
+				KindASCII: ASCIIType, KindBigInt: BigIntType, KindBlob: BlobType, KindBoolean: BooleanType,
+				KindCounter: CounterType, KindDecimal: DecimalType, KindDouble: DoubleType, KindFloat: FloatType,
+				KindInt: IntType, KindText: TextType, KindTimestamp: TimestampType, KindUUID: UUIDType,
+				KindVarint: VarintType, KindTimeUUID: TimeUUIDType, KindInet: InetType,
+				KindDate: DateType, KindTime: TimeType, KindSmallInt: SmallIntType, KindTinyInt: TinyIntType,
+				KindDuration: DurationType,
 			}
-			for kind := TypeASCII; kind <= TypeDuration; kind++ {
+			for kind := KindASCII; kind <= KindDuration; kind++ {
 				if kind == wireText {
 					continue
 				}
@@ -138,10 +138,10 @@ func TestDataType(t *testing.T) {
 					t.Fatalf("ScalarType(%v) = %v, want shared %v", kind, got, want)
 				}
 			}
-			if _, err := ScalarType(TypeList); err == nil {
+			if _, err := ScalarType(KindList); err == nil {
 				t.Fatal("ScalarType accepted a collection kind")
 			}
-			if allocs := testing.AllocsPerRun(100, func() { _, _ = ScalarType(TypeText) }); allocs != 0 {
+			if allocs := testing.AllocsPerRun(100, func() { _, _ = ScalarType(KindText) }); allocs != 0 {
 				t.Fatalf("ScalarType allocated %v times", allocs)
 			}
 		})
@@ -156,11 +156,11 @@ func TestTextVarcharOneKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if legacy.Kind() != TypeText || descriptorOf(legacy) != descriptorOf(TextType) || !legacy.Equal(TextType) {
+	if legacy.Kind() != KindText || descriptorOf(legacy) != descriptorOf(TextType) || !legacy.Equal(TextType) {
 		t.Fatalf("legacy text ID = %v, want TextType", legacy)
 	}
-	if got := TypeText.String(); got != "text" {
-		t.Fatalf("TypeText.String() = %q", got)
+	if got := KindText.String(); got != "text" {
+		t.Fatalf("KindText.String() = %q", got)
 	}
 	nest := func(text DataType) DataType {
 		list := dataTypeTestMust(ListType(text))

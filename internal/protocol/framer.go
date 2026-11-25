@@ -541,22 +541,22 @@ func (f *Framer) readTypeInfo(depth int) TypeInfo {
 	id := f.ReadShort()
 
 	simple := cqltype.NewCustomType(f.Proto,
-		cql.Type(id), "")
+		cql.Kind(id), "")
 
 	// Fast path for simple native types (through TypeDuration).
-	if id > 0 && id <= uint16(cql.TypeDuration) {
+	if id > 0 && id <= uint16(cql.KindDuration) {
 		return simple
 	}
 
-	if cqltype.NativeKind(simple) == cql.TypeCustom {
+	if cqltype.NativeKind(simple) == cql.KindCustom {
 		simple = NewCustomType(simple.Version(), simple.Type(), f.ReadString())
-		if cassType := cqltype.GetApacheCassandraType(cqltype.NativeCustom(simple)); cassType != cql.TypeCustom {
+		if cassType := cqltype.GetApacheCassandraType(cqltype.NativeCustom(simple)); cassType != cql.KindCustom {
 			simple = NewCustomType(simple.Version(), cassType, simple.Custom())
 		}
 	}
 
 	switch cqltype.NativeKind(simple) {
-	case cql.TypeTuple:
+	case cql.KindTuple:
 		n := f.ReadShort()
 		tuple := TupleTypeInfo{
 			NativeType: simple,
@@ -569,7 +569,7 @@ func (f *Framer) readTypeInfo(depth int) TypeInfo {
 
 		return tuple
 
-	case cql.TypeUDT:
+	case cql.KindUDT:
 		udt := UDTTypeInfo{
 			NativeType: simple,
 		}
@@ -585,19 +585,19 @@ func (f *Framer) readTypeInfo(depth int) TypeInfo {
 		}
 
 		return udt
-	case cql.TypeMap, cql.TypeList, cql.TypeSet:
+	case cql.KindMap, cql.KindList, cql.KindSet:
 		collection := CollectionType{
 			NativeType: simple,
 		}
 
-		if cqltype.NativeKind(simple) == cql.TypeMap {
+		if cqltype.NativeKind(simple) == cql.KindMap {
 			collection.Key = f.readTypeInfo(depth + 1)
 		}
 
 		collection.Elem = f.readTypeInfo(depth + 1)
 
 		return collection
-	case cql.TypeCustom:
+	case cql.KindCustom:
 		vectorTypePrefix := ApacheCassandraTypePrefix + "VectorType"
 		if strings.HasPrefix(cqltype.NativeCustom(simple), vectorTypePrefix) {
 			return f.readVectorTypeInfo(simple, vectorTypePrefix)

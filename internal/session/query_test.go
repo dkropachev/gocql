@@ -858,8 +858,8 @@ func TestQuery(t *testing.T) {
 				return body
 			}
 		}
-		key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cql.ScalarType(cql.TypeInt))})
-		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+		key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cql.ScalarType(cql.KindInt))})
+		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 		prepared := preparedBody([]byte("loopback"), key, value, 0)
 		if workload == "pwrite" {
 			prepared = preparedBody([]byte("loopback"), cql.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), cql.NewColumns(), 0)

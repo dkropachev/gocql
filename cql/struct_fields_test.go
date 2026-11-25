@@ -38,31 +38,31 @@ type structFixture struct {
 
 func structFixtureColumns(t testing.TB) Columns {
 	t.Helper()
-	spec := func(name string, kind Type) ColumnSpec {
+	spec := func(name string, kind Kind) ColumnSpec {
 		return ColumnSpec{Name: name, Type: rowTestType(t, kind)}
 	}
 	// Server order differs from field order: mapping is by name.
 	return NewColumns(
-		spec("id", TypeUUID),
-		spec("text", TypeText),
-		spec("bool", TypeBoolean),
-		spec("tiny", TypeTinyInt),
-		spec("small", TypeSmallInt),
-		spec("int", TypeInt),
-		spec("big_value", TypeBigInt),
-		spec("float", TypeFloat),
-		spec("double", TypeDouble),
-		spec("ascii", TypeASCII),
-		spec("blob", TypeBlob),
-		spec("time_id", TypeTimeUUID),
-		spec("addr", TypeInet),
-		spec("hits", TypeCounter),
-		spec("day", TypeDate),
-		spec("clock", TypeTime),
-		spec("at", TypeTimestamp),
-		spec("span", TypeDuration),
-		spec("maybe_int", TypeInt),
-		spec("maybe_text", TypeText),
+		spec("id", KindUUID),
+		spec("text", KindText),
+		spec("bool", KindBoolean),
+		spec("tiny", KindTinyInt),
+		spec("small", KindSmallInt),
+		spec("int", KindInt),
+		spec("big_value", KindBigInt),
+		spec("float", KindFloat),
+		spec("double", KindDouble),
+		spec("ascii", KindASCII),
+		spec("blob", KindBlob),
+		spec("time_id", KindTimeUUID),
+		spec("addr", KindInet),
+		spec("hits", KindCounter),
+		spec("day", KindDate),
+		spec("clock", KindTime),
+		spec("at", KindTimestamp),
+		spec("span", KindDuration),
+		spec("maybe_int", KindInt),
+		spec("maybe_text", KindText),
 	)
 }
 

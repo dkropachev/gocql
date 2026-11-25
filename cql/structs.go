@@ -120,8 +120,8 @@ func UDTCodecOf[T any](options UDTOptions, opts ...StructOption) (Codec[T], erro
 		return nil, err
 	}
 	return recordCodec[T]{
-		recordEncoder: recordEncoder[T]{kind: TypeUDT, codec: params, options: options},
-		recordDecoder: recordDecoder[T]{kind: TypeUDT, codec: rows, options: options},
+		recordEncoder: recordEncoder[T]{kind: KindUDT, codec: params, options: options},
+		recordDecoder: recordDecoder[T]{kind: KindUDT, codec: rows, options: options},
 	}, nil
 }
 

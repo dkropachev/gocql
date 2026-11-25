@@ -94,7 +94,7 @@ func StreamDecodeFixture[T any](t testing.TB, typ DataType, decoder StreamDecode
 	}
 	return scope.RequireEnd()
 }
-func streamScalarCase[T any](t *testing.T, kind Type, encoder Encoder[T], decoder StreamDecoder[T], value T) {
+func streamScalarCase[T any](t *testing.T, kind Kind, encoder Encoder[T], decoder StreamDecoder[T], value T) {
 	t.Helper()
 	typ := FoundationScalar(t, kind)
 	data := streamEncodedFixture(t, typ, encoder, value)

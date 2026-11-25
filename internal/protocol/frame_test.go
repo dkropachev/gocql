@@ -198,7 +198,7 @@ func writeRowsResultWithColumnType(fr *framer, customType string) {
 	fr.WriteString("gocql_test")
 	fr.WriteString("vectors")
 	fr.WriteString("vec")
-	fr.WriteShort(uint16(cql.TypeCustom))
+	fr.WriteShort(uint16(cql.KindCustom))
 	fr.WriteString(customType)
 	fr.WriteInt(0) // numRows
 }

@@ -143,42 +143,42 @@ func (i *valueIterator[T]) All() iter.Seq2[T, error] {
 type sequenceEncoder[T any] struct {
 	element Encoder[T]
 	typ     DataType
-	kind    Type
+	kind    Kind
 	width   int64
 }
 
 // ListEncoder encodes a slice as a CQL list using element.
 func ListEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeList, element: element}
+	return sequenceEncoder[T]{kind: KindList, element: element}
 }
 
 // SetEncoder encodes a slice as a CQL set using element.
 func SetEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeSet, element: element}
+	return sequenceEncoder[T]{kind: KindSet, element: element}
 }
 
 // VectorEncoder encodes a vector of the declared dimension using element.
 func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeVector, element: element}
+	return sequenceEncoder[T]{kind: KindVector, element: element}
 }
 
 // anySequence is the kind of a sequence codec that takes the kind of the
 // type it compiles for: a list, a set or a vector.
-const anySequence = TypeCustom
+const anySequence = KindCustom
 
 // resolveSequenceKind returns the kind a sequence codec of kind uses for typ.
-func resolveSequenceKind(typ DataType, kind Type) Type {
+func resolveSequenceKind(typ DataType, kind Kind) Kind {
 	if kind != anySequence {
 		return kind
 	}
 	switch k := typ.Kind(); k {
-	case TypeList, TypeSet, TypeVector:
+	case KindList, KindSet, KindVector:
 		return k
 	}
 	return anySequence
 }
 
-func sequenceElement(typ DataType, kind Type) (DataType, int64, error) {
+func sequenceElement(typ DataType, kind Kind) (DataType, int64, error) {
 	if err := validateDataType(typ); err != nil {
 		return DataType{}, 0, err
 	}
@@ -192,7 +192,7 @@ func sequenceElement(typ DataType, kind Type) (DataType, int64, error) {
 	if !ok || typ.Kind() != kind {
 		return DataType{}, 0, typeValidation("type", "expected %s, got %s", kind, typ)
 	}
-	if kind != TypeVector {
+	if kind != KindVector {
 		return element, 0, nil
 	}
 	dimension, vector := typ.Dimension()
@@ -235,7 +235,7 @@ func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
 		return typeValidation("type", "sequence metadata changed after compilation")
 	}
 	element, _ := c.typ.Element()
-	if c.kind == TypeVector {
+	if c.kind == KindVector {
 		dimension, _ := c.typ.Dimension()
 		if len(values) != int(dimension) {
 			return typeValidation("dimension", "vector requires %d elements, got %d", dimension, len(values))
@@ -276,26 +276,26 @@ type sequenceDecoder[T any] struct {
 	element     Decoder[T]
 	elementInto valueIntoDecoder[T] // resolved by compileValueDecoder
 	typ         DataType
-	kind        Type
+	kind        Kind
 	width       int64
 }
 
 // ListDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func ListDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeList, element: element}
+	return sequenceDecoder[T]{kind: KindList, element: element}
 }
 
 // SetDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func SetDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeSet, element: element}
+	return sequenceDecoder[T]{kind: KindSet, element: element}
 }
 
 // VectorDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func VectorDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeVector, element: element}
+	return sequenceDecoder[T]{kind: KindVector, element: element}
 }
 func (c sequenceDecoder[T]) CheckType(typ DataType) error {
 	perfCheckType()
@@ -451,19 +451,19 @@ func checkedCollectionChild(cursor *ValueCursor, typ DataType) error {
 	}
 	return nil
 }
-func validateSequenceBody(r ValueReader, kind Type) (Bytes, int, int64, error) {
+func validateSequenceBody(r ValueReader, kind Kind) (Bytes, int, int64, error) {
 	element, width, err := sequenceElement(r.Type(), kind)
 	if err != nil {
 		return Bytes{}, 0, 0, err
 	}
 	return validateSequenceLayout(r, r.Type().Kind(), element, width)
 }
-func validateSequenceLayout(r ValueReader, kind Type, element DataType, width int64) (Bytes, int, int64, error) {
+func validateSequenceLayout(r ValueReader, kind Kind, element DataType, width int64) (Bytes, int, int64, error) {
 	if err := requirePresent(r); err != nil {
 		return Bytes{}, 0, 0, err
 	}
 	cursor := r.cursorValue()
-	if kind == TypeVector {
+	if kind == KindVector {
 		dimension, _ := r.Type().Dimension()
 		count := int(dimension)
 		if width > 0 {
@@ -541,15 +541,15 @@ func vectorFixedWidth(typ DataType) (int64, error) {
 		return 0, err
 	}
 	switch typ.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		return 1, nil
-	case TypeInt, TypeFloat:
+	case KindInt, KindFloat:
 		return 4, nil
-	case TypeBigInt, TypeDouble, TypeTimestamp:
+	case KindBigInt, KindDouble, KindTimestamp:
 		return 8, nil
-	case TypeUUID, TypeTimeUUID:
+	case KindUUID, KindTimeUUID:
 		return 16, nil
-	case TypeVector:
+	case KindVector:
 		dimension, ok := typ.Dimension()
 		if !ok || dimension == 0 {
 			return 0, typeValidation("dimension", "vector dimension must be positive")

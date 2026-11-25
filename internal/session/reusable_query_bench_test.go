@@ -383,7 +383,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 								return nil
 							}
 						default:
-							typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
+							typ := codecTestMust(cql.ScalarType(cql.KindBlob))
 							statement := binding.Statement[[]byte, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO ks.tbl(value)VALUES(?)", Params: cql.OneParam(cql.ByteSliceCodec), Rows: cql.EmptyRowDecoder, BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})}
 							query := codecTestMust(unpreparedQuery(s, statement, options.Values()))
 							b.Cleanup(query.Close)

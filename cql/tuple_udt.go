@@ -41,19 +41,19 @@ type recordEncoder[T any] struct {
 	typ     DataType
 	options UDTOptions
 	columns Columns
-	kind    Type
+	kind    Kind
 }
 
 // TupleEncoder encodes its parameters as members of one physical tuple cell.
 func TupleEncoder[T any](codec ParamEncoder[T]) Encoder[T] {
-	return recordEncoder[T]{kind: TypeTuple, codec: codec}
+	return recordEncoder[T]{kind: KindTuple, codec: codec}
 }
 
 // UDTEncoder matches fields against a complete UDT descriptor.
 func UDTEncoder[T any](codec ParamEncoder[T], options UDTOptions) Encoder[T] {
-	return recordEncoder[T]{kind: TypeUDT, codec: codec, options: options}
+	return recordEncoder[T]{kind: KindUDT, codec: codec, options: options}
 }
-func recordColumns(typ DataType, kind Type) (Columns, error) {
+func recordColumns(typ DataType, kind Kind) (Columns, error) {
 	if err := validateDataType(typ); err != nil {
 		return Columns{}, err
 	}
@@ -71,7 +71,7 @@ func (c recordEncoder[T]) CheckType(typ DataType) error {
 	return err
 }
 func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) {
-	if c.kind == TypeUDT {
+	if c.kind == KindUDT {
 		if err := checkUDTIdentity(typ, c.options); err != nil {
 			return nil, err
 		}
@@ -84,7 +84,7 @@ func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) 
 		return nil, typeValidation("encoder", "nil tuple/UDT parameter encoder")
 	}
 	var plan CompiledParams[T]
-	if c.kind == TypeUDT {
+	if c.kind == KindUDT {
 		plan, err = compileUDTParamEncoder(c.codec, columns, c.options)
 	} else {
 		plan, err = compileParams(c.codec, columns)
@@ -125,7 +125,7 @@ type recordDecoder[T any] struct {
 	values  *syncx.Pool[*T]
 	options UDTOptions
 	columns Columns
-	kind    Type
+	kind    Kind
 }
 
 type recordReaderState struct {
@@ -136,12 +136,12 @@ type recordReaderState struct {
 // TupleDecoder consumes tuple members inside one cell without expanding result
 // columns. A missing serialized suffix is passed to member decoders as null.
 func TupleDecoder[T any](codec RowDecoder[T]) Decoder[T] {
-	return recordDecoder[T]{kind: TypeTuple, codec: codec}
+	return recordDecoder[T]{kind: KindTuple, codec: codec}
 }
 
 // UDTDecoder decodes UDT fields with codec and explicit identity and matching options.
 func UDTDecoder[T any](codec RowDecoder[T], options UDTOptions) Decoder[T] {
-	return recordDecoder[T]{kind: TypeUDT, codec: codec, options: options}
+	return recordDecoder[T]{kind: KindUDT, codec: codec, options: options}
 }
 func (c recordDecoder[T]) CheckType(typ DataType) error {
 	perfCheckType()
@@ -150,7 +150,7 @@ func (c recordDecoder[T]) CheckType(typ DataType) error {
 	return err
 }
 func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) {
-	if c.kind == TypeUDT {
+	if c.kind == KindUDT {
 		if err := checkUDTIdentity(typ, c.options); err != nil {
 			return nil, err
 		}
@@ -163,7 +163,7 @@ func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) 
 		return nil, typeValidation("decoder", "nil tuple/UDT row decoder")
 	}
 	var plan CompiledRow[T]
-	if c.kind == TypeUDT {
+	if c.kind == KindUDT {
 		plan, err = compileUDTRowDecoder(c.codec, columns, c.options)
 	} else {
 		plan, err = compileRow(c.codec, columns)
@@ -487,8 +487,8 @@ type recordCodec[T any] struct {
 // field of a struct mapping (see WithCodec).
 func TupleCodec[T any](enc ParamEncoder[T], dec RowDecoder[T]) Codec[T] {
 	return recordCodec[T]{
-		recordEncoder: recordEncoder[T]{kind: TypeTuple, codec: enc},
-		recordDecoder: recordDecoder[T]{kind: TypeTuple, codec: dec},
+		recordEncoder: recordEncoder[T]{kind: KindTuple, codec: enc},
+		recordDecoder: recordDecoder[T]{kind: KindTuple, codec: dec},
 	}
 }
 

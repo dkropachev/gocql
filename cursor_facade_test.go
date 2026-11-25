@@ -98,8 +98,8 @@ func casBatchRowsBody(values ...string) []byte {
 	}
 	for _, column := range []struct {
 		name string
-		kind cql.Type
-	}{{"[applied]", cql.TypeBoolean}, {"value", cql.TypeBlob}} {
+		kind cql.Kind
+	}{{"[applied]", cql.KindBoolean}, {"value", cql.KindBlob}} {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(column.name)))
 		b = append(b, column.name...)
 		b = binary.BigEndian.AppendUint16(b, uint16(column.kind))

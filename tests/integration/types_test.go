@@ -164,11 +164,11 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								typ, err := cql.ScalarType(cql.Type(tc.CQLType))
+								typ, err := cql.ScalarType(cql.Kind(tc.CQLType))
 								if err != nil {
 									t.Fatal(err)
 								}
-								value, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								value, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -204,7 +204,7 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								typ, err := cql.ScalarType(cql.Type(tc.CQLType))
+								typ, err := cql.ScalarType(cql.Kind(tc.CQLType))
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -223,7 +223,7 @@ func TestTypes(t *testing.T) {
 								if err != nil {
 									return
 								}
-								expected, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								expected, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -247,7 +247,7 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								input, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								input, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}

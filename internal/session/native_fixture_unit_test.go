@@ -59,7 +59,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	}
 	switch v := value.(type) {
 	case string:
-		if typ.Kind() == implCql.TypeInet {
+		if typ.Kind() == implCql.KindInet {
 			ip, err := netip.ParseAddr(v)
 			if err != nil {
 				return nil, err
@@ -100,7 +100,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	case float64:
 		return fixtureBody(typ, implCql.Float64Codec, v)
 	case []string:
-		if typ.Kind() == implCql.TypeSet {
+		if typ.Kind() == implCql.KindSet {
 			return fixtureBody(typ, implCql.SetEncoder(implCql.StringCodec), v)
 		}
 		return fixtureBody(typ, implCql.ListEncoder(implCql.StringCodec), v)

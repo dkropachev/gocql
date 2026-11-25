@@ -22,7 +22,7 @@ func dynamicTestMust[T any](value T, err error) T {
 	}
 	return value
 }
-func dynamicTestType(kind Type) DataType {
+func dynamicTestType(kind Kind) DataType {
 	return dynamicTestMust(ScalarType(kind))
 }
 func dynamicTestHex(s string) []byte { return dynamicTestMust(hex.DecodeString(s)) }
@@ -75,7 +75,7 @@ func dynamicTestRowBody(t *testing.T, cols Columns, values []Value) wire.Chain {
 func TestDynamic(t *testing.T) {
 	t.Run("Params", func(t *testing.T) {
 		t.Run("NamesCountsAndRollback", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			cols := NewColumns(ColumnSpec{Name: "a", Type: integer}, ColumnSpec{Name: "b", Type: text}, ColumnSpec{Name: "a", Type: integer})
 			plan := dynamicTestMust(NamedDynamicParams.Compile(cols))
 			builder := wire.NewBuilder(0)
@@ -146,7 +146,7 @@ func TestDynamic(t *testing.T) {
 	})
 	t.Run("Rows", func(t *testing.T) {
 		t.Run("ComposeWithTypedRecords", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			tuple := dynamicTestMust(TupleType(integer, text))
 			encoded := dynamicTestMust(newEncodedValue(tuple, Present, BorrowBytes(dynamicTestHex("0000000400000001"))))
 			tupleRow := dynamicTestMust(DecodeValue(TupleDecoder(DynamicRows), encoded))
@@ -182,7 +182,7 @@ func TestDynamic(t *testing.T) {
 			}
 		})
 		t.Run("ConcurrentPlansAndReaders", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}, ColumnSpec{Name: "n", Type: integer})
 			input := []ValueField{{Name: "s", Value: TextValue("shared")}, {Name: "n", Value: IntValue(42)}}
 			params := dynamicTestMust(NamedDynamicParams.Compile(cols))
@@ -300,7 +300,7 @@ func TestDynamic(t *testing.T) {
 			}
 		})
 		t.Run("PhysicalSchemaLazyAccessAndClone", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			tuple := dynamicTestMust(TupleType(integer, text))
 			cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
 			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), TextValue("hello"), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), TextValue("nested")}))})
@@ -380,7 +380,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("aggregate Clone did not detach")
 			}
 			// A row validates all physical cell framing, while scalar content stays lazy.
-			boolean := dynamicTestType(TypeBoolean)
+			boolean := dynamicTestType(KindBoolean)
 			badCols := NewColumns(ColumnSpec{Name: "b", Type: boolean})
 			badPlan := dynamicTestMust(DynamicRows.Compile(badCols))
 			badRow, err := decodeRow(badPlan, newRowReader(badCols, FoundationChain(t, []byte{0, 0, 0, 1, 2}), nil))
@@ -400,7 +400,7 @@ func TestDynamic(t *testing.T) {
 	})
 	t.Run("Value", func(t *testing.T) {
 		t.Run("AggregateWireAndMetadata", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			mapping := dynamicTestMust(MapType(text, integer))
 			tuple := dynamicTestMust(TupleType(text, integer))
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "number", Type: integer}))
@@ -424,7 +424,7 @@ func TestDynamic(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					got := dynamicTestRoundTrip(t, test.value, test.wire)
 					switch got.Type().Kind() {
-					case TypeMap:
+					case KindMap:
 						values, err := dynamicTestMust(got.iterEntries()).Collect()
 						if err != nil || len(values) != 1 {
 							t.Fatalf("map entries %d: %v", len(values), err)
@@ -434,7 +434,7 @@ func TestDynamic(t *testing.T) {
 						if k.String() != "k" || n != 1 {
 							t.Fatal("map values changed")
 						}
-					case TypeUDT:
+					case KindUDT:
 						fields, err := dynamicTestMust(got.iterFields()).Collect()
 						if err != nil || len(fields) != 2 || fields[0].Name != "name" || fields[1].Name != "number" {
 							t.Fatal("UDT order or names changed", err)
@@ -475,7 +475,7 @@ func TestDynamic(t *testing.T) {
 			}
 		})
 		t.Run("BorrowingAndOwnedClone", func(t *testing.T) {
-			text := dynamicTestType(TypeText)
+			text := dynamicTestType(KindText)
 			list := dynamicTestMust(ListType(text))
 			body := dynamicTestHex("0000000200000003e282ac0000000178")
 			parts := make([]wire.Span, len(body))
@@ -532,7 +532,7 @@ func TestDynamic(t *testing.T) {
 			if s, _ := scalarClone.Text(); s.String() != "€" {
 				t.Fatal("scalar Clone did not detach")
 			}
-			blob := dynamicTestType(TypeBlob)
+			blob := dynamicTestType(KindBlob)
 			blobs := dynamicTestMust(ListType(blob))
 			payload := []byte("payload")
 			descriptors := []Value{BlobValue(payload)}
@@ -559,11 +559,11 @@ func TestDynamic(t *testing.T) {
 		t.Run("ChecksTypeWithoutPayload", func(t *testing.T) {
 			invalid := DataType{}
 			for _, value := range []Value{NullValue(invalid), UnsetValue(invalid)} {
-				if _, err := encodeValueBorrowed(dynamicTestType(TypeInt), DynamicCodec, value); err == nil {
+				if _, err := encodeValueBorrowed(dynamicTestType(KindInt), DynamicCodec, value); err == nil {
 					t.Fatal("invalid descriptor accepted for payload-free value")
 				}
 			}
-			large := dynamicTestMust(VectorType(dynamicTestType(TypeDouble), 65535))
+			large := dynamicTestMust(VectorType(dynamicTestType(KindDouble), 65535))
 			tooWide := dynamicTestMust(VectorType(large, 65535))
 			if err := DynamicCodec.CheckType(tooWide); err == nil {
 				t.Fatal("vector aggregate width overflow was accepted")
@@ -581,9 +581,9 @@ func TestDynamic(t *testing.T) {
 			}
 		})
 		t.Run("MalformedCheckedLazily", func(t *testing.T) {
-			integer := dynamicTestType(TypeInt)
-			boolean := dynamicTestType(TypeBoolean)
-			text := dynamicTestType(TypeText)
+			integer := dynamicTestType(KindInt)
+			boolean := dynamicTestType(KindBoolean)
+			text := dynamicTestType(KindText)
 			list := dynamicTestMust(ListType(integer))
 			mapping := dynamicTestMust(MapType(text, integer))
 			tuple := dynamicTestMust(TupleType(integer))
@@ -593,10 +593,10 @@ func TestDynamic(t *testing.T) {
 				typ  DataType
 				body string
 			}{
-				{boolean, "02"}, {integer, "0001"}, {dynamicTestType(TypeBigInt), "00"}, {text, "ff"}, {dynamicTestType(TypeASCII), "ff"},
-				{dynamicTestType(TypeTimeUUID), "00112233445566778899aabbccddeeff"}, {dynamicTestType(TypeTime), "ffffffffffffffff"},
-				{dynamicTestType(TypeDecimal), "00000000"}, {dynamicTestType(TypeDuration), "020103"}, {dynamicTestType(TypeDuration), "00000000"},
-				{dynamicTestType(TypeCounter), ""}, {dynamicTestType(TypeDuration), ""}, {list, ""}, {list, "ffffffff"}, {list, "000000020000000400000001"},
+				{boolean, "02"}, {integer, "0001"}, {dynamicTestType(KindBigInt), "00"}, {text, "ff"}, {dynamicTestType(KindASCII), "ff"},
+				{dynamicTestType(KindTimeUUID), "00112233445566778899aabbccddeeff"}, {dynamicTestType(KindTime), "ffffffffffffffff"},
+				{dynamicTestType(KindDecimal), "00000000"}, {dynamicTestType(KindDuration), "020103"}, {dynamicTestType(KindDuration), "00000000"},
+				{dynamicTestType(KindCounter), ""}, {dynamicTestType(KindDuration), ""}, {list, ""}, {list, "ffffffff"}, {list, "000000020000000400000001"},
 				{list, "00000000ff"}, {list, "00000001fffffffe"}, {list, "00000001ffffffff"}, {mapping, "00000001000000016b"},
 				{tuple, "00000003"}, {tuple, "000000040000000100"}, {fixed, "00000001"}, {fixed, "000000010000000200"}, {variable, "0161"}, {variable, "80016100"},
 			}
@@ -665,59 +665,59 @@ func TestDynamic(t *testing.T) {
 				t.Run(test.name, func(t *testing.T) {
 					got := dynamicTestRoundTrip(t, test.value, test.wire)
 					switch got.Type().Kind() {
-					case TypeBoolean:
+					case KindBoolean:
 						a, e := got.Bool()
 						b, _ := test.value.Bool()
 						if e != nil || a != b {
 							t.Fatalf("Bool: %v %v", a, e)
 						}
-					case TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeCounter, TypeDate, TypeTime, TypeTimestamp:
+					case KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter, KindDate, KindTime, KindTimestamp:
 						a, e := got.Signed()
 						b, _ := test.value.Signed()
 						if e != nil || a != b {
 							t.Fatalf("Signed: %d %v", a, e)
 						}
-					case TypeFloat, TypeDouble:
+					case KindFloat, KindDouble:
 						a, e := got.Float()
 						b, _ := test.value.Float()
 						if e != nil || a != b {
 							t.Fatalf("Float: %f %v", a, e)
 						}
-					case TypeText, TypeASCII:
+					case KindText, KindASCII:
 						a, e := got.Text()
 						b, _ := test.value.Text()
 						if e != nil || a.String() != b.String() {
 							t.Fatalf("Text: %v", e)
 						}
-					case TypeBlob:
+					case KindBlob:
 						a, e := got.Bytes()
 						if e != nil || !bytes.Equal(a.ownedBytes(), []byte{0, 1}) {
 							t.Fatalf("Bytes: %v", e)
 						}
-					case TypeUUID, TypeTimeUUID:
+					case KindUUID, KindTimeUUID:
 						a, e := got.UUID()
 						b, _ := test.value.UUID()
 						if e != nil || a != b {
 							t.Fatalf("UUID: %v", e)
 						}
-					case TypeInet:
+					case KindInet:
 						a, e := got.Inet()
 						b, _ := test.value.Inet()
 						if e != nil || a != b {
 							t.Fatalf("Inet: %v", e)
 						}
-					case TypeDuration:
+					case KindDuration:
 						a, e := got.Duration()
 						b, _ := test.value.Duration()
 						if e != nil || a != b {
 							t.Fatalf("Duration: %v", e)
 						}
-					case TypeVarint:
+					case KindVarint:
 						a, e := got.Varint()
 						if e != nil || a.BigInt().Int64() != -129 {
 							t.Fatalf("Varint: %v", e)
 						}
-					case TypeDecimal:
+					case KindDecimal:
 						a, e := got.Decimal()
 						if e != nil || a.Scale != -2 || a.Unscaled.BigInt().Int64() != -129 {
 							t.Fatalf("Decimal: %v", e)
@@ -725,19 +725,19 @@ func TestDynamic(t *testing.T) {
 					}
 				})
 			}
-			legacy := dynamicTestType(Type(0x000A))
+			legacy := dynamicTestType(Kind(0x000A))
 			encoded, err := encodeValueBorrowed(legacy, DynamicCodec, TextValue("v"))
 			if err != nil {
 				t.Fatal(err)
 			}
 			value, err := DecodeValue(DynamicCodec, encoded)
-			if err != nil || value.Type().Kind() != TypeText {
+			if err != nil || value.Type().Kind() != KindText {
 				t.Fatal("legacy text ID did not decode as text", err)
 			}
 			if _, err := IntValue(1).Text(); err == nil {
 				t.Fatal("wrong accessor accepted")
 			}
-			if _, err := NullValue(dynamicTestType(TypeBoolean)).Bool(); err == nil {
+			if _, err := NullValue(dynamicTestType(KindBoolean)).Bool(); err == nil {
 				t.Fatal("null boolean accessor accepted")
 			}
 			// The constructors do not fail; an invalid payload fails when
@@ -759,7 +759,7 @@ func TestDynamic(t *testing.T) {
 			}
 		})
 		t.Run("StatesAndTrailingFields", func(t *testing.T) {
-			integer, text := dynamicTestType(TypeInt), dynamicTestType(TypeText)
+			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			list := dynamicTestMust(ListType(integer))
 			for _, typ := range []DataType{integer, text, list} {
 				encoded, err := encodeValueBorrowed(typ, DynamicCodec, NullValue(typ))
@@ -778,7 +778,7 @@ func TestDynamic(t *testing.T) {
 					t.Fatal("result unset accepted")
 				}
 			}
-			for _, kind := range []Type{TypeBoolean, TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeFloat, TypeDouble, TypeDate, TypeTime, TypeTimestamp, TypeUUID, TypeTimeUUID, TypeInet, TypeVarint, TypeDecimal} {
+			for _, kind := range []Kind{KindBoolean, KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindFloat, KindDouble, KindDate, KindTime, KindTimestamp, KindUUID, KindTimeUUID, KindInet, KindVarint, KindDecimal} {
 				typ := dynamicTestType(kind)
 				empty := dynamicTestMust(EmptyValue(typ))
 				dynamicTestRoundTrip(t, empty, "")
@@ -787,7 +787,7 @@ func TestDynamic(t *testing.T) {
 					t.Fatalf("%s wire empty lost", typ)
 				}
 			}
-			for _, kind := range []Type{TypeCounter, TypeDuration, TypeASCII, TypeText, TypeBlob} {
+			for _, kind := range []Kind{KindCounter, KindDuration, KindASCII, KindText, KindBlob} {
 				if _, err := EmptyValue(dynamicTestType(kind)); err == nil {
 					t.Fatalf("unsupported Empty for %s accepted", kind)
 				}
@@ -826,7 +826,7 @@ func TestDynamic(t *testing.T) {
 // codec that wraps DynamicCodec reaches Encode, and Clone and CheckType are
 // part of every Decoder and Encoder.
 func TestDynamicCodecContracts(t *testing.T) {
-	blob, integer := dynamicTestType(TypeBlob), dynamicTestType(TypeInt)
+	blob, integer := dynamicTestType(KindBlob), dynamicTestType(KindInt)
 	t.Run("WrappedEncode", func(t *testing.T) {
 		// The wrapper hides DynamicCodec's compiled form, so EncodeValue
 		// checks the type and calls Encode on every value.

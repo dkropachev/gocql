@@ -18,14 +18,14 @@ import (
 type scalarCodec[T any] struct {
 	encode      func(*ValueWriter, T) error
 	decode      func(ValueReader) (T, error)
-	decodeRow   func(*RowReader, Type, Type, bool) (T, error)
+	decodeRow   func(*RowReader, Kind, Kind, bool) (T, error)
 	clone       func(T) T
-	kind        Type
-	alternative Type
+	kind        Kind
+	alternative Kind
 	compiled    bool
 }
 
-func checkScalarType(t DataType, kind, alternative Type) error {
+func checkScalarType(t DataType, kind, alternative Kind) error {
 	if k := t.Kind(); k != kind && (alternative == 0 || k != alternative) {
 		return scalarTypeError(kind, k)
 	}
@@ -33,7 +33,7 @@ func checkScalarType(t DataType, kind, alternative Type) error {
 }
 
 //go:noinline
-func scalarTypeError(kind, got Type) error {
+func scalarTypeError(kind, got Kind) error {
 	return fmt.Errorf("gocql: codec for %s cannot use %s", kind, got)
 }
 
@@ -125,7 +125,7 @@ type signedScalar interface {
 
 // integerColumn decodes a signed integer cell of width bytes from the row,
 // sign-extended. Row plans call it directly for built-in integer codecs.
-func integerColumn(r *RowReader, kind, alternative Type, compiled bool, width int64) (int64, error) {
+func integerColumn(r *RowReader, kind, alternative Kind, compiled bool, width int64) (int64, error) {
 	if _, err := r.scalarColumn(kind, alternative, compiled, width); err != nil {
 		return 0, err
 	}
@@ -161,7 +161,7 @@ func integerColumn(r *RowReader, kind, alternative Type, compiled bool, width in
 }
 
 // blobColumn decodes a blob cell as a view borrowing the row's lease.
-func blobColumn(r *RowReader, kind, alternative Type, compiled bool) (Bytes, error) {
+func blobColumn(r *RowReader, kind, alternative Kind, compiled bool) (Bytes, error) {
 	length, err := r.scalarColumn(kind, alternative, compiled, 0)
 	if err != nil {
 		return Bytes{}, err
@@ -179,10 +179,10 @@ func textColumn(r *RowReader, compiled bool) (Text, error) {
 	ascii := false
 	if r != nil {
 		if column, ok := r.columns.At(r.index); ok {
-			ascii = column.Type.Kind() == TypeASCII
+			ascii = column.Type.Kind() == KindASCII
 		}
 	}
-	v, err := blobColumn(r, TypeText, TypeASCII, compiled)
+	v, err := blobColumn(r, KindText, KindASCII, compiled)
 	if err != nil {
 		return Text{}, err
 	}
@@ -195,8 +195,8 @@ func textColumn(r *RowReader, compiled bool) (Text, error) {
 // counterCodec is the int64 codec, which also accepts counter: a counter is a
 // bigint the server only adds to.
 func counterCodec() Codec[int64] {
-	c := integerCodec[int64](TypeBigInt, 8).(scalarCodec[int64])
-	c.alternative = TypeCounter
+	c := integerCodec[int64](KindBigInt, 8).(scalarCodec[int64])
+	c.alternative = KindCounter
 	return c
 }
 
@@ -218,9 +218,9 @@ func intCodec() Codec[int] {
 	}
 }
 
-func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
+func integerCodec[T signedScalar](kind Kind, width int64) Codec[T] {
 	return scalarCodec[T]{kind: kind,
-		decodeRow: func(r *RowReader, kind, alternative Type, compiled bool) (T, error) {
+		decodeRow: func(r *RowReader, kind, alternative Kind, compiled bool) (T, error) {
 			v, err := integerColumn(r, kind, alternative, compiled, width)
 			return T(v), err
 		},
@@ -276,16 +276,16 @@ func integerCodec[T signedScalar](kind Type, width int64) Codec[T] {
 // is a view (Text, Bytes).
 var (
 	// BoolCodec maps boolean to bool.
-	BoolCodec Codec[bool] = scalarCodec[bool]{kind: TypeBoolean, encode: encodeBool, decode: decodeBool}
+	BoolCodec Codec[bool] = scalarCodec[bool]{kind: KindBoolean, encode: encodeBool, decode: decodeBool}
 
 	// Int8Codec maps tinyint to int8.
-	Int8Codec Codec[int8] = integerCodec[int8](TypeTinyInt, 1)
+	Int8Codec Codec[int8] = integerCodec[int8](KindTinyInt, 1)
 
 	// Int16Codec maps smallint to int16.
-	Int16Codec Codec[int16] = integerCodec[int16](TypeSmallInt, 2)
+	Int16Codec Codec[int16] = integerCodec[int16](KindSmallInt, 2)
 
 	// Int32Codec maps int to int32.
-	Int32Codec Codec[int32] = integerCodec[int32](TypeInt, 4)
+	Int32Codec Codec[int32] = integerCodec[int32](KindInt, 4)
 
 	// Int64Codec maps bigint and counter to int64.
 	Int64Codec Codec[int64] = counterCodec()
@@ -296,7 +296,7 @@ var (
 	IntCodec Codec[int] = intCodec()
 
 	// Float32Codec maps float to float32.
-	Float32Codec Codec[float32] = scalarCodec[float32]{kind: TypeFloat,
+	Float32Codec Codec[float32] = scalarCodec[float32]{kind: KindFloat,
 		encode: func(w *ValueWriter, v float32) error { return w.Uint32(math.Float32bits(v)) },
 		decode: func(r ValueReader) (float32, error) {
 			if v, ok := fixedValue(r, 4); ok {
@@ -312,7 +312,7 @@ var (
 	}
 
 	// Float64Codec maps double to float64.
-	Float64Codec Codec[float64] = scalarCodec[float64]{kind: TypeDouble,
+	Float64Codec Codec[float64] = scalarCodec[float64]{kind: KindDouble,
 		encode: func(w *ValueWriter, v float64) error { return w.Uint64(math.Float64bits(v)) },
 		decode: func(r ValueReader) (float64, error) {
 			if v, ok := fixedValue(r, 8); ok {
@@ -330,14 +330,14 @@ var (
 	// UUIDCodec maps uuid and timeuuid to UUID. It rejects encoding a UUID
 	// that is not version 1 into a timeuuid; decoding a timeuuid returns its
 	// UUID as is.
-	UUIDCodec Codec[UUID] = scalarCodec[UUID]{kind: TypeUUID, alternative: TypeTimeUUID, encode: encodeAnyUUID, decode: decodeUUID}
+	UUIDCodec Codec[UUID] = scalarCodec[UUID]{kind: KindUUID, alternative: KindTimeUUID, encode: encodeAnyUUID, decode: decodeUUID}
 
 	// TimeUUIDCodec maps timeuuid to TimeUUID, rejecting a UUID that is not
 	// version 1.
-	TimeUUIDCodec Codec[TimeUUID] = scalarCodec[TimeUUID]{kind: TypeTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
+	TimeUUIDCodec Codec[TimeUUID] = scalarCodec[TimeUUID]{kind: KindTimeUUID, encode: encodeTimeUUID, decode: decodeTimeUUID}
 
 	// InetCodec maps inet to netip.Addr, as a 4- or 16-byte address.
-	InetCodec Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: TypeInet, encode: encodeInet, decode: decodeInet}
+	InetCodec Codec[netip.Addr] = scalarCodec[netip.Addr]{kind: KindInet, encode: encodeInet, decode: decodeInet}
 
 	// StringCodec maps text and ascii to string. It decodes into a newly
 	// allocated string that stays valid after the row is released; use
@@ -353,7 +353,7 @@ var (
 	// BytesCodec maps blob to Bytes. A decoded Bytes borrows the response, and
 	// encoding borrows the Bytes as ValueWriter.BorrowBytes does; Clone
 	// detaches it.
-	BytesCodec Codec[Bytes] = scalarCodec[Bytes]{kind: TypeBlob,
+	BytesCodec Codec[Bytes] = scalarCodec[Bytes]{kind: KindBlob,
 		decodeRow: blobColumn,
 		encode:    func(w *ValueWriter, v Bytes) error { return w.borrowView(v) },
 		decode:    func(r ValueReader) (Bytes, error) { return r.Bytes(), nil },
@@ -419,7 +419,7 @@ func decodeUUID(r ValueReader) (UUID, error) {
 // encodeAnyUUID writes a UUID into a uuid or a timeuuid, which must hold a
 // version 1 UUID.
 func encodeAnyUUID(w *ValueWriter, v UUID) error {
-	if w.Type().Kind() == TypeTimeUUID && v.Version() != 1 {
+	if w.Type().Kind() == KindTimeUUID && v.Version() != 1 {
 		return errors.New("gocql: timeuuid must have version 1")
 	}
 	return encodeUUID(w, v)
@@ -488,7 +488,7 @@ func decodeInet(r ValueReader) (netip.Addr, error) {
 type stringCodec struct{ compiled bool }
 
 func checkTextType(t DataType) error {
-	if k := t.Kind(); k == TypeText || k == TypeASCII {
+	if k := t.Kind(); k == KindText || k == KindASCII {
 		return nil
 	}
 	return fmt.Errorf("gocql: incompatible text type %s", t.Kind())
@@ -501,7 +501,7 @@ func (c stringCodec) Encode(w *ValueWriter, v string) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
-	if w.Type().Kind() == TypeASCII {
+	if w.Type().Kind() == KindASCII {
 		for i := 0; i < len(v); i++ {
 			if v[i] >= utf8.RuneSelf {
 				return errors.New("gocql: invalid ASCII")
@@ -540,7 +540,7 @@ func (c textCodec) Encode(w *ValueWriter, v Text) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
-	if e := validateText(v.Bytes(), w.Type().Kind() == TypeASCII); e != nil {
+	if e := validateText(v.Bytes(), w.Type().Kind() == KindASCII); e != nil {
 		return e
 	}
 	return w.borrowView(v.Bytes())
@@ -552,7 +552,7 @@ func (c textCodec) Decode(r ValueReader) (Text, error) {
 	if e := requirePresent(r); e != nil {
 		return Text{}, e
 	}
-	if e := validateText(r.Bytes(), r.Type().Kind() == TypeASCII); e != nil {
+	if e := validateText(r.Bytes(), r.Type().Kind() == KindASCII); e != nil {
 		return Text{}, e
 	}
 	return textView(r.Bytes()), nil
@@ -855,7 +855,7 @@ type emptyCodec[T any] struct {
 
 func emptySupported(t DataType) bool {
 	switch t.Kind() {
-	case TypeBoolean, TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeFloat, TypeDouble, TypeDate, TypeTime, TypeTimestamp, TypeUUID, TypeTimeUUID, TypeInet, TypeVarint, TypeDecimal, TypeTuple:
+	case KindBoolean, KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindFloat, KindDouble, KindDate, KindTime, KindTimestamp, KindUUID, KindTimeUUID, KindInet, KindVarint, KindDecimal, KindTuple:
 		return true
 	}
 	return false

@@ -76,7 +76,7 @@ func TestScan(t *testing.T) {
 			for _, method := range []string{"SliceMap", "MapScan"} {
 				t.Run(method, func(t *testing.T) {
 					got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, cql.IntValue(1))
-					if n, err := got.Signed(); err != nil || n != 42 || got.Type().Kind() != cql.TypeCounter {
+					if n, err := got.Signed(); err != nil || n != 42 || got.Type().Kind() != cql.KindCounter {
 						t.Fatalf("got %v (%s), %v; want counter 42", got, got.Type(), err)
 					}
 				})

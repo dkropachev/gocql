@@ -118,7 +118,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 	// BenchmarkRowsCodec/TextFields decodes a row of an int and three text views,
 	// through direct ops and through the fields' interfaces.
 	b.Run("TextFields", func(b *testing.B) {
-		columns := textColumns(b, TypeText)
+		columns := textColumns(b, KindText)
 		rows := CodecTestMust(textRows.Compile(columns))
 		var data []byte
 		data = cell(data, []byte{0, 0, 0, 7}, false)
@@ -144,9 +144,9 @@ func BenchmarkRowsCodec(b *testing.B) {
 	})
 	b.Run("FusedRowPaged", func(b *testing.B) {
 		columns := NewColumns(
-			ColumnSpec{Name: "key", Type: rowTestType(b, TypeInt)},
-			ColumnSpec{Name: "row", Type: rowTestType(b, TypeInt)},
-			ColumnSpec{Name: "blob", Type: rowTestType(b, TypeBlob)},
+			ColumnSpec{Name: "key", Type: rowTestType(b, KindInt)},
+			ColumnSpec{Name: "row", Type: rowTestType(b, KindInt)},
+			ColumnSpec{Name: "blob", Type: rowTestType(b, KindBlob)},
 		)
 		var data []byte
 		for i := 0; i < 32; i++ {
@@ -260,7 +260,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		}
 	})
 	b.Run("ScalarPlan", func(b *testing.B) {
-		columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(b, TypeInt)})
+		columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(b, KindInt)})
 		plan, err := OneColumn(Int32Codec).Compile(columns)
 		if err != nil {
 			b.Fatal(err)

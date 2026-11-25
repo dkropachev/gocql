@@ -377,7 +377,7 @@ func TestRouting(t *testing.T) {
 				for _, index := range tc.indexes {
 					column, ok := prepared.Parameters().At(index)
 					require.True(t, ok)
-					require.Equal(t, cql.TypeInt, column.Type.Kind())
+					require.Equal(t, cql.KindInt, column.Type.Kind())
 				}
 				again := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Same(t, preparedData(prepared).InternalState, preparedData(again).InternalState, "preparing again must hit typed cache")

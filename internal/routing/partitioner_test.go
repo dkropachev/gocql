@@ -31,7 +31,7 @@ type constPartitioner int64
 func (p constPartitioner) Token(routing.PartitionKey) (int64, error) { return int64(p), nil }
 
 func blobCell(b []byte) model.EncodedCell {
-	typ, _ := cql.ScalarType(cql.TypeBlob)
+	typ, _ := cql.ScalarType(cql.KindBlob)
 	return model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(cql.BorrowBytes(b)), State: cql.Present}
 }
 

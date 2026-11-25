@@ -109,7 +109,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("Codec", func(t *testing.T) {
 		t.Run("PublicChecks", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			checks, encodes, decodes := 0, 0, 0
 			codec := foundationCustomBlob{checks: &checks, encodes: &encodes, decodes: &decodes}
 			encoded, err := encodeValueBorrowed(typ, codec, []byte("value"))
@@ -149,7 +149,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("WrapperCheckType", func(t *testing.T) {
-			integer, text := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeText)
+			integer, text := FoundationScalar(t, KindInt), FoundationScalar(t, KindText)
 			list := CodecTestMust(ListType(integer))
 			set := CodecTestMust(SetType(integer))
 			vector := CodecTestMust(VectorType(integer, 2))
@@ -190,7 +190,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("EncodeValue", func(t *testing.T) {
 		t.Run("OwnedAndBorrowed", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			source := []byte("source")
 			borrowed, err := encodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
@@ -241,7 +241,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("RejectsOversized", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			// Reuse immutable storage to represent 2 GiB without allocating its payload.
 			block := make([]byte, 1<<16)
 			spans := make([]wire.Span, 1<<15)
@@ -270,8 +270,8 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("EncodedValue", func(t *testing.T) {
 		t.Run("StatesAndLifetime", func(t *testing.T) {
-			blob := FoundationScalar(t, TypeBlob)
-			integer := FoundationScalar(t, TypeInt)
+			blob := FoundationScalar(t, KindBlob)
+			integer := FoundationScalar(t, KindInt)
 			for _, test := range []struct {
 				state CellState
 				body  []byte
@@ -360,7 +360,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("ValueReader", func(t *testing.T) {
 		t.Run("MalformedFraming", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			for _, data := range [][]byte{{}, {0}, {0, 0, 0}, {0, 0, 0, 2, 1}, {0x7f, 0xff, 0xff, 0xff}, {0xff, 0xff, 0xff, 0xfe}, {0xff, 0xff, 0xff, 0xfd}, {0x80, 0, 0, 0}} {
 				c := wire.NewCursor(foundationChain(t, data))
 				before := c.Remaining()
@@ -395,7 +395,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("ValueWriter", func(t *testing.T) {
 		t.Run("CellStates", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(4)
 			encoders := []func(*ValueWriter) error{func(w *ValueWriter) error { return w.BorrowBytes(nil) }, func(w *ValueWriter) error { return w.BorrowBytes([]byte{}) }, func(w *ValueWriter) error { return w.Null() }, func(w *ValueWriter) error { return w.Unset() }}
 			for _, encode := range encoders {
@@ -420,7 +420,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("Empty", func(t *testing.T) {
-			integer, blob := foundationScalar(t, TypeInt), foundationScalar(t, TypeBlob)
+			integer, blob := foundationScalar(t, KindInt), foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(4)
 			w := newValueWriter(builder, integer, true)
 			if err := w.Empty(); err != nil {
@@ -452,7 +452,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("FramingTransactions", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(3)
 			payload := []byte("payload")
 			writer := newValueWriter(builder, typ, true)
@@ -509,7 +509,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("SegmentedCursor", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(1)
 			w := newValueWriter(builder, typ, false)
 			if err := w.Uint16(0x1234); err != nil {

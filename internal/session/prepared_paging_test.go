@@ -35,7 +35,7 @@ import (
 
 func testPage(t *testing.T, values ...string) *Page[cql.Bytes] {
 	t.Helper()
-	typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
+	typ := codecTestMust(cql.ScalarType(cql.KindBlob))
 	columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
 	var body []byte
 	for _, v := range values {
