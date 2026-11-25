@@ -27,33 +27,33 @@ type MyPointerMarshaler struct{}
 
 var typeLookupTest = []struct {
 	TypeName     string
-	ExpectedType cql.Type
+	ExpectedType cql.Kind
 }{
-	{"AsciiType", cql.TypeASCII},
-	{"LongType", cql.TypeBigInt},
-	{"BytesType", cql.TypeBlob},
-	{"BooleanType", cql.TypeBoolean},
-	{"CounterColumnType", cql.TypeCounter},
-	{"DecimalType", cql.TypeDecimal},
-	{"DoubleType", cql.TypeDouble},
-	{"FloatType", cql.TypeFloat},
-	{"Int32Type", cql.TypeInt},
-	{"DateType", cql.TypeTimestamp},
-	{"TimestampType", cql.TypeTimestamp},
-	{"UUIDType", cql.TypeUUID},
-	{"UTF8Type", cql.TypeVarchar},
-	{"IntegerType", cql.TypeVarint},
-	{"TimeUUIDType", cql.TypeTimeUUID},
-	{"InetAddressType", cql.TypeInet},
-	{"MapType", cql.TypeMap},
-	{"ListType", cql.TypeList},
-	{"SetType", cql.TypeSet},
-	{"unknown", cql.TypeCustom},
-	{"ShortType", cql.TypeSmallInt},
-	{"ByteType", cql.TypeTinyInt},
+	{"AsciiType", cql.KindASCII},
+	{"LongType", cql.KindBigInt},
+	{"BytesType", cql.KindBlob},
+	{"BooleanType", cql.KindBoolean},
+	{"CounterColumnType", cql.KindCounter},
+	{"DecimalType", cql.KindDecimal},
+	{"DoubleType", cql.KindDouble},
+	{"FloatType", cql.KindFloat},
+	{"Int32Type", cql.KindInt},
+	{"DateType", cql.KindTimestamp},
+	{"TimestampType", cql.KindTimestamp},
+	{"UUIDType", cql.KindUUID},
+	{"UTF8Type", cql.KindText},
+	{"IntegerType", cql.KindVarint},
+	{"TimeUUIDType", cql.KindTimeUUID},
+	{"InetAddressType", cql.KindInet},
+	{"MapType", cql.KindMap},
+	{"ListType", cql.KindList},
+	{"SetType", cql.KindSet},
+	{"unknown", cql.KindCustom},
+	{"ShortType", cql.KindSmallInt},
+	{"ByteType", cql.KindTinyInt},
 }
 
-func testType(t *testing.T, cassType string, expectedType cql.Type) {
+func testType(t *testing.T, cassType string, expectedType cql.Kind) {
 	if computedType := getApacheCassandraType(cqltype.ApacheCassandraTypePrefix + cassType); computedType != expectedType {
 		t.Errorf("Cassandra custom type lookup for %s failed. Expected %s, got %s.", cassType, expectedType.String(), computedType.String())
 	}

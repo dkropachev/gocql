@@ -26,7 +26,7 @@ func codecTestMust[T any](v T, err error) T {
 	}
 	return v
 }
-func foundationScalar(t testing.TB, kind cql.Type) cql.DataType {
+func foundationScalar(t testing.TB, kind cql.Kind) cql.DataType {
 	t.Helper()
 	d, err := cql.ScalarType(kind)
 	if err != nil {

@@ -412,7 +412,7 @@ func TestTypedConn(t *testing.T) {
 			if page == nil || len(page.Warnings()) != 1 || !page.CQLTraceID().Set || len(page.Payload()) != 1 {
 				t.Fatal("error metadata lost")
 			}
-			if got := string(page.Payload()[0].Value.Value.OwnedBytes()); got != "val" {
+			if got := string(ownedBytesForTest(page.Payload()[0].Value.Value)); got != "val" {
 				t.Fatalf("wrong payload %q", got)
 			}
 			page.Owner.Release()
@@ -496,9 +496,9 @@ func TestTypedConn(t *testing.T) {
 			e.Str("ks", false)
 			e.Str("tbl", false)
 			e.Str("v", false)
-			e.U16(uint16(cql.TypeList))
-			e.U16(uint16(cql.TypeList))
-			e.U16(uint16(cql.TypeInt))
+			e.U16(uint16(cql.KindList))
+			e.U16(uint16(cql.KindList))
+			e.U16(uint16(cql.KindInt))
 			e.U32(0)
 			body, _ := e.Freeze()
 			owner := wire.NewLease(body, nil)

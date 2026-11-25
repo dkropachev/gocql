@@ -289,25 +289,25 @@ func (p *TypedParser) dataType(depth int) cql.DataType {
 		return cql.DataType{}
 	}
 	p.ReserveAllocation(160)
-	kind := cql.Type(p.U16())
+	kind := cql.Kind(p.U16())
 	if p.Err != nil {
 		return cql.DataType{}
 	}
 	var result cql.DataType
 	var err error
 	switch kind {
-	case cql.TypeList, cql.TypeSet:
+	case cql.KindList, cql.KindSet:
 		element := p.dataType(depth + 1)
-		if kind == cql.TypeList {
+		if kind == cql.KindList {
 			result, err = cql.ListType(element)
 		} else {
 			result, err = cql.SetType(element)
 		}
-	case cql.TypeMap:
+	case cql.KindMap:
 		key := p.dataType(depth + 1)
 		element := p.dataType(depth + 1)
 		result, err = cql.MapType(key, element)
-	case cql.TypeTuple:
+	case cql.KindTuple:
 		n := int(p.U16())
 		if int64(n) > p.Cursor.Remaining()/2 {
 			p.Check(fmt.Errorf("gocql: truncated tuple metadata"))
@@ -322,7 +322,7 @@ func (p *TypedParser) dataType(depth int) cql.DataType {
 			fields[i] = p.dataType(depth + 1)
 		}
 		result, err = cql.TupleType(fields...)
-	case cql.TypeUDT:
+	case cql.KindUDT:
 		keyspace, name := p.Str(), p.Str()
 		n := int(p.U16())
 		if int64(n) > p.Cursor.Remaining()/4 {
@@ -338,9 +338,9 @@ func (p *TypedParser) dataType(depth int) cql.DataType {
 			fields[i] = cql.ColumnSpec{Name: p.Str(), Type: p.dataType(depth + 1)}
 		}
 		result, err = cql.UDTType(keyspace, name, fields...)
-	case cql.TypeCustom:
+	case cql.KindCustom:
 		name := p.Str()
-		if scalar := GetApacheCassandraType(name); scalar != cql.TypeCustom {
+		if scalar := GetApacheCassandraType(name); scalar != cql.KindCustom {
 			result, err = cql.ScalarType(scalar)
 			break
 		}

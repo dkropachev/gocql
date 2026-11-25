@@ -32,7 +32,7 @@ names belong to the package the block names, or to `gocql` when it names none;
 
 ## Type metadata and codec contracts
 
-The signatures below are normative. Existing `Type` constants denote CQL kinds;
+The signatures below are normative. `Kind` constants denote CQL kinds;
 `DataType` is the immutable descriptor of all wire-available type structure. It
 contains nested element/key and value types, ordered tuple/UDT fields, UDT
 identity, vector dimension and frozen state. Construction and access copy
@@ -49,10 +49,10 @@ compared structure and names; equality never relies solely on a hash.
 type DataType struct { /* immutable private descriptor */ }
 type ColumnSpec struct { Keyspace, Table, Name string; Type DataType }
 type Columns struct { /* immutable private ordered column specs */ }
-func ScalarType(kind Type) (DataType, error) // shared descriptor; fails only for non-scalar kinds
+func ScalarType(kind Kind) (DataType, error) // shared descriptor; fails only for non-scalar kinds
 var ASCIIType, BigIntType, BlobType, BooleanType, CounterType, DecimalType,
     DoubleType, FloatType, IntType, TextType, TimestampType, UUIDType,
-    VarcharType, VarintType, TimeUUIDType, InetType, DateType, TimeType,
+    VarintType, TimeUUIDType, InetType, DateType, TimeType,
     SmallIntType, TinyIntType, DurationType DataType // predeclared scalars; treat as constants
 func ListType(element DataType) (DataType, error)
 func SetType(element DataType) (DataType, error)
@@ -61,7 +61,9 @@ func TupleType(fields ...DataType) (DataType, error)
 func UDTType(keyspace, name string, fields ...ColumnSpec) (DataType, error)
 func VectorType(element DataType, dimension uint16) (DataType, error)
 func NewColumns(columns ...ColumnSpec) Columns
-func (t DataType) Kind() Type
+func ParseDataType(string) (DataType, error) // "map<text, frozen<list<int>>>"; no UDTs
+func MustParseDataType(string) DataType
+func (t DataType) Kind() Kind
 func (t DataType) Equal(other DataType) bool
 func (t DataType) Frozen() bool
 func (t DataType) FrozenKnown() bool
@@ -211,12 +213,11 @@ standalone representation or a top-level binding, never in a result decode.
 ```go
 // package cql
 type EncodedValue struct { /* private type, state and Bytes */ }
-func NewEncodedValue(DataType, CellState, Bytes) (EncodedValue, error)
+func NewEncodedValue(DataType, CellState, []byte) (EncodedValue, error) // borrows the body
 func (v EncodedValue) Type() DataType
 func (v EncodedValue) State() CellState
 func (v EncodedValue) Bytes() Bytes
 func (v EncodedValue) Clone() EncodedValue
-func EncodeValueBorrowed[T any](DataType, Encoder[T], T) (EncodedValue, error)
 func EncodeValue[T any](DataType, Encoder[T], T) (EncodedValue, error) // owned
 func DecodeValue[T any](Decoder[T], EncodedValue) (T, error)
 ```
@@ -299,6 +300,9 @@ func RowOf[R any](...StructOption) (RowDecoder[R], error)
 func MustRowOf[R any](...StructOption) RowDecoder[R]
 func UDTCodecOf[T any](UDTOptions, ...StructOption) (Codec[T], error)
 func MustUDTCodecOf[T any](UDTOptions, ...StructOption) Codec[T]
+func TupleCodecOf[T any](...StructOption) (Codec[T], error) // members by field position
+func MustTupleCodecOf[T any](...StructOption) Codec[T]
+func PairCodec[A, B any](Codec[A], Codec[B]) Codec[Pair[A, B]] // tuple<a, b>
 func WithCodec[V any](Codec[V]) StructOption
 func WithEncoder[V any](Encoder[V]) StructOption
 func ReuseBuffers() StructOption
@@ -313,9 +317,15 @@ name in snake_case as gocqlx maps it (`CreatedAt` is `created_at`, `UserID`
 codec. `ParamsOf` skips fields without a matching marker but requires a field
 for every marker; `RowOf` leaves fields of unselected columns zero and
 requires a field for every column unless given `IgnoreExtraColumns`. A
+`[]V` field maps a list, set or vector, whichever the column is; a named type
+maps like its underlying type; `int`, `*V`, `cql.Text` and `*big.Int` fields
+map with `IntCodec`, `PointerCodec`, `TextCodec` and `VarintBigIntCodec`. A
 `time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
 parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
-gives. `UDTCodecOf` maps a UDT's fields to struct T the same way. Options are
+gives. `UDTCodecOf` maps a UDT's fields to struct T the same way; an empty
+`UDTOptions.Name` matches any name, and `IgnoreExtraColumns` sets
+`AllowExtraDatabaseFields`. `WithCodec(c)` also maps `[]V`, `*V` and map
+values of V. `TupleCodecOf` maps a tuple's members to T's fields by position. Options are
 not generic, so `WithCodec(c)` infers V from c; a constructor rejects an
 option it does not apply with a ValidationError.
 
@@ -366,27 +376,31 @@ var Int8Codec Codec[int8]
 var Int16Codec Codec[int16]
 var Int32Codec Codec[int32]
 var Int64Codec Codec[int64]              // bigint and counter
+var IntCodec Codec[int]                  // bigint and counter; decode checks the range
 var Float32Codec Codec[float32]
 var Float64Codec Codec[float64]
 var DateCodec Codec[Date]
-var TimeCodec Codec[TimeOfDay]
+var TimeOfDayCodec Codec[TimeOfDay]
 var TimestampCodec Codec[Timestamp]
 var TimestampTimeCodec Codec[time.Time] // UTC on decode; millisecond instant on encode
 var DurationCodec Codec[Duration]
-var UUIDCodec Codec[UUID]
+var UUIDCodec Codec[UUID]                     // uuid and timeuuid; version 1 checked into timeuuid
 var TimeUUIDCodec Codec[TimeUUID]
 var InetCodec Codec[netip.Addr]
 var VarintCodec Codec[Varint]
+var VarintBigIntCodec Codec[*big.Int]    // varint; nil is NULL
 var DecimalCodec Codec[Decimal]
-var StringCodec Codec[string]                 // text/varchar; decodes an owned copy
-var ASCIIStringCodec Codec[string]
+var StringCodec Codec[string]                 // text and ascii; decodes an owned copy
 var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
-var TextCodec Codec[Text]                     // text/varchar borrowed view
-var ASCIICodec Codec[Text]
-var BlobCodec Codec[Bytes]
-func NamedScalar[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
+var TextCodec Codec[Text]                     // text and ascii; borrowed view
+var BytesCodec Codec[Bytes]
+func ConvertCodec[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
 func VarintFromBigInt(*big.Int) Varint
+func VarintFromInt64(int64) Varint
 func (v Varint) BigInt() *big.Int
+func (v Varint) Int64() (int64, error) // fails when v does not fit
+func ParseDecimal(string) (Decimal, error) // "12.30", "-7", "1.23E+5"
+func (d Decimal) Rat() *big.Rat
 func VarintFromBytes([]byte) (Varint, error)
 func DateFromTime(time.Time) (Date, error)
 func (d Date) Time() time.Time
@@ -415,9 +429,9 @@ not fail. TimeUUID provides canonical string/JSON/text and
 UUID timestamp/time/byte helpers. ParseTimeUUID and TimeUUIDFromUUID validate
 version 1; codecs and checked unmarshaling do likewise. The zero value is not
 an encodable timeuuid; Nullable represents NULL.
-VectorType has Kind TypeVector, a driver-defined kind that is not a native
-protocol type ID, plus Dimension. The zero DataType has Kind TypeCustom;
-ScalarType(TypeCustom) rejects an incomplete custom descriptor.
+VectorType has Kind KindVector, a driver-defined kind that is not a native
+protocol type ID, plus Dimension. The zero DataType has Kind KindCustom;
+ScalarType(KindCustom) rejects an incomplete custom descriptor.
 
 A counter is a bigint the server only adds to: Int64Codec, StreamInt64 and
 BigIntValue accept it, and there is no separate counter Go type.
@@ -447,8 +461,8 @@ values.
 Public type descriptions use DataType and ColumnSpec only; protocol metadata
 descriptors are internal.
 ParseConsistency and ParseUUID return errors; MustParseConsistency and
-MustParseUUID panic on invalid input. EncodeValue owns its output payloads;
-EncodeValueBorrowed preserves borrowed inputs.
+MustParseUUID panic on invalid input. EncodeValue owns its output payloads; the
+driver's own zero-copy encoding is internal.
 
 The wrapper roles are separate: Option is for inherited settings and for result values that may be unknown; Nullable is
 for nullable application data and decoded results; BindValue controls binding
@@ -472,7 +486,6 @@ func (b Bytes) Slice(offset, length int64) (Bytes, error)
 func (b Bytes) WriteTo(io.Writer) (int64, error)
 func (b Bytes) CopyTo([]byte) (int, error)
 func (b Bytes) Clone() Bytes          // panics with cqlerr.ErrReleased on an expired view
-func (b Bytes) OwnedBytes() []byte    // panics likewise
 func (b Bytes) Copy() ([]byte, error) // checked form: returns cqlerr.ErrReleased
 func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
@@ -480,6 +493,8 @@ func (t Text) String() string
 func (t Text) Copy() (string, error)
 
 type Entry[K, V any] struct { Key K; Value V }
+func SliceCodec[T any](Codec[T]) Codec[[]T] // list, set or vector, per the column
+func PointerCodec[T any](Codec[T]) Codec[*T] // nil is NULL
 func ListCodec[T any](Codec[T]) Codec[[]T]
 func SetCodec[T any](Codec[T]) Codec[[]T]
 func MapCodec[K, V any](Codec[K], Codec[V]) Codec[[]Entry[K, V]]
@@ -498,7 +513,7 @@ func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
 func TupleCodec[T any](ParamEncoder[T], RowDecoder[T]) Codec[T]
 type UDTOptions struct {
     Keyspace string // empty matches the UDT in any keyspace
-    Name     string // required, exact metadata name
+    Name     string // empty matches a UDT of any name
     AllowExtraDatabaseFields, AllowMissingFields bool
 }
 func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
@@ -514,7 +529,8 @@ whose key and value types have owning built-in codecs; MapCodec keeps
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
 dynamic.Text likewise returns an error for invalid UTF-8. StringCodec and
-ASCIIStringCodec return ordinary codec errors for invalid encoded input. Malformed
+TextCodec return ordinary codec errors for invalid encoded input: UTF-8 for
+text, ASCII for ascii. Malformed
 input is never a reason for a constructor panic.
 
 Buffered Bytes and Text retain fragments; a cell is not flattened when it
@@ -527,7 +543,7 @@ declared dimension and reject NULL without a Nullable wrapper.
 
 Eager materialization does not detach borrowed elements. Decoder.Clone
 recursively copies collection storage and borrowed Text, Bytes, Value and
-nested aggregates so they survive page release. String(), OwnedBytes(), Clone()
+nested aggregates so they survive page release. String(), Copy(), Clone()
 and explicit big.Int/calendar adapters are requested materializations.
 Collection framing and all selected child decoders run before Decode succeeds;
 a malformed element returns an error and no partial slice. DecodeInto may reuse
@@ -535,19 +551,20 @@ caller storage, whose contents must be discarded after an error. Fixed-width
 vectors check the compiled aggregate width before decoding elements; variable
 vectors use checked unsigned-vint lengths.
 
-Dynamic Value retains explicit cursor traversal through Elements, Entries and
-Fields. dynamic.Iterator stops permanently at the first error, enforces framing
-and counts, and does not publish the failed value. Its Collect method allocates
-an output slice and recursively detaches yielded values; errors return no
-partial slice. Dynamic traversal does not imply typed lazy collection decoders.
+Dynamic Value retains explicit cursor traversal through the Elements, Entries
+and Fields range iterators. Each stops at the first error, which it yields once
+with a zero member, enforces framing and counts, and does not publish the
+failed value; yielded members may borrow the response until Clone. There is no
+indexed member access, which would rescan a decoded value. Dynamic traversal
+does not imply typed lazy collection decoders.
 
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
 protocol permits; a nonnullable destination rejects them. UDT matching defaults
-to exact field names and full identity/type validation. UDTOptions.Name must
-supply the expected name, and a non-empty Keyspace the expected keyspace; a
-missing name fails CheckType/Compile with a validation error, and equal layouts
-under a different identity are incompatible.
+to exact field names and full identity/type validation. A non-empty
+UDTOptions.Name and Keyspace must match the UDT's name and keyspace, and equal
+layouts under a different identity are then incompatible; an empty one matches
+any.
 Explicit options permit extra database fields (encode explicit null; decode
 checked skips) or application fields absent from the database (encode ignores
 those fields; decode sets explicit zero defaults only when allowed).
@@ -605,18 +622,12 @@ func (v Value) Duration() (Duration, error)
 func (v Value) Varint() (Varint, error)
 func (v Value) Decimal() (Decimal, error)
 func (v Value) Len() int
-func (v Value) At(int) (Value, error)           // list, set, vector, tuple or UDT member
 func (v Value) Field(string) (Value, error)     // UDT field
+func (v Value) Str() (string, error)            // owned copy of text or ascii
 func (v Value) String() string                  // CQL literal, for logs
-func (v Value) Elements() (*Iterator[Value], error)
-func (v Value) Entries() (*Iterator[Entry], error)
-func (v Value) Fields() (*Iterator[Field], error)
-type Iterator[T any] struct { /* bounded cursor for Value traversal */ }
-func (i *Iterator[T]) Next() bool
-func (i *Iterator[T]) Value() T
-func (i *Iterator[T]) Err() error
-func (i *Iterator[T]) All() iter.Seq2[T, error]
-func (i *Iterator[T]) Collect() ([]T, error)
+func (v Value) Elements() iter.Seq2[Value, error]
+func (v Value) Entries() iter.Seq2[Entry, error]
+func (v Value) Fields() iter.Seq2[Field, error]
 func Null(DataType) Value
 func Unset(DataType) Value
 func Empty(DataType) (Value, error)
@@ -639,12 +650,12 @@ func Timestamp(Timestamp) Value
 func Duration(Duration) Value
 func Varint(Varint) Value
 func Decimal(Decimal) Value
-func List(DataType, []Value) (Value, error)
-func Set(DataType, []Value) (Value, error)
+func List(element DataType, values ...Value) (Value, error)
+func Set(element DataType, values ...Value) (Value, error)
 func Map(DataType, []Entry) (Value, error)
 func Tuple(DataType, []Value) (Value, error)
 func UDT(DataType, []Field) (Value, error)
-func Vector(DataType, []Value) (Value, error)
+func Vector(element DataType, values ...Value) (Value, error) // dimension len(values)
 var Codec cql.Codec[Value]
 var Params cql.ParamEncoder[[]Value]
 var NamedParams cql.ParamEncoder[[]Field]
@@ -1160,11 +1171,10 @@ var Date Decoder[Date]
 var Time Decoder[TimeOfDay]
 var Timestamp Decoder[Timestamp]
 var Duration Decoder[Duration]
-var UUID Decoder[UUID]
+var UUID Decoder[UUID] // uuid and timeuuid
 var TimeUUID Decoder[TimeUUID]
 var Inet Decoder[netip.Addr]
-var Text Decoder[[]byte] // text/varchar; incremental UTF-8 check
-var ASCII Decoder[[]byte]
+var Text Decoder[[]byte] // text and ascii; incremental UTF-8 or ASCII check
 var Blob Decoder[[]byte]
 var Varint Decoder[[]byte] // exact signed two's-complement bytes
 // Decimal's unscaled bytes have the same caller-capacity rule.
@@ -1172,6 +1182,7 @@ type DecimalParts struct { Scale int32; Unscaled []byte }
 var Decimal Decoder[DecimalParts]
 func Nullable[T any](Decoder[T]) Decoder[Nullable[T]]
 func Empty[T any](Decoder[T]) Decoder[MaybeEmpty[T]]
+func Slice[T any](Decoder[T]) Decoder[[]T] // list, set or vector, per the column
 func List[T any](Decoder[T]) Decoder[[]T]
 func Set[T any](Decoder[T]) Decoder[[]T]
 func Map[K, V any](Decoder[K], Decoder[V]) Decoder[[]Entry[K, V]]

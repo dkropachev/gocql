@@ -71,7 +71,7 @@ func TestClientRoutes(t *testing.T) {
 					_, port, _ := net.SplitHostPort(srv.Address)
 					var goodPort int
 					fmt.Sscan(port, &goodPort)
-					columns := []rowsCol{{"connection_id", optNative(cql.TypeUUID)}, {"host_id", optNative(cql.TypeUUID)}, {"address", optNative(cql.TypeVarchar)}, {"port", optNative(cql.TypeInt)}, {"tls_port", optNative(cql.TypeInt)}}
+					columns := []rowsCol{{"connection_id", optNative(cql.KindUUID)}, {"host_id", optNative(cql.KindUUID)}, {"address", optNative(cql.KindText)}, {"port", optNative(cql.KindInt)}, {"tls_port", optNative(cql.KindInt)}}
 					var rows [][][]byte
 					for i, id := range ids {
 						port := 1

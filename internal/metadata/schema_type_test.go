@@ -18,7 +18,7 @@ func TestSchemaDataType(t *testing.T) {
 	}}
 	for source, want := range map[string]string{
 		"int":                          "int",
-		"varchar":                      "varchar",
+		"varchar":                      "text",
 		"frozen<list<int>>":            "frozen<list<int>>",
 		"map<text, frozen<set<uuid>>>": "map<text,frozen<set<uuid>>>",
 		"frozen<tuple<int, text>>":     "frozen<tuple<int,text>>",
@@ -37,7 +37,7 @@ func TestSchemaDataType(t *testing.T) {
 		}
 	}
 	addr, _ := InternalSchemaDataType(ks, "addr")
-	if addr.Kind() != cql.TypeUDT || addr.Fields().Len() != 2 {
+	if addr.Kind() != cql.KindUDT || addr.Fields().Len() != 2 {
 		t.Errorf("addr fields: %v", addr)
 	}
 	for _, bad := range []string{"", "nosuch", "list<int, int>", "map<int>", "'org.Custom'", "other.addr", "int>", "vector<float, 0>"} {

@@ -682,7 +682,7 @@ func TestQuery(t *testing.T) {
 			handle := new(Prepared[[]byte, cql.Bytes])
 			PreparedData(handle).InternalState = state
 			PreparedData(handle).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
-			PreparedData(handle).rows = cql.OneColumn(cql.BlobCodec)
+			PreparedData(handle).rows = cql.OneColumn(cql.BytesCodec)
 			PreparedData(handle).plans = &InternalResultPlanCache[cql.Bytes]{}
 			q := codecTestMust(handle.Query(Options{}))
 			defer q.Close()
@@ -718,7 +718,7 @@ func TestQuery(t *testing.T) {
 			var dst cql.Bytes
 			var values []string
 			result, err := q.Each(ctx, []byte("key"), &dst, func(row *cql.Bytes) error {
-				values = append(values, string(row.OwnedBytes()))
+				values = append(values, string(ownedBytesForTest(*row)))
 				return nil
 			})
 			if err != nil || fmt.Sprint(values) != "[one uno two]" || result.Rows != 3 {
@@ -858,8 +858,8 @@ func TestQuery(t *testing.T) {
 				return body
 			}
 		}
-		key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cql.ScalarType(cql.TypeInt))})
-		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+		key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: codecTestMust(cql.ScalarType(cql.KindInt))})
+		value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 		prepared := preparedBody([]byte("loopback"), key, value, 0)
 		if workload == "pwrite" {
 			prepared = preparedBody([]byte("loopback"), cql.NewColumns(append(cqltype.ColumnSlice(key), cqltype.ColumnSlice(value)...)...), cql.NewColumns(), 0)
@@ -1025,7 +1025,7 @@ func TestQuery(t *testing.T) {
 		// close.
 		t.Run("HandleGoesStaleOnNextExecution", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, Options{}))
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, Options{}))
 			defer q.Close()
 			served := make(chan struct{})
 			go func() {
@@ -1041,7 +1041,7 @@ func TestQuery(t *testing.T) {
 			defer cancel()
 			first := codecTestMust(q.Run(ctx, cql.EmptyRow{}))
 			var row cql.Bytes
-			if !first.NextInto(&row) || string(row.OwnedBytes()) != "first" {
+			if !first.NextInto(&row) || string(ownedBytesForTest(row)) != "first" {
 				t.Fatal(first.Err())
 			}
 			if err := first.Close(); err != nil {
@@ -1068,7 +1068,7 @@ func TestQuery(t *testing.T) {
 			if err := first.Close(); err != nil {
 				t.Fatal("stale close", err)
 			}
-			if !second.NextInto(&row) || string(row.OwnedBytes()) != "second" {
+			if !second.NextInto(&row) || string(ownedBytesForTest(row)) != "second" {
 				t.Fatal("stale close disturbed the new execution", second.Err())
 			}
 			if second.NextInto(&row) || second.Err() != nil {

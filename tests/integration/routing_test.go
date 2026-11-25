@@ -377,7 +377,7 @@ func TestRouting(t *testing.T) {
 				for _, index := range tc.indexes {
 					column, ok := prepared.Parameters().At(index)
 					require.True(t, ok)
-					require.Equal(t, cql.TypeInt, column.Type.Kind())
+					require.Equal(t, cql.KindInt, column.Type.Kind())
 				}
 				again := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Same(t, preparedData(prepared).InternalState, preparedData(again).InternalState, "preparing again must hit typed cache")
@@ -655,22 +655,16 @@ func TestRouting(t *testing.T) {
 			var row cql.DynamicRow
 			for serverRows.NextInto(&row) {
 				last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
-				list := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
+				list := codecTestMust(collectSeq(codecTestMust(row.Get("replicas")).Elements()))
 				r := metadata.TokenRange{End: last}
-				for list.Next() {
-					tuple := codecTestMust(list.Value().Elements())
-					if !tuple.Next() {
-						t.Fatal("missing host")
+				for _, replica := range list {
+					tuple := codecTestMust(collectSeq(replica.Elements()))
+					if len(tuple) < 2 {
+						t.Fatal("missing host or shard")
 					}
-					host := codecTestMust(tuple.Value().UUID())
-					if !tuple.Next() {
-						t.Fatal("missing shard")
-					}
-					shard := codecTestMust(tuple.Value().Signed())
+					host := codecTestMust(tuple[0].UUID())
+					shard := codecTestMust(tuple[1].Signed())
 					r.Replicas = append(r.Replicas, metadata.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
-				}
-				if err := list.Err(); err != nil {
-					t.Fatal(err)
 				}
 				authoritative = append(authoritative, r)
 			}

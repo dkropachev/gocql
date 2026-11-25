@@ -13,8 +13,8 @@ import (
 
 func sequenceWork[T any](t *testing.T, typ DataType, encoder Encoder[[]T], decoder Decoder[[]T], input []T) {
 	t.Helper()
-	encoded := CodecTestMust(EncodeValueBorrowed(typ, encoder, input))
-	raw := encoded.Bytes().OwnedBytes()
+	encoded := CodecTestMust(encodeValueBorrowed(typ, encoder, input))
+	raw := encoded.Bytes().ownedBytes()
 	spans := make([]wire.Span, len(raw))
 	for i := range raw {
 		spans[i] = wire.Borrow(raw[i : i+1])

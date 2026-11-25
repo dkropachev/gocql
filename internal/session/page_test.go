@@ -94,20 +94,20 @@ func TestPage(t *testing.T) {
 			p := testPage(t, "one", "two", "three")
 			defer p.Close()
 			var first, second cql.Bytes
-			if !p.NextInto(&first) || string(first.OwnedBytes()) != "one" {
+			if !p.NextInto(&first) || string(ownedBytesForTest(first)) != "one" {
 				t.Fatal(p.Err())
 			}
 			retained := codecTestMust(p.Retain())
 			defer retained.Close()
 			original := first
 			first = cql.BorrowBytes([]byte("edited"))
-			if string(codecTestMust(p.Clone()).OwnedBytes()) != "edited" {
+			if string(ownedBytesForTest(codecTestMust(p.Clone()))) != "edited" {
 				t.Fatal("current destination not observed")
 			}
-			if !p.NextInto(&second) || string(second.OwnedBytes()) != "two" || string(first.OwnedBytes()) != "edited" {
+			if !p.NextInto(&second) || string(ownedBytesForTest(second)) != "two" || string(ownedBytesForTest(first)) != "edited" {
 				t.Fatal("NextInto modified old destination")
 			}
-			if !p.NextInto(&second) || string(second.OwnedBytes()) != "three" {
+			if !p.NextInto(&second) || string(ownedBytesForTest(second)) != "three" {
 				t.Fatal(p.Err())
 			}
 			if p.NextInto(&second) || second.Len() != 0 || p.Err() != nil {
@@ -116,11 +116,11 @@ func TestPage(t *testing.T) {
 			if p.NextInto(nil) || p.Err() != nil {
 				t.Fatal("terminal nil replaced exhaustion", p.Err())
 			}
-			if string(original.OwnedBytes()) != "one" {
+			if string(ownedBytesForTest(original)) != "one" {
 				t.Fatal("retention lost")
 			}
 			p.Close()
-			if string(original.OwnedBytes()) != "one" {
+			if string(ownedBytesForTest(original)) != "one" {
 				t.Fatal("close lost retained page")
 			}
 			retained.Close()
@@ -130,8 +130,8 @@ func TestPage(t *testing.T) {
 		})
 
 		t.Run("PartialErrorClears", func(t *testing.T) {
-			integer := codecTestMust(cql.ScalarType(cql.TypeInt))
-			blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
+			integer := codecTestMust(cql.ScalarType(cql.KindInt))
+			blob := codecTestMust(cql.ScalarType(cql.KindBlob))
 			type row struct {
 				Number int32
 				Value  cql.Bytes
@@ -139,7 +139,7 @@ func TestPage(t *testing.T) {
 			}
 			cols := cql.NewColumns(cql.ColumnSpec{Name: "n", Type: integer}, cql.ColumnSpec{Name: "v", Type: blob})
 			body := typedTestChain(t, []byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 5, 1})
-			decoder := cql.Row(cql.Column("n", cql.Int32Codec, func(r *row) *int32 { return &r.Number }), cql.Column("v", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.Value }))
+			decoder := cql.Row(cql.Column("n", cql.Int32Codec, func(r *row) *int32 { return &r.Number }), cql.Column("v", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.Value }))
 			p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: body, RowCount: 1, Owner: wire.NewLease(body, nil)}}, decoder, nil))
 			defer p.Close()
 			dst := row{Unused: 8}
@@ -209,7 +209,7 @@ func TestPage(t *testing.T) {
 						}
 						before := dst
 						_ = s.Close()
-						if string(before.OwnedBytes()) != "delivered" {
+						if string(ownedBytesForTest(before)) != "delivered" {
 							t.Fatal("shutdown recycled delivered page")
 						}
 						if p.NextInto(&dst) || dst.Len() != 0 || !errors.Is(p.Err(), cqlerr.ErrClosed) {
@@ -223,7 +223,7 @@ func TestPage(t *testing.T) {
 						}
 						before := dst
 						_ = s.Close()
-						if string(before.OwnedBytes()) != "delivered" {
+						if string(ownedBytesForTest(before)) != "delivered" {
 							t.Fatal("shutdown recycled delivered rows")
 						}
 						if r.NextInto(&dst) || dst.Len() != 0 || !errors.Is(r.Err(), cqlerr.ErrClosed) {
@@ -289,14 +289,14 @@ func TestPage(t *testing.T) {
 					if err := b.Wait(ctx); err != nil {
 						t.Fatal(err)
 					}
-					if string(view.OwnedBytes()) != "retained" {
+					if string(ownedBytesForTest(view)) != "retained" {
 						t.Fatal("shutdown invalidated current row")
 					}
 					if advance() {
 						t.Fatal("advance after shutdown")
 					}
 					closeRows()
-					if string(view.OwnedBytes()) != "retained" {
+					if string(ownedBytesForTest(view)) != "retained" {
 						t.Fatal("retained lease lost")
 					}
 					if _, err := Run(context.Background(), s, b, CompiledOptions{}); !errors.Is(err, cqlerr.ErrClosed) {

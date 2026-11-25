@@ -11,14 +11,14 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
-var schemaScalarTypes = map[string]cql.Type{
-	"ascii": cql.TypeASCII, "bigint": cql.TypeBigInt, "blob": cql.TypeBlob,
-	"boolean": cql.TypeBoolean, "counter": cql.TypeCounter, "date": cql.TypeDate,
-	"decimal": cql.TypeDecimal, "double": cql.TypeDouble, "duration": cql.TypeDuration,
-	"float": cql.TypeFloat, "inet": cql.TypeInet, "int": cql.TypeInt,
-	"smallint": cql.TypeSmallInt, "text": cql.TypeText, "time": cql.TypeTime,
-	"timestamp": cql.TypeTimestamp, "timeuuid": cql.TypeTimeUUID, "tinyint": cql.TypeTinyInt,
-	"uuid": cql.TypeUUID, "varchar": cql.TypeVarchar, "varint": cql.TypeVarint,
+var schemaScalarTypes = map[string]cql.Kind{
+	"ascii": cql.KindASCII, "bigint": cql.KindBigInt, "blob": cql.KindBlob,
+	"boolean": cql.KindBoolean, "counter": cql.KindCounter, "date": cql.KindDate,
+	"decimal": cql.KindDecimal, "double": cql.KindDouble, "duration": cql.KindDuration,
+	"float": cql.KindFloat, "inet": cql.KindInet, "int": cql.KindInt,
+	"smallint": cql.KindSmallInt, "text": cql.KindText, "time": cql.KindTime,
+	"timestamp": cql.KindTimestamp, "timeuuid": cql.KindTimeUUID, "tinyint": cql.KindTinyInt,
+	"uuid": cql.KindUUID, "varchar": cql.KindText, "varint": cql.KindVarint,
 }
 
 // InternalSchemaDataType builds the DataType of a schema type string, such as

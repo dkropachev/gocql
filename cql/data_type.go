@@ -17,7 +17,7 @@ type dataTypeDescriptor struct {
 	Element, Key   DataType
 	Keyspace, Name string
 	Fields         Columns
-	Kind           Type
+	Kind           Kind
 	Dimension      uint16
 	frozen         bool
 	frozenKnown    bool
@@ -39,45 +39,53 @@ type ColumnSpec struct {
 // The zero Columns is empty.
 type Columns struct{ columns []ColumnSpec }
 
-// scalarTypes holds one shared descriptor per scalar kind, indexed by Type.
-var scalarTypes = func() (t [TypeDuration + 1]DataType) {
-	for k := TypeASCII; k <= TypeDuration; k++ {
-		t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
+// wireText is the native protocol's legacy ID for text. It decodes to
+// KindText, the ID of varchar, since the two are one CQL type.
+const wireText Kind = 0x000A
+
+// scalarTypes holds one shared descriptor per scalar kind, indexed by Kind.
+// The legacy text ID shares KindText's descriptor.
+var scalarTypes = func() (t [KindDuration + 1]DataType) {
+	for k := KindASCII; k <= KindDuration; k++ {
+		if k != wireText {
+			t[k] = DataType{descriptor: &dataTypeDescriptor{Kind: k}}
+		}
 	}
+	t[wireText] = t[KindText]
 	return t
 }()
 
-// Predeclared scalar types. Each equals ScalarType of the matching Type
+// Predeclared scalar types. Each equals ScalarType of the matching Kind
 // constant. Treat them as constants: reassigning one changes only code that
 // reads the variable, not ScalarType or decoded metadata.
 var (
-	ASCIIType     = scalarTypes[TypeASCII]
-	BigIntType    = scalarTypes[TypeBigInt]
-	BlobType      = scalarTypes[TypeBlob]
-	BooleanType   = scalarTypes[TypeBoolean]
-	CounterType   = scalarTypes[TypeCounter]
-	DecimalType   = scalarTypes[TypeDecimal]
-	DoubleType    = scalarTypes[TypeDouble]
-	FloatType     = scalarTypes[TypeFloat]
-	IntType       = scalarTypes[TypeInt]
-	TextType      = scalarTypes[TypeText]
-	TimestampType = scalarTypes[TypeTimestamp]
-	UUIDType      = scalarTypes[TypeUUID]
-	VarcharType   = scalarTypes[TypeVarchar]
-	VarintType    = scalarTypes[TypeVarint]
-	TimeUUIDType  = scalarTypes[TypeTimeUUID]
-	InetType      = scalarTypes[TypeInet]
-	DateType      = scalarTypes[TypeDate]
-	TimeType      = scalarTypes[TypeTime]
-	SmallIntType  = scalarTypes[TypeSmallInt]
-	TinyIntType   = scalarTypes[TypeTinyInt]
-	DurationType  = scalarTypes[TypeDuration]
+	ASCIIType     = scalarTypes[KindASCII]
+	BigIntType    = scalarTypes[KindBigInt]
+	BlobType      = scalarTypes[KindBlob]
+	BooleanType   = scalarTypes[KindBoolean]
+	CounterType   = scalarTypes[KindCounter]
+	DecimalType   = scalarTypes[KindDecimal]
+	DoubleType    = scalarTypes[KindDouble]
+	FloatType     = scalarTypes[KindFloat]
+	IntType       = scalarTypes[KindInt]
+	TextType      = scalarTypes[KindText]
+	TimestampType = scalarTypes[KindTimestamp]
+	UUIDType      = scalarTypes[KindUUID]
+	VarintType    = scalarTypes[KindVarint]
+	TimeUUIDType  = scalarTypes[KindTimeUUID]
+	InetType      = scalarTypes[KindInet]
+	DateType      = scalarTypes[KindDate]
+	TimeType      = scalarTypes[KindTime]
+	SmallIntType  = scalarTypes[KindSmallInt]
+	TinyIntType   = scalarTypes[KindTinyInt]
+	DurationType  = scalarTypes[KindDuration]
 )
 
-// ScalarType returns the shared descriptor for a supported scalar kind. It
-// fails only for non-scalar kinds; use the predeclared values such as TextType
+// ScalarType returns the shared descriptor for a supported scalar kind. The
+// protocol's legacy text ID, Kind(0x000A), returns TextType. It fails only
+// for non-scalar kinds; use the predeclared values such as TextType
 // when the kind is known at compile time.
-func ScalarType(kind Type) (DataType, error) {
+func ScalarType(kind Kind) (DataType, error) {
 	if err := validateScalarKind(kind); err != nil {
 		return DataType{}, err
 	}
@@ -85,19 +93,19 @@ func ScalarType(kind Type) (DataType, error) {
 }
 
 // ValidateScalarKind checks scalar support without constructing a descriptor.
-func validateScalarKind(kind Type) error {
-	if kind < TypeASCII || kind > TypeDuration {
+func validateScalarKind(kind Kind) error {
+	if kind < KindASCII || kind > KindDuration {
 		return typeValidation("kind", "unsupported scalar kind %v", kind)
 	}
 	return nil
 }
 
 // ListType constructs a CQL list type with the supplied element type.
-func ListType(element DataType) (DataType, error) { return collectionDataType(TypeList, element) }
+func ListType(element DataType) (DataType, error) { return collectionDataType(KindList, element) }
 
 // SetType constructs a CQL set type with the supplied element type.
-func SetType(element DataType) (DataType, error) { return collectionDataType(TypeSet, element) }
-func collectionDataType(kind Type, element DataType) (DataType, error) {
+func SetType(element DataType) (DataType, error) { return collectionDataType(KindSet, element) }
+func collectionDataType(kind Kind, element DataType) (DataType, error) {
 	if err := validateDataType(element); err != nil {
 		return DataType{}, err
 	}
@@ -112,7 +120,7 @@ func MapType(key, value DataType) (DataType, error) {
 	if err := validateDataType(value); err != nil {
 		return DataType{}, err
 	}
-	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeMap, Key: key, Element: value}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: KindMap, Key: key, Element: value}}, nil
 }
 
 // TupleType constructs a CQL Tuple type from its complete type description.
@@ -127,7 +135,7 @@ func TupleType(fields ...DataType) (DataType, error) {
 		}
 		columns[i].Type = t
 	}
-	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeTuple, Fields: Columns{columns: columns}}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: KindTuple, Fields: Columns{columns: columns}}}, nil
 }
 
 // UDTType constructs a CQL UDT type from its complete type description.
@@ -151,7 +159,7 @@ func UDTType(keyspace, name string, fields ...ColumnSpec) (DataType, error) {
 			return DataType{}, fmt.Errorf("UDT field %q: %w", c.Name, err)
 		}
 	}
-	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeUDT, Keyspace: keyspace, Name: name, Fields: NewColumns(fields...)}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: KindUDT, Keyspace: keyspace, Name: name, Fields: NewColumns(fields...)}}, nil
 }
 
 // VectorType constructs a vector type with an element type and fixed nonzero dimension.
@@ -162,7 +170,7 @@ func VectorType(element DataType, dimension uint16) (DataType, error) {
 	if dimension == 0 {
 		return DataType{}, typeValidation("dimension", "vector dimension must be positive")
 	}
-	return DataType{descriptor: &dataTypeDescriptor{Kind: TypeVector, Element: element, Dimension: dimension}}, nil
+	return DataType{descriptor: &dataTypeDescriptor{Kind: KindVector, Element: element, Dimension: dimension}}, nil
 }
 
 // NewColumns snapshots column specifications into immutable metadata.
@@ -170,11 +178,11 @@ func NewColumns(columns ...ColumnSpec) Columns {
 	return Columns{columns: append([]ColumnSpec(nil), columns...)}
 }
 
-// Kind returns the type's kind. A vector is TypeVector; the invalid zero
-// DataType is TypeCustom.
-func (t DataType) Kind() Type {
+// Kind returns the type's kind. A vector is KindVector; the invalid zero
+// DataType is KindCustom.
+func (t DataType) Kind() Kind {
 	if t.descriptor == nil {
-		return TypeCustom
+		return KindCustom
 	}
 	return t.descriptor.Kind
 }
@@ -207,7 +215,7 @@ func (t DataType) Element() (DataType, bool) {
 	if t.descriptor == nil {
 		return DataType{}, false
 	}
-	if t.Kind() == TypeList || t.Kind() == TypeSet || t.descriptor.Dimension != 0 {
+	if t.Kind() == KindList || t.Kind() == KindSet || t.descriptor.Dimension != 0 {
 		return t.descriptor.Element, true
 	}
 	return DataType{}, false
@@ -216,7 +224,7 @@ func (t DataType) Element() (DataType, bool) {
 // KeyValue returns the key and value types of a map, and false for any other
 // type.
 func (t DataType) KeyValue() (DataType, DataType, bool) {
-	if t.descriptor == nil || t.Kind() != TypeMap {
+	if t.descriptor == nil || t.Kind() != KindMap {
 		return DataType{}, DataType{}, false
 	}
 	return t.descriptor.Key, t.descriptor.Element, true
@@ -234,7 +242,7 @@ func (t DataType) Fields() Columns {
 // UDTName returns the keyspace and name of a UDT, and false for any other
 // type.
 func (t DataType) UDTName() (keyspace, name string, ok bool) {
-	if t.descriptor == nil || t.Kind() != TypeUDT {
+	if t.descriptor == nil || t.Kind() != KindUDT {
 		return "", "", false
 	}
 	return t.descriptor.Keyspace, t.descriptor.Name, true
@@ -369,19 +377,19 @@ func (t DataType) String() string {
 	d := t.descriptor
 	var s string
 	switch d.Kind {
-	case TypeList, TypeSet:
+	case KindList, KindSet:
 		s = fmt.Sprintf("%s<%s>", d.Kind, d.Element)
-	case TypeMap:
+	case KindMap:
 		s = fmt.Sprintf("map<%s,%s>", d.Key, d.Element)
-	case TypeTuple:
+	case KindTuple:
 		fields := make([]string, d.Fields.Len())
 		for i, c := range d.Fields.columns {
 			fields[i] = c.Type.String()
 		}
 		s = "tuple<" + strings.Join(fields, ",") + ">"
-	case TypeUDT:
+	case KindUDT:
 		s = d.Keyspace + "." + d.Name
-	case TypeVector:
+	case KindVector:
 		s = fmt.Sprintf("vector<%s,%d>", d.Element, d.Dimension)
 	default:
 		s = d.Kind.String()

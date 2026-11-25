@@ -6,7 +6,9 @@ package cql
 import (
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -104,9 +106,49 @@ func VarintFromBigInt(v *big.Int) Varint {
 	return Varint{bytes: BorrowBytes(b)}
 }
 
+// VarintFromInt64 constructs a Varint holding n.
+func VarintFromInt64(n int64) Varint {
+	if n == 0 {
+		return Varint{}
+	}
+	var b [8]byte
+	for i := range b {
+		b[i] = byte(n >> (56 - 8*i))
+	}
+	// Drop leading bytes that only repeat the sign.
+	start := 0
+	for start < 7 && (b[start] == 0 && b[start+1]&0x80 == 0 || b[start] == 0xff && b[start+1]&0x80 != 0) {
+		start++
+	}
+	return Varint{bytes: BorrowBytes(append([]byte(nil), b[start:]...))}
+}
+
+// Int64 returns v as an int64. It fails with a ValidationError when v does
+// not fit, and with ErrReleased once the view has expired.
+func (v Varint) Int64() (int64, error) {
+	if err := checkBytesAlive(v.bytes); err != nil {
+		return 0, err
+	}
+	if v.bytes.Len() > 8 {
+		return 0, typeValidation("varint", "value overflows int64")
+	}
+	if v.bytes.Len() == 0 {
+		return 0, nil
+	}
+	var b [8]byte
+	if _, err := v.bytes.CopyTo(b[:v.bytes.Len()]); err != nil {
+		return 0, err
+	}
+	n := int64(int8(b[0]))
+	for _, c := range b[1:v.bytes.Len()] {
+		n = n<<8 | int64(c)
+	}
+	return n, nil
+}
+
 // BigInt explicitly materializes an independent arbitrary precision integer.
-// It panics, like Bytes.OwnedBytes, when v borrows a page that was already
-// released.
+// It panics with ErrReleased, as Bytes.Clone does, when v borrows a page that
+// was already released.
 func (v Varint) BigInt() *big.Int {
 	if v.bytes.Len() == 0 {
 		if err := checkBytesAlive(v.bytes); err != nil {
@@ -114,7 +156,7 @@ func (v Varint) BigInt() *big.Int {
 		}
 		return new(big.Int)
 	}
-	b := v.bytes.OwnedBytes()
+	b := v.bytes.ownedBytes()
 	if b[0]&0x80 == 0 {
 		return new(big.Int).SetBytes(b)
 	}
@@ -136,6 +178,54 @@ func (v Varint) String() string {
 		return "<released>"
 	}
 	return v.BigInt().String()
+}
+
+// ParseDecimal parses s in the forms Decimal.String prints and Java's
+// BigDecimal accepts: an optional sign, digits with an optional decimal
+// point, and an optional exponent, such as "12.30", "-7" or "1.23E+5". The
+// scale is the number of fraction digits less the exponent, so "12.30" has
+// scale 2 and "1.23E+5" scale -3.
+func ParseDecimal(s string) (Decimal, error) {
+	fail := func() (Decimal, error) {
+		return Decimal{}, typeValidation("decimal", "invalid decimal %q", s)
+	}
+	mantissa, exponent := s, int64(0)
+	if i := strings.IndexAny(s, "eE"); i >= 0 {
+		e, err := strconv.ParseInt(s[i+1:], 10, 32)
+		if err != nil {
+			return fail()
+		}
+		mantissa, exponent = s[:i], e
+	}
+	sign := ""
+	if mantissa != "" && (mantissa[0] == '-' || mantissa[0] == '+') {
+		sign, mantissa = mantissa[:1], mantissa[1:]
+	}
+	whole, fraction, _ := strings.Cut(mantissa, ".")
+	digits := whole + fraction
+	if digits == "" || strings.Trim(digits, "0123456789") != "" {
+		return fail()
+	}
+	scale := int64(len(fraction)) - exponent
+	if scale < math.MinInt32 || scale > math.MaxInt32 {
+		return fail()
+	}
+	n, ok := new(big.Int).SetString(sign+digits, 10)
+	if !ok {
+		return fail()
+	}
+	return Decimal{Unscaled: VarintFromBigInt(n), Scale: int32(scale)}, nil
+}
+
+// Rat returns the decimal as an exact rational number. It panics, like
+// Varint.BigInt, when the decimal borrows a page that was already released.
+func (d Decimal) Rat() *big.Rat {
+	r := new(big.Rat).SetInt(d.Unscaled.BigInt())
+	power := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(math.Abs(float64(d.Scale)))), nil)
+	if d.Scale >= 0 {
+		return r.Quo(r, new(big.Rat).SetInt(power))
+	}
+	return r.Mul(r, new(big.Rat).SetInt(power))
 }
 
 // String returns the decimal as Java's BigDecimal.toString, which Cassandra

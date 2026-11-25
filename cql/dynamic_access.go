@@ -18,68 +18,43 @@ func (v Value) Len() int {
 		return 0
 	}
 	switch v.typ.Kind() {
-	case TypeList, TypeSet, TypeMap, TypeTuple, TypeUDT, TypeVector:
+	case KindList, KindSet, KindMap, KindTuple, KindUDT, KindVector:
 		return v.count
 	}
 	return 0
 }
 
-// At returns the element at index of a present list, set or vector, or the
-// field at index of a present tuple or UDT. A decoded value is read from its
-// start up to index, so a loop over every member should use Elements or
-// Fields. A decoded member may borrow the response; see Clone.
-func (v Value) At(index int) (Value, error) {
-	if err := v.require(TypeList, TypeSet, TypeVector, TypeTuple, TypeUDT); err != nil {
+// Field returns the field named name of a present UDT. It returns a
+// ValidationError for a name the UDT does not have. A decoded UDT is read
+// from its start up to the field, so a loop over every field should use
+// Fields. A decoded field may borrow the response; see Clone.
+func (v Value) Field(name string) (Value, error) {
+	if err := v.require(KindUDT); err != nil {
 		return Value{}, err
 	}
-	if index < 0 || index >= v.count {
-		return Value{}, typeValidation("index", "%d outside %d members", index, v.count)
-	}
-	if v.typ.Kind() == TypeUDT {
-		fields, err := v.Fields()
-		if err != nil {
-			return Value{}, err
+	index := -1
+	for i, f := range columnSlice(descriptorOf(v.typ).Fields) {
+		if f.Name == name {
+			index = i
+			break
 		}
-		f, err := nth(fields, index)
-		return f.Value, err
 	}
-	if !v.encoded {
-		return v.values[index], nil
+	if index < 0 {
+		return Value{}, typeValidation("field", "%s has no field %q", v.typ, name)
 	}
-	elements, err := v.Elements()
+	fields, err := v.iterFields()
 	if err != nil {
 		return Value{}, err
 	}
-	return nth(elements, index)
-}
-
-// Field returns the field named name of a present UDT. It returns a
-// ValidationError for a name the UDT does not have. A decoded field may
-// borrow the response; see Clone.
-func (v Value) Field(name string) (Value, error) {
-	if err := v.require(TypeUDT); err != nil {
+	for i := 0; fields.Next(); i++ {
+		if i == index {
+			return fields.Value().Value, nil
+		}
+	}
+	if err := fields.Err(); err != nil {
 		return Value{}, err
 	}
-	for i, f := range columnSlice(descriptorOf(v.typ).Fields) {
-		if f.Name == name {
-			return v.At(i)
-		}
-	}
 	return Value{}, typeValidation("field", "%s has no field %q", v.typ, name)
-}
-
-// nth advances it to the member at index and returns it.
-func nth[T any](it *ValueIterator[T], index int) (T, error) {
-	for i := 0; it.Next(); i++ {
-		if i == index {
-			return it.Value(), nil
-		}
-	}
-	var zero T
-	if err := it.Err(); err != nil {
-		return zero, err
-	}
-	return zero, typeValidation("index", "%d outside the members read", index)
 }
 
 // String returns the value as a CQL literal, such as 'text', 0x0102,
@@ -128,51 +103,46 @@ func (v Value) format(b *strings.Builder) {
 		return
 	}
 	switch v.typ.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		b.WriteString(strconv.FormatBool(v.bits != 0))
-	case TypeTinyInt, TypeSmallInt, TypeInt, TypeBigInt, TypeCounter:
+	case KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter:
 		b.WriteString(strconv.FormatInt(int64(v.bits), 10))
-	case TypeFloat:
+	case KindFloat:
 		b.WriteString(strconv.FormatFloat(float64(math.Float32frombits(uint32(v.bits))), 'g', -1, 32))
-	case TypeDouble:
+	case KindDouble:
 		b.WriteString(strconv.FormatFloat(math.Float64frombits(v.bits), 'g', -1, 64))
-	case TypeText, TypeVarchar, TypeASCII:
+	case KindText, KindASCII:
 		quoted(textView(v.bytes).String())
-	case TypeBlob:
+	case KindBlob:
 		b.WriteString("0x")
-		b.WriteString(hex.EncodeToString(v.bytes.OwnedBytes()))
-	case TypeUUID, TypeTimeUUID:
+		b.WriteString(hex.EncodeToString(v.bytes.ownedBytes()))
+	case KindUUID, KindTimeUUID:
 		b.WriteString(v.uuid.String())
-	case TypeInet:
+	case KindInet:
 		quoted(v.inet.String())
-	case TypeDate:
+	case KindDate:
 		quoted(Date(int32(v.bits)).String())
-	case TypeTime:
+	case KindTime:
 		quoted(TimeOfDay(int64(v.bits)).String())
-	case TypeTimestamp:
+	case KindTimestamp:
 		quoted(Timestamp(int64(v.bits)).String())
-	case TypeDuration:
+	case KindDuration:
 		b.WriteString(v.duration.String())
-	case TypeVarint:
+	case KindVarint:
 		b.WriteString(varintView(v.bytes).String())
-	case TypeDecimal:
+	case KindDecimal:
 		b.WriteString(Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)}.String())
-	case TypeList, TypeVector, TypeSet, TypeTuple:
+	case KindList, KindVector, KindSet, KindTuple:
 		open, end := "[", "]"
 		switch v.typ.Kind() {
-		case TypeSet:
+		case KindSet:
 			open, end = "{", "}"
-		case TypeTuple:
+		case KindTuple:
 			open, end = "(", ")"
 		}
 		b.WriteString(open)
-		elements, err := v.Elements()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for e, err := range elements.All() {
+		for e, err := range v.Elements() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {
@@ -182,15 +152,10 @@ func (v Value) format(b *strings.Builder) {
 			e.format(b)
 		}
 		b.WriteString(end)
-	case TypeMap:
+	case KindMap:
 		b.WriteString("{")
-		entries, err := v.Entries()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for e, err := range entries.All() {
+		for e, err := range v.Entries() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {
@@ -202,15 +167,10 @@ func (v Value) format(b *strings.Builder) {
 			e.Value.format(b)
 		}
 		b.WriteString("}")
-	case TypeUDT:
+	case KindUDT:
 		b.WriteString("{")
-		fields, err := v.Fields()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for f, err := range fields.All() {
+		for f, err := range v.Fields() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {

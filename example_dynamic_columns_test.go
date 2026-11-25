@@ -69,24 +69,24 @@ func Example_dynamicColumns() {
 			}
 			// Each accessor checks the value's type.
 			switch value.Type().Kind() {
-			case cql.TypeTinyInt, cql.TypeSmallInt, cql.TypeInt, cql.TypeBigInt:
+			case cql.KindTinyInt, cql.KindSmallInt, cql.KindInt, cql.KindBigInt:
 				n, err := value.Signed()
 				if err != nil {
 					return err
 				}
 				fmt.Print(n, " ")
-			case cql.TypeFloat, cql.TypeDouble:
+			case cql.KindFloat, cql.KindDouble:
 				f, err := value.Float()
 				if err != nil {
 					return err
 				}
 				fmt.Print(f, " ")
-			case cql.TypeASCII, cql.TypeText, cql.TypeVarchar:
-				text, err := value.Text()
+			case cql.KindASCII, cql.KindText:
+				text, err := value.Str()
 				if err != nil {
 					return err
 				}
-				fmt.Print(text.String(), " ")
+				fmt.Print(text, " ")
 			default:
 				fmt.Print(value.Type().Kind(), " ")
 			}

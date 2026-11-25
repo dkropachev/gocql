@@ -60,7 +60,7 @@ func (c codecMatrix[T]) eq(a, b T) bool {
 
 func (c codecMatrix[T]) columns() cql.Columns {
 	return cql.NewColumns(
-		cql.ColumnSpec{Name: "k", Type: matrixType(cql.TypeInt)},
+		cql.ColumnSpec{Name: "k", Type: matrixType(cql.KindInt)},
 		cql.ColumnSpec{Name: "v", Type: c.typ},
 	)
 }
@@ -226,7 +226,7 @@ func (c codecMatrix[T]) run(t *testing.T) {
 	})
 	t.Run("WrongType", func(t *testing.T) {
 		wrong := cql.NewColumns(
-			cql.ColumnSpec{Name: "k", Type: matrixType(cql.TypeInt)},
+			cql.ColumnSpec{Name: "k", Type: matrixType(cql.KindInt)},
 			cql.ColumnSpec{Name: "v", Type: c.wrongType},
 		)
 		for path, decoder := range c.decoders() {
@@ -249,7 +249,7 @@ type matrixCodec[T any] struct {
 
 func (c matrixCodec[T]) CheckType(t cql.DataType) error { return c.Encoder.CheckType(t) }
 
-func matrixOf[T any](label string, kind cql.Type, codec cql.Codec[T], wrong cql.Type, values ...T) codecMatrix[T] {
+func matrixOf[T any](label string, kind cql.Kind, codec cql.Codec[T], wrong cql.Kind, values ...T) codecMatrix[T] {
 	return matrixOfType(label, matrixType(kind), codec, matrixType(wrong), values...)
 }
 
@@ -262,11 +262,13 @@ func matrixOfType[T any](label string, typ cql.DataType, codec cql.Codec[T], wro
 // values and a mismatched column type, and checks that each failure is a
 // CodecError naming the column.
 func TestCodecMatrix(t *testing.T) {
-	intType := matrixType(cql.TypeInt)
-	textType := matrixType(cql.TypeText)
+	intType := matrixType(cql.KindInt)
+	textType := matrixType(cql.KindText)
 	bigVarint := cql.VarintFromBigInt(new(big.Int).Lsh(big.NewInt(-3), 100))
 	textEq := func(a, b cql.Text) bool { return a.String() == b.String() }
-	bytesEq := func(a, b cql.Bytes) bool { return string(a.OwnedBytes()) == string(b.OwnedBytes()) }
+	bytesEq := func(a, b cql.Bytes) bool {
+		return string(cql.CodecTestMust(a.Copy())) == string(cql.CodecTestMust(b.Copy()))
+	}
 	varintEq := func(a, b cql.Varint) bool { return a.BigInt().Cmp(b.BigInt()) == 0 }
 	decimalEq := func(a, b cql.Decimal) bool { return a.Scale == b.Scale && varintEq(a.Unscaled, b.Unscaled) }
 	floatEq32 := func(a, b float32) bool { return math.Float32bits(a) == math.Float32bits(b) }
@@ -276,54 +278,54 @@ func TestCodecMatrix(t *testing.T) {
 		c.equal = eq
 		return c
 	}
-	text := withEq(matrixOf("text/Text", cql.TypeText, cql.TextCodec, cql.TypeInt, cql.Text{}, mustText("héllo")), textEq)
+	text := withEq(matrixOf("text/Text", cql.KindText, cql.TextCodec, cql.KindInt, cql.Text{}, mustText("héllo")), textEq)
 	text.emptyDecodes, text.noEmptyCodec = true, true
-	ascii := withEq(matrixOf("ascii/Text", cql.TypeASCII, cql.ASCIICodec, cql.TypeInt, mustText("plain")), textEq)
+	ascii := withEq(matrixOf("ascii/Text", cql.KindASCII, cql.TextCodec, cql.KindInt, mustText("plain")), textEq)
 	ascii.emptyDecodes, ascii.noEmptyCodec = true, true
-	str := matrixOf("text/string", cql.TypeText, cql.StringCodec, cql.TypeBlob, "", "héllo")
+	str := matrixOf("text/string", cql.KindText, cql.StringCodec, cql.KindBlob, "", "héllo")
 	str.emptyDecodes, str.noEmptyCodec, str.badValues = true, true, []string{"\xff"}
 	str.paths = matrixDecoders[string]
-	asciiStr := matrixOf("ascii/string", cql.TypeASCII, cql.ASCIIStringCodec, cql.TypeText, "plain")
+	asciiStr := matrixOf("ascii/string", cql.KindASCII, cql.StringCodec, cql.KindBlob, "plain")
 	asciiStr.emptyDecodes, asciiStr.noEmptyCodec, asciiStr.badValues = true, true, []string{"é"}
-	varcharStr := matrixOf("varchar/string", cql.TypeVarchar, cql.StringCodec, cql.TypeASCII, "v")
+	varcharStr := matrixOf("legacy-text/string", cql.Kind(0x000A), cql.StringCodec, cql.KindBlob, "v")
 	varcharStr.emptyDecodes, varcharStr.noEmptyCodec = true, true
-	blob := matrixOf("blob/Bytes", cql.TypeBlob, cql.BlobCodec, cql.TypeText, cql.BorrowBytes([]byte{1, 2, 3}))
+	blob := matrixOf("blob/Bytes", cql.KindBlob, cql.BytesCodec, cql.KindText, cql.BorrowBytes([]byte{1, 2, 3}))
 	blob.emptyDecodes, blob.noEmptyCodec, blob.equal = true, true, bytesEq
-	byteSlice := matrixOf("blob/[]byte", cql.TypeBlob, cql.ByteSliceCodec, cql.TypeText, []byte{1, 2, 3})
+	byteSlice := matrixOf("blob/[]byte", cql.KindBlob, cql.ByteSliceCodec, cql.KindText, []byte{1, 2, 3})
 	byteSlice.emptyDecodes, byteSlice.noEmptyCodec = true, true
-	varint := matrixOf("varint/Varint", cql.TypeVarint, cql.VarintCodec, cql.TypeBigInt, cql.VarintFromBigInt(big.NewInt(0)), cql.VarintFromBigInt(big.NewInt(-1)), bigVarint)
+	varint := matrixOf("varint/Varint", cql.KindVarint, cql.VarintCodec, cql.KindBigInt, cql.VarintFromBigInt(big.NewInt(0)), cql.VarintFromBigInt(big.NewInt(-1)), bigVarint)
 	varint.equal = varintEq
-	decimal := matrixOf("decimal/Decimal", cql.TypeDecimal, cql.DecimalCodec, cql.TypeDouble,
+	decimal := matrixOf("decimal/Decimal", cql.KindDecimal, cql.DecimalCodec, cql.KindDouble,
 		cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(12345)), Scale: 2}, cql.Decimal{Unscaled: bigVarint, Scale: math.MinInt32})
 	decimal.equal = decimalEq
-	f32 := matrixOf("float/float32", cql.TypeFloat, cql.Float32Codec, cql.TypeDouble, 0, float32(math.Inf(-1)), float32(math.NaN()), math.MaxFloat32, math.SmallestNonzeroFloat32)
+	f32 := matrixOf("float/float32", cql.KindFloat, cql.Float32Codec, cql.KindDouble, 0, float32(math.Inf(-1)), float32(math.NaN()), math.MaxFloat32, math.SmallestNonzeroFloat32)
 	f32.equal = floatEq32
-	f64 := matrixOf("double/float64", cql.TypeDouble, cql.Float64Codec, cql.TypeFloat, 0, math.Inf(1), math.NaN(), math.MaxFloat64, -math.SmallestNonzeroFloat64)
+	f64 := matrixOf("double/float64", cql.KindDouble, cql.Float64Codec, cql.KindFloat, 0, math.Inf(1), math.NaN(), math.MaxFloat64, -math.SmallestNonzeroFloat64)
 	f64.equal = floatEq64
-	timeOfDay := matrixOf("time/TimeOfDay", cql.TypeTime, cql.TimeCodec, cql.TypeBigInt, 0, cql.TimeOfDay(24*3600*1e9-1))
+	timeOfDay := matrixOf("time/TimeOfDay", cql.KindTime, cql.TimeOfDayCodec, cql.KindBigInt, 0, cql.TimeOfDay(24*3600*1e9-1))
 	timeOfDay.badValues = []cql.TimeOfDay{-1, cql.TimeOfDay(24 * 3600 * 1e9)}
-	inet := matrixOf("inet/netip.Addr", cql.TypeInet, cql.InetCodec, cql.TypeBlob, netip.MustParseAddr("10.0.0.1"), netip.MustParseAddr("::1"))
+	inet := matrixOf("inet/netip.Addr", cql.KindInet, cql.InetCodec, cql.KindBlob, netip.MustParseAddr("10.0.0.1"), netip.MustParseAddr("::1"))
 	inet.badValues = []netip.Addr{{}}
-	duration := matrixOf("duration/Duration", cql.TypeDuration, cql.DurationCodec, cql.TypeBigInt,
+	duration := matrixOf("duration/Duration", cql.KindDuration, cql.DurationCodec, cql.KindBigInt,
 		cql.Duration{}, cql.Duration{Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64},
 		cql.Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64})
 	duration.noEmptyCodec = true
 	duration.badValues = []cql.Duration{{Months: 1, Days: -1}, {Days: -1, Nanoseconds: 1}}
-	timeUUID := matrixOf("timeuuid/TimeUUID", cql.TypeTimeUUID, cql.TimeUUIDCodec, cql.TypeUUID, cql.MustParseTimeUUID("8a1b8e54-ed6e-11ee-8001-0242ac120002"))
+	timeUUID := matrixOf("timeuuid/TimeUUID", cql.KindTimeUUID, cql.TimeUUIDCodec, cql.KindUUID, cql.MustParseTimeUUID("8a1b8e54-ed6e-11ee-8001-0242ac120002"))
 	timeUUID.badValues = []cql.TimeUUID{{}}
 
 	// Every decode path for a scalar, a string, a collection and a tuple;
 	// the other mappings are checked through Column.
-	i32 := matrixOf("int/int32", cql.TypeInt, cql.Int32Codec, cql.TypeBigInt, math.MinInt32, 0, math.MaxInt32)
+	i32 := matrixOf("int/int32", cql.KindInt, cql.Int32Codec, cql.KindBigInt, math.MinInt32, 0, math.MaxInt32)
 	i32.paths = matrixDecoders[int32]
-	counter := matrixOf("counter/int64", cql.TypeCounter, cql.Int64Codec, cql.TypeInt, int64(math.MinInt64), 0, math.MaxInt64)
+	counter := matrixOf("counter/int64", cql.KindCounter, cql.Int64Codec, cql.KindInt, int64(math.MinInt64), 0, math.MaxInt64)
 	counter.noEmptyCodec = true
 	list := matrixOfType("list<int>/[]int32", mustMatrixType(cql.ListType(intType)), cql.ListCodec(cql.Int32Codec), mustMatrixType(cql.SetType(intType)), []int32{}, []int32{1, math.MinInt32})
 	list.noEmptyCodec, list.nullDecodes, list.equal = true, true, nilAsEmptyEqual[int32]
 	list.paths = matrixDecoders[[]int32]
 	set := matrixOfType("set<text>/[]string", mustMatrixType(cql.SetType(textType)), cql.SetCodec(cql.StringCodec), mustMatrixType(cql.ListType(textType)), []string{"a", "b"})
 	set.noEmptyCodec, set.nullDecodes, set.equal = true, true, nilAsEmptyEqual[string]
-	vector := matrixOfType("vector<float,3>/[]float32", mustMatrixType(cql.VectorType(matrixType(cql.TypeFloat), 3)), cql.VectorCodec(cql.Float32Codec), mustMatrixType(cql.ListType(matrixType(cql.TypeFloat))), []float32{1, -2, 3})
+	vector := matrixOfType("vector<float,3>/[]float32", mustMatrixType(cql.VectorType(matrixType(cql.KindFloat), 3)), cql.VectorCodec(cql.Float32Codec), mustMatrixType(cql.ListType(matrixType(cql.KindFloat))), []float32{1, -2, 3})
 	vector.noEmptyCodec = true
 	vector.badValues = [][]float32{{1, 2}, {1, 2, 3, 4}}
 	entries := matrixOfType("map<int,text>/[]Entry", mustMatrixType(cql.MapType(intType, textType)), cql.MapCodec(cql.Int32Codec, cql.StringCodec), mustMatrixType(cql.ListType(intType)), []cql.Entry[int32, string]{{Key: 1, Value: "a"}})
@@ -360,18 +362,18 @@ func TestCodecMatrix(t *testing.T) {
 	}
 
 	cases := []matrixCase{
-		matrixOf("boolean/bool", cql.TypeBoolean, cql.BoolCodec, cql.TypeTinyInt, false, true),
-		matrixOf("tinyint/int8", cql.TypeTinyInt, cql.Int8Codec, cql.TypeSmallInt, math.MinInt8, 0, math.MaxInt8),
-		matrixOf("smallint/int16", cql.TypeSmallInt, cql.Int16Codec, cql.TypeInt, math.MinInt16, 0, math.MaxInt16),
+		matrixOf("boolean/bool", cql.KindBoolean, cql.BoolCodec, cql.KindTinyInt, false, true),
+		matrixOf("tinyint/int8", cql.KindTinyInt, cql.Int8Codec, cql.KindSmallInt, math.MinInt8, 0, math.MaxInt8),
+		matrixOf("smallint/int16", cql.KindSmallInt, cql.Int16Codec, cql.KindInt, math.MinInt16, 0, math.MaxInt16),
 		i32,
-		matrixOf("bigint/int64", cql.TypeBigInt, cql.Int64Codec, cql.TypeInt, math.MinInt64, 0, math.MaxInt64),
+		matrixOf("bigint/int64", cql.KindBigInt, cql.Int64Codec, cql.KindInt, math.MinInt64, 0, math.MaxInt64),
 		counter,
 		f32, f64, str, asciiStr, varcharStr, text, ascii, blob, byteSlice, varint, decimal,
-		matrixOf("date/Date", cql.TypeDate, cql.DateCodec, cql.TypeInt, math.MinInt32, 0, math.MaxInt32),
+		matrixOf("date/Date", cql.KindDate, cql.DateCodec, cql.KindInt, math.MinInt32, 0, math.MaxInt32),
 		timeOfDay,
-		matrixOf("timestamp/Timestamp", cql.TypeTimestamp, cql.TimestampCodec, cql.TypeInt, math.MinInt64, 0, math.MaxInt64),
+		matrixOf("timestamp/Timestamp", cql.KindTimestamp, cql.TimestampCodec, cql.KindInt, math.MinInt64, 0, math.MaxInt64),
 		duration,
-		matrixOf("uuid/UUID", cql.TypeUUID, cql.UUIDCodec, cql.TypeBlob, cql.UUID{}, cql.MustParseUUID("00112233-4455-6677-8899-aabbccddeeff")),
+		matrixOf("uuid/UUID", cql.KindUUID, cql.UUIDCodec, cql.KindBlob, cql.UUID{}, cql.MustParseUUID("00112233-4455-6677-8899-aabbccddeeff")),
 		timeUUID, inet, list, set, vector, entries, goMap, tuple, udt,
 	}
 	for _, c := range cases {
@@ -401,7 +403,7 @@ func matrixBytes(t *testing.T, chain wire.Chain) []byte {
 	return buf
 }
 
-func matrixType(kind cql.Type) cql.DataType { return mustMatrixType(cql.ScalarType(kind)) }
+func matrixType(kind cql.Kind) cql.DataType { return mustMatrixType(cql.ScalarType(kind)) }
 
 func mustMatrixType(t cql.DataType, err error) cql.DataType {
 	if err != nil {

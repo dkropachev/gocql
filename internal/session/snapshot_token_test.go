@@ -30,8 +30,8 @@ func TestSnapshotTokenMatchesPreparedRouting(t *testing.T) {
 	config.Partitioners = map[string]routing2.TokenPartitioner{partitioner: routing2.Murmur3TokenPartitioner}
 	s.ConfigureV2Peripheral(config)
 
-	intType := codecTestMust(cql.ScalarType(cql.TypeInt))
-	textType := codecTestMust(cql.ScalarType(cql.TypeText))
+	intType := codecTestMust(cql.ScalarType(cql.KindInt))
+	textType := codecTestMust(cql.ScalarType(cql.KindText))
 	next := routing.InternalClonePlacementSnapshot(s.Metadata())
 	ks := metadata.InternalCloneV2Keyspace(routing.SnapshotData(s.Metadata()).InternalKeyspaces["ks"])
 	column := func(name, typ string) *metadata2.Column {

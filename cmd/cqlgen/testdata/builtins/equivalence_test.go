@@ -33,7 +33,7 @@ type (
 func scalarTypes(t *testing.T) []cql.DataType {
 	t.Helper()
 	var out []cql.DataType
-	for kind := cql.TypeASCII; kind <= cql.TypeDuration; kind++ {
+	for kind := cql.KindASCII; kind <= cql.KindDuration; kind++ {
 		typ, err := cql.ScalarType(kind)
 		if err != nil {
 			t.Fatal(err)
@@ -112,6 +112,9 @@ func fill(v reflect.Value) {
 		fill(value)
 		m.SetMapIndex(key, value)
 		v.Set(m)
+	case reflect.Pointer:
+		v.Set(reflect.New(v.Type().Elem()))
+		fill(v.Elem())
 	case reflect.Struct:
 		for i := range v.NumField() {
 			if v.Type().Field(i).IsExported() {

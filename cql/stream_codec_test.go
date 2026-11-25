@@ -56,14 +56,14 @@ func streamCellBytes(body []byte) []byte {
 }
 func streamEncodedFixture[T any](t testing.TB, typ DataType, encoder Encoder[T], value T) []byte {
 	t.Helper()
-	v, err := EncodeValueBorrowed(typ, encoder, value)
+	v, err := encodeValueBorrowed(typ, encoder, value)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if v.state == Null {
 		return []byte{255, 255, 255, 255}
 	}
-	return streamCellBytes(v.Bytes().OwnedBytes())
+	return streamCellBytes(v.Bytes().ownedBytes())
 }
 func streamReaderFixture(t testing.TB, columns Columns, source io.Reader, size int) (*StreamRowReader, *wire.Stream) {
 	t.Helper()
@@ -94,7 +94,7 @@ func StreamDecodeFixture[T any](t testing.TB, typ DataType, decoder StreamDecode
 	}
 	return scope.RequireEnd()
 }
-func streamScalarCase[T any](t *testing.T, kind Type, encoder Encoder[T], decoder StreamDecoder[T], value T) {
+func streamScalarCase[T any](t *testing.T, kind Kind, encoder Encoder[T], decoder StreamDecoder[T], value T) {
 	t.Helper()
 	typ := FoundationScalar(t, kind)
 	data := streamEncodedFixture(t, typ, encoder, value)

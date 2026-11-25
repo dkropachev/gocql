@@ -28,17 +28,19 @@ type StreamStatement[P, R any] struct {
 // StreamRowOf decodes streamed rows into struct R by column name, mapped like
 // cql.RowOf but with the streaming decoders, which have their own Go types:
 // text, ascii, blob and varint columns decode into []byte (blob by default;
-// pick another with `cql:"name,stream=Text"`), and slices decode lists
-// (`stream=Set` for sets, `stream=Vector` for vectors). A [][]byte field
-// decodes a list of blobs, or with `stream=Text`, `stream=ASCII` or
-// `stream=Varint` a list of those. Storage of []byte and
+// pick another with `cql:"name,stream=Text"`), and slices decode a list, a
+// set or a vector, whichever the column is (`stream=List`, `stream=Set` or
+// `stream=Vector` requires one). A named type maps like its underlying type,
+// also inside a slice or a Nullable.
+// A [][]byte field decodes a sequence of blobs, or with `stream=Text` or
+// `stream=Varint` one of those. Storage of []byte and
 // slice fields is reused across rows. Every column needs a field, unless
 // IgnoreExtraColumns is given. A time.Time field has no streaming decoder;
 // use cql.Timestamp.
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
 // mapping is used; otherwise R is reflected once, here. StreamRowOf applies
-// WithStreamCodec and IgnoreExtraColumns, and rejects other options.
+// WithStreamDecoder and IgnoreExtraColumns, and rejects other options.
 func StreamRowOf[R any](opts ...StructOption) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]
 	if g, ok := any(new(R)).(interface{ CQLStreamColumns() []StreamOutputField[R] }); ok {

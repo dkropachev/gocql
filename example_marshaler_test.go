@@ -26,34 +26,31 @@ package gocql_test
 
 import (
 	"fmt"
+	"log"
+	"math"
 
 	"github.com/scylladb/gocql/v2/cql"
-
-	"log"
 )
 
-type temperature int32
-type temperatureCodec struct{}
+// temperature is in degrees Celsius; the table stores it in tenths of a
+// degree, as an int.
+type temperature float64
 
-func (temperatureCodec) CheckType(t cql.DataType) error { return cql.Int32Codec.CheckType(t) }
-func (temperatureCodec) Encode(w *cql.ValueWriter, v temperature) error {
-	return cql.Int32Codec.Encode(w, int32(v))
-}
-func (temperatureCodec) Decode(r cql.ValueReader) (temperature, error) {
-	v, e := cql.Int32Codec.Decode(r)
-	return temperature(v), e
-}
-func (temperatureCodec) Clone(v temperature) temperature { return v }
+// temperatureCodec maps a temperature through Int32Codec, converting it on
+// the way in and out.
+var temperatureCodec = cql.ConvertCodec(cql.Int32Codec,
+	func(t temperature) int32 { return int32(math.Round(float64(t) * 10)) },
+	func(v int32) temperature { return temperature(v) / 10 })
 
 func Example_customCodec() {
-	encoded, err := cql.EncodeValue(cql.IntType, temperatureCodec{}, temperature(23))
+	encoded, err := cql.EncodeValue(cql.IntType, temperatureCodec, temperature(23.5))
 	if err != nil {
 		log.Fatal(err)
 	}
-	value, err := cql.DecodeValue(temperatureCodec{}, encoded)
+	value, err := cql.DecodeValue(temperatureCodec, encoded)
 	if err != nil {
 		log.Fatal(err)
 	}
 	fmt.Println(value)
-	// Output: 23
+	// Output: 23.5
 }

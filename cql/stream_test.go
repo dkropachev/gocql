@@ -34,7 +34,7 @@ import (
 func TestStream(t *testing.T) {
 	t.Run("Collection", func(t *testing.T) {
 		t.Run("EncodedNestedFinalReadIdentity", func(t *testing.T) {
-			blob := FoundationScalar(t, TypeBlob)
+			blob := FoundationScalar(t, KindBlob)
 			list := CodecTestMust(ListType(blob))
 			payload := bytes.Repeat([]byte{0x72}, 300<<10)
 			data := streamEncodedFixture(t, list, ListEncoder(ByteSliceCodec), [][]byte{payload})
@@ -66,7 +66,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("NestedCapacityAndBacking", func(t *testing.T) {
-			blob := FoundationScalar(t, TypeBlob)
+			blob := FoundationScalar(t, KindBlob)
 			list := CodecTestMust(ListType(blob))
 			data := streamEncodedFixture(t, list, ListEncoder(ByteSliceCodec), [][]byte{[]byte("one"), []byte("two")})
 			first, second := make([]byte, 8), make([]byte, 8)
@@ -109,8 +109,8 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("Vectors", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
-			text := FoundationScalar(t, TypeText)
+			integer := FoundationScalar(t, KindInt)
+			text := FoundationScalar(t, KindText)
 			fixed := CodecTestMust(VectorType(integer, 3))
 			data := streamEncodedFixture(t, fixed, VectorEncoder(Int32Codec), []int32{1, -2, 3})
 			out := make([]int32, 0, 3)
@@ -136,7 +136,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("ConcurrencyAndNilDestinations", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			cols := NewColumns(ColumnSpec{Name: "v", Type: integer})
 			plan := CodecTestMust(StreamOneColumn(StreamInt32).Compile(cols))
 			data := streamEncodedFixture(t, integer, Int32Codec, int32(42))
@@ -163,7 +163,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("CustomReusesCompiledChildren", func(t *testing.T) {
-			integer, blob := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeBlob)
+			integer, blob := FoundationScalar(t, KindInt), FoundationScalar(t, KindBlob)
 			tuple := CodecTestMust(TupleType(integer, blob))
 			cols := NewColumns(ColumnSpec{Name: "v", Type: tuple})
 			checks := 0
@@ -184,7 +184,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("NilPlansAreValidationErrors", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			cols := NewColumns(ColumnSpec{Name: "v", Type: integer})
 			tuple := CodecTestMust(TupleType(integer))
 			list := CodecTestMust(ListType(integer))
@@ -211,7 +211,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("SharedTypeDAG", func(t *testing.T) {
-			left, right := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeInt)
+			left, right := FoundationScalar(t, KindInt), FoundationScalar(t, KindInt)
 			for i := 0; i < 64; i++ {
 				left = CodecTestMust(TupleType(left, left))
 				right = CodecTestMust(TupleType(right, right))
@@ -247,7 +247,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("PageValidation", func(t *testing.T) {
 		t.Run("MetadataReplacement", func(t *testing.T) {
-			boolean := FoundationScalar(t, TypeBoolean)
+			boolean := FoundationScalar(t, KindBoolean)
 			columns := NewColumns(ColumnSpec{Name: "v", Type: boolean})
 			prior, _ := streamReaderFixture(t, columns, bytes.NewReader(nil), 0)
 			for _, candidate := range []struct {
@@ -255,8 +255,8 @@ func TestStream(t *testing.T) {
 				columns Columns
 			}{
 				{"equal-new-backing", NewColumns(ColumnSpec{Name: "v", Type: boolean})},
-				{"equal-new-descriptor", NewColumns(ColumnSpec{Name: "v", Type: FoundationScalar(t, TypeBoolean)})},
-				{"changed-type", NewColumns(ColumnSpec{Name: "v", Type: FoundationScalar(t, TypeInt)})},
+				{"equal-new-descriptor", NewColumns(ColumnSpec{Name: "v", Type: FoundationScalar(t, KindBoolean)})},
+				{"changed-type", NewColumns(ColumnSpec{Name: "v", Type: FoundationScalar(t, KindInt)})},
 				{"changed-name", NewColumns(ColumnSpec{Name: "new", Type: boolean})},
 			} {
 				t.Run(candidate.name, func(t *testing.T) {
@@ -272,7 +272,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("NestedMalformedAndIndependentReaders", func(t *testing.T) {
-			boolean := FoundationScalar(t, TypeBoolean)
+			boolean := FoundationScalar(t, KindBoolean)
 			list := CodecTestMust(ListType(boolean))
 			columns := NewColumns(ColumnSpec{Name: "v", Type: list})
 			valid := streamEncodedFixture(t, list, ListEncoder(BoolCodec), []bool{true, false})
@@ -318,7 +318,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("Ownership", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			columns := NewColumns(ColumnSpec{Name: "v", Type: integer})
 			data := streamCellBytes([]byte{0, 0, 0, 7})
 			prior, _ := streamReaderFixture(t, columns, bytes.NewReader(data), len(data))
@@ -363,7 +363,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("UsesNewEnvelopeLimits", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			list := CodecTestMust(ListType(integer))
 			columns := NewColumns(ColumnSpec{Name: "v", Type: list})
 			data := streamEncodedFixture(t, list, ListEncoder(Int32Codec), []int32{1, 2})
@@ -388,7 +388,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Reader", func(t *testing.T) {
 		_ = context.Canceled
-		integer := FoundationScalar(t, TypeInt)
+		integer := FoundationScalar(t, KindInt)
 		cols := NewColumns(ColumnSpec{Name: "v", Type: integer})
 		data := streamCellBytes([]byte{0, 0, 0, 1})
 		reader, _ := streamReaderFixture(t, cols, bytes.NewReader(data), len(data))
@@ -403,7 +403,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Reset", func(t *testing.T) {
 		t.Run("AbsentCustomResetterSucceeds", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
 			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true, AllowExtraDatabaseFields: true}
 			row := StreamRowInto(func(*int32) {}, StreamColumn("missing", customStreamResettable{}, func(value *int32) *int32 { return value }))
@@ -420,7 +420,7 @@ func TestStream(t *testing.T) {
 				Custom  int32
 				Wrapped Nullable[int32]
 			}
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
 			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true}
 			row := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamBlob, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamBlob), func(d *destination) *[][]byte { return &d.Nested }))
@@ -450,7 +450,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Row", func(t *testing.T) {
 		t.Run("DuplicateNamesAndMissingUDTFields", func(t *testing.T) {
-			integer := FoundationScalar(t, TypeInt)
+			integer := FoundationScalar(t, KindInt)
 			columns := NewColumns(ColumnSpec{Name: "dup", Type: integer}, ColumnSpec{Name: "dup", Type: integer})
 			data := append(streamCellBytes([]byte{0, 0, 0, 1}), streamCellBytes([]byte{0, 0, 0, 2})...)
 			decoder := StreamRowInto(func(*Pair[int32, int32]) {}, StreamColumnAt(0, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.First }), StreamColumnAt(1, StreamInt32, func(p *Pair[int32, int32]) *int32 { return &p.Second }))
@@ -485,7 +485,7 @@ func TestStream(t *testing.T) {
 				Name     Nullable[[]byte]
 				Unmapped int
 			}
-			integer, text := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeText)
+			integer, text := FoundationScalar(t, KindInt), FoundationScalar(t, KindText)
 			tuple := CodecTestMust(TupleType(integer, text))
 			encoder := TupleEncoder(Params(ParamAt(0, Int32Codec, func(r record) int32 { return r.ID }), ParamAt(1, NullableEncoder(ByteSliceCodec), func(r record) Nullable[[]byte] { return r.Name })))
 			_ = encoder // Text uses a typed string input fixture below.
@@ -508,8 +508,8 @@ func TestStream(t *testing.T) {
 			if err := StreamDecodeFixture(t, udt, decoder, data, &out, 1); err != nil || out.ID != 7 {
 				t.Fatal("UDT", err)
 			}
-			if _, err := StreamUDT(named, UDTOptions{}).Compile(udt); err == nil {
-				t.Fatal("missing identity accepted")
+			if _, err := StreamUDT(named, UDTOptions{}).Compile(udt); err != nil {
+				t.Fatal("zero options rejected a UDT:", err)
 			}
 			if _, err := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "wrong"}).Compile(udt); err == nil {
 				t.Fatal("wrong identity accepted")
@@ -547,7 +547,7 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("SkippedValuesBoundedAndChecked", func(t *testing.T) {
-			boolean, text, blob := FoundationScalar(t, TypeBoolean), FoundationScalar(t, TypeText), FoundationScalar(t, TypeBlob)
+			boolean, text, blob := FoundationScalar(t, KindBoolean), FoundationScalar(t, KindText), FoundationScalar(t, KindBlob)
 			ignored := StreamRowInto(nil, StreamIgnoreColumn[EmptyRow]("ignored"))
 			for _, tc := range []struct {
 				typ  DataType
@@ -581,7 +581,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Scalar", func(t *testing.T) {
 		t.Run("BytesCapacityNullAndText", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeText)
+			typ := FoundationScalar(t, KindText)
 			payload := bytes.Repeat([]byte("A€𐍈"), 1024)
 			data := streamCellBytes(payload)
 			for _, step := range []int{1, 2, 3, 7, 32, 1024} {
@@ -609,7 +609,7 @@ func TestStream(t *testing.T) {
 					t.Fatalf("invalid text %x", bad)
 				}
 			}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeASCII), StreamASCII, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindASCII), StreamText, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
 				t.Fatal("invalid ASCII accepted")
 			}
 			backing := make([]byte, 12)
@@ -624,7 +624,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("unset result accepted")
 			}
 			empty := MaybeEmpty[int32]{Value: 1}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeInt), StreamEmpty(StreamInt32), streamCellBytes(nil), &empty, 1); err != nil || !empty.Empty {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindInt), StreamEmpty(StreamInt32), streamCellBytes(nil), &empty, 1); err != nil || !empty.Empty {
 				t.Fatal("logical Empty", err)
 			}
 			if _, err := StreamEmpty(StreamText).Compile(typ); err == nil {
@@ -648,7 +648,7 @@ func TestStream(t *testing.T) {
 				}
 				reads++
 			}}
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			cols := NewColumns(ColumnSpec{Name: "v", Type: typ})
 			r, scope := streamReaderFixture(t, cols, source, len(data))
 			p := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
@@ -660,43 +660,43 @@ func TestStream(t *testing.T) {
 			}
 		})
 		t.Run("Domains", func(t *testing.T) {
-			streamScalarCase(t, TypeBoolean, BoolCodec, StreamBool, true)
-			streamScalarCase(t, TypeTinyInt, Int8Codec, StreamInt8, int8(-128))
-			streamScalarCase(t, TypeSmallInt, Int16Codec, StreamInt16, int16(-32768))
-			streamScalarCase(t, TypeInt, Int32Codec, StreamInt32, int32(math.MinInt32))
-			streamScalarCase(t, TypeBigInt, Int64Codec, StreamInt64, int64(math.MinInt64))
-			streamScalarCase(t, TypeFloat, Float32Codec, StreamFloat32, float32(-1.25))
-			streamScalarCase(t, TypeDouble, Float64Codec, StreamFloat64, math.Inf(-1))
-			streamScalarCase(t, TypeCounter, Int64Codec, StreamInt64, int64(-1))
-			streamScalarCase(t, TypeDate, DateCodec, StreamDate, Date(math.MinInt32))
-			streamScalarCase(t, TypeTime, TimeCodec, StreamTime, TimeOfDay(nanosecondsPerDay-1))
-			streamScalarCase(t, TypeTimestamp, TimestampCodec, StreamTimestamp, Timestamp(math.MinInt64))
-			streamScalarCase(t, TypeDuration, DurationCodec, StreamDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64})
-			streamScalarCase(t, TypeUUID, UUIDCodec, StreamUUID, UUID{1, 2, 3, 4, 5})
-			streamScalarCase(t, TypeTimeUUID, TimeUUIDCodec, StreamTimeUUID, TimeUUID(newTimeUUID()))
-			streamScalarCase(t, TypeInet, InetCodec, StreamInet, netip.MustParseAddr("2001:db8::1"))
-			streamScalarCase(t, TypeInet, InetCodec, StreamInet, netip.MustParseAddr("127.0.0.1"))
+			streamScalarCase(t, KindBoolean, BoolCodec, StreamBool, true)
+			streamScalarCase(t, KindTinyInt, Int8Codec, StreamInt8, int8(-128))
+			streamScalarCase(t, KindSmallInt, Int16Codec, StreamInt16, int16(-32768))
+			streamScalarCase(t, KindInt, Int32Codec, StreamInt32, int32(math.MinInt32))
+			streamScalarCase(t, KindBigInt, Int64Codec, StreamInt64, int64(math.MinInt64))
+			streamScalarCase(t, KindFloat, Float32Codec, StreamFloat32, float32(-1.25))
+			streamScalarCase(t, KindDouble, Float64Codec, StreamFloat64, math.Inf(-1))
+			streamScalarCase(t, KindCounter, Int64Codec, StreamInt64, int64(-1))
+			streamScalarCase(t, KindDate, DateCodec, StreamDate, Date(math.MinInt32))
+			streamScalarCase(t, KindTime, TimeOfDayCodec, StreamTime, TimeOfDay(nanosecondsPerDay-1))
+			streamScalarCase(t, KindTimestamp, TimestampCodec, StreamTimestamp, Timestamp(math.MinInt64))
+			streamScalarCase(t, KindDuration, DurationCodec, StreamDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64})
+			streamScalarCase(t, KindUUID, UUIDCodec, StreamUUID, UUID{1, 2, 3, 4, 5})
+			streamScalarCase(t, KindTimeUUID, TimeUUIDCodec, StreamTimeUUID, TimeUUID(newTimeUUID()))
+			streamScalarCase(t, KindInet, InetCodec, StreamInet, netip.MustParseAddr("2001:db8::1"))
+			streamScalarCase(t, KindInet, InetCodec, StreamInet, netip.MustParseAddr("127.0.0.1"))
 			var badBool bool
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeBoolean), StreamBool, streamCellBytes([]byte{2}), &badBool, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindBoolean), StreamBool, streamCellBytes([]byte{2}), &badBool, 1); err == nil {
 				t.Fatal("invalid boolean accepted")
 			}
 			var badTime TimeOfDay
 			bad := make([]byte, 8)
 			binary.BigEndian.PutUint64(bad, uint64(nanosecondsPerDay))
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeTime), StreamTime, streamCellBytes(bad), &badTime, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindTime), StreamTime, streamCellBytes(bad), &badTime, 1); err == nil {
 				t.Fatal("invalid time accepted")
 			}
 			var id TimeUUID
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeTimeUUID), StreamTimeUUID, streamCellBytes(make([]byte, 16)), &id, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindTimeUUID), StreamTimeUUID, streamCellBytes(make([]byte, 16)), &id, 1); err == nil {
 				t.Fatal("non-v1 UUID accepted")
 			}
 			var duration Duration
-			if err := StreamDecodeFixture(t, FoundationScalar(t, TypeDuration), StreamDuration, streamCellBytes([]byte{1, 2, 0}), &duration, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindDuration), StreamDuration, streamCellBytes([]byte{1, 2, 0}), &duration, 1); err == nil {
 				t.Fatal("mixed duration signs accepted")
 			}
 		})
 		t.Run("NumericPayloadStorage", func(t *testing.T) {
-			varint := FoundationScalar(t, TypeVarint)
+			varint := FoundationScalar(t, KindVarint)
 			dst := make([]byte, 0, 6)
 			want := []byte{0xff, 0xff, 0x80}
 			if err := StreamDecodeFixture(t, varint, StreamVarint, streamCellBytes(want), &dst, 1); err != nil || !bytes.Equal(dst, want) {
@@ -705,7 +705,7 @@ func TestStream(t *testing.T) {
 			if err := StreamDecodeFixture(t, varint, StreamVarint, streamCellBytes(nil), &dst, 1); err == nil {
 				t.Fatal("empty varint accepted")
 			}
-			decimal := FoundationScalar(t, TypeDecimal)
+			decimal := FoundationScalar(t, KindDecimal)
 			value := Decimal{Scale: -7, Unscaled: CodecTestMust(VarintFromBytes([]byte{0x80, 0}))}
 			data := streamEncodedFixture(t, decimal, DecimalCodec, value)
 			out := DecimalParts{Unscaled: make([]byte, 0, 2)}
@@ -724,7 +724,7 @@ func TestStream(t *testing.T) {
 	})
 	t.Run("Validation", func(t *testing.T) {
 		t.Run("RejectsUnsupportedScalarKinds", func(t *testing.T) {
-			for _, kind := range []Type{TypeDuration + 1, 65535} {
+			for _, kind := range []Kind{KindDuration + 1, 65535} {
 				// Corrupt a private copy: ScalarType descriptors are shared.
 				typ := typeFromDescriptor(&dataTypeDescriptor{Kind: kind})
 				checks := []func() error{
@@ -748,7 +748,7 @@ func TestStream(t *testing.T) {
 // TestStreamValueReaderAccessors decodes cells with a custom decoder that
 // reads the cell's type and state and its body as fixed-width integers.
 func TestStreamValueReaderAccessors(t *testing.T) {
-	blob := FoundationScalar(t, TypeBlob)
+	blob := FoundationScalar(t, KindBlob)
 	body := []byte{0x12, 0x34, 0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef}
 	var got streamWords
 	for _, step := range []int{1, len(body) + 4} {
@@ -807,7 +807,7 @@ func TestStreamResetters(t *testing.T) {
 		}
 	})
 	t.Run("Encoded", func(t *testing.T) {
-		dst := StreamCell{Type: FoundationScalar(t, TypeInt), State: Null, Bytes: []byte{1, 2}}
+		dst := StreamCell{Type: FoundationScalar(t, KindInt), State: Null, Bytes: []byte{1, 2}}
 		StreamEncoded.Reset(&dst)
 		if !dst.Type.Equal(DataType{}) || dst.State != Present || len(dst.Bytes) != 0 || cap(dst.Bytes) != 2 {
 			t.Fatalf("cell %+v", dst)

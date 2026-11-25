@@ -72,8 +72,8 @@ func TestValue(t *testing.T) {
 				t.Fatalf("WriteTo after release: %v", err)
 			}
 			foundationPanicReleased(t, func() { slice.Clone() })
-			foundationPanicReleased(t, func() { slice.OwnedBytes() })
-			if got := string(cloned.OwnedBytes()); got != "bcde" {
+			foundationPanicReleased(t, func() { slice.ownedBytes() })
+			if got := string(cloned.ownedBytes()); got != "bcde" {
 				t.Fatalf("clone lost ownership: %q", got)
 			}
 		})
@@ -109,10 +109,10 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("Codec", func(t *testing.T) {
 		t.Run("PublicChecks", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			checks, encodes, decodes := 0, 0, 0
 			codec := foundationCustomBlob{checks: &checks, encodes: &encodes, decodes: &decodes}
-			encoded, err := EncodeValueBorrowed(typ, codec, []byte("value"))
+			encoded, err := encodeValueBorrowed(typ, codec, []byte("value"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -127,7 +127,7 @@ func TestValue(t *testing.T) {
 				t.Fatalf("decode checks/calls: %d/%d", checks, decodes)
 			}
 			codec.reject = true
-			if _, err := EncodeValueBorrowed(typ, codec, nil); err == nil || encodes != 1 {
+			if _, err := encodeValueBorrowed(typ, codec, nil); err == nil || encodes != 1 {
 				t.Fatal("rejected type entered encoder")
 			}
 			if _, err := DecodeValue(codec, encoded); err == nil || decodes != 1 {
@@ -135,12 +135,12 @@ func TestValue(t *testing.T) {
 			}
 			codec.reject = false
 			codec.errorAfterWrite = true
-			failed, err := EncodeValueBorrowed(typ, codec, []byte("partial"))
+			failed, err := encodeValueBorrowed(typ, codec, []byte("partial"))
 			if err == nil || descriptorOf(failed.Type()) != nil {
 				t.Fatal("failed encoder published a value")
 			}
 			var nilEncoder Encoder[[]byte]
-			if _, err := EncodeValueBorrowed(typ, nilEncoder, nil); err == nil {
+			if _, err := encodeValueBorrowed(typ, nilEncoder, nil); err == nil {
 				t.Fatal("nil encoder accepted")
 			}
 			var nilDecoder Decoder[[]byte]
@@ -149,7 +149,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("WrapperCheckType", func(t *testing.T) {
-			integer, text := FoundationScalar(t, TypeInt), FoundationScalar(t, TypeText)
+			integer, text := FoundationScalar(t, KindInt), FoundationScalar(t, KindText)
 			list := CodecTestMust(ListType(integer))
 			set := CodecTestMust(SetType(integer))
 			vector := CodecTestMust(VectorType(integer, 2))
@@ -190,9 +190,9 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("EncodeValue", func(t *testing.T) {
 		t.Run("OwnedAndBorrowed", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			source := []byte("source")
-			borrowed, err := EncodeValueBorrowed(typ, ByteSliceCodec, source)
+			borrowed, err := encodeValueBorrowed(typ, ByteSliceCodec, source)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -210,10 +210,10 @@ func TestValue(t *testing.T) {
 			}
 			clone := borrowed.Clone()
 			source[0] = 'X'
-			if got := string(owned.Bytes().OwnedBytes()); got != "source" {
+			if got := string(owned.Bytes().ownedBytes()); got != "source" {
 				t.Fatalf("owned data retained source: %q", got)
 			}
-			if got := string(clone.Bytes().OwnedBytes()); got != "source" {
+			if got := string(clone.Bytes().ownedBytes()); got != "source" {
 				t.Fatalf("cloned data retained source: %q", got)
 			}
 			// An owned parent propagates its mode through nested child writers.
@@ -236,12 +236,12 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := string(child.Bytes().OwnedBytes()); got != "nested" {
+			if got := string(child.Bytes().ownedBytes()); got != "nested" {
 				t.Fatalf("owned child retained source: %q", got)
 			}
 		})
 		t.Run("RejectsOversized", func(t *testing.T) {
-			typ := FoundationScalar(t, TypeBlob)
+			typ := FoundationScalar(t, KindBlob)
 			// Reuse immutable storage to represent 2 GiB without allocating its payload.
 			block := make([]byte, 1<<16)
 			spans := make([]wire.Span, 1<<15)
@@ -252,7 +252,7 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := NewEncodedValue(typ, Present, bytesView(chain, wire.Ref{})); err == nil {
+			if _, err := newEncodedValue(typ, Present, bytesView(chain, wire.Ref{})); err == nil {
 				t.Fatal("oversized standalone cell accepted")
 			}
 			builder := wire.NewBuilder(0)
@@ -270,18 +270,18 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("EncodedValue", func(t *testing.T) {
 		t.Run("StatesAndLifetime", func(t *testing.T) {
-			blob := FoundationScalar(t, TypeBlob)
-			integer := FoundationScalar(t, TypeInt)
+			blob := FoundationScalar(t, KindBlob)
+			integer := FoundationScalar(t, KindInt)
 			for _, test := range []struct {
 				state CellState
 				body  []byte
 				typ   DataType
 			}{{Null, []byte{1}, blob}, {Unset, []byte{1}, blob}, {EmptyCell, []byte{1}, integer}, {CellState(42), nil, blob}, {EmptyCell, nil, blob}} {
-				if _, err := NewEncodedValue(test.typ, test.state, BorrowBytes(test.body)); err == nil {
+				if _, err := newEncodedValue(test.typ, test.state, BorrowBytes(test.body)); err == nil {
 					t.Fatalf("invalid state/body accepted: %+v", test)
 				}
 			}
-			empty, err := EncodeValueBorrowed(integer, EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
+			empty, err := encodeValueBorrowed(integer, EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -292,29 +292,29 @@ func TestValue(t *testing.T) {
 			if err != nil || !decoded.Empty {
 				t.Fatalf("empty decode: %+v %v", decoded, err)
 			}
-			unset, err := NewEncodedValue(blob, Unset, BorrowBytes(nil))
+			unset, err := newEncodedValue(blob, Unset, BorrowBytes(nil))
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := DecodeValue(BlobCodec, unset); err == nil {
+			if _, err := DecodeValue(BytesCodec, unset); err == nil {
 				t.Fatal("unset result accepted")
 			}
 			chain := FoundationChain(t, []byte("leased"))
 			lease := wire.NewLease(chain, nil)
-			leased, err := NewEncodedValue(blob, Present, bytesView(chain, wire.RefOf(lease)))
+			leased, err := newEncodedValue(blob, Present, bytesView(chain, wire.RefOf(lease)))
 			if err != nil {
 				t.Fatal(err)
 			}
 			detached := leased.Clone()
 			lease.Release()
-			if _, err := DecodeValue(BlobCodec, leased); !errors.Is(err, ErrReleased) {
+			if _, err := DecodeValue(BytesCodec, leased); !errors.Is(err, ErrReleased) {
 				t.Fatalf("decode released: %v", err)
 			}
-			if _, err := NewEncodedValue(blob, Present, leased.Bytes()); !errors.Is(err, ErrReleased) {
+			if _, err := newEncodedValue(blob, Present, leased.Bytes()); !errors.Is(err, ErrReleased) {
 				t.Fatalf("construct released: %v", err)
 			}
 			foundationPanicReleased(t, func() { leased.Clone() })
-			if got, err := DecodeValue(BlobCodec, detached); err != nil || string(got.OwnedBytes()) != "leased" {
+			if got, err := DecodeValue(BytesCodec, detached); err != nil || string(got.ownedBytes()) != "leased" {
 				t.Fatalf("owned decode: %v", err)
 			}
 		})
@@ -360,7 +360,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("ValueReader", func(t *testing.T) {
 		t.Run("MalformedFraming", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			for _, data := range [][]byte{{}, {0}, {0, 0, 0}, {0, 0, 0, 2, 1}, {0x7f, 0xff, 0xff, 0xff}, {0xff, 0xff, 0xff, 0xfe}, {0xff, 0xff, 0xff, 0xfd}, {0x80, 0, 0, 0}} {
 				c := wire.NewCursor(foundationChain(t, data))
 				before := c.Remaining()
@@ -395,7 +395,7 @@ func TestValue(t *testing.T) {
 	})
 	t.Run("ValueWriter", func(t *testing.T) {
 		t.Run("CellStates", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(4)
 			encoders := []func(*ValueWriter) error{func(w *ValueWriter) error { return w.BorrowBytes(nil) }, func(w *ValueWriter) error { return w.BorrowBytes([]byte{}) }, func(w *ValueWriter) error { return w.Null() }, func(w *ValueWriter) error { return w.Unset() }}
 			for _, encode := range encoders {
@@ -420,7 +420,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("Empty", func(t *testing.T) {
-			integer, blob := foundationScalar(t, TypeInt), foundationScalar(t, TypeBlob)
+			integer, blob := foundationScalar(t, KindInt), foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(4)
 			w := newValueWriter(builder, integer, true)
 			if err := w.Empty(); err != nil {
@@ -452,7 +452,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("FramingTransactions", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(3)
 			payload := []byte("payload")
 			writer := newValueWriter(builder, typ, true)
@@ -509,7 +509,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("SegmentedCursor", func(t *testing.T) {
-			typ := foundationScalar(t, TypeBlob)
+			typ := foundationScalar(t, KindBlob)
 			builder := wire.NewBuilder(1)
 			w := newValueWriter(builder, typ, false)
 			if err := w.Uint16(0x1234); err != nil {
@@ -543,7 +543,7 @@ func TestValue(t *testing.T) {
 				t.Fatalf("scalar %x %v", v, err)
 			}
 			child, err := a.Child(typ)
-			if err != nil || string(child.Bytes().OwnedBytes()) != "abc" {
+			if err != nil || string(child.Bytes().ownedBytes()) != "abc" {
 				t.Fatalf("child: %v", err)
 			}
 			large, err := a.Uint64()

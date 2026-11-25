@@ -480,7 +480,7 @@ func TestExecution(t *testing.T) {
 			if err != nil || result.Attempts != 1 || result.Rows != 0 || len(result.CQLTraces()) != 1 || result.CQLTraces()[0] != (implCql.CQLTraceRef{ID: trace, HostID: result.HostID, Attempt: 1}) || len(result.Warnings()) != 1 || result.Warnings()[0] != "warning" {
 				t.Fatalf("result = %+v, %v", result, err)
 			}
-			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
+			if len(result.CustomPayload()) != 1 || result.CustomPayload()[0].Key != "key" || string(ownedBytesForTest(result.CustomPayload()[0].Value.Value)) != "val" {
 				t.Fatalf("custom payload = %+v", result.CustomPayload())
 			}
 			b.Close()
@@ -497,7 +497,7 @@ func TestExecution(t *testing.T) {
 			if len(requests) != 1 || len(attempts) != 1 || requests[0].Err != nil || requests[0].Result.CQLTraces()[0].ID != trace || requests[0].Result.Warnings()[0] != "warning" {
 				t.Fatalf("observer events = %+v / %+v", requests, attempts)
 			}
-			if len(requests[0].Result.CustomPayload()) != 1 || string(requests[0].Result.CustomPayload()[0].Value.Value.OwnedBytes()) != "val" {
+			if len(requests[0].Result.CustomPayload()) != 1 || string(ownedBytesForTest(requests[0].Result.CustomPayload()[0].Value.Value)) != "val" {
 				t.Fatalf("observer custom payload = %+v", requests[0].Result.CustomPayload())
 			}
 			if m := s.Metrics(); m.Requests != 1 || m.Attempts != 1 || m.InFlight != 0 || m.Errors != 0 {
@@ -657,7 +657,7 @@ func TestExecution(t *testing.T) {
 				t.Fatal(err)
 			}
 			var row implCql.Bytes
-			if !page.NextInto(&row) || string(row.OwnedBytes()) != "retried" {
+			if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "retried" {
 				t.Fatal("delayed retry result", page.Err())
 			}
 			page.Close()
@@ -775,7 +775,7 @@ func TestExecution(t *testing.T) {
 						time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
 						_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 					}()
-					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}

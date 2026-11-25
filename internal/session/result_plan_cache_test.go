@@ -42,10 +42,10 @@ func TestResultPlanCache(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxx
 			}()
-			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 			state, old := preparedState(t, s, columns)
 			host := cql.UUID{15: 1}
-			changed := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeInt))})
+			changed := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindInt))})
 			replacement := &transport.InternalResponsePage{ResponseData: implModel.ResponseData{Kind: 2, Columns: changed, MetadataID: []byte("new")}}
 			if err := selectPreparedResponse(state, host, old, old.InternalMetadataID, true, replacement); err != nil {
 				t.Fatal(err)
@@ -55,10 +55,10 @@ func TestResultPlanCache(t *testing.T) {
 			if err := selectPreparedResponse(state, host, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(newPageWithPlans(response, cql.OneColumn(cql.BlobCodec), &InternalResultPlanCache[cql.Bytes]{}, nil))
+			p := codecTestMust(newPageWithPlans(response, cql.OneColumn(cql.BytesCodec), &InternalResultPlanCache[cql.Bytes]{}, nil))
 			defer p.Close()
 			var dst cql.Bytes
-			if !p.NextInto(&dst) || string(dst.OwnedBytes()) != "old" {
+			if !p.NextInto(&dst) || string(ownedBytesForTest(dst)) != "old" {
 				t.Fatal("old matching page lost", p.Err())
 			}
 		})
@@ -69,7 +69,7 @@ func TestResultPlanCache(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxx
 			}()
-			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 			_, hp := preparedState(t, s, columns)
 			var calls atomic.Int32
 			decoder := countingDecoder{calls: &calls, hook: func() {
@@ -96,7 +96,7 @@ func TestResultPlanCache(t *testing.T) {
 				implCluster.SessionData(opaqueStorageValuexxxxxxxxxxx).InternalLogger = logging.Nop()
 				return opaqueStorageValuexxxxxxxxxxx
 			}()
-			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+			columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 			_, hp := preparedState(t, s, columns)
 			tracker := hp.InternalResult.InternalTracker
 			entered, release := make(chan struct{}), make(chan struct{})
@@ -154,7 +154,7 @@ func TestResultPlanCache(t *testing.T) {
 
 	t.Run("SelectPlan", func(t *testing.T) {
 		t.Run("ScopedReuseAndNoCompileLock", func(t *testing.T) {
-			cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+			cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 			entry := &implModel.ResultSchemaIdentity{InternalColumns: cols}
 			cache := &InternalResultPlanCache[cql.Bytes]{}
 			var calls atomic.Int32
@@ -201,7 +201,7 @@ func TestResultPlanCache(t *testing.T) {
 		// unidentified plan, so a later response under the old identity is compiled
 		// for its own columns instead of reusing the unidentified plan.
 		t.Run("UnidentifiedSwitchRetiresIdentityHit", func(t *testing.T) {
-			blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
+			blob := codecTestMust(cql.ScalarType(cql.KindBlob))
 			cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: blob})
 			other := cql.NewColumns(cql.ColumnSpec{Name: "w", Type: blob})
 			entry := &implModel.ResultSchemaIdentity{InternalColumns: cols}

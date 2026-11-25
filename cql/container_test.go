@@ -31,10 +31,10 @@ import (
 func TestContainer(t *testing.T) {
 	t.Run("Clone", func(t *testing.T) {
 		t.Run("FragmentAliasingAndLease", func(t *testing.T) {
-			blob := rowTestType(t, TypeBlob)
+			blob := rowTestType(t, KindBlob)
 			list, _ := ListType(blob)
 			payload := []byte("fragmented")
-			encoded, err := EncodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
+			encoded, err := encodeValueBorrowed(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -48,19 +48,19 @@ func TestContainer(t *testing.T) {
 			if !alias {
 				t.Fatal("container encoder copied borrowed payload")
 			}
-			body := encoded.Bytes().OwnedBytes()
+			body := encoded.Bytes().ownedBytes()
 			spans := make([]wire.Span, len(body))
 			for i := range body {
 				spans[i] = wire.Borrow(body[i : i+1])
 			}
 			chain, _ := wire.NewChain(spans...)
 			lease := wire.NewLease(chain, nil)
-			leased, _ := NewEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
-			sequence, err := DecodeValue(ListDecoder(BlobCodec), leased)
+			leased, _ := newEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
+			sequence, err := DecodeValue(ListDecoder(BytesCodec), leased)
 			if err != nil {
 				t.Fatal(err)
 			}
-			clone := ListDecoder(BlobCodec).Clone(sequence)
+			clone := ListDecoder(BytesCodec).Clone(sequence)
 			fragments := 0
 			eachBytes(sequence[0], func(s wire.Span) error {
 				if &s.Bytes()[0] != &body[8+fragments] {
@@ -76,7 +76,7 @@ func TestContainer(t *testing.T) {
 			if err := checkBytesAlive(sequence[0]); !errors.Is(err, ErrReleased) {
 				t.Fatalf("released element: %v", err)
 			}
-			if string(clone[0].OwnedBytes()) != "fragmented" {
+			if string(clone[0].ownedBytes()) != "fragmented" {
 				t.Fatal("detached clone failed")
 			}
 			owned, err := EncodeValue(list, ListEncoder(ByteSliceCodec), [][]byte{payload})
@@ -84,47 +84,47 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'X'
-			if got := owned.Bytes().OwnedBytes(); string(got[8:]) != "fragmented" {
+			if got := owned.Bytes().ownedBytes(); string(got[8:]) != "fragmented" {
 				t.Fatal("owned collection retained source")
 			}
 		})
 	})
-	t.Run("Collect", func(t *testing.T) {
-		text, blob := FoundationScalar(t, TypeText), FoundationScalar(t, TypeBlob)
+	t.Run("Detach", func(t *testing.T) {
+		text, blob := FoundationScalar(t, KindText), FoundationScalar(t, KindBlob)
 		tuple := CodecTestMust(TupleType(text, blob))
 		list := CodecTestMust(ListType(tuple))
 		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
-		encoded := CodecTestMust(EncodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
+		encoded := CodecTestMust(encodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(bytesChain(encoded.body), nil)
 		borrowed := EncodedValue{typ: list, state: Present, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
-		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BlobCodec))))
+		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextCodec), OneColumn(BytesCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
 		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
-		dynamicValues := CodecTestMust(CodecTestMust(dynamic.Elements()).Collect())
+		dynamicValues := dynamicTestDetach(dynamic.Elements(), cloneValue)
 		lease.Release()
-		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.OwnedBytes(), []byte("more")) {
+		if values[0].First.String() != "one" || !bytes.Equal(values[1].Second.ownedBytes(), []byte("more")) {
 			t.Fatal("typed Clone retained lease")
 		}
-		fields := CodecTestMust(CodecTestMust(dynamicValues[0].Fields()).Collect())
+		fields := dynamicTestDetach(dynamicValues[0].Fields(), cloneField)
 		txt := CodecTestMust(fields[0].Value.Text())
 		if txt.String() != "one" {
-			t.Fatal("dynamic Collect retained lease")
+			t.Fatal("dynamic Clone retained lease")
 		}
-		// Input-side dynamic values borrow caller arrays too; Collect detaches them.
+		// Input-side dynamic values borrow caller arrays too; Clone detaches them.
 		payload := []byte("input")
-		value := CodecTestMust(ListValue(CodecTestMust(ListType(blob)), []Value{BlobValue(payload)}))
-		input := CodecTestMust(CodecTestMust(value.Elements()).Collect())
+		value := CodecTestMust(ListValue(blob, BlobValue(payload)))
+		input := dynamicTestDetach(value.Elements(), cloneValue)
 		payload[0] = 'X'
 		b := CodecTestMust(input[0].Bytes())
-		if string(b.OwnedBytes()) != "input" {
-			t.Fatal("input-side Collect did not detach")
+		if string(b.ownedBytes()) != "input" {
+			t.Fatal("input-side Clone did not detach")
 		}
 	})
 	t.Run("Compile", func(t *testing.T) {
 		t.Run("ChecksOnceConcurrently", func(t *testing.T) {
 			var checks atomic.Int64
-			list, _ := ListType(rowTestType(t, TypeInt))
+			list, _ := ListType(rowTestType(t, KindInt))
 			columns := NewColumns(ColumnSpec{Name: "items", Type: list})
 			codec := OneColumn(ListDecoder(containerCheckedInt{checks: &checks}))
 			plan, err := codec.Compile(columns)
@@ -159,7 +159,7 @@ func TestContainer(t *testing.T) {
 	})
 	t.Run("Decode", func(t *testing.T) {
 		t.Run("ElementFailureIsEager", func(t *testing.T) {
-			list, _ := ListType(rowTestType(t, TypeInt))
+			list, _ := ListType(rowTestType(t, KindInt))
 			// Valid enclosing frames, but the second integer body is too short.
 			body, _ := hex.DecodeString("00000002000000040000000700000003010203")
 			values, err := DecodeValue(ListDecoder(Int32Codec), containerValue(t, list, body))
@@ -168,7 +168,7 @@ func TestContainer(t *testing.T) {
 			}
 		})
 		t.Run("StrictEnclosingFraming", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			list, _ := ListType(integer)
 			set, _ := SetType(integer)
 			mapType, _ := MapType(integer, integer)
@@ -186,7 +186,7 @@ func TestContainer(t *testing.T) {
 						t.Fatalf("%s accepted %s", test.typ, bad)
 					}
 				}
-				null, _ := NewEncodedValue(test.typ, Null, Bytes{})
+				null, _ := newEncodedValue(test.typ, Null, Bytes{})
 				if err := test.validate(null); err != nil {
 					t.Fatalf("%s rejected null collection: %v", test.typ, err)
 				}
@@ -194,20 +194,20 @@ func TestContainer(t *testing.T) {
 					t.Fatalf("empty collection rejected: %v", err)
 				}
 			}
-			encoded, err := EncodeValueBorrowed(list, ListEncoder(Int32Codec), nil)
-			if err != nil || !bytes.Equal(encoded.Bytes().OwnedBytes(), []byte{0, 0, 0, 0}) {
+			encoded, err := encodeValueBorrowed(list, ListEncoder(Int32Codec), nil)
+			if err != nil || !bytes.Equal(encoded.Bytes().ownedBytes(), []byte{0, 0, 0, 0}) {
 				t.Fatalf("nil slice must encode empty: %v", err)
 			}
-			if _, err := EncodeValueBorrowed(list, ListEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}}); err == nil {
+			if _, err := encodeValueBorrowed(list, ListEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}}); err == nil {
 				t.Fatal("null collection member accepted")
 			}
-			if _, err := EncodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{{State: Unset}}); err == nil {
+			if _, err := encodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{{State: Unset}}); err == nil {
 				t.Fatal("unset collection member accepted")
 			}
 		})
 	})
 	t.Run("Golden", func(t *testing.T) {
-		integer := rowTestType(t, TypeInt)
+		integer := rowTestType(t, KindInt)
 		list, _ := ListType(integer)
 		set, _ := SetType(integer)
 		vector, _ := VectorType(integer, 2)
@@ -231,19 +231,19 @@ func TestContainer(t *testing.T) {
 				t.Fatalf("values=%v", values)
 			}
 		}
-		text := rowTestType(t, TypeText)
-		blob := rowTestType(t, TypeBlob)
+		text := rowTestType(t, KindText)
+		blob := rowTestType(t, KindBlob)
 		mapType, _ := MapType(text, blob)
 		encoded := containerGolden(t, mapType, MapEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
-		mapping, err := DecodeValue(MapDecoder(TextCodec, BlobCodec), encoded)
+		mapping, err := DecodeValue(MapDecoder(TextCodec, BytesCodec), encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
 		entries := mapping
-		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.OwnedBytes()) != "y" {
+		if len(entries) != 1 || entries[0].Key.String() != "x" || string(entries[0].Value.ownedBytes()) != "y" {
 			t.Fatalf("entries=%v", entries)
 		}
-		tiny, _ := VectorType(rowTestType(t, TypeTinyInt), 2)
+		tiny, _ := VectorType(rowTestType(t, KindTinyInt), 2)
 		containerGolden(t, tiny, VectorEncoder(Int8Codec), []int8{1, -1}, "010101ff")
 		texts, _ := VectorType(text, 2)
 		encoded = containerGolden(t, texts, VectorEncoder(StringCodec), []string{"", "é"}, "0002c3a9")
@@ -271,20 +271,20 @@ func TestContainer(t *testing.T) {
 
 	t.Run("Vector", func(t *testing.T) {
 		t.Run("StrictDimensionsAndLengths", func(t *testing.T) {
-			integer := rowTestType(t, TypeInt)
+			integer := rowTestType(t, KindInt)
 			vector, _ := VectorType(integer, 2)
 			for _, bad := range [][]byte{nil, {0, 0, 0, 1}, make([]byte, 7), make([]byte, 9)} {
 				if _, err := DecodeValue(VectorDecoder(NullableDecoder(Int32Codec)), containerValue(t, vector, bad)); err == nil {
 					t.Fatalf("short/surplus vector accepted: %x", bad)
 				}
 			}
-			if _, err := EncodeValueBorrowed(vector, VectorEncoder(Int32Codec), []int32{1}); err == nil {
+			if _, err := encodeValueBorrowed(vector, VectorEncoder(Int32Codec), []int32{1}); err == nil {
 				t.Fatal("short vector encoded")
 			}
-			if _, err := EncodeValueBorrowed(vector, VectorEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}, {}}); err == nil {
+			if _, err := encodeValueBorrowed(vector, VectorEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}, {}}); err == nil {
 				t.Fatal("null vector member encoded")
 			}
-			text := rowTestType(t, TypeText)
+			text := rowTestType(t, KindText)
 			texts, _ := VectorType(text, 1)
 			for _, bad := range []string{"", "02ff", "8000", "ff0000000000000000", "f080000000", "0000"} {
 				body, _ := hex.DecodeString(bad)
@@ -307,14 +307,14 @@ func TestContainer(t *testing.T) {
 			}
 		})
 		t.Run("VariablePayloadBorrowingAndOwnedDetach", func(t *testing.T) {
-			vector, _ := VectorType(rowTestType(t, TypeBlob), 2)
+			vector, _ := VectorType(rowTestType(t, KindBlob), 2)
 			payload := bytes.Repeat([]byte{'x'}, 128)
 			input := [][]byte{payload, {}}
-			borrowed, err := EncodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)
+			borrowed, err := encodeValueBorrowed(vector, VectorEncoder(ByteSliceCodec), input)
 			if err != nil {
 				t.Fatal(err)
 			}
-			data := borrowed.Bytes().OwnedBytes()
+			data := borrowed.Bytes().ownedBytes()
 			if len(data) != 131 || data[0] != 0x80 || data[1] != 0x80 || data[130] != 0 {
 				t.Fatalf("unsigned vint body = %x", data)
 			}
@@ -333,7 +333,7 @@ func TestContainer(t *testing.T) {
 				t.Fatal(err)
 			}
 			payload[0] = 'Y'
-			if got := owned.Bytes().OwnedBytes(); got[2] != 'x' {
+			if got := owned.Bytes().ownedBytes(); got[2] != 'x' {
 				t.Fatal("owned vector retained borrowed payload")
 			}
 			// Every scalar and vint can straddle receive segments without gathering.
@@ -342,7 +342,7 @@ func TestContainer(t *testing.T) {
 				spans[index] = wire.Borrow(data[index : index+1])
 			}
 			chain, _ := wire.NewChain(spans...)
-			sequence, err := VectorDecoder(BlobCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
+			sequence, err := VectorDecoder(BytesCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
 			if err != nil {
 				t.Fatal(err)
 			}

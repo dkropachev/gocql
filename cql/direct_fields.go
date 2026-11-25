@@ -22,11 +22,11 @@ type directKind uint8
 const (
 	directNone      directKind = iota
 	directInt                  // a built-in signed integer codec of width bytes
-	directBlob                 // BlobCodec: a view borrowing the response
-	directText                 // TextCodec or ASCIICodec: a validated view borrowing the response
+	directBlob                 // BytesCodec: a view borrowing the response
+	directText                 // TextCodec: a validated view borrowing the response
 	directOwnedBlob            // ByteSliceCodec: a copy into the field's capacity
 	directBytes                // ByteSliceCodec
-	directString               // StringCodec or ASCIIStringCodec
+	directString               // StringCodec
 )
 
 // funcPointer returns a func value's pointer. A func value is one pointer
@@ -57,15 +57,15 @@ func integerWidth[V any]() int64 {
 
 // isIntegerKind reports whether kind is a CQL type of a built-in integer
 // codec, whose width the codec fixes.
-func isIntegerKind(kind Type, width int64) bool {
+func isIntegerKind(kind Kind, width int64) bool {
 	switch kind {
-	case TypeTinyInt:
+	case KindTinyInt:
 		return width == 1
-	case TypeSmallInt:
+	case KindSmallInt:
 		return width == 2
-	case TypeInt:
+	case KindInt:
 		return width == 4
-	case TypeBigInt, TypeCounter:
+	case KindBigInt, KindCounter:
 		return width == 8
 	}
 	return false
@@ -113,7 +113,7 @@ type rowOp[R any] struct {
 	field           OutputField[R] // directNone: the field itself
 	access          unsafe.Pointer // the field accessor, a func(*R) *V
 	width           int64
-	columnKind, alt Type
+	columnKind, alt Kind
 	kind            directKind
 	compiled        bool
 }
@@ -129,7 +129,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		}
 		if width := integerWidth[V](); width > 0 && isIntegerKind(c.kind, width) {
 			op.kind, op.width = directInt, width
-		} else if _, blob := any(f.codec).(scalarCodec[Bytes]); blob && c.kind == TypeBlob {
+		} else if _, blob := any(f.codec).(scalarCodec[Bytes]); blob && c.kind == KindBlob {
 			op.kind = directBlob
 		} else {
 			return rowOp[R]{}, false
@@ -141,10 +141,7 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		// The field stays for columns of another kind, whose type error the
 		// codec reports in its own words.
 		op.kind, op.field, op.compiled = directText, f, c.compiled
-		op.columnKind, op.alt = TypeText, TypeVarchar
-		if c.ascii {
-			op.columnKind, op.alt = TypeASCII, 0
-		}
+		op.columnKind, op.alt = KindText, KindASCII
 	default:
 		return rowOp[R]{}, false
 	}
@@ -197,7 +194,7 @@ func (op *rowOp[R]) decodeText(reader *RowReader, dst *R, ptr unsafe.Pointer) er
 	if column, ok := reader.columns.At(reader.index); ok && column.Type.Kind() != op.columnKind && column.Type.Kind() != op.alt {
 		return op.field.decode(reader, dst)
 	}
-	v, err := textColumn(reader, op.columnKind, op.alt, op.compiled)
+	v, err := textColumn(reader, op.compiled)
 	if err == nil {
 		*(*Text)(ptr) = v
 	}
@@ -209,9 +206,20 @@ type paramOp[P any] struct {
 	field           InputField[P]  // directNone, or a precondition the op does not cover
 	get             unsafe.Pointer // the field getter, a func(P) V
 	width           int64
-	columnKind, alt Type // directInt: the codec's types
+	columnKind, alt Kind // directInt: the codec's types
 	kind            directKind
-	ascii           bool
+	// erased: get is a func(*erasedBase) V of a struct mapping's field,
+	// called with the parameter struct's address (erasedParam).
+	erased bool
+}
+
+// directGet calls op's getter on *value and returns the field as V.
+func directGet[V, P any](op *paramOp[P], value *P) V {
+	get := op.get
+	if op.erased {
+		return (*(*func(*erasedBase) V)(unsafe.Pointer(&get)))(structAddr(value))
+	}
+	return (*(*func(P) V)(unsafe.Pointer(&get)))(*value)
 }
 
 // directParamOp compiles f, already compiled for its column, into a direct op
@@ -234,7 +242,7 @@ func (f inputField[P, V]) directParamOp() (paramOp[P], bool) {
 		if !c.compiled {
 			return paramOp[P]{}, false
 		}
-		op.kind, op.ascii = directString, c.ascii
+		op.kind = directString
 	default:
 		return paramOp[P]{}, false
 	}
@@ -249,7 +257,6 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 	if !ok || w.builder == nil || validateDataType(column.Type) != nil || w.capture != nil && w.index >= len(w.capture) {
 		return op.field.encode(w, value)
 	}
-	get := op.get
 	start := w.builder.Len()
 	switch op.kind {
 	case directInt:
@@ -263,33 +270,33 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		p[0], p[1], p[2], p[3] = 0, 0, 0, byte(op.width)
 		switch op.width {
 		case 1:
-			p[4] = byte((*(*func(P) int8)(unsafe.Pointer(&get)))(value))
+			p[4] = byte(directGet[int8](op, &value))
 		case 2:
-			v := uint16((*(*func(P) int16)(unsafe.Pointer(&get)))(value))
+			v := uint16(directGet[int16](op, &value))
 			p[4], p[5] = byte(v>>8), byte(v)
 		case 4:
-			v := uint32((*(*func(P) int32)(unsafe.Pointer(&get)))(value))
+			v := uint32(directGet[int32](op, &value))
 			p[4], p[5], p[6], p[7] = byte(v>>24), byte(v>>16), byte(v>>8), byte(v)
 		default:
-			v := uint64((*(*func(P) int64)(unsafe.Pointer(&get)))(value))
+			v := uint64(directGet[int64](op, &value))
 			for i := 0; i < 8; i++ {
 				p[4+i] = byte(v >> (56 - 8*i))
 			}
 		}
 	case directBytes:
-		if column.Type.Kind() != TypeBlob {
+		if column.Type.Kind() != KindBlob {
 			return op.field.encode(w, value)
 		}
-		b := (*(*func(P) []byte)(unsafe.Pointer(&get)))(value)
+		b := directGet[[]byte](op, &value)
 		if err := op.writeBody(w, b, ""); err != nil {
 			return err
 		}
 	default: // directString
-		if checkTextType(column.Type, op.ascii) != nil {
+		if checkTextType(column.Type) != nil {
 			return op.field.encode(w, value)
 		}
-		s := (*(*func(P) string)(unsafe.Pointer(&get)))(value)
-		if op.ascii {
+		s := directGet[string](op, &value)
+		if column.Type.Kind() == KindASCII {
 			for i := 0; i < len(s); i++ {
 				if s[i] >= utf8.RuneSelf {
 					return columnError(CodecStageEncode, w.index, column.Name, errors.New("gocql: invalid ASCII"))

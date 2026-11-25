@@ -30,7 +30,7 @@ func fixtureBody[T any](typ cql.DataType, codec cql.Encoder[T], v T) ([]byte, er
 	if err != nil {
 		return nil, err
 	}
-	return encoded.Bytes().OwnedBytes(), nil
+	return ownedBytesForTest(encoded.Bytes()), nil
 }
 func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	typ, err := cqltype.DataTypeFromInfo(info)
@@ -42,7 +42,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	}
 	switch v := value.(type) {
 	case string:
-		if typ.Kind() == cql.TypeInet {
+		if typ.Kind() == cql.KindInet {
 			ip, err := netip.ParseAddr(v)
 			if err != nil {
 				return nil, err
@@ -59,7 +59,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	case cql.UUID:
 		return fixtureBody(typ, cql.UUIDCodec, v)
 	case []byte:
-		return fixtureBody(typ, cql.BlobCodec, cql.BorrowBytes(v))
+		return fixtureBody(typ, cql.BytesCodec, cql.BorrowBytes(v))
 	case int8:
 		return fixtureBody(typ, cql.Int8Codec, v)
 	case int16:
@@ -71,7 +71,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		for k, x := range v {
 			entries = append(entries, cql.Entry[string, cql.Bytes]{Key: k, Value: cql.BorrowBytes(x)})
 		}
-		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.BlobCodec), entries)
+		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.BytesCodec), entries)
 	case bool:
 		return fixtureBody(typ, cql.BoolCodec, v)
 	case int:
@@ -83,7 +83,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	case float64:
 		return fixtureBody(typ, cql.Float64Codec, v)
 	case []string:
-		if typ.Kind() == cql.TypeSet {
+		if typ.Kind() == cql.KindSet {
 			return fixtureBody(typ, cql.SetEncoder(cql.StringCodec), v)
 		}
 		return fixtureBody(typ, cql.ListEncoder(cql.StringCodec), v)

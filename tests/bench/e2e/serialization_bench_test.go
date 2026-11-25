@@ -26,26 +26,26 @@ import (
 
 func BenchmarkSerialization(b *testing.B) {
 	b.Run("Values", func(b *testing.B) {
-		b.Run("Int", func(b *testing.B) { benchmarkValue(b, scalar(cql.TypeInt), cql.Int32Codec, cql.Int32Codec, int32(42)) })
+		b.Run("Int", func(b *testing.B) { benchmarkValue(b, scalar(cql.KindInt), cql.Int32Codec, cql.Int32Codec, int32(42)) })
 		for _, size := range []int{100, 1024, 1024 * 1024} {
 			body := bytes.Repeat([]byte("x"), size)
 			b.Run(fmt.Sprintf("Blob/%d", size), func(b *testing.B) {
-				benchmarkValue(b, scalar(cql.TypeBlob), cql.BlobCodec, cql.BlobCodec, cql.BorrowBytes(body))
+				benchmarkValue(b, scalar(cql.KindBlob), cql.BytesCodec, cql.BytesCodec, cql.BorrowBytes(body))
 			})
 			b.Run(fmt.Sprintf("Text/%d", size), func(b *testing.B) {
-				benchmarkValue(b, scalar(cql.TypeText), cql.StringCodec, cql.TextCodec, string(body))
+				benchmarkValue(b, scalar(cql.KindText), cql.StringCodec, cql.TextCodec, string(body))
 			})
 		}
 		b.Run("UUID", func(b *testing.B) {
-			benchmarkValue(b, scalar(cql.TypeUUID), cql.UUIDCodec, cql.UUIDCodec, cql.UUID{})
+			benchmarkValue(b, scalar(cql.KindUUID), cql.UUIDCodec, cql.UUIDCodec, cql.UUID{})
 		})
 		b.Run("Duration", func(b *testing.B) {
-			benchmarkValue(b, scalar(cql.TypeDuration), cql.DurationCodec, cql.DurationCodec, cql.Duration{Nanoseconds: 300000000000})
+			benchmarkValue(b, scalar(cql.KindDuration), cql.DurationCodec, cql.DurationCodec, cql.Duration{Nanoseconds: 300000000000})
 		})
 		b.Run("Timestamp", func(b *testing.B) {
-			benchmarkValue(b, scalar(cql.TypeTimestamp), cql.TimestampCodec, cql.TimestampCodec, cql.Timestamp(1700000000000))
+			benchmarkValue(b, scalar(cql.KindTimestamp), cql.TimestampCodec, cql.TimestampCodec, cql.Timestamp(1700000000000))
 		})
-		text, integer := scalar(cql.TypeText), scalar(cql.TypeInt)
+		text, integer := scalar(cql.KindText), scalar(cql.KindInt)
 		list, _ := cql.ListType(text)
 		set, _ := cql.SetType(text)
 		mapping, _ := cql.MapType(text, integer)
@@ -70,11 +70,11 @@ func BenchmarkSerialization(b *testing.B) {
 		}
 		params := cql.Params(cql.ParamAt(0, cql.UUIDCodec, func(v record) cql.UUID { return v.ID }), cql.ParamAt(1, cql.StringCodec, func(v record) string { return v.Name }), cql.ParamAt(2, cql.Int32Codec, func(v record) int32 { return v.Value }))
 		rows := cql.Row(cql.ColumnAt(0, cql.UUIDCodec, func(v *view) *cql.UUID { return &v.ID }), cql.ColumnAt(1, cql.TextCodec, func(v *view) *cql.Text { return &v.Name }), cql.ColumnAt(2, cql.Int32Codec, func(v *view) *int32 { return &v.Value }))
-		tuple, _ := cql.TupleType(scalar(cql.TypeUUID), text, integer)
+		tuple, _ := cql.TupleType(scalar(cql.KindUUID), text, integer)
 		b.Run("Tuple", func(b *testing.B) {
 			benchmarkValue(b, tuple, cql.TupleEncoder(params), cql.TupleDecoder(rows), record{Name: "test tuple", Value: 123})
 		})
-		udt, _ := cql.UDTType("myks", "myudt", cql.ColumnSpec{Name: "id", Type: scalar(cql.TypeUUID)}, cql.ColumnSpec{Name: "name", Type: text}, cql.ColumnSpec{Name: "value", Type: integer})
+		udt, _ := cql.UDTType("myks", "myudt", cql.ColumnSpec{Name: "id", Type: scalar(cql.KindUUID)}, cql.ColumnSpec{Name: "name", Type: text}, cql.ColumnSpec{Name: "value", Type: integer})
 		opts := cql.UDTOptions{Keyspace: "myks", Name: "myudt"}
 		udtEnc := cql.UDTEncoder(params, opts)
 		udtDec := cql.UDTDecoder(rows, opts)
@@ -90,7 +90,7 @@ func BenchmarkSerialization(b *testing.B) {
 	b.Run("Vector", func(b *testing.B) {
 		for _, dim := range []int{128, 384, 768, 1536} {
 			b.Run(fmt.Sprint(dim), func(b *testing.B) {
-				typ, err := cql.VectorType(scalar(cql.TypeFloat), uint16(dim))
+				typ, err := cql.VectorType(scalar(cql.KindFloat), uint16(dim))
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -107,14 +107,14 @@ func BenchmarkSerialization(b *testing.B) {
 // benchmarkValue measures explicit borrowed encoding and borrowed decoding.
 // Owned conversions have separate names so their copy costs remain visible.
 func benchmarkValue[P, R any](b *testing.B, typ cql.DataType, enc cql.Encoder[P], dec cql.Decoder[R], value P) {
-	encoded, err := cql.EncodeValueBorrowed(typ, enc, value)
+	encoded, err := cql.EncodeValue(typ, enc, value)
 	if err != nil {
 		b.Fatal(err)
 	}
 	b.Run("EncodeBorrowed", func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
-			if _, err := cql.EncodeValueBorrowed(typ, enc, value); err != nil {
+			if _, err := cql.EncodeValue(typ, enc, value); err != nil {
 				b.Fatal(err)
 			}
 		}
@@ -136,7 +136,7 @@ func benchmarkValue[P, R any](b *testing.B, typ cql.DataType, enc cql.Encoder[P]
 		}
 	})
 }
-func scalar(kind cql.Type) cql.DataType {
+func scalar(kind cql.Kind) cql.DataType {
 	t, err := cql.ScalarType(kind)
 	if err != nil {
 		panic(err)

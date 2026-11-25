@@ -60,6 +60,10 @@ func TestGeneratedCodec(t *testing.T) {
 		if genRow.Varint.BigInt().Cmp(v.Varint.BigInt()) != 0 || genRow.Text != v.Text || genRow.Corner != v.Corner || genRow.TimeID != v.TimeID {
 			t.Fatalf("round trip:\nwant %+v\ngot  %+v", v, genRow)
 		}
+		if !reflect.DeepEqual(genRow.Labels, v.Labels) || genRow.Label == nil || *genRow.Label != *v.Label ||
+			genRow.MaybeTag != v.MaybeTag || !reflect.DeepEqual(genRow.LabelHits, v.LabelHits) {
+			t.Fatalf("named element types: %v %v %v %v", genRow.Labels, genRow.Label, genRow.MaybeTag, genRow.LabelHits)
+		}
 	})
 
 	// The generated streaming mapping and the reflected one decode alike.

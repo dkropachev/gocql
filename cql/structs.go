@@ -25,7 +25,7 @@ type StructFields[P any] struct {
 // ParamsOf binds a statement's parameters from the exported fields of struct
 // P by column name. A field's column is its `cql:"name"` tag, or its name in
 // snake_case, as gocqlx maps it (CreatedAt is created_at, UserID user_id);
-// `cql:"-"` skips it and `cql:"name,codec=ASCIIStringCodec"` picks a
+// `cql:"-"` skips it and `cql:"name,codec=ListCodec"` picks a
 // built-in codec other than the type's default (`cql:",codec=..."` keeps the
 // snake_case name). Names match the column exactly, so a quoted mixed-case
 // column, or a name snake_case splits otherwise (UserIDs is user_i_ds),
@@ -43,15 +43,21 @@ type StructFields[P any] struct {
 // an embedded struct, is rejected. An embedded non-struct is an ordinary
 // field named after its type.
 //
-// A field maps by its exact Go type: a named type, such as
-// type Status string, has no built-in codec and needs WithCodec. Slice
-// fields map lists by default (ListCodec; `codec=SetCodec` for sets,
-// `codec=VectorCodec` for vectors). A time.Time field maps a timestamp with
-// TimestampTimeCodec. A BindValue[V] field of a type with a built-in codec,
+// A field maps by its Go type. A named type without a codec of its own, such
+// as type Status string, maps like its underlying type, and so do []Status,
+// *Status, Nullable[Status], BindValue[Status] and map keys and values of
+// Status, like []string, *string and the rest; WithCodec overrides it. A
+// type defined from a named type other than a predeclared one, such as type
+// ID cql.UUID, needs a codec. A []V field maps a list, a set or a vector,
+// whichever the column is (SliceCodec; `codec=ListCodec`, `codec=SetCodec` or `codec=VectorCodec`
+// requires one). An int field maps bigint with IntCodec, a *V field maps V
+// with NULL as nil (PointerCodec), a cql.Text field maps text and ascii with
+// TextCodec, and a *big.Int field maps varint with VarintBigIntCodec. A
+// time.Time field maps a timestamp with TimestampTimeCodec. A BindValue[V] field of a type with a built-in codec,
 // or one WithCodec or WithEncoder maps, binds NULL and UNSET too; it maps
 // parameters only, so RowOf rejects it. A map[K]V field maps with GoMapCodec
 // when K and V have built-in codecs that decode into owned storage: the
-// numeric and boolean types, string, UUID, TimeUUID, netip.Addr, Date,
+// numeric types, int included, bool, string, UUID, TimeUUID, netip.Addr, Date,
 // TimeOfDay and Timestamp, and as values also []byte, Duration and time.Time.
 // Other maps, and []Entry[K, V] fields for MapCodec, need WithCodec or a
 // `codec=` tag.
@@ -94,14 +100,18 @@ func MustRowOf[R any](opts ...StructOption) RowDecoder[R] { return must(RowOf[R]
 // collection. Every UDT field needs a struct field and every struct field a
 // UDT field, unless options relaxes it; a UDT field the struct leaves out is
 // bound as NULL with AllowExtraDatabaseFields. An empty options.Keyspace
-// matches the UDT in any keyspace.
+// matches the UDT in any keyspace, and an empty options.Name a UDT of any
+// name, so the zero UDTOptions matches by fields alone.
 //
-// Pass the codec to WithCodec to map fields of type T in an enclosing
-// struct. UDTCodecOf applies WithCodec, for T's own fields, and rejects other
-// options.
+// Pass the codec to WithCodec to map fields of type T, and []T, *T and
+// map values of T, in an enclosing struct. UDTCodecOf applies WithCodec, for
+// T's own fields, and IgnoreExtraColumns, which sets
+// AllowExtraDatabaseFields, and rejects other options.
 func UDTCodecOf[T any](options UDTOptions, opts ...StructOption) (Codec[T], error) {
-	if options.Name == "" {
-		return nil, typeValidation("UDTOptions", "no UDT name")
+	for _, opt := range opts {
+		if _, ok := opt.(ignoreExtraColumnsOption); ok {
+			options.AllowExtraDatabaseFields = true
+		}
 	}
 	fields := generatedFields[T]()
 	params, err := generatedParams(fields, targetUDT, opts...)
@@ -113,8 +123,8 @@ func UDTCodecOf[T any](options UDTOptions, opts ...StructOption) (Codec[T], erro
 		return nil, err
 	}
 	return recordCodec[T]{
-		recordEncoder: recordEncoder[T]{kind: TypeUDT, codec: params, options: options},
-		recordDecoder: recordDecoder[T]{kind: TypeUDT, codec: rows, options: options},
+		recordEncoder: recordEncoder[T]{kind: KindUDT, codec: params, options: options},
+		recordDecoder: recordDecoder[T]{kind: KindUDT, codec: rows, options: options},
 	}, nil
 }
 

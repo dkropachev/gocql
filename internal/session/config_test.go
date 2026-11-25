@@ -158,7 +158,7 @@ func TestConfig(t *testing.T) {
 			storage := PreparedData(handle)
 			storage.InternalState = state
 			storage.params = codecTestMust(implCql.EmptyParamsEncoder.Compile(implCql.NewColumns()))
-			storage.rows = implCql.OneColumn(implCql.BlobCodec)
+			storage.rows = implCql.OneColumn(implCql.BytesCodec)
 			storage.plans = &InternalResultPlanCache[implCql.Bytes]{}
 			bound := codecTestMust(BindBorrowed(handle, implCql.EmptyRow{}))
 			defer bound.Close()
@@ -195,7 +195,7 @@ func TestConfig(t *testing.T) {
 			for _, include := range []bool{false, true, false} {
 				page := codecTestMust(RunPage(ctx, s, bound, implCql.StartPage(), 0, testOptions(Options{IncludeMetadata: include, PageSize: implCql.Unpaged})))
 				var row implCql.Bytes
-				if !page.NextInto(&row) || string(row.OwnedBytes()) != "value" {
+				if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "value" {
 					t.Fatal(page.Err())
 				}
 				if err := page.Close(); err != nil {
@@ -467,7 +467,7 @@ func TestConfig(t *testing.T) {
 			if err := explicit.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BlobCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
+			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.EmptyParamsEncoder, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
 			unpaged := options.Values()
 			unpaged.PageSize = implCql.Unpaged
 			page = codecTestMust(RunPage(ctx, s, conditional, implCql.StartPage(), 0, testOptions(unpaged)))

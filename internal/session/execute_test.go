@@ -75,7 +75,7 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(name)))
 		b = append(b, name...)
 	}
-	b = binary.BigEndian.AppendUint16(b, uint16(cql.TypeBlob))
+	b = binary.BigEndian.AppendUint16(b, uint16(cql.KindBlob))
 	b = binary.BigEndian.AppendUint32(b, uint32(len(values)))
 	for _, value := range values {
 		b = binary.BigEndian.AppendUint32(b, uint32(len(value)))
@@ -85,7 +85,7 @@ func runtimeRowsBody(token []byte, values ...string) []byte {
 }
 func runtimeQuery(t testing.TB) *Bound[cql.Bytes] {
 	t.Helper()
-	b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BlobCodec)}, cql.NewColumns(), cql.EmptyRow{})
+	b, err := BindUnpreparedBorrowed(binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.EmptyParamsEncoder, Rows: cql.OneColumn(cql.BytesCodec)}, cql.NewColumns(), cql.EmptyRow{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func runtimeSpeculativeLoserWriterKeepsInput(t *testing.T, pageTimeout time.Dura
 		t.Fatal(err)
 	}
 	var row cql.Bytes
-	if !page.NextInto(&row) || string(row.OwnedBytes()) != "winner" {
+	if !page.NextInto(&row) || string(ownedBytesForTest(row)) != "winner" {
 		t.Fatal(page.Err())
 	}
 	bound.Close()

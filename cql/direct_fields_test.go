@@ -26,19 +26,19 @@ type directRow struct {
 }
 
 func directColumns(t testing.TB) Columns {
-	typ := func(kind Type) DataType { return CodecTestMust(ScalarType(kind)) }
+	typ := func(kind Kind) DataType { return CodecTestMust(ScalarType(kind)) }
 	return NewColumns(
-		ColumnSpec{Name: "i8", Type: typ(TypeTinyInt)},
-		ColumnSpec{Name: "i16", Type: typ(TypeSmallInt)},
-		ColumnSpec{Name: "i32", Type: typ(TypeInt)},
-		ColumnSpec{Name: "i64", Type: typ(TypeBigInt)},
-		ColumnSpec{Name: "count", Type: typ(TypeCounter)},
-		ColumnSpec{Name: "view", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "owned", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "text", Type: typ(TypeText)},
-		ColumnSpec{Name: "ascii", Type: typ(TypeASCII)},
-		ColumnSpec{Name: "blob", Type: typ(TypeBlob)},
-		ColumnSpec{Name: "skipped", Type: typ(TypeInt)},
+		ColumnSpec{Name: "i8", Type: typ(KindTinyInt)},
+		ColumnSpec{Name: "i16", Type: typ(KindSmallInt)},
+		ColumnSpec{Name: "i32", Type: typ(KindInt)},
+		ColumnSpec{Name: "i64", Type: typ(KindBigInt)},
+		ColumnSpec{Name: "count", Type: typ(KindCounter)},
+		ColumnSpec{Name: "view", Type: typ(KindBlob)},
+		ColumnSpec{Name: "owned", Type: typ(KindBlob)},
+		ColumnSpec{Name: "text", Type: typ(KindText)},
+		ColumnSpec{Name: "ascii", Type: typ(KindASCII)},
+		ColumnSpec{Name: "blob", Type: typ(KindBlob)},
+		ColumnSpec{Name: "skipped", Type: typ(KindInt)},
 	)
 }
 
@@ -48,10 +48,10 @@ var directParams = Params(
 	Param("i32", Int32Codec, func(r directRow) int32 { return r.I32 }),
 	Param("i64", Int64Codec, func(r directRow) int64 { return r.I64 }),
 	Param("count", Int64Codec, func(r directRow) int64 { return r.Count }),
-	Param("view", BlobCodec, func(r directRow) Bytes { return r.View }),
+	Param("view", BytesCodec, func(r directRow) Bytes { return r.View }),
 	Param("owned", ByteSliceCodec, func(r directRow) []byte { return r.Owned }),
 	Param("text", StringCodec, func(r directRow) string { return r.Text }),
-	Param("ascii", ASCIIStringCodec, func(r directRow) string { return r.ASCII }),
+	Param("ascii", StringCodec, func(r directRow) string { return r.ASCII }),
 	Param("blob", ByteSliceCodec, func(r directRow) []byte { return r.Blob }),
 	Param("skipped", NullableCodec(Int32Codec), func(r directRow) Nullable[int32] {
 		return Nullable[int32]{Value: r.Skipped, Valid: true}
@@ -64,7 +64,7 @@ var directRows = RowInto(func(r *directRow) { r.Owned = r.Owned[:0] },
 	Column("i32", Int32Codec, func(r *directRow) *int32 { return &r.I32 }),
 	Column("i64", Int64Codec, func(r *directRow) *int64 { return &r.I64 }),
 	Column("count", Int64Codec, func(r *directRow) *int64 { return &r.Count }),
-	Column("view", BlobCodec, func(r *directRow) *Bytes { return &r.View }),
+	Column("view", BytesCodec, func(r *directRow) *Bytes { return &r.View }),
 	Column("owned", ByteSliceCodec, func(r *directRow) *[]byte { return &r.Owned }),
 	IgnoreColumn[directRow]("text"),
 	IgnoreColumn[directRow]("ascii"),

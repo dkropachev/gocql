@@ -22,9 +22,9 @@ func TestStructMapping(t *testing.T) {
 			V string
 		}
 		columns := NewColumns(
-			ColumnSpec{Name: "[applied]", Type: rowTestType(t, TypeBoolean)},
-			ColumnSpec{Name: "k", Type: rowTestType(t, TypeInt)},
-			ColumnSpec{Name: "v", Type: rowTestType(t, TypeText)},
+			ColumnSpec{Name: "[applied]", Type: rowTestType(t, KindBoolean)},
+			ColumnSpec{Name: "k", Type: rowTestType(t, KindInt)},
+			ColumnSpec{Name: "v", Type: rowTestType(t, KindText)},
 		)
 		plan, err := CASRows(MustRowOf[previous]()).Compile(columns)
 		if err != nil {
@@ -74,9 +74,9 @@ func TestStructMapping(t *testing.T) {
 			W string
 		}
 		columns := NewColumns(
-			ColumnSpec{Name: "[applied]", Type: rowTestType(t, TypeBoolean)},
-			ColumnSpec{Name: "k", Type: rowTestType(t, TypeInt)},
-			ColumnSpec{Name: "v", Type: rowTestType(t, TypeText)},
+			ColumnSpec{Name: "[applied]", Type: rowTestType(t, KindBoolean)},
+			ColumnSpec{Name: "k", Type: rowTestType(t, KindInt)},
+			ColumnSpec{Name: "v", Type: rowTestType(t, KindText)},
 		)
 		for name, decoder := range map[string]RowDecoder[previous]{
 			"struct": MustRowOf[previous](),
@@ -133,8 +133,8 @@ func TestStructMapping(t *testing.T) {
 				Blobs [][]byte
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "blobs", Type: CodecTestMust(ListType(rowTestType(t, TypeBlob)))},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "blobs", Type: CodecTestMust(ListType(rowTestType(t, KindBlob)))},
 			)
 			chain := encodeTestParams(t, columns, MustParamsOf[blobsRow](), blobsRow{ID: 1, Blobs: [][]byte{{1, 2}, {3}}})
 			allocs := func(rows RowDecoder[blobsRow]) (float64, blobsRow) {
@@ -201,9 +201,9 @@ func TestStructMapping(t *testing.T) {
 				Blob []byte
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
-				ColumnSpec{Name: "blob", Type: rowTestType(t, TypeBlob)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
+				ColumnSpec{Name: "blob", Type: rowTestType(t, KindBlob)},
 			)
 			hand := Params(
 				Param("id", Int64Codec, func(v small) int64 { return v.ID }),
@@ -258,11 +258,11 @@ func TestStructMapping(t *testing.T) {
 		// offset in it; an outer field hides an embedded one with the same column.
 		t.Run("Embedded", func(t *testing.T) {
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "created_at", Type: rowTestType(t, TypeTimestamp)},
-				ColumnSpec{Name: "updated_at", Type: rowTestType(t, TypeTimestamp)},
-				ColumnSpec{Name: "owner", Type: rowTestType(t, TypeText)},
-				ColumnSpec{Name: "text", Type: rowTestType(t, TypeText)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "created_at", Type: rowTestType(t, KindTimestamp)},
+				ColumnSpec{Name: "updated_at", Type: rowTestType(t, KindTimestamp)},
+				ColumnSpec{Name: "owner", Type: rowTestType(t, KindText)},
+				ColumnSpec{Name: "text", Type: rowTestType(t, KindText)},
 			)
 			value := embeddedRow{ID: 1, auditFields: auditFields{CreatedAt: 2, UpdatedAt: 3, ID: 99}, EmbeddedOwner: EmbeddedOwner{"me"}, Text: "t"}
 			chain := encodeTestParams(t, columns, MustParamsOf[embeddedRow](), value)
@@ -376,8 +376,8 @@ func TestStructMapping(t *testing.T) {
 				Other []byte // not selected: emptied, keeping its storage
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "blob", Type: rowTestType(t, TypeBlob)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "blob", Type: rowTestType(t, KindBlob)},
 			)
 			chain := encodeTestParams(t, columns, MustParamsOf[blobRow](), blobRow{ID: 1, Blob: []byte("payload")})
 			storage := make([]byte, 0, 16)
@@ -415,8 +415,8 @@ func TestStructMapping(t *testing.T) {
 				Text     string
 			}
 			update := NewColumns(
-				ColumnSpec{Name: "text", Type: rowTestType(t, TypeText)},
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
+				ColumnSpec{Name: "text", Type: rowTestType(t, KindText)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
 			)
 			value := tweet{ID: 3, Timeline: "unused", Text: "edited"}
 			chain := encodeTestParams(t, update, MustParamsOf[tweet](), value)
@@ -426,8 +426,8 @@ func TestStructMapping(t *testing.T) {
 			}
 			// Every column still needs a field.
 			extra := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "author", Type: rowTestType(t, TypeText)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "author", Type: rowTestType(t, KindText)},
 			)
 			if _, err := MustParamsOf[tweet]().Compile(extra); err == nil || !strings.Contains(err.Error(), "author") {
 				t.Fatalf("unmapped column: %v", err)
@@ -445,8 +445,8 @@ func TestStructMapping(t *testing.T) {
 				t.Fatalf("unsupported type: %v", err)
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "origin", Type: rowTestType(t, TypeBigInt)},
-				ColumnSpec{Name: "corner", Type: rowTestType(t, TypeBigInt)},
+				ColumnSpec{Name: "origin", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "corner", Type: rowTestType(t, KindBigInt)},
 			)
 			value := shape{Origin: structPoint{1, -2}, Corner: Nullable[structPoint]{Value: structPoint{3, 4}, Valid: true}}
 			chain := encodeTestParams(t, columns, MustParamsOf[shape](WithCodec(Codec[structPoint](pointCodec{}))), value)
@@ -462,7 +462,7 @@ func TestStructMapping(t *testing.T) {
 		fields := structFields[generated]{
 			Params: []InputField[generated]{Param("id", Int64Codec, func(v generated) int64 { called = true; return v.ID })},
 		}
-		columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)})
+		columns := NewColumns(ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)})
 		params, err := generatedParams(fields, targetParams)
 		if err != nil {
 			t.Fatal(err)
@@ -539,8 +539,8 @@ func TestStructMapping(t *testing.T) {
 				Extra   int64
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-				ColumnSpec{Name: "payload", Type: rowTestType(t, TypeBlob)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+				ColumnSpec{Name: "payload", Type: rowTestType(t, KindBlob)},
 			)
 			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[pair](), pair{ID: 3, Payload: []byte("x"), Extra: 9}))
 			dst := pair{Payload: make([]byte, 0, 8), Extra: 1}
@@ -550,14 +550,14 @@ func TestStructMapping(t *testing.T) {
 			}
 			// Every column still needs a field.
 			wider := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-				ColumnSpec{Name: "author", Type: rowTestType(t, TypeBlob)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+				ColumnSpec{Name: "author", Type: rowTestType(t, KindBlob)},
 			)
 			if _, err := MustStreamRowOf[pair]().Compile(wider); err == nil {
 				t.Fatal("unmapped streaming column accepted")
 			}
 			type text struct{ Name string }
-			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamCodec") {
+			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamDecoder") {
 				t.Fatalf("string field: %v", err)
 			}
 			type badTag struct {
@@ -567,25 +567,29 @@ func TestStructMapping(t *testing.T) {
 				t.Fatalf("wrong stream tag: %v", err)
 			}
 		})
-		t.Run("WithStreamCodec", func(t *testing.T) {
-			type hitCount int64 // a type with no built-in streaming decoder
+		t.Run("WithStreamDecoder", func(t *testing.T) {
+			type hitCount int64 // the option replaces the underlying type's decoder
 			type counted struct {
 				ID   int32
 				Hits hitCount
+				Seen []hitCount
 			}
 			columns := NewColumns(
-				ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-				ColumnSpec{Name: "hits", Type: rowTestType(t, TypeBigInt)},
+				ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+				ColumnSpec{Name: "hits", Type: rowTestType(t, KindBigInt)},
+				ColumnSpec{Name: "seen", Type: CodecTestMust(SetType(rowTestType(t, KindBigInt)))},
 			)
 			type source struct {
 				ID   int32
 				Hits int64
+				Seen []int64 `cql:",codec=SetCodec"`
 			}
-			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42}))
-			hits := streamInteger[hitCount](TypeBigInt, 8)
-			var dst counted
-			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamCodec(hits)), data, &dst)
-			if dst != (counted{ID: 1, Hits: 42}) {
+			data := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[source](), source{ID: 1, Hits: 42, Seen: []int64{7}}))
+			hits := streamInteger[hitCount](KindBigInt, 8)
+			dst := counted{Seen: make([]hitCount, 0, 1)}
+			// A []V field takes the column's kind, here a set.
+			streamDecodeRow(t, columns, MustStreamRowOf[counted](WithStreamDecoder(hits)), data, &dst)
+			if dst.ID != 1 || dst.Hits != 42 || len(dst.Seen) != 1 || dst.Seen[0] != 7 {
 				t.Fatalf("custom stream codec: %+v", dst)
 			}
 		})

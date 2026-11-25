@@ -46,7 +46,7 @@ func dirtyResponse(t *testing.T, rows int) *transport.InternalResponsePage {
 		body = append(body, 0, 0, 0, 1, 7)
 	}
 	chain := typedTestChain(t, body)
-	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.TypeBlob))})
+	cols := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: codecTestMust(cql.ScalarType(cql.KindBlob))})
 	return &transport.InternalResponsePage{ResponseData: model.ResponseData{Columns: cols, Rows: chain, RowCount: int32(rows), Owner: wire.NewLease(chain, nil)}}
 }
 
@@ -90,21 +90,21 @@ func TestCustomPlanStillGetsZeroedDestination(t *testing.T) {
 // TestBuiltinPlansManageDestination checks that every built-in row plan
 // clears its own destination, so the session skips its per-row clear.
 func TestBuiltinPlansManageDestination(t *testing.T) {
-	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
-	boolean := codecTestMust(cql.ScalarType(cql.TypeBoolean))
+	blob := codecTestMust(cql.ScalarType(cql.KindBlob))
+	boolean := codecTestMust(cql.ScalarType(cql.KindBoolean))
 	one := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: blob})
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: blob}, cql.ColumnSpec{Name: "b", Type: blob})
 	cas := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "v", Type: blob})
 	type row struct{ V cql.Bytes }
-	field := cql.Column("v", cql.BlobCodec, func(r *row) *cql.Bytes { return &r.V })
-	single := cql.OneColumn(cql.BlobCodec)
+	field := cql.Column("v", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.V })
+	single := cql.OneColumn(cql.BytesCodec)
 	cases := []struct {
 		name string
 		plan func() (bool, error)
 	}{
 		{"single column", func() (bool, error) { return manages(single, one) }},
 		{"mapped", func() (bool, error) {
-			return manages(cql.ConvertRows(single, func(b cql.Bytes) string { return string(b.OwnedBytes()) }, func(s string) string { return s }), one)
+			return manages(cql.ConvertRows(single, func(b cql.Bytes) string { return string(ownedBytesForTest(b)) }, func(s string) string { return s }), one)
 		}},
 		{"row", func() (bool, error) { return manages(cql.Row(field), one) }},
 		{"row into", func() (bool, error) { return manages(cql.RowInto(func(*row) {}, field), one) }},
@@ -134,8 +134,8 @@ func TestBuiltinPlansManageDestination(t *testing.T) {
 // produces the same value as decoding it into a zeroed destination, so no
 // field of the previous row survives the skipped clear.
 func TestBuiltinPlansClearStaleRow(t *testing.T) {
-	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
-	boolean := codecTestMust(cql.ScalarType(cql.TypeBoolean))
+	blob := codecTestMust(cql.ScalarType(cql.KindBlob))
+	boolean := codecTestMust(cql.ScalarType(cql.KindBoolean))
 	one := cql.NewColumns(cql.ColumnSpec{Name: "v", Type: blob})
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: blob}, cql.ColumnSpec{Name: "b", Type: blob})
 	cas := cql.NewColumns(cql.ColumnSpec{Name: "[applied]", Type: boolean}, cql.ColumnSpec{Name: "v", Type: blob})
@@ -143,7 +143,7 @@ func TestBuiltinPlansClearStaleRow(t *testing.T) {
 		V     cql.Nullable[cql.Bytes]
 		Extra int
 	}
-	blobs := cql.NullableCodec(cql.BlobCodec)
+	blobs := cql.NullableCodec(cql.BytesCodec)
 	field := cql.Column("v", blobs, func(r *row) *cql.Nullable[cql.Bytes] { return &r.V })
 	single := cql.OneColumn(blobs)
 	value := []byte{0, 0, 0, 1, 'x'}
@@ -164,7 +164,7 @@ func TestBuiltinPlansClearStaleRow(t *testing.T) {
 	staleNullable := func(v *cql.Nullable[cql.Bytes]) { v.Valid = true }
 	t.Run("single column", func(t *testing.T) { clearsStaleRow(t, single, one, oneRows, staleNullable) })
 	t.Run("mapped", func(t *testing.T) {
-		mapped := cql.ConvertRows(single, func(b cql.Nullable[cql.Bytes]) string { return string(b.Value.OwnedBytes()) }, func(s string) string { return s })
+		mapped := cql.ConvertRows(single, func(b cql.Nullable[cql.Bytes]) string { return string(ownedBytesForTest(b.Value)) }, func(s string) string { return s })
 		clearsStaleRow(t, mapped, one, oneRows, func(s *string) { *s = "stale" })
 	})
 	t.Run("row", func(t *testing.T) { clearsStaleRow(t, cql.Row(field), one, oneRows, stale) })

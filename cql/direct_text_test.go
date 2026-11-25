@@ -20,15 +20,15 @@ type textRow struct {
 var textRows = RowInto(nil,
 	Column("id", Int32Codec, func(r *textRow) *int32 { return &r.ID }),
 	Column("name", TextCodec, func(r *textRow) *Text { return &r.Name }),
-	Column("code", ASCIICodec, func(r *textRow) *Text { return &r.Code }),
+	Column("code", TextCodec, func(r *textRow) *Text { return &r.Code }),
 	Column("other", TextCodec, func(r *textRow) *Text { return &r.Other }),
 )
 
-func textColumns(t testing.TB, other Type) Columns {
+func textColumns(t testing.TB, other Kind) Columns {
 	return NewColumns(
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
-		ColumnSpec{Name: "code", Type: rowTestType(t, TypeASCII)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
+		ColumnSpec{Name: "code", Type: rowTestType(t, KindASCII)},
 		ColumnSpec{Name: "other", Type: rowTestType(t, other)},
 	)
 }
@@ -48,7 +48,7 @@ func textRowString(r textRow) string {
 // Text and ASCII fields compile into direct ops that decode the same views and
 // fail with the same errors as their codec, across fragmented responses.
 func TestDirectTextMatchesCodec(t *testing.T) {
-	for _, other := range []Type{TypeText, TypeVarchar} {
+	for _, other := range []Kind{KindText, Kind(0x000A)} {
 		columns := textColumns(t, other)
 		plan := CodecTestMust(textRows.Compile(columns))
 		want := []directKind{directInt, directText, directText, directText}
@@ -132,8 +132,8 @@ func TestDirectTextMatchesCodec(t *testing.T) {
 // A text field compiled for one kind keeps the codec's own error when the
 // decoded column has another kind.
 func TestDirectTextForeignColumn(t *testing.T) {
-	plan := CodecTestMust(textRows.Compile(textColumns(t, TypeText)))
-	foreign := textColumns(t, TypeInt)
+	plan := CodecTestMust(textRows.Compile(textColumns(t, KindText)))
+	foreign := textColumns(t, KindInt)
 	body := cell(cell(cell(cell(nil, []byte{0, 0, 0, 1}, false), []byte("a"), false), []byte("b"), false), []byte{0, 0, 0, 2}, false)
 	chain, _ := wire.NewChain(wire.Borrow(body))
 	run := func(p CompiledRow[textRow]) (string, int) {

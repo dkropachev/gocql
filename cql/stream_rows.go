@@ -237,7 +237,7 @@ func (p streamOneColumnPlan[T]) DecodeInto(r *StreamRowReader, dst *T) error {
 type streamRecordCodec[R any] struct {
 	decoder StreamRowDecoder[R]
 	options UDTOptions
-	kind    Type
+	kind    Kind
 }
 type streamRecordPlan[R any] struct {
 	typ         DataType
@@ -248,12 +248,12 @@ type streamRecordPlan[R any] struct {
 
 // StreamTuple decodes tuple fields into caller storage with decoder.
 func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
-	return streamRecordCodec[R]{kind: TypeTuple, decoder: decoder}
+	return streamRecordCodec[R]{kind: KindTuple, decoder: decoder}
 }
 
 // StreamUDT decodes UDT fields into caller storage with decoder and explicit matching options.
 func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
-	return streamRecordCodec[R]{kind: TypeUDT, options: options, decoder: decoder}
+	return streamRecordCodec[R]{kind: KindUDT, options: options, decoder: decoder}
 }
 func (c streamRecordCodec[R]) Compile(t DataType) (CompiledStreamValue[R], error) {
 	columns, err := recordColumns(t, c.kind)
@@ -263,7 +263,7 @@ func (c streamRecordCodec[R]) Compile(t DataType) (CompiledStreamValue[R], error
 	if c.decoder == nil {
 		return nil, typeValidation("stream codec", "nil record decoder")
 	}
-	if c.kind == TypeUDT {
+	if c.kind == KindUDT {
 		if err := checkUDTIdentity(t, c.options); err != nil {
 			return nil, err
 		}

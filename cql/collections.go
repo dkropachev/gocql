@@ -22,30 +22,28 @@ type Entry[K, V any] struct {
 	Value V
 }
 
-// ValueIterator walks the members of a collection Value. Next advances and
+// valueIterator walks the members of a collection Value. Next advances and
 // reports whether a member is available, Value returns it, and Err reports
 // the failure that stopped iteration. All does the same as a range loop.
-// Collect reads the remaining members into a slice, detached from the page.
 //
-// The zero ValueIterator is exhausted: Next reports false, and Err nil.
-type ValueIterator[T any] struct {
+// The zero valueIterator is exhausted: Next reports false, and Err nil.
+type valueIterator[T any] struct {
 	value        T
 	err          error
 	next         func(int) (T, error)
 	nextCursor   func(*ValueCursor, int) (T, error)
-	clone        func(T) T
 	cursor       ValueCursor
 	count, index int
 	done         bool
 }
 
-func newValueIterator[T any](count int, next func(int) (T, error), clone func(T) T) *ValueIterator[T] {
-	return &ValueIterator[T]{count: count, next: next, clone: clone}
+func newValueIterator[T any](count int, next func(int) (T, error)) *valueIterator[T] {
+	return &valueIterator[T]{count: count, next: next}
 }
 
 // Next advances to the next member and reports whether there is one. It
 // returns false at the end, after a failure, and for a nil iterator.
-func (i *ValueIterator[T]) Next() bool {
+func (i *valueIterator[T]) Next() bool {
 	if i == nil || i.done {
 		return false
 	}
@@ -81,7 +79,7 @@ func (i *ValueIterator[T]) Next() bool {
 
 // Value returns the member Next advanced to, or the zero T before the first
 // call and after the end. The member may borrow the collection's storage.
-func (i *ValueIterator[T]) Value() T {
+func (i *valueIterator[T]) Value() T {
 	if i == nil {
 		var zero T
 		return zero
@@ -91,34 +89,11 @@ func (i *ValueIterator[T]) Value() T {
 
 // Err returns the failure that stopped iteration, or nil. It returns a
 // ValidationError for a nil iterator.
-func (i *ValueIterator[T]) Err() error {
+func (i *valueIterator[T]) Err() error {
 	if i == nil {
 		return typeValidation("iterator", "nil iterator")
 	}
 	return i.err
-}
-
-// Collect explicitly materializes the iterator's remaining values. It returns
-// no partial slice on failure and recursively detaches every yielded value.
-func (i *ValueIterator[T]) Collect() ([]T, error) {
-	if i == nil {
-		return nil, typeValidation("iterator", "nil iterator")
-	}
-	if i.clone == nil && i.count > i.index {
-		return nil, typeValidation("iterator", "missing ownership-detaching clone")
-	}
-	values := make([]T, 0, max(0, i.count-i.index))
-	for i.Next() {
-		value := i.Value()
-		if i.clone != nil {
-			value = i.clone(value)
-		}
-		values = append(values, value)
-	}
-	if err := i.Err(); err != nil {
-		return nil, err
-	}
-	return values, nil
 }
 
 // All returns an iterator over the remaining members, for use with range.
@@ -126,7 +101,7 @@ func (i *ValueIterator[T]) Collect() ([]T, error) {
 // last pair holding the zero T and the error, which Err then also returns.
 // A nil iterator yields only Err's ValidationError. The members may borrow
 // the collection's storage, as Value's do.
-func (i *ValueIterator[T]) All() iter.Seq2[T, error] {
+func (i *valueIterator[T]) All() iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		for i.Next() {
 			if !yield(i.Value(), nil) {
@@ -143,34 +118,56 @@ func (i *ValueIterator[T]) All() iter.Seq2[T, error] {
 type sequenceEncoder[T any] struct {
 	element Encoder[T]
 	typ     DataType
-	kind    Type
+	kind    Kind
 	width   int64
 }
 
 // ListEncoder encodes a slice as a CQL list using element.
 func ListEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeList, element: element}
+	return sequenceEncoder[T]{kind: KindList, element: element}
 }
 
 // SetEncoder encodes a slice as a CQL set using element.
 func SetEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeSet, element: element}
+	return sequenceEncoder[T]{kind: KindSet, element: element}
 }
 
 // VectorEncoder encodes a vector of the declared dimension using element.
 func VectorEncoder[T any](element Encoder[T]) Encoder[[]T] {
-	return sequenceEncoder[T]{kind: TypeVector, element: element}
+	return sequenceEncoder[T]{kind: KindVector, element: element}
 }
 
-func sequenceElement(typ DataType, kind Type) (DataType, int64, error) {
+// anySequence is the kind of a sequence codec that takes the kind of the
+// type it compiles for: a list, a set or a vector.
+const anySequence = KindCustom
+
+// resolveSequenceKind returns the kind a sequence codec of kind uses for typ.
+func resolveSequenceKind(typ DataType, kind Kind) Kind {
+	if kind != anySequence {
+		return kind
+	}
+	switch k := typ.Kind(); k {
+	case KindList, KindSet, KindVector:
+		return k
+	}
+	return anySequence
+}
+
+func sequenceElement(typ DataType, kind Kind) (DataType, int64, error) {
 	if err := validateDataType(typ); err != nil {
 		return DataType{}, 0, err
 	}
 	element, ok := typ.Element()
+	if kind == anySequence {
+		if !ok || resolveSequenceKind(typ, kind) == anySequence {
+			return DataType{}, 0, typeValidation("type", "expected list, set or vector, got %s", typ)
+		}
+		kind = typ.Kind()
+	}
 	if !ok || typ.Kind() != kind {
 		return DataType{}, 0, typeValidation("type", "expected %s, got %s", kind, typ)
 	}
-	if kind != TypeVector {
+	if kind != KindVector {
 		return element, 0, nil
 	}
 	dimension, vector := typ.Dimension()
@@ -198,7 +195,7 @@ func (c sequenceEncoder[T]) compileValueEncoder(typ DataType) (Encoder[[]T], err
 	if err != nil {
 		return nil, fmt.Errorf("gocql: element type: %w", err)
 	}
-	c.typ, c.element, c.width = typ, encoder, width
+	c.typ, c.element, c.width, c.kind = typ, encoder, width, typ.Kind()
 	return c, nil
 }
 func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
@@ -213,7 +210,7 @@ func (c sequenceEncoder[T]) Encode(w *ValueWriter, values []T) error {
 		return typeValidation("type", "sequence metadata changed after compilation")
 	}
 	element, _ := c.typ.Element()
-	if c.kind == TypeVector {
+	if c.kind == KindVector {
 		dimension, _ := c.typ.Dimension()
 		if len(values) != int(dimension) {
 			return typeValidation("dimension", "vector requires %d elements, got %d", dimension, len(values))
@@ -254,26 +251,26 @@ type sequenceDecoder[T any] struct {
 	element     Decoder[T]
 	elementInto valueIntoDecoder[T] // resolved by compileValueDecoder
 	typ         DataType
-	kind        Type
+	kind        Kind
 	width       int64
 }
 
 // ListDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func ListDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeList, element: element}
+	return sequenceDecoder[T]{kind: KindList, element: element}
 }
 
 // SetDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func SetDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeSet, element: element}
+	return sequenceDecoder[T]{kind: KindSet, element: element}
 }
 
 // VectorDecoder eagerly decodes every element into a []T. Elements may borrow
 // page storage; Clone recursively detaches them.
 func VectorDecoder[T any](element Decoder[T]) Decoder[[]T] {
-	return sequenceDecoder[T]{kind: TypeVector, element: element}
+	return sequenceDecoder[T]{kind: KindVector, element: element}
 }
 func (c sequenceDecoder[T]) CheckType(typ DataType) error {
 	perfCheckType()
@@ -290,7 +287,7 @@ func (c sequenceDecoder[T]) compileValueDecoder(typ DataType) (Decoder[[]T], err
 	if err != nil {
 		return nil, fmt.Errorf("gocql: element type: %w", err)
 	}
-	c.typ, c.element, c.width = typ, decoder, width
+	c.typ, c.element, c.width, c.kind = typ, decoder, width, typ.Kind()
 	c.elementInto, _ = decoder.(valueIntoDecoder[T])
 	return c, nil
 }
@@ -429,19 +426,19 @@ func checkedCollectionChild(cursor *ValueCursor, typ DataType) error {
 	}
 	return nil
 }
-func validateSequenceBody(r ValueReader, kind Type) (Bytes, int, int64, error) {
+func validateSequenceBody(r ValueReader, kind Kind) (Bytes, int, int64, error) {
 	element, width, err := sequenceElement(r.Type(), kind)
 	if err != nil {
 		return Bytes{}, 0, 0, err
 	}
-	return validateSequenceLayout(r, kind, element, width)
+	return validateSequenceLayout(r, r.Type().Kind(), element, width)
 }
-func validateSequenceLayout(r ValueReader, kind Type, element DataType, width int64) (Bytes, int, int64, error) {
+func validateSequenceLayout(r ValueReader, kind Kind, element DataType, width int64) (Bytes, int, int64, error) {
 	if err := requirePresent(r); err != nil {
 		return Bytes{}, 0, 0, err
 	}
 	cursor := r.cursorValue()
-	if kind == TypeVector {
+	if kind == KindVector {
 		dimension, _ := r.Type().Dimension()
 		count := int(dimension)
 		if width > 0 {
@@ -519,15 +516,15 @@ func vectorFixedWidth(typ DataType) (int64, error) {
 		return 0, err
 	}
 	switch typ.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		return 1, nil
-	case TypeInt, TypeFloat:
+	case KindInt, KindFloat:
 		return 4, nil
-	case TypeBigInt, TypeDouble, TypeTimestamp:
+	case KindBigInt, KindDouble, KindTimestamp:
 		return 8, nil
-	case TypeUUID, TypeTimeUUID:
+	case KindUUID, KindTimeUUID:
 		return 16, nil
-	case TypeVector:
+	case KindVector:
 		dimension, ok := typ.Dimension()
 		if !ok || dimension == 0 {
 			return 0, typeValidation("dimension", "vector dimension must be positive")

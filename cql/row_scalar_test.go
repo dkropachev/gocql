@@ -25,7 +25,7 @@ func rowScalarFrame(prefix int32, body []byte) []byte {
 	return append(binary.BigEndian.AppendUint32(nil, uint32(prefix)), body...)
 }
 
-func checkRowScalarEquivalent[T any](t *testing.T, kind Type, decoder Decoder[T], input []byte, missing, expired bool) {
+func checkRowScalarEquivalent[T any](t *testing.T, kind Kind, decoder Decoder[T], input []byte, missing, expired bool) {
 	t.Helper()
 	for _, fragment := range []int{1, 3, 1024} {
 		t.Run(fmt.Sprint(fragment), func(t *testing.T) {

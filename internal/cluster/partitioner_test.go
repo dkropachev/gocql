@@ -52,7 +52,7 @@ func TestPartitioner(t *testing.T) {
 
 			// at least verify that the partitioner
 			// doesn't return nil
-			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
+			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.KindInt), 1)
 			token = InternalMurmur3Partitioner{}.Hash(pk)
 			if token == nil {
 				t.Fatal("token was nil")
@@ -125,7 +125,7 @@ func TestPartitioner(t *testing.T) {
 		// at least verify that the partitioner
 		// doesn't return nil
 		p := InternalOrderedPartitioner{}
-		pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
+		pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.KindInt), 1)
 		token := p.Hash(pk)
 		if token == nil {
 			t.Fatal("token was nil")
@@ -152,7 +152,7 @@ func TestPartitioner(t *testing.T) {
 			// at least verify that the partitioner
 			// doesn't return nil
 			p := InternalRandomPartitioner{}
-			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.TypeInt), 1)
+			pk, _ := encodeFixtureCell(cqltype.NewNativeType(4, cql.KindInt), 1)
 			token := p.Hash(pk)
 			if token == nil {
 				t.Fatal("token was nil")

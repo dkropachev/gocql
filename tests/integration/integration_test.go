@@ -51,7 +51,7 @@ func assertV2CustomPayload(t testing.TB, want, got []cql.PayloadEntry) {
 				t.Fatalf("duplicate custom-payload key %q", entry.Key)
 			}
 			if entry.Value.Valid {
-				result[entry.Key] = entry.Value.Value.OwnedBytes()
+				result[entry.Key] = ownedBytesForTest(entry.Value.Value)
 			} else {
 				result[entry.Key] = nil
 			}

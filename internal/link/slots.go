@@ -30,6 +30,10 @@ var (
 	ParamCellType = NewSlot("cql.paramCellType")
 	// SetParamOwnership holds func(*cql.ParamWriter, bool).
 	SetParamOwnership = NewSlot("cql.setParamOwnership")
+	// EncodeDynamicBorrowed holds func(cql.DataType, cql.Value)
+	// (cql.EncodedValue, error), which encodes with cql.DynamicCodec without
+	// copying borrowed payloads.
+	EncodeDynamicBorrowed = NewSlot("cql.encodeDynamicBorrowed")
 	// ReadValue holds func(*wire.Cursor, cql.DataType, *wire.Lease, bool) (cql.ValueReader, error).
 	ReadValue = NewSlot("cql.readValue")
 	// NewValueReader holds func(cql.DataType, cql.CellState, wire.Chain, *wire.Lease) cql.ValueReader.

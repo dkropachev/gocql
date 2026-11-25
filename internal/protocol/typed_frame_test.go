@@ -199,7 +199,7 @@ func TestTypedFrame(t *testing.T) {
 				}
 				return page.Columns, err
 			}
-			original := reuseMetadataBody("value", uint16(cql.TypeBlob))
+			original := reuseMetadataBody("value", uint16(cql.KindBlob))
 			first, err := parse(original)
 			if err != nil {
 				t.Fatal(err)
@@ -211,7 +211,7 @@ func TestTypedFrame(t *testing.T) {
 			if &cqltype.ColumnSlice(first)[0] != &cqltype.ColumnSlice(second)[0] {
 				t.Fatal("matching validated metadata was reallocated")
 			}
-			changed, err := parse(reuseMetadataBody("other", uint16(cql.TypeInt)))
+			changed, err := parse(reuseMetadataBody("other", uint16(cql.KindInt)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -241,7 +241,7 @@ func TestTypedFrame(t *testing.T) {
 				}
 				return page.Columns
 			}
-			body := reuseMetadataBody("value", uint16(cql.TypeBlob))
+			body := reuseMetadataBody("value", uint16(cql.KindBlob))
 			parsed := parse(body, cql.Columns{})
 			blob := cql.BlobType
 			expect := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "table", Name: "value", Type: blob})
@@ -264,7 +264,7 @@ func TestTypedFrame(t *testing.T) {
 				t.Fatal("unequal expected columns were returned")
 			}
 			// Changed metadata forgets the expected columns it matched before.
-			changed := parse(reuseMetadataBody("other", uint16(cql.TypeInt)), expect)
+			changed := parse(reuseMetadataBody("other", uint16(cql.KindInt)), expect)
 			if changed.Equal(expect) {
 				t.Fatal("changed metadata returned the expected columns")
 			}
@@ -407,7 +407,7 @@ func TestTypedFrame(t *testing.T) {
 			e.Str("ks", false)
 			e.Str("tbl", false)
 			e.Str("v", false)
-			e.U16(uint16(cql.TypeInt))
+			e.U16(uint16(cql.KindInt))
 			e.U32(1)
 			e.U32(4)
 			e.U32(19)

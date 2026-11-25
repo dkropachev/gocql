@@ -58,8 +58,8 @@ type ruleDeep struct {
 // TestStructMappingRules pins how ParamsOf and RowOf match struct fields to
 // columns, next to the explicit Params and Row they are equivalent to.
 func TestStructMappingRules(t *testing.T) {
-	integer := ruleType(t, cql.TypeInt)
-	text := ruleType(t, cql.TypeText)
+	integer := ruleType(t, cql.KindInt)
+	text := ruleType(t, cql.KindText)
 	cols := func(names ...string) cql.Columns {
 		specs := make([]cql.ColumnSpec, len(names))
 		for i, name := range names {
@@ -94,13 +94,14 @@ func TestStructMappingRules(t *testing.T) {
 	})
 	t.Run("EmbeddedNonStruct", func(t *testing.T) {
 		columns := cql.NewColumns(cql.ColumnSpec{Name: "rule_text", Type: text})
-		// A named type has no built-in codec, whatever its underlying type.
-		if _, err := cql.RowOf[ruleEmbeddedNonStruct](); err == nil || !strings.Contains(err.Error(), "no codec for type cql_test.RuleText") {
-			t.Fatalf("named type: %v", err)
-		}
-		opt := cql.WithCodec(cql.NamedScalar(cql.StringCodec,
-			func(v RuleText) string { return string(v) }, func(v string) RuleText { return RuleText(v) }))
+		// A named type maps like its underlying type, and a WithCodec
+		// option for it takes precedence.
 		value := ruleEmbeddedNonStruct{ruleName: "hidden", RuleText: "shown"}
+		if row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](), value)); row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
+			t.Fatalf("named type: %+v", row)
+		}
+		opt := cql.WithCodec(cql.ConvertCodec(cql.StringCodec,
+			func(v RuleText) string { return string(v) }, func(v string) RuleText { return RuleText(v) }))
 		row := ruleDecode(t, columns, cql.MustRowOf[ruleEmbeddedNonStruct](opt), ruleEncode(t, columns, cql.MustParamsOf[ruleEmbeddedNonStruct](opt), value))
 		if row != (ruleEmbeddedNonStruct{RuleText: "shown"}) {
 			t.Fatalf("got %+v", row)
@@ -233,7 +234,7 @@ func TestStructMappingRules(t *testing.T) {
 	})
 }
 
-func ruleType(t *testing.T, kind cql.Type) cql.DataType {
+func ruleType(t *testing.T, kind cql.Kind) cql.DataType {
 	t.Helper()
 	typ, err := cql.ScalarType(kind)
 	if err != nil {

@@ -37,9 +37,9 @@ func TestRoutingPolicy(t *testing.T) {
 			peripheral.InternalMu.Unlock()
 			config.Partitioners = map[string]routing2.TokenPartitioner{"old": old, "new": newer}
 			s.ConfigureV2Peripheral(config)
-			typ := codecTestMust(cql.ScalarType(cql.TypeBlob))
+			typ := codecTestMust(cql.ScalarType(cql.KindBlob))
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "key", Type: typ, Keyspace: "ks", Table: "table"})
-			encoder := cql.OneParam(cql.BlobCodec)
+			encoder := cql.OneParam(cql.BytesCodec)
 			params := codecTestMust(encoder.Compile(columns))
 			state := &InternalPreparedState{InternalSession: s, InternalProtocol: 4, InternalParameters: columns, partitioner: "old", InternalInfo: PreparedInfo{Keyspace: "ks", Table: "table", PartitionKeyIndexes: []int{0}}}
 			prepared := func() *Prepared[cql.Bytes,

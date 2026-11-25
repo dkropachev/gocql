@@ -26,12 +26,12 @@ func TestUnpreparedCalls(t *testing.T) {
 	t.Run("EachAndErrorsReleaseQueries", func(t *testing.T) {
 		core := loopbackTestSession(t, "pone")
 		s := InternalWrapSession(core)
-		statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BlobCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
+		statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BytesCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
 		sentinel := errors.New("stop consumer")
 		for _, callbackError := range []error{nil, sentinel} {
 			var dst cql.Bytes
 			result, err := s.UnpreparedEach(context.Background(), statement, int32(1), &dst, func(row *cql.Bytes) error {
-				if string(row.OwnedBytes()) != loopbackValue {
+				if string(ownedBytesForTest(*row)) != loopbackValue {
 					t.Error("bad borrowed value during callback")
 				}
 				return callbackError

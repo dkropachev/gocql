@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func FoundationScalar(t *testing.T, kind Type) DataType {
+func FoundationScalar(t *testing.T, kind Kind) DataType {
 	t.Helper()
 	d, err := ScalarType(kind)
 	if err != nil {

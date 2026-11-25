@@ -848,7 +848,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("table")
 			// <col_spec_0>
 			respFrame.WriteString("col0")                 // <name>
-			respFrame.WriteShort(uint16(cql.TypeBoolean)) // <type>
+			respFrame.WriteShort(uint16(cql.KindBoolean)) // <type>
 		case "batchmetadata":
 			respFrame.WriteHeader(0, frm.OpResult, head.Stream)
 			respFrame.WriteInt(frm.ResultKindPrepared)
@@ -865,12 +865,12 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("ks1")
 			respFrame.WriteString("tbl1")
 			respFrame.WriteString("col1")
-			respFrame.WriteShort(uint16(cql.TypeInt))
+			respFrame.WriteShort(uint16(cql.KindInt))
 			// <col_spec_1>
 			respFrame.WriteString("ks2")
 			respFrame.WriteString("tbl2")
 			respFrame.WriteString("col2")
-			respFrame.WriteShort(uint16(cql.TypeInt))
+			respFrame.WriteShort(uint16(cql.KindInt))
 			// <result_metadata>
 			respFrame.WriteInt(int32(frm.FlagNoMetaData))
 			respFrame.WriteInt(0)
@@ -897,7 +897,7 @@ func (srv *TestServer) process(conn net.Conn, reqFrame *implProtocol.Framer, ext
 			respFrame.WriteString("table")
 			// <col_spec_0>
 			respFrame.WriteString("col0")                 // <name>
-			respFrame.WriteShort(uint16(cql.TypeBoolean)) // <type>
+			respFrame.WriteShort(uint16(cql.KindBoolean)) // <type>
 		default:
 			respFrame.WriteHeader(0, frm.OpError, head.Stream)
 			respFrame.WriteInt(0)

@@ -164,11 +164,11 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								typ, err := cql.ScalarType(cql.Type(tc.CQLType))
+								typ, err := cql.ScalarType(cql.Kind(tc.CQLType))
 								if err != nil {
 									t.Fatal(err)
 								}
-								value, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								value, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -177,7 +177,7 @@ func TestTypes(t *testing.T) {
 									if owned {
 										encoded, err = cql.EncodeValue(typ, cql.DynamicCodec, value)
 									} else {
-										encoded, err = cql.EncodeValueBorrowed(typ, cql.DynamicCodec, value)
+										encoded, err = cql.EncodeValue(typ, cql.DynamicCodec, value)
 									}
 									if (err != nil) != lc.ErrInsert {
 										t.Fatalf("encode error: %v (expected error %t)", err, lc.ErrInsert)
@@ -185,8 +185,8 @@ func TestTypes(t *testing.T) {
 									if err != nil {
 										continue
 									}
-									if !bytes.Equal(vc.Data, encoded.Bytes().OwnedBytes()) {
-										t.Fatalf("binary fixture: expected %x, got %x", vc.Data, encoded.Bytes().OwnedBytes())
+									if !bytes.Equal(vc.Data, ownedBytesForTest(encoded.Bytes())) {
+										t.Fatalf("binary fixture: expected %x, got %x", vc.Data, ownedBytesForTest(encoded.Bytes()))
 									}
 									if (vc.Data == nil) != (encoded.State() == cql.Null) {
 										t.Fatalf("null/present distinction lost: %s", vc.Name)
@@ -204,7 +204,7 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								typ, err := cql.ScalarType(cql.Type(tc.CQLType))
+								typ, err := cql.ScalarType(cql.Kind(tc.CQLType))
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -212,7 +212,7 @@ func TestTypes(t *testing.T) {
 								if vc.Data == nil {
 									state = cql.Null
 								}
-								encoded, err := cql.NewEncodedValue(typ, state, cql.BorrowBytes(vc.Data))
+								encoded, err := cql.NewEncodedValue(typ, state, vc.Data)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -223,7 +223,7 @@ func TestTypes(t *testing.T) {
 								if err != nil {
 									return
 								}
-								expected, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								expected, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -247,7 +247,7 @@ func TestTypes(t *testing.T) {
 					for _, vc := range tc.Cases {
 						for _, lc := range vc.LangCases {
 							t.Run(vc.Name+"/"+lc.LangType, func(t *testing.T) {
-								input, err := serializationFixtureValue(cql.Type(tc.CQLType), lc.Value)
+								input, err := serializationFixtureValue(cql.Kind(tc.CQLType), lc.Value)
 								if err != nil {
 									t.Fatal(err)
 								}
@@ -266,8 +266,8 @@ func TestTypes(t *testing.T) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								if !bytes.Equal(vc.Data, raw.Bytes().OwnedBytes()) {
-									t.Fatalf("database binary fixture: expected %x, got %x", vc.Data, raw.Bytes().OwnedBytes())
+								if !bytes.Equal(vc.Data, ownedBytesForTest(raw.Bytes())) {
+									t.Fatalf("database binary fixture: expected %x, got %x", vc.Data, ownedBytesForTest(raw.Bytes()))
 								}
 								if (vc.Data == nil) != (raw.State() == cql.Null) {
 									t.Fatal("database null/present distinction lost")

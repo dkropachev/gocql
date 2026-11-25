@@ -270,7 +270,7 @@ func TestPreparedStream(t *testing.T) {
 		// An incompatible actual type is rejected before any destination access.
 		invalid := runtimeRowsBody(nil, "1234")
 		typeAt := bytes.Index(invalid, []byte("value")) + len("value")
-		binary.BigEndian.PutUint16(invalid[typeAt:], uint16(cql.TypeInt))
+		binary.BigEndian.PutUint16(invalid[typeAt:], uint16(cql.KindInt))
 		go func() { r := <-requests; _, _ = peers[0].Write(typedTestResponse(t, 4, r.stream, invalid)) }()
 		dst = append(dst[:0], "untouched"...)
 		if rows, err := q.Run(ctx, 1); err == nil || rows != nil {

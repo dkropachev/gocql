@@ -31,7 +31,7 @@ func TestPageStateMirror(t *testing.T) {
 		t.Fatalf("CompletePageState = %+v", p)
 	}
 	b := cql.BorrowBytes([]byte("abc"))
-	if v := BytesView(BytesChain(b), BytesLease(b)); string(v.OwnedBytes()) != "abc" {
-		t.Fatalf("BytesView(BytesChain(b)) = %q", v.OwnedBytes())
+	if v := BytesView(BytesChain(b), BytesLease(b)); string(ownedBytesForTest(v)) != "abc" {
+		t.Fatalf("BytesView(BytesChain(b)) = %q", ownedBytesForTest(v))
 	}
 }

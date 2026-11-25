@@ -21,7 +21,7 @@ func asVectorType(t TypeInfo, depth int) (VectorType, bool) {
 		return v, true
 	}
 	n, ok := t.(NativeType)
-	if !ok || n.Type() != cql.TypeCustom {
+	if !ok || n.Type() != cql.KindCustom {
 		return VectorType{}, false
 	}
 	const vectorTypePrefix = ApacheCassandraTypePrefix + "VectorType"
@@ -52,7 +52,7 @@ func asVectorType(t TypeInfo, depth int) (VectorType, bool) {
 		}
 	}
 	return VectorType{
-		NativeType: NewCustomType(n.Version(), cql.TypeCustom, vectorTypePrefix),
+		NativeType: NewCustomType(n.Version(), cql.KindCustom, vectorTypePrefix),
 		SubType:    subType,
 		Dimensions: dim,
 	}, true
@@ -85,27 +85,27 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 	const prefix = ApacheCassandraTypePrefix
 	if remaining < 0 {
 		logger.Warn("unparsable type definition", "detail", "type nesting exceeds the depth limit")
-		return NewCustomType(protoVer, cql.TypeCustom, name)
+		return NewCustomType(protoVer, cql.KindCustom, name)
 	}
 	depth := remaining - 1
 	if strings.HasPrefix(name, prefix+"SetType") {
 		return CollectionType{
-			NativeType: NewNativeType(protoVer, cql.TypeSet),
+			NativeType: NewNativeType(protoVer, cql.KindSet),
 			Elem:       getCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"SetType", '('), protoVer, logger, depth),
 		}
 	} else if strings.HasPrefix(name, prefix+"ListType") {
 		return CollectionType{
-			NativeType: NewNativeType(protoVer, cql.TypeList),
+			NativeType: NewNativeType(protoVer, cql.KindList),
 			Elem:       getCassandraLongType(UnwrapCompositeTypeDefinition(name, prefix+"ListType", '('), protoVer, logger, depth),
 		}
 	} else if strings.HasPrefix(name, prefix+"MapType") {
 		names := SplitJavaCompositeTypes(name, prefix+"MapType")
 		if len(names) != 2 {
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("map type, it has %d subelements, expecting 2", len(names)))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		return CollectionType{
-			NativeType: NewNativeType(protoVer, cql.TypeMap),
+			NativeType: NewNativeType(protoVer, cql.KindMap),
 			Key:        getCassandraLongType(names[0], protoVer, logger, depth),
 			Elem:       getCassandraLongType(names[1], protoVer, logger, depth),
 		}
@@ -118,7 +118,7 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 		}
 
 		return TupleTypeInfo{
-			NativeType: NewNativeType(protoVer, cql.TypeTuple),
+			NativeType: NewNativeType(protoVer, cql.KindTuple),
 			Elems:      types,
 		}
 	} else if strings.HasPrefix(name, prefix+"UserType") {
@@ -126,7 +126,7 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 		// Without keyspace and type name, make() below gets a negative length.
 		if len(names) < 2 {
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("udt type, it has %d subelements, expecting at least 2", len(names)))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		fields := make([]UDTField, len(names)-2)
 
@@ -134,7 +134,7 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 			spec := strings.Split(names[i], ":")
 			if len(spec) < 2 {
 				logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("udt field %q, expecting <name>:<type>", names[i]))
-				return NewCustomType(protoVer, cql.TypeCustom, name)
+				return NewCustomType(protoVer, cql.KindCustom, name)
 			}
 			fieldName, _ := hex.DecodeString(spec[0])
 			fields[i-2] = UDTField{
@@ -145,7 +145,7 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 
 		udtName, _ := hex.DecodeString(names[1])
 		return UDTTypeInfo{
-			NativeType: NewNativeType(protoVer, cql.TypeUDT),
+			NativeType: NewNativeType(protoVer, cql.KindUDT),
 			KeySpace:   names[0],
 			Name:       string(udtName),
 			Elements:   fields,
@@ -155,7 +155,7 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 		// Without the element type and the dimensions, indexing names below panics.
 		if len(names) != 2 {
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector type, it has %d subelements, expecting 2", len(names)))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		// A nested vector arrives here, not readVectorTypeInfo, which validates only
 		// the outer spec, so both of its guards are repeated below.
@@ -164,23 +164,23 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 			// Without this the element resolves to a custom type with no name at all,
 			// while the other two parsers of this grammar both reject it.
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector type %q: missing element type", name))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		subType := getCassandraLongType(elem, protoVer, logger, depth)
 		// A negative dimension reaches unmarshalVector's MakeSlice.
 		dim, err := strconv.Atoi(strings.TrimSpace(names[1]))
 		if err != nil {
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector dimensions %q: %v", names[1], err))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		if dim < 1 {
 			// Separate arm: err is nil here, so %v would log "<nil>".
 			logger.Warn("unparsable type definition", "type", name, "detail", fmt.Sprintf("vector dimensions %q: expecting a positive value", names[1]))
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 
 		return VectorType{
-			NativeType: NewCustomType(protoVer, cql.TypeCustom, prefix+"VectorType"),
+			NativeType: NewCustomType(protoVer, cql.KindCustom, prefix+"VectorType"),
 			SubType:    subType,
 			Dimensions: dim,
 		}
@@ -190,9 +190,9 @@ func getCassandraLongType(name string, protoVer byte, logger *slog.Logger, remai
 	} else {
 		// basic type
 		typ := GetApacheCassandraType(name)
-		if typ == cql.TypeCustom {
+		if typ == cql.KindCustom {
 			// Keep the name so an error can say what the server sent, not "custom()".
-			return NewCustomType(protoVer, cql.TypeCustom, name)
+			return NewCustomType(protoVer, cql.KindCustom, name)
 		}
 		return NativeType{
 			proto: protoVer,
@@ -243,60 +243,60 @@ func SplitCompositeTypes(name string, typeName string, typeOpen int32, typeClose
 	return parts
 }
 
-func GetApacheCassandraType(class string) cql.Type {
+func GetApacheCassandraType(class string) cql.Kind {
 	switch strings.TrimPrefix(class, ApacheCassandraTypePrefix) {
 	case "AsciiType":
-		return cql.TypeASCII
+		return cql.KindASCII
 	case "LongType":
-		return cql.TypeBigInt
+		return cql.KindBigInt
 	case "BytesType":
-		return cql.TypeBlob
+		return cql.KindBlob
 	case "BooleanType":
-		return cql.TypeBoolean
+		return cql.KindBoolean
 	case "CounterColumnType":
-		return cql.TypeCounter
+		return cql.KindCounter
 	case "DecimalType":
-		return cql.TypeDecimal
+		return cql.KindDecimal
 	case "DoubleType":
-		return cql.TypeDouble
+		return cql.KindDouble
 	case "FloatType":
-		return cql.TypeFloat
+		return cql.KindFloat
 	case "Int32Type":
-		return cql.TypeInt
+		return cql.KindInt
 	case "ShortType":
-		return cql.TypeSmallInt
+		return cql.KindSmallInt
 	case "ByteType":
-		return cql.TypeTinyInt
+		return cql.KindTinyInt
 	case "TimeType":
-		return cql.TypeTime
+		return cql.KindTime
 	case "DateType", "TimestampType":
-		return cql.TypeTimestamp
+		return cql.KindTimestamp
 	case "UUIDType", "LexicalUUIDType":
-		return cql.TypeUUID
+		return cql.KindUUID
 	case "UTF8Type":
-		return cql.TypeVarchar
+		return cql.KindText
 	case "IntegerType":
-		return cql.TypeVarint
+		return cql.KindVarint
 	case "TimeUUIDType":
-		return cql.TypeTimeUUID
+		return cql.KindTimeUUID
 	case "InetAddressType":
-		return cql.TypeInet
+		return cql.KindInet
 	case "MapType":
-		return cql.TypeMap
+		return cql.KindMap
 	case "ListType":
-		return cql.TypeList
+		return cql.KindList
 	case "SetType":
-		return cql.TypeSet
+		return cql.KindSet
 	case "TupleType":
-		return cql.TypeTuple
+		return cql.KindTuple
 	case "DurationType":
-		return cql.TypeDuration
+		return cql.KindDuration
 	case "SimpleDateType":
-		return cql.TypeDate
+		return cql.KindDate
 	case "UserType":
-		return cql.TypeUDT
+		return cql.KindUDT
 	default:
-		return cql.TypeCustom
+		return cql.KindCustom
 	}
 }
 

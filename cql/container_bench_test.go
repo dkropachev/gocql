@@ -20,7 +20,7 @@ func BenchmarkContainer(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {
 				if kind == "map" {
 					typ := CodecTestMust(MapType(integer, integer))
-					encoded := CodecTestMust(EncodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), make([]Entry[int32, int32], n)))
+					encoded := CodecTestMust(encodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), make([]Entry[int32, int32], n)))
 					dec := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
 					reader := valueReaderFromLease(typ, Present, bytesChain(encoded.body), nil)
 					b.ReportAllocs()
@@ -54,13 +54,13 @@ func BenchmarkContainer(b *testing.B) {
 					opts := UDTOptions{Keyspace: "ks", Name: "r"}
 					enc, dec = ListEncoder(UDTEncoder(OneParam(Int32Codec), opts)), ListDecoder(UDTDecoder(OneColumn(Int32Codec), opts))
 				}
-				encoded := CodecTestMust(EncodeValueBorrowed(typ, enc, make([]int32, n)))
+				encoded := CodecTestMust(encodeValueBorrowed(typ, enc, make([]int32, n)))
 				compiled := CodecTestMust(compileValueDecoder(dec, typ))
 				for _, segmented := range []bool{false, true} {
 					b.Run(fmt.Sprintf("segmented=%t", segmented), func(b *testing.B) {
 						chain := bytesChain(encoded.body)
 						if segmented {
-							data := encoded.Bytes().OwnedBytes()
+							data := encoded.Bytes().ownedBytes()
 							spans := make([]wire.Span, len(data))
 							for i := range data {
 								spans[i] = wire.Borrow(data[i : i+1])

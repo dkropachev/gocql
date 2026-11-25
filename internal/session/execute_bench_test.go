@@ -32,7 +32,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func scalarReader(t testing.TB, kind cql.Type, state cql.CellState, chunks ...[]byte) cql.ValueReader {
+func scalarReader(t testing.TB, kind cql.Kind, state cql.CellState, chunks ...[]byte) cql.ValueReader {
 	t.Helper()
 	spans := make([]wire.Span, len(chunks))
 	for i, b := range chunks {

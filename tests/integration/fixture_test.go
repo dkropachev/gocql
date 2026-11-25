@@ -112,7 +112,7 @@ func TestFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(got.OwnedBytes(), payload) {
+		if !bytes.Equal(ownedBytesForTest(got), payload) {
 			t.Fatal("single-row helper did not retain an owned payload")
 		}
 		if _, err := v2ReadOne(ctx, session, "SELECT payload FROM "+table+" WHERE bucket = ?", cql.IntValue(2)); !errors.Is(err, errNoRows) {

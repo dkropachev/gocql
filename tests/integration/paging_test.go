@@ -217,7 +217,7 @@ func TestPaging(t *testing.T) {
 			cassandraWrite(t, session, "INSERT INTO "+table+"(id,val,payload) VALUES(?,?,?)", cql.IntValue(1), cql.IntValue(i), cql.BlobValue(payload))
 		}
 		var calls atomic.Int32
-		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32Codec, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BlobCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
+		decoder := liveDecoder{calls: &calls, base: cql.Row(cql.Column("val", cql.Int32Codec, func(r *liveDestination) *int32 { return &r.Value }), cql.Column("payload", cql.BytesCodec, func(r *liveDestination) *cql.Bytes { return &r.Payload }))}
 		prepared := codecTestMust(session.Prepare(ctx, cql.Statement[int32, liveDestination]{CQL: "SELECT val,payload FROM " + table + " WHERE id=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
 		churn := make(chan error, 1)
 		go func() {
@@ -240,7 +240,7 @@ func TestPaging(t *testing.T) {
 		var first cql.Bytes
 		count := 0
 		for rows.NextInto(&dst) {
-			if dst.Value != int32(count) || !bytes.Equal(dst.Payload.OwnedBytes(), payload) {
+			if dst.Value != int32(count) || !bytes.Equal(ownedBytesForTest(dst.Payload), payload) {
 				t.Fatal("row mismatch", count, dst.Value)
 			}
 			if count == 0 {
@@ -265,7 +265,7 @@ func TestPaging(t *testing.T) {
 		if err := <-churn; err != nil {
 			t.Fatal(err)
 		}
-		if !bytes.Equal(first.OwnedBytes(), payload) {
+		if !bytes.Equal(ownedBytesForTest(first), payload) {
 			t.Fatal("retained output lost during DDL")
 		}
 	})

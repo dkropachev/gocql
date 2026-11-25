@@ -345,7 +345,7 @@ func InternalQueryV2SchemaRows[R any](ctx context.Context, s Source, stmt string
 	if !settings.Available {
 		return nil, InternalErrNoControl
 	}
-	typ := cql.VarcharType
+	typ := cql.TextType
 	columns := make([]cql.ColumnSpec, len(args))
 	for i := range columns {
 		columns[i] = cql.ColumnSpec{Type: typ}

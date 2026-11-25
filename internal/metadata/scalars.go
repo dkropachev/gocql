@@ -13,19 +13,10 @@ import (
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeASCII {
-		return cql.ASCIICodec.CheckType(t)
-	}
 	return cql.TextCodec.CheckType(t)
 }
 func (InternalV2MetadataText) Decode(r cql.ValueReader) (string, error) {
-	var text cql.Text
-	var err error
-	if r.Type().Kind() == cql.TypeASCII {
-		text, err = cql.ASCIICodec.Decode(r)
-	} else {
-		text, err = cql.TextCodec.Decode(r)
-	}
+	text, err := cql.TextCodec.Decode(r)
 	if err != nil {
 		return "", err
 	}
@@ -91,14 +82,14 @@ func columnOrderFromSchema(order string) metadata.ColumnOrder {
 }
 
 func (v2MetadataStrings) CheckType(t cql.DataType) error {
-	if t.Kind() == cql.TypeSet {
+	if t.Kind() == cql.KindSet {
 		return cql.SetDecoder[cql.Text](cql.TextCodec).CheckType(t)
 	}
 	return cql.ListDecoder[cql.Text](cql.TextCodec).CheckType(t)
 }
 func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
 	decoder := cql.ListDecoder[cql.Text](cql.TextCodec)
-	if r.Type().Kind() == cql.TypeSet {
+	if r.Type().Kind() == cql.KindSet {
 		decoder = cql.SetDecoder[cql.Text](cql.TextCodec)
 	}
 	v, err := decoder.Decode(r)
@@ -134,20 +125,25 @@ func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) 
 func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
 func (v2MetadataExtensions) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).CheckType(t)
+	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).CheckType(t)
 }
 func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BlobCodec).Decode(r)
+	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string][]byte, len(v))
 	for _, entry := range v {
-		key := entry.Key.String()
+		key, err := entry.Key.Copy()
+		if err != nil {
+			return nil, err
+		}
 		if _, ok := out[key]; ok {
 			return nil, cqltype.TypeValidation("schema extensions", "duplicate key %q", key)
 		}
-		out[key] = entry.Value.OwnedBytes()
+		if out[key], err = entry.Value.Copy(); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }

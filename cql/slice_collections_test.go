@@ -18,13 +18,13 @@ type collectionRow struct {
 
 func collectionColumns(t testing.TB) Columns {
 	t.Helper()
-	text, blob := rowTestType(t, TypeText), rowTestType(t, TypeBlob)
+	text, blob := rowTestType(t, KindText), rowTestType(t, KindBlob)
 	return NewColumns(
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeBigInt)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindBigInt)},
 		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(text))},
-		ColumnSpec{Name: "scores", Type: CodecTestMust(SetType(rowTestType(t, TypeInt)))},
+		ColumnSpec{Name: "scores", Type: CodecTestMust(SetType(rowTestType(t, KindInt)))},
 		ColumnSpec{Name: "blobs", Type: CodecTestMust(ListType(blob))},
-		ColumnSpec{Name: "attrs", Type: CodecTestMust(MapType(text, rowTestType(t, TypeBigInt)))},
+		ColumnSpec{Name: "attrs", Type: CodecTestMust(MapType(text, rowTestType(t, KindBigInt)))},
 	)
 }
 

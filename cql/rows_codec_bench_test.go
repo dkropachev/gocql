@@ -32,7 +32,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		}
 		integer, blob := IntType, BlobType
 		cols := NewColumns(ColumnSpec{Name: "number", Type: integer}, ColumnSpec{Name: "payload", Type: blob})
-		decoder := Row(Column("number", Int32Codec, func(r *row) *int32 { return &r.Number }), Column("payload", BlobCodec, func(r *row) *Bytes { return &r.Payload }))
+		decoder := Row(Column("number", Int32Codec, func(r *row) *int32 { return &r.Number }), Column("payload", BytesCodec, func(r *row) *Bytes { return &r.Payload }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		payload := bytes.Repeat([]byte{0x31}, 512000)
 		framed := append(streamEncodedFixture(b, integer, Int32Codec, int32(1)), streamEncodedFixture(b, blob, ByteSliceCodec, payload)...)
@@ -118,7 +118,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 	// BenchmarkRowsCodec/TextFields decodes a row of an int and three text views,
 	// through direct ops and through the fields' interfaces.
 	b.Run("TextFields", func(b *testing.B) {
-		columns := textColumns(b, TypeText)
+		columns := textColumns(b, KindText)
 		rows := CodecTestMust(textRows.Compile(columns))
 		var data []byte
 		data = cell(data, []byte{0, 0, 0, 7}, false)
@@ -144,9 +144,9 @@ func BenchmarkRowsCodec(b *testing.B) {
 	})
 	b.Run("FusedRowPaged", func(b *testing.B) {
 		columns := NewColumns(
-			ColumnSpec{Name: "key", Type: rowTestType(b, TypeInt)},
-			ColumnSpec{Name: "row", Type: rowTestType(b, TypeInt)},
-			ColumnSpec{Name: "blob", Type: rowTestType(b, TypeBlob)},
+			ColumnSpec{Name: "key", Type: rowTestType(b, KindInt)},
+			ColumnSpec{Name: "row", Type: rowTestType(b, KindInt)},
+			ColumnSpec{Name: "blob", Type: rowTestType(b, KindBlob)},
 		)
 		var data []byte
 		for i := 0; i < 32; i++ {
@@ -164,7 +164,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 			}
 			b.Run(name, func(b *testing.B) {
 				var integer Decoder[int32] = Int32Codec
-				var blob Decoder[Bytes] = BlobCodec
+				var blob Decoder[Bytes] = BytesCodec
 				if !direct {
 					integer = genericRowScalar[int32]{integer}
 					blob = genericRowScalar[Bytes]{blob}
@@ -210,13 +210,13 @@ func BenchmarkRowsCodec(b *testing.B) {
 					index := i
 					names := [4]string{fmt.Sprint("n", i), fmt.Sprint("t", i), fmt.Sprint("b", i), fmt.Sprint("l", i)}
 					specs = append(specs, ColumnSpec{Name: names[0], Type: integer}, ColumnSpec{Name: names[1], Type: text}, ColumnSpec{Name: names[2], Type: blob}, ColumnSpec{Name: names[3], Type: list})
-					fields = append(fields, Column(names[0], Int32Codec, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *Text { return &r.Texts[index] }), Column(names[2], BlobCodec, func(r *wideRow) *Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32Codec), func(r *wideRow) *[]int32 { return &r.Lists[index] }))
-					values = append(values, IntValue(int32(i)), TextValue("safe-🙂"), BlobValue(make([]byte, 4096)), CodecTestMust(ListValue(list, []Value{IntValue(1), IntValue(2)})))
+					fields = append(fields, Column(names[0], Int32Codec, func(r *wideRow) *int32 { return &r.Numbers[index] }), Column(names[1], TextCodec, func(r *wideRow) *Text { return &r.Texts[index] }), Column(names[2], BytesCodec, func(r *wideRow) *Bytes { return &r.Blobs[index] }), Column(names[3], ListDecoder(Int32Codec), func(r *wideRow) *[]int32 { return &r.Lists[index] }))
+					values = append(values, IntValue(int32(i)), TextValue("safe-🙂"), BlobValue(make([]byte, 4096)), CodecTestMust(ListValue(integer, IntValue(1), IntValue(2))))
 				}
 				columns := NewColumns(specs...)
 				decoder := Row(fields...)
 				plan := CodecTestMust(decoder.Compile(columns))
-				raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).OwnedBytes()
+				raw := bytesView(encodeTestParams(b, columns, DynamicParams, values), wire.Ref{}).ownedBytes()
 				spans := make([]wire.Span, fragments)
 				for i := range spans {
 					spans[i] = wire.Borrow(raw[len(raw)*i/fragments : len(raw)*(i+1)/fragments])
@@ -260,7 +260,7 @@ func BenchmarkRowsCodec(b *testing.B) {
 		}
 	})
 	b.Run("ScalarPlan", func(b *testing.B) {
-		columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(b, TypeInt)})
+		columns := NewColumns(ColumnSpec{Name: "v", Type: rowTestType(b, KindInt)})
 		plan, err := OneColumn(Int32Codec).Compile(columns)
 		if err != nil {
 			b.Fatal(err)

@@ -8,11 +8,11 @@ import (
 // typeOption writes a CQL [option] type description the way a server does.
 type typeOption func(f *protocol.Framer)
 
-func optNative(t cql.Type) typeOption {
+func optNative(t cql.Kind) typeOption {
 	return func(f *protocol.Framer) { f.WriteShort(uint16(t)) }
 }
 
-func optCollection(t cql.Type, elems ...typeOption) typeOption {
+func optCollection(t cql.Kind, elems ...typeOption) typeOption {
 	return func(f *protocol.Framer) {
 		f.WriteShort(uint16(t))
 		for _, e := range elems {

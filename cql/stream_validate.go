@@ -63,24 +63,24 @@ func compileStreamValidationMemo(t DataType, depth int, memo map[*dataTypeDescri
 	}
 	var err error
 	switch t.Kind() {
-	case TypeList, TypeSet, TypeVector:
+	case KindList, KindSet, KindVector:
 		p.element, err = child(d.Element)
 		if err != nil {
 			return nil, err
 		}
-		if t.Kind() == TypeVector {
+		if t.Kind() == KindVector {
 			if d.Dimension == 0 {
 				return nil, typeValidation("dimension", "zero vector dimension")
 			}
 			p.width, err = vectorFixedWidth(d.Element)
 		}
-	case TypeMap:
+	case KindMap:
 		p.key, err = child(d.Key)
 		if err == nil {
 			p.element, err = child(d.Element)
 		}
-	case TypeTuple, TypeUDT:
-		if t.Kind() == TypeUDT && (d.Keyspace == "" || d.Name == "") {
+	case KindTuple, KindUDT:
+		if t.Kind() == KindUDT && (d.Keyspace == "" || d.Name == "") {
 			return nil, typeValidation("UDT identity", "incomplete descriptor")
 		}
 		p.fields = make([]*streamValidationPlan, d.Fields.Len())
@@ -137,27 +137,27 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 		return nil
 	}
 	switch p.typ.Kind() {
-	case TypeBlob, TypeVarint, TypeDecimal:
+	case KindBlob, KindVarint, KindDecimal:
 		minimum := int64(0)
-		if p.typ.Kind() == TypeVarint {
+		if p.typ.Kind() == KindVarint {
 			minimum = 1
 		}
-		if p.typ.Kind() == TypeDecimal {
+		if p.typ.Kind() == KindDecimal {
 			minimum = 5
 		}
 		if r.Remaining() < minimum {
 			return r.fail(typeValidation("length", "invalid %s length", p.typ))
 		}
 		return r.rawSkip(nil)
-	case TypeText, TypeVarchar, TypeASCII:
-		validator := newTextValidation(p.typ.Kind() == TypeASCII)
+	case KindText, KindASCII:
+		validator := newTextValidation(p.typ.Kind() == KindASCII)
 		if err := r.rawSkip(validator.write); err != nil {
 			return err
 		}
 		return r.failIf(validator.finish())
-	case TypeList, TypeSet, TypeMap:
+	case KindList, KindSet, KindMap:
 		minimum := int64(4)
-		if p.typ.Kind() == TypeMap {
+		if p.typ.Kind() == KindMap {
 			minimum = 8
 		}
 		count, err := r.count(minimum)
@@ -174,7 +174,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 				return streamFailure("element", err)
 			}
 		}
-	case TypeTuple, TypeUDT:
+	case KindTuple, KindUDT:
 		for i, f := range p.fields {
 			if r.Remaining() == 0 {
 				break
@@ -183,7 +183,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 				return fmt.Errorf("gocql: record field %d: %w", i, err)
 			}
 		}
-	case TypeVector:
+	case KindVector:
 		count := int(descriptorOf(p.typ).Dimension)
 		if p.width > 0 && r.Remaining() != int64(count)*p.width {
 			return r.fail(typeValidation("dimension", "incorrect fixed vector body width"))
@@ -305,36 +305,36 @@ func streamScalarValidation[T any](typ DataType, codec StreamDecoder[T]) (func(*
 }
 func compileStreamScalarValidation(t DataType) (func(*StreamValueReader) error, error) {
 	switch t.Kind() {
-	case TypeBoolean:
+	case KindBoolean:
 		return streamScalarValidation(t, StreamBool)
-	case TypeTinyInt:
+	case KindTinyInt:
 		return streamScalarValidation(t, StreamInt8)
-	case TypeSmallInt:
+	case KindSmallInt:
 		return streamScalarValidation(t, StreamInt16)
-	case TypeInt:
+	case KindInt:
 		return streamScalarValidation(t, StreamInt32)
-	case TypeBigInt, TypeCounter:
+	case KindBigInt, KindCounter:
 		return streamScalarValidation(t, StreamInt64)
-	case TypeFloat:
+	case KindFloat:
 		return streamScalarValidation(t, StreamFloat32)
-	case TypeDouble:
+	case KindDouble:
 		return streamScalarValidation(t, StreamFloat64)
-	case TypeDate:
+	case KindDate:
 		return streamScalarValidation(t, StreamDate)
-	case TypeTime:
+	case KindTime:
 		return streamScalarValidation(t, StreamTime)
-	case TypeTimestamp:
+	case KindTimestamp:
 		return streamScalarValidation(t, StreamTimestamp)
-	case TypeDuration:
+	case KindDuration:
 		return streamScalarValidation(t, StreamDuration)
-	case TypeUUID:
+	case KindUUID:
 		return streamScalarValidation(t, StreamUUID)
-	case TypeTimeUUID:
+	case KindTimeUUID:
 		return streamScalarValidation(t, StreamTimeUUID)
-	case TypeInet:
+	case KindInet:
 		return streamScalarValidation(t, StreamInet)
 	// Variable-byte types have specialized incremental validation in skip.
-	case TypeBlob, TypeVarint, TypeDecimal, TypeText, TypeVarchar, TypeASCII:
+	case KindBlob, KindVarint, KindDecimal, KindText, KindASCII:
 		return nil, nil
 	default:
 		return nil, typeValidation("type", "unsupported scalar validation %s", t)

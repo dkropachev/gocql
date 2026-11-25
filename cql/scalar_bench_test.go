@@ -25,7 +25,7 @@ func BenchmarkScalar(b *testing.B) {
 	b.Run("BaselineEquivalent", func(b *testing.B) {
 		b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 			data := bytes.Repeat([]byte{'x'}, 1024)
-			typ := VarcharType
+			typ := TextType
 			r := valueReaderFromLease(typ, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
 			dst := make([]byte, 1024)
 			b.ReportAllocs()
@@ -41,7 +41,7 @@ func BenchmarkScalar(b *testing.B) {
 			}
 		})
 		b.Run("UUID", func(b *testing.B) {
-			r := ScalarReader(b, TypeUUID, Present, make([]byte, 16))
+			r := ScalarReader(b, KindUUID, Present, make([]byte, 16))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
@@ -55,12 +55,12 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("BlobDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
-		r := ScalarReader(b, TypeBlob, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindBlob, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
 		for b.Loop() {
-			v, err := BlobCodec.Decode(r)
+			v, err := BytesCodec.Decode(r)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -69,7 +69,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("BlobEncodeBorrowed", func(b *testing.B) {
 		data := make([]byte, 1<<20)
-		typ := scalarType(b, TypeBlob)
+		typ := scalarType(b, KindBlob)
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -102,11 +102,11 @@ func BenchmarkScalar(b *testing.B) {
 						b.SetBytes(int64(size))
 						for b.Loop() {
 							if text {
-								if _, e := EncodeValueBorrowed(typ, StringCodec, stringData); e != nil {
+								if _, e := encodeValueBorrowed(typ, StringCodec, stringData); e != nil {
 									b.Fatal(e)
 								}
 							} else {
-								if _, e := EncodeValueBorrowed(typ, ByteSliceCodec, data); e != nil {
+								if _, e := encodeValueBorrowed(typ, ByteSliceCodec, data); e != nil {
 									b.Fatal(e)
 								}
 							}
@@ -125,7 +125,7 @@ func BenchmarkScalar(b *testing.B) {
 								}
 								scalarTextSink = v
 							} else {
-								v, e := BlobCodec.Decode(reader)
+								v, e := BytesCodec.Decode(reader)
 								if e != nil {
 									b.Fatal(e)
 								}
@@ -139,7 +139,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("Int64Decode", func(b *testing.B) {
 		data := []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-		r := ScalarReader(b, TypeBigInt, Present, data[:3], data[3:])
+		r := ScalarReader(b, KindBigInt, Present, data[:3], data[3:])
 		b.ReportAllocs()
 		b.SetBytes(8)
 		b.ResetTimer()
@@ -156,7 +156,7 @@ func BenchmarkScalar(b *testing.B) {
 		for i := range data {
 			data[i] = 'a'
 		}
-		r := ScalarReader(b, TypeText, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindText, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -171,7 +171,7 @@ func BenchmarkScalar(b *testing.B) {
 	b.Run("VarintDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
 		data[0] = 0x01
-		r := ScalarReader(b, TypeVarint, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindVarint, Present, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()

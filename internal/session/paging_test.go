@@ -228,7 +228,7 @@ func TestPaging(t *testing.T) {
 			}
 			waitRequests(2) // page one, and page two prefetched
 			for i, want := range []string{"a", "b", "c"} {
-				if !rows.NextInto(&row) || string(row.OwnedBytes()) != want {
+				if !rows.NextInto(&row) || string(ownedBytesForTest(row)) != want {
 					t.Fatalf("row %d: %v", i, rows.Err())
 				}
 				if i == 0 {
@@ -313,7 +313,7 @@ func TestPaging(t *testing.T) {
 				t.Fatalf("rows after Session.Close: %v", rows.Err())
 			}
 			_ = rows.Close()
-			if got := string(view.OwnedBytes()); got != "kept" {
+			if got := string(ownedBytesForTest(view)); got != "kept" {
 				t.Fatalf("retained view reads %q after Session.Close", got)
 			}
 			lease.Close()
@@ -351,7 +351,7 @@ func TestPaging(t *testing.T) {
 					rows := codecTestMust(Run(context.Background(), s, b, testOptions(Options{Profile: handle})))
 					defer rows.Close()
 					var dst cql.Bytes
-					if !rows.NextInto(&dst) || string(dst.OwnedBytes()) != "one" {
+					if !rows.NextInto(&dst) || string(ownedBytesForTest(dst)) != "one" {
 						t.Fatal(rows.Err())
 					}
 					retained := codecTestMust(rows.Retain())
@@ -385,7 +385,7 @@ func TestPaging(t *testing.T) {
 					if err := <-closed; !errors.Is(err, context.Canceled) {
 						t.Fatal(err)
 					}
-					if string(copyView.OwnedBytes()) != "one" {
+					if string(ownedBytesForTest(copyView)) != "one" {
 						t.Fatal("retained view lost")
 					}
 					<-stopped
@@ -576,7 +576,7 @@ func TestPaging(t *testing.T) {
 			}
 			bound.Close()
 			var view cql.Bytes
-			if !rows.NextInto(&view) || string(view.OwnedBytes()) != "row" {
+			if !rows.NextInto(&view) || string(ownedBytesForTest(view)) != "row" {
 				t.Fatal(rows.Err())
 			}
 			retained, err := rows.Retain()
@@ -593,7 +593,7 @@ func TestPaging(t *testing.T) {
 			if err = bound.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if string(view.OwnedBytes()) != "row" {
+			if string(ownedBytesForTest(view)) != "row" {
 				t.Fatal("retained page lost")
 			}
 			retained.Close()

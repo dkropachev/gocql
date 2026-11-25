@@ -23,8 +23,8 @@ func fuzzType(t *testing.T, sel *[]byte, depth int) DataType {
 		*sel = (*sel)[1:]
 		return b
 	}
-	scalars := []Type{TypeInt, TypeText, TypeBlob, TypeFloat, TypeVarint, TypeDecimal, TypeDuration,
-		TypeBoolean, TypeUUID, TypeInet, TypeDate, TypeTime, TypeSmallInt, TypeTinyInt, TypeBigInt, TypeASCII}
+	scalars := []Kind{KindInt, KindText, KindBlob, KindFloat, KindVarint, KindDecimal, KindDuration,
+		KindBoolean, KindUUID, KindInet, KindDate, KindTime, KindSmallInt, KindTinyInt, KindBigInt, KindASCII}
 	b := next()
 	kind := int(b) % (len(scalars) + 6)
 	if depth == 0 || kind < len(scalars) {
@@ -57,7 +57,7 @@ func fuzzType(t *testing.T, sel *[]byte, depth int) DataType {
 // fuzzDecoders are typed decoders of a fixed column type each.
 func fuzzDecoders(t *testing.T) []func(ColumnSpec, wire.Chain, *wire.Lease) {
 	intType, textType := IntType, TextType
-	floatType := CodecTestMust(ScalarType(TypeFloat))
+	floatType := CodecTestMust(ScalarType(KindFloat))
 	pair := Row(ColumnAt(0, Int32Codec, func(p *Pair[int32, string]) *int32 { return &p.First }),
 		ColumnAt(1, StringCodec, func(p *Pair[int32, string]) *string { return &p.Second }))
 	udtType := CodecTestMust(UDTType("ks", "u", ColumnSpec{Name: "a", Type: intType}, ColumnSpec{Name: "b", Type: textType}))
@@ -68,17 +68,17 @@ func fuzzDecoders(t *testing.T) []func(ColumnSpec, wire.Chain, *wire.Lease) {
 	return []func(ColumnSpec, wire.Chain, *wire.Lease){
 		fuzzDecoder(CodecTestMust(ListType(intType)), ListCodec(Int32Codec)),
 		fuzzDecoder(CodecTestMust(SetType(textType)), SetCodec(StringCodec)),
-		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BlobCodec))),
+		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BytesCodec))),
 		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, TextCodec)),
 		fuzzDecoder(CodecTestMust(MapType(intType, textType)), GoMapCodec(Int32Codec, StringCodec)),
 		fuzzDecoder(CodecTestMust(VectorType(floatType, 3)), VectorCodec(Float32Codec)),
 		fuzzDecoder(CodecTestMust(VectorType(textType, 2)), VectorCodec(StringCodec)),
 		fuzzDecoder(CodecTestMust(TupleType(intType, textType)), TupleDecoder(pair)),
 		fuzzDecoder(udtType, UDTDecoder(udt, udtOptions)),
-		fuzzDecoder(CodecTestMust(ScalarType(TypeVarint)), VarintCodec),
-		fuzzDecoder(CodecTestMust(ScalarType(TypeDecimal)), DecimalCodec),
-		fuzzDecoder(CodecTestMust(ScalarType(TypeDuration)), DurationCodec),
-		fuzzDecoder(CodecTestMust(ScalarType(TypeInet)), InetCodec),
+		fuzzDecoder(CodecTestMust(ScalarType(KindVarint)), VarintCodec),
+		fuzzDecoder(CodecTestMust(ScalarType(KindDecimal)), DecimalCodec),
+		fuzzDecoder(CodecTestMust(ScalarType(KindDuration)), DurationCodec),
+		fuzzDecoder(CodecTestMust(ScalarType(KindInet)), InetCodec),
 	}
 }
 
@@ -112,18 +112,18 @@ func walkValue(v Value, depth int) {
 	if depth > 8 {
 		return
 	}
-	if it, err := v.Elements(); err == nil {
+	if it, err := v.iterElements(); err == nil {
 		for it.Next() {
 			walkValue(it.Value(), depth+1)
 		}
 	}
-	if it, err := v.Entries(); err == nil {
+	if it, err := v.iterEntries(); err == nil {
 		for it.Next() {
 			walkValue(it.Value().Key, depth+1)
 			walkValue(it.Value().Value, depth+1)
 		}
 	}
-	if it, err := v.Fields(); err == nil {
+	if it, err := v.iterFields(); err == nil {
 		for it.Next() {
 			walkValue(it.Value().Value, depth+1)
 		}

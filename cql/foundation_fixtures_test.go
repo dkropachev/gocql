@@ -6,7 +6,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-func foundationScalar(t testing.TB, kind Type) DataType {
+func foundationScalar(t testing.TB, kind Kind) DataType {
 	t.Helper()
 	d, err := ScalarType(kind)
 	if err != nil {

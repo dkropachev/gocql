@@ -65,16 +65,16 @@ func TestLongTypeNestingDepth(t *testing.T) {
 	for _, levels := range []int{MaxLongTypeDepth, MaxLongTypeDepth + 1, 10000} {
 		depth, leaf := depthOf(GetCassandraLongType(nestedLongType(levels, false), 4, logging.Nop()))
 		if levels <= MaxLongTypeDepth {
-			if depth != levels || leaf.Type() != cql.TypeInt {
+			if depth != levels || leaf.Type() != cql.KindInt {
 				t.Fatalf("%d levels: parsed %d levels down to %v", levels, depth, leaf.Type())
 			}
 			continue
 		}
-		if depth > MaxLongTypeDepth+1 || leaf.Type() != cql.TypeCustom {
+		if depth > MaxLongTypeDepth+1 || leaf.Type() != cql.KindCustom {
 			t.Fatalf("%d levels: parsed %d levels down to %v, want a custom type within the limit", levels, depth, leaf.Type())
 		}
 	}
-	vector, ok := AsVectorType(NewCustomType(4, cql.TypeCustom, nestedLongType(10000, true)))
+	vector, ok := AsVectorType(NewCustomType(4, cql.KindCustom, nestedLongType(10000, true)))
 	if !ok || vector.Dimensions != 2 {
 		t.Fatalf("deep vector: %v %v", vector, ok)
 	}
@@ -131,6 +131,6 @@ func FuzzCassandraLongType(f *testing.F) {
 		}
 		info := GetCassandraLongType(name, 4, logging.Nop())
 		_, _ = AsVectorType(info)
-		_, _ = AsVectorType(NewCustomType(4, cql.TypeCustom, name))
+		_, _ = AsVectorType(NewCustomType(4, cql.KindCustom, name))
 	})
 }

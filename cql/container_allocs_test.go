@@ -26,11 +26,11 @@ import (
 // without that instrumentation; ownership and concurrency tests also run with it.
 func TestContainerAllocs(t *testing.T) {
 	t.Run("TupleDecode", func(t *testing.T) {
-		integer := FoundationScalar(t, TypeInt)
+		integer := FoundationScalar(t, KindInt)
 		tuple := CodecTestMust(TupleType(integer))
 		list := CodecTestMust(ListType(tuple))
 		allocated := func(count int) float64 {
-			encoded := CodecTestMust(EncodeValueBorrowed(list, ListEncoder(TupleEncoder(OneParam(Int32Codec))), make([]int32, count)))
+			encoded := CodecTestMust(encodeValueBorrowed(list, ListEncoder(TupleEncoder(OneParam(Int32Codec))), make([]int32, count)))
 			decoder := CodecTestMust(compileValueDecoder(ListDecoder(TupleDecoder(OneColumn(Int32Codec))), list))
 			reader := valueReaderFromLease(list, Present, bytesChain(encoded.body), nil)
 			return testing.AllocsPerRun(20, func() {

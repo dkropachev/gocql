@@ -50,13 +50,13 @@ func encodeTextSet(items ...string) []byte {
 }
 
 var systemLocalCols = []rowsCol{
-	{"host_id", optNative(cql.TypeUUID)},
-	{"data_center", optNative(cql.TypeVarchar)},
-	{"rack", optNative(cql.TypeVarchar)},
-	{"rpc_address", optNative(cql.TypeInet)},
-	{"release_version", optNative(cql.TypeVarchar)},
-	{"partitioner", optNative(cql.TypeVarchar)},
-	{"tokens", optCollection(cql.TypeSet, optNative(cql.TypeVarchar))},
+	{"host_id", optNative(cql.KindUUID)},
+	{"data_center", optNative(cql.KindText)},
+	{"rack", optNative(cql.KindText)},
+	{"rpc_address", optNative(cql.KindInet)},
+	{"release_version", optNative(cql.KindText)},
+	{"partitioner", optNative(cql.KindText)},
+	{"tokens", optCollection(cql.KindSet, optNative(cql.KindText))},
 }
 
 var testLocalHostID = func() cql.UUID {

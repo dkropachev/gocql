@@ -12,7 +12,7 @@ import (
 
 func containerValue(t testing.TB, typ DataType, body []byte) EncodedValue {
 	t.Helper()
-	v, err := NewEncodedValue(typ, Present, BorrowBytes(body))
+	v, err := newEncodedValue(typ, Present, BorrowBytes(body))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -20,7 +20,7 @@ func containerValue(t testing.TB, typ DataType, body []byte) EncodedValue {
 }
 func containerGolden[T any](t *testing.T, typ DataType, encoder Encoder[T], value T, golden string) EncodedValue {
 	t.Helper()
-	encoded, err := EncodeValueBorrowed(typ, encoder, value)
+	encoded, err := encodeValueBorrowed(typ, encoder, value)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,8 +28,8 @@ func containerGolden[T any](t *testing.T, typ DataType, encoder Encoder[T], valu
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(encoded.Bytes().OwnedBytes(), want) {
-		t.Fatalf("wire body = %x, want %x", encoded.Bytes().OwnedBytes(), want)
+	if !bytes.Equal(encoded.Bytes().ownedBytes(), want) {
+		t.Fatalf("wire body = %x, want %x", encoded.Bytes().ownedBytes(), want)
 	}
 	return encoded
 }

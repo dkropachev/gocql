@@ -16,7 +16,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			s := loopbackTestSession(t, "pone")
 			session := InternalWrapSession(s)
-			statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BlobCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
+			statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BytesCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
 			p := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 			q := codecTestMust(p.Query(Options{}))
 			defer q.Close()
@@ -37,7 +37,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 			if found, _, err := read(&second); err != nil || !found {
 				t.Fatal(found, err)
 			}
-			if string(first.OwnedBytes()) != loopbackValue || string(second.OwnedBytes()) != loopbackValue {
+			if string(ownedBytesForTest(first)) != loopbackValue || string(ownedBytesForTest(second)) != loopbackValue {
 				t.Fatal("result expired after return or next execution")
 			}
 		})

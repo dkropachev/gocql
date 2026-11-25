@@ -53,8 +53,8 @@ func routingCell[T any](t *testing.T, typ cql.DataType, encoder cql.Encoder[T], 
 
 func TestSnapshotToken(t *testing.T) {
 	m := tokenTestSnapshot()
-	intType, _ := cql.ScalarType(cql.TypeInt)
-	textType, _ := cql.ScalarType(cql.TypeText)
+	intType, _ := cql.ScalarType(cql.KindInt)
+	textType, _ := cql.ScalarType(cql.KindText)
 
 	t.Run("SingleKeyMurmur3Vector", func(t *testing.T) {
 		for _, n := range []int32{0, 1, 42, -1, math.MaxInt32, math.MinInt32} {

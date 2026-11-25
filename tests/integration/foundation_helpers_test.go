@@ -4,6 +4,7 @@ package integration
 
 import (
 	"context"
+	"iter"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
@@ -24,6 +25,19 @@ func codecTestMust[T any](v T, err error) T {
 		panic(err)
 	}
 	return v
+}
+
+// collectSeq collects the members a Value iterator yields, stopping at the
+// first error.
+func collectSeq[T any](seq iter.Seq2[T, error]) ([]T, error) {
+	var out []T
+	for v, err := range seq {
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, nil
 }
 
 // bindOptions binds v to session, failing loudly on values a test meant to

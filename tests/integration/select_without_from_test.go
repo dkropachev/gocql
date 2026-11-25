@@ -38,11 +38,11 @@ func TestSelectWithoutFrom(t *testing.T) {
 		})
 		t.Run("marker types the column", func(t *testing.T) {
 			row := noFromOne(t, session, "SELECT intAsBlob(?)", cql.IntValue(42))
-			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeBlob {
+			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.KindBlob {
 				t.Fatal("blob type expected")
 			}
 			blob, err := noFromValue(t, row, 0).Bytes()
-			if err != nil || !bytes.Equal(blob.OwnedBytes(), []byte{0, 0, 0, 42}) {
+			if err != nil || !bytes.Equal(ownedBytesForTest(blob), []byte{0, 0, 0, 42}) {
 				t.Fatalf("blob=%v err=%v", blob, err)
 			}
 		})
@@ -149,7 +149,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			before := time.Now()
 			row := noFromOne(t, session, "SELECT toTimestamp(now())")
 			after := time.Now()
-			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimestamp {
+			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.KindTimestamp {
 				t.Fatal("timestamp metadata expected")
 			}
 			got := cql.Timestamp(noFromInt(t, row, 0)).Time()
@@ -183,7 +183,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if rows.Columns().Len() != 1 {
 				t.Fatal("SELECT 1 must have one column")
 			}
-			if noFromColumn(t, rows.Columns(), 0).Type.Kind() != cql.TypeInt {
+			if noFromColumn(t, rows.Columns(), 0).Type.Kind() != cql.KindInt {
 				t.Fatal("literal must have int metadata")
 			}
 			if rows.Info().Rows != 1 {
@@ -212,7 +212,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if row.Columns().Len() != 3 {
 				t.Fatal("expected three columns")
 			}
-			for i, kind := range []cql.Type{cql.TypeInt, cql.TypeVarchar, cql.TypeBoolean} {
+			for i, kind := range []cql.Kind{cql.KindInt, cql.KindText, cql.KindBoolean} {
 				if noFromColumn(t, row.Columns(), i).Type.Kind() != kind {
 					t.Fatalf("column%d wrong type", i)
 				}
@@ -233,7 +233,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			before := time.Now()
 			row := noFromOne(t, session, "SELECT now()")
 			after := time.Now()
-			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.TypeTimeUUID {
+			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.KindTimeUUID {
 				t.Fatal("now() metadata must be timeuuid")
 			}
 			got, err := noFromValue(t, row, 0).UUID()

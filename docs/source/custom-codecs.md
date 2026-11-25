@@ -1,7 +1,9 @@
 # Custom codec contracts
 
 Most applications compose `Params`, `Row`, `cql.StreamRowInto`, or their struct-mapping
-counterparts. Custom implementations use the following public contracts from
+counterparts. A type that converts to and from one a built-in codec maps
+needs no codec of its own: `cql.ConvertCodec(cql.Int32Codec, to, from)`
+maps it through `Int32Codec`. Custom implementations use the following public contracts from
 `github.com/scylladb/gocql/v2/cql`; the streaming ones carry a `Stream`
 prefix.
 

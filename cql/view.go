@@ -14,7 +14,7 @@ import (
 // Bytes is an immutable view of response bytes. Cursor views expire on advancement or Close
 // unless a PageLease pins the page; One detaches them. Clone creates an owned copy.
 //
-// Clone and OwnedBytes panic with ErrReleased on an expired view; Copy is
+// Clone panics with ErrReleased on an expired view; Copy is
 // the checked form and returns that error instead. Expiry detection is
 // best-effort: a release that races the check is not caught, so a view must
 // never be used after its page may have been released.
@@ -130,10 +130,10 @@ func (b Bytes) CopyTo(dst []byte) (int, error) {
 
 // Clone returns an owned copy that never expires. It panics with ErrReleased
 // once the view has expired; Copy is the checked form.
-func (b Bytes) Clone() Bytes { return BorrowBytes(b.OwnedBytes()) }
+func (b Bytes) Clone() Bytes { return BorrowBytes(b.ownedBytes()) }
 
-// OwnedBytes is Copy, panicking with Copy's error.
-func (b Bytes) OwnedBytes() []byte {
+// ownedBytes is Copy, panicking with Copy's error.
+func (b Bytes) ownedBytes() []byte {
 	dst, err := b.Copy()
 	if err != nil {
 		panic(err)

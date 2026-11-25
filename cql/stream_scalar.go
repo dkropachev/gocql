@@ -30,7 +30,7 @@ import (
 
 type streamScalarCodec[T any] struct {
 	decode            func(*StreamValueReader) (T, error)
-	kind, alternative Type
+	kind, alternative Kind
 	minimum, maximum  int64
 }
 type streamScalarPlan[T any] struct {
@@ -75,7 +75,7 @@ func (p streamScalarPlan[T]) DecodeInto(r *StreamValueReader, dst *T) error {
 	*dst = value
 	return nil
 }
-func streamFixed[T any](kind Type, size int64, convert func([]byte) (T, error)) StreamDecoder[T] {
+func streamFixed[T any](kind Kind, size int64, convert func([]byte) (T, error)) StreamDecoder[T] {
 	return streamScalarCodec[T]{kind: kind, minimum: size, maximum: size, decode: func(r *StreamValueReader) (T, error) {
 		bytes := r.shared.scalar[:int(size)]
 		if err := r.readFull(bytes); err != nil {
@@ -86,13 +86,20 @@ func streamFixed[T any](kind Type, size int64, convert func([]byte) (T, error)) 
 	}}
 }
 
-// streamCounter is StreamInt64, which also accepts counter.
-func streamCounter() StreamDecoder[int64] {
-	c := streamInteger[int64](TypeBigInt, 8).(streamScalarCodec[int64])
-	c.alternative = TypeCounter
+// streamAnyUUID is StreamUUID, which also accepts timeuuid.
+func streamAnyUUID() StreamDecoder[UUID] {
+	c := streamFixed(KindUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil }).(streamScalarCodec[UUID])
+	c.alternative = KindTimeUUID
 	return c
 }
-func streamInteger[T ~int8 | ~int16 | ~int32 | ~int64](kind Type, size int64) StreamDecoder[T] {
+
+// streamCounter is StreamInt64, which also accepts counter.
+func streamCounter() StreamDecoder[int64] {
+	c := streamInteger[int64](KindBigInt, 8).(streamScalarCodec[int64])
+	c.alternative = KindCounter
+	return c
+}
+func streamInteger[T ~int8 | ~int16 | ~int32 | ~int64](kind Kind, size int64) StreamDecoder[T] {
 	return streamFixed(kind, size, func(b []byte) (T, error) {
 		switch len(b) {
 		case 1:
@@ -142,7 +149,7 @@ func streamReadDuration(r *StreamValueReader) (Duration, error) {
 // names and decodes into caller storage without borrowing response bytes.
 var (
 	// StreamBool decodes boolean into bool.
-	StreamBool StreamDecoder[bool] = streamFixed(TypeBoolean, 1, func(b []byte) (bool, error) {
+	StreamBool StreamDecoder[bool] = streamFixed(KindBoolean, 1, func(b []byte) (bool, error) {
 		if b[0] > 1 {
 			return false, typeValidation("boolean", "must be 0 or 1")
 		}
@@ -150,31 +157,31 @@ var (
 	})
 
 	// StreamInt8 decodes tinyint into int8.
-	StreamInt8 = streamInteger[int8](TypeTinyInt, 1)
+	StreamInt8 = streamInteger[int8](KindTinyInt, 1)
 
 	// StreamInt16 decodes smallint into int16.
-	StreamInt16 = streamInteger[int16](TypeSmallInt, 2)
+	StreamInt16 = streamInteger[int16](KindSmallInt, 2)
 
 	// StreamInt32 decodes int into int32.
-	StreamInt32 = streamInteger[int32](TypeInt, 4)
+	StreamInt32 = streamInteger[int32](KindInt, 4)
 
 	// StreamInt64 decodes bigint and counter into int64.
 	StreamInt64 = streamCounter()
 
 	// StreamTimestamp decodes timestamp into Timestamp.
-	StreamTimestamp = streamInteger[Timestamp](TypeTimestamp, 8)
+	StreamTimestamp = streamInteger[Timestamp](KindTimestamp, 8)
 
 	// StreamFloat32 decodes float into float32.
-	StreamFloat32 = streamFixed(TypeFloat, 4, func(b []byte) (float32, error) { return math.Float32frombits(binary.BigEndian.Uint32(b)), nil })
+	StreamFloat32 = streamFixed(KindFloat, 4, func(b []byte) (float32, error) { return math.Float32frombits(binary.BigEndian.Uint32(b)), nil })
 
 	// StreamFloat64 decodes double into float64.
-	StreamFloat64 = streamFixed(TypeDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil })
+	StreamFloat64 = streamFixed(KindDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil })
 
 	// StreamDate decodes date into Date.
-	StreamDate = streamFixed(TypeDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })
+	StreamDate = streamFixed(KindDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })
 
 	// StreamTime decodes time into TimeOfDay, rejecting a value outside one day.
-	StreamTime = streamFixed(TypeTime, 8, func(b []byte) (TimeOfDay, error) {
+	StreamTime = streamFixed(KindTime, 8, func(b []byte) (TimeOfDay, error) {
 		v := binary.BigEndian.Uint64(b)
 		if v >= uint64(nanosecondsPerDay) {
 			return 0, typeValidation("time", "outside one day")
@@ -183,14 +190,14 @@ var (
 	})
 
 	// StreamDuration decodes duration into Duration.
-	StreamDuration StreamDecoder[Duration] = streamScalarCodec[Duration]{kind: TypeDuration, minimum: 3, maximum: 27, decode: streamReadDuration}
+	StreamDuration StreamDecoder[Duration] = streamScalarCodec[Duration]{kind: KindDuration, minimum: 3, maximum: 27, decode: streamReadDuration}
 
-	// StreamUUID decodes uuid into UUID.
-	StreamUUID = streamFixed(TypeUUID, 16, func(b []byte) (UUID, error) { var v UUID; copy(v[:], b); return v, nil })
+	// StreamUUID decodes uuid and timeuuid into UUID, as UUIDCodec does.
+	StreamUUID = streamAnyUUID()
 
 	// StreamTimeUUID decodes timeuuid into TimeUUID, rejecting a UUID that is not
 	// version 1.
-	StreamTimeUUID = streamFixed(TypeTimeUUID, 16, func(b []byte) (TimeUUID, error) {
+	StreamTimeUUID = streamFixed(KindTimeUUID, 16, func(b []byte) (TimeUUID, error) {
 		var v TimeUUID
 		copy(v[:], b)
 		if UUID(v).Version() != 1 {
@@ -200,7 +207,7 @@ var (
 	})
 
 	// StreamInet decodes inet into netip.Addr.
-	StreamInet StreamDecoder[netip.Addr] = streamScalarCodec[netip.Addr]{kind: TypeInet, minimum: 4, maximum: 16, decode: func(r *StreamValueReader) (netip.Addr, error) {
+	StreamInet StreamDecoder[netip.Addr] = streamScalarCodec[netip.Addr]{kind: KindInet, minimum: 4, maximum: 16, decode: func(r *StreamValueReader) (netip.Addr, error) {
 		n := r.Remaining()
 		if n != 4 && n != 16 {
 			return netip.Addr{}, typeValidation("inet", "requires 4 or 16 bytes")
@@ -213,33 +220,31 @@ var (
 		return v, nil
 	}}
 
-	// StreamText decodes text and varchar into a []byte, validating UTF-8. The
-	// value is written into the destination's existing capacity; a value that
-	// does not fit fails with a StreamCapacityError.
-	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: TypeText}
-
-	// StreamASCII is StreamText for the ascii type.
-	StreamASCII StreamDecoder[[]byte] = streamBytesCodec{kind: TypeASCII}
+	// StreamText decodes text and ascii into a []byte, validating UTF-8 for
+	// text and ASCII for ascii. The value is written into the destination's
+	// existing capacity; a value that does not fit fails with a
+	// StreamCapacityError.
+	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: KindText}
 
 	// StreamBlob decodes blob into a []byte, within the destination's capacity
 	// as for StreamText.
-	StreamBlob StreamDecoder[[]byte] = streamBytesCodec{kind: TypeBlob}
+	StreamBlob StreamDecoder[[]byte] = streamBytesCodec{kind: KindBlob}
 
 	// StreamVarint decodes varint into a []byte holding the big-endian
 	// two's-complement integer, within the destination's capacity as for
 	// StreamText.
-	StreamVarint StreamDecoder[[]byte] = streamBytesCodec{kind: TypeVarint}
+	StreamVarint StreamDecoder[[]byte] = streamBytesCodec{kind: KindVarint}
 )
 
-type streamBytesCodec struct{ kind Type }
+type streamBytesCodec struct{ kind Kind }
 type streamBytesPlan struct{ typ DataType }
 
 func (c streamBytesCodec) Compile(t DataType) (CompiledStreamValue[[]byte], error) {
 	if err := validateDataType(t); err != nil {
 		return nil, err
 	}
-	if c.kind == TypeText {
-		if err := checkTextType(t, false); err != nil {
+	if c.kind == KindText {
+		if err := checkTextType(t); err != nil {
 			return nil, err
 		}
 	} else if t.Kind() != c.kind {
@@ -263,15 +268,15 @@ func (p streamBytesPlan) DecodeInto(r *StreamValueReader, dst *[]byte) error {
 		return r.fail(typeValidation("type", "compiled byte metadata changed"))
 	}
 	n := r.Remaining()
-	if p.typ.Kind() == TypeVarint && n == 0 {
+	if p.typ.Kind() == KindVarint && n == 0 {
 		return r.fail(typeValidation("varint", "requires nonempty signed bytes"))
 	}
 	if err := r.capacity(n, cap(*dst)); err != nil {
 		return err
 	}
 	*dst = (*dst)[:int(n)]
-	validator := newTextValidation(p.typ.Kind() == TypeASCII)
-	text := p.typ.Kind() == TypeText || p.typ.Kind() == TypeVarchar || p.typ.Kind() == TypeASCII
+	validator := newTextValidation(p.typ.Kind() == KindASCII)
+	text := p.typ.Kind() == KindText || p.typ.Kind() == KindASCII
 	b := *dst
 	for len(b) > 0 {
 		n, err := r.Read(b)

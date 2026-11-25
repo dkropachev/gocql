@@ -23,14 +23,14 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 	defer peer.Close()
 	defer s.Close()
 	implCluster.SessionData(s).InternalCfg.Keyspace = "ks"
-	blob := codecTestMust(cql.ScalarType(cql.TypeBlob))
+	blob := codecTestMust(cql.ScalarType(cql.KindBlob))
 	columns := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: blob})
 	state, _ := preparedState(t, s, columns)
 	changed := cql.NewColumns(cqltype.ColumnSlice(columns)[0], cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "added", Type: blob})
 	bound := func() *Bound[cql.Bytes] {
 		opaqueStorageValue := new(Bound[cql.Bytes])
 		BoundData(opaqueStorageValue).InternalRequest = InternalExecutionRequest{statement: state.InternalStatement, InternalSource: state.preparedSource(), InternalValues: model.EncodedValues{Columns: cql.NewColumns()}, InternalOwner: InternalNewInputOwner(), routing: routing.Info{Kind: cql.OrdinaryStatement}}
-		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BlobCodec)
+		BoundData(opaqueStorageValue).InternalRows = cql.OneColumn(cql.BytesCodec)
 		return opaqueStorageValue
 	}()
 	defer bound.Close()
@@ -79,7 +79,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 					for _, name := range []string{"value", "added"} {
 						reply = binary.BigEndian.AppendUint16(reply, uint16(len(name)))
 						reply = append(reply, name...)
-						reply = binary.BigEndian.AppendUint16(reply, uint16(cql.TypeBlob))
+						reply = binary.BigEndian.AppendUint16(reply, uint16(cql.KindBlob))
 					}
 					reply = binary.BigEndian.AppendUint32(reply, 1)
 					reply = binary.BigEndian.AppendUint32(reply, 4)

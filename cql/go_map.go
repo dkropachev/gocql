@@ -216,9 +216,10 @@ func ownsDecoded[T any](d Decoder[T]) bool {
 //
 // unsafe: a map value is one pointer word, so a map[K]V and an unsafe.Pointer
 // convert both ways and the GC sees the map through either. offset is the
-// reflect offset of a field whose type is exactly map[K]V (resolveField
-// matches builtins by reflect.Type), inside the row or parameter struct the
-// pointer arithmetic starts from.
+// reflect offset of a field whose type is exactly map[K]V, or a map type
+// with named keys or values that has map[K]V's layout (resolveField,
+// sameLayout), inside the row or parameter struct the pointer arithmetic
+// starts from.
 type goMapField interface {
 	compile(DataType) (goMapField, error)
 	encode(w *ParamWriter, m unsafe.Pointer) error
@@ -310,6 +311,7 @@ var goMapBuiltins = sync.OnceValue(func() []goMapBuiltin {
 	keys(&out, mapElement[int16]{Int16Codec, "int16", "Int16Codec"})
 	keys(&out, mapElement[int32]{Int32Codec, "int32", "Int32Codec"})
 	keys(&out, mapElement[int64]{Int64Codec, "int64", "Int64Codec"})
+	keys(&out, mapElement[int]{IntCodec, "int", "IntCodec"})
 	keys(&out, mapElement[float32]{Float32Codec, "float32", "Float32Codec"})
 	keys(&out, mapElement[float64]{Float64Codec, "float64", "Float64Codec"})
 	keys(&out, mapElement[string]{StringCodec, "string", "StringCodec"})
@@ -317,7 +319,7 @@ var goMapBuiltins = sync.OnceValue(func() []goMapBuiltin {
 	keys(&out, mapElement[TimeUUID]{TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec"})
 	keys(&out, mapElement[netip.Addr]{InetCodec, "netip.Addr", "InetCodec"})
 	keys(&out, mapElement[Date]{DateCodec, "cql.Date", "DateCodec"})
-	keys(&out, mapElement[TimeOfDay]{TimeCodec, "cql.TimeOfDay", "TimeCodec"})
+	keys(&out, mapElement[TimeOfDay]{TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec"})
 	keys(&out, mapElement[Timestamp]{TimestampCodec, "cql.Timestamp", "TimestampCodec"})
 	return out
 })
@@ -328,6 +330,7 @@ func keys[K comparable](out *[]goMapBuiltin, key mapElement[K]) {
 	pair(out, key, mapElement[int16]{Int16Codec, "int16", "Int16Codec"})
 	pair(out, key, mapElement[int32]{Int32Codec, "int32", "Int32Codec"})
 	pair(out, key, mapElement[int64]{Int64Codec, "int64", "Int64Codec"})
+	pair(out, key, mapElement[int]{IntCodec, "int", "IntCodec"})
 	pair(out, key, mapElement[float32]{Float32Codec, "float32", "Float32Codec"})
 	pair(out, key, mapElement[float64]{Float64Codec, "float64", "Float64Codec"})
 	pair(out, key, mapElement[string]{StringCodec, "string", "StringCodec"})
@@ -336,7 +339,7 @@ func keys[K comparable](out *[]goMapBuiltin, key mapElement[K]) {
 	pair(out, key, mapElement[TimeUUID]{TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec"})
 	pair(out, key, mapElement[netip.Addr]{InetCodec, "netip.Addr", "InetCodec"})
 	pair(out, key, mapElement[Date]{DateCodec, "cql.Date", "DateCodec"})
-	pair(out, key, mapElement[TimeOfDay]{TimeCodec, "cql.TimeOfDay", "TimeCodec"})
+	pair(out, key, mapElement[TimeOfDay]{TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec"})
 	pair(out, key, mapElement[Timestamp]{TimestampCodec, "cql.Timestamp", "TimestampCodec"})
 	pair(out, key, mapElement[Duration]{DurationCodec, "cql.Duration", "DurationCodec"})
 	pair(out, key, mapElement[time.Time]{TimestampTimeCodec, "time.Time", "TimestampTimeCodec"})

@@ -23,17 +23,17 @@ type streamFixture struct {
 
 func streamFixtureColumns(t testing.TB) Columns {
 	t.Helper()
-	blobs := CodecTestMust(ListType(rowTestType(t, TypeBlob)))
-	ints := CodecTestMust(SetType(rowTestType(t, TypeInt)))
+	blobs := CodecTestMust(ListType(rowTestType(t, KindBlob)))
+	ints := CodecTestMust(SetType(rowTestType(t, KindInt)))
 	return NewColumns(
-		ColumnSpec{Name: "payload", Type: rowTestType(t, TypeBlob)},
-		ColumnSpec{Name: "id", Type: rowTestType(t, TypeInt)},
-		ColumnSpec{Name: "key", Type: rowTestType(t, TypeUUID)},
-		ColumnSpec{Name: "name", Type: rowTestType(t, TypeText)},
+		ColumnSpec{Name: "payload", Type: rowTestType(t, KindBlob)},
+		ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)},
+		ColumnSpec{Name: "key", Type: rowTestType(t, KindUUID)},
+		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
 		ColumnSpec{Name: "pieces", Type: blobs},
 		ColumnSpec{Name: "tags", Type: ints},
-		ColumnSpec{Name: "maybe", Type: rowTestType(t, TypeBigInt)},
-		ColumnSpec{Name: "at", Type: rowTestType(t, TypeTimestamp)},
+		ColumnSpec{Name: "maybe", Type: rowTestType(t, KindBigInt)},
+		ColumnSpec{Name: "at", Type: rowTestType(t, KindTimestamp)},
 	)
 }
 
@@ -89,14 +89,14 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 		Counts [][]byte `cql:"counts,stream=Varint"`
 	}
 	columns := NewColumns(
-		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, TypeText)))},
-		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, TypeASCII)))},
-		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, TypeVarint)))},
+		ColumnSpec{Name: "names", Type: CodecTestMust(ListType(rowTestType(t, KindText)))},
+		ColumnSpec{Name: "codes", Type: CodecTestMust(ListType(rowTestType(t, KindASCII)))},
+		ColumnSpec{Name: "counts", Type: CodecTestMust(ListType(rowTestType(t, KindVarint)))},
 	)
 	type source struct{ Names, Codes []string }
 	params := Params(
 		Param("names", ListEncoder(StringCodec), func(v source) []string { return v.Names }),
-		Param("codes", ListEncoder(ASCIIStringCodec), func(v source) []string { return v.Codes }),
+		Param("codes", ListEncoder(StringCodec), func(v source) []string { return v.Codes }),
 		Param("counts", ListEncoder(VarintCodec), func(source) []Varint {
 			return []Varint{CodecTestMust(VarintFromBytes([]byte{1})), CodecTestMust(VarintFromBytes([]byte{0xff}))}
 		}),
@@ -110,5 +110,31 @@ func TestStreamRowOfElementListTag(t *testing.T) {
 		len(got.Codes) != 1 || string(got.Codes[0]) != "a" ||
 		len(got.Counts) != 2 || !bytes.Equal(got.Counts[0], []byte{1}) || !bytes.Equal(got.Counts[1], []byte{0xff}) {
 		t.Fatalf("decoded %q %q %x", got.Names, got.Codes, got.Counts)
+	}
+}
+
+// StreamRowOf maps named types inside slices and Nullable like the types
+// they are defined from, as RowOf does.
+func TestStreamRowOfNamedElements(t *testing.T) {
+	type code int32
+	type row struct {
+		Codes []code
+		Maybe Nullable[code]
+	}
+	columns := NewColumns(
+		ColumnSpec{Name: "codes", Type: CodecTestMust(SetType(rowTestType(t, KindInt)))},
+		ColumnSpec{Name: "maybe", Type: rowTestType(t, KindInt)},
+	)
+	type source struct{ Codes []int32 }
+	params := Params(
+		Param("codes", SetEncoder(Int32Codec), func(v source) []int32 { return v.Codes }),
+		Param("maybe", Int32Codec, func(source) int32 { return 9 }),
+	)
+	data := chainBytes(t, encodeTestParams(t, columns, params, source{Codes: []int32{1, 2}}))
+	// Streaming decoders write into the destination's storage.
+	got := row{Codes: make([]code, 0, 2)}
+	streamDecodeRow(t, columns, MustStreamRowOf[row](), data, &got)
+	if len(got.Codes) != 2 || got.Codes[1] != 2 || got.Maybe != (Nullable[code]{Value: 9, Valid: true}) {
+		t.Fatalf("decoded %+v", got)
 	}
 }

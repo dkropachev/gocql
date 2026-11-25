@@ -1788,7 +1788,7 @@ func InternalExecutionErrorResult(err error) cql.Result {
 // a counter: executing the statement is then a counter write.
 func hasCounterColumn(columns cql.Columns) bool {
 	for _, column := range cqltype.ColumnSlice(columns) {
-		if column.Type.Kind() == cql.TypeCounter {
+		if column.Type.Kind() == cql.KindCounter {
 			return true
 		}
 	}

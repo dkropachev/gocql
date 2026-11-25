@@ -98,8 +98,8 @@ func casBatchRowsBody(values ...string) []byte {
 	}
 	for _, column := range []struct {
 		name string
-		kind cql.Type
-	}{{"[applied]", cql.TypeBoolean}, {"value", cql.TypeBlob}} {
+		kind cql.Kind
+	}{{"[applied]", cql.KindBoolean}, {"value", cql.KindBlob}} {
 		b = binary.BigEndian.AppendUint16(b, uint16(len(column.name)))
 		b = append(b, column.name...)
 		b = binary.BigEndian.AppendUint16(b, uint16(column.kind))
@@ -142,7 +142,7 @@ func TestCASBatchRows(t *testing.T) {
 	if batch.Len() != 2 || batch.Size() == 0 {
 		t.Fatalf("batch of 2 members: Len %d, Size %d", batch.Len(), batch.Size())
 	}
-	rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BlobCodec)))
+	rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BytesCodec)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestCASBatchRows(t *testing.T) {
 	if !rows.NextInto(&dst) {
 		t.Fatal(rows.Err())
 	}
-	if dst.Applied || !dst.Previous.Set || string(dst.Previous.Value.OwnedBytes()) != "first" {
+	if dst.Applied || !dst.Previous.Set || string(ownedBytesForTest(dst.Previous.Value)) != "first" {
 		t.Fatalf("first row = %+v", dst)
 	}
 	cloned, err := rows.Clone()
@@ -174,7 +174,7 @@ func TestCASBatchRows(t *testing.T) {
 	if info := rows.Info(); info.Rows != 2 || info.Attempts != 1 || info.HostID != (cql.UUID{15: 1}) {
 		t.Fatalf("Info = %+v, want two rows from one attempt on the fake node", info)
 	}
-	if cloned.Applied || !cloned.Previous.Set || string(cloned.Previous.Value.OwnedBytes()) != "first" {
+	if cloned.Applied || !cloned.Previous.Set || string(ownedBytesForTest(cloned.Previous.Value)) != "first" {
 		t.Fatalf("Clone = %+v, want the first row", cloned)
 	}
 	// The lease keeps the page, and so the borrowed second row, alive after
@@ -186,7 +186,7 @@ func TestCASBatchRows(t *testing.T) {
 	if _, err := second.Previous.Value.Copy(); !errors.Is(err, cql.ErrReleased) {
 		t.Fatalf("borrowed row after the lease closed: %v, want cql.ErrReleased", err)
 	}
-	if string(cloned.Previous.Value.OwnedBytes()) != "first" {
+	if string(ownedBytesForTest(cloned.Previous.Value)) != "first" {
 		t.Fatal("the cloned row borrowed the released page")
 	}
 	// NextInto reported the end before Close, so Applied still answers.
@@ -265,7 +265,7 @@ func TestCursorAll(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BlobCodec)))
+		rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BytesCodec)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -277,7 +277,7 @@ func TestCursorAll(t *testing.T) {
 			if row.Applied {
 				t.Fatalf("row %+v applied", row)
 			}
-			got += string(row.Previous.Value.OwnedBytes()) + ","
+			got += string(ownedBytesForTest(row.Previous.Value)) + ","
 		}
 		if got != "first,second," {
 			t.Fatalf("CASBatchRows.All = %q", got)
