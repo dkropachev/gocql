@@ -59,6 +59,10 @@ func TestResolveKind(t *testing.T) {
 		"BEGIN BATCH INSERT INTO t(k) VALUES(1) IF NOT EXISTS; APPLY BATCH",
 		"BEGIN UNLOGGED BATCH UPDATE t SET v = 1 WHERE k = 1 IF v = 0 APPLY BATCH",
 		"UPDATE t SET v = 1 WHERE k = 1\nIF\tv = 0",
+		"// lead\nUPDATE t SET v = 1 WHERE k = 1 IF v = 0",
+		"-- lead\r\nDELETE FROM t WHERE k = 1 IF EXISTS",
+		"INSERT INTO t(k, v) VALUES(1, $$ it's $$) IF NOT EXISTS",
+		"BEGIN COUNTER BATCH UPDATE t SET c = c + 1 WHERE k = 1 IF EXISTS APPLY BATCH",
 	}
 	ordinary := []string{
 		"SELECT v FROM t WHERE k = 1",
@@ -72,6 +76,12 @@ func TestResolveKind(t *testing.T) {
 		"DROP KEYSPACE IF EXISTS ks",
 		"SELECT * FROM t WHERE k = 1 /* UPDATE IF */",
 		"BEGIN BATCH INSERT INTO t(k) VALUES(1); APPLY BATCH",
+		"INSERT INTO t(k, v) VALUES(1, $$ IF $$)",
+		"INSERT INTO t(k, v) VALUES(1, $$it's 'IF'$$)",
+		"UPDATE t SET v = 1 WHERE k = 1 // IF v = 0",
+		"// UPDATE t SET v = 1 WHERE k = 1 IF v = 0\nSELECT * FROM t",
+		"UPDATE t SET v = 1 WHERE k = 1 /* IF",
+		"INSERT INTO t(k, v) VALUES(1, $$ IF",
 	}
 	for _, text := range conditional {
 		if got, err := ResolveKind(cql.UnknownStatement, text, nil); err != nil || got != cql.ConditionalStatement {

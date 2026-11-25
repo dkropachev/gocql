@@ -185,6 +185,11 @@ func InternalConditionalCQL(cql string) bool {
 	})
 	return conditional
 }
+
+// visitCQLWords calls visit with each unquoted word of cql, upper-cased,
+// until visit returns false. It skips string literals, single-quoted with
+// a doubled quote as escape or between $$ pairs, double-quoted identifiers,
+// and --, // and /* */ comments, so a word inside one is never visited.
 func visitCQLWords(cql string, visit func(string) bool) {
 	for i := 0; i < len(cql); {
 		if cql[i] == '\'' || cql[i] == '"' {
@@ -203,19 +208,27 @@ func visitCQLWords(cql string, visit func(string) bool) {
 			}
 			continue
 		}
-		if i+1 < len(cql) && cql[i] == '-' && cql[i+1] == '-' {
+		if strings.HasPrefix(cql[i:], "$$") {
+			end := strings.Index(cql[i+2:], "$$")
+			if end < 0 {
+				return
+			}
+			i += 2 + end + 2
+			continue
+		}
+		if strings.HasPrefix(cql[i:], "--") || strings.HasPrefix(cql[i:], "//") {
 			i += 2
-			for i < len(cql) && cql[i] != '\n' {
+			for i < len(cql) && cql[i] != '\n' && cql[i] != '\r' {
 				i++
 			}
 			continue
 		}
-		if i+1 < len(cql) && cql[i] == '/' && cql[i+1] == '*' {
-			i += 2
-			for i+1 < len(cql) && (cql[i] != '*' || cql[i+1] != '/') {
-				i++
+		if strings.HasPrefix(cql[i:], "/*") {
+			end := strings.Index(cql[i+2:], "*/")
+			if end < 0 {
+				return
 			}
-			i += 2
+			i += 2 + end + 2
 			continue
 		}
 		if cql[i] >= 'a' && cql[i] <= 'z' || cql[i] >= 'A' && cql[i] <= 'Z' || cql[i] == '_' {
