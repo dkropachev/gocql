@@ -245,7 +245,7 @@ cursor, err := next.MarshalText() // the opaque cursor to hand out
 ```
 
 `state.UnmarshalText(cursor)` restores the state, start and completion
-included; `cql.PageStateFromToken(token)` restores one from the server token
+included, an empty cursor being the start; `cql.PageStateFromToken(token)` restores one from the server token
 alone. Either carries server state: authenticate or encrypt it before giving
 it to an untrusted client. See [paging](statements/paging.md).
 

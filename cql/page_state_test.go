@@ -79,7 +79,7 @@ func TestPageState(t *testing.T) {
 				t.Errorf("%s: text round trip through %s gave %+v", name, text, got)
 			}
 		}
-		for name, b := range map[string][]byte{"empty": nil, "kind": {3}, "start token": {0, 1}, "complete token": {2, 1}} {
+		for name, b := range map[string][]byte{"kind": {3}, "start token": {0, 1}, "complete token": {2, 1}} {
 			var got PageState
 			if err := got.UnmarshalBinary(b); !errors.As(err, new(*ValidationError)) {
 				t.Errorf("%s: UnmarshalBinary(%v) = %v, want a ValidationError", name, b, err)
@@ -88,6 +88,39 @@ func TestPageState(t *testing.T) {
 		var got PageState
 		if err := got.UnmarshalText([]byte("not base64!")); !errors.As(err, new(*ValidationError)) {
 			t.Errorf("UnmarshalText of bad base64 = %v, want a ValidationError", err)
+		}
+	})
+
+	// TestPageState/EmptyStart checks that the start state encodes as empty
+	// binary and text, that empty input decodes to it, whatever state the
+	// receiver held, and that "AA", the start state earlier releases
+	// encoded, still does.
+	t.Run("EmptyStart", func(t *testing.T) {
+		if b, err := StartPage().MarshalBinary(); err != nil || b == nil || len(b) != 0 {
+			t.Fatalf("start MarshalBinary = %v, %v; want empty", b, err)
+		}
+		if text, err := StartPage().MarshalText(); err != nil || len(text) != 0 {
+			t.Fatalf("start MarshalText = %q, %v; want empty", text, err)
+		}
+		inputs := map[string]func(*PageState) error{
+			"binary nil":   func(p *PageState) error { return p.UnmarshalBinary(nil) },
+			"binary empty": func(p *PageState) error { return p.UnmarshalBinary([]byte{}) },
+			"binary zero":  func(p *PageState) error { return p.UnmarshalBinary([]byte{0}) },
+			"text empty":   func(p *PageState) error { return p.UnmarshalText(nil) },
+			"text AA":      func(p *PageState) error { return p.UnmarshalText([]byte("AA")) },
+		}
+		for name, decode := range inputs {
+			got := PageStateFromToken([]byte{1})
+			if err := decode(&got); err != nil {
+				t.Fatalf("%s: %v", name, err)
+			}
+			if got.More() || got.Complete() || got.Token() != nil {
+				t.Errorf("%s: decoded %+v, want the start state", name, got)
+			}
+		}
+		var got PageState
+		if err := json.Unmarshal([]byte(`""`), &got); err != nil || got.More() || got.Complete() {
+			t.Errorf(`json "" = %+v, %v; want the start state`, got, err)
 		}
 	})
 }

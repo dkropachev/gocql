@@ -196,11 +196,15 @@ func (p PageState) Token() []byte {
 }
 func completePageState() PageState { return PageState{kind: 2} }
 
-// MarshalBinary encodes the whole state, start and completion included: one
-// byte for its kind, then a continuation's token. UnmarshalBinary reads it
-// back. The encoding carries the token, so it needs the same care before it
-// reaches an untrusted client.
+// MarshalBinary encodes the whole state, start and completion included. The
+// start state encodes as empty, so an absent cursor starts paging; any other
+// state is one byte for its kind, then a continuation's token. UnmarshalBinary
+// reads it back. The encoding carries the token, so it needs the same care
+// before it reaches an untrusted client.
 func (p PageState) MarshalBinary() ([]byte, error) {
+	if p.kind == 0 {
+		return []byte{}, nil
+	}
 	b := make([]byte, 1, 1+len(p.token))
 	b[0] = p.kind
 	if p.kind == 1 {
@@ -210,10 +214,13 @@ func (p PageState) MarshalBinary() ([]byte, error) {
 }
 
 // UnmarshalBinary decodes a state MarshalBinary encoded, copying its token.
-// Any other input is rejected with a ValidationError.
+// Empty input is the start state, as is the single zero byte earlier
+// releases encoded it as. Any other input is rejected with a
+// ValidationError.
 func (p *PageState) UnmarshalBinary(data []byte) error {
 	if len(data) == 0 {
-		return typeValidation("page state", "empty encoding")
+		*p = PageState{}
+		return nil
 	}
 	switch kind := data[0]; {
 	case kind == 1:
@@ -229,13 +236,16 @@ func (p *PageState) UnmarshalBinary(data []byte) error {
 }
 
 // MarshalText encodes the state as the unpadded URL-safe base64 of its
-// MarshalBinary encoding, fit for a URL or JSON cursor.
+// MarshalBinary encoding, fit for a URL or JSON cursor. The start state
+// encodes as empty text.
 func (p PageState) MarshalText() ([]byte, error) {
 	b, _ := p.MarshalBinary()
 	return base64.RawURLEncoding.AppendEncode(nil, b), nil
 }
 
-// UnmarshalText decodes a state MarshalText encoded. Any other input is
+// UnmarshalText decodes a state MarshalText encoded. Empty text is the start
+// state, so a request without a cursor starts paging, and "AA", the start
+// state of earlier releases, still decodes to it. Any other input is
 // rejected with a ValidationError.
 func (p *PageState) UnmarshalText(text []byte) error {
 	b, err := base64.RawURLEncoding.AppendDecode(nil, text)

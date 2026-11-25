@@ -933,7 +933,7 @@ func PageStateFromToken([]byte) PageState
 func (p PageState) More() bool
 func (p PageState) Complete() bool
 func (p PageState) Token() []byte
-func (p PageState) MarshalBinary() ([]byte, error)  // kind byte, then a continuation's token
+func (p PageState) MarshalBinary() ([]byte, error)  // empty for the start; else kind byte, then a continuation's token
 func (p *PageState) UnmarshalBinary([]byte) error
 func (p PageState) MarshalText() ([]byte, error)    // unpadded URL-safe base64 of the binary form
 func (p *PageState) UnmarshalText([]byte) error

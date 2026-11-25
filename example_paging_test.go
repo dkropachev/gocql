@@ -37,7 +37,7 @@ import (
 // Example_paging fetches a table two rows at a time. Each RunPage call sends
 // one request; the page's State resumes the next call, here through the text
 // cursor a web API could hand to its client once it authenticates it (see
-// cql.PageState).
+// cql.PageState). An empty cursor decodes to the start state.
 func Example_paging() {
 	ctx := context.Background()
 	cfg, err := config.New(config.ScyllaV4, "localhost:9042").Build()
@@ -56,10 +56,8 @@ func Example_paging() {
 	var cursor []byte // empty: the first page
 	for {
 		var state cql.PageState
-		if len(cursor) > 0 {
-			if err := state.UnmarshalText(cursor); err != nil {
-				log.Fatal(err)
-			}
+		if err := state.UnmarshalText(cursor); err != nil {
+			log.Fatal(err)
 		}
 		page, err := p.RunPage(ctx, cql.EmptyParams{}, state, 2)
 		if err != nil {
