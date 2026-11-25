@@ -172,7 +172,10 @@ if !found {
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
 | `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a `Worker` (`Prepared.Worker`) rejects a fixed timestamp |
 | `query.Attempts()`, `query.Latency()` | the returned `cql.Result`'s `Attempts` and `AttemptLatency`, the sum of the completed attempts' latencies |
-| `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page |
+| `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page; `rows.Result().FetchedRows` on an open `Rows` |
+| `query.Observer(o)` | `exec.Options{Observer: o}`, which v2 joins after the session's observer; add `NoSessionObserver: true` for v1's replacement |
+| `iter.Host()` | `Result.HostID`; `rows.Result().HostID` on an open `Rows` |
+| `query.GetRoutingKey()` | `prepared.Routing(params)`, whose `Token` is the partition's token |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Worker(options)` is closed with `Close` |

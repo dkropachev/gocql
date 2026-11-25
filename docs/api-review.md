@@ -353,7 +353,8 @@ A seventh pass, with one reviewer per area, made about 80 proposals; all
 are taken and land in six changes before `v2.0.0-rc.1`. This first part
 fixes silent run-time failures, with little or no API change; the second
 reworks the `cql` types and codecs; the third the `cql` statements, results
-and paging. Rows marked **reverses** undo a decision of an earlier pass.
+and paging; the fourth the root execution API and `exec`. Rows marked
+**reverses** undo a decision of an earlier pass.
 
 ### transport / config
 
@@ -433,6 +434,26 @@ and paging. Rows marked **reverses** undo a decision of an earlier pass.
 | Finding | Outcome |
 |---|---|
 | `Prepared.Parameters` and `PreparedStream.Parameters` named what `Statement.BindMarkers` supplies for an unprepared call | Renamed `BindMarkers`. |
+
+### gocql execution API
+
+| Finding | Outcome |
+|---|---|
+| `Prepared.Query` returned a `*Query`, a name that reads like CQL text or v1's mutable query builder rather than the reusable execution one goroutine owns | `Prepared.Worker` returns a `*Worker`, `PreparedStream.Worker` a `*StreamWorker`; the grid's worker-owned row, the docs and the examples follow, and `ErrBusy` names the worker. **Reverses** the first pass's "keep `Query`, `StreamQuery`": the type was named for the request, while what a caller manages is a per-goroutine execution with buffers to close. The rename is the first change of this part, so the later ones use the new names. |
+| Reading a value's route took a `Worker` to create and close, and `Routing` left out the consistency and host and shard pins its doc promised | `Prepared.Routing(value, options...)`, with the shared form's options, encodes into pooled scratch and fills in the consistency, the pins, the session keyspace for a statement that names none and conditional routing for a SERIAL read. `Worker.Routing` is removed. |
+| A conditional batch's applied flag took `RunConditionalBatch`, `Applied` and `Close` | `Session.ApplyBatch(ctx, batch, options...) (applied bool, cql.Result, error)` runs it with `cql.CASApplied` and closes the rows before returning, so it keeps no pooled query. The grid gains a Batch row (`ExecBatch`, `ApplyBatch`, `RunConditionalBatch`, pages empty by design), whose verbs `TestExecutionGrid` checks with the `Batch` suffix; `ErrConditionalExec` names `ApplyBatch`. |
+| `RowStream` had no range form, though `Rows`, `Page` and `CASBatchRows` do | `RowStream.All(dst)` decodes into the seeded `dst` and closes the stream when the loop ends, so `break` releases the execution and any reserved connection. |
+| A statement always read at one consistency passed the same compiled options on every call | `Prepared.With(defaults)` returns a view that shares the preparation and its pool; its calls without options use `defaults`, options passed to a call replace them whole, as they replace the session's, and its `Worker` takes their values, a `Timestamp` among them rejected. |
+| Most throwaway calls were `UnpreparedExec(ctx, cql.Command(text), cql.EmptyParams{})` | `Session.UnpreparedCommand(ctx, text, options...)`, the grid's first documented exception: a new Exceptions section of `docs/api-surface.md` lists it, and `TestExecutionGrid` checks each exception is documented there and ends in its row's options form. The examples use it. |
+| `Rows`, `Page` and `CASBatchRows` returned their `cql.Result` from `Info`, the name `Prepared.Info` uses for preparation data; `RowStream.Info` returned a `StreamInfo` whose `DeliveredRows` repeated `Result.FetchedRows` | `Result()` on all four. What was left of `StreamInfo`, `Pages` and `OutputStarted`, is a `StreamProgress` from `RowStream.Progress()`: progress counters, not the information about the stream that `Info` named, and no longer holding the result `Result()` returns. |
+| `Session.ID` returned the UUID as a string, and a zero `Session`'s as `""` | Returns a `cql.UUID`, as `HostID` and the trace IDs are, and the zero UUID for a zero `Session`. |
+| `One`'s `(found bool, cql.Result, error)` was proposed to change with the other accessors | Kept: `found` is the one-row answer, as `ApplyBatch`'s `applied` is, and the `Result` is returned beside it on every one-shot call. |
+
+### exec observers
+
+| Finding | Outcome |
+|---|---|
+| `exec.Options.Observer` replaced the session's observer, so adding a span or counter to one execution dropped the session's tracer and metrics unless the caller joined them by hand | The per-call observer is joined after the session's, as `observe.Join` orders them: each hook calls the session's first, and the added one's `StartRequest` gets the session's context. `Options.NoSessionObserver` leaves the session's out, and `Session.Observer` returns it. **Reverses** the sixth pass's "replace, and show `observe.Join(sessionObserver, extra)`": joining was what every caller wanted, and replacing needed the session's observer at each call site; `NoSessionObserver` keeps replacement for the rare caller that wants it. |
 
 ## Decisions
 
