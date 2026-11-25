@@ -53,6 +53,7 @@ package gocql
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
 		gocql.PreparedStream method (*T) Worker(options ...exec.StreamOptions) (*gocql.StreamWorker[P, R], error)
 	type gocql.RowStream[R any] struct
+		gocql.RowStream method (*T) All(dst *R) iter.Seq2[*R, error]
 		gocql.RowStream method (*T) Close() error
 		gocql.RowStream method (*T) Columns() cql.Columns
 		gocql.RowStream method (*T) Err() error

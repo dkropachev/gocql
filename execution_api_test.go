@@ -170,3 +170,58 @@ func TestApplyBatch(t *testing.T) {
 		t.Fatalf("ApplyBatch after Close = %v, want cqlerr.ErrClosed", err)
 	}
 }
+
+// TestRowStreamAll ranges over a RowStream: the loop decodes every page into
+// the seeded destination, and breaking out of it closes the stream, so the
+// worker runs again at once instead of reporting cqlerr.ErrBusy.
+func TestRowStreamAll(t *testing.T) {
+	f := newLifetimeFixture(t)
+	w, err := f.ps.Worker(exec.StreamOptions{Options: gridOptions})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	stream, err := w.Run(f.ctx, gridKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst := make([]byte, 0, 16)
+	var got string
+	for row, err := range stream.All(&dst) {
+		if err != nil {
+			t.Fatal(err)
+		}
+		if row != &dst {
+			t.Fatal("RowStream.All did not yield dst")
+		}
+		got += string(*row)
+	}
+	if got != "abc" {
+		t.Fatalf("RowStream.All = %q, want every page's rows", got)
+	}
+	if err := stream.Close(); err != nil {
+		t.Fatalf("Close after All = %v", err)
+	}
+	if info := stream.Info(); info.Pages != 2 || !info.OutputStarted {
+		t.Fatalf("Info = %+v, want two pages with output", info)
+	}
+
+	stream, err = w.Run(f.ctx, gridKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for row, err := range stream.All(&dst) {
+		if err != nil || string(*row) != "a" {
+			t.Fatalf("first row = %q, %v", *row, err)
+		}
+		break
+	}
+	if stream.NextInto(&dst) {
+		t.Fatal("NextInto returned a row after the loop broke")
+	}
+	again, err := w.Run(f.ctx, gridKey)
+	if err != nil {
+		t.Fatalf("Run after a broken loop = %v, want the stream closed", err)
+	}
+	_ = again.Close()
+}

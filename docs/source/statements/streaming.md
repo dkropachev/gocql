@@ -45,6 +45,17 @@ for stream.NextInto(&row) {
 return stream.Err()
 ```
 
+`stream.All(&row)` is the range form of the same loop: it yields `&row` for
+each row, yields any error once, and closes the stream when the loop ends,
+so `break` releases the execution:
+
+```go
+for r, err := range stream.All(&row) {
+    if err != nil { return err }
+    consume(*r) // r is &row.
+}
+```
+
 Choose execution and receive behavior independently:
 
 | Use case | API and behavior |

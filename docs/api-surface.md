@@ -92,7 +92,8 @@ A new cell follows the options form of its row.
 Streaming is a standalone, performance-first API that decodes into caller
 storage. It is always prepared, worker-owned, and has one output shape, many
 rows: `Session.PrepareStream` → `PreparedStream.Worker` → `StreamWorker.Run` →
-`RowStream`. Adding another shape or entry point to streaming is a change to
+`RowStream`, read by pull (`NextInto`) or range (`All`), as `Rows` is.
+Adding another shape or entry point to streaming is a change to
 this rule, made with the maintainer.
 
 Streaming and the many-rows methods fetch pages under the hood and expose no

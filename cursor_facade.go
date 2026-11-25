@@ -183,6 +183,27 @@ type RowStream[R any] implSession.RowStream[R]
 // NextInto decodes the next row into dst, reporting whether one exists.
 func (r *RowStream[R]) NextInto(dst *R) bool { return (*implSession.RowStream[R])(r).NextInto(dst) }
 
+// All returns an iterator over the stream's rows, decoding each into dst,
+// which must be seeded as for NextInto: the yielded pointer is dst itself,
+// overwritten by the next row. An error is yielded once, as (nil, err), and
+// ends the iteration. The stream is closed when the loop ends, early or not,
+// so breaking out of the loop releases the execution and any reserved
+// connection.
+func (r *RowStream[R]) All(dst *R) iter.Seq2[*R, error] {
+	return func(yield func(*R, error) bool) {
+		s := (*implSession.RowStream[R])(r)
+		for s.NextInto(dst) {
+			if !yield(dst, nil) {
+				_ = s.Close()
+				return
+			}
+		}
+		if err := s.Close(); err != nil {
+			yield(nil, err)
+		}
+	}
+}
+
 // Err returns the terminal iteration error, if any.
 func (r *RowStream[R]) Err() error { return (*implSession.RowStream[R])(r).Err() }
 

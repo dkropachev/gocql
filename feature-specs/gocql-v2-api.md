@@ -1086,6 +1086,7 @@ func (w *StreamWorker[P, R]) Close()
 func (w *StreamWorker[P, R]) Wait(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
+func (s *RowStream[R]) All(*R) iter.Seq2[*R, error] // closes the stream when the loop ends
 func (s *RowStream[R]) Err() error
 func (s *RowStream[R]) Close() error
 func (s *RowStream[R]) Columns() cql.Columns
