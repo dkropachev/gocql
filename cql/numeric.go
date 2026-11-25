@@ -147,8 +147,8 @@ func (v Varint) Int64() (int64, error) {
 }
 
 // BigInt explicitly materializes an independent arbitrary precision integer.
-// It panics, like Bytes.Copy, when v borrows a page that was already
-// released.
+// It panics with ErrReleased, as Bytes.Clone does, when v borrows a page that
+// was already released.
 func (v Varint) BigInt() *big.Int {
 	if v.bytes.Len() == 0 {
 		if err := checkBytesAlive(v.bytes); err != nil {
