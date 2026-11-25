@@ -33,8 +33,9 @@ type Info struct {
 	// HostID pins the request to a host, when set.
 	HostID cql.Option[cql.UUID]
 	// AnyShardFallback lets a request pinned to ShardID use another shard of
-	// HostID when ShardID has no connection; without it the request stays on
-	// ShardID.
+	// HostID when ShardID has no connection or the host has no such shard,
+	// as exec.Options.AnyShardFallback sets it; without it the request stays
+	// on ShardID.
 	AnyShardFallback bool
 }
 

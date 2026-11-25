@@ -126,7 +126,8 @@ type Options struct {
 	// HostID when ShardID has no connection or the host has no such shard,
 	// as metadata.Target.AnyShardFallback does for a routing.SingleTarget
 	// policy. It requires ShardID. The zero value keeps the request on
-	// ShardID.
+	// ShardID. A conditional request, or one with SERIAL or LOCAL_SERIAL
+	// consistency, stays on ShardID regardless.
 	AnyShardFallback bool
 	// NoSessionObserver leaves the session's hooks out of the execution, so
 	// Observer alone observes it, or nothing does when Observer is the zero
