@@ -66,7 +66,7 @@ func closeTwice(t *testing.T, name string, close func() error, want error) {
 // failing; and Session.Close waits for a running Each or All callback.
 func TestHandleLifetimes(t *testing.T) {
 	// TestHandleLifetimes/CloseIsIdempotent checks that closing each handle
-	// twice is harmless and that a closed query or stream query refuses new
+	// twice is harmless and that a closed Worker or StreamWorker refuses new
 	// executions with cqlerr.ErrClosed while Wait returns nil.
 	t.Run("CloseIsIdempotent", func(t *testing.T) {
 		f := newLifetimeFixture(t)
@@ -281,9 +281,8 @@ func TestHandleLifetimes(t *testing.T) {
 	})
 
 	// TestHandleLifetimes/OpenAcrossQueryClose checks that Rows and a Page of
-	// a reusable query, and a RowStream of a stream query, left open while
-	// the query closes report cqlerr.ErrClosed, and that Wait then returns
-	// nil.
+	// a Worker, and a RowStream of a StreamWorker, left open while the worker
+	// closes report cqlerr.ErrClosed, and that Wait then returns nil.
 	t.Run("OpenAcrossQueryClose", func(t *testing.T) {
 		for _, kind := range []string{"Rows", "Page", "RowStream"} {
 			t.Run(kind, func(t *testing.T) {

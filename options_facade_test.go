@@ -167,7 +167,7 @@ func TestTooManyOptions(t *testing.T) {
 	checkPrepare("PrepareStream", err)
 }
 
-// TestWorkerRejectsFixedTimestamp checks that a worker query refuses a fixed
+// TestWorkerRejectsFixedTimestamp checks that a Worker refuses a fixed
 // write timestamp, which every write it runs would carry.
 func TestWorkerRejectsFixedTimestamp(t *testing.T) {
 	options := exec.Options{Timestamp: cql.Some(time.Now())}

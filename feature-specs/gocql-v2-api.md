@@ -747,7 +747,7 @@ func (s *Session) Observer() observe.Observer // the configured one
 ```
 
 Prepared statements and compiled plans are immutable and shareable. Each
-worker creates a reusable query; it permits one active execution and owns all
+goroutine creates a Worker; it permits one active execution and owns all
 captured parameters through retries, pages, accepted writes and callbacks.
 
 ```go
@@ -848,17 +848,17 @@ that drain within its own context instead of returning ErrBusy. AddToBatch
 uses storage of its own and works during the drain. Close() stops
 the worker, cancels a running call (which returns an error matching
 context.Canceled), stops an open handle with cqlerr.ErrClosed, and returns at once; Wait(ctx) joins the drain, returning ctx.Err() when ctx ends
-first, and Session.Close joins the rest. The session refers to an open query
-weakly: a query dropped without Close is closed by a garbage-collector cleanup,
+first, and Session.Close joins the rest. The session refers to an open worker
+weakly: a worker dropped without Close is closed by a garbage-collector cleanup,
 and a session logging at Debug logs where it was created. Cursor handles capture their execution
 generation; stale handles cannot advance, close or modify another execution.
-Rows is a value handle over iterator storage that a reusable query keeps and
+Rows is a value handle over iterator storage that a Worker keeps and
 reuses for its next execution. A stale Rows reports no rows, Err returns
 cqlerr.ErrStaleRows and Close does nothing; the zero Rows has no rows. Rows is not
 safe for concurrent use.
 Close is idempotent. Close a cursor on early termination before reusing its
-query. Session
-shutdown stops all queries before joining their transport/callback drains.
+worker. Session
+shutdown stops all workers before joining their transport/callback drains.
 
 Prepare performs schema-scoped dependency validation and keeps per-host IDs,
 LRU eviction independence, codec validation, conditional classification and
@@ -1223,8 +1223,8 @@ then exposes that caller-owned representation; nested framing/type validation
 runs incrementally and does not allocate a complete cell in driver storage.
 
 A streaming execution uses the same parameter encoding, routing, per-host
-prepared IDs, metadata revisions and Close/Wait admission as a buffered query.
-Actual streaming response metadata selects this query's stream.CompiledStreamRow; cache
+prepared IDs, metadata revisions and Close/Wait admission as a buffered Worker.
+Actual streaming response metadata selects this worker's stream.CompiledStreamRow; cache
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
 an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
 Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
@@ -1234,7 +1234,7 @@ the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Worker-local caches revalidate
 actual changed result metadata without changing the shared preparation.
 
-Streaming query execution installs the stream receiver before sending and returns after checked
+StreamWorker execution installs the stream receiver before sending and returns after checked
 response headers/metadata and bounded integrity staging, without waiting for the
 complete page. It does not consume row payload waiting for an application
 destination. NextInto reads one row into that destination and performs automatic
@@ -1247,8 +1247,8 @@ payloads forever; its CQL trace IDs accumulate across pages and attempts. Output
 that can modify a destination, including Reset; it never becomes false again.
 Result().FetchedRows increments only after complete checked rows. Pages counts checked
 response pages, including empty pages. Errors retain this information through
-Result and Progress even when a streaming query has already returned a cursor. An error before cursor
-construction returns normally through the query Run method's error result.
+Result and Progress even when a StreamWorker has already returned a cursor. An error before cursor
+construction returns normally through the StreamWorker Run method's error result.
 
 Reset is called on a non-nil destination before each active NextInto attempt;
 terminal/exhausted calls return false without touching it. Built-in value Reset
@@ -1376,7 +1376,7 @@ type Options struct {
     PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
     Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
-    Timestamp cql.Option[time.Time]               // sent in microseconds; worker queries reject it
+    Timestamp cql.Option[time.Time]               // sent in microseconds; workers reject it
     NowInSeconds cql.Option[int32]
     Keyspace string
     CQLTrace bool                                 // server-side CQL tracing
@@ -1449,8 +1449,8 @@ type CQLTraceRef struct {
 }
 ```
 
-Invalid values fail in the query constructor or Session.CompileOptions, before any
-execution. A query uses its options as resolved when it is created; options
+Invalid values fail in the Worker constructor or Session.CompileOptions, before any
+execution. A worker uses its options as resolved when it is created; options
 passed per call use the resolution CompileOptions made. A zero exec.Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed
 errors, not panics. A profile is a plain value, made by `ProfileBuilder.Build`:
