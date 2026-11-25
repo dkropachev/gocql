@@ -44,6 +44,24 @@ false when `ctx` ended first. A `cqltrace.Fetcher` changes that wait with
 When `ctx` ends before the session is ready, the error matches
 `cqltrace.ErrNotReady`.
 
+`cqltrace.FetchAll` reads every session a list of references names, which is
+how to trace a request that failed: its `*cqlerr.ExecutionError` carries the
+`Result` with the failed attempts' sessions. It returns one `Info` per
+reference, and the errors of the sessions it could not read joined:
+
+```go
+_, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true})
+if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
+	infos, err := cqltrace.FetchAll(ctx, session, failure.Result.CQLTraces())
+	if err != nil {
+		log.Print(err)
+	}
+	for _, info := range infos {
+		fmt.Print(info)
+	}
+}
+```
+
 `exec.PrepareOptions.CQLTrace` traces the PREPARE request itself; the driver
 does not report that session's ID, so find it in `system_traces.sessions`.
 

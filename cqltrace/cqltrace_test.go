@@ -292,3 +292,29 @@ func TestFetchReadiness(t *testing.T) {
 		}
 	})
 }
+
+func TestFetchAll(t *testing.T) {
+	ok, bad := cql.UUID{15: 1}, cql.UUID{15: 2}
+	refs := []cql.CQLTraceRef{{ID: ok, Attempt: 1, Failed: true}, {ID: bad, Attempt: 2}, {ID: ok, Attempt: 3}}
+	broken := errors.New("broken")
+	var read []cql.UUID
+	infos, err := fetchAll(context.Background(), refs, func(_ context.Context, id cql.UUID) (Info, error) {
+		read = append(read, id)
+		if id == bad {
+			return Info{ID: id, Command: "partial"}, broken
+		}
+		return Info{ID: id, Command: "QUERY"}, nil
+	})
+	if !slices.Equal(read, []cql.UUID{ok, bad, ok}) {
+		t.Fatalf("read %v", read)
+	}
+	if len(infos) != 3 || infos[0].Command != "QUERY" || infos[1].ID != bad || infos[1].Command != "" || infos[2].Command != "QUERY" {
+		t.Fatalf("infos %+v", infos)
+	}
+	if !errors.Is(err, broken) || !strings.Contains(err.Error(), bad.String()) {
+		t.Fatalf("error %v", err)
+	}
+	if infos, err := fetchAll(context.Background(), nil, nil); len(infos) != 0 || err != nil {
+		t.Fatalf("no refs: %v, %v", infos, err)
+	}
+}

@@ -138,6 +138,37 @@ func Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
 	return Fetcher{}.Fetch(ctx, s, id)
 }
 
+// FetchAll reads the trace sessions refs name with a zero Fetcher.
+func FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]Info, error) {
+	return Fetcher{}.FetchAll(ctx, s, refs)
+}
+
+// FetchAll reads the trace session of every reference in refs, in order, as
+// Fetch reads one: the sessions cql.Result.CQLTraces lists, or a failed
+// execution's cqlerr.ExecutionError.Result.CQLTraces. It returns one Info per
+// reference, also for a session it could not read, which holds only its ID,
+// and the errors of those sessions joined, each naming its session; a
+// session that fails does not keep the later ones from being read. Once ctx
+// ends, the remaining sessions fail with ErrNotReady.
+func (f Fetcher) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]Info, error) {
+	return fetchAll(ctx, refs, func(ctx context.Context, id cql.UUID) (Info, error) { return f.Fetch(ctx, s, id) })
+}
+
+// fetchAll is FetchAll reading each session with fetch.
+func fetchAll(ctx context.Context, refs []cql.CQLTraceRef, fetch func(context.Context, cql.UUID) (Info, error)) ([]Info, error) {
+	infos := make([]Info, len(refs))
+	var errs []error
+	for i, ref := range refs {
+		info, err := fetch(ctx, ref.ID)
+		if err != nil {
+			info = Info{ID: ref.ID}
+			errs = append(errs, fmt.Errorf("trace session %s: %w", ref.ID, err))
+		}
+		infos[i] = info
+	}
+	return infos, errors.Join(errs...)
+}
+
 // Fetch reads the trace session id, polling until it is ready or ctx ends.
 //
 // The cluster writes a trace session asynchronously, after it answers the

@@ -1123,11 +1123,13 @@ package cqltrace
 		cqltrace.Event field Elapsed time.Duration
 		cqltrace.Event field ID cql.TimeUUID
 	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+	func cqltrace.FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Fetcher struct
 		cqltrace.Fetcher field Poll time.Duration
 		cqltrace.Fetcher field Settle time.Duration
 		cqltrace.Fetcher field Consistency cql.Consistency
 		cqltrace.Fetcher method (T) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+		cqltrace.Fetcher method (T) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Info struct
 		cqltrace.Info field Started time.Time
 		cqltrace.Info field Coordinator net/netip.Addr
