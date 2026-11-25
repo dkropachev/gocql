@@ -51,7 +51,11 @@ func Example_nulls() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(value.Valid, value.Value.String() == "")
+	text, err := value.Value.Copy()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(value.Valid, text == "")
 	// Output:
 	// false
 	// true true

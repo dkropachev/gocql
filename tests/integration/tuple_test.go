@@ -84,11 +84,7 @@ func checkDynamicTuple(t *testing.T, mode string) {
 		}
 		return
 	}
-	iter, err := v.Elements()
-	if err != nil {
-		t.Fatal(err)
-	}
-	members, err := iter.Collect()
+	members, err := collectSeq(v.Elements())
 	if err != nil {
 		t.Fatal(err)
 	}

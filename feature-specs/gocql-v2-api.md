@@ -547,11 +547,12 @@ caller storage, whose contents must be discarded after an error. Fixed-width
 vectors check the compiled aggregate width before decoding elements; variable
 vectors use checked unsigned-vint lengths.
 
-Dynamic Value retains explicit cursor traversal through Elements, Entries and
-Fields. dynamic.Iterator stops permanently at the first error, enforces framing
-and counts, and does not publish the failed value. Its Collect method allocates
-an output slice and recursively detaches yielded values; errors return no
-partial slice. Dynamic traversal does not imply typed lazy collection decoders.
+Dynamic Value retains explicit cursor traversal through the Elements, Entries
+and Fields range iterators. Each stops at the first error, which it yields once
+with a zero member, enforces framing and counts, and does not publish the
+failed value; yielded members may borrow the response until Clone. There is no
+indexed member access, which would rescan a decoded value. Dynamic traversal
+does not imply typed lazy collection decoders.
 
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
@@ -617,18 +618,12 @@ func (v Value) Duration() (Duration, error)
 func (v Value) Varint() (Varint, error)
 func (v Value) Decimal() (Decimal, error)
 func (v Value) Len() int
-func (v Value) At(int) (Value, error)           // list, set, vector, tuple or UDT member
 func (v Value) Field(string) (Value, error)     // UDT field
+func (v Value) Str() (string, error)            // owned copy of text or ascii
 func (v Value) String() string                  // CQL literal, for logs
-func (v Value) Elements() (*Iterator[Value], error)
-func (v Value) Entries() (*Iterator[Entry], error)
-func (v Value) Fields() (*Iterator[Field], error)
-type Iterator[T any] struct { /* bounded cursor for Value traversal */ }
-func (i *Iterator[T]) Next() bool
-func (i *Iterator[T]) Value() T
-func (i *Iterator[T]) Err() error
-func (i *Iterator[T]) All() iter.Seq2[T, error]
-func (i *Iterator[T]) Collect() ([]T, error)
+func (v Value) Elements() iter.Seq2[Value, error]
+func (v Value) Entries() iter.Seq2[Entry, error]
+func (v Value) Fields() iter.Seq2[Field, error]
 func Null(DataType) Value
 func Unset(DataType) Value
 func Empty(DataType) (Value, error)
@@ -651,12 +646,12 @@ func Timestamp(Timestamp) Value
 func Duration(Duration) Value
 func Varint(Varint) Value
 func Decimal(Decimal) Value
-func List(DataType, []Value) (Value, error)
-func Set(DataType, []Value) (Value, error)
+func List(element DataType, values ...Value) (Value, error)
+func Set(element DataType, values ...Value) (Value, error)
 func Map(DataType, []Entry) (Value, error)
 func Tuple(DataType, []Value) (Value, error)
 func UDT(DataType, []Field) (Value, error)
-func Vector(DataType, []Value) (Value, error)
+func Vector(element DataType, values ...Value) (Value, error) // dimension len(values)
 var Codec cql.Codec[Value]
 var Params cql.ParamEncoder[[]Value]
 var NamedParams cql.ParamEncoder[[]Field]

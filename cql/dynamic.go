@@ -5,6 +5,7 @@ package cql
 
 import (
 	"fmt"
+	"iter"
 	"math"
 	"net/netip"
 	"sync"
@@ -18,9 +19,10 @@ import (
 // report the first two. The accessors Bool, Signed, Float, Text, Bytes, UUID,
 // TimeUUID, Inet, Time, TimeOfDay, Duration, Varint and Decimal return the
 // payload of a present scalar of a matching type, and an error otherwise,
-// which matches ErrNull for a NULL. Elements, Entries and Fields iterate a
-// collection, map, tuple or UDT; Len, At and Field read one member. String
-// prints the value as a CQL literal. Clone detaches a decoded value from its
+// which matches ErrNull for a NULL; Str copies text into a string. Elements,
+// Entries and Fields range over a collection, map, tuple or UDT; Len counts
+// its members and Field reads one UDT field. String prints the value as a
+// CQL literal. Clone detaches a decoded value from its
 // page.
 //
 // The constructors do not fail on a scalar payload: an invalid one, such as
@@ -266,9 +268,9 @@ func (v Value) Float() (float64, error) {
 	return math.Float64frombits(v.bits), nil
 }
 
-// Text returns a present text, varchar or ascii value. A decoded Text borrows
-// the response; see Clone. It fails for a TextValue or ASCIIValue that is not
-// valid for its type.
+// Text returns a present text or ascii value. A decoded Text borrows the
+// response; see Clone, or Str for a string that does not. It fails for a
+// TextValue or ASCIIValue that is not valid for its type.
 func (v Value) Text() (Text, error) {
 	if err := v.require(TypeText, TypeASCII); err != nil {
 		return Text{}, err
@@ -279,6 +281,17 @@ func (v Value) Text() (Text, error) {
 		}
 	}
 	return textView(v.bytes), nil
+}
+
+// Str returns a present text or ascii value as a newly allocated string,
+// which stays valid after the response is released. It fails as Text does,
+// and with ErrReleased for a decoded value whose response was released.
+func (v Value) Str() (string, error) {
+	text, err := v.Text()
+	if err != nil {
+		return "", err
+	}
+	return text.Copy()
 }
 
 // Bytes returns a present blob. A decoded Bytes borrows the response; see
@@ -541,16 +554,26 @@ func dynamicAggregateChecked(t DataType, kind Type, values []Value) (Value, erro
 	return Value{typ: t, values: values, count: len(values)}, nil
 }
 
-// ListValue constructs a dynamic list value, validating its elements against t.
-// The input slice and borrowed elements must remain immutable until captured; Clone detaches them.
-func ListValue(t DataType, v []Value) (Value, error) {
-	return dynamicAggregate(t, TypeList, v)
+// ListValue constructs a dynamic list of element values, validating each
+// against element. Borrowed values must remain immutable until captured;
+// Clone detaches them.
+func ListValue(element DataType, values ...Value) (Value, error) {
+	t, err := ListType(element)
+	if err != nil {
+		return Value{}, err
+	}
+	return dynamicAggregate(t, TypeList, values)
 }
 
-// SetValue constructs a dynamic set value, validating its elements against t.
-// The input slice and borrowed elements must remain immutable until captured; Clone detaches them.
-func SetValue(t DataType, v []Value) (Value, error) {
-	return dynamicAggregate(t, TypeSet, v)
+// SetValue constructs a dynamic set of element values, validating each
+// against element. Borrowed values must remain immutable until captured;
+// Clone detaches them.
+func SetValue(element DataType, values ...Value) (Value, error) {
+	t, err := SetType(element)
+	if err != nil {
+		return Value{}, err
+	}
+	return dynamicAggregate(t, TypeSet, values)
 }
 
 // TupleValue constructs a dynamic tuple value, validating its members against t.
@@ -559,9 +582,18 @@ func TupleValue(t DataType, v []Value) (Value, error) {
 	return dynamicAggregate(t, TypeTuple, v)
 }
 
-// VectorValue constructs a dynamic vector value, checking its dimension and element types.
-func VectorValue(t DataType, v []Value) (Value, error) {
-	return dynamicAggregate(t, TypeVector, v)
+// VectorValue constructs a dynamic vector of element values, whose
+// dimension is the number of values, validating each against element.
+// Borrowed values must remain immutable until captured; Clone detaches them.
+func VectorValue(element DataType, values ...Value) (Value, error) {
+	if len(values) > math.MaxUint16 {
+		return Value{}, typeValidation("dimension", "vector dimension %d exceeds 65535", len(values))
+	}
+	t, err := VectorType(element, uint16(len(values)))
+	if err != nil {
+		return Value{}, err
+	}
+	return dynamicAggregate(t, TypeVector, values)
 }
 
 // MapValue constructs a dynamic map value, validating its members against t.
@@ -832,9 +864,45 @@ func dynamicField(c *ValueCursor, t DataType, shape *streamValidationPlan) (Valu
 	return decodeDynamicWithPlan(r, shape)
 }
 
-// Elements returns an independent iterator over list, set, vector, or tuple
-// members. Tuple fields retain their physical ordinal and complete type.
-func (v Value) Elements() (*ValueIterator[Value], error) {
+// Elements returns an iterator over the members of a list, set, vector or
+// tuple, in order. It yields each member with a nil error; a failure, such
+// as a value of another type or a malformed member, ends the loop with one
+// last pair holding the zero Value and the error. A decoded member may
+// borrow the response; see Clone.
+func (v Value) Elements() iter.Seq2[Value, error] {
+	it, err := v.iterElements()
+	return seqOf(it, err)
+}
+
+// Entries returns an iterator over the key and value of each entry of a
+// map, in encoded order, which ends on a failure as Elements does.
+func (v Value) Entries() iter.Seq2[ValueEntry, error] {
+	it, err := v.iterEntries()
+	return seqOf(it, err)
+}
+
+// Fields returns an iterator over the fields of a tuple or UDT, in type
+// order, which ends on a failure as Elements does. A tuple's fields have no
+// names.
+func (v Value) Fields() iter.Seq2[ValueField, error] {
+	it, err := v.iterFields()
+	return seqOf(it, err)
+}
+
+// seqOf returns it as a range iterator, or one that yields only err.
+func seqOf[T any](it *valueIterator[T], err error) iter.Seq2[T, error] {
+	if err != nil {
+		return func(yield func(T, error) bool) {
+			var zero T
+			yield(zero, err)
+		}
+	}
+	return it.All()
+}
+
+// iterElements returns an independent iterator over list, set, vector, or
+// tuple members. Tuple fields retain their physical ordinal and complete type.
+func (v Value) iterElements() (*valueIterator[Value], error) {
 	if err := v.require(TypeList, TypeSet, TypeVector, TypeTuple); err != nil {
 		return nil, err
 	}
@@ -842,7 +910,7 @@ func (v Value) Elements() (*ValueIterator[Value], error) {
 		return newValueIterator(len(v.values), func(i int) (Value, error) { return v.values[i], nil }, func(v Value) Value { return v.Clone() }), nil
 	}
 	typ := v.typ
-	return &ValueIterator[Value]{clone: func(v Value) Value { return v.Clone() }, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (Value, error) {
+	return &valueIterator[Value]{clone: func(v Value) Value { return v.Clone() }, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (Value, error) {
 		if typ.Kind() == TypeTuple {
 			return dynamicField(c, columnSlice(descriptorOf(typ).Fields)[i].Type, dynamicShapeField(v.shape, i))
 		}
@@ -860,16 +928,16 @@ func (v Value) Elements() (*ValueIterator[Value], error) {
 	}}, nil
 }
 
-// Entries returns an independent iterator over the key and value of each
+// iterEntries returns an independent iterator over the key and value of each
 // entry of a map, in encoded order.
-func (v Value) Entries() (*ValueIterator[ValueEntry], error) {
+func (v Value) iterEntries() (*valueIterator[ValueEntry], error) {
 	if err := v.require(TypeMap); err != nil {
 		return nil, err
 	}
 	if !v.encoded {
 		return newValueIterator(len(v.entries), func(i int) (ValueEntry, error) { return v.entries[i], nil }, cloneDynamicEntry), nil
 	}
-	return &ValueIterator[ValueEntry]{clone: cloneDynamicEntry, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, _ int) (ValueEntry, error) {
+	return &valueIterator[ValueEntry]{clone: cloneDynamicEntry, count: v.count, cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, _ int) (ValueEntry, error) {
 		key, err := c.Child(descriptorOf(v.typ).Key)
 		if err != nil {
 			return ValueEntry{}, err
@@ -890,9 +958,9 @@ func (v Value) Entries() (*ValueIterator[ValueEntry], error) {
 	}}, nil
 }
 
-// Fields returns an independent iterator over the fields of a tuple or UDT,
-// in type order. A tuple's fields have no names.
-func (v Value) Fields() (*ValueIterator[ValueField], error) {
+// iterFields returns an independent iterator over the fields of a tuple or
+// UDT, in type order. A tuple's fields have no names.
+func (v Value) iterFields() (*valueIterator[ValueField], error) {
 	if err := v.require(TypeTuple, TypeUDT); err != nil {
 		return nil, err
 	}
@@ -914,7 +982,7 @@ func (v Value) Fields() (*ValueIterator[ValueField], error) {
 			return ValueField{}, typeValidation("fields", "missing UDT field %q", field.Name)
 		}, cloneDynamicField), nil
 	}
-	return &ValueIterator[ValueField]{clone: cloneDynamicField, count: columns.Len(), cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (ValueField, error) {
+	return &valueIterator[ValueField]{clone: cloneDynamicField, count: columns.Len(), cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (ValueField, error) {
 		col := columnSlice(columns)[i]
 		value, err := dynamicField(c, col.Type, dynamicShapeField(v.shape, i))
 		if err != nil {
@@ -936,7 +1004,7 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 				return err
 			}
 		}
-		iterator, err := v.Elements()
+		iterator, err := v.iterElements()
 		if err != nil {
 			return err
 		}
@@ -1003,7 +1071,7 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 		if uint64(count) > math.MaxInt32 {
 			return typeValidation("count", "too many map entries")
 		}
-		iterator, err := v.Entries()
+		iterator, err := v.iterEntries()
 		if err != nil {
 			return err
 		}
@@ -1026,7 +1094,7 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 				return err
 			}
 		}
-		iterator, err := v.Fields()
+		iterator, err := v.iterFields()
 		if err != nil {
 			return err
 		}

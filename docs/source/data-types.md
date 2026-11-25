@@ -30,9 +30,12 @@ applications. Scalar constructors such as `cql.TextValue("a")` return a
 `Value` with no error, so a parameter list is written inline; an invalid
 payload, such as a `TextValue` that is not UTF-8, fails when it is bound.
 `BigIntValue` also binds a counter. Accessors such as `Signed`, `Text` and
-`Time` read a present value; `Len`, `At(i)` and `Field(name)` read one member
-of a collection, tuple or UDT, and `Elements`, `Entries` and `Fields` return
-an iterator whose `All` ranges over every member. `String` prints a `Value`,
+`Time` read a present value, and `Str` copies text into a string; `Len` and
+`Field(name)` read a collection's size and a UDT's field, and `Elements`,
+`Entries` and `Fields` return an `iter.Seq2` that ranges over every member,
+ending with an error for a malformed member or a value of another kind.
+`ListValue`, `SetValue` and `VectorValue` take the element type and the
+values: `cql.ListValue(cql.TextType, cql.TextValue("a"))`. `String` prints a `Value`,
 and `Varint`, `Decimal`, `Date`, `TimeOfDay`, `Timestamp` and `Duration`
 print, in a CQL literal form. A vector type has kind `TypeVector`, the
 driver's own kind: the protocol sends a vector as a custom type. Standalone

@@ -112,18 +112,18 @@ func walkValue(v Value, depth int) {
 	if depth > 8 {
 		return
 	}
-	if it, err := v.Elements(); err == nil {
+	if it, err := v.iterElements(); err == nil {
 		for it.Next() {
 			walkValue(it.Value(), depth+1)
 		}
 	}
-	if it, err := v.Entries(); err == nil {
+	if it, err := v.iterEntries(); err == nil {
 		for it.Next() {
 			walkValue(it.Value().Key, depth+1)
 			walkValue(it.Value().Value, depth+1)
 		}
 	}
-	if it, err := v.Fields(); err == nil {
+	if it, err := v.iterFields(); err == nil {
 		for it.Next() {
 			walkValue(it.Value().Value, depth+1)
 		}

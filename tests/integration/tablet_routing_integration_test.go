@@ -58,28 +58,22 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		}
 		row := rows[0]
 		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
-		iterator := codecTestMust(codecTestMust(row.Get("replicas")).Elements())
+		list := codecTestMust(collectSeq(codecTestMust(row.Get("replicas")).Elements()))
 		var replicas []metadata.Target
-		for iterator.Next() {
-			tuple := codecTestMust(iterator.Value().Elements())
-			if !tuple.Next() {
-				t.Fatal("authoritative replica missing host", tuple.Err())
+		for _, replica := range list {
+			tuple := codecTestMust(collectSeq(replica.Elements()))
+			if len(tuple) < 2 {
+				t.Fatal("authoritative replica missing host or shard")
 			}
-			id := codecTestMust(tuple.Value().UUID())
-			if !tuple.Next() {
-				t.Fatal("authoritative replica missing shard", tuple.Err())
-			}
-			shard := codecTestMust(tuple.Value().Signed())
+			id := codecTestMust(tuple[0].UUID())
+			shard := codecTestMust(tuple[1].Signed())
 			if shard < 0 || shard > math.MaxUint32 {
 				t.Fatal("invalid authoritative shard", shard)
 			}
-			if tuple.Next() || tuple.Err() != nil {
-				t.Fatal("authoritative replica extra member", tuple.Err())
+			if len(tuple) != 2 {
+				t.Fatal("authoritative replica extra member", len(tuple))
 			}
 			replicas = append(replicas, metadata.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
-		}
-		if iterator.Err() != nil {
-			t.Fatal(iterator.Err())
 		}
 		if codecTestMust(row.Get("new_replicas")).State() != cql.Null || codecTestMust(row.Get("stage")).State() != cql.Null {
 			observation.stable = false

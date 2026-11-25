@@ -22,13 +22,13 @@ type Entry[K, V any] struct {
 	Value V
 }
 
-// ValueIterator walks the members of a collection Value. Next advances and
+// valueIterator walks the members of a collection Value. Next advances and
 // reports whether a member is available, Value returns it, and Err reports
 // the failure that stopped iteration. All does the same as a range loop.
 // Collect reads the remaining members into a slice, detached from the page.
 //
-// The zero ValueIterator is exhausted: Next reports false, and Err nil.
-type ValueIterator[T any] struct {
+// The zero valueIterator is exhausted: Next reports false, and Err nil.
+type valueIterator[T any] struct {
 	value        T
 	err          error
 	next         func(int) (T, error)
@@ -39,13 +39,13 @@ type ValueIterator[T any] struct {
 	done         bool
 }
 
-func newValueIterator[T any](count int, next func(int) (T, error), clone func(T) T) *ValueIterator[T] {
-	return &ValueIterator[T]{count: count, next: next, clone: clone}
+func newValueIterator[T any](count int, next func(int) (T, error), clone func(T) T) *valueIterator[T] {
+	return &valueIterator[T]{count: count, next: next, clone: clone}
 }
 
 // Next advances to the next member and reports whether there is one. It
 // returns false at the end, after a failure, and for a nil iterator.
-func (i *ValueIterator[T]) Next() bool {
+func (i *valueIterator[T]) Next() bool {
 	if i == nil || i.done {
 		return false
 	}
@@ -81,7 +81,7 @@ func (i *ValueIterator[T]) Next() bool {
 
 // Value returns the member Next advanced to, or the zero T before the first
 // call and after the end. The member may borrow the collection's storage.
-func (i *ValueIterator[T]) Value() T {
+func (i *valueIterator[T]) Value() T {
 	if i == nil {
 		var zero T
 		return zero
@@ -91,7 +91,7 @@ func (i *ValueIterator[T]) Value() T {
 
 // Err returns the failure that stopped iteration, or nil. It returns a
 // ValidationError for a nil iterator.
-func (i *ValueIterator[T]) Err() error {
+func (i *valueIterator[T]) Err() error {
 	if i == nil {
 		return typeValidation("iterator", "nil iterator")
 	}
@@ -100,7 +100,7 @@ func (i *ValueIterator[T]) Err() error {
 
 // Collect explicitly materializes the iterator's remaining values. It returns
 // no partial slice on failure and recursively detaches every yielded value.
-func (i *ValueIterator[T]) Collect() ([]T, error) {
+func (i *valueIterator[T]) Collect() ([]T, error) {
 	if i == nil {
 		return nil, typeValidation("iterator", "nil iterator")
 	}
@@ -126,7 +126,7 @@ func (i *ValueIterator[T]) Collect() ([]T, error) {
 // last pair holding the zero T and the error, which Err then also returns.
 // A nil iterator yields only Err's ValidationError. The members may borrow
 // the collection's storage, as Value's do.
-func (i *ValueIterator[T]) All() iter.Seq2[T, error] {
+func (i *valueIterator[T]) All() iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
 		for i.Next() {
 			if !yield(i.Value(), nil) {

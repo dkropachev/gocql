@@ -82,11 +82,11 @@ func Example_dynamicColumns() {
 				}
 				fmt.Print(f, " ")
 			case cql.TypeASCII, cql.TypeText:
-				text, err := value.Text()
+				text, err := value.Str()
 				if err != nil {
 					return err
 				}
-				fmt.Print(text.String(), " ")
+				fmt.Print(text, " ")
 			default:
 				fmt.Print(value.Type().Kind(), " ")
 			}

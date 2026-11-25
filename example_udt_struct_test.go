@@ -59,6 +59,10 @@ func Example_userDefinedTypes() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(value.Street.String(), value.Number)
+	street, err := value.Street.Copy()
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(street, value.Number)
 	// Output: Main Street 42
 }

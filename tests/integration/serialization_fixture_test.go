@@ -261,13 +261,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		b, f := got.Decimal()
 		equal = e == nil && f == nil && a.Scale == b.Scale && a.Unscaled.BigInt().Cmp(b.Unscaled.BigInt()) == 0
 	case cql.TypeMap:
-		ai, e := want.Entries()
-		bi, f := got.Entries()
-		if e != nil || f != nil {
-			t.Fatalf("map iterators: %v %v", e, f)
-		}
-		a, e := ai.Collect()
-		b, f := bi.Collect()
+		a, e := collectSeq(want.Entries())
+		b, f := collectSeq(got.Entries())
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("map cardinality: %d %d %v %v", len(a), len(b), e, f)
 		}
@@ -291,13 +286,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		}
 		return
 	case cql.TypeUDT:
-		ai, e := want.Fields()
-		bi, f := got.Fields()
-		if e != nil || f != nil {
-			t.Fatalf("UDT iterators: %v %v", e, f)
-		}
-		a, e := ai.Collect()
-		b, f := bi.Collect()
+		a, e := collectSeq(want.Fields())
+		b, f := collectSeq(got.Fields())
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatal("UDT field count mismatch")
 		}
@@ -309,13 +299,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		}
 		return
 	default:
-		ai, e := want.Elements()
-		bi, f := got.Elements()
-		if e != nil || f != nil {
-			t.Fatalf("element iterators: %v %v", e, f)
-		}
-		a, e := ai.Collect()
-		b, f := bi.Collect()
+		a, e := collectSeq(want.Elements())
+		b, f := collectSeq(got.Elements())
 		if e != nil || f != nil || len(a) != len(b) {
 			t.Fatalf("elements: %d %d %v %v", len(a), len(b), e, f)
 		}

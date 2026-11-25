@@ -46,7 +46,12 @@ func Example_set() {
 		log.Fatal(err)
 	}
 	for _, value := range values {
-		fmt.Println(value.String())
+		// A decoded Text borrows the response; Copy returns an owned string.
+		text, err := value.Copy()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(text)
 	}
 	// Output:
 	// alpha

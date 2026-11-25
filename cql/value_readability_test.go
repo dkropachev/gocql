@@ -123,12 +123,9 @@ func TestScalarString(t *testing.T) {
 }
 
 func TestValueString(t *testing.T) {
-	list := CodecTestMust(ListType(IntType))
-	set := CodecTestMust(SetType(TextType))
 	mapping := CodecTestMust(MapType(TextType, IntType))
 	tuple := CodecTestMust(TupleType(IntType, TextType))
 	udt := CodecTestMust(UDTType("ks", "point", ColumnSpec{Name: "x", Type: IntType}, ColumnSpec{Name: "label", Type: TextType}))
-	vector := CodecTestMust(VectorType(FloatType, 2))
 	uuid := CodecTestMust(ParseUUID("00112233-4455-6677-8899-aabbccddeeff"))
 	for _, test := range []struct {
 		value Value
@@ -151,12 +148,12 @@ func TestValueString(t *testing.T) {
 		{TimestampValue(0), "'1970-01-01T00:00:00.000Z'"},
 		{DurationValue(Duration{Days: 1}), "1d"},
 		{DecimalValue(Decimal{Unscaled: VarintFromBigInt(big.NewInt(15)), Scale: 1}), "1.5"},
-		{CodecTestMust(ListValue(list, []Value{IntValue(1), IntValue(2)})), "[1, 2]"},
-		{CodecTestMust(SetValue(set, []Value{TextValue("a")})), "{'a'}"},
+		{CodecTestMust(ListValue(IntType, IntValue(1), IntValue(2))), "[1, 2]"},
+		{CodecTestMust(SetValue(TextType, TextValue("a"))), "{'a'}"},
 		{CodecTestMust(MapValue(mapping, []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}})), "{'k': 1}"},
 		{CodecTestMust(TupleValue(tuple, []Value{IntValue(1), NullValue(TextType)})), "(1, null)"},
 		{CodecTestMust(UDTValue(udt, []ValueField{{Name: "x", Value: IntValue(3)}, {Name: "label", Value: TextValue("p")}})), "{x: 3, label: 'p'}"},
-		{CodecTestMust(VectorValue(vector, []Value{FloatValue(1), FloatValue(-2)})), "[1, -2]"},
+		{CodecTestMust(VectorValue(FloatType, FloatValue(1), FloatValue(-2))), "[1, -2]"},
 	} {
 		if got := test.value.String(); got != test.want {
 			t.Errorf("got %q, want %q", got, test.want)
@@ -177,7 +174,7 @@ func TestValueMembers(t *testing.T) {
 	udt := CodecTestMust(UDTType("ks", "point", ColumnSpec{Name: "x", Type: IntType}, ColumnSpec{Name: "label", Type: TextType}))
 	tuple := CodecTestMust(TupleType(IntType, TextType))
 	built := map[string]Value{
-		"list":  CodecTestMust(ListValue(list, []Value{IntValue(10), IntValue(20), IntValue(30)})),
+		"list":  CodecTestMust(ListValue(IntType, IntValue(10), IntValue(20), IntValue(30))),
 		"udt":   CodecTestMust(UDTValue(udt, []ValueField{{Name: "label", Value: TextValue("p")}, {Name: "x", Value: IntValue(3)}})),
 		"tuple": CodecTestMust(TupleValue(tuple, []Value{IntValue(1), TextValue("a")})),
 	}
@@ -190,10 +187,10 @@ func TestValueMembers(t *testing.T) {
 					if v.Len() != 3 {
 						t.Fatal(v.Len())
 					}
-					if n, err := CodecTestMust(v.At(2)).Signed(); err != nil || n != 30 {
+					if n, err := CodecTestMust(valueAt(v, 2)).Signed(); err != nil || n != 30 {
 						t.Fatal(n, err)
 					}
-					if _, err := v.At(3); !hasErrorType[*ValidationError](err) {
+					if _, err := valueAt(v, 3); !hasErrorType[*ValidationError](err) {
 						t.Fatal(err)
 					}
 					if _, err := v.Field("x"); err == nil {
@@ -206,14 +203,14 @@ func TestValueMembers(t *testing.T) {
 					if text, err := CodecTestMust(v.Field("label")).Text(); err != nil || text.String() != "p" {
 						t.Fatal(text, err)
 					}
-					if n, err := CodecTestMust(v.At(0)).Signed(); err != nil || n != 3 {
+					if n, err := CodecTestMust(valueAt(v, 0)).Signed(); err != nil || n != 3 {
 						t.Fatal("At(0) is not the first field in type order:", n, err)
 					}
 					if _, err := v.Field("y"); !hasErrorType[*ValidationError](err) {
 						t.Fatal(err)
 					}
 				case "tuple":
-					if text, err := CodecTestMust(v.At(1)).Text(); err != nil || text.String() != "a" {
+					if text, err := CodecTestMust(valueAt(v, 1)).Text(); err != nil || text.String() != "a" {
 						t.Fatal(text, err)
 					}
 				}
@@ -223,16 +220,15 @@ func TestValueMembers(t *testing.T) {
 	if IntValue(1).Len() != 0 || NullValue(list).Len() != 0 {
 		t.Fatal("Len of a scalar or a null list")
 	}
-	if _, err := NullValue(list).At(0); !errors.Is(err, ErrNull) {
+	if _, err := valueAt(NullValue(list), 0); !errors.Is(err, ErrNull) {
 		t.Fatal(err)
 	}
 }
 
 func TestValueIteratorAll(t *testing.T) {
-	list := CodecTestMust(ListType(IntType))
-	v := CodecTestMust(ListValue(list, []Value{IntValue(1), IntValue(2), IntValue(3)}))
+	v := CodecTestMust(ListValue(IntType, IntValue(1), IntValue(2), IntValue(3)))
 	var got []int64
-	for e, err := range CodecTestMust(v.Elements()).All() {
+	for e, err := range CodecTestMust(v.iterElements()).All() {
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -241,7 +237,7 @@ func TestValueIteratorAll(t *testing.T) {
 	if len(got) != 3 || got[2] != 3 {
 		t.Fatal(got)
 	}
-	it := CodecTestMust(v.Elements())
+	it := CodecTestMust(v.iterElements())
 	for range it.All() {
 		break
 	}
@@ -262,7 +258,7 @@ func TestValueIteratorAll(t *testing.T) {
 	if strings.Join(pairs, ",") != "1/,<invalid>/broken" || failing.Err() == nil {
 		t.Fatal(pairs)
 	}
-	var zero *ValueIterator[Value]
+	var zero *valueIterator[Value]
 	for _, err := range zero.All() {
 		if !hasErrorType[*ValidationError](err) {
 			t.Fatal("nil iterator yielded a member")
@@ -334,5 +330,74 @@ func TestNonNullAndIsZero(t *testing.T) {
 	}
 	if !(UUID{}).IsZero() || !(TimeUUID{}).IsZero() || NewTimeUUID().IsZero() {
 		t.Fatal("IsZero")
+	}
+}
+
+// valueAt returns the member at index of a list, set, vector, tuple or UDT,
+// read through Elements or Fields.
+func valueAt(v Value, index int) (Value, error) {
+	i := 0
+	if k := v.Type().Kind(); k == TypeUDT || k == TypeTuple {
+		for f, err := range v.Fields() {
+			if err != nil {
+				return Value{}, err
+			}
+			if i == index {
+				return f.Value, nil
+			}
+			i++
+		}
+	} else {
+		for e, err := range v.Elements() {
+			if err != nil {
+				return Value{}, err
+			}
+			if i == index {
+				return e, nil
+			}
+			i++
+		}
+	}
+	return Value{}, typeValidation("index", "%d outside %d members", index, i)
+}
+
+// Elements, Entries and Fields range over members, ending with one error
+// for a value of another kind; Str copies text.
+func TestValueRanges(t *testing.T) {
+	m := CodecTestMust(MapValue(CodecTestMust(MapType(TextType, IntType)), []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}}))
+	encoded := CodecTestMust(EncodeValue(m.Type(), DynamicCodec, m))
+	decoded := CodecTestMust(DecodeValue(DynamicCodec, encoded))
+	n := 0
+	for e, err := range decoded.Entries() {
+		if err != nil || CodecTestMust(e.Key.Str()) != "k" {
+			t.Fatal(e, err)
+		}
+		n++
+	}
+	if n != 1 {
+		t.Fatal(n)
+	}
+	for _, seq := range []func(func(Value, error) bool){IntValue(1).Elements(), m.Elements()} {
+		calls := 0
+		for _, err := range seq {
+			calls++
+			if err == nil {
+				t.Fatal("no error for a value that is not a sequence")
+			}
+		}
+		if calls != 1 {
+			t.Fatal(calls)
+		}
+	}
+	for _, err := range m.Fields() {
+		if err == nil {
+			t.Fatal("Fields of a map")
+		}
+	}
+	if _, err := IntValue(1).Str(); err == nil {
+		t.Fatal("Str of an int")
+	}
+	if s, err := ASCIIValue("a").Str(); err != nil || s != "a" {
+		t.Fatal(s, err)
 	}
 }

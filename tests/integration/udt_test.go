@@ -120,22 +120,14 @@ func TestUDT(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			it, err := v.Elements()
-			if err != nil {
-				t.Fatal(err)
-			}
-			entries, err := it.Collect()
+			entries, err := collectSeq(v.Elements())
 			if err != nil {
 				t.Fatal(err)
 			}
 			if len(entries) != 1 {
 				t.Fatalf("expected 1 entry, got %d", len(entries))
 			}
-			fs, err := entries[0].Fields()
-			if err != nil {
-				t.Fatal(err)
-			}
-			fields, err := fs.Collect()
+			fields, err := collectSeq(entries[0].Fields())
 			if err != nil {
 				t.Fatal(err)
 			}

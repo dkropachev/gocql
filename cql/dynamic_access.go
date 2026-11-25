@@ -24,62 +24,37 @@ func (v Value) Len() int {
 	return 0
 }
 
-// At returns the element at index of a present list, set or vector, or the
-// field at index of a present tuple or UDT. A decoded value is read from its
-// start up to index, so a loop over every member should use Elements or
-// Fields. A decoded member may borrow the response; see Clone.
-func (v Value) At(index int) (Value, error) {
-	if err := v.require(TypeList, TypeSet, TypeVector, TypeTuple, TypeUDT); err != nil {
-		return Value{}, err
-	}
-	if index < 0 || index >= v.count {
-		return Value{}, typeValidation("index", "%d outside %d members", index, v.count)
-	}
-	if v.typ.Kind() == TypeUDT {
-		fields, err := v.Fields()
-		if err != nil {
-			return Value{}, err
-		}
-		f, err := nth(fields, index)
-		return f.Value, err
-	}
-	if !v.encoded {
-		return v.values[index], nil
-	}
-	elements, err := v.Elements()
-	if err != nil {
-		return Value{}, err
-	}
-	return nth(elements, index)
-}
-
 // Field returns the field named name of a present UDT. It returns a
-// ValidationError for a name the UDT does not have. A decoded field may
-// borrow the response; see Clone.
+// ValidationError for a name the UDT does not have. A decoded UDT is read
+// from its start up to the field, so a loop over every field should use
+// Fields. A decoded field may borrow the response; see Clone.
 func (v Value) Field(name string) (Value, error) {
 	if err := v.require(TypeUDT); err != nil {
 		return Value{}, err
 	}
+	index := -1
 	for i, f := range columnSlice(descriptorOf(v.typ).Fields) {
 		if f.Name == name {
-			return v.At(i)
+			index = i
+			break
 		}
+	}
+	if index < 0 {
+		return Value{}, typeValidation("field", "%s has no field %q", v.typ, name)
+	}
+	fields, err := v.iterFields()
+	if err != nil {
+		return Value{}, err
+	}
+	for i := 0; fields.Next(); i++ {
+		if i == index {
+			return fields.Value().Value, nil
+		}
+	}
+	if err := fields.Err(); err != nil {
+		return Value{}, err
 	}
 	return Value{}, typeValidation("field", "%s has no field %q", v.typ, name)
-}
-
-// nth advances it to the member at index and returns it.
-func nth[T any](it *ValueIterator[T], index int) (T, error) {
-	for i := 0; it.Next(); i++ {
-		if i == index {
-			return it.Value(), nil
-		}
-	}
-	var zero T
-	if err := it.Err(); err != nil {
-		return zero, err
-	}
-	return zero, typeValidation("index", "%d outside the members read", index)
 }
 
 // String returns the value as a CQL literal, such as 'text', 0x0102,
@@ -166,13 +141,8 @@ func (v Value) format(b *strings.Builder) {
 			open, end = "(", ")"
 		}
 		b.WriteString(open)
-		elements, err := v.Elements()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for e, err := range elements.All() {
+		for e, err := range v.Elements() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {
@@ -184,13 +154,8 @@ func (v Value) format(b *strings.Builder) {
 		b.WriteString(end)
 	case TypeMap:
 		b.WriteString("{")
-		entries, err := v.Entries()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for e, err := range entries.All() {
+		for e, err := range v.Entries() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {
@@ -204,13 +169,8 @@ func (v Value) format(b *strings.Builder) {
 		b.WriteString("}")
 	case TypeUDT:
 		b.WriteString("{")
-		fields, err := v.Fields()
-		if err != nil {
-			fail(err)
-			return
-		}
 		sep := ""
-		for f, err := range fields.All() {
+		for f, err := range v.Fields() {
 			b.WriteString(sep)
 			sep = ", "
 			if err != nil {

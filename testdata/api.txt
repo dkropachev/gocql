@@ -421,7 +421,7 @@ package cql
 	func cql.ListDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
 	func cql.ListEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
 	func cql.ListType(element cql.DataType) (cql.DataType, error)
-	func cql.ListValue(t cql.DataType, v []cql.Value) (cql.Value, error)
+	func cql.ListValue(element cql.DataType, values ...cql.Value) (cql.Value, error)
 	const cql.LocalOne cql.Consistency = 10
 	const cql.LocalQuorum cql.Consistency = 6
 	const cql.LocalSerial cql.Consistency = 9
@@ -530,7 +530,7 @@ package cql
 	func cql.SetDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
 	func cql.SetEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
 	func cql.SetType(element cql.DataType) (cql.DataType, error)
-	func cql.SetValue(t cql.DataType, v []cql.Value) (cql.Value, error)
+	func cql.SetValue(element cql.DataType, values ...cql.Value) (cql.Value, error)
 	func cql.SliceCodec[T any](element cql.Codec[T]) cql.Codec[[]T]
 	var cql.SmallIntType cql.DataType
 	func cql.SmallIntValue(n int16) cql.Value
@@ -745,21 +745,21 @@ package cql
 		cql.ValidationError method (*T) Error() string
 		cql.ValidationError method (*T) Unwrap() error
 	type cql.Value struct
-		cql.Value method (T) At(index int) (cql.Value, error)
 		cql.Value method (T) Bool() (bool, error)
 		cql.Value method (T) Bytes() (cql.Bytes, error)
 		cql.Value method (T) Clone() cql.Value
 		cql.Value method (T) Decimal() (cql.Decimal, error)
 		cql.Value method (T) Duration() (cql.Duration, error)
-		cql.Value method (T) Elements() (*cql.ValueIterator[cql.Value], error)
-		cql.Value method (T) Entries() (*cql.ValueIterator[cql.ValueEntry], error)
+		cql.Value method (T) Elements() iter.Seq2[cql.Value, error]
+		cql.Value method (T) Entries() iter.Seq2[cql.ValueEntry, error]
 		cql.Value method (T) Field(name string) (cql.Value, error)
-		cql.Value method (T) Fields() (*cql.ValueIterator[cql.ValueField], error)
+		cql.Value method (T) Fields() iter.Seq2[cql.ValueField, error]
 		cql.Value method (T) Float() (float64, error)
 		cql.Value method (T) Inet() (net/netip.Addr, error)
 		cql.Value method (T) Len() int
 		cql.Value method (T) Signed() (int64, error)
 		cql.Value method (T) State() cql.CellState
+		cql.Value method (T) Str() (string, error)
 		cql.Value method (T) String() string
 		cql.Value method (T) Text() (cql.Text, error)
 		cql.Value method (T) Time() (time.Time, error)
@@ -783,12 +783,6 @@ package cql
 	type cql.ValueField struct
 		cql.ValueField field Name string
 		cql.ValueField field Value cql.Value
-	type cql.ValueIterator[T any] struct
-		cql.ValueIterator method (*T) All() iter.Seq2[T, error]
-		cql.ValueIterator method (*T) Collect() ([]T, error)
-		cql.ValueIterator method (*T) Err() error
-		cql.ValueIterator method (*T) Next() bool
-		cql.ValueIterator method (*T) Value() T
 	type cql.ValueReader struct
 		cql.ValueReader method (T) Bytes() cql.Bytes
 		cql.ValueReader method (T) Cursor() *cql.ValueCursor
@@ -823,7 +817,7 @@ package cql
 	func cql.VectorDecoder[T any](element cql.Decoder[T]) cql.Decoder[[]T]
 	func cql.VectorEncoder[T any](element cql.Encoder[T]) cql.Encoder[[]T]
 	func cql.VectorType(element cql.DataType, dimension uint16) (cql.DataType, error)
-	func cql.VectorValue(t cql.DataType, v []cql.Value) (cql.Value, error)
+	func cql.VectorValue(element cql.DataType, values ...cql.Value) (cql.Value, error)
 	func cql.WithCodec[V any](codec cql.Codec[V]) cql.StructOption
 	func cql.WithEncoder[V any](encoder cql.Encoder[V]) cql.StructOption
 	func cql.WithStreamDecoder[V any](decoder cql.StreamDecoder[V]) cql.StructOption
