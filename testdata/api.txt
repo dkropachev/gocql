@@ -138,7 +138,6 @@ package config
 		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithApplication(name string, version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAuth(provider auth.Provider) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithAutomaticSchemaAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCQLVersion(version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientID(id string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithClientRoutes(routes ...config.ClientRoute) *config.ConfigBuilder
@@ -185,9 +184,9 @@ package config
 		config.ConfigBuilder method (*T) WithReadTimeout(d time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReceiveBuffer(bytes int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReconnect(policy endpoint.ReconnectPolicy) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithRefreshAfterAgreement(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithResolver(resolver endpoint.Resolver) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSchemaAgreement(poll time.Duration, timeout time.Duration) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithSchemaChangeWait(wait config.SchemaChangeWait) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSendBuffer(bytes int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
@@ -229,6 +228,11 @@ package config
 		config.ProfileBuilder method (*T) WithSerialConsistency(c cql.Consistency) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithSpeculation(policy retry.SpeculationPolicy) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithTimeout(d time.Duration) *config.ProfileBuilder
+	type config.SchemaChangeWait uint8
+		config.SchemaChangeWait method (T) String() string
+	const config.SchemaChangeWaitAgreement config.SchemaChangeWait = 1
+	const config.SchemaChangeWaitNone config.SchemaChangeWait = 0
+	const config.SchemaChangeWaitRefresh config.SchemaChangeWait = 2
 	const config.ScyllaV4 config.Dialect = 1
 	type config.TLSFileSource struct
 		config.TLSFileSource method (*T) Err() error

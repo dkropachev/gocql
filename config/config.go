@@ -54,6 +54,7 @@ type ConfigBuilder struct {
 	sourcePortsChosen    bool
 	maxExcessChosen      bool
 	portChosen           bool
+	schemaChangeWait     SchemaChangeWait
 	perHost              bool
 	dialect              Dialect
 	// started reports that New made the builder.
@@ -65,7 +66,7 @@ type ConfigBuilder struct {
 // path (optionally prefixed with "unix:"); for a socket, no host discovery is
 // filled in unless chosen. Build rejects the zero Dialect.
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder {
-	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, started: true}
+	return &ConfigBuilder{settings: implSettings.DefaultConfig(contactPoints...), profile: NewProfile(), dialect: dialect, schemaChangeWait: SchemaChangeWaitRefresh, started: true}
 }
 
 // Clone returns an independent copy of the builder, so a shared base can be
@@ -158,6 +159,13 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		}
 		keep := settings.HostFilter
 		settings.HostFilter = func(host metadata.HostSnapshot) bool { return host.HostID == id && (keep == nil || keep(host)) }
+	}
+	switch b.schemaChangeWait {
+	case SchemaChangeWaitNone, SchemaChangeWaitAgreement, SchemaChangeWaitRefresh:
+		settings.Metadata.AutomaticAgreement = b.schemaChangeWait >= SchemaChangeWaitAgreement
+		settings.Metadata.RefreshAfterAgreement = b.schemaChangeWait == SchemaChangeWaitRefresh
+	default:
+		return Config{}, &cql.ValidationError{Field: "WithSchemaChangeWait", Err: fmt.Errorf("%v is not SchemaChangeWaitNone, SchemaChangeWaitAgreement or SchemaChangeWaitRefresh", b.schemaChangeWait)}
 	}
 	for _, kind := range b.ignoredEvents {
 		switch kind {
@@ -648,18 +656,13 @@ func (b *ConfigBuilder) WithSchemaAgreement(poll, timeout time.Duration) *Config
 	return b
 }
 
-// WithAutomaticSchemaAgreement chooses whether a DDL statement waits for
-// schema agreement before it returns. With false, call
-// Session.AwaitSchemaAgreement where agreement matters. Default true.
-func (b *ConfigBuilder) WithAutomaticSchemaAgreement(on bool) *ConfigBuilder {
-	b.settings.Metadata.AutomaticAgreement = on
-	return b
-}
-
-// WithRefreshAfterAgreement chooses whether metadata is reloaded once schema
-// agreement is reached. Default true.
-func (b *ConfigBuilder) WithRefreshAfterAgreement(on bool) *ConfigBuilder {
-	b.settings.Metadata.RefreshAfterAgreement = on
+// WithSchemaChangeWait chooses what a statement that changes the schema
+// waits for before it returns: nothing, schema agreement among the nodes
+// (WithSchemaAgreement bounds the wait), or agreement and then a reload of
+// the changed keyspace's metadata, so Session.Metadata shows the change.
+// Build rejects a value it does not define. Default SchemaChangeWaitRefresh.
+func (b *ConfigBuilder) WithSchemaChangeWait(wait SchemaChangeWait) *ConfigBuilder {
+	b.schemaChangeWait = wait
 	return b
 }
 

@@ -49,6 +49,8 @@ func TestEnumStrings(t *testing.T) {
 		{cqlerr.OpType(9), "OpType(9)"},
 		{config.ScyllaV4, "ScyllaV4"},
 		{config.Dialect(0), "Dialect(0)"},
+		{config.SchemaChangeWaitAgreement, "agreement"},
+		{config.SchemaChangeWait(9), "SchemaChangeWait(9)"},
 		{cql.LocalQuorum, "LOCAL_QUORUM"},
 		{cql.Consistency(66), "Consistency(66)"},
 		{cql.KindUDT, "udt"},

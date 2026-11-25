@@ -1909,8 +1909,11 @@ Authorization/protocol/validation failures are terminal. Each retry takes a
 fresh snapshot. Automatic handling of a successful DDL result additionally
 requires that exact coordinator host identity to report successfully, even if a
 later topology excludes or temporarily loses it; absence cannot count as
-agreement. Manual agreement does not refresh metadata. Automatic
-agreement/refresh runs within the original operation context; failure reports
+agreement. Manual agreement does not refresh metadata.
+`ConfigBuilder.WithSchemaChangeWait` chooses what a successful DDL waits for:
+`SchemaChangeWaitNone`, `SchemaChangeWaitAgreement`, or
+`SchemaChangeWaitRefresh` (the default), agreement and then a metadata
+refresh. Automatic agreement/refresh runs within the original operation context; failure reports
 that the DDL already succeeded and never retries the successful DDL.
 
 Session.Close atomically rejects new session work, sets Closed()==true, cancels

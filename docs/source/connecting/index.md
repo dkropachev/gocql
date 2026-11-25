@@ -70,9 +70,11 @@ sends no heartbeats, `WithMetadataRefresh(0)` stops periodic metadata reloads,
 `WithPreparedCacheSize(0)` caches no prepared statements and
 `WithErrorStatementText(0)`, the default, leaves the statement out of request
 errors ([errors](../errors.md)). On/off settings take a bool: `WithNagle`,
-`WithDiscovery`, `WithConfigReport`, `WithAutomaticSchemaAgreement` and
-`WithRefreshAfterAgreement` and `WithAdvancedShardAwareness`, whose source
-ports `WithShardAwareSourcePorts` sets. `WithReceiveBuffer(0)` and
+`WithDiscovery`, `WithConfigReport` and `WithAdvancedShardAwareness`, whose
+source ports `WithShardAwareSourcePorts` sets. `WithSchemaChangeWait` chooses
+what a schema change waits for before it returns: `config.SchemaChangeWaitNone`,
+`SchemaChangeWaitAgreement` among the nodes, or, the default,
+`SchemaChangeWaitRefresh`, agreement and then a metadata reload. `WithReceiveBuffer(0)` and
 `WithSendBuffer(0)` keep the OS's buffer sizes.
 `ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
 Zero optional timeouts disable their budget. A nil provider or policy restores

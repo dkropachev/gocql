@@ -50,8 +50,7 @@ func dropLeftoverKeyspaces() error {
 	cfg, err := createV2Cluster(func(c *config.ConfigBuilder) {
 		c.WithKeyspace("system").
 			WithIgnoreEvents(event.KindSchema, event.KindTopology, event.KindStatus).
-			WithAutomaticSchemaAgreement(false).
-			WithRefreshAfterAgreement(false)
+			WithSchemaChangeWait(config.SchemaChangeWaitNone)
 	}).Build()
 	if err != nil {
 		return fmt.Errorf("build config: %w", err)

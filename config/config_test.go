@@ -263,8 +263,7 @@ func TestConfigBuilder(t *testing.T) {
 			"WithMetadataServerTimeout not chosen (30s on ScyllaDB, none on Cassandra)": !c.Metadata.ServerTimeout.Set,
 			"WithIgnoreEvents none ignored":                                             c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
 			"WithSchemaAgreement 200ms and 60s":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
-			"WithAutomaticSchemaAgreement true":                                         c.Metadata.AutomaticAgreement,
-			"WithRefreshAfterAgreement true":                                            c.Metadata.RefreshAfterAgreement,
+			"WithSchemaChangeWait refresh":                                              c.Metadata.AutomaticAgreement && c.Metadata.RefreshAfterAgreement,
 			"WithPreparedCacheSize 1000":                                                c.PreparedCacheSize == 1000,
 			"WithTimestampGenerator driver stamps":                                      c.Timestamps.Mode() == implSettings.DriverTimestampMode,
 			"WithApplication none":                                                      c.Identity.ApplicationName == "" && c.Identity.ApplicationVersion == "",
@@ -341,8 +340,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithMetadataKeyspaces("").WithMetadataKeyspaces().
 			WithDiscovery(false).WithDiscovery(true).
 			WithConfigReport(false).WithConfigReport(true).
-			WithAutomaticSchemaAgreement(false).WithAutomaticSchemaAgreement(true).
-			WithRefreshAfterAgreement(false).WithRefreshAfterAgreement(true).
+			WithSchemaChangeWait(SchemaChangeWaitNone).WithSchemaChangeWait(SchemaChangeWaitRefresh).
 			WithDefaultProfile(NewProfile().WithPageSize(0).WithPageSize(42).WithPrefetch(0).WithPrefetch(1).MustBuild())
 		c := mustBuildConfig(t, b).settings
 		if c.TLS != nil || c.ClientRoutes != nil || !c.Metadata.InitialDiscovery || !c.ReportConfiguration ||
@@ -645,7 +643,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DisableMethods", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithTimestampGenerator(nil).
-			WithConfigReport(false).WithDiscovery(false).WithAutomaticSchemaAgreement(false).WithRefreshAfterAgreement(false).WithAdvancedShardAwareness(false).WithNagle(true)).settings
+			WithConfigReport(false).WithDiscovery(false).WithSchemaChangeWait(SchemaChangeWaitNone).WithAdvancedShardAwareness(false).WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
@@ -1021,5 +1019,28 @@ func TestReconnectFunc(t *testing.T) {
 	}
 	if d, ok := c.Reconnect.Delay(3); d != 3*time.Second || !ok {
 		t.Fatalf("Delay(3) = %v, %v", d, ok)
+	}
+}
+
+// TestSchemaChangeWait maps each wait to the two internal switches and
+// rejects a value it does not define.
+func TestSchemaChangeWait(t *testing.T) {
+	for _, tc := range []struct {
+		wait             SchemaChangeWait
+		name             string
+		agree, refreshes bool
+	}{
+		{SchemaChangeWaitNone, "none", false, false},
+		{SchemaChangeWaitAgreement, "agreement", true, false},
+		{SchemaChangeWaitRefresh, "refresh", true, true},
+	} {
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithSchemaChangeWait(tc.wait)).settings
+		if c.Metadata.AutomaticAgreement != tc.agree || c.Metadata.RefreshAfterAgreement != tc.refreshes || tc.wait.String() != tc.name {
+			t.Fatalf("%v: agreement %v, refresh %v", tc.wait, c.Metadata.AutomaticAgreement, c.Metadata.RefreshAfterAgreement)
+		}
+	}
+	_, err := New(ScyllaV4, "h").WithSchemaChangeWait(SchemaChangeWait(3)).Build()
+	if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithSchemaChangeWait" || !strings.Contains(err.Error(), "SchemaChangeWait(3)") {
+		t.Fatalf("Build = %v, want a WithSchemaChangeWait ValidationError", err)
 	}
 }
