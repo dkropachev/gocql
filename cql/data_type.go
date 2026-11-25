@@ -6,6 +6,7 @@ package cql
 import (
 	"encoding/binary"
 	"fmt"
+	"iter"
 	"math"
 	"strings"
 )
@@ -265,6 +266,29 @@ func (c Columns) At(index int) (ColumnSpec, bool) {
 		return ColumnSpec{}, false
 	}
 	return c.columns[index], true
+}
+
+// All yields each column with its index, in order.
+func (c Columns) All() iter.Seq2[int, ColumnSpec] {
+	return func(yield func(int, ColumnSpec) bool) {
+		for i, column := range c.columns {
+			if !yield(i, column) {
+				return
+			}
+		}
+	}
+}
+
+// Index returns the index of the first column named name, compared exactly,
+// and false when no column has that name. Names the server reports are
+// lower case unless the schema quoted them.
+func (c Columns) Index(name string) (int, bool) {
+	for i := range c.columns {
+		if c.columns[i].Name == name {
+			return i, true
+		}
+	}
+	return -1, false
 }
 
 // same reports whether c and other are the same specifications, not only

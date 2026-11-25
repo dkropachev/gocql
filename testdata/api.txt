@@ -31,12 +31,12 @@ package gocql
 	type gocql.Prepared[P any, R any] struct
 		gocql.Prepared method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Prepared method (*T) All(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Prepared method (*T) BindMarkers() cql.Columns
 		gocql.Prepared method (*T) Columns() cql.Columns
 		gocql.Prepared method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
-		gocql.Prepared method (*T) Parameters() cql.Columns
 		gocql.Prepared method (*T) Query(options ...exec.Options) (*gocql.Query[P, R], error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
@@ -47,9 +47,9 @@ package gocql
 		gocql.PreparedInfo field Kind cql.StatementKind
 		gocql.PreparedInfo field Generation uint64
 	type gocql.PreparedStream[P any, R any] struct
+		gocql.PreparedStream method (*T) BindMarkers() cql.Columns
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
-		gocql.PreparedStream method (*T) Parameters() cql.Columns
 		gocql.PreparedStream method (*T) Query(options ...exec.StreamOptions) (*gocql.StreamQuery[P, R], error)
 	type gocql.Query[P any, R any] struct
 		gocql.Query method (*T) AddToBatch(batch *gocql.Batch, value P) error
@@ -295,8 +295,10 @@ package cql
 		cql.ColumnSpec field Table string
 		cql.ColumnSpec field Name string
 	type cql.Columns struct
+		cql.Columns method (T) All() iter.Seq2[int, cql.ColumnSpec]
 		cql.Columns method (T) At(index int) (cql.ColumnSpec, bool)
 		cql.Columns method (T) Equal(other cql.Columns) bool
+		cql.Columns method (T) Index(name string) (int, bool)
 		cql.Columns method (T) Len() int
 	func cql.Command(text string) cql.Statement[cql.EmptyParams, cql.EmptyRow]
 	type cql.CompiledParams[P any] interface

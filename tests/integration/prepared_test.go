@@ -205,7 +205,7 @@ func TestPrepared(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 			prepared := cassandraPrepared(t, session, cql.Statement[string, cql.DynamicRow]{CQL: "SELECT release_version,host_id FROM system.local WHERE key=?", Params: cql.OneParam(cql.StringCodec), Rows: cql.DynamicRows}, exec.PrepareOptions{})
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			require.Equal(t, 2, prepared.Columns().Len())
 		})
 		t.Run("MissingSchema", func(t *testing.T) {

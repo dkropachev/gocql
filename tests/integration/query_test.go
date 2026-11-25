@@ -133,7 +133,7 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
 			params := cql.Params(cql.Param("value", cql.StringCodec, func(v ClusteredKeyValue) string { return v.Value }), cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
 			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
-			require.Equal(t, 3, prepared.Parameters().Len())
+			require.Equal(t, 3, prepared.BindMarkers().Len())
 			_, err := prepared.Exec(context.Background(), ClusteredKeyValue{200, 300, "baz"})
 			require.NoError(t, err)
 			readParams := cql.Params(cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }))
@@ -174,7 +174,7 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(113), cql.TextValue("foo"))
 			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.DynamicRow]{CQL: fmt.Sprintf("SELECT id,value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, exec.PrepareOptions{})
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			for i := 0; i < 2; i++ {
 				row := cassandraReadOne(t, session, prepared, int32(113), exec.Options{})
 				require.Equal(t, int64(113), cassandraInt(t, row, "id"))
@@ -411,7 +411,7 @@ func TestQuery(t *testing.T) {
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table)))
 			prepared, err := session.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
 			require.NoError(t, err)
-			require.Equal(t, 1, prepared.Parameters().Len())
+			require.Equal(t, 1, prepared.BindMarkers().Len())
 			require.Equal(t, table, prepared.Info().Table)
 
 			// Query setters become per-admission Options. Trace IDs and timing belong

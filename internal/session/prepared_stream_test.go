@@ -179,7 +179,7 @@ func TestPreparedStream(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if decoder.compiles.Load() != 1 || p.Parameters().Len() != 1 || p.Columns().Len() != 1 {
+		if decoder.compiles.Load() != 1 || p.BindMarkers().Len() != 1 || p.Columns().Len() != 1 {
 			t.Fatal("preparation did not validate and expose metadata")
 		}
 		var workers sync.WaitGroup

@@ -755,7 +755,7 @@ type PrepareOptions struct {
 
 // package gocql
 func (s *Session) Prepare[P, R any](context.Context, cql.Statement[P, R], ...exec.PrepareOptions) (*Prepared[P, R], error) // at most one
-func (p *Prepared[P, R]) Parameters() cql.Columns
+func (p *Prepared[P, R]) BindMarkers() cql.Columns
 func (p *Prepared[P, R]) Columns() cql.Columns
 func (p *Prepared[P, R]) Info() PreparedInfo
 type PreparedInfo struct {
@@ -1071,7 +1071,7 @@ The user-facing description is docs/source/statements/streaming.md.
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Query.
 func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
-func (p *PreparedStream[P, R]) Parameters() cql.Columns
+func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
 func (p *PreparedStream[P, R]) Query(...exec.StreamOptions) (*StreamQuery[P, R], error) // at most one

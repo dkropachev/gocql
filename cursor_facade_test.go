@@ -77,7 +77,7 @@ func TestCursorColumns(t *testing.T) {
 		wantColumns(t, "RowStream.Columns", stream.Columns(), gridValueColumn)
 	})
 	t.Run("PreparedStream", func(t *testing.T) {
-		wantColumns(t, "PreparedStream.Parameters", f.ps.Parameters(), gridKeyColumn)
+		wantColumns(t, "PreparedStream.BindMarkers", f.ps.BindMarkers(), gridKeyColumn)
 		wantColumns(t, "PreparedStream.Columns", f.ps.Columns(), gridValueColumn)
 		info := f.ps.Info()
 		if info.Keyspace != "ks" || info.Table != "tbl" || info.Generation != f.p.Info().Generation {

@@ -182,8 +182,9 @@ func (p *Prepared[P, R]) AddToBatch(batch *Batch, value P) error {
 	return p.internal().AddToBatch((*implSession.Batch)(batch), value)
 }
 
-// Parameters returns the statement's immutable bind-marker metadata.
-func (p *Prepared[P, R]) Parameters() cql.Columns { return p.internal().Parameters() }
+// BindMarkers returns the statement's immutable bind-marker metadata, one
+// column per marker, as the server reported it when preparing.
+func (p *Prepared[P, R]) BindMarkers() cql.Columns { return p.internal().BindMarkers() }
 
 // Columns returns the statement's initial immutable result metadata. Actual
 // execution metadata can change after schema updates; cursor Columns reports it.

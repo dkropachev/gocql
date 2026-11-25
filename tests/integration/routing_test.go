@@ -375,7 +375,7 @@ func TestRouting(t *testing.T) {
 				prepared := cassandraPrepared(t, session, statement, exec.PrepareOptions{})
 				require.Equal(t, tc.indexes, prepared.Info().PartitionKeyIndexes)
 				for _, index := range tc.indexes {
-					column, ok := prepared.Parameters().At(index)
+					column, ok := prepared.BindMarkers().At(index)
 					require.True(t, ok)
 					require.Equal(t, cql.KindInt, column.Type.Kind())
 				}

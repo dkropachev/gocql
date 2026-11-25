@@ -189,7 +189,7 @@ func Prepare[P, R any](ctx context.Context, s *implCluster.Core, statement bindi
 	}(), nil
 }
 
-func (p *Prepared[P, R]) Parameters() cql.Columns {
+func (p *Prepared[P, R]) BindMarkers() cql.Columns {
 	if p == nil || p.privateStorage.InternalState == nil {
 		return cql.Columns{}
 	}

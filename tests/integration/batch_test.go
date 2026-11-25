@@ -57,7 +57,7 @@ func TestBatch(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int,cluster int,value text,PRIMARY KEY(id,cluster))", table))
 			params := cql.Params(cql.Param("id", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Id }), cql.Param("cluster", cql.Int32Codec, func(v ClusteredKeyValue) int32 { return v.Cluster }), cql.Param("value", cql.StringCodec, func(v ClusteredKeyValue) string { return v.Value }))
 			prepared := cassandraPrepared(t, session, cql.Statement[ClusteredKeyValue, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,cluster,value) VALUES(?,?,?)", table), Params: params, Rows: cql.EmptyRowDecoder}, exec.PrepareOptions{})
-			require.Equal(t, 3, prepared.Parameters().Len())
+			require.Equal(t, 3, prepared.BindMarkers().Len())
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
 			cassandraAdd(t, batch, prepared, ClusteredKeyValue{4000, 5000, "bar"})
 			cassandraBatch(t, session, batch, exec.Options{})
