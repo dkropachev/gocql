@@ -786,7 +786,7 @@ func (s *Core) BuildQueryReport() queryReport {
 		if profile.SerialConsistency.Set {
 			cfg.SerialConsistency = profile.SerialConsistency.Value
 		}
-		cfg.DefaultIdempotence = false
+		cfg.DefaultIdempotence = profile.Idempotent
 		cfg.DefaultTimestamp = runtime.ConfigSnapshot().Timestamps.Mode() != settings.ServerTimestampMode
 		report := queryReport{
 			Defaults:      buildQueryDefaultsReport(&cfg),

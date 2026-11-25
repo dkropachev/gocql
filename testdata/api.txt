@@ -213,12 +213,14 @@ package config
 		config.Profile field PageSize int32
 		config.Profile field SerialConsistency cql.Option[cql.Consistency]
 		config.Profile field Consistency cql.Consistency
+		config.Profile field Idempotent bool
 		config.Profile method (T) Builder() *config.ProfileBuilder
 	type config.ProfileBuilder struct
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
 		config.ProfileBuilder method (*T) MustBuild() config.Profile
 		config.ProfileBuilder method (*T) NoSerialConsistency() *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithConsistency(c cql.Consistency) *config.ProfileBuilder
+		config.ProfileBuilder method (*T) WithIdempotent(on bool) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageSize(rows int32) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageTimeout(d time.Duration) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPrefetch(pages int) *config.ProfileBuilder

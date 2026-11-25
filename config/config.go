@@ -916,6 +916,17 @@ func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 	return p
 }
 
+// WithIdempotent chooses whether every statement the profile runs is safe to
+// run more than once, as cql.Statement.Idempotent marks one statement: with
+// true, retry.Safe retries and speculation applies to all of them. With
+// false, each statement's own Idempotent decides. exec.Options.Idempotent
+// overrides both for one execution. It is v1's ClusterConfig
+// DefaultIdempotence. Default false.
+func (p *ProfileBuilder) WithIdempotent(on bool) *ProfileBuilder {
+	p.profile.Idempotent = on
+	return p
+}
+
 // WithSpeculation sets the speculative execution policy; nil disables it.
 // Default none. Only an idempotent execution of ordinary statements
 // speculates; see retry.SpeculationPolicy.

@@ -33,7 +33,9 @@ type Statement[P, R any] struct {
 	// execution requires it, and retry.Safe moves a request that may have
 	// executed to another host only when it is set. Prepared statements,
 	// their queries and batch members carry it; a batch is idempotent when
-	// every member is. exec.Options.Idempotent overrides it for one
+	// every member is. A profile with Idempotent set
+	// (config.ProfileBuilder.WithIdempotent) marks every statement it runs
+	// idempotent, and exec.Options.Idempotent overrides both for one
 	// execution.
 	Idempotent bool
 }

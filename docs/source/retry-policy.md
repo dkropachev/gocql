@@ -3,8 +3,8 @@
 `Profile.Retry` is a `retry.Policy`: `Decide(retry.Attempt) retry.Decision`.
 The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
 `ProfileBuilder.WithRetry`. `retry.Attempt` carries the failed attempt's error,
-1-based number, idempotence (`Statement.Idempotent`, or
-`exec.Options.Idempotent` when set), consistency, whether
+1-based number, idempotence (`Statement.Idempotent` or the profile's
+`Idempotent`, or `exec.Options.Idempotent` when set), consistency, whether
 it is conditional, the kind of batch it sends (`Batch`, unset for a single
 statement), and `ExecutionStatus`, which reports whether the attempt
 may have changed data (see [Errors](errors.md)). A `retry.Decision` selects
@@ -52,7 +52,7 @@ checks a batch's partitions, and it covers conditional batches too, since a
 batch whose statements the driver did not classify counts as conditional. A
 logged batch is checked whole before its batch log is written, so it is
 retried as other requests are. A batch is idempotent when every member's
-statement is (`Statement.Idempotent`); `exec.Options.Idempotent` overrides
+statement is (`Statement.Idempotent`) or its profile is; `exec.Options.Idempotent` overrides
 that for one execution when replaying all of it is safe.
 
 Retries reuse encoded binding inputs and compiled result plans. They do not

@@ -90,6 +90,7 @@ defer session.Close()
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
 | `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `WithDefaultProfile` with a profile from `config.NewProfile()` and `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
+| `cluster.DefaultIdempotence` | `WithIdempotent(true)` on the default profile's `config.NewProfile()` builder: every statement the profile runs is idempotent unless `exec.Options.Idempotent` says otherwise |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |

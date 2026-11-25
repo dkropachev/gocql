@@ -47,6 +47,11 @@ type Profile struct {
 	SerialConsistency cql.Option[cql.Consistency]
 	// Consistency is the consistency level.
 	Consistency cql.Consistency
+	// Idempotent marks every statement the profile runs safe to run more
+	// than once, as cql.Statement.Idempotent marks one; false leaves each
+	// statement's own. exec.Options.Idempotent overrides it for one
+	// execution.
+	Idempotent bool
 	// built reports that ProfileBuilder.Build made the profile.
 	built bool
 }
@@ -70,7 +75,7 @@ var defaultRouting = sync.OnceValue(implSettings.DefaultRouting)
 func internalProfile(p Profile) implSettings.Profile {
 	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
-		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency}
+		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency, Idempotent: p.Idempotent}
 	if v.Retry == nil {
 		v.Retry = defaultRetry
 	}
@@ -90,7 +95,7 @@ func publicProfile(p implSettings.Profile) Profile {
 	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
 		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
-		built: p.InternalBuilt()}
+		Idempotent: p.Idempotent, built: p.InternalBuilt()}
 }
 
 func init() {

@@ -12,7 +12,7 @@
 // overrides the matching field of the profile: a cql.Option whose Set is
 // true, a non-nil Retry, a non-zero PageSize, and a SerialConsistency other
 // than SerialInherit. Idempotent, when set, overrides the statement's
-// cql.Statement.Idempotent.
+// cql.Statement.Idempotent and the profile's Idempotent.
 //
 // Options.Timeout, when set, replaces the profile's Timeout, so it can
 // lengthen the limit as well as shorten it, and cql.Some(time.Duration(0))
@@ -107,9 +107,10 @@ type Options struct {
 	// driver has validated metadata cached.
 	IncludeMetadata bool
 	// Idempotent, when set, replaces the statement's cql.Statement.Idempotent
-	// for the execution: cql.Some(true) marks it safe to run more than once,
-	// cql.Some(false) marks it unsafe. A batch is idempotent when every
-	// member is, unless this overrides it.
+	// and the profile's Idempotent for the execution: cql.Some(true) marks it
+	// safe to run more than once, cql.Some(false) marks it unsafe. Unset, an
+	// execution is idempotent when its statement or its profile is, and a
+	// batch when every member is or its profile is.
 	Idempotent cql.Option[bool]
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed

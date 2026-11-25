@@ -21,6 +21,8 @@ type Profile struct {
 	PageSize             int32
 	SerialConsistency    cql.Option[cql.Consistency]
 	Consistency          cql.Consistency
+	// Idempotent marks every statement the profile runs idempotent.
+	Idempotent bool
 	// unbuilt marks a public Profile that ProfileBuilder.Build did not make,
 	// such as a struct literal: its unset fields are zero, not the driver's
 	// defaults, so validation rejects it.

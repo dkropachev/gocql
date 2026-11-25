@@ -1375,7 +1375,7 @@ type Options struct {
     PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
     PageSize int32                                // 0 inherits; cql.Unpaged: whole result
     Prefetch cql.Option[int]                      // 0 or 1 page
-    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent
+    Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent and Profile.Idempotent
     Timestamp cql.Option[time.Time]               // sent in microseconds; workers reject it
     NowInSeconds cql.Option[int32]
     Keyspace string
@@ -1405,6 +1405,7 @@ type Profile struct {
     Retry retry.Policy
     Routing routing.Policy
     Speculation SpeculationPolicy
+    Idempotent bool // every statement the profile runs; v1 DefaultIdempotence
     /* unexported built mark */
 }
 func NewProfile() *ProfileBuilder
@@ -1412,7 +1413,7 @@ func (*ProfileBuilder) MustBuild() Profile // Build that panics on error
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
-// WithSpeculation; zero turns WithTimeout and WithPrefetch off, and
+// WithSpeculation, WithIdempotent; zero turns WithTimeout and WithPrefetch off, and
 // NoSerialConsistency clears the serial consistency. A nil WithRetry or
 // WithRouting, or a nil Retry or Routing field, is the default policy;
 // retry.Never{} disables retries.

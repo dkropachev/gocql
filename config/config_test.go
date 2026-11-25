@@ -895,6 +895,17 @@ func TestConfigBuilder(t *testing.T) {
 		if c.DefaultProfile.PageTimeout != time.Second {
 			t.Fatalf("default profile PageTimeout = %v", c.DefaultProfile.PageTimeout)
 		}
+		if NewProfile().MustBuild().Idempotent {
+			t.Fatal("a profile is idempotent by default")
+		}
+		idempotent := NewProfile().WithIdempotent(true).MustBuild()
+		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(idempotent))
+		if !idempotent.Idempotent || !cfg.settings.DefaultProfile.Idempotent || !cfg.DefaultProfile().Idempotent {
+			t.Fatal("WithIdempotent(true) was not kept")
+		}
+		if p := idempotent.Builder().WithIdempotent(false).MustBuild(); p.Idempotent {
+			t.Fatal("WithIdempotent(false) did not clear it")
+		}
 	})
 
 	t.Run("ProfileBuild", func(t *testing.T) {

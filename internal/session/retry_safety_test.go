@@ -127,6 +127,28 @@ func TestRetrySafety(t *testing.T) {
 				}
 			})
 
+			// A profile marked idempotent makes the same failure of a
+			// statement not marked idempotent replay on the next host.
+			t.Run("IdempotentProfileReplayedAfterSend", func(t *testing.T) {
+				_, routes, run, _, peers := hostsSession(t, 2)
+				go func() {
+					serverRead(peers[0])
+					peers[0].Close()
+				}()
+				go func() {
+					stream, ok := serverRead(peers[1])
+					if !ok {
+						return
+					}
+					_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
+				}()
+				profile := profileFor(routes)
+				profile.Idempotent = true
+				if err := run(&Options{Profile: profile}); err != nil {
+					t.Fatal(err)
+				}
+			})
+
 			// A server rejection before execution is replayed even for a
 			// non-idempotent request.
 			t.Run("NonIdempotentReplayedWhenNotExecuted", func(t *testing.T) {

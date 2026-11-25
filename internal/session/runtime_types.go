@@ -216,12 +216,12 @@ type InternalExecutionRequest struct {
 }
 
 // isIdempotent reports whether r may run more than once: its options'
-// Idempotent when set, else its statement's.
+// Idempotent when set, else whether its statement or its profile is.
 func (r *InternalExecutionRequest) isIdempotent() bool {
 	if o := r.options.InternalOptions.Idempotent; o.Set {
 		return o.Value
 	}
-	return r.idempotent
+	return r.idempotent || r.options.InternalProfile.Idempotent
 }
 
 // batchKind returns the kind of batch r sends, unset when r is not a batch.

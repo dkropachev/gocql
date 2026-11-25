@@ -27,8 +27,9 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 
 A request speculates only when it is idempotent and known to be ordinary.
 Mark a statement idempotent with `Statement.Idempotent`, which its prepared
-statement, workers and batch members carry; `exec.Options.Idempotent`, when
-set, overrides it for one execution. ScyllaDB marks conditional statements in
+statement, workers and batch members carry, or every statement a profile runs
+with `ProfileBuilder.WithIdempotent(true)`; `exec.Options.Idempotent`, when
+set, overrides both for one execution. ScyllaDB marks conditional statements in
 prepared metadata, so its prepared statements are classified. Elsewhere a
 statement whose row type is `cql.EmptyRow` is ordinary unless its `Kind` says
 otherwise; for any other, on Cassandra or unprepared, set `Statement.Kind` to
