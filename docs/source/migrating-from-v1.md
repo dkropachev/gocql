@@ -275,8 +275,8 @@ conditional statements in prepared metadata: set
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.ConvertCodec` for a type that converts to a built-in one; otherwise `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
 | `gocql.UnsetValue` | the `Unset` binding state; see [data types](data-types.md) |
-| `*T` or `gocql.NullX` for NULL | `cql.NullableCodec` or `cql.Nullable[T]`; `cql.NonNull(v)` builds a present one |
-| NULL scanned into a non-pointer, read as the zero value | an error matching `cql.ErrNull`: a column that may be NULL needs a `cql.Nullable[T]` field |
+| `*T` or `gocql.NullX` for NULL | `cql.NullableCodec` or `cql.Nullable[T]`, and `cql.PointerCodec` for a `*T`, which struct mappings also use; `cql.NonNull(v)` builds a present `Nullable` |
+| NULL scanned into a non-pointer, read as the zero value | an error matching `cql.ErrNull`: a column that may be NULL needs a `cql.Nullable[T]` or `*T` field |
 | `int64` for a counter column | `int64`, with `cql.Int64Codec`; `cql.BigIntValue` binds a counter increment |
 | `gocql.UUID.IsEmpty` | `cql.UUID.IsZero`, and `cql.TimeUUID.IsZero` |
 
