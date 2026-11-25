@@ -197,3 +197,93 @@ func TestCASBatchRows(t *testing.T) {
 		t.Fatalf("sent %+v, want one BATCH", sent)
 	}
 }
+
+// TestCursorAll reads Rows, a Page and CASBatchRows through All: Rows
+// fetches every page, a Page stops at its own and keeps its State, and
+// CASBatchRows still answers Applied once the loop ran to the end.
+func TestCursorAll(t *testing.T) {
+	t.Run("Rows", func(t *testing.T) {
+		f := newLifetimeFixture(t)
+		rows, err := f.p.Run(f.ctx, gridKey, f.options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		for row, err := range rows.All(nil) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			got += string(*row)
+		}
+		if got != "abc" {
+			t.Fatalf("Rows.All = %q, want every page's rows", got)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatalf("Close after All = %v", err)
+		}
+	})
+	t.Run("Page", func(t *testing.T) {
+		f := newLifetimeFixture(t)
+		page, err := f.p.RunPage(f.ctx, gridKey, cql.StartPage(), 2, f.options)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var dst []byte
+		var got string
+		for row, err := range page.All(&dst) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row != &dst {
+				t.Fatal("Page.All did not yield dst")
+			}
+			got += string(*row)
+		}
+		if got != "ab" {
+			t.Fatalf("Page.All = %q, want the first page's rows", got)
+		}
+		if page.State().Complete() {
+			t.Fatal("the page's State is complete, want a state to resume from")
+		}
+	})
+	t.Run("CASBatchRows", func(t *testing.T) {
+		s, _, peers := runtimeTestSession(t, 1)
+		srv := newGridServer(t, peers[0], func(r gridRequest) []byte {
+			return typedTestResponse(t, 4, r.stream, casBatchRowsBody("first", "second"))
+		})
+		defer srv.stop(t, peers[0])
+		defer func() { _ = s.Close() }()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		update, err := s.Prepare(ctx, gridUpdate(cql.ConditionalStatement))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var batch Batch
+		for range 2 {
+			if err := update.AddToBatch(&batch, gridKey); err != nil {
+				t.Fatal(err)
+			}
+		}
+		rows, err := s.RunConditionalBatch(ctx, &batch, cql.CASRows(cql.OneColumn(cql.BlobCodec)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got string
+		for row, err := range rows.All(nil) {
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.Applied {
+				t.Fatalf("row %+v applied", row)
+			}
+			got += string(row.Previous.Value.OwnedBytes()) + ","
+		}
+		if got != "first,second," {
+			t.Fatalf("CASBatchRows.All = %q", got)
+		}
+		if applied, err := rows.Applied(); err != nil || applied {
+			t.Fatalf("Applied after All = %v, %v; want a batch that did not apply", applied, err)
+		}
+	})
+}
