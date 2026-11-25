@@ -10,7 +10,6 @@ import (
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/internal/structmap"
-	"github.com/scylladb/gocql/v2/internal/syncx"
 )
 
 // Struct mappings build the same Param and Column fields an application writes
@@ -28,37 +27,56 @@ type builtinField[P any] struct {
 
 // builtinFields returns the built-in field types, each with its Nullable form.
 func builtinFields[P any]() []builtinField[P] {
-	// Every entry instantiates field accessors for P, so the table grows the
-	// code of each mapped struct type. Go maps are the exception: their key and
-	// value pairs multiply, so goMapFields shares one accessor per struct type
-	// among all of them.
-	var fields []builtinField[P]
-	add := func(entries ...builtinField[P]) { fields = append(fields, entries...) }
-	add(builtin[P](BoolCodec, "bool", "BoolCodec", true)...)
-	add(builtin[P](Int8Codec, "int8", "Int8Codec", true)...)
-	add(builtin[P](Int16Codec, "int16", "Int16Codec", true)...)
-	add(builtin[P](Int32Codec, "int32", "Int32Codec", true)...)
-	add(builtin[P](Int64Codec, "int64", "Int64Codec", true)...)
-	add(builtin[P](IntCodec, "int", "IntCodec", true)...)
-	add(builtin[P](Float32Codec, "float32", "Float32Codec", true)...)
-	add(builtin[P](Float64Codec, "float64", "Float64Codec", true)...)
+	erased := erasedBuiltins()
+	fields := make([]builtinField[P], 0, len(erased)+len(goMapBuiltins()))
+	for _, b := range erased {
+		entry := bindEntry[P](b.erasedEntry)
+		entry.BuiltinFieldType = b.BuiltinFieldType
+		fields = append(fields, entry)
+	}
+	return append(fields, goMapFields[P]()...)
+}
+
+// erasedBuiltin is a built-in field type with its fields built for
+// erasedBase, as an option's are.
+type erasedBuiltin struct {
+	erasedEntry
+	structmap.BuiltinFieldType
+}
+
+// erasedBuiltins returns the built-in field types other than Go maps, with
+// their fields built for erasedBase. The table does not depend on the mapped
+// struct type, so each field type's codecs and accessors are instantiated
+// once, not once per struct type: under coverage and race instrumentation,
+// instantiating them per struct made compiling a package with many mapped
+// structs take tens of gigabytes.
+func erasedBuiltins() []erasedBuiltin {
+	var fields []erasedBuiltin
+	add := func(entries ...erasedBuiltin) { fields = append(fields, entries...) }
+	add(builtin(BoolCodec, "bool", "BoolCodec", true)...)
+	add(builtin(Int8Codec, "int8", "Int8Codec", true)...)
+	add(builtin(Int16Codec, "int16", "Int16Codec", true)...)
+	add(builtin(Int32Codec, "int32", "Int32Codec", true)...)
+	add(builtin(Int64Codec, "int64", "Int64Codec", true)...)
+	add(builtin(IntCodec, "int", "IntCodec", true)...)
+	add(builtin(Float32Codec, "float32", "Float32Codec", true)...)
+	add(builtin(Float64Codec, "float64", "Float64Codec", true)...)
 	// ASCIIStringCodec names StringCodec, which maps ascii too, in a tag.
-	add(builtin[P](StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
-	add(builtin[P](TextCodec, "cql.Text", "TextCodec", true)...)
-	add(builtin[P](ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
-	add(builtin[P](BytesCodec, "cql.Bytes", "BytesCodec", true)...)
-	add(builtin[P](UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
-	add(builtin[P](TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
-	add(builtin[P](InetCodec, "netip.Addr", "InetCodec", true)...)
-	add(builtin[P](VarintCodec, "cql.Varint", "VarintCodec", true)...)
-	add(builtin[P](VarintBigIntCodec, "*big.Int", "VarintBigIntCodec", true)...)
-	add(builtin[P](DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
-	add(builtin[P](DateCodec, "cql.Date", "DateCodec", true)...)
-	add(builtin[P](TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec", true)...)
-	add(builtin[P](TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
-	add(builtin[P](DurationCodec, "cql.Duration", "DurationCodec", true)...)
-	add(builtin[P](TimestampTimeCodec, "time.Time", "TimestampTimeCodec", true)...)
-	add(goMapFields[P]()...)
+	add(builtin(StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
+	add(builtin(TextCodec, "cql.Text", "TextCodec", true)...)
+	add(builtin(ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
+	add(builtin(BytesCodec, "cql.Bytes", "BytesCodec", true)...)
+	add(builtin(UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
+	add(builtin(TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
+	add(builtin(InetCodec, "netip.Addr", "InetCodec", true)...)
+	add(builtin(VarintCodec, "cql.Varint", "VarintCodec", true)...)
+	add(builtin(VarintBigIntCodec, "*big.Int", "VarintBigIntCodec", true)...)
+	add(builtin(DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
+	add(builtin(DateCodec, "cql.Date", "DateCodec", true)...)
+	add(builtin(TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec", true)...)
+	add(builtin(TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
+	add(builtin(DurationCodec, "cql.Duration", "DurationCodec", true)...)
+	add(builtin(TimestampTimeCodec, "time.Time", "TimestampTimeCodec", true)...)
 	return fields
 }
 
@@ -68,55 +86,51 @@ func builtinFields[P any]() []builtinField[P] {
 // (`codec=ListCodec`), a set (`codec=SetCodec`) or a vector
 // (`codec=VectorCodec`) of c. name is c's exported name, which a `codec=`
 // tag selects it by, as it does each of aliases.
-func builtin[P, V any](c Codec[V], typeSrc, name string, def bool, aliases ...string) []builtinField[P] {
+func builtin[V any](c Codec[V], typeSrc, name string, def bool, aliases ...string) []erasedBuiltin {
 	names := append([]string{name}, aliases...)
-	plain := builtinField[P]{
+	plain := erasedBuiltin{
 		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[V](), TypeSrc: typeSrc,
 			EncoderSrc: "cql." + name, DecoderSrc: "cql." + name,
 			Names: names, Default: def,
 		},
-		param:  fieldParam[P](Encoder[V](c)),
-		column: fieldColumn[P](Decoder[V](c)),
+		erasedEntry: erasedEntry{param: erasedParamOf(Encoder[V](c)), column: erasedColumnOf(Decoder[V](c))},
 	}
-	nullable := builtinField[P]{
+	nullable := erasedBuiltin{
 		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[Nullable[V]](), TypeSrc: "cql.Nullable[" + typeSrc + "]",
 			EncoderSrc: "cql.NullableEncoder(cql." + name + ")", DecoderSrc: "cql.NullableDecoder(cql." + name + ")",
 			Names: names, Default: def,
 		},
-		param:  fieldParam[P](NullableEncoder[V](c)),
-		column: fieldColumn[P](NullableDecoder[V](c)),
+		erasedEntry: erasedEntry{param: erasedParamOf(NullableEncoder[V](c)), column: erasedColumnOf(NullableDecoder[V](c))},
 	}
-	bind := builtinField[P]{
+	bind := erasedBuiltin{
 		BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: reflect.TypeFor[BindValue[V]](), TypeSrc: "cql.BindValue[" + typeSrc + "]",
 			EncoderSrc: "cql.BindEncoder(cql." + name + ")",
 			Names:      names, Default: def,
 		},
-		param: fieldParam[P](BindEncoder[V](c)),
+		erasedEntry: erasedEntry{param: erasedParamOf(BindEncoder[V](c))},
 	}
-	collection := func(codec Codec[[]V], src string, names []string, def bool) builtinField[P] {
-		return builtinField[P]{
+	collection := func(codec Codec[[]V], src string, names []string, def bool) erasedBuiltin {
+		return erasedBuiltin{
 			BuiltinFieldType: structmap.BuiltinFieldType{
 				Type: reflect.TypeFor[[]V](), TypeSrc: "[]" + typeSrc,
 				EncoderSrc: src, DecoderSrc: src, Names: names, Default: def,
 			},
-			param:  fieldParam[P](Encoder[[]V](codec)),
-			column: fieldColumn[P](Decoder[[]V](codec)),
+			erasedEntry: erasedEntry{param: erasedParamOf(Encoder[[]V](codec)), column: erasedColumnOf(Decoder[[]V](codec))},
 		}
 	}
-	fields := []builtinField[P]{plain, nullable, bind,
+	fields := []erasedBuiltin{plain, nullable, bind,
 		collection(SliceCodec(c), "cql.SliceCodec(cql."+name+")", names, def)}
 	if reflect.TypeFor[V]().Kind() != reflect.Pointer {
-		fields = append(fields, builtinField[P]{
+		fields = append(fields, erasedBuiltin{
 			BuiltinFieldType: structmap.BuiltinFieldType{
 				Type: reflect.TypeFor[*V](), TypeSrc: "*" + typeSrc,
 				EncoderSrc: "cql.PointerCodec(cql." + name + ")", DecoderSrc: "cql.PointerCodec(cql." + name + ")",
 				Names: names, Default: def,
 			},
-			param:  fieldParam[P](Encoder[*V](PointerCodec(c))),
-			column: fieldColumn[P](Decoder[*V](PointerCodec(c))),
+			erasedEntry: erasedEntry{param: erasedParamOf(Encoder[*V](PointerCodec(c))), column: erasedColumnOf(Decoder[*V](PointerCodec(c)))},
 		})
 	}
 	if def {
@@ -135,25 +149,6 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 		types[i] = f.BuiltinFieldType
 	}
 	return types
-}
-
-// unsafe: in fieldParam, fieldColumn and fieldStreamColumn, offset is the
-// reflect offset of a field of type exactly V, or of a type with V's layout
-// that names a type where V has the type's underlying type (resolveField,
-// sameLayout; eachStructField sums the offsets of flattened value embeds;
-// pointer embeds are rejected), so it stays inside the struct the arithmetic
-// starts from and the result is a typed pointer the GC sees.
-
-func fieldParam[P, V any](enc Encoder[V]) func(string, uintptr) InputField[P] {
-	return func(name string, offset uintptr) InputField[P] {
-		return Param(name, enc, func(v P) V { return *(*V)(unsafe.Add(unsafe.Pointer(&v), offset)) })
-	}
-}
-
-func fieldColumn[R, V any](dec Decoder[V]) func(string, uintptr) OutputField[R] {
-	return func(name string, offset uintptr) OutputField[R] {
-		return Column(name, dec, func(r *R) *V { return (*V)(unsafe.Add(unsafe.Pointer(r), offset)) })
-	}
 }
 
 // StructOption configures a struct mapping: ParamsOf, RowOf, StreamRowOf,
@@ -216,14 +211,19 @@ type structConfig[P any] struct {
 	ignoreExtra  bool
 }
 
-// Options name a field type V but not the struct, so they cannot
-// instantiate the struct's field accessors. They build them for erasedBase
+// Built-in field types and options name a field type V but not the struct,
+// and building their accessors for each struct would instantiate every
+// field type's code once per mapped struct. They build them for erasedBase
 // instead, a stand-in whose pointer is the struct's address, and
 // erasedParam, erasedColumn and erasedStreamColumn adapt them to the struct.
 //
 // unsafe: an erased accessor adds the field's reflect offset to the
-// struct's address, as fieldParam does; the struct is P or R, whose field at
-// that offset has type exactly V (resolveField matches by reflect.Type).
+// struct's address; the struct is P or R, whose field at that offset has
+// type exactly V, or a type with V's layout that names a type where V has
+// the type's underlying type (resolveField, sameLayout). eachStructField
+// sums the offsets of flattened value embeds and rejects pointer embeds, so
+// the offset stays inside the struct and the result is a typed pointer the
+// GC sees.
 type erasedBase struct{}
 
 // erasedEntry builds the fields of one Go type for an option: param binds a
@@ -255,13 +255,10 @@ func erasedStreamColumnOf[V any](dec StreamDecoder[V]) func(string, uintptr) Str
 	}
 }
 
-// erasedParam binds a parameter of P with a field built for erasedBase. A
-// parameter struct arrives by value, so its address would escape to the
-// heap on every bind; encode copies it into a pooled slot instead.
-type erasedParam[P any] struct {
-	inner InputField[*erasedBase]
-	slots *syncx.Pool[*P]
-}
+// erasedParam binds a parameter of P with a field built for erasedBase,
+// passing the field the address of the parameter struct, which arrives by
+// value, without moving it to the heap (structAddr).
+type erasedParam[P any] struct{ inner InputField[*erasedBase] }
 
 func (f erasedParam[P]) location() fieldLocation { return f.inner.location() }
 func (f erasedParam[P]) compile(typ DataType) (InputField[P], error) {
@@ -273,13 +270,37 @@ func (f erasedParam[P]) compile(typ DataType) (InputField[P], error) {
 	return f, nil
 }
 func (f erasedParam[P]) encode(w *ParamWriter, value P) error {
-	slot := f.slots.Get()
-	*slot = value
-	err := f.inner.encode(w, (*erasedBase)(unsafe.Pointer(slot)))
-	var zero P
-	*slot = zero
-	f.slots.Put(slot)
-	return err
+	return f.inner.encode(w, structAddr(&value))
+}
+
+// directParamOp is the inner field's direct op, which calls its getter with
+// the struct's address (paramOp.erased), with f as its fallback field.
+func (f erasedParam[P]) directParamOp() (paramOp[P], bool) {
+	d, ok := f.inner.(directParamField[*erasedBase])
+	if !ok {
+		return paramOp[P]{}, false
+	}
+	op, ok := d.directParamOp()
+	if !ok {
+		return paramOp[P]{}, false
+	}
+	return paramOp[P]{field: f, get: op.get, width: op.width, columnKind: op.columnKind, alt: op.alt, kind: op.kind, erased: true}, true
+}
+
+// structAddr returns p as the erasedBase pointer of an erased field, hiding
+// it from escape analysis: erasedParam and paramOp.encodeDirect take the
+// address of a parameter struct that arrives by value, and passing it to an
+// erased field, an interface or a func value, would otherwise move the
+// struct to the heap on every bind.
+//
+// unsafe: an erased field only reads the field at its offset from the
+// address, during the call, and never retains the address, so the struct
+// outlives every use. The address is loaded back as a pointer, so the GC
+// and stack copying see it; only escape analysis loses track of it through
+// the uintptr.
+func structAddr[P any](p *P) *erasedBase {
+	x := uintptr(unsafe.Pointer(p))
+	return *(**erasedBase)(unsafe.Pointer(&x))
 }
 
 // erasedColumn decodes a column of R with a field built for erasedBase.
@@ -300,20 +321,42 @@ func (f erasedColumn[R]) decode(r *RowReader, row *R) error { return f.inner.dec
 func (f erasedColumn[R]) clone(dst, source *R)              { f.inner.clone(erased(dst), erased(source)) }
 func (f erasedColumn[R]) detachField(row *R)                { f.inner.detachField(erased(row)) }
 
+// directRowOp is the inner field's direct op. Its accessor, a
+// func(*erasedBase) *V, is called as a func(*R) unsafe.Pointer: both take
+// and return one pointer, so they are called the same way (funcPointer),
+// and the row's address is the erasedBase address the accessor expects.
+func (f erasedColumn[R]) directRowOp() (rowOp[R], bool) {
+	d, ok := f.inner.(directRowField[erasedBase])
+	if !ok {
+		return rowOp[R]{}, false
+	}
+	op, ok := d.directRowOp()
+	if !ok {
+		return rowOp[R]{}, false
+	}
+	out := rowOp[R]{access: op.access, width: op.width, columnKind: op.columnKind, alt: op.alt, kind: op.kind, compiled: op.compiled}
+	if op.field != nil {
+		out.field = erasedColumn[R]{inner: op.field}
+	}
+	return out, true
+}
+
 // erasedStreamColumn decodes a streamed column of R with a field built for
-// erasedBase.
+// erasedBase. Its funcs take a *erasedBase where R's take a *R, so they are
+// called the same way (funcPointer) and are used as R's, with the row's
+// address as the erasedBase address the field expects.
 func erasedStreamColumn[R any](field StreamOutputField[erasedBase]) StreamOutputField[R] {
 	inner := field.streamDeclaration()
 	return &streamOutputField[R]{loc: inner.loc,
-		resetMissing: func(row *R) { inner.resetMissing(erased(row)) },
+		resetMissing: *(*func(*R))(unsafe.Pointer(&inner.resetMissing)),
 		compile: func(typ DataType) (streamFieldPlan[R], error) {
 			plan, err := inner.compile(typ)
 			if err != nil {
 				return streamFieldPlan[R]{}, err
 			}
 			return streamFieldPlan[R]{
-				reset:  func(row *R) { plan.reset(erased(row)) },
-				decode: func(r *StreamRowReader, row *R) error { return plan.decode(r, erased(row)) },
+				reset:  *(*func(*R))(unsafe.Pointer(&plan.reset)),
+				decode: *(*func(*StreamRowReader, *R) error)(unsafe.Pointer(&plan.decode)),
 			}, nil
 		},
 	}
@@ -323,9 +366,8 @@ func erasedStreamColumn[R any](field StreamOutputField[erasedBase]) StreamOutput
 func bindEntry[P any](e erasedEntry) builtinField[P] {
 	var entry builtinField[P]
 	if e.param != nil {
-		slots := syncx.NewPool(func() *P { return new(P) })
 		entry.param = func(name string, offset uintptr) InputField[P] {
-			return erasedParam[P]{inner: e.param(name, offset), slots: slots}
+			return erasedParam[P]{inner: e.param(name, offset)}
 		}
 	}
 	if e.column != nil {
@@ -637,7 +679,7 @@ func bufferReset[R any](reuse bool) (func(*R), error) {
 		var zero R
 		*r = zero
 		// unsafe: offsets are the reflect offsets of R's slice fields
-		// (see fieldParam), and old keeps the previous backing arrays alive.
+		// (see erasedBase), and old keeps the previous backing arrays alive.
 		base, prev := unsafe.Pointer(r), unsafe.Pointer(&old)
 		for _, off := range offsets {
 			// Every slice header has the same layout, so truncating it as a
@@ -864,27 +906,49 @@ func (f streamBuiltinField[P]) meta() structmap.BuiltinFieldType { return f.Buil
 // its Nullable form and its list form, and for a type's default decoder its
 // set and vector forms.
 func streamBuiltinFields[P any]() []streamBuiltinField[P] {
-	var fields []streamBuiltinField[P]
-	add := func(entries ...streamBuiltinField[P]) { fields = append(fields, entries...) }
-	add(streamBuiltin[P](StreamBool, "bool", "Bool", true)...)
-	add(streamBuiltin[P](StreamInt8, "int8", "Int8", true)...)
-	add(streamBuiltin[P](StreamInt16, "int16", "Int16", true)...)
-	add(streamBuiltin[P](StreamInt32, "int32", "Int32", true)...)
-	add(streamBuiltin[P](StreamInt64, "int64", "Int64", true)...)
-	add(streamBuiltin[P](StreamFloat32, "float32", "Float32", true)...)
-	add(streamBuiltin[P](StreamFloat64, "float64", "Float64", true)...)
-	add(streamBuiltin[P](StreamBlob, "[]byte", "Blob", true)...)
+	erased := erasedStreamBuiltins()
+	fields := make([]streamBuiltinField[P], len(erased))
+	for i, b := range erased {
+		column := b.column
+		fields[i] = streamBuiltinField[P]{BuiltinFieldType: b.BuiltinFieldType, column: func(name string, offset uintptr) StreamOutputField[P] {
+			return erasedStreamColumn[P](column(name, offset))
+		}}
+	}
+	return fields
+}
+
+// erasedStreamBuiltin is a built-in streaming field type with its field
+// built for erasedBase, as erasedBuiltin is for buffered rows.
+type erasedStreamBuiltin struct {
+	erasedStreamEntry
+	structmap.BuiltinFieldType
+}
+
+// erasedStreamBuiltins returns the built-in streaming field types with
+// their fields built for erasedBase, once per field type rather than once per
+// struct type, as erasedBuiltins does.
+func erasedStreamBuiltins() []erasedStreamBuiltin {
+	var fields []erasedStreamBuiltin
+	add := func(entries ...erasedStreamBuiltin) { fields = append(fields, entries...) }
+	add(streamBuiltin(StreamBool, "bool", "Bool", true)...)
+	add(streamBuiltin(StreamInt8, "int8", "Int8", true)...)
+	add(streamBuiltin(StreamInt16, "int16", "Int16", true)...)
+	add(streamBuiltin(StreamInt32, "int32", "Int32", true)...)
+	add(streamBuiltin(StreamInt64, "int64", "Int64", true)...)
+	add(streamBuiltin(StreamFloat32, "float32", "Float32", true)...)
+	add(streamBuiltin(StreamFloat64, "float64", "Float64", true)...)
+	add(streamBuiltin(StreamBlob, "[]byte", "Blob", true)...)
 	// ASCII names StreamText, which decodes ascii too, in a tag.
-	add(streamBuiltin[P](StreamText, "[]byte", "Text", false, "ASCII")...)
-	add(streamBuiltin[P](StreamVarint, "[]byte", "Varint", false)...)
-	add(streamBuiltin[P](StreamUUID, "cql.UUID", "UUID", true)...)
-	add(streamBuiltin[P](StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
-	add(streamBuiltin[P](StreamInet, "netip.Addr", "Inet", true)...)
-	add(streamBuiltin[P](StreamDecimal, "cql.DecimalParts", "Decimal", true)...)
-	add(streamBuiltin[P](StreamDate, "cql.Date", "Date", true)...)
-	add(streamBuiltin[P](StreamTime, "cql.TimeOfDay", "Time", true)...)
-	add(streamBuiltin[P](StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
-	add(streamBuiltin[P](StreamDuration, "cql.Duration", "Duration", true)...)
+	add(streamBuiltin(StreamText, "[]byte", "Text", false, "ASCII")...)
+	add(streamBuiltin(StreamVarint, "[]byte", "Varint", false)...)
+	add(streamBuiltin(StreamUUID, "cql.UUID", "UUID", true)...)
+	add(streamBuiltin(StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
+	add(streamBuiltin(StreamInet, "netip.Addr", "Inet", true)...)
+	add(streamBuiltin(StreamDecimal, "cql.DecimalParts", "Decimal", true)...)
+	add(streamBuiltin(StreamDate, "cql.Date", "Date", true)...)
+	add(streamBuiltin(StreamTime, "cql.TimeOfDay", "Time", true)...)
+	add(streamBuiltin(StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
+	add(streamBuiltin(StreamDuration, "cql.Duration", "Duration", true)...)
 	return fields
 }
 
@@ -895,33 +959,33 @@ func streamBuiltinFields[P any]() []streamBuiltinField[P] {
 // that names it, or one of aliases, also selects the slice of it, and there
 // is no list, set or vector entry: those tags already select the default
 // decoder's.
-func streamBuiltin[P, V any](dec StreamDecoder[V], typeSrc, name string, def bool, aliases ...string) []streamBuiltinField[P] {
+func streamBuiltin[V any](dec StreamDecoder[V], typeSrc, name string, def bool, aliases ...string) []erasedStreamBuiltin {
 	names := append([]string{name}, aliases...)
-	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[P]) streamBuiltinField[P] {
-		return streamBuiltinField[P]{column: column, BuiltinFieldType: structmap.BuiltinFieldType{
+	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[erasedBase]) erasedStreamBuiltin {
+		return erasedStreamBuiltin{erasedStreamEntry: erasedStreamEntry{column: column}, BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
 		}}
 	}
 	src := "cql.Stream" + name
-	plain := []streamBuiltinField[P]{
-		entry(reflect.TypeFor[V](), typeSrc, src, names, def, fieldStreamColumn[P](dec)),
+	plain := []erasedStreamBuiltin{
+		entry(reflect.TypeFor[V](), typeSrc, src, names, def, erasedStreamColumnOf(dec)),
 		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",
-			names, def, fieldStreamColumn[P](StreamNullable(dec))),
+			names, def, erasedStreamColumnOf(StreamNullable(dec))),
 	}
 	if !def {
 		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSlice("+src+")",
-			names, false, fieldStreamColumn[P](StreamSlice(dec))))
+			names, false, erasedStreamColumnOf(StreamSlice(dec))))
 	}
-	return append(plain, []streamBuiltinField[P]{
+	return append(plain, []erasedStreamBuiltin{
 		// A slice takes its element's default decoder.
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSlice("+src+")",
-			nil, def, fieldStreamColumn[P](StreamSlice(dec))),
+			nil, def, erasedStreamColumnOf(StreamSlice(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamList("+src+")",
-			[]string{"List"}, false, fieldStreamColumn[P](StreamList(dec))),
+			[]string{"List"}, false, erasedStreamColumnOf(StreamList(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSet("+src+")",
-			[]string{"Set"}, false, fieldStreamColumn[P](StreamSet(dec))),
+			[]string{"Set"}, false, erasedStreamColumnOf(StreamSet(dec))),
 		entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamVector("+src+")",
-			[]string{"Vector"}, false, fieldStreamColumn[P](StreamVector(dec))),
+			[]string{"Vector"}, false, erasedStreamColumnOf(StreamVector(dec))),
 	}...)
 }
 
@@ -934,13 +998,6 @@ func streamBuiltinFieldTypes() []structmap.BuiltinFieldType {
 		types[i] = f.BuiltinFieldType
 	}
 	return types
-}
-
-func fieldStreamColumn[R, V any](dec StreamDecoder[V]) func(string, uintptr) StreamOutputField[R] {
-	return func(name string, offset uintptr) StreamOutputField[R] {
-		// unsafe: as fieldParam.
-		return StreamColumn(name, dec, func(r *R) *V { return (*V)(unsafe.Add(unsafe.Pointer(r), offset)) })
-	}
 }
 
 type streamCodecOption[V any] struct{ decoder StreamDecoder[V] }

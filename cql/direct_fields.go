@@ -208,6 +208,18 @@ type paramOp[P any] struct {
 	width           int64
 	columnKind, alt Kind // directInt: the codec's types
 	kind            directKind
+	// erased: get is a func(*erasedBase) V of a struct mapping's field,
+	// called with the parameter struct's address (erasedParam).
+	erased bool
+}
+
+// directGet calls op's getter on *value and returns the field as V.
+func directGet[V, P any](op *paramOp[P], value *P) V {
+	get := op.get
+	if op.erased {
+		return (*(*func(*erasedBase) V)(unsafe.Pointer(&get)))(structAddr(value))
+	}
+	return (*(*func(P) V)(unsafe.Pointer(&get)))(*value)
 }
 
 // directParamOp compiles f, already compiled for its column, into a direct op
@@ -245,7 +257,6 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 	if !ok || w.builder == nil || validateDataType(column.Type) != nil || w.capture != nil && w.index >= len(w.capture) {
 		return op.field.encode(w, value)
 	}
-	get := op.get
 	start := w.builder.Len()
 	switch op.kind {
 	case directInt:
@@ -259,15 +270,15 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		p[0], p[1], p[2], p[3] = 0, 0, 0, byte(op.width)
 		switch op.width {
 		case 1:
-			p[4] = byte((*(*func(P) int8)(unsafe.Pointer(&get)))(value))
+			p[4] = byte(directGet[int8](op, &value))
 		case 2:
-			v := uint16((*(*func(P) int16)(unsafe.Pointer(&get)))(value))
+			v := uint16(directGet[int16](op, &value))
 			p[4], p[5] = byte(v>>8), byte(v)
 		case 4:
-			v := uint32((*(*func(P) int32)(unsafe.Pointer(&get)))(value))
+			v := uint32(directGet[int32](op, &value))
 			p[4], p[5], p[6], p[7] = byte(v>>24), byte(v>>16), byte(v>>8), byte(v)
 		default:
-			v := uint64((*(*func(P) int64)(unsafe.Pointer(&get)))(value))
+			v := uint64(directGet[int64](op, &value))
 			for i := 0; i < 8; i++ {
 				p[4+i] = byte(v >> (56 - 8*i))
 			}
@@ -276,7 +287,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		if column.Type.Kind() != KindBlob {
 			return op.field.encode(w, value)
 		}
-		b := (*(*func(P) []byte)(unsafe.Pointer(&get)))(value)
+		b := directGet[[]byte](op, &value)
 		if err := op.writeBody(w, b, ""); err != nil {
 			return err
 		}
@@ -284,7 +295,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		if checkTextType(column.Type) != nil {
 			return op.field.encode(w, value)
 		}
-		s := (*(*func(P) string)(unsafe.Pointer(&get)))(value)
+		s := directGet[string](op, &value)
 		if column.Type.Kind() == KindASCII {
 			for i := 0; i < len(s); i++ {
 				if s[i] >= utf8.RuneSelf {
