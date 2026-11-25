@@ -10,6 +10,18 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	Build()
 ```
 
+`config.LoadTLSFiles` builds such a config from PEM files once, over a base
+config or TLS 1.2+ defaults:
+
+```go
+tlsConfig, err := config.LoadTLSFiles(&tls.Config{MinVersion: tls.VersionTLS13}, config.TLSFiles{
+	CertFile: "/etc/scylla-client/tls.crt",
+	KeyFile:  "/etc/scylla-client/tls.key",
+	CAFile:   "/etc/scylla-client/ca.crt",
+})
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLS(tlsConfig).Build()
+```
+
 Standard verification remains enabled: unless the config sets `ServerName` or
 skips verification, each connection verifies the node's IP address. One
 configuration serves every node; customize checks with `VerifyConnection`.

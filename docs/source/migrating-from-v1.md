@@ -95,7 +95,7 @@ defer session.Close()
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |
 | `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; other mechanisms implement `auth.Provider` |
-| `cluster.SslOpts` | `WithTLS(*tls.Config)`, or `WithTLSSource` with a source from `config.NewTLSFileSource` to reload certificate files |
+| `cluster.SslOpts` | `WithTLS(*tls.Config)`; `config.LoadTLSFiles(base, config.TLSFiles{CertFile, KeyFile, CAFile})` reads v1's `CertPath`, `KeyPath` and `CaPath`, and `WithTLSSource` with a source from `config.NewTLSFileSource` reloads them. v1 skipped verification unless `EnableHostVerification` was set; v2 verifies by default: without a `ServerName` each connection checks that the node's certificate names its IP address, so a node certificate without its IP address needs the base's `ServerName` set to a name it carries. `InsecureSkipVerify` reproduces v1's default and is not recommended |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc)` and `WithLocalRack(rack)` set its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
 | `cluster.RetryPolicy` | the profile's `WithRetry(policy)`, for example `retry.Safe{MaxAttempts: n}` with n attempts in all; `WithRetry(nil)` is the default, and `retry.Never{}` disables retries; see [retries](retry-policy.md) |

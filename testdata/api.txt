@@ -198,6 +198,7 @@ package config
 		config.Dialect method (T) MarshalText() ([]byte, error)
 		config.Dialect method (T) String() string
 		config.Dialect method (*T) UnmarshalText(text []byte) error
+	func config.LoadTLSFiles(base *crypto/tls.Config, files config.TLSFiles) (*crypto/tls.Config, error)
 	func config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder
 	func config.NewProfile() *config.ProfileBuilder
 	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles) (*config.TLSFileSource, error)

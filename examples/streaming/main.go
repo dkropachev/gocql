@@ -66,23 +66,13 @@ func run() (resultErr error) {
 		builder.WithAuth(auth.Password(*username, *password))
 	}
 	if *ca != "" {
-		pem, err := os.ReadFile(*ca)
+		tlsConfig, err := config.LoadTLSFiles(&tls.Config{ServerName: *serverName, MinVersion: tls.VersionTLS12},
+			config.TLSFiles{CertFile: *cert, KeyFile: *key, CAFile: *ca})
 		if err != nil {
 			return err
 		}
-		roots := x509.NewCertPool()
-		if !roots.AppendCertsFromPEM(pem) {
-			return fmt.Errorf("invalid CA PEM")
-		}
-		tlsConfig := &tls.Config{RootCAs: roots, ServerName: *serverName, MinVersion: tls.VersionTLS12}
-		if *cert != "" {
-			pair, err := tls.LoadX509KeyPair(*cert, *key)
-			if err != nil {
-				return err
-			}
-			tlsConfig.Certificates = []tls.Certificate{pair}
-		}
 		if *uri != "" {
+			roots := tlsConfig.RootCAs
 			// Explicit URI identity verification also verifies the complete CA chain.
 			tlsConfig.InsecureSkipVerify = true
 			tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {

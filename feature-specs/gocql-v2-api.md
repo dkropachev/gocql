@@ -711,6 +711,7 @@ owns its type:
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
 | `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `config.LoadTLSFiles(*tls.Config, config.TLSFiles) (*tls.Config, error)` | a TLS configuration loaded from files once, for `WithTLS` |
 | `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
 
 Package `cql` also exports `func StartPage() PageState` (the zero `PageState`);
