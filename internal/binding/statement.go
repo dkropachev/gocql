@@ -121,14 +121,27 @@ func ValidateStatement[P, R any](s *Statement[P, R]) error {
 // inference; a ConditionalStatement stays one; an OrdinaryStatement the
 // inference finds conditional is rejected with a ValidationError, before
 // anything is sent, since it would run with a client timestamp, shuffled
-// replicas and speculation a conditional statement must not have.
+// replicas and speculation a conditional statement must not have. Only an
+// INSERT, UPDATE, DELETE or BATCH can be conditional, so a statement of any
+// other text, a SELECT included, that is declared ConditionalStatement or
+// decoded with cql.CASRows is rejected with a ValidationError as well.
 // It scans the text once, so a prepared statement resolves at Prepare and an
 // unprepared one per call.
 func ResolveKind(kind cql.StatementKind, text string, rows any) (cql.StatementKind, error) {
+	casRows := codec.ConditionalRows(rows)
+	if kind == cql.ConditionalStatement || casRows {
+		if first := firstCQLWord(text); !conditionalVerb(first) {
+			reason := "a CASRows decoder"
+			if !casRows {
+				reason = "a ConditionalStatement kind"
+			}
+			return 0, cqltype.TypeValidation("statement kind", "only an INSERT, UPDATE, DELETE or BATCH can be conditional; a %s statement cannot have %s", strings.ToUpper(first), reason)
+		}
+	}
 	if kind == cql.ConditionalStatement {
 		return kind, nil
 	}
-	conditional := codec.ConditionalRows(rows) || InternalConditionalCQL(text)
+	conditional := casRows || InternalConditionalCQL(text)
 	switch {
 	case !conditional:
 		return cql.OrdinaryStatement, nil
@@ -177,12 +190,7 @@ func InternalConditionalCQL(cql string) bool {
 	visitCQLWords(cql, func(word string) bool {
 		if first {
 			first = false
-			for _, dml := range [...]string{"INSERT", "UPDATE", "DELETE", "BEGIN"} {
-				if strings.EqualFold(word, dml) {
-					return true
-				}
-			}
-			return false
+			return conditionalVerb(word)
 		}
 		if strings.EqualFold(word, "IF") {
 			conditional = true
@@ -191,6 +199,18 @@ func InternalConditionalCQL(cql string) bool {
 		return true
 	})
 	return conditional
+}
+
+// conditionalVerb reports whether word, the first word of a statement,
+// begins one that can be conditional: INSERT, UPDATE, DELETE or BEGIN, which
+// starts a BATCH.
+func conditionalVerb(word string) bool {
+	for _, dml := range [...]string{"INSERT", "UPDATE", "DELETE", "BEGIN"} {
+		if strings.EqualFold(word, dml) {
+			return true
+		}
+	}
+	return false
 }
 
 // visitCQLWords calls visit with each unquoted word of cql, as written,

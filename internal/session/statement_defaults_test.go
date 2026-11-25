@@ -22,7 +22,8 @@ func TestStatementDefaults(t *testing.T) {
 	// TestStatementDefaults/InferredKind checks that an unprepared query
 	// resolves an unclassified statement from its decoder and CQL, a
 	// SELECT reading rows included, and rejects an ordinary one that is
-	// conditional before anything is sent.
+	// conditional, or a SELECT declared conditional or decoded with CASRows,
+	// before anything is sent.
 	t.Run("InferredKind", func(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 1)
 		defer s.Close()
@@ -43,11 +44,21 @@ func TestStatementDefaults(t *testing.T) {
 			t.Errorf("UPDATE IF: %v, want conditional", got)
 		}
 		lwt.Close()
-		cas, err := unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "SELECT * FROM ks.t", Rows: cql.CASApplied}, Options{})
+		cas, err := unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "INSERT INTO ks.t(k) VALUES(1)", Rows: cql.CASApplied}, Options{})
 		if got := kindOf(t, err, &cas.bound.privateStorage.InternalRequest); got != cql.ConditionalStatement {
 			t.Errorf("CASRows: %v, want conditional", got)
 		}
 		cas.Close()
+		// A SELECT can never be conditional, so neither a CASRows decoder
+		// nor an explicit ConditionalStatement kind is accepted for one.
+		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "SELECT * FROM ks.t", Rows: cql.CASApplied}, Options{})
+		if !hasErrorType[*cql.ValidationError](err) {
+			t.Errorf("CASRows SELECT: %v, want a ValidationError", err)
+		}
+		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, int32]{CQL: "SELECT v FROM ks.t", Rows: cql.OneColumn(cql.Int32Codec), Kind: cql.ConditionalStatement}, Options{})
+		if !hasErrorType[*cql.ValidationError](err) {
+			t.Errorf("conditional SELECT: %v, want a ValidationError", err)
+		}
 		_, err = unpreparedQuery(s, binding.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "INSERT INTO ks.t(k) VALUES(1) IF NOT EXISTS", Kind: cql.OrdinaryStatement}, Options{})
 		if !hasErrorType[*cql.ValidationError](err) {
 			t.Errorf("ordinary INSERT IF NOT EXISTS: %v, want a ValidationError", err)

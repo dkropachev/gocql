@@ -467,7 +467,7 @@ func TestConfig(t *testing.T) {
 			if err := explicit.Wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "SELECT value FROM ks.tbl", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
+			conditional := codecTestMust(BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.ConditionalStatement, CQL: "UPDATE ks.tbl SET value = 0x01 WHERE k = 0 IF EXISTS", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{}))
 			unpaged := options.Values()
 			unpaged.PageSize = implCql.Unpaged
 			page = codecTestMust(RunPage(ctx, s, conditional, implCql.StartPage(), 0, testOptions(unpaged)))

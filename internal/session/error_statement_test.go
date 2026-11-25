@@ -124,7 +124,7 @@ func secretQuery(t *testing.T, kind cql.StatementKind) *Bound[cql.Bytes] {
 	t.Helper()
 	bound, err := BindUnpreparedOwned(binding.Statement[string, cql.Bytes]{
 		Kind:   kind,
-		CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
+		CQL:    "UPDATE ks.tbl SET value = 0x01 WHERE k = ?",
 		Params: cql.OneParam(cql.StringCodec),
 		Rows:   cql.OneColumn(cql.BytesCodec),
 	}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
@@ -143,8 +143,8 @@ func checkNamed(t *testing.T, err error) {
 	if !ok {
 		t.Fatalf("%v: want an ExecutionError", err)
 	}
-	const want = `statement "SELECT value FROM ks.tbl WHERE k = ?"`
-	if failure.Statement != "SELECT value FROM ks.tbl WHERE k = ?" || !strings.Contains(err.Error(), want) {
+	const want = `statement "UPDATE ks.tbl SET value = 0x01 WHERE k = ?"`
+	if failure.Statement != "UPDATE ks.tbl SET value = 0x01 WHERE k = ?" || !strings.Contains(err.Error(), want) {
 		t.Errorf("message %q, Statement %q: want %s", err, failure.Statement, want)
 	}
 	if text := errorText(err); strings.Contains(text, redactionSecret) {

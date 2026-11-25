@@ -31,7 +31,10 @@ const (
 	// ConditionalStatement is a conditional (lightweight transaction) statement,
 	// which returns an [applied] row. The driver sends it no client
 	// timestamp, tries replicas in a fixed order without shuffling, keeps a
-	// strict shard pin, and never speculates it.
+	// strict shard pin, and never speculates it. Only an INSERT, UPDATE,
+	// DELETE or BATCH can be one: any other statement, a SELECT included,
+	// declared ConditionalStatement or decoded with CASRows is rejected with a
+	// ValidationError before it is sent.
 	ConditionalStatement
 )
 

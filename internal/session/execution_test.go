@@ -197,9 +197,10 @@ func TestExecution(t *testing.T) {
 				for _, cql := range []string{"SELECT value FROM ks.tbl", "INSERT INTO t (x) VALUES (1) IF NOT EXISTS", "SELECT 'IF' FROM t"} {
 					b, err := BindUnpreparedOwned(binding.Statement[implCql.EmptyRow, implCql.EmptyRow]{CQL: cql, Kind: kind, Params: implCql.NoParams}, implCql.NewColumns(), implCql.EmptyRow{})
 					// An unclassified statement takes the kind its CQL
-					// shows; an ordinary one with an IF is rejected.
+					// shows; an ordinary one with an IF, or a SELECT
+					// declared conditional, is rejected.
 					conditional := strings.Contains(cql, "IF NOT EXISTS")
-					if kind == implCql.OrdinaryStatement && conditional {
+					if kind == implCql.OrdinaryStatement && conditional || kind == implCql.ConditionalStatement && strings.HasPrefix(cql, "SELECT") {
 						if !hasErrorType[*implCql.ValidationError](err) {
 							t.Fatal(cql, err)
 						}
@@ -785,7 +786,7 @@ func TestExecution(t *testing.T) {
 						time.Sleep(50 * time.Millisecond) // well past the 1ms speculation delay
 						_, _ = peers[0].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 					}()
-					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "SELECT value FROM ks.tbl", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+					b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: tc.kind, CQL: "UPDATE ks.tbl SET value = 0x01 WHERE k = 0", Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 					if err != nil {
 						t.Fatal(err)
 					}

@@ -49,7 +49,9 @@ func TestStatement(t *testing.T) {
 // TestResolveKind checks how an unclassified statement resolves: a CASRows
 // decoder or a lexical IF in a DML statement makes it conditional, an IF in
 // a string, a comment, a quoted identifier, a longer word or DDL does not,
-// and an explicit kind wins unless an ordinary one is conditional.
+// and an explicit kind wins unless an ordinary one is conditional or a
+// statement other than INSERT, UPDATE, DELETE or BATCH is declared
+// conditional or decoded with CASRows.
 func TestResolveKind(t *testing.T) {
 	conditional := []string{
 		"INSERT INTO t(k) VALUES(1) IF NOT EXISTS",
@@ -98,19 +100,41 @@ func TestResolveKind(t *testing.T) {
 		if got, err := ResolveKind(cql.UnknownStatement, text, nil); err != nil || got != cql.OrdinaryStatement {
 			t.Errorf("%q: %v, %v; want ordinary", text, got, err)
 		}
-		if got, err := ResolveKind(cql.ConditionalStatement, text, nil); err != nil || got != cql.ConditionalStatement {
-			t.Errorf("explicit conditional %q: %v, %v; want it kept", text, got, err)
+		// An ordinary DML statement may be declared conditional; any other
+		// statement cannot be conditional at all.
+		got, err := ResolveKind(cql.ConditionalStatement, text, nil)
+		if conditionalVerb(firstCQLWord(text)) {
+			if err != nil || got != cql.ConditionalStatement {
+				t.Errorf("explicit conditional %q: %v, %v; want it kept", text, got, err)
+			}
+		} else if !errors.As(err, new(*cql.ValidationError)) {
+			t.Errorf("explicit conditional %q: %v, %v; want a ValidationError", text, got, err)
 		}
 	}
-	// A CASRows decoder makes the statement conditional whatever its text.
-	if got, err := ResolveKind(cql.UnknownStatement, "SELECT * FROM t", cql.CASApplied); err != nil || got != cql.ConditionalStatement {
-		t.Errorf("CASRows: %v, %v; want conditional", got, err)
+	// A CASRows decoder makes a DML statement conditional whatever its text.
+	for _, text := range []string{"INSERT INTO t(k) VALUES(1)", "update t SET v = 1 WHERE k = 1", "DELETE FROM t WHERE k = 1", "BEGIN BATCH INSERT INTO t(k) VALUES(1) APPLY BATCH"} {
+		if got, err := ResolveKind(cql.UnknownStatement, text, cql.CASApplied); err != nil || got != cql.ConditionalStatement {
+			t.Errorf("CASRows %q: %v, %v; want conditional", text, got, err)
+		}
+		if got, err := ResolveKind(cql.UnknownStatement, text, cql.CASRows(cql.OneColumn(cql.Int32Codec))); err != nil || got != cql.ConditionalStatement {
+			t.Errorf("CASRows of a decoder %q: %v, %v; want conditional", text, got, err)
+		}
+		if _, err := ResolveKind(cql.OrdinaryStatement, text, cql.CASApplied); !errors.As(err, new(*cql.ValidationError)) {
+			t.Errorf("ordinary CASRows %q: %v, want a ValidationError", text, err)
+		}
 	}
-	if got, err := ResolveKind(cql.UnknownStatement, "SELECT * FROM t", cql.CASRows(cql.OneColumn(cql.Int32Codec))); err != nil || got != cql.ConditionalStatement {
-		t.Errorf("CASRows of a decoder: %v, %v; want conditional", got, err)
+	// A statement that can never be conditional, a SELECT or DDL, rejects a
+	// CASRows decoder whatever its declared kind.
+	for _, text := range []string{"SELECT * FROM t", "select v FROM t WHERE k = 1 /* UPDATE IF */", "CREATE TABLE IF NOT EXISTS t (k int PRIMARY KEY)", "// INSERT\nSELECT * FROM t"} {
+		for _, kind := range []cql.StatementKind{cql.UnknownStatement, cql.OrdinaryStatement, cql.ConditionalStatement} {
+			if got, err := ResolveKind(kind, text, cql.CASApplied); !errors.As(err, new(*cql.ValidationError)) {
+				t.Errorf("%v CASRows %q: %v, %v; want a ValidationError", kind, text, got, err)
+			}
+		}
 	}
-	if _, err := ResolveKind(cql.OrdinaryStatement, "SELECT * FROM t", cql.CASApplied); !errors.As(err, new(*cql.ValidationError)) {
-		t.Errorf("ordinary CASRows: %v, want a ValidationError", err)
+	sel := Statement[cql.EmptyParams, cql.CASResult[cql.EmptyRow]]{CQL: "SELECT v FROM t", Rows: cql.CASApplied}
+	if err := ValidateStatement(&sel); !errors.As(err, new(*cql.ValidationError)) {
+		t.Errorf("ValidateStatement of a CASRows SELECT: %v, want a ValidationError", err)
 	}
 	// ValidateStatement stores the resolved kind.
 	s := Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DELETE FROM t WHERE k = 1 IF EXISTS"}
