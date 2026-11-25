@@ -113,3 +113,28 @@ goroutine of your own.
 The driver itself depends on no tracing library. To link the two kinds, an
 `Attempt` hook can record `AttemptEvent.CQLTraceID` on its attempt span when
 the request runs with `CQLTrace`.
+
+## Metrics
+
+`Session.Metrics` returns a `metrics.Snapshot` of the session's counters:
+requests, attempts, errors by kind, retries, speculations, orphaned streams,
+executions in flight and the connections the pools hold. Its latency
+percentiles cover the successes of the last ten seconds and are meant for
+decisions that follow the cluster's current latency, such as a speculation
+delay, not for charts. To export latency, count it per request from a
+`Request` hook into a histogram of your metrics library, as
+`observe.Example_prometheus` does with a Prometheus `HistogramVec`:
+
+```go
+hooks := observe.Hooks{
+	Request: func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+		return ctx, func(e observe.RequestEvent) {
+			outcome := "ok"
+			if e.Err != nil {
+				outcome = cqlerr.KindOf(e.Err).String()
+			}
+			latency.WithLabelValues(outcome).Observe(time.Since(start.Started).Seconds())
+		}
+	},
+}
+```

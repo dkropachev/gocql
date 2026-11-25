@@ -381,6 +381,24 @@ func (pool *InternalHostConnPool) Size() int {
 	return size
 }
 
+// Connections returns the number of connections the host pools hold.
+func (p *InternalPolicyConnPool) Connections() int {
+	if p == nil {
+		return 0
+	}
+	p.InternalMu.RLock()
+	pools := make([]*InternalHostConnPool, 0, len(p.InternalHostConnPools))
+	for _, pool := range p.InternalHostConnPools {
+		pools = append(pools, pool)
+	}
+	p.InternalMu.RUnlock()
+	n := 0
+	for _, pool := range pools {
+		n += pool.Size()
+	}
+	return n
+}
+
 // Size returns the number of connections currently active in the pool
 func (pool *InternalHostConnPool) InFlight() int {
 	pool.InternalMu.RLock()

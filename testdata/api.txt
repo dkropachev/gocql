@@ -1492,6 +1492,7 @@ package metrics
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
 		metrics.Snapshot field InFlight int64
+		metrics.Snapshot field Connections int
 		metrics.Snapshot field LatencyP50 time.Duration
 		metrics.Snapshot field LatencyP95 time.Duration
 		metrics.Snapshot field LatencyP99 time.Duration

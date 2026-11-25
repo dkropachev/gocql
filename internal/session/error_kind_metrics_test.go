@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -78,4 +79,17 @@ func TestErrorKindMetrics(t *testing.T) {
 			t.Fatalf("a runtime without errors: %+v", m)
 		}
 	})
+}
+
+// TestConnectionsMetric checks that Metrics counts the connections of every
+// host's pool.
+func TestConnectionsMetric(t *testing.T) {
+	s, _, _ := runtimeTestSession(t, 3)
+	if got := s.Metrics().Connections; got != 3 {
+		t.Fatalf("Connections = %d, want 3", got)
+	}
+	var zero *implCluster.Core
+	if got := zero.Metrics().Connections; got != 0 {
+		t.Fatalf("zero Connections = %d", got)
+	}
 }

@@ -207,6 +207,7 @@ func (s *Core) Metrics() metrics.Snapshot {
 	}
 	p := s.Peripheral()
 	result.Orphans = p.orphans.Load()
+	result.Connections = s.privateStorage.InternalPool.Connections()
 	if summary := p.latencySummary.Load(); summary != nil {
 		result.LatencyP50 = summary.p50
 		result.LatencyP95 = summary.p95

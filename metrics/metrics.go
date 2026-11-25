@@ -5,8 +5,8 @@
 //
 // Session.Metrics returns a Snapshot of them. The counters
 // cover every execution of the session, of every statement and batch: they
-// start at zero when the session is opened and only grow, except InFlight
-// and the latency percentiles, which report the present.
+// start at zero when the session is opened and only grow, except InFlight,
+// Connections and the latency percentiles, which report the present.
 // Reading them is cheap, but a Snapshot is a copy: read it again to see later
 // executions. Per-request detail goes to observe.Hooks instead.
 package metrics
@@ -51,6 +51,10 @@ type Snapshot struct {
 	Orphans uint64
 	// InFlight is the number of executions started and not yet finished.
 	InFlight int64
+	// Connections is the number of connections the session's pools hold to
+	// nodes, the control connection not included. Session.Metrics counts
+	// them host by host, so reading it costs a lock per host.
+	Connections int
 	// LatencyP50, LatencyP95 and LatencyP99 are percentiles of the latency
 	// of the executions that succeeded in the last ten seconds, at most 1024
 	// of them, newer seconds first, recomputed once a second. In a second
@@ -58,5 +62,14 @@ type Snapshot struct {
 	// rather than being the latest 1024 to finish. Failed executions are
 	// not included. When none succeeded since the last computation, the
 	// previous values stay. They are zero until the first computation.
+	//
+	// They are meant for decisions that follow the cluster's current
+	// latency, such as a retry.SpeculationPolicy that waits LatencyP95
+	// before speculating, and for a quick look at a live session. They are
+	// not a latency histogram: a sample of ten seconds of successes cannot
+	// be summed across sessions or over time. To chart latency, record
+	// each request's latency in a histogram of your own from an
+	// observe.Hooks Request hook, as Example_prometheus in package observe
+	// does.
 	LatencyP50, LatencyP95, LatencyP99 time.Duration
 }
