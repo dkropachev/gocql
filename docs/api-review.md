@@ -552,6 +552,16 @@ extras, and a sweep of the docs. Rows marked
 | The guides' Go snippets were checked only by reading, and some called renamed or removed symbols | `TestDocSnippets` builds every Go block of `docs/source` as a package, fragments in a function body and type and function declarations at package level, with the names a block assumes declared in an HTML comment above its fence, which the rendered page hides, and v1 code marked to be skipped. The batch guide's `Idempotent: true` is now `cql.Some(true)`. |
 | The retry and speculation guides described attempt fields and statement classification as they were before this pass; `HostSnapshot.HostID` read "the host's host HostID"; the streaming example passed zero options explicitly | Corrected. |
 
+### Follow-ups
+
+Issues the phase reviews found outside their phase's items, fixed after the six parts merged.
+
+| Finding | Outcome |
+|---|---|
+| `Rows.All`, `Page.All` and `CASBatchRows.All` closed the rows when the loop broke or ended, but not when its body panicked, so a recovered panic held the execution and any reserved connection until garbage collection | The close is deferred, as `RowStream.All` already did. |
+| A TLS file that could not be read or parsed failed with a `cql.ValidationError` whose `Field` was "TLS files" | The field is the call that loaded the files: `LoadTLSFiles`, `NewTLSFileSource` for its first load, `TLSFileSource` for a reload. |
+| `feature-specs/gocql-v2-api.md` still used names from before this pass (`Route.Shard`, `WithShard`, `routing.Target`, `routing.HostSnapshot`, a `dynamic` package) | It uses the names of `testdata/api.txt`. |
+
 ## Decisions
 
 These changed names or removed symbols that users of the earlier v2 code may
