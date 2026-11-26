@@ -560,7 +560,7 @@ Issues the phase reviews found outside their phase's items, fixed after the six 
 |---|---|
 | `Rows.All`, `Page.All` and `CASBatchRows.All` closed the rows when the loop broke or ended, but not when its body panicked, so a recovered panic held the execution and any reserved connection until garbage collection | The close is deferred, as `RowStream.All` already did. |
 | A TLS file that could not be read or parsed failed with a `cql.ValidationError` whose `Field` was "TLS files" | The field is the call that loaded the files: `LoadTLSFiles`, `NewTLSFileSource` for its first load, `TLSFileSource` for a reload. |
-| `feature-specs/gocql-v2-api.md` still used names from before this pass (`Route.Shard`, `WithShard`, `routing.Target`, `routing.HostSnapshot`, a `dynamic` package) | It uses the names of `testdata/api.txt`. |
+| `feature-specs/gocql-v2-api.md` still used names from before this pass (`Route.Shard`, `WithShard`, `routing.Route`, `routing.Target`, `routing.HostSnapshot`, `Snapshot.HostRoutes` and `ReplicaRoutes`, a `dynamic` package) | It uses the names of `testdata/api.txt`. |
 
 ## Decisions
 
