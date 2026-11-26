@@ -418,11 +418,25 @@ func TestLoadTLSFiles(t *testing.T) {
 		"MissingFile":    {CAFile: "../testdata/pki/missing.crt"},
 	} {
 		_, err := LoadTLSFiles(nil, files)
-		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+		verr, ok := errors.AsType[*cql.ValidationError](err)
+		if !ok {
 			t.Fatalf("%s: LoadTLSFiles = %v, want a cql.ValidationError", name, err)
 		}
-		if name != "MissingFile" && !strings.Contains(err.Error(), "LoadTLSFiles") {
-			t.Fatalf("%s: %v does not name LoadTLSFiles", name, err)
+		if verr.Field != "LoadTLSFiles" || !strings.Contains(err.Error(), "LoadTLSFiles") {
+			t.Fatalf("%s: %v (field %q) does not name LoadTLSFiles", name, err, verr.Field)
 		}
+	}
+	// A file that cannot be read fails the call that read it.
+	missing := TLSFiles{CAFile: "../testdata/pki/missing.crt"}
+	if _, err := NewTLSFileSource(nil, missing); err == nil {
+		t.Fatal("NewTLSFileSource accepted a missing file")
+	} else if verr, ok := errors.AsType[*cql.ValidationError](err); !ok || verr.Field != "NewTLSFileSource" {
+		t.Fatalf("NewTLSFileSource = %v, want a cql.ValidationError naming NewTLSFileSource", err)
+	}
+	// A CA file without PEM certificates fails the same way.
+	if _, err := LoadTLSFiles(nil, TLSFiles{CAFile: pki.KeyFile}); err == nil {
+		t.Fatal("LoadTLSFiles accepted a CA file without certificates")
+	} else if verr, ok := errors.AsType[*cql.ValidationError](err); !ok || verr.Field != "LoadTLSFiles" {
+		t.Fatalf("LoadTLSFiles with a bad CA file = %v, want a cql.ValidationError naming LoadTLSFiles", err)
 	}
 }
