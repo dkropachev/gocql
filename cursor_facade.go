@@ -44,7 +44,8 @@ func (r Rows[R]) NextInto(dst *R) bool { return (implSession.Rows[R])(r).NextInt
 // each row is decoded into a new R, which the caller may keep. Borrowed
 // fields stay valid until the next iteration. An error is yielded once, as
 // (nil, err), and ends the iteration. The rows are closed when the loop
-// ends, early or not.
+// ends, early or not, so breaking out of the loop, or a panic in its body,
+// releases the execution.
 func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] { return (implSession.Rows[R])(r).All(dst) }
 
 // Err returns the terminal iteration error, if any.
