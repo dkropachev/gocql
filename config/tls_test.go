@@ -192,11 +192,25 @@ func TestTLSSource(t *testing.T) {
 		if err := s.Reload(); err == nil || s.Err() == nil || s.TLSConfig() != before {
 			t.Fatal("mismatched pair replaced the config or reported no error")
 		}
+		// A failed reload names the source, not NewTLSFileSource.
+		namesSource := func(err error) bool {
+			verr, ok := errors.AsType[*cql.ValidationError](err)
+			return ok && verr.Field == "TLSFileSource"
+		}
+		if err := s.Err(); !namesSource(err) {
+			t.Fatalf("mismatched pair: Err = %v, want a cql.ValidationError naming TLSFileSource", err)
+		}
 		if err := os.Remove(f.files.CAFile); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.Reload(); err == nil || s.TLSConfig() != before {
 			t.Fatal("missing CA file replaced the config")
+		} else if !namesSource(err) {
+			t.Fatalf("missing CA file: Reload = %v, want a cql.ValidationError naming TLSFileSource", err)
+		}
+		s.next.Store(0) // the interval has passed
+		if s.TLSConfig() != before || !namesSource(s.Err()) {
+			t.Fatalf("TLSConfig's check of a missing CA file: Err = %v, want a cql.ValidationError naming TLSFileSource", s.Err())
 		}
 		f.set(2, 10)
 		if err := s.Reload(); err != nil || s.Err() != nil || f.serial(s.TLSConfig()) != 2 {
