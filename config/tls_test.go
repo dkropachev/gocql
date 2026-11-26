@@ -192,11 +192,25 @@ func TestTLSSource(t *testing.T) {
 		if err := s.Reload(); err == nil || s.Err() == nil || s.TLSConfig() != before {
 			t.Fatal("mismatched pair replaced the config or reported no error")
 		}
+		// A failed reload names the source, not NewTLSFileSource.
+		namesSource := func(err error) bool {
+			verr, ok := errors.AsType[*cql.ValidationError](err)
+			return ok && verr.Field == "TLSFileSource"
+		}
+		if err := s.Err(); !namesSource(err) {
+			t.Fatalf("mismatched pair: Err = %v, want a cql.ValidationError naming TLSFileSource", err)
+		}
 		if err := os.Remove(f.files.CAFile); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.Reload(); err == nil || s.TLSConfig() != before {
 			t.Fatal("missing CA file replaced the config")
+		} else if !namesSource(err) {
+			t.Fatalf("missing CA file: Reload = %v, want a cql.ValidationError naming TLSFileSource", err)
+		}
+		s.next.Store(0) // the interval has passed
+		if s.TLSConfig() != before || !namesSource(s.Err()) {
+			t.Fatalf("TLSConfig's check of a missing CA file: Err = %v, want a cql.ValidationError naming TLSFileSource", s.Err())
 		}
 		f.set(2, 10)
 		if err := s.Reload(); err != nil || s.Err() != nil || f.serial(s.TLSConfig()) != 2 {
@@ -418,11 +432,25 @@ func TestLoadTLSFiles(t *testing.T) {
 		"MissingFile":    {CAFile: "../testdata/pki/missing.crt"},
 	} {
 		_, err := LoadTLSFiles(nil, files)
-		if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+		verr, ok := errors.AsType[*cql.ValidationError](err)
+		if !ok {
 			t.Fatalf("%s: LoadTLSFiles = %v, want a cql.ValidationError", name, err)
 		}
-		if name != "MissingFile" && !strings.Contains(err.Error(), "LoadTLSFiles") {
-			t.Fatalf("%s: %v does not name LoadTLSFiles", name, err)
+		if verr.Field != "LoadTLSFiles" || !strings.Contains(err.Error(), "LoadTLSFiles") {
+			t.Fatalf("%s: %v (field %q) does not name LoadTLSFiles", name, err, verr.Field)
 		}
+	}
+	// A file that cannot be read fails the call that read it.
+	missing := TLSFiles{CAFile: "../testdata/pki/missing.crt"}
+	if _, err := NewTLSFileSource(nil, missing); err == nil {
+		t.Fatal("NewTLSFileSource accepted a missing file")
+	} else if verr, ok := errors.AsType[*cql.ValidationError](err); !ok || verr.Field != "NewTLSFileSource" {
+		t.Fatalf("NewTLSFileSource = %v, want a cql.ValidationError naming NewTLSFileSource", err)
+	}
+	// A CA file without PEM certificates fails the same way.
+	if _, err := LoadTLSFiles(nil, TLSFiles{CAFile: pki.KeyFile}); err == nil {
+		t.Fatal("LoadTLSFiles accepted a CA file without certificates")
+	} else if verr, ok := errors.AsType[*cql.ValidationError](err); !ok || verr.Field != "LoadTLSFiles" {
+		t.Fatalf("LoadTLSFiles with a bad CA file = %v, want a cql.ValidationError naming LoadTLSFiles", err)
 	}
 }

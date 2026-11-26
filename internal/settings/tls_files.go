@@ -18,8 +18,10 @@ type TLSFilesContent struct {
 	Cert, Key, CA []byte
 }
 
-// ReadTLSFiles reads every named file; an empty name is skipped.
-func ReadTLSFiles(certFile, keyFile, caFile string) (TLSFilesContent, error) {
+// ReadTLSFiles reads every named file; an empty name is skipped. An error is
+// a cql.ValidationError whose Field is function, the public call that read
+// the files.
+func ReadTLSFiles(function, certFile, keyFile, caFile string) (TLSFilesContent, error) {
 	var content TLSFilesContent
 	read := func(path string, into *[]byte) error {
 		if path == "" {
@@ -27,7 +29,7 @@ func ReadTLSFiles(certFile, keyFile, caFile string) (TLSFilesContent, error) {
 		}
 		data, err := os.ReadFile(path)
 		if err != nil {
-			return cqltype.TypeValidation("TLS files", "%w", err)
+			return cqltype.TypeValidation(function, "%w", err)
 		}
 		*into = data
 		return nil
@@ -63,8 +65,10 @@ func digestParts(parts ...[]byte) [sha256.Size]byte {
 }
 
 // BuildTLSFromFiles returns a copy of base, or of TLS 1.2+ defaults when base
-// is nil, with the certificate and CA from content. base is not modified.
-func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, error) {
+// is nil, with the certificate and CA from content. base is not modified. An
+// error is a cql.ValidationError whose Field is function, the public call
+// that loaded the files.
+func BuildTLSFromFiles(function string, base *tls.Config, content TLSFilesContent) (*tls.Config, error) {
 	var config *tls.Config
 	if base == nil {
 		config = &tls.Config{MinVersion: tls.VersionTLS12}
@@ -74,14 +78,14 @@ func BuildTLSFromFiles(base *tls.Config, content TLSFilesContent) (*tls.Config, 
 	if content.Cert != nil {
 		pair, err := tls.X509KeyPair(content.Cert, content.Key)
 		if err != nil {
-			return nil, cqltype.TypeValidation("TLS files", "cert and key: %w", err)
+			return nil, cqltype.TypeValidation(function, "cert and key: %w", err)
 		}
 		config.Certificates = []tls.Certificate{pair}
 	}
 	if content.CA != nil {
 		pool := x509.NewCertPool()
 		if !pool.AppendCertsFromPEM(content.CA) {
-			return nil, cqltype.TypeValidation("TLS files", "CA file has no PEM certificates")
+			return nil, cqltype.TypeValidation(function, "CA file has no PEM certificates")
 		}
 		config.RootCAs = pool
 	}

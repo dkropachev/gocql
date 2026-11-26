@@ -115,16 +115,20 @@ type rowsHolder[R any] struct {
 
 // All iterates the remaining rows, decoding each into dst, or into a new R
 // for each row when dst is nil. An error is yielded once, as (nil, err), and
-// ends the iteration. The rows are closed when the loop ends.
+// ends the iteration. The rows are closed when the loop ends, also when its
+// body panics.
 func (r Rows[R]) All(dst *R) iter.Seq2[*R, error] {
 	return allRows(dst, r.NextInto, r.Close)
 }
 
 // allRows iterates the rows next decodes, as Rows.All describes, and calls
-// close when the loop ends. close's error, the one that ended the rows, is
-// yielded once when the loop ran to the end.
+// close when the loop ends, also when its body panics. close's error, the
+// one that ended the rows, is yielded once when the loop ran to the end.
 func allRows[R any](dst *R, next func(*R) bool, close func() error) iter.Seq2[*R, error] {
 	return func(yield func(*R, error) bool) {
+		// close is idempotent: the deferred call releases the rows when the
+		// loop breaks or its body panics.
+		defer func() { _ = close() }()
 		for {
 			row := dst
 			if row == nil {
@@ -134,7 +138,6 @@ func allRows[R any](dst *R, next func(*R) bool, close func() error) iter.Seq2[*R
 				break
 			}
 			if !yield(row, nil) {
-				_ = close()
 				return
 			}
 		}

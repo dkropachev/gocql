@@ -75,11 +75,11 @@ func LoadTLSFiles(base *tls.Config, files TLSFiles) (*tls.Config, error) {
 	if err := checkTLSFiles("LoadTLSFiles", base, files); err != nil {
 		return nil, err
 	}
-	content, err := implSettings.ReadTLSFiles(files.CertFile, files.KeyFile, files.CAFile)
+	content, err := implSettings.ReadTLSFiles("LoadTLSFiles", files.CertFile, files.KeyFile, files.CAFile)
 	if err != nil {
 		return nil, err
 	}
-	return implSettings.BuildTLSFromFiles(base, content)
+	return implSettings.BuildTLSFromFiles("LoadTLSFiles", base, content)
 }
 
 // checkTLSFiles rejects files that name no usable set, as a
@@ -159,7 +159,13 @@ func (s *TLSFileSource) reloadLocked(first bool) error {
 }
 
 func (s *TLSFileSource) loadLocked(first bool) error {
-	content, err := implSettings.ReadTLSFiles(s.files.CertFile, s.files.KeyFile, s.files.CAFile)
+	// The first load fails NewTLSFileSource; later ones are reported by
+	// Reload and Err.
+	function := "TLSFileSource"
+	if first {
+		function = "NewTLSFileSource"
+	}
+	content, err := implSettings.ReadTLSFiles(function, s.files.CertFile, s.files.KeyFile, s.files.CAFile)
 	if err != nil {
 		return err
 	}
@@ -167,7 +173,7 @@ func (s *TLSFileSource) loadLocked(first bool) error {
 	if !first && digest == s.digest {
 		return nil
 	}
-	config, err := implSettings.BuildTLSFromFiles(s.base, content)
+	config, err := implSettings.BuildTLSFromFiles(function, s.base, content)
 	if err != nil {
 		return err
 	}
