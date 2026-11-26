@@ -137,7 +137,7 @@ server metadata, a prior successful plan, or retained decode state. This makes
 TupleDecoder/UDTDecoder.Clone correct after standalone DecodeValue as well as
 normal row execution. The driver detaches a custom plan's rows with the Clone
 of the RowDecoder that compiled it; a plan has no Clone of its own. Row, OneColumn, PairRows,
-ConvertRows, CASRows, dynamic.Rows and every custom RowDecoder implement the
+ConvertRows, CASRows, DynamicRows and every custom RowDecoder implement the
 schema-independent method; custom decoders must supply explicit clone logic.
 Caching the first successful plan to implement Clone or panicking because no
 plan was previously compiled is not permitted.
@@ -532,7 +532,7 @@ whose key and value types have owning built-in codecs; MapCodec keeps
 []Entry[K, V] for non-comparable keys, server order and streaming slots.
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
-dynamic.Text likewise returns an error for invalid UTF-8. StringCodec and
+Value.Text likewise returns an error for invalid UTF-8. StringCodec and
 TextCodec return ordinary codec errors for invalid encoded input: UTF-8 for
 text, ASCII for ascii. Malformed
 input is never a reason for a constructor panic.
@@ -598,7 +598,7 @@ Dynamic behavior uses a tagged representation, never reflection-created Go
 values or `map[string]any`. Value's private representation contains the actual
 DataType, state, scalar payload or a lazy encoded aggregate. Constructors store
 borrowed input payloads; normal binding lifetime rules apply. Decoded Value and
-dynamic.Row borrow the current page owner without acquiring an independent lease
+cql.DynamicRow borrow the current page owner without acquiring an independent lease
 reference. Their views expire under the same NextInto/Close rule as typed rows; only
 an explicit PageLease or Clone extends their usable lifetime. An aggregate may
 hold explicitly supplied `[]Value` descriptors on input or encoded bytes on
@@ -671,11 +671,11 @@ func (r Row) Get(string) (Value, error)
 func (r Row) Clone() Row
 ```
 
-Named dynamic binding uses `cql.Params[[]dynamic.Field]` accessors or
-`dynamic.NamedParams`, which maps unique input names to server marker order;
+Named dynamic binding uses `cql.Params[[]cql.ValueField]` accessors or
+`cql.NamedDynamicParams`, which maps unique input names to server marker order;
 repeated server markers reuse one input field, and duplicate or unused input
 names are rejected.
-dynamic.Rows compiles column name lookup once per result shape. At/Get use a
+cql.DynamicRows compiles column name lookup once per result shape. At/Get use a
 single lazily built physical-cell offset index per current row for repeated
 random access, without eagerly decoding values; there is no whole-row rescan
 for each access. Its descriptors remain owned by that row/page and cannot alias
@@ -1531,9 +1531,9 @@ func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
 func (r Route) Usable() bool
 func (r Route) Datacenter() string                  // and Rack, from the latest snapshot that indexed the host
-func (r Route) Shard() cql.Option[uint32]           // unset: any connection of the host
+func (r Route) ShardID() cql.Option[uint32]         // unset: any connection of the host
 func (r Route) ShardOf(token int64) cql.Option[uint32]
-func (r Route) WithShard(shard cql.Option[uint32]) Route
+func (r Route) WithShardID(shard cql.Option[uint32]) Route
 type Plan interface { Next() (Route, bool) }
 type Policy interface {
     Pick(Info, *metadata.Snapshot) (Route, bool)     // cheap first route; false: start with Fallback
@@ -1836,16 +1836,16 @@ func (s *Subscription) Close()
 
 // package metadata
 type Snapshot struct { /* immutable */ }
-func (m *Snapshot) Hosts() []routing.HostSnapshot
-func (m *Snapshot) Host(cql.UUID) (routing.HostSnapshot, bool)
+func (m *Snapshot) Hosts() []HostSnapshot
+func (m *Snapshot) Host(cql.UUID) (HostSnapshot, bool)
 func (m *Snapshot) Keyspaces() []string // sorted names
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
 func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
 func (m *Snapshot) View(keyspace, name string) (*View, bool)
 func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
-func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]routing.Target, error)
-func (m *Snapshot) TokenRanges(keyspace, table string) ([]routing.TokenRange, error)
-func (m *Snapshot) Token(keyspace, table string, key ...dynamic.Value) (int64, error)
+func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error)
+func (m *Snapshot) TokenRanges(keyspace, table string) ([]TokenRange, error)
+func (m *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error)
 func (m *Snapshot) HostRoutes() []routing.Route
 func (m *Snapshot) ReplicaRoutes(routing.Info) []routing.Route
 func (m *Snapshot) Diagnostics() []error
@@ -1993,7 +1993,7 @@ func (Profile) Builder() *ProfileBuilder
 func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
 func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
-func (*ConfigBuilder) WithHostFilter(keep func(routing.HostSnapshot) bool) *ConfigBuilder
+func (*ConfigBuilder) WithHostFilter(keep func(metadata.HostSnapshot) bool) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
@@ -2111,7 +2111,7 @@ session, err := gocql.Connect(ctx, cfg)
 type DialTarget struct {
     Network, Address string
     LocalAddress netip.AddrPort
-    Host routing.HostSnapshot
+    Host metadata.HostSnapshot
     ShardID cql.Option[uint32]
 }
 type Dialer interface { DialContext(context.Context, DialTarget) (net.Conn, error) }
