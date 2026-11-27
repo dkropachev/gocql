@@ -178,13 +178,13 @@ func TestSafe(t *testing.T) {
 }
 
 func TestSpeculationPolicyFunc(t *testing.T) {
-	var policy retry.SpeculationPolicy = retry.SpeculationPolicyFunc(func(started int) (time.Duration, bool) {
-		return time.Duration(started) * time.Millisecond, started < 2
+	var policy retry.SpeculationPolicy = retry.SpeculationPolicyFunc(func(s retry.Speculation) (time.Duration, bool) {
+		return time.Duration(s.Started) * time.Millisecond, s.Started < 2
 	})
-	if d, ok := policy.Delay(1); d != time.Millisecond || !ok {
+	if d, ok := policy.Delay(retry.Speculation{Started: 1}); d != time.Millisecond || !ok {
 		t.Fatalf("Delay(1) = %v, %v", d, ok)
 	}
-	if _, ok := policy.Delay(2); ok {
+	if _, ok := policy.Delay(retry.Speculation{Started: 2}); ok {
 		t.Fatal("Delay(2) started another attempt")
 	}
 }

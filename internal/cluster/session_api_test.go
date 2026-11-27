@@ -66,7 +66,7 @@ func TestSessionAPI(t *testing.T) {
 				HostIDs:       []string{host.String(), "not-a-uuid"},
 			})
 			got := <-sub.Events()
-			if got.Kind != event.KindClientRoute || got.Change != event.ChangeUpdated {
+			if got.Kind != event.KindClientRoute || got.Change != event.ChangeRoutesUpdated {
 				t.Fatalf("event %+v", got)
 			}
 			if !slices.Equal(got.ConnectionIDs, []string{"c1", conn}) {

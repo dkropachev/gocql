@@ -119,8 +119,11 @@ func TestPaging(t *testing.T) {
 						if next.Complete() {
 							break
 						}
-						require.NotEqual(t, state.Token(), next.Token())
-						state = cql.PageStateFromToken(next.Token())
+						require.NotEqual(t, state, next)
+						cursor, err := next.MarshalText()
+						require.NoError(t, err)
+						state, err = cql.ParsePageState(string(cursor))
+						require.NoError(t, err)
 					}
 					validate(t, result)
 				})
@@ -192,7 +195,10 @@ func TestPaging(t *testing.T) {
 			if state.Complete() {
 				break
 			}
-			state = cql.PageStateFromToken(state.Token())
+			cursor, err := state.MarshalText()
+			require.NoError(t, err)
+			state, err = cql.ParsePageState(string(cursor))
+			require.NoError(t, err)
 		}
 		require.Equal(t, count, fetched)
 	})
@@ -322,7 +328,7 @@ func TestPaging(t *testing.T) {
 			Text   []byte
 		}
 		decoder := cql.StreamRowInto(func(*output) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *output) *int32 { return &r.ID }), cql.StreamColumn("value", cql.StreamBlob, func(r *output) *[]byte { return &r.Value }), cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *output) *[][]byte { return &r.Pieces }), cql.StreamColumn("txt", cql.StreamText, func(r *output) *[]byte { return &r.Text }))
-		options := exec.StreamOptions{Incremental: true, Options: exec.Options{PageSize: 2}}
+		options := exec.Options{PageSize: 2}
 		streamStatement := cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: decoder}
 		streamPrepared, err := s.PrepareStream(ctx, streamStatement)
 		if err != nil {
@@ -341,14 +347,14 @@ func TestPaging(t *testing.T) {
 			t.Fatal(err)
 		}
 		if *flagProto < 5 && fixtureCompressed() {
-			_, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
+			_, err := pagingRunStream(ctx, t, s, streamPrepared, cql.EmptyParams{}, true, options)
 			if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 				t.Fatal("frame compression pre-submit capability", err)
 			}
 			t.Log("frame-compressed streaming explicitly rejected before query")
 			return
 		}
-		cursor, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
+		cursor, err := pagingRunStream(ctx, t, s, streamPrepared, cql.EmptyParams{}, true, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -380,7 +386,7 @@ func TestPaging(t *testing.T) {
 		}
 		// A separate caller destination is never borrowed past early Close. Ordinary
 		// configured pool repair must restore subsequent execution within its budget.
-		early, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, options)
+		early, err := pagingRunStream(ctx, t, s, streamPrepared, cql.EmptyParams{}, true, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -427,7 +433,7 @@ func TestPaging(t *testing.T) {
 		if err := rows.Close(); err != nil || count != 5 {
 			t.Fatal("shared execution after stream repair", count, err)
 		}
-		empty, err := pagingRunStream(ctx, t, emptyPrepared, cql.EmptyParams{}, options)
+		empty, err := pagingRunStream(ctx, t, s, emptyPrepared, cql.EmptyParams{}, true, options)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -438,7 +444,7 @@ func TestPaging(t *testing.T) {
 
 		// Change a SELECT * result while its pull-driven continuation is live. The
 		// existing stream must select a new streaming plan from real server metadata.
-		changed, err := pagingRunStream(ctx, t, changedPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: exec.Options{PageSize: 1}})
+		changed, err := pagingRunStream(ctx, t, s, changedPrepared, cql.EmptyParams{}, true, exec.Options{PageSize: 1})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -458,7 +464,7 @@ func TestPaging(t *testing.T) {
 		}
 		defer sub.Close()
 		blockedCtx, blockedCancel := context.WithTimeout(ctx, 100*time.Millisecond)
-		second, blockedErr := pagingRunStream(blockedCtx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Result().HostID}}})
+		second, blockedErr := pagingRunStream(blockedCtx, t, s, streamPrepared, cql.EmptyParams{}, true, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: changed.Result().HostID}})
 		blockedCancel()
 		if second != nil {
 			second.Close()
@@ -510,8 +516,8 @@ func TestPaging(t *testing.T) {
 
 // pagingRunStream runs ps once with options. The stream query is closed when
 // the test ends, after the deferred closes of its streams.
-func pagingRunStream[P, R any](ctx context.Context, t testing.TB, ps *gocql.PreparedStream[P, R], value P, options exec.StreamOptions) (*gocql.RowStream[R], error) {
-	q, err := ps.Worker(options)
+func pagingRunStream[P, R any](ctx context.Context, t testing.TB, s *gocql.Session, ps *gocql.PreparedStream[P, R], value P, incremental bool, options exec.Options) (*gocql.RowStream[R], error) {
+	q, err := ps.With(bindOptions(s, options)).Worker(exec.StreamOptions{Incremental: incremental})
 	if err != nil {
 		return nil, err
 	}

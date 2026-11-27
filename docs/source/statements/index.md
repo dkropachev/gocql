@@ -8,9 +8,10 @@ once from any goroutine, call `prepared.Exec(ctx, input)`,
 `prepared.All(ctx, input, &dst)`. `Exec` and `Each` return `(Result, error)`,
 `One` returns `(bool, Result, error)`, and `All` returns an iterator for a
 range loop that yields each row and, once, any error. They run on queries the statement keeps, and take at
-most one `exec.CompiledOptions` for that call: compile `exec.Options` for the session once with
-`session.CompileOptions(options)` and reuse the result, or pass none for the
-session default. They return once the execution has finished. `One` detaches borrowed fields
+most one `exec.CompiledOptions` for that call: compile `exec.Options` once
+with `session.CompileOptions(options)`, which runs the session's dialect
+checks up front and picks the compiled form its protocol uses; reuse the
+result, or pass none for the session default. They return once the execution has finished. `One` detaches borrowed fields
 before returning, so the row remains usable. `Each` lends borrowed fields only
 during the callback; copy or clone fields that escape it. Every row is decoded
 into the same `dst`, and a nil `dst` decodes each into a new value instead; with `cql.ReuseBuffers`, or a `RowInto` reset that keeps
@@ -73,8 +74,8 @@ For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 be described by `Statement.BindMarkers`: a statement with parameters and no
 markers fails before it is sent, unless it binds `cql.DynamicParams`.
 `Session.UnpreparedCommand(ctx, text)` runs text with nothing to bind and
-no result, such as DDL, without a statement value. They take at most one plain `exec.Options`,
-validated during the call. Frequent statements should be prepared
+no result, such as DDL, without a statement value. They take at most one `exec.CompiledOptions`,
+as the prepared calls do. Frequent statements should be prepared
 once and shared. Create workers once per goroutine, rather than once per
 HTTP request, and close each one. A worker dropped without `Close` is closed
 when the garbage collector finds it unreachable, which may take a while.

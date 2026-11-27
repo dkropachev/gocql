@@ -213,7 +213,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	}()
 	// Unprepared statements take only public options, which pin the host but
 	// not the connection.
-	_, err := session.UnpreparedExec(ctx, cql.Command("CREATE TABLE "+qualified+"(id int PRIMARY KEY)"), cql.EmptyParams{}, exec.Options{HostID: host})
+	_, err := session.UnpreparedExec(ctx, cql.Command("CREATE TABLE "+qualified+"(id int PRIMARY KEY)"), cql.EmptyParams{}, bindOptions(session, exec.Options{HostID: host}))
 	require.NoError(t, err)
 	require.NoError(t, (*implSession.Session)(session).Core().AwaitV2SchemaAgreementOn(ctx, conn))
 	_, err = cassandraWritePrepared(t, session, "INSERT INTO "+qualified+"(id) VALUES(?)", prepareOptions).Exec(ctx, []cql.Value{cql.IntValue(1)}, bindOptions(session, options))
@@ -232,7 +232,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 	}
 	before := cached()
 	require.NotEmpty(t, before.InternalMetadataID)
-	_, err = session.UnpreparedExec(ctx, cql.Command("ALTER TABLE "+qualified+" ADD new_col int"), cql.EmptyParams{}, exec.Options{HostID: host})
+	_, err = session.UnpreparedExec(ctx, cql.Command("ALTER TABLE "+qualified+" ADD new_col int"), cql.EmptyParams{}, bindOptions(session, exec.Options{HostID: host}))
 	require.NoError(t, err)
 	// Include the exact host that applied ALTER; checking another host can
 	// falsely agree on the old version before schema propagation starts.

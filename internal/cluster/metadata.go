@@ -197,6 +197,19 @@ func (s *Core) Metadata() *routing.MetadataSnapshot {
 		}
 	}
 }
+
+// LatencyPercentiles returns the session's latency percentiles, zero until
+// it has measured enough requests. It only loads the cached summary.
+func (s *Core) LatencyPercentiles() (p50, p95, p99 time.Duration) {
+	if s == nil {
+		return 0, 0, 0
+	}
+	if summary := s.Peripheral().latencySummary.Load(); summary != nil {
+		return summary.p50, summary.p95, summary.p99
+	}
+	return 0, 0, 0
+}
+
 func (s *Core) Metrics() metrics.Snapshot {
 	if s == nil {
 		return metrics.Snapshot{}

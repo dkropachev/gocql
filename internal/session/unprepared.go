@@ -73,7 +73,7 @@ func unpreparedCall[P, R any](s *Session, statement binding.Statement[P, R], val
 	case 1:
 		values = options[0]
 	default:
-		return nil, notSent(cqltype.TypeValidation("options", "at most one Options"))
+		return nil, notSent(cqltype.TypeValidation("options", "at most one CompiledOptions"))
 	}
 	o, err := queryOptions(s.Core(), values)
 	if err != nil {

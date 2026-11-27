@@ -33,16 +33,20 @@ context. When the profile's `Timeout` or `exec.Options.Timeout` (or
 `PageTimeout`) runs out, the error matches `cqlerr.ErrRequestTimeout`; it
 also matches `context.DeadlineExceeded`, as the caller's deadline does.
 
-`cqlerr.Retryable(err, idempotent)` puts the two questions together: the error
-is transient, it is not the caller's own cancellation or deadline, and the
-request was not executed or is idempotent. A retry loop needs nothing else:
+`cqlerr.Retryable(err)` puts the two questions together: the error is
+transient, it is not the caller's own cancellation or deadline, and the
+request was not executed or is idempotent. The idempotence is the one the
+driver resolved for the request (`exec.Options.Idempotent`, else the
+statement's or the profile's), kept in `ExecutionError.Idempotent`, so the
+caller does not restate it. A retry loop needs nothing else, but note that
+the profile's retry policy has already retried each request:
 
 <!-- snippet
 var insert *gocql.Prepared[int32, cql.EmptyRow]
 var row int32
 -->
 ```go
-for attempt := 0; cqlerr.Retryable(err, true) && attempt < 3; attempt++ {
+for attempt := 0; cqlerr.Retryable(err) && attempt < 3; attempt++ {
 	_, err = insert.Exec(ctx, row)
 }
 ```

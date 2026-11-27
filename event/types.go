@@ -22,7 +22,8 @@ const (
 	KindTopology
 	// KindStatus reports a node going up or down.
 	KindStatus
-	// KindSchema reports a keyspace, table, type, function or aggregate change.
+	// KindSchema reports a keyspace, table, view, type, function or aggregate
+	// change.
 	KindSchema
 	// KindControl reports that the control connection reconnected to
 	// another host.
@@ -30,7 +31,7 @@ const (
 	// KindClientRoute reports a change of the cluster's client routes.
 	KindClientRoute
 	// KindPool reports the session's connection pool to a host connecting
-	// (ChangeConnected) or the session marking the host down (ChangeDown).
+	// (ChangePoolUp) or the session marking the host down (ChangePoolDown).
 	// The driver raises it, not the server, so config.WithIgnoreEvents does
 	// not take it.
 	KindPool
@@ -81,22 +82,26 @@ const (
 	ChangeMovedNode Change = "MOVED_NODE"
 	// ChangeUp is a Status event for a node that came up.
 	ChangeUp Change = "UP"
-	// ChangeDown is a Status event for a node that went down, or a Pool
-	// event for a host the session marked down and dropped the pool of.
+	// ChangeDown is a Status event for a node the server reports down.
 	ChangeDown Change = "DOWN"
-	// ChangeConnected is a Pool event for a host whose pool connected and
-	// that the session marked up.
-	ChangeConnected Change = "CONNECTED"
+	// ChangePoolUp is a Pool event for a host whose pool connected and that
+	// the session marked up.
+	ChangePoolUp Change = "POOL_UP"
+	// ChangePoolDown is a Pool event for a host the session marked down and
+	// dropped the pool of.
+	ChangePoolDown Change = "POOL_DOWN"
 	// ChangeCreated is a Schema event for a created object.
 	ChangeCreated Change = "CREATED"
-	// ChangeUpdated is a Schema event for an altered object, or a
-	// ClientRoute event for changed routes.
+	// ChangeUpdated is a Schema event for an altered object.
 	ChangeUpdated Change = "UPDATED"
 	// ChangeDropped is a Schema event for a dropped object.
 	ChangeDropped Change = "DROPPED"
-	// ChangeRefreshed is a ClientRoute event sent after the driver reloaded
-	// the client routes itself.
-	ChangeRefreshed Change = "REFRESHED"
+	// ChangeRoutesUpdated is a ClientRoute event: the server reported that
+	// client routes changed.
+	ChangeRoutesUpdated Change = "ROUTES_UPDATED"
+	// ChangeRoutesRefreshed is a ClientRoute event sent after the driver
+	// reloaded the client routes itself.
+	ChangeRoutesRefreshed Change = "ROUTES_REFRESHED"
 	// ChangeReconnected is a Control event: the control connection moved to
 	// another host.
 	ChangeReconnected Change = "RECONNECTED"
@@ -116,8 +121,12 @@ type ObjectKind string
 const (
 	// ObjectKeyspace is a keyspace change.
 	ObjectKeyspace ObjectKind = "KEYSPACE"
-	// ObjectTable is a table or materialized view change.
+	// ObjectTable is a table change.
 	ObjectTable ObjectKind = "TABLE"
+	// ObjectView is a materialized view change. The server reports a view as
+	// a table; the driver names it a view when the metadata snapshot of the
+	// event, or the one before it for a drop, holds a view of that name.
+	ObjectView ObjectKind = "VIEW"
 	// ObjectType is a user-defined type change.
 	ObjectType ObjectKind = "TYPE"
 	// ObjectFunction is a user-defined function change.

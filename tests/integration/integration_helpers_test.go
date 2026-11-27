@@ -380,13 +380,17 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retry.Safe{MaxAttempts: 4}}); err != nil {
+	options, err := session.CompileOptions(exec.Options{Idempotent: cql.Some(true), Retry: retry.Safe{MaxAttempts: 4}})
+	if err != nil {
+		return err
+	}
+	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, options); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
 		return err
 	}
-	_, err := session.RefreshMetadata(ctx)
+	_, err = session.RefreshMetadata(ctx)
 	return err
 }
 

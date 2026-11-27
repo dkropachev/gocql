@@ -97,7 +97,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		case "B7":
 			opts = exec.Options{PageSize: 5000}
 		}
-		q, err := read.Worker(opts)
+		o, err := a.options(opts)
+		if err != nil {
+			return nil, err
+		}
+		q, err := read.Worker(o)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +121,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "A2":
 		return c.preparedOne(read), nil
 	case "A4", "B2", "B8":
-		q, err := read.Worker(exec.Options{})
+		q, err := read.Worker()
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +174,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close()))
 		}, nil
 	case "A6", "B6":
-		q, err := read.Worker(exec.Options{PageSize: cql.Unpaged})
+		o, err := a.options(exec.Options{PageSize: cql.Unpaged})
+		if err != nil {
+			return nil, err
+		}
+		q, err := read.Worker(o)
 		if err != nil {
 			return nil, err
 		}
@@ -197,7 +205,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.found(found, err)
 		}, nil
 	case "C1":
-		q, err := read.Worker(exec.Options{})
+		q, err := read.Worker()
 		if err != nil {
 			return nil, err
 		}
@@ -208,14 +216,19 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			want := cursor.expect()
 			state := cql.StartPage()
 			if len(cursor.state) > 0 {
-				state = cql.PageStateFromToken(cursor.state)
+				if err := state.UnmarshalBinary(cursor.state); err != nil {
+					return err
+				}
 			}
 			page, err := q.RunPage(ctx, cursor.k, state, 0)
 			if err != nil {
 				return err
 			}
 			err = c.drain(page, allRows)
-			next := page.State().Token()
+			var next []byte // empty once paging completes, as cursor.advance expects
+			if st := page.State(); st.More() {
+				next, _ = st.MarshalBinary()
+			}
 			if err = errors.Join(err, page.Err(), page.Close()); err != nil {
 				return err
 			}
@@ -225,7 +238,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return cursor.advance(c.check.seen, next)
 		}, nil
 	case "D1":
-		q, err := write.Worker(a.metadata)
+		q, err := write.Worker(a.boundMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -246,11 +259,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			_, err := a.s.UnpreparedExec(ctx, statement, row{K: k, P: payload(false, k, 0)}, a.metadata)
+			_, err := a.s.UnpreparedExec(ctx, statement, row{K: k, P: payload(false, k, 0)}, a.boundMetadata)
 			return err
 		}, nil
 	case "E1", "E2":
-		q, err := write.Worker(a.metadata)
+		q, err := write.Worker(a.boundMetadata)
 		if err != nil {
 			return nil, err
 		}
@@ -283,11 +296,11 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "G1", "G2":
 		var readOp, writeOp op
 		if name == "G1" {
-			rq, err := read.Worker(exec.Options{})
+			rq, err := read.Worker()
 			if err != nil {
 				return nil, err
 			}
-			wq, err := write.Worker(a.metadata)
+			wq, err := write.Worker(a.boundMetadata)
 			if err != nil {
 				return nil, err
 			}
@@ -379,7 +392,11 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	q, err := update.Worker(exec.Options{SerialConsistency: exec.SerialLocal})
+	o, err := c.a.options(exec.Options{SerialConsistency: exec.SerialLocal})
+	if err != nil {
+		return nil, err
+	}
+	q, err := update.Worker(o)
 	if err != nil {
 		return nil, err
 	}

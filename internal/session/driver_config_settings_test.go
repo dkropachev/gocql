@@ -41,7 +41,7 @@ func (d secretDialer) DialContext(ctx context.Context, target endpoint.DialTarge
 
 type reportSpeculation struct{}
 
-func (reportSpeculation) Delay(int) (time.Duration, bool) { return time.Second, true }
+func (reportSpeculation) Delay(retry.Speculation) (time.Duration, bool) { return time.Second, true }
 
 type reportRouting struct{ routing.Policy }
 

@@ -4,20 +4,57 @@ Speculation starts another attempt of a request on the next host of its plan
 when the first one is slow, and returns whichever answers first. It is off by
 default. Set `Profile.Speculation`, with `ProfileBuilder.WithSpeculation`, to a
 `retry.SpeculationPolicy`; nil disables it. The driver ships no policy:
-`Delay(started)` receives the number of attempts started so far and returns how
-long to wait before starting another and whether to start one at all.
+`Delay` receives a `retry.Speculation` and returns how long to wait before
+starting another attempt and whether to start one at all. The `Speculation`
+holds the attempts started so far, the time since the first, the page's
+deadline, the statement's keyspace, table and consistency, and the session's
+latency percentiles. Its `Context` is the execution's context, so a value the
+application attached with `context.WithValue`, such as a request's priority,
+reaches the policy; `retry.Attempt.Context` does the same for a retry policy.
 
 `retry.SpeculationPolicyFunc` makes one from a function:
 
 ```go
-// Start up to two attempts, 50ms apart.
-speculation := retry.SpeculationPolicyFunc(func(started int) (time.Duration, bool) {
-	return 50 * time.Millisecond, started < 2
+// Start a second attempt once the first has taken the session's p95
+// latency, and only when it can still finish before the deadline.
+speculation := retry.SpeculationPolicyFunc(func(s retry.Speculation) (time.Duration, bool) {
+	delay := max(s.LatencyP95, 10*time.Millisecond)
+	if s.Started >= 2 || !s.Deadline.IsZero() && time.Until(s.Deadline) < delay {
+		return 0, false
+	}
+	return delay, true
 })
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	WithDefaultProfile(config.NewProfile().WithSpeculation(speculation).MustBuild()).
 	Build()
 ```
+
+`exec.Options.Speculation` replaces the profile's policy for the executions
+that carry it, nil keeps the profile's, and `retry.NoSpeculation{}` turns
+speculation off. To speculate only some statements, leave the profile without
+a policy and set one on those statements; to exempt a few, do the opposite:
+
+<!-- snippet
+var speculation retry.SpeculationPolicy
+var lookups, reports *gocql.Prepared[int32, string]
+-->
+```go
+speculative, err := session.CompileOptions(exec.Options{Speculation: speculation})
+if err != nil {
+	return err
+}
+lookups = lookups.With(speculative) // every execution of lookups speculates
+
+quiet, err := session.CompileOptions(exec.Options{Speculation: retry.NoSpeculation{}})
+if err != nil {
+	return err
+}
+reports = reports.With(quiet) // executions of reports never speculate
+```
+
+To decide per call without extra options, have the policy read a value the
+caller put on the context, from `Speculation.Context`, and return false when
+it is absent.
 
 A request speculates only when it is idempotent and known to be ordinary.
 Mark a statement idempotent with `Statement.Idempotent`, which its prepared

@@ -55,8 +55,8 @@ func Example_paging() {
 	}
 	var cursor []byte // empty: the first page
 	for {
-		var state cql.PageState
-		if err := state.UnmarshalText(cursor); err != nil {
+		state, err := cql.ParsePageState(string(cursor))
+		if err != nil {
 			log.Fatal(err)
 		}
 		page, err := p.RunPage(ctx, cql.EmptyParams{}, state, 2)

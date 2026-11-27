@@ -28,6 +28,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implModel "github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
@@ -310,10 +311,10 @@ func TestPage(t *testing.T) {
 	t.Run("State", func(t *testing.T) {
 		t.Run("EmptyContinuationSurvivesClose", func(t *testing.T) {
 			p := testPage(t)
-			PageData(p).response.State = cql.PageStateFromToken(nil)
+			PageData(p).response.State = cqltype.PageStateOwned([]byte{})
 			state := p.State()
 			p.Close()
-			if !state.More() || state.Complete() || state.Token() == nil || len(state.Token()) != 0 {
+			if !state.More() || state.Complete() || cqltype.PageToken(state) == nil || len(cqltype.PageToken(state)) != 0 {
 				t.Fatal("empty continuation collapsed")
 			}
 			if !p.State().More() {

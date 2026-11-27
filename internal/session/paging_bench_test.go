@@ -23,6 +23,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/model"
 	"github.com/scylladb/gocql/v2/internal/paging"
 	"github.com/scylladb/gocql/v2/internal/transport"
@@ -78,7 +79,7 @@ func BenchmarkPaging(b *testing.B) {
 				h := paging.InternalPagingHistory{InternalMaxCount: count, InternalMaxBytes: 16 << 20}
 				var state cql.PageState
 				for i := 0; i < count; i++ {
-					state = cql.PageStateFromToken(binary.LittleEndian.AppendUint64(nil, uint64(i)))
+					state = cqltype.PageStateOwned(binary.LittleEndian.AppendUint64(nil, uint64(i)))
 					if err := h.InternalAdd(state); err != nil {
 						b.Fatal(err)
 					}

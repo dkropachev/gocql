@@ -185,7 +185,10 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info
 	if consistency == cql.Any {
 		consistency = cql.One
 	}
-	options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: consistency, Set: true}, Idempotent: cql.Some(true)}
+	options, err := s.CompileOptions(exec.Options{Consistency: cql.Some(consistency), Idempotent: cql.Some(true)})
+	if err != nil {
+		return Info{ID: id}, err
+	}
 	statement := sessionStatement(s.Dialect() == config.ScyllaV4)
 	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow
@@ -359,7 +362,7 @@ var eventStatement = cql.Statement[cql.UUID, eventRow]{
 	BindMarkers: sessionIDMarker,
 }
 
-func readEvents(ctx context.Context, s *gocql.Session, id cql.UUID, options exec.Options) ([]Event, error) {
+func readEvents(ctx context.Context, s *gocql.Session, id cql.UUID, options exec.CompiledOptions) ([]Event, error) {
 	var events []Event
 	var row eventRow
 	_, err := s.UnpreparedEach(ctx, eventStatement, id, &row, func(r *eventRow) error {

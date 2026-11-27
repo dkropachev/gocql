@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
@@ -40,7 +41,7 @@ func TestPageAPI(t *testing.T) {
 			chain, _ := wire.NewChain(wire.Borrow(body))
 			released := false
 			owner := wire.NewLease(chain, func() { released = true })
-			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: cql.PageState(cql.PageStateFromToken([]byte{1}))}}
+			response := &responsePage{ResponseData: responseData{Columns: columns, Rows: chain, RowCount: 1, Owner: owner, State: cql.PageState(cqltype.PageStateOwned([]byte{1}))}}
 			page, err := newPage(response, cql.OneColumn(cql.BytesCodec), nil)
 			if err != nil {
 				t.Fatal(err)
@@ -74,7 +75,7 @@ func TestPageAPI(t *testing.T) {
 			if string(ownedBytesForTest(clone)) != "value" {
 				t.Fatal("clone changed")
 			}
-			if page.State().Token()[0] != 1 {
+			if cqltype.PageToken(page.State())[0] != 1 {
 				t.Fatal("page state lost")
 			}
 		})

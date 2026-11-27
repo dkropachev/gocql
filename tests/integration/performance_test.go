@@ -157,7 +157,7 @@ func TestPerformance(t *testing.T) {
 							run := func() error {
 								options := exec.Options{PageSize: 128, Prefetch: cql.Option[int]{Set: true, Value: 0}}
 								if api == "stream" {
-									query, e := streamPrepared.Worker(exec.StreamOptions{Incremental: true, Options: options})
+									query, e := streamPrepared.With(bindOptions(s, options)).Worker(exec.StreamOptions{Incremental: true})
 									if e != nil {
 										return e
 									}
@@ -424,7 +424,7 @@ func TestPerformance(t *testing.T) {
 							return nil
 						}
 						if api == "stream" {
-							query, e := streamPrepared.Worker(exec.StreamOptions{Incremental: true, Options: options})
+							query, e := streamPrepared.With(bindOptions(s, options)).Worker(exec.StreamOptions{Incremental: true})
 							if e != nil {
 								return 0, 0, e
 							}

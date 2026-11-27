@@ -91,7 +91,7 @@ func TestHostConnPool(t *testing.T) {
 			// Each change reaches subscribers as a Pool event naming the host,
 			// after the metadata publication that shows it.
 			addr := netip.AddrPortFrom(netip.MustParseAddr(host.ConnectAddress().String()), uint16(host.Port()))
-			for _, want := range []event.Change{event.ChangeConnected, event.ChangeDown} {
+			for _, want := range []event.Change{event.ChangePoolUp, event.ChangePoolDown} {
 				var e event.Event
 				select {
 				case e = <-sub.Events():
@@ -101,7 +101,7 @@ func TestHostConnPool(t *testing.T) {
 				if e.Kind != event.KindPool || e.Change != want || e.HostID != implEndpoint.InternalHostInfoHostUUID(host) || e.Address != addr {
 					t.Fatalf("event %+v, want Pool %s of %s at %s", e, want, implEndpoint.InternalHostInfoHostUUID(host), addr)
 				}
-				if want == event.ChangeDown && e.Generation != f.session.Metadata().Generation() {
+				if want == event.ChangePoolDown && e.Generation != f.session.Metadata().Generation() {
 					t.Fatalf("Pool DOWN at generation %d, metadata at %d", e.Generation, f.session.Metadata().Generation())
 				}
 			}

@@ -184,6 +184,12 @@ func (s *Core) PublishV2Event(source oldevents.Event) {
 func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false, nil) }
 func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true, nil) }
 
+// emitV2EventAfter delivers an event, consulting prev, the snapshot before
+// the event's changes, for what the current snapshot no longer holds.
+func (s *Core) emitV2EventAfter(source oldevents.Event, prev *routing.MetadataSnapshot) {
+	s.publishV2EventMode(source, false, true, prev)
+}
+
 // emitV2NodeEvent delivers a topology or status event, taking a host ID the
 // current snapshot no longer has, such as a removed node's, from prev.
 func (s *Core) emitV2NodeEvent(source oldevents.Event, prev *routing.MetadataSnapshot) {
@@ -239,6 +245,9 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	case *oldevents.ClientRoutesChangedEvent:
 		e.Kind = event.KindClientRoute
 		e.Change = event.Change(v.ChangeType)
+		if e.Change == "UPDATED" {
+			e.Change = event.ChangeRoutesUpdated
+		}
 		e.ConnectionIDs = append([]string(nil), v.ConnectionIDs...)
 		e.HostIDs = s.clientRouteHostIDs(v.HostIDs)
 	case *oldevents.ControlConnectionRecreatedEvent:
@@ -301,6 +310,9 @@ func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bo
 	}
 	if !deliver {
 		return
+	}
+	if e.ObjectKind == event.ObjectTable && isV2View(e.Keyspace, e.Object, s.Metadata(), prev) {
+		e.ObjectKind = event.ObjectView
 	}
 	if e.HostID == (cql.UUID{}) && e.Address.IsValid() {
 		snapshots := []*routing.MetadataSnapshot{s.Metadata(), prev}
@@ -385,4 +397,25 @@ func (s *Core) clientRouteHostIDs(ids []string) []cql.UUID {
 		out = append(out, u)
 	}
 	return out
+}
+
+// isV2View reports whether the first snapshot that holds keyspace.name, of
+// snapshots, holds it as a view.
+func isV2View(keyspace, name string, snapshots ...*routing.MetadataSnapshot) bool {
+	for _, m := range snapshots {
+		if m == nil {
+			continue
+		}
+		ks := routing.SnapshotData(m).InternalKeyspaces[keyspace]
+		if ks == nil {
+			continue
+		}
+		if ks.Views[name] != nil {
+			return true
+		}
+		if ks.Tables[name] != nil {
+			return false
+		}
+	}
+	return false
 }

@@ -21,7 +21,7 @@ type gridRow struct {
 }
 
 var gridRows = map[string]gridRow{
-	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...exec.Options"},
+	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...exec.CompiledOptions"},
 	"Worker-owned": {typ: "Worker"},
 	"Shared":       {typ: "Prepared", options: "options ...exec.CompiledOptions"},
 	// A batch's one row is whether it applied, and its rows are those of a
@@ -57,7 +57,7 @@ var gridNonExecution = map[string][]string{
 // must end in.
 var gridExceptions = map[string]string{
 	// The throwaway none cell for a statement with nothing to bind.
-	"Session.UnpreparedCommand": "options ...exec.Options",
+	"Session.UnpreparedCommand": "options ...exec.CompiledOptions",
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI

@@ -176,7 +176,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	var prepared gocql.Prepared[cql.EmptyParams, cql.EmptyRow]
 	_, err = prepared.Exec(ctx, cql.EmptyParams{})
 	requireValidation(t, "zero Prepared.Exec", err)
-	_, err = prepared.Worker(exec.Options{})
+	_, err = prepared.Worker()
 	requireValidation(t, "zero Prepared.Worker", err)
 	requireValidation(t, "zero Prepared.AddToBatch", prepared.AddToBatch(new(gocql.Batch), cql.EmptyParams{}))
 	_, err = new(gocql.PreparedStream[cql.EmptyParams, cql.EmptyRow]).Worker(exec.StreamOptions{})
@@ -216,7 +216,7 @@ func TestZeroValuesUsable(t *testing.T) {
 		t.Errorf("zero Batch: kind %v, %d statements, %d bytes", batch.Kind, batch.Len(), batch.Size())
 	}
 	batch.Reset()
-	if zero := (cql.PageState{}); zero.Complete() || zero.More() || zero.Token() != nil {
+	if zero := (cql.PageState{}); zero.Complete() || zero.More() {
 		t.Error("the zero PageState does not start paging")
 	}
 	var row cql.EmptyRow

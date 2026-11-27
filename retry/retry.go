@@ -5,6 +5,7 @@
 package retry
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -46,6 +47,11 @@ func (a Action) String() string {
 //
 // Its zero value describes no failure.
 type Attempt struct {
+	// Context is the execution's context: the caller's, bounded by the
+	// driver's timeouts. Values the application attached with
+	// context.WithValue reach the policy through it. It is nil only in the
+	// zero Attempt.
+	Context context.Context
 	// Err is the attempt's error.
 	Err error
 	// Attempt is the 1-based number of the failed attempt.

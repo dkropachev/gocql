@@ -263,6 +263,8 @@ func sessionHandleSchemaEvent(s *Core, frames []protocol.Frame) {
 }
 
 func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
+	// The snapshot before the change names a dropped view's event a view.
+	prev := s.Metadata()
 	sessionHandleSchemaEvent( // Coalesce relevant schema work while keeping each bounded event's publication
 		// behind the resulting visible metadata (including diagnostics on failure).
 		s, frames)
@@ -283,7 +285,7 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 	}
 	for _, f := range frames {
 		if event := events.FrameToEvent(f); event != nil {
-			s.emitV2Event(event)
+			s.emitV2EventAfter(event, prev)
 			if s.privateStorage.eventBus != nil {
 				s.privateStorage.eventBus.PublishEvent(event)
 			}
@@ -427,7 +429,7 @@ func (s *Core) HandlePoolConnected(pool *pool.InternalHostConnPool) {
 	p.InternalMu.Unlock()
 	p.hostMu.Unlock()
 	s.PublishV2Metadata()
-	s.publishPoolEvent(event.ChangeConnected, pool.InternalHost)
+	s.publishPoolEvent(event.ChangePoolUp, pool.InternalHost)
 }
 func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	if s.privateStorage.InternalPool != nil {
@@ -439,7 +441,7 @@ func sessionHandleNodeConnected(s *Core, host *implEndpoint.HostInfo) {
 	s.logger().Debug("node connected", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
 	implEndpoint.InternalHostInfoSetState(host, implEndpoint.NodeUp)
 	s.PublishV2Metadata()
-	s.publishPoolEvent(event.ChangeConnected, host)
+	s.publishPoolEvent(event.ChangePoolUp, host)
 }
 
 // publishPoolEvent delivers a Pool event for host to the subscriptions. It
@@ -464,7 +466,7 @@ func (s *Core) HandleNodeDown(ip net.IP, port int) {
 	marked := ok && s.markHostDown(host, false)
 	s.PublishV2Metadata()
 	if marked {
-		s.publishPoolEvent(event.ChangeDown, host)
+		s.publishPoolEvent(event.ChangePoolDown, host)
 	}
 }
 
@@ -483,7 +485,7 @@ func (s *Core) HandleHostDown(host *implEndpoint.HostInfo) {
 	s.PublishV2Metadata()
 	if marked {
 		s.logger().Info("node down", logging.KeyHost, net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port())))
-		s.publishPoolEvent(event.ChangeDown, host)
+		s.publishPoolEvent(event.ChangePoolDown, host)
 	}
 }
 

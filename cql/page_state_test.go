@@ -9,31 +9,40 @@ import (
 	"testing"
 )
 
+// stateToken returns a copy of p's continuation token, nil for the start and
+// complete states.
+func stateToken(p PageState) []byte {
+	if p.kind != 1 {
+		return nil
+	}
+	return append([]byte{}, p.token...)
+}
+
 func TestPageState(t *testing.T) {
-	t.Run("PageStateFromToken", func(t *testing.T) {
+	t.Run("FromToken", func(t *testing.T) {
 		start := startPage()
-		empty := PageStateFromToken(nil)
+		empty := pageStateFromToken(nil)
 		complete := completePageState()
 		if start.More() || start.Complete() || !empty.More() || empty.Complete() || !complete.Complete() {
 			t.Fatal("page state distinctions lost")
 		}
-		if start.Token() != nil || complete.Token() != nil {
+		if stateToken(start) != nil || stateToken(complete) != nil {
 			t.Fatal("initial or complete state exported a continuation token")
 		}
-		if empty.Token() == nil {
+		if stateToken(empty) == nil {
 			t.Fatal("empty continuation became absent")
 		}
 		token := []byte{1}
-		state := PageStateFromToken(token)
+		state := pageStateFromToken(token)
 		token[0] = 2
-		copy := state.Token()
+		copy := stateToken(state)
 		copy[0] = 3
-		if state.Token()[0] != 1 {
+		if stateToken(state)[0] != 1 {
 			t.Fatal("state token aliased")
 		}
 		for _, state := range []PageState{empty, state} {
-			restored := PageStateFromToken(state.Token())
-			if !restored.More() || restored.Complete() || string(restored.Token()) != string(state.Token()) {
+			restored := pageStateFromToken(stateToken(state))
+			if !restored.More() || restored.Complete() || string(stateToken(restored)) != string(stateToken(state)) {
 				t.Fatal("continuation token did not round-trip")
 			}
 		}
@@ -45,8 +54,8 @@ func TestPageState(t *testing.T) {
 	t.Run("Marshal", func(t *testing.T) {
 		states := map[string]PageState{
 			"start":    startPage(),
-			"empty":    PageStateFromToken(nil),
-			"token":    PageStateFromToken([]byte{0, 1, 2, 0xff}),
+			"empty":    pageStateFromToken(nil),
+			"token":    pageStateFromToken([]byte{0, 1, 2, 0xff}),
 			"complete": completePageState(),
 		}
 		for name, state := range states {
@@ -58,12 +67,12 @@ func TestPageState(t *testing.T) {
 			if err := got.UnmarshalBinary(b); err != nil {
 				t.Fatal(name, err)
 			}
-			if got.More() != state.More() || got.Complete() != state.Complete() || string(got.Token()) != string(state.Token()) || (got.Token() == nil) != (state.Token() == nil) {
+			if got.More() != state.More() || got.Complete() != state.Complete() || string(stateToken(got)) != string(stateToken(state)) || (stateToken(got) == nil) != (stateToken(state) == nil) {
 				t.Errorf("%s: binary round trip gave %+v", name, got)
 			}
 			if len(b) > 1 {
 				b[1] = 7 // the decoded token is a copy
-				if got.Token()[0] == 7 {
+				if stateToken(got)[0] == 7 {
 					t.Errorf("%s: decoded token aliases its input", name)
 				}
 			}
@@ -75,7 +84,7 @@ func TestPageState(t *testing.T) {
 			if err := json.Unmarshal(text, &got); err != nil {
 				t.Fatal(name, err)
 			}
-			if got.More() != state.More() || got.Complete() != state.Complete() || string(got.Token()) != string(state.Token()) {
+			if got.More() != state.More() || got.Complete() != state.Complete() || string(stateToken(got)) != string(stateToken(state)) {
 				t.Errorf("%s: text round trip through %s gave %+v", name, text, got)
 			}
 		}
@@ -88,6 +97,29 @@ func TestPageState(t *testing.T) {
 		var got PageState
 		if err := got.UnmarshalText([]byte("not base64!")); !errors.As(err, new(*ValidationError)) {
 			t.Errorf("UnmarshalText of bad base64 = %v, want a ValidationError", err)
+		}
+	})
+
+	// TestPageState/Parse checks that ParsePageState reads back every state
+	// MarshalText writes, empty text being the start, and rejects bad input.
+	t.Run("Parse", func(t *testing.T) {
+		for name, state := range map[string]PageState{
+			"start":    startPage(),
+			"empty":    pageStateFromToken(nil),
+			"token":    pageStateFromToken([]byte{0, 1, 2, 0xff}),
+			"complete": completePageState(),
+		} {
+			text, _ := state.MarshalText()
+			got, err := ParsePageState(string(text))
+			if err != nil {
+				t.Fatal(name, err)
+			}
+			if got.More() != state.More() || got.Complete() != state.Complete() || string(stateToken(got)) != string(stateToken(state)) {
+				t.Errorf("%s: ParsePageState(%q) = %+v", name, text, got)
+			}
+		}
+		if _, err := ParsePageState("not base64!"); !errors.As(err, new(*ValidationError)) {
+			t.Errorf("ParsePageState of bad base64 = %v, want a ValidationError", err)
 		}
 	})
 
@@ -110,11 +142,11 @@ func TestPageState(t *testing.T) {
 			"text AA":      func(p *PageState) error { return p.UnmarshalText([]byte("AA")) },
 		}
 		for name, decode := range inputs {
-			got := PageStateFromToken([]byte{1})
+			got := pageStateFromToken([]byte{1})
 			if err := decode(&got); err != nil {
 				t.Fatalf("%s: %v", name, err)
 			}
-			if got.More() || got.Complete() || got.Token() != nil {
+			if got.More() || got.Complete() || stateToken(got) != nil {
 				t.Errorf("%s: decoded %+v, want the start state", name, got)
 			}
 		}

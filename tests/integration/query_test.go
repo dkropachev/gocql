@@ -277,7 +277,7 @@ func TestQuery(t *testing.T) {
 
 			// Unprepared INSERT retains the QUERY custom-payload path.
 			insert := cql.Command(fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table))
-			result, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, options)
+			result, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, bindOptions(session, options))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -499,7 +499,7 @@ func TestQuery(t *testing.T) {
 			statement := cql.Statement[cql.EmptyParams, cql.UUID]{CQL: hostIDQuery, Params: cql.NoParams, Rows: cql.OneColumn(cql.UUIDCodec)}
 			runOn := func(options exec.Options) error {
 				var id cql.UUID
-				_, err := session.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &id, func(*cql.UUID) error { return nil }, options)
+				_, err := session.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &id, func(*cql.UUID) error { return nil }, bindOptions(session, options))
 				return err
 			}
 			hosts := session.Metadata().Hosts()
@@ -606,7 +606,7 @@ func TestQuery(t *testing.T) {
 				t.Run(tc.name, func(t *testing.T) {
 					observer := &cassandraObserver{}
 					insert := cql.Command("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')")
-					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: hooksOf(observer)})
+					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, bindOptions(session, exec.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: hooksOf(observer)}))
 					require.Error(t, err)
 					events, attempts := observer.snapshot()
 					require.Len(t, attempts, tc.attempts)
@@ -627,7 +627,7 @@ func TestQuery(t *testing.T) {
 					t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
 						observer := new(sessionTestObserver)
 						retryPolicy := sessionTestRetry{action: retry.Stop, maxAttempts: retries + 1}
-						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, exec.Options{Idempotent: cql.Some(true), Retry: retryPolicy, Observer: hooksOf(observer)})
+						_, err := session.UnpreparedExec(ctx, insert, cql.EmptyParams{}, bindOptions(session, exec.Options{Idempotent: cql.Some(true), Retry: retryPolicy, Observer: hooksOf(observer)}))
 						require.Error(t, err)
 						var server cqlerr.ServerError
 						require.ErrorAs(t, err, &server)
@@ -714,7 +714,7 @@ func TestQuery(t *testing.T) {
 			P    []byte
 		}
 		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P }))}, exec.PrepareOptions{}))
-		w := codecTestMust(write.Worker(exec.Options{}))
+		w := codecTestMust(write.Worker())
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
 		for i := int32(0); i < 6; i++ {
@@ -724,7 +724,7 @@ func TestQuery(t *testing.T) {
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
-		q := codecTestMust(read.Worker(exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		q := codecTestMust(read.Worker(bindOptions(session, exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
@@ -781,7 +781,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.Worker(exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		unpaged := codecTestMust(read.Worker(bindOptions(session, exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}})))
 		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage(), 0))
 		n := 0
@@ -795,7 +795,7 @@ func TestQuery(t *testing.T) {
 		for _, incremental := range []bool{false, true} {
 			streamDecoder := cql.StreamRowInto(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
 			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
-			streamQuery := codecTestMust(readStream.Worker(exec.StreamOptions{Incremental: incremental, Options: exec.Options{PageSize: 2}}))
+			streamQuery := codecTestMust(readStream.With(bindOptions(session, exec.Options{PageSize: 2})).Worker(exec.StreamOptions{Incremental: incremental}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
 				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {

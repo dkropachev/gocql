@@ -85,7 +85,7 @@ func TestHandleLifetimes(t *testing.T) {
 		}
 		closeTwice(t, "Page", page.Close, nil)
 
-		q, err := f.p.Worker(gridOptions)
+		q, err := f.p.Worker(mustCompileOptions(gridOptions))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -137,7 +137,7 @@ func TestHandleLifetimes(t *testing.T) {
 	// and that the session refuses new work.
 	t.Run("OpenAcrossSessionClose", func(t *testing.T) {
 		f := newLifetimeFixture(t)
-		q, err := f.p.Worker(gridOptions)
+		q, err := f.p.Worker(mustCompileOptions(gridOptions))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -287,7 +287,7 @@ func TestHandleLifetimes(t *testing.T) {
 		for _, kind := range []string{"Rows", "Page", "RowStream"} {
 			t.Run(kind, func(t *testing.T) {
 				f := newLifetimeFixture(t)
-				q, err := f.p.Worker(gridOptions)
+				q, err := f.p.Worker(mustCompileOptions(gridOptions))
 				if err != nil {
 					t.Fatal(err)
 				}

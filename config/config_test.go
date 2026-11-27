@@ -897,7 +897,7 @@ func TestConfigBuilder(t *testing.T) {
 		if p.PageTimeout != 2*time.Second || p.Speculation != retry.SpeculationPolicy(speculation) {
 			t.Fatalf("profile = %+v", p)
 		}
-		if d, ok := p.Speculation.Delay(1); !ok || d != 50*time.Millisecond {
+		if d, ok := p.Speculation.Delay(retry.Speculation{Started: 1}); !ok || d != 50*time.Millisecond {
 			t.Fatalf("Speculation.Delay = %v, %v", d, ok)
 		}
 		if p := codecTestMust(NewProfile().WithSpeculation(speculation).WithSpeculation(nil).Build()); p.Speculation != nil {
@@ -969,7 +969,7 @@ func (declineReconnect) Delay(int) (time.Duration, bool) { return 0, false }
 
 type fixedSpeculation struct{ delay time.Duration }
 
-func (s fixedSpeculation) Delay(int) (time.Duration, bool) { return s.delay, true }
+func (s fixedSpeculation) Delay(retry.Speculation) (time.Duration, bool) { return s.delay, true }
 
 func codecTestMust[T any](v T, err error) T {
 	if err != nil {

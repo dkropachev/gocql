@@ -78,12 +78,17 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 	return (*PreparedStream[P, R])(p), err
 }
 
-// CompileOptions validates and snapshots overrides for reuse by one-shot calls.
-// Omit options on those calls to use the session defaults. An exec.CompiledOptions used
-// on another session applies its original overrides to that session's defaults
-// and is resolved again on each call. Use context deadlines for per-request
-// time limits. Policy and observer objects remain shared and must be safe for
-// concurrent use.
+// CompileOptions validates options and compiles them for this session: it
+// runs the checks that depend on the session's dialect now, rather than at
+// each execution, resolves the overrides against the session's defaults once,
+// and picks the compiled form the session's protocol uses. It is the only way
+// to make an exec.CompiledOptions other than the zero value, which uses the
+// session defaults. An exec.CompiledOptions used on another session applies
+// its original overrides to that session's defaults and is resolved again on
+// each call. Use context deadlines for per-request time limits. Policy and
+// observer objects remain shared and must be safe for concurrent use. An
+// invalid value is rejected with a cql.ValidationError, and a setting the
+// dialect lacks with a cqlerr.UnsupportedSettingError.
 func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, error) {
 	o, err := s.internal().CompileOptions(internalOptions(options))
 	return exec.CompiledOptions(o), err
@@ -95,9 +100,8 @@ func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, er
 // other than cql.EmptyParams) must set: without them the call fails with a
 // cql.ValidationError before anything is sent. With cql.DynamicParams and no
 // BindMarkers, the markers take the types of the values. At most one
-// exec.Options may be passed; the call validates and resolves it, and
-// omitting it uses the session defaults.
-func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error) {
+// exec.CompiledOptions may be passed; omitting it uses the session defaults.
+func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
@@ -106,9 +110,9 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // UnpreparedExec(ctx, cql.Command(statement), cql.EmptyParams{}, options...)
 // without the statement and parameter values to spell out, and so a
 // documented exception to the execution grid: the none cell of the throwaway
-// row for a statement with nothing to bind. At most one exec.Options may be
-// passed, as for UnpreparedExec.
-func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...exec.Options) (cql.Result, error) {
+// row for a statement with nothing to bind. At most one exec.CompiledOptions may
+// be passed, as for UnpreparedExec.
+func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...exec.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(cql.Command(statement)), cql.EmptyParams{}, internalOptionList(options)...)
 }
 
@@ -116,9 +120,9 @@ func (s *Session) UnpreparedCommand(ctx context.Context, statement string, optio
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
 // are detached before return; there is no worker or cursor to close. Parameters
 // are described by statement.BindMarkers, as for UnpreparedExec. With a nil
-// dst it only reports whether a row exists. At most one exec.Options may be passed;
-// the call validates and resolves it, and omitting it uses the session defaults.
-func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error) {
+// dst it only reports whether a row exists. At most one exec.CompiledOptions may be
+// passed; omitting it uses the session defaults.
+func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error) {
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
@@ -126,10 +130,9 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no worker or cursor to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
-// exec.Options may be passed; the call validates and resolves it, and omitting
-// it uses the session defaults. dst is decoded into as for Worker.Each: the
+// exec.CompiledOptions may be passed; omitting it uses the session defaults. dst is decoded into as for Worker.Each: the
 // same pointer for every row, or a new R for each row when dst is nil.
-func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error) {
+func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
@@ -137,9 +140,8 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 // across all pages, decoding each into dst, as Worker.All does. The statement's
 // execution is closed when the loop ends; there is nothing to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
-// exec.Options may be passed; the call validates and resolves it, and
-// omitting it uses the session defaults.
-func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) iter.Seq2[*R, error] {
+// exec.CompiledOptions may be passed; omitting it uses the session defaults.
+func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error] {
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 

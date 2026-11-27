@@ -31,8 +31,7 @@ type v2Adapter struct {
 	streams       [2]*g.PreparedStream[int32, row]
 	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead       *g.Prepared[int32, int32]
-	metadata      exec.Options         // includes result metadata, as master's writes request
-	boundMetadata exec.CompiledOptions // metadata bound to the session, for one-shot executions
+	boundMetadata exec.CompiledOptions // includes result metadata, as master's writes request
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -81,13 +80,12 @@ func connect(hosts []string) (adapter, error) {
 		s.Close()
 		return nil, e
 	}
-	metadata := exec.Options{IncludeMetadata: true}
-	boundMetadata, e := s.CompileOptions(metadata)
+	boundMetadata, e := s.CompileOptions(exec.Options{IncludeMetadata: true})
 	if e != nil {
 		s.Close()
 		return nil, e
 	}
-	return &v2Adapter{s: s, metadata: metadata, boundMetadata: boundMetadata}, nil
+	return &v2Adapter{s: s, boundMetadata: boundMetadata}, nil
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
@@ -173,7 +171,7 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 	if paged {
 		size = 4096
 	}
-	readQuery, e := read.Worker(exec.Options{})
+	readQuery, e := read.Worker()
 	if e != nil {
 		return nil, e
 	}

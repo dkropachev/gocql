@@ -405,7 +405,7 @@ func (s *RowStream[R]) NextInto(dst *R) bool {
 		}
 		next := cqltype.CompletePageState()
 		if s.privateStorage.response.InternalMetadata.PagingState != nil {
-			next = cql.PageStateFromToken(s.privateStorage.response.InternalMetadata.PagingState)
+			next = cqltype.PageStateOwned(append([]byte{}, s.privateStorage.response.InternalMetadata.PagingState...))
 		}
 		if !next.More() {
 			s.privateStorage.mu.Lock()
@@ -736,7 +736,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		}
 		decision := retry.Decision{}
 		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+			decision = policy.Decide(retry.Attempt{Context: pagectx, Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 		}
 		if decision.Action == retry.Stop {
 			return err

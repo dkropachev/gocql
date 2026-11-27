@@ -145,7 +145,8 @@ selectName, err := session.Prepare(ctx, cql.Select(
 if err != nil {
 	return err
 }
-// Prepare once and keep selectName; compile options once too.
+// Prepare once and keep selectName; compile options once too, and keep
+// them with the session.
 one, err := session.CompileOptions(exec.Options{Consistency: cql.Some(cql.One)})
 if err != nil {
 	return err
@@ -194,10 +195,9 @@ statement the driver finds conditional fails before it is sent, as does
 reading a SELECT through `cql.CASRows` or declaring it
 `cql.ConditionalStatement`.
 
-One-shot calls on a `*Prepared` take `exec.CompiledOptions` from
-`session.CompileOptions`; compile them once and reuse them. A goroutine that runs
-a statement in a loop can own a `*gocql.Worker` from `prepared.Worker(options)`,
-which takes `exec.Options` directly. See [statements](statements/index.md).
+Every execution entry point takes `exec.CompiledOptions`, from
+`session.CompileOptions`; compile them once and reuse them. A goroutine that runs a statement in a loop can own a `*gocql.Worker`
+from `prepared.Worker(options)`. See [statements](statements/index.md).
 
 ### Struct mapping
 
@@ -260,9 +260,9 @@ next := page.State()
 cursor, err := next.MarshalText() // the opaque cursor to hand out
 ```
 
-`state.UnmarshalText(cursor)` restores the state, start and completion
-included, an empty cursor being the start; `cql.PageStateFromToken(token)` restores one from the server token
-alone. Either carries server state: authenticate or encrypt it before giving
+`cql.ParsePageState(cursor)` restores the state, start and completion
+included, an empty cursor being the start. v1's raw `PageState()` bytes have
+no v2 equivalent: they cannot tell the start from completion. The cursor carries server state: authenticate or encrypt it before giving
 it to an untrusted client. See [paging](statements/paging.md).
 
 ## Batches and lightweight transactions
@@ -344,7 +344,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |
 | `gocql.ObservedQuery`, `QueryObserver` | the `Request` and `Attempt` hooks of `observe.Hooks`; `observe.Join` combines several |
-| `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangeConnected`) or the host marked down (`ChangeDown`), `KindStatus` and `KindTopology` the cluster's own events |
+| `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangePoolUp`) or the host marked down (`ChangePoolDown`), `KindStatus` and `KindTopology` the cluster's own events |
 
 ## Not carried over
 

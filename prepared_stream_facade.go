@@ -7,6 +7,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 // PreparedStream is an immutable statement prepared for caller-storage decoding.
@@ -20,10 +21,11 @@ type PreparedStream[P, R any] implSession.PreparedStream[P, R]
 
 // Worker creates a reusable stream execution with fixed options. Close the
 // worker when its goroutine finishes, and close each execution cursor before
-// reusing it. At
-// most one exec.StreamOptions may be passed; omitting it buffers one page
-// with the session defaults. Options with a Timestamp are rejected with a
-// cql.ValidationError, since every write of the worker would carry it.
+// reusing it. At most one exec.StreamOptions may be passed; omitting it
+// buffers one page. Execution overrides are the defaults of a view made by
+// With, or else the session defaults. Overrides with a Timestamp are
+// rejected with a cql.ValidationError, since every write of the worker would
+// carry it.
 func (p *PreparedStream[P, R]) Worker(options ...exec.StreamOptions) (*StreamWorker[P, R], error) {
 	var o exec.StreamOptions
 	switch len(options) {
@@ -33,11 +35,21 @@ func (p *PreparedStream[P, R]) Worker(options ...exec.StreamOptions) (*StreamWor
 	default:
 		return nil, tooManyWorkerOptions(true)
 	}
-	if o.Options.Timestamp.Set {
+	internal := (*implSession.PreparedStream[P, R])(p)
+	values := internal.Defaults().Values()
+	if values.Timestamp.Set {
 		return nil, fixedWorkerTimestamp()
 	}
-	q, err := (*implSession.PreparedStream[P, R])(p).Query(internalStreamOptions(o))
+	q, err := internal.Query(implSession.StreamOptions{Options: values, Limits: implTransport.StreamLimits(o.Limits), Incremental: o.Incremental})
 	return (*StreamWorker[P, R])(q), err
+}
+
+// With returns a view of p whose workers use defaults instead of the session
+// defaults, as Prepared.With does. The view shares p's preparation; making
+// one costs one small allocation, and neither needs closing. With on a view
+// replaces its defaults.
+func (p *PreparedStream[P, R]) With(defaults exec.CompiledOptions) *PreparedStream[P, R] {
+	return (*PreparedStream[P, R])((*implSession.PreparedStream[P, R])(p).With(implSession.CompiledOptions(defaults)))
 }
 
 // BindMarkers returns the immutable bind-marker metadata, one column per

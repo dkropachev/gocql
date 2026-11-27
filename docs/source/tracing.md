@@ -22,7 +22,11 @@ insert := cql.Statement[int32, cql.EmptyRow]{
 	Params:      cql.OneParam(cql.Int32Codec),
 	BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 }
-result, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true})
+traced, err := session.CompileOptions(exec.Options{CQLTrace: true})
+if err != nil {
+	return err
+}
+result, err := session.UnpreparedExec(ctx, insert, 42, traced)
 if err != nil {
 	return err
 }
@@ -51,9 +55,10 @@ reference, and the errors of the sessions it could not read joined:
 
 <!-- snippet
 var insert cql.Statement[int32, cql.EmptyRow]
+var traced exec.CompiledOptions
 -->
 ```go
-_, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true})
+_, err := session.UnpreparedExec(ctx, insert, 42, traced)
 if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); ok {
 	infos, err := cqltrace.FetchAll(ctx, session, failure.Result.CQLTraces())
 	if err != nil {

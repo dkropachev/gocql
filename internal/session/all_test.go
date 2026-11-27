@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
 func TestQueryAll(t *testing.T) {
@@ -268,7 +269,7 @@ func TestHandleAll(t *testing.T) {
 		if len(got) != 2 || got[0] == got[1] || string(*got[1]) != "b" {
 			t.Fatalf("rows %v", got)
 		}
-		if state := page.State(); !state.More() || string(state.Token()) != "\x01" {
+		if state := page.State(); !state.More() || string(cqltype.PageToken(state)) != "\x01" {
 			t.Fatalf("state after All: %+v", state)
 		}
 		if page.NextInto(new([]byte)) {

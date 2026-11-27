@@ -32,6 +32,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wirecompress"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/observe"
+	"github.com/scylladb/gocql/v2/retry"
 	routing "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -426,7 +427,7 @@ func (o *testObserver) StartAttempt(context.Context, observe.AttemptStart) func(
 
 type speculation struct{}
 
-func (speculation) Delay(int) (time.Duration, bool) {
+func (speculation) Delay(retry.Speculation) (time.Duration, bool) {
 	return time.Hour, true
 }
 

@@ -26,9 +26,29 @@ type StreamStatement[P, R any] struct {
 // Its initial plan is immutable; each query revalidates changed result metadata.
 type PreparedStream[P, R any] struct {
 	prepared *Prepared[P, cql.EmptyRow]
+	defaults CompiledOptions
 	decoder  cql.StreamRowDecoder[R]
 	plan     cql.CompiledStreamRow[R]
 	columns  cql.Columns
+}
+
+// With returns a copy of p whose workers use defaults, sharing p's
+// preparation.
+func (p *PreparedStream[P, R]) With(defaults CompiledOptions) *PreparedStream[P, R] {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	v.defaults = defaults
+	return &v
+}
+
+// Defaults returns the options With set, or the zero CompiledOptions.
+func (p *PreparedStream[P, R]) Defaults() CompiledOptions {
+	if p == nil {
+		return CompiledOptions{}
+	}
+	return p.defaults
 }
 
 func (s *Session) PrepareStream[P, R any](ctx context.Context, statement StreamStatement[P, R], options PrepareOptions) (*PreparedStream[P, R], error) {

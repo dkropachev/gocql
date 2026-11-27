@@ -157,26 +157,28 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 // Worker creates a reusable execution of the statement, owned by one
 // goroutine, with fixed options. It also provides cursors and explicit
 // paging. Close it when the goroutine is done with it. At most one
-// exec.Options may be passed; omitting it uses the defaults of a view made by
-// With, or else the session defaults. Options with a Timestamp, passed or
-// taken from the view's defaults, are rejected with a cql.ValidationError,
-// since every write of the worker would carry it.
-func (p *Prepared[P, R]) Worker(options ...exec.Options) (*Worker[P, R], error) {
-	var o exec.Options
+// exec.CompiledOptions may be passed; omitting it, or passing the zero
+// value, uses the defaults of a view made by With, or else the session
+// defaults. Options with a Timestamp, passed or taken from the view's
+// defaults, are rejected with a cql.ValidationError, since every write of the
+// worker would carry it.
+func (p *Prepared[P, R]) Worker(options ...exec.CompiledOptions) (*Worker[P, R], error) {
+	var c implSession.CompiledOptions
 	switch len(options) {
 	case 0:
-		if d := p.internal().Defaults(); d != (implSession.CompiledOptions{}) {
-			o = exec.CompiledOptions(d).Values()
-		}
 	case 1:
-		o = options[0]
+		c = implSession.CompiledOptions(options[0])
 	default:
 		return nil, tooManyWorkerOptions(false)
 	}
+	if c == (implSession.CompiledOptions{}) {
+		c = p.internal().Defaults()
+	}
+	o := c.Values()
 	if o.Timestamp.Set {
 		return nil, fixedWorkerTimestamp()
 	}
-	q, err := p.internal().Query(internalOptions(o))
+	q, err := p.internal().Query(o)
 	return (*Worker[P, R])(q), err
 }
 
@@ -204,7 +206,7 @@ func (p *Prepared[P, R]) Routing(value P, options ...exec.CompiledOptions) (rout
 
 // With returns a view of p whose calls passed no options use defaults
 // instead of the session defaults: Exec, One, Each, All, Run, RunPage and
-// Routing, and Worker, which takes the values defaults were compiled from. A
+// Routing, and Worker. A
 // zero exec.CompiledOptions passed to a call counts as none. Options passed
 // to a call replace defaults whole, as they replace the session defaults,
 // rather than adding to them field by field.

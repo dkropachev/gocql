@@ -93,7 +93,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, i/10+1, len(attempts), "row %d", i)
 			i++
 			return nil
-		}, exec.Options{PageSize: 10, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: hooksOf(observer)})
+		}, bindOptions(session, exec.Options{PageSize: 10, Prefetch: cql.Option[int]{Value: 0, Set: true}, Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		require.Equal(t, 50, i)
 		events, attempts := observer.snapshot()
@@ -146,7 +146,7 @@ func TestObserver(t *testing.T) {
 		observer.reset()
 		bad := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id FROM unknown_table WHERE id = 42", Rows: cql.DynamicRows}
 		var badRow cql.DynamicRow
-		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, exec.Options{Observer: hooksOf(observer)})
+		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
 		require.Error(t, err)
 		check("SELECT id FROM unknown_table WHERE id = 42", true)
 	})

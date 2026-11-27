@@ -48,11 +48,13 @@ func Example_errors() {
 	}
 
 	// KindOf says whether trying again can help, and Retryable whether it
-	// also is safe; it is false once ctx has ended.
+	// also is safe, from the idempotence the driver resolved for the
+	// request; it is false once ctx has ended. The profile's retry policy
+	// has already retried, so a loop here multiplies its attempts.
 	if kind := cqlerr.KindOf(err); kind.Transient() {
 		log.Printf("transient %v failure: %v", kind, err)
 	}
-	for attempt := 0; cqlerr.Retryable(err, false) && attempt < 3; attempt++ {
+	for attempt := 0; cqlerr.Retryable(err) && attempt < 3; attempt++ {
 		_, err = insert.Exec(ctx, "hello")
 	}
 
