@@ -52,7 +52,7 @@ func TestAddressTranslation(t *testing.T) {
 				Port:           9042,
 			}.Build()
 
-			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, nil)
+			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, 0, nil)
 
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated CQL", netip.MustParseAddrPort("10.10.10.10:9142"), translated.CQL)
@@ -63,7 +63,7 @@ func TestAddressTranslation(t *testing.T) {
 			for _, port := range []int{-1, 0, 65536} {
 				t.Run(fmt.Sprint(port), func(t *testing.T) {
 					host := endpoint.HostInfoBuilder{ConnectAddress: net.ParseIP("10.0.0.1"), Port: port}.Build()
-					if _, err := InternalTranslateHostAddresses(ctx, nil, &host, nil); err == nil {
+					if _, err := InternalTranslateHostAddresses(ctx, nil, &host, 0, nil); err == nil {
 						t.Fatalf("expected invalid port %d to be rejected", port)
 					}
 				})
@@ -109,7 +109,7 @@ func TestAddressTranslation(t *testing.T) {
 			}(),
 			)
 
-			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, nil)
+			translated, err := InternalTranslateHostAddresses(ctx, translator, &host, 0, nil)
 
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated CQL", netip.AddrPortFrom(translatedIP, 9043), translated.CQL)

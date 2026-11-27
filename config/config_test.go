@@ -393,12 +393,21 @@ func TestConfigBuilder(t *testing.T) {
 		if c.TLS == nil || c.TLS.ServerName != "last" {
 			t.Fatal("WithTLS did not replace WithTLSSource")
 		}
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithTLS(&tls.Config{}).WithTLSPort(9142).WithTLSFallback(true).
+			WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity { return endpoint.TLSIdentity{ChainOnly: true} })).settings
+		if conn := c.Connectivity(); conn.TLSPort != 9142 || !conn.TLSFallback || conn.TLSIdentity == nil || !conn.TLSIdentity(endpoint.DialTarget{}).ChainOnly {
+			t.Fatal("TLS identity, port and fallback did not reach the connectivity settings")
+		}
 		for name, tc := range map[string]struct {
 			b    *ConfigBuilder
 			want string
 		}{
-			"NoConfig":   {New(ScyllaV4, "h").WithTLSSource(staticTLS{}), "returned no config"},
-			"UnixSocket": {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "WithTLS"},
+			"NoConfig":             {New(ScyllaV4, "h").WithTLSSource(staticTLS{}), "returned no config"},
+			"UnixSocket":           {New(ScyllaV4, "/var/lib/scylla/cql.m").WithTLSSource(source), "WithTLS"},
+			"IdentityWithoutTLS":   {New(ScyllaV4, "h").WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity { return endpoint.TLSIdentity{} }), "WithTLSIdentity"},
+			"PortWithoutTLS":       {New(ScyllaV4, "h").WithTLSPort(9142), "WithTLSPort"},
+			"FallbackWithoutTLS":   {New(ScyllaV4, "h").WithTLSFallback(true), "WithTLSFallback"},
+			"PortWithClientRoutes": {New(ScyllaV4, "h").WithTLS(&tls.Config{}).WithTLSPort(9142).WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "a"}), "client routes"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := tc.b.Build(); err == nil || !strings.Contains(err.Error(), tc.want) {

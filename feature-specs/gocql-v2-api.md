@@ -2006,6 +2006,9 @@ func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
+func (*ConfigBuilder) WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity) *ConfigBuilder
+func (*ConfigBuilder) WithTLSPort(uint16) *ConfigBuilder        // TLS on its own port (native_transport_port_ssl)
+func (*ConfigBuilder) WithTLSFallback(bool) *ConfigBuilder      // one-way plaintext fallback while enabling TLS
 func (*ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder // replaces all; none removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
@@ -2033,7 +2036,14 @@ options, address translation/filtering/client routes, startup identity and
 configuration reporting, metadata scope/events/agreement,
 profiles/retry/speculation, observers/logger and timestamp generation. The
 native protocol version is not a setting: it comes from the session's dialect. TLS uses Go crypto/tls,
-validates host/CA by default, and never downgrades after a TLS failure. Each
+validates host/CA by default, and never downgrades after a TLS failure unless
+`WithTLSFallback(true)` allows a one-way fallback for nodes that do not speak
+TLS yet: never after a verification failure, never for a node that has
+answered TLS, and not at all once every node has. `WithTLSIdentity` returns
+each dial's `endpoint.TLSIdentity{ServerName, VerifyName, ChainOnly, Verify}`:
+the SNI, the name the certificate must match, a chain-only check, and a check
+of its own over the `tls.ConnectionState`; a contact point's target has a zero
+host ID. Session tickets are keyed by node. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
 connection verifies the node's IP address. `ConfigBuilder.WithTLS` copies a

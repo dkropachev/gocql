@@ -143,7 +143,10 @@ func (c InternalCassVersion) String() string {
 // InternalTranslatedAddresses holds a host's translated endpoints. A zero
 // field means the endpoint is not advertised.
 type InternalTranslatedAddresses struct {
-	CQL           netip.AddrPort
+	CQL netip.AddrPort
+	// CQLTLS is the address of the node's TLS port, set when the session
+	// dials TLS on a port of its own (WithTLSPort).
+	CQLTLS        netip.AddrPort
 	ShardAware    netip.AddrPort
 	ShardAwareTLS netip.AddrPort
 }

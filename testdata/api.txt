@@ -193,6 +193,9 @@ package config
 		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLS(config *crypto/tls.Config) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSFallback(fallback bool) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSIdentity(identity func(target endpoint.DialTarget) endpoint.TLSIdentity) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSPort(port uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLSSource(source endpoint.TLSSource) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTimestampGenerator(next func() int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithWriteTimeout(d time.Duration) *config.ConfigBuilder
@@ -1207,6 +1210,11 @@ package endpoint
 	type endpoint.SimpleConvictionPolicy struct
 		endpoint.SimpleConvictionPolicy method (T) AddFailure(ev endpoint.ConvictionEvent) bool
 		endpoint.SimpleConvictionPolicy method (T) Reset(endpoint.ConvictionEvent)
+	type endpoint.TLSIdentity struct
+		endpoint.TLSIdentity field Verify func(crypto/tls.ConnectionState) error
+		endpoint.TLSIdentity field ServerName string
+		endpoint.TLSIdentity field VerifyName string
+		endpoint.TLSIdentity field ChainOnly bool
 	type endpoint.TLSSource interface
 		endpoint.TLSSource method TLSConfig() *crypto/tls.Config
 	type endpoint.Translator interface
