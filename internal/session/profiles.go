@@ -19,6 +19,7 @@ import (
 // Session.CompileOptions resolves recurring overrides for one-shot calls.
 type Options struct {
 	Retry                retry.Policy
+	Speculation          retry.SpeculationPolicy
 	Observer             observe.Hooks
 	Profile              *settings.Profile
 	privateStorage       OptionsStorage
@@ -115,6 +116,14 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if options.Retry != nil {
 		p.Retry = options.Retry
+	}
+	switch options.Speculation.(type) {
+	case nil:
+	case retry.NoSpeculation, *retry.NoSpeculation:
+		// Disabled speculation allocates no scheduler or timer.
+		p.Speculation = nil
+	default:
+		p.Speculation = options.Speculation
 	}
 	if options.Consistency.Set && !settings.InternalValidConsistency(p.Consistency) {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("consistency", "invalid consistency")

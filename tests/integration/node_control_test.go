@@ -77,7 +77,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	streamOptions := pinned
 	streamOptions.PageSize = 1
 	streamPrepared := codecTestMust(s.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, output]{CQL: statement.CQL, Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: decoder}))
-	interrupted, err := pagingRunStream(ctx, t, streamPrepared, cql.EmptyParams{}, exec.StreamOptions{Incremental: true, Options: streamOptions})
+	interrupted, err := pagingRunStream(ctx, t, s, streamPrepared, cql.EmptyParams{}, true, streamOptions)
 	if err != nil {
 		t.Fatal(err)
 	}

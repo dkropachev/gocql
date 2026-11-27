@@ -1125,6 +1125,7 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 type inlineSpeculation struct {
 	timer   *time.Timer
 	due     time.Time // when timer next starts an attempt, or zero
+	first   time.Time // when the page's first attempt started; see speculationDelay
 	winner  typedAttemptOutcome
 	mu      sync.Mutex
 	running bool // the first attempt is still waiting
@@ -1156,13 +1157,32 @@ func speculationOnly(request *InternalExecutionRequest) bool {
 }
 
 // speculationDelay returns the delay before the speculative attempt that
-// follows started attempts, if request speculates.
-func speculationDelay(request *InternalExecutionRequest, started int) (time.Duration, bool) {
+// follows started attempts, if request speculates. first holds when the
+// page's first attempt started; the call that follows that attempt, the
+// first call, records it.
+func (s *InternalSessionRuntime) speculationDelay(ctx context.Context, request *InternalExecutionRequest, started int, first *time.Time) (time.Duration, bool) {
 	if !request.isIdempotent() || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
 		return 0, false
 	}
 	perfAdd(2, 1)
-	delay, ok := request.options.InternalProfile.Speculation.Delay(started)
+	now := time.Now()
+	if first.IsZero() {
+		*first = now
+	}
+	deadline, _ := ctx.Deadline()
+	p50, p95, p99 := s.LatencyPercentiles()
+	delay, ok := request.options.InternalProfile.Speculation.Delay(retry.Speculation{
+		Context:     ctx,
+		Started:     started,
+		Elapsed:     now.Sub(*first),
+		Deadline:    deadline,
+		Keyspace:    request.routing.Keyspace,
+		Table:       request.routing.Table,
+		Consistency: request.routing.Consistency,
+		LatencyP50:  p50,
+		LatencyP95:  p95,
+		LatencyP99:  p99,
+	})
 	if !ok || delay < 0 {
 		return 0, false
 	}
@@ -1372,7 +1392,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			// only once the timer is stored.
 			spec.mu.Lock()
 			spec.running = true
-			if delay, ok := speculationDelay(request, startedCount); ok {
+			if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
 				spec.due = started.Add(delay)
 				spec.timer = time.AfterFunc(delay, func() {
 					spec.mu.Lock()
@@ -1382,7 +1402,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 					}
 					spec.due = time.Time{}
 					if launch(nil, consistency, true) == nil {
-						if delay, ok := speculationDelay(request, startedCount); ok {
+						if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
 							spec.due = time.Now().Add(delay)
 							spec.timer.Reset(delay)
 						}
@@ -1444,7 +1464,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			timer = nil
 		}
 		speculate = nil
-		delay, ok := speculationDelay(request, startedCount)
+		delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first)
 		if !ok {
 			return
 		}
@@ -1585,7 +1605,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			}
 			decision := retry.Decision{}
 			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
+				decision = policy.Decide(retry.Attempt{Context: ctx, Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
 			}
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {

@@ -70,10 +70,17 @@ consistency, page size, value and page state of the requests they send.
 
 ## Options
 
+Every entry point takes the one overrides type, `exec.CompiledOptions`, made
+once by `Session.CompileOptions`, which runs the dialect checks up front and
+chooses the compiled form the session's protocol uses. Two small types configure other
+things: `exec.PrepareOptions` the PREPARE request, and `exec.StreamOptions`
+a stream's receive mode.
+
 - Worker-owned: options are fixed when the worker is created, as the
-  `exec.Options` passed to `Prepared.Worker`, and its methods take none.
-- Shared: each call ends in `options ...exec.CompiledOptions`, made once by
-  `Session.CompileOptions`. The variadic is Go's form of an optional
+  `exec.CompiledOptions` passed to `Prepared.Worker` or the defaults of a
+  `With` view, and its methods take none. A stream worker's overrides are
+  the defaults of `PreparedStream.With`.
+- Shared: each call ends in `options ...exec.CompiledOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
   and uses the session defaults. At most one value is accepted; a second
   fails the call at once with a validation error. The type is
@@ -83,10 +90,9 @@ consistency, page size, value and page state of the requests they send.
   returns a view whose calls without options use given defaults instead of
   the session's; options passed to a call replace them whole. The view
   shares the preparation and its pool, so it is not a new row.
-- Throwaway: each call ends in `options ...exec.Options`, the same optional
-  parameter with at most one value. The call validates and resolves it: a
-  throwaway statement has no setup step to compile options in, and its path
-  is not optimised.
+- Throwaway: each call ends in `options ...exec.CompiledOptions`, the same
+  optional parameter with at most one value, resolved against the session
+  on the call.
 
 A new cell follows the options form of its row.
 
@@ -231,7 +237,7 @@ removes boilerplate from a common call without adding a way to execute.
   bind markers and no result columns, such as DDL. It is the
   throwaway none cell, `UnpreparedExec`, with `cql.Command(statement)` and
   `cql.EmptyParams{}` filled in, so it takes the throwaway row's
-  `...exec.Options`. Schema setup and occasional commands are most of the
+  `...exec.CompiledOptions`. Schema setup and occasional commands are most of the
   throwaway calls, and spelling the statement type and the empty parameters
   out in each one hid the CQL.
 

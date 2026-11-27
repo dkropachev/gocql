@@ -34,7 +34,11 @@ func ExampleFetch() {
 		Params:      cql.OneParam(cql.Int32Codec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 	}
-	result, err := session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true})
+	traced, err := session.CompileOptions(exec.Options{CQLTrace: true})
+	if err != nil {
+		log.Fatal(err)
+	}
+	result, err := session.UnpreparedExec(ctx, insert, 42, traced)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -67,7 +71,11 @@ func ExampleFetchAll() {
 		Params:      cql.OneParam(cql.Int32Codec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 	}
-	_, err = session.UnpreparedExec(ctx, insert, 42, exec.Options{CQLTrace: true, Consistency: cql.Some(cql.All)})
+	traced, err := session.CompileOptions(exec.Options{CQLTrace: true, Consistency: cql.Some(cql.All)})
+	if err != nil {
+		log.Fatal(err)
+	}
+	_, err = session.UnpreparedExec(ctx, insert, 42, traced)
 	failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 	if !ok {
 		return

@@ -11,12 +11,11 @@ import (
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
-	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func internalOptions(o exec.Options) implSession.Options {
 	v := implSession.Options{
-		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
+		Retry: o.Retry, Speculation: o.Speculation, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: o.Prefetch, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
@@ -34,10 +33,6 @@ func internalOptions(o exec.Options) implSession.Options {
 		v.Profile = &profile
 	}
 	return v
-}
-
-func internalStreamOptions(o exec.StreamOptions) implSession.StreamOptions {
-	return implSession.StreamOptions{Options: internalOptions(o.Options), Limits: implTransport.StreamLimits(o.Limits), Incremental: o.Incremental}
 }
 
 // tooManyPrepareOptions is the error of a call given more than one
@@ -67,15 +62,16 @@ func fixedWorkerTimestamp() error {
 	return &cql.ValidationError{Field: "Timestamp", Err: errors.New("a worker would give every write the same timestamp; pass it per call through Session.CompileOptions")}
 }
 
-// internalOptionList converts the optional exec.Options of a throwaway call; the
-// internal call rejects more than one.
-func internalOptionList(options []exec.Options) []implSession.Options {
+// internalOptionList converts the optional exec.CompiledOptions of a
+// throwaway call to the values it resolves for the session; the internal
+// call rejects more than one.
+func internalOptionList(options []exec.CompiledOptions) []implSession.Options {
 	if len(options) == 0 {
 		return nil
 	}
 	out := make([]implSession.Options, len(options))
 	for i, o := range options {
-		out[i] = internalOptions(o)
+		out[i] = implSession.CompiledOptions(o).Values()
 	}
 	return out
 }

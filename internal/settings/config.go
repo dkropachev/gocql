@@ -44,7 +44,10 @@ type Config struct {
 	TLS               *tls.Config
 	// TLSSource, when set, supplies TLS for every dial; TLS then holds its
 	// config at Build, for validation.
-	TLSSource      TLSSource
+	TLSSource TLSSource
+	// TLSIdentity, when set, chooses each TLS connection's SNI and
+	// verified name.
+	TLSIdentity    func(endpoint.DialTarget) endpoint.TLSIdentity
 	HostFilter     func(metadata.HostSnapshot) bool
 	ClientRoutes   *ClientRoutesOptions
 	DefaultProfile *Profile
@@ -78,6 +81,12 @@ type Config struct {
 	PreparedCacheSize                                 int
 	Port                                              uint16
 	NoDelay                                           bool
+	// TLSPort, when not zero, is the port TLS connections dial on every
+	// node instead of its CQL port.
+	TLSPort uint16
+	// TLSFallback lets a node that does not answer TLS be dialed in
+	// plaintext until it has once answered TLS.
+	TLSFallback bool
 	// ChosenSocketOptions are the socket options a setter chose. The others
 	// are applied best-effort.
 	ChosenSocketOptions connectivity.SocketOptions

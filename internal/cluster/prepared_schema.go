@@ -33,7 +33,7 @@ func (s *Core) InvalidatePreparedSchema(e event.Event) {
 	t := s.SchemaTracker()
 	keys := []schemafence.InternalPreparedDependencyKey{{InternalKind: 'a', InternalKeyspace: "", InternalName: ""}, {InternalKind: 'a', InternalKeyspace: e.Keyspace, InternalName: ""}}
 	switch e.ObjectKind {
-	case event.ObjectTable, "VIEW":
+	case event.ObjectTable, event.ObjectView:
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 'b', InternalKeyspace: e.Keyspace, InternalName: e.Object})
 	case event.ObjectType:
 		keys = append(keys, schemafence.InternalPreparedDependencyKey{InternalKind: 't', InternalKeyspace: e.Keyspace, InternalName: e.Object})

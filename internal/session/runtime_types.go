@@ -218,6 +218,9 @@ type InternalExecutionRequest struct {
 // isIdempotent reports whether r may run more than once: its options'
 // Idempotent when set, else whether its statement or its profile is.
 func (r *InternalExecutionRequest) isIdempotent() bool {
+	if r.options == nil { // refused before its options were resolved
+		return r.idempotent
+	}
 	if o := r.options.InternalOptions.Idempotent; o.Set {
 		return o.Value
 	}

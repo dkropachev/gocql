@@ -24,7 +24,7 @@ import (
 func TestPublicMethodDocumentation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Worker", "Prepared.One", "Worker.Close", "StreamWorker.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "exec.CompiledOptions.Values", "config.ConfigBuilder.WithDefaultProfile", "config.Profile.Builder", "cql.PageState.Token"} {
+	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Worker", "Prepared.One", "Worker.Close", "StreamWorker.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "exec.CompiledOptions.Values", "config.ConfigBuilder.WithDefaultProfile", "config.Profile.Builder", "cql.PageState.MarshalText"} {
 		t.Run(symbol, func(t *testing.T) {
 			path := "github.com/scylladb/gocql/v2." + symbol
 			if pkg, rest, ok := strings.Cut(symbol, "."); ok && pkg == strings.ToLower(pkg) {

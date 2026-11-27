@@ -398,7 +398,10 @@ func (c *Conn) InternalGetScyllaSupported() implEndpoint.ScyllaConnectionFeature
 	return c.InternalScyllaSupported
 }
 
-func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, host *implEndpoint.HostInfo, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
+// InternalTranslateHostAddresses translates the addresses the session dials
+// on host: its CQL port, its shard-aware ports and, when tlsPort is not zero,
+// that TLS port.
+func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, host *implEndpoint.HostInfo, tlsPort uint16, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
 	logger = logging.Or(logger)
 	port := host.Port()
 	if port < 1 || port > 65535 {
@@ -414,6 +417,13 @@ func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpo
 		CQL: addr,
 	}
 
+	if tlsPort != 0 {
+		addr, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, tlsPort), logger)
+		if err != nil {
+			return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("unable to translate tls cql address: %w", err)
+		}
+		resultedInfo.CQLTLS = addr
+	}
 	if port := peer.ShardAwarePort; port != 0 {
 		addr, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, port), logger)
 		if err != nil {

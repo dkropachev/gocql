@@ -98,7 +98,7 @@ func TestRouting(t *testing.T) {
 				handle := new(profile)
 				ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
 				var row cql.DynamicRow
-				_, queryErr := session.UnpreparedEach(ctx, hostIDStatement, cql.EmptyParams{}, &row, func(*cql.DynamicRow) error { return nil }, exec.Options{Profile: handle})
+				_, queryErr := session.UnpreparedEach(ctx, hostIDStatement, cql.EmptyParams{}, &row, func(*cql.DynamicRow) error { return nil }, bindOptions(session, exec.Options{Profile: handle}))
 				if ctx.Err() != nil {
 					t.Errorf("policy %d oneHost=%t hung when every host was down: %v", i, oneHost, queryErr)
 				}

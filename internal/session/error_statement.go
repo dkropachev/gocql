@@ -8,14 +8,20 @@ import (
 	"unicode/utf8"
 )
 
-// describeStatement adds request's statement to the ExecutionError in err
-// when the session reports statements in errors
+// describeStatement records request's resolved idempotence in the
+// ExecutionError in err, and adds its statement when the session reports
+// statements in errors
 // (ConfigBuilder.WithErrorStatementText): its CQL text cut to the configured
 // limit, and for a batch the statement count with the first statement. Bound
 // values are never added. An error that already names a statement keeps it.
 func (rt *InternalSessionRuntime) describeStatement(err error, request *InternalExecutionRequest) {
 	if request == nil {
 		return
+	}
+	if failure, ok := errors.AsType[*ExecutionError](err); ok && request.options != nil {
+		// A request refused before its options were resolved keeps what
+		// the resolved request recorded, if anything.
+		failure.Idempotent = request.isIdempotent()
 	}
 	var entries []batchEntry
 	if request.batch != nil {

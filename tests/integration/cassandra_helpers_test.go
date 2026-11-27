@@ -138,7 +138,7 @@ func cassandraUnpreparedAll[R any](t testing.TB, s *gocql.Session, stmt string, 
 	if _, err := s.UnpreparedEach(context.Background(), statement, cql.EmptyParams{}, &cur, func(row *R) error {
 		result = append(result, decoder.Clone(*row))
 		return nil
-	}, options); err != nil {
+	}, bindOptions(s, options)); err != nil {
 		t.Fatal(err)
 	}
 	return result

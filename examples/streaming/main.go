@@ -199,9 +199,11 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned := exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)}
-	options := exec.StreamOptions{Incremental: incremental, Options: pinned}
-	worker, err := prepared.Worker(options)
+	pinned, err := s.CompileOptions(exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)})
+	if err != nil {
+		return err
+	}
+	worker, err := prepared.With(pinned).Worker(exec.StreamOptions{Incremental: incremental})
 	if err != nil {
 		return err
 	}

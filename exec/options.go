@@ -10,7 +10,7 @@
 // (config.ConfigBuilder.WithDefaultProfile). Options.Profile, when set,
 // replaces that profile whole, and then each Options field that is set
 // overrides the matching field of the profile: a cql.Option whose Set is
-// true, a non-nil Retry, a non-zero PageSize, and a SerialConsistency other
+// true, a non-nil Retry or Speculation, a non-zero PageSize, and a SerialConsistency other
 // than SerialInherit. Idempotent, when set, overrides the statement's
 // cql.Statement.Idempotent and the profile's Idempotent.
 //
@@ -49,6 +49,11 @@ type Options struct {
 	// Retry replaces the profile's retry policy; nil keeps it. Use
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
+	// Speculation replaces the profile's speculation policy; nil keeps it.
+	// Use retry.NoSpeculation{} to disable speculation. Set it on a
+	// statement with Prepared.With to speculate only that statement's
+	// executions, or per call through Session.CompileOptions.
+	Speculation retry.SpeculationPolicy
 	// Observer observes the execution as well as the session's hooks
 	// (config.ConfigBuilder.WithObserver), joined after them as observe.Join
 	// joins them: each hook calls the session's first, then this one's, and
@@ -170,13 +175,15 @@ func (s SerialOverride) String() string {
 	}
 }
 
-// CompiledOptions is an immutable snapshot made by
-// gocql.Session.CompileOptions. Reuse it for recurring one-shot execution
-// settings; the zero value uses session defaults. Compiling validates
-// overrides, copies payloads and precomputes request settings. Reuse on another
-// session resolves the original overrides against that session's defaults
-// instead. CompiledOptions controls execution; PrepareOptions controls
-// statement preparation.
+// CompiledOptions is an immutable snapshot of execution overrides, made by
+// gocql.Session.CompileOptions; the session chooses its compiled form, which
+// may depend on its dialect and protocol. Every execution entry point takes
+// it. Reuse it for recurring execution settings; the zero value uses session
+// defaults. Compiling validates overrides, copies payloads and precomputes
+// request settings. Options compiled for another session resolve their
+// overrides against the executing session's defaults, and that session's
+// dialect checks them, at each execution. CompiledOptions controls
+// execution; PrepareOptions controls statement preparation.
 type CompiledOptions implSession.CompiledOptions
 
 // Values returns an independent copy of the original overrides for deriving
@@ -219,9 +226,10 @@ type PrepareOptions struct {
 // reads the current response from its socket only as the decoder needs it,
 // never in the background, so a slow consumer keeps its reserved connection
 // and lets the transport's flow control hold back the server.
+//
+// Execution overrides come from the CompiledOptions of
+// gocql.PreparedStream.With, as for a prepared statement.
 type StreamOptions struct {
-	// Options holds the execution overrides.
-	Options Options
 	// Limits bounds an incremental stream's receive scratch.
 	Limits StreamLimits
 	// Incremental decodes the response as it arrives on a reserved
@@ -253,7 +261,7 @@ type StreamLimits struct {
 
 func publicOptions(o implSession.Options) Options {
 	v := Options{
-		Retry: o.Retry, Observer: o.Observer, Keyspace: o.Keyspace,
+		Retry: o.Retry, Speculation: o.Speculation, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: o.Prefetch, PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,

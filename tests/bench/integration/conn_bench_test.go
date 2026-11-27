@@ -97,7 +97,7 @@ func BenchmarkConn(b *testing.B) {
 		b.ResetTimer()
 		b.RunParallel(func(pb *testing.PB) {
 			worker := seed.Add(1)
-			query, err := prepared.Worker(exec.Options{})
+			query, err := prepared.Worker()
 			if err != nil {
 				b.Error(err)
 				return

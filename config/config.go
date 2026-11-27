@@ -122,6 +122,19 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			return Config{}, &cql.ValidationError{Field: "WithTLSSource", Err: errors.New("source returned no config")}
 		}
 	}
+	if settings.TLS == nil {
+		for _, set := range []struct {
+			name string
+			on   bool
+		}{{"WithTLSIdentity", settings.TLSIdentity != nil}, {"WithTLSPort", settings.TLSPort != 0}, {"WithTLSFallback", settings.TLSFallback}} {
+			if set.on {
+				return Config{}, &cql.ValidationError{Field: set.name, Err: errors.New("requires WithTLS or WithTLSSource")}
+			}
+		}
+	}
+	if settings.TLSPort != 0 && settings.ClientRoutes != nil {
+		return Config{}, &cql.ValidationError{Field: "WithTLSPort", Err: errors.New("client routes choose their own ports")}
+	}
 	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
 		settings.Pool.AdvancedShardAwareness.Enabled = false
 	}
@@ -227,7 +240,7 @@ func (b *ConfigBuilder) WithAuth(provider auth.Provider) *ConfigBuilder {
 
 // WithTLS encrypts every connection with a copy of config, taken now. Unless
 // config skips verification or names a server, each connection verifies the
-// node's IP address. A nil config selects plaintext. It replaces
+// node's IP address; WithTLSIdentity changes the names per node. A nil config selects plaintext. It replaces
 // WithTLSSource. Default plaintext.
 func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
 	if config == nil {
@@ -245,6 +258,48 @@ func (b *ConfigBuilder) WithTLS(config *tls.Config) *ConfigBuilder {
 // A nil source selects plaintext. It replaces WithTLS.
 func (b *ConfigBuilder) WithTLSSource(source endpoint.TLSSource) *ConfigBuilder {
 	b.settings.TLSSource = source
+	return b
+}
+
+// WithTLSIdentity sets the function that chooses each TLS connection's
+// identity: the SNI it sends, the name the node's certificate must match, a
+// chain-only check, and a check of its own. The driver calls it once per
+// dial, with the target being dialed, on the dialing goroutine, so it must
+// not block. Target.Host.HostID is zero for a contact point dialed before the
+// driver has learned the node's identity: return an identity that needs only
+// its address then. The certificates, CAs and cipher settings stay those of
+// the session's single TLS configuration. It requires WithTLS or
+// WithTLSSource. Nil restores the defaults, which WithTLS describes.
+func (b *ConfigBuilder) WithTLSIdentity(identity func(target endpoint.DialTarget) endpoint.TLSIdentity) *ConfigBuilder {
+	b.settings.TLSIdentity = identity
+	return b
+}
+
+// WithTLSPort dials TLS connections on port of every node instead of its CQL
+// port: ScyllaDB's and Cassandra's native_transport_port_ssl, which serves
+// TLS beside the plaintext port. The address translator translates it as it
+// does the CQL port. Shard-aware TLS connections keep the port each node
+// advertises. It requires WithTLS or WithTLSSource; client routes choose
+// their own ports and reject it. Zero, the default, dials the CQL port.
+func (b *ConfigBuilder) WithTLSPort(port uint16) *ConfigBuilder {
+	b.settings.TLSPort = port
+	return b
+}
+
+// WithTLSFallback(true) lets a session reach a cluster while TLS is being
+// enabled on it, node by node. Each dial tries TLS first, on WithTLSPort's
+// port when set. When the node does not speak TLS there (it answers with
+// something other than TLS, closes the connection during the handshake, or
+// refuses the TLS port), the dial falls back to plaintext on the CQL port.
+// A certificate that fails verification never falls back. The fallback is
+// one-way: once a node has answered TLS it is never dialed in plaintext
+// again, and once every node of the cluster has, the session stops falling
+// back at all. Plaintext connections opened earlier stay until they close.
+// An attacker on the network can still downgrade a node that has not yet
+// answered TLS, so turn it off once the rollout is done. It requires WithTLS
+// or WithTLSSource. Default false: a TLS session never dials in plaintext.
+func (b *ConfigBuilder) WithTLSFallback(fallback bool) *ConfigBuilder {
+	b.settings.TLSFallback = fallback
 	return b
 }
 

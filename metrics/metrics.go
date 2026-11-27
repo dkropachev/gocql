@@ -65,7 +65,7 @@ type Snapshot struct {
 	//
 	// They are meant for decisions that follow the cluster's current
 	// latency, such as a retry.SpeculationPolicy that waits LatencyP95
-	// before speculating, and for a quick look at a live session. They are
+	// before speculating (retry.Speculation carries them), and for a quick look at a live session. They are
 	// not a latency histogram: a sample of ten seconds of successes cannot
 	// be summed across sessions or over time. To chart latency, record
 	// each request's latency in a histogram of your own from an

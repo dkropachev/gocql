@@ -211,7 +211,7 @@ func TestApplyBatch(t *testing.T) {
 // cqlerr.ErrBusy.
 func TestRowStreamAll(t *testing.T) {
 	f := newLifetimeFixture(t)
-	w, err := f.ps.Worker(exec.StreamOptions{Options: gridOptions})
+	w, err := f.ps.With(mustCompileOptions(gridOptions)).Worker()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -365,7 +365,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	defer func() { _ = s.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.Options{Consistency: cql.Some(cql.All)})
+	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", mustCompileOptions(exec.Options{Consistency: cql.Some(cql.All)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +375,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	if sent := srv.sent(); len(sent) != 1 || sent[0].consistency != cql.All || sent[0].batch {
 		t.Fatalf("sent %+v, want one QUERY at ALL", sent)
 	}
-	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.Options{}, exec.Options{}); !errors.As(err, new(*cql.ValidationError)) {
+	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", mustCompileOptions(exec.Options{}), mustCompileOptions(exec.Options{})); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("UnpreparedCommand with two options = %v, want a cql.ValidationError", err)
 	}
 	if len(srv.sent()) != 1 {

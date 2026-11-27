@@ -45,7 +45,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *cql.DynamicRow) error {
 			rows = append(rows, r.Clone())
 			return nil
-		}, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.HostID}, PageSize: cql.Unpaged})
+		}, bindOptions(s, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.HostID}, PageSize: cql.Unpaged}))
 		if err != nil {
 			t.Fatal(err)
 		}

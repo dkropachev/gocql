@@ -16,7 +16,7 @@
 //
 // KindOf groups any error by what a caller can do about it (timeout,
 // overloaded, invalid, connection, ...), and Kind.Transient reports whether
-// trying again can help; Retryable(err, idempotent) combines the two
+// trying again can help; Retryable(err) combines the two
 // answers for a retry loop. ExecutionError.Attempts lists every failed attempt
 // with the host it went to.
 //

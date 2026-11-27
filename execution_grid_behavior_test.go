@@ -201,7 +201,11 @@ func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[i
 	if err != nil {
 		return nil, err
 	}
-	return p.Worker(options)
+	o, err := s.CompileOptions(options)
+	if err != nil {
+		return nil, err
+	}
+	return p.Worker(o)
 }
 
 // gridShared prepares statement and compiles options for it.
@@ -222,16 +226,32 @@ var gridModes = []gridMode{
 	{
 		name: "Throwaway",
 		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o exec.Options) (cql.Result, error) {
-			return s.UnpreparedExec(ctx, st, gridKey, o)
+			c, err := s.CompileOptions(o)
+			if err != nil {
+				return cql.Result{}, err
+			}
+			return s.UnpreparedExec(ctx, st, gridKey, c)
 		},
 		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) (bool, cql.Result, error) {
-			return s.UnpreparedOne(ctx, st, gridKey, dst, o)
+			c, err := s.CompileOptions(o)
+			if err != nil {
+				return false, cql.Result{}, err
+			}
+			return s.UnpreparedOne(ctx, st, gridKey, dst, c)
 		},
 		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o exec.Options) (cql.Result, error) {
-			return s.UnpreparedEach(ctx, st, gridKey, dst, fn, o)
+			c, err := s.CompileOptions(o)
+			if err != nil {
+				return cql.Result{}, err
+			}
+			return s.UnpreparedEach(ctx, st, gridKey, dst, fn, c)
 		},
 		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) iter.Seq2[*[]byte, error] {
-			return s.UnpreparedAll(ctx, st, gridKey, dst, o)
+			c, err := s.CompileOptions(o)
+			if err != nil {
+				return gridSeqError[[]byte](err)
+			}
+			return s.UnpreparedAll(ctx, st, gridKey, dst, c)
 		},
 	},
 	{
@@ -784,7 +804,7 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	o, c := exec.Options{}, exec.CompiledOptions{}
+	c := exec.CompiledOptions{}
 	var dst []byte
 	nop := func(*[]byte) error { return nil }
 	firstErr := func(seq iter.Seq2[*[]byte, error]) error {
@@ -792,10 +812,10 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 		return err
 	}
 	for name, err := range map[string]error{
-		"Session.UnpreparedExec": gridErr2(s.UnpreparedExec(ctx, upd, gridKey, o, o)),
-		"Session.UnpreparedOne":  gridErr3(s.UnpreparedOne(ctx, sel, gridKey, &dst, o, o)),
-		"Session.UnpreparedEach": gridErr2(s.UnpreparedEach(ctx, sel, gridKey, &dst, nop, o, o)),
-		"Session.UnpreparedAll":  firstErr(s.UnpreparedAll(ctx, sel, gridKey, &dst, o, o)),
+		"Session.UnpreparedExec": gridErr2(s.UnpreparedExec(ctx, upd, gridKey, c, c)),
+		"Session.UnpreparedOne":  gridErr3(s.UnpreparedOne(ctx, sel, gridKey, &dst, c, c)),
+		"Session.UnpreparedEach": gridErr2(s.UnpreparedEach(ctx, sel, gridKey, &dst, nop, c, c)),
+		"Session.UnpreparedAll":  firstErr(s.UnpreparedAll(ctx, sel, gridKey, &dst, c, c)),
 		"Prepared.Exec":          gridErr2(pu.Exec(ctx, gridKey, c, c)),
 		"Prepared.One":           gridErr3(p.One(ctx, gridKey, &dst, c, c)),
 		"Prepared.Each":          gridErr2(p.Each(ctx, gridKey, &dst, nop, c, c)),

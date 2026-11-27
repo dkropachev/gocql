@@ -44,7 +44,7 @@
 // argument; each handle holds a pooled query until it is closed.
 //
 // Prepared.Worker creates a reusable execution owned by one goroutine, a
-// Worker. It resolves its exec.Options once and saves the pool hand-off of
+// Worker. It resolves its exec.CompiledOptions once and saves the pool hand-off of
 // the one-shot calls (about 2 to 4 percent of client CPU at high
 // concurrency), and has the same calls. A call while a Rows, Page or
 // RowStream of the worker is open, or while another goroutine's call runs,

@@ -28,8 +28,74 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLS(tlsConfig).Build()
 Standard verification remains enabled: unless the config sets `ServerName` or
 skips verification, each connection verifies the node's IP address. One
 configuration serves every node; customize checks with `VerifyConnection`.
-Use `ClientSessionCache` for ticket resumption. TLS failure never downgrades to
-plaintext.
+Use `ClientSessionCache` for ticket resumption; the driver keys it by node,
+so nodes that share an SNI never resume each other's sessions. TLS failure
+never downgrades to plaintext unless `WithTLSFallback` allows it (see below).
+
+## Per-node identity
+
+Certificates, CAs and cipher settings never vary by node, but the names a
+handshake uses can. `WithTLSIdentity` takes a function the driver calls on
+every dial with the `endpoint.DialTarget`, and returns the
+`endpoint.TLSIdentity` of that connection:
+
+- `ServerName` is the SNI sent, such as the name an SNI proxy routes by.
+- `VerifyName` is the name the certificate must match when it differs from
+  the SNI, such as a node dialed by IP whose certificate names its DNS host.
+- `ChainOnly` verifies the chain against `RootCAs` but no name, for nodes
+  dialed by addresses their certificates do not carry. Trust only a private
+  CA with it, or check the identity in `Verify`.
+- `Verify` runs after the chain and name checks with the
+  `tls.ConnectionState`, whose `VerifiedChains` is filled: pin a key, require
+  the node's host ID or IP in the certificate, or accept only one
+  datacenter's CA. An error fails that connection only.
+
+`Target.Host.HostID` is zero for a contact point the driver dials before it
+learns the node's identity, so return an identity that needs only its address
+then.
+
+<!-- snippet
+var roots *x509.CertPool
+-->
+```go
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
+	WithTLS(&tls.Config{RootCAs: roots, MinVersion: tls.VersionTLS13}).
+	WithTLSIdentity(func(target endpoint.DialTarget) endpoint.TLSIdentity {
+		if target.Host.HostID.IsZero() {
+			return endpoint.TLSIdentity{ChainOnly: true} // a contact point
+		}
+		return endpoint.TLSIdentity{
+			ServerName: target.Host.HostID.String() + ".nodes.example.com",
+			VerifyName: "*.nodes.example.com",
+		}
+	}).
+	Build()
+```
+
+## Enabling TLS on a running cluster
+
+Nodes switch to TLS one at a time, so for a while some answer only
+plaintext. `WithTLSPort` dials TLS on a port of its own on every node, the
+`native_transport_port_ssl` that serves TLS beside the plaintext port;
+shard-aware TLS connections keep the port each node advertises.
+`WithTLSFallback(true)` makes each dial try TLS first and, when the node does
+not speak TLS there (it answers something other than TLS, closes the
+connection during the handshake, or refuses the TLS port), dial plaintext on
+its CQL port. A certificate that fails verification never falls back.
+
+The fallback is one-way: once a node has answered TLS, it is never dialed in
+plaintext again, and once every node has, the session stops falling back.
+Plaintext connections opened earlier stay until they close. Someone on the
+network can still force plaintext to a node that has not yet answered TLS, so
+turn the fallback off once the rollout is done.
+
+```go
+cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
+	WithTLS(&tls.Config{MinVersion: tls.VersionTLS13}).
+	WithTLSPort(9142).
+	WithTLSFallback(true).
+	Build()
+```
 
 Raw dialing receives the selected native/shard endpoint before TLS wrapping.
 Per-host hooks honor cancellation and preserve shard/source selection. Custom

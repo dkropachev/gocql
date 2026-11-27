@@ -32,7 +32,7 @@ func (nopObserver) StartAttempt(context.Context, observe.AttemptStart) func(rout
 // constantSpeculation starts each speculative attempt delay after the last.
 type constantSpeculation struct{ delay time.Duration }
 
-func (p constantSpeculation) Delay(int) (time.Duration, bool) { return p.delay, true }
+func (p constantSpeculation) Delay(retry.Speculation) (time.Duration, bool) { return p.delay, true }
 
 // delayRetry retries every failure on the same host after delay.
 type delayRetry struct{ delay time.Duration }

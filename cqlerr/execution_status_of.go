@@ -162,13 +162,18 @@ type ExecutionError struct {
 	// BatchSize is the number of statements of a batch whose first
 	// statement Statement holds, and zero otherwise.
 	BatchSize int
-	status    ExecutionStatus
+	// Idempotent reports that the request was idempotent as the driver
+	// resolved it: exec.Options.Idempotent when set, else the statement's
+	// or the profile's. Retryable reads it.
+	Idempotent bool
+	status     ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request that stopped with err
 // after attempts, whose ExecutionStatus reports status. Tests of code that
 // handles the driver's errors, such as a retry.Policy or a caller's
-// fallback, can use it; set Statement, Result and BatchSize directly.
+// fallback, can use it; set Statement, Result, BatchSize and Idempotent
+// directly.
 func NewExecutionError(err error, status ExecutionStatus, attempts ...AttemptFailure) *ExecutionError {
 	return &ExecutionError{Err: err, status: status, Attempts: attempts}
 }

@@ -51,7 +51,7 @@ import (
 
 type countSpeculation struct{ calls atomic.Int32 }
 
-func (p *countSpeculation) Delay(int) (time.Duration, bool) {
+func (p *countSpeculation) Delay(retry.Speculation) (time.Duration, bool) {
 	p.calls.Add(1)
 	return 0, false
 }

@@ -9,10 +9,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/cqltype"
 )
 
-// TestPageStateResumesOnAnotherSession checks that a page state's token,
-// carried as bytes the way an application would hand it to a client and
+// TestPageStateResumesOnAnotherSession checks that a page state,
+// carried as a text cursor the way an application would hand it to a client and
 // back, resumes the same statement on another session: the second session
 // sends the token unchanged and returns the next page.
 func TestPageStateResumesOnAnotherSession(t *testing.T) {
@@ -47,8 +48,16 @@ func TestPageStateResumesOnAnotherSession(t *testing.T) {
 	if rows != "ab" || !state.More() {
 		t.Fatalf("first page %q, more %v", rows, state.More())
 	}
-	token := state.Token()
-	rows, state, sent := run(cql.PageStateFromToken(token))
+	token := cqltype.PageToken(state)
+	cursor, err := state.MarshalText()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resumed, err := cql.ParsePageState(string(cursor))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, state, sent := run(resumed)
 	if rows != "c" || !state.Complete() {
 		t.Fatalf("resumed page %q, complete %v", rows, state.Complete())
 	}

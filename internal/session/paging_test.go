@@ -39,7 +39,7 @@ func TestPaging(t *testing.T) {
 	t.Run("History", func(t *testing.T) {
 		t.Run("CyclesLimitsAndTokenIdentity", func(t *testing.T) {
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 4}
-			a, b := cql.PageStateFromToken([]byte("a")), cql.PageStateFromToken([]byte("b"))
+			a, b := cqltype.PageStateOwned([]byte("a")), cqltype.PageStateOwned([]byte("b"))
 			if h.InternalAdd(a) != nil || h.InternalAdd(b) != nil || !errors.Is(h.InternalAdd(a), cqlerr.ErrPagingNoProgress) {
 				t.Fatal("nonconsecutive cycle")
 			}
@@ -56,10 +56,10 @@ func TestPaging(t *testing.T) {
 			if !found {
 				t.Fatal("history copied payload")
 			}
-			if h.InternalAdd(cql.PageStateFromToken(nil)) != nil || !errors.Is(h.InternalAdd(cql.PageStateFromToken([]byte{})), cqlerr.ErrPagingNoProgress) {
+			if h.InternalAdd(cqltype.PageStateOwned([]byte{})) != nil || !errors.Is(h.InternalAdd(cqltype.PageStateOwned([]byte{})), cqlerr.ErrPagingNoProgress) {
 				t.Fatal("empty cycle")
 			}
-			if !errors.Is(h.InternalAdd(cql.PageStateFromToken([]byte("long"))), cqlerr.ErrPagingStateLimit) || h.InternalCount != 3 {
+			if !errors.Is(h.InternalAdd(cqltype.PageStateOwned([]byte("long"))), cqlerr.ErrPagingStateLimit) || h.InternalCount != 3 {
 				t.Fatal("byte limit")
 			}
 			h = implPaging.InternalPagingHistory{InternalMaxCount: 1, InternalMaxBytes: 100}
@@ -69,7 +69,7 @@ func TestPaging(t *testing.T) {
 		})
 
 		t.Run("HashCollisionComparesFullBytes", func(t *testing.T) {
-			a, b := cql.PageStateFromToken([]byte("a")), cql.PageStateFromToken([]byte("b"))
+			a, b := cqltype.PageStateOwned([]byte("a")), cqltype.PageStateOwned([]byte("b"))
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 8}
 			_ = h.InternalAdd(b)
 			h.InternalSpill()
@@ -91,7 +91,7 @@ func TestPaging(t *testing.T) {
 		// The inline history and its spill into the hashed map detect the same
 		// repeats and enforce the same limits on either side of the spill.
 		t.Run("InlineSpill", func(t *testing.T) {
-			token := func(i int) cql.PageState { return cql.PageStateFromToken([]byte{byte(i), 0xff}) }
+			token := func(i int) cql.PageState { return cqltype.PageStateOwned([]byte{byte(i), 0xff}) }
 			inline := new([paging.InternalInlineHistory]cql.PageState)
 			h := implPaging.InternalPagingHistory{InternalMaxCount: 100, InternalMaxBytes: 1000, InternalInline: inline}
 			for i := 0; i < 12; i++ {
@@ -489,7 +489,7 @@ func TestPaging(t *testing.T) {
 			defer cancel()
 			bound := runtimeQuery(t)
 			defer bound.Close()
-			if page, err := RunPage(ctx, s, bound, cql.PageStateFromToken([]byte("12345")), 0, CompiledOptions{}); !errors.Is(err, cqlerr.ErrPagingStateLimit) {
+			if page, err := RunPage(ctx, s, bound, cqltype.PageStateOwned([]byte("12345")), 0, CompiledOptions{}); !errors.Is(err, cqlerr.ErrPagingStateLimit) {
 				if page != nil {
 					page.Close()
 				}
@@ -498,7 +498,7 @@ func TestPaging(t *testing.T) {
 			if n := conns[0].InternalStreams.InUse(); n != 0 {
 				t.Fatalf("%d streams in use after a refused token", n)
 			}
-			page, err := RunPage(ctx, s, bound, cql.PageStateFromToken([]byte("1234")), 0, CompiledOptions{})
+			page, err := RunPage(ctx, s, bound, cqltype.PageStateOwned([]byte("1234")), 0, CompiledOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}

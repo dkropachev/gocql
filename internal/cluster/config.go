@@ -97,6 +97,21 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 	hostDialer := &transport.InternalV2TLSHostDialer{InternalConfig: config.Connectivity()}
 	legacy.HostDialer = hostDialer
 	var typedSession *Core
+	if config.TLSFallback {
+		hostDialer.InternalKnownHosts = func() []cql.UUID {
+			if typedSession == nil || typedSession.privateStorage.InternalHostSource == nil {
+				return nil
+			}
+			hosts := typedSession.privateStorage.InternalHostSource.InternalGetHostsList()
+			ids := make([]cql.UUID, 0, len(hosts))
+			for _, host := range hosts {
+				if id := implEndpoint.InternalHostInfoHostUUID(host); !id.IsZero() {
+					ids = append(ids, id)
+				}
+			}
+			return ids
+		}
+	}
 	if path, _ := config.UnixContact(); path != "" {
 		hostDialer.InternalUnixHostID = func() cql.UUID {
 			if typedSession != nil && typedSession.privateStorage.InternalControl != nil {

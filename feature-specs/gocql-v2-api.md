@@ -712,7 +712,7 @@ owns its type:
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
 | `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
 | `config.LoadTLSFiles(*tls.Config, config.TLSFiles) (*tls.Config, error)` | a TLS configuration loaded from files once, for `WithTLS` |
-| `cql.PageStateFromToken([]byte) cql.PageState` | a continuation from a saved token; `PageState` fields are private |
+| `cql.ParsePageState(string) (cql.PageState, error)` | a state from a `MarshalText` cursor, start and completion included; `PageState` fields are private |
 
 Package `cql` also exports `func StartPage() PageState` (the zero `PageState`);
 the root package exports `var StopIteration` (see below).
@@ -783,12 +783,12 @@ func (p *Prepared[P, R]) Routing(P, ...exec.CompiledOptions) (routing.Info, erro
 func (p *Prepared[P, R]) With(exec.CompiledOptions) *Prepared[P, R] // a view with its own defaults, sharing the preparation and pool
 
 // Worker-owned reusable executions.
-func (p *Prepared[P, R]) Worker(...exec.Options) (*Worker[P, R], error) // at most one
-func (s *Session) UnpreparedCommand(context.Context, string, ...exec.Options) (Result, error) // UnpreparedExec of cql.Command
-func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.Options) (Result, error)
-func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) (bool, Result, error)
-func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.Options) (Result, error)
-func (s *Session) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.Options) iter.Seq2[*R, error]
+func (p *Prepared[P, R]) Worker(...exec.CompiledOptions) (*Worker[P, R], error) // at most one; none or zero uses With's defaults
+func (s *Session) UnpreparedCommand(context.Context, string, ...exec.CompiledOptions) (Result, error) // UnpreparedExec of cql.Command
+func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.CompiledOptions) (Result, error)
+func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.CompiledOptions) (bool, Result, error)
+func (s *Session) UnpreparedEach[P, R any](context.Context, cql.Statement[P, R], P, *R, func(*R) error, ...exec.CompiledOptions) (Result, error)
+func (s *Session) UnpreparedAll[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.CompiledOptions) iter.Seq2[*R, error]
 func (s *Session) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P) error
 func (w *Worker[P, R]) Exec(context.Context, P) (Result, error)
 func (w *Worker[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
@@ -812,7 +812,7 @@ session registers that query while the handle is open, so Session.Close stops
 the handle, and a handle dropped without Close releases its query once the
 garbage collector finds it. A Worker skips the pool hand-off (about
 2 to 4 percent of client CPU at 64 workers on the loopback benchmark) and
-resolves its exec.Options once; it keeps the same calls for workers that run one
+resolves its exec.CompiledOptions once; it keeps the same calls for workers that run one
 statement repeatedly.
 
 All is the range-over-func form of Each: it yields dst for every row across
@@ -828,8 +828,8 @@ Each lends borrowed fields only during its callback. Custom row/value decoders
 fall back to their recursive Clone contract when One detaches results.
 Session.UnpreparedExec, UnpreparedOne, UnpreparedEach and UnpreparedAll provide occasional typed
 CQL text execution without a caller-owned query, and UnpreparedAddToBatch
-appends an unprepared statement to a batch. They take at most one plain
-exec.Options and validate it during the call. Their cleanup stops admission
+appends an unprepared statement to a batch. They take at most one
+exec.CompiledOptions, resolved against the session on the call. Their cleanup stops admission
 on every return and keeps any remaining drain registered with the session.
 
 Input is copied during execution admission,
@@ -938,10 +938,9 @@ func (l *PageLease) Close()
 // package cql
 type PageState struct { /* start / more / complete, opaque owned token */ }
 func StartPage() PageState // the zero PageState
-func PageStateFromToken([]byte) PageState
+func ParsePageState(string) (PageState, error) // decodes MarshalText; empty is the start
 func (p PageState) More() bool
 func (p PageState) Complete() bool
-func (p PageState) Token() []byte
 func (p PageState) MarshalBinary() ([]byte, error)  // empty for the start; else kind byte, then a continuation's token
 func (p *PageState) UnmarshalBinary([]byte) error
 func (p PageState) MarshalText() ([]byte, error)    // unpadded URL-safe base64 of the binary form
@@ -1040,24 +1039,21 @@ cqlerr.ErrPagingNoProgress before another fetch of A. Token equality checks full
 a hash alone is insufficient. Use a hash-indexed history with full-byte collision
 checks, giving expected O(token bytes) insertion/lookup rather than scanning all
 prior states on every page. Retain one immutable owned token representation for
-history, next-page sending and PageState; internal use never calls the public
-copying Token() accessor. Count the history entry/index storage under the count
-budget and token bytes under the byte budget. Explicit Token() calls still copy.
+history, next-page sending and PageState. Count the history entry/index storage under the count
+budget and token bytes under the byte budget.
 Retained history is bounded by ConfigBuilder.WithMaxPagingStates (default
 65,536) and WithMaxPagingStateSize (default 16 MiB);
 exhausting either returns terminal cqlerr.ErrPagingStateLimit before storing/fetching
 the next state. Both budgets must be positive. Manual RunPage keeps no
 cross-call history. RunPage returns an empty page and its continuation as-is.
 PageState distinguishes an absent start token, present empty continuation, and
-completion. Tokens returned by State/Token remain available after page closure;
-Token returns an explicit owned copy of the server token, not a serialized state
-tag. The zero PageState and StartPage() mean start. PageStateFromToken always
-constructs a continuation, including for nil and empty input, and copies its
-argument. Token is nil for start and complete; use More/Complete to distinguish
-them. A continuation with zero token bytes still has More()==true. Complete is
+completion. State remains available after page closure. The raw server token
+is not exported, because it alone cannot tell start from completion; the
+MarshalBinary/MarshalText forms and ParsePageState carry the whole state. The
+zero PageState and StartPage() mean start; use More/Complete to distinguish
+the others. A continuation with zero token bytes still has More()==true. Complete is
 output-only: passing it to RunPage returns cqlerr.ErrPagingComplete before
-admission/I/O. This continuation-only import API does not round-trip start or
-complete through Token. The page size cql.Unpaged (math.MaxInt32) resolves to
+admission/I/O. The page size cql.Unpaged (math.MaxInt32) resolves to
 a request without a page size and rejects an explicit nonzero prefetch. Exec drains and
 closes all rows and fails if result columns exist; conditional writes use
 CASRows and consume every row, including multi-row conditional batches. CASRows
@@ -1085,6 +1081,7 @@ func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
 func (p *PreparedStream[P, R]) Worker(...exec.StreamOptions) (*StreamWorker[P, R], error) // at most one
+func (p *PreparedStream[P, R]) With(exec.CompiledOptions) *PreparedStream[P, R] // a view whose workers use these overrides
 func (w *StreamWorker[P, R]) Run(context.Context, P) (*RowStream[R], error)
 func (w *StreamWorker[P, R]) Close()
 func (w *StreamWorker[P, R]) Wait(context.Context) error
@@ -1098,9 +1095,8 @@ func (s *RowStream[R]) Result() Result // FetchedRows counts delivered rows
 func (s *RowStream[R]) Progress() StreamProgress
 
 // package exec
-type StreamOptions struct {
+type StreamOptions struct { // overrides come from PreparedStream.With
     Incremental bool
-    Options Options
     Limits StreamLimits
 }
 type StreamLimits struct {
@@ -1355,13 +1351,15 @@ also interrupts active streams; already written caller output remains valid.
 ## Options, profiles, batches and results
 
 ```go
-// exec.Options are plain values; the zero exec.Options uses the session default
-// profile. Worker constructors take exec.Options and validate, resolve and encode
-// them for their session once. One-shot executions (Prepared.Exec/One/Each,
-// Session.ExecBatch, Session.RunConditionalBatch) take exec.CompiledOptions: exec.Options compiled by
-// Session.CompileOptions for one session's default profile and keyspace. On
-// another session, exec.CompiledOptions are resolved again for that session on each
-// execution. The zero exec.CompiledOptions uses the executing session's default profile.
+// exec.Options are plain values, compiled once into exec.CompiledOptions, the
+// one overrides type every execution entry point takes: prepared and
+// unprepared calls, batches, Prepared.Worker, and PreparedStream.With.
+// Session.CompileOptions is the only constructor: it runs the dialect checks
+// up front, resolves the session's default profile and keyspace once, and
+// chooses the compiled form the session's protocol uses, so a later protocol
+// can compile differently. On another session, exec.CompiledOptions are resolved again
+// for that session on each execution. The zero exec.CompiledOptions uses the
+// executing session's default profile.
 func (s *Session) CompileOptions(exec.Options) (exec.CompiledOptions, error)
 
 // package exec
@@ -1387,6 +1385,7 @@ type Options struct {
     ShardID cql.Option[uint32]                    // strict unless AnyShardFallback
     AnyShardFallback bool                         // requires ShardID: may use another shard of HostID
     Retry retry.Policy                            // nil inherits; retry.Never{} disables
+    Speculation retry.SpeculationPolicy           // nil inherits; retry.NoSpeculation{} disables
     Observer observe.Hooks                        // joined after the session's hooks
     NoSessionObserver bool                        // leave the session's observer out
 }
@@ -1564,8 +1563,15 @@ type AttemptStart struct {
     Started time.Time
     Speculative bool
 }
-type SpeculationPolicy interface { Delay(started int) (time.Duration, bool) }
-type SpeculationPolicyFunc func(started int) (time.Duration, bool)
+type SpeculationPolicy interface { Delay(Speculation) (time.Duration, bool) }
+type SpeculationPolicyFunc func(Speculation) (time.Duration, bool)
+type NoSpeculation struct{} // for exec.Options.Speculation: disables it
+type Speculation struct {
+    Context context.Context // the execution's; carries the caller's values
+    Started int; Elapsed time.Duration; Deadline time.Time
+    Keyspace, Table string; Consistency cql.Consistency
+    LatencyP50, LatencyP95, LatencyP99 time.Duration
+}
 type Hooks struct { // a nil hook is skipped; later hooks are new fields
     Request func(context.Context, RequestStart) (context.Context, func(RequestEvent))
     Attempt func(context.Context, AttemptStart) func(routing.AttemptEvent)
@@ -1604,6 +1610,7 @@ package retry
 type Action uint8
 const (Stop Action = iota; Same; Next)
 type Attempt struct {
+    Context context.Context // the execution's; carries the caller's values
     Err error
     Attempt int // 1-based
     Idempotent bool
@@ -1818,8 +1825,8 @@ type Event struct {
     Generation uint64
     Address netip.AddrPort
     HostID cql.UUID // Topology, Status, Pool and Control; REMOVED_NODE from the previous snapshot
-    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ChangeConnected (Pool), ...
-    ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ...
+    Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ChangePoolUp and ChangePoolDown (Pool), ChangeRoutesUpdated (ClientRoute), ...
+    ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ObjectView, ...
     Keyspace, Object string
     ArgumentTypes []string  // function/aggregate argument types
     ConnectionIDs []string  // ClientRoute
@@ -1999,6 +2006,9 @@ func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
 func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
+func (*ConfigBuilder) WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity) *ConfigBuilder
+func (*ConfigBuilder) WithTLSPort(uint16) *ConfigBuilder        // TLS on its own port (native_transport_port_ssl)
+func (*ConfigBuilder) WithTLSFallback(bool) *ConfigBuilder      // one-way plaintext fallback while enabling TLS
 func (*ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder // replaces all; none removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
@@ -2026,7 +2036,14 @@ options, address translation/filtering/client routes, startup identity and
 configuration reporting, metadata scope/events/agreement,
 profiles/retry/speculation, observers/logger and timestamp generation. The
 native protocol version is not a setting: it comes from the session's dialect. TLS uses Go crypto/tls,
-validates host/CA by default, and never downgrades after a TLS failure. Each
+validates host/CA by default, and never downgrades after a TLS failure unless
+`WithTLSFallback(true)` allows a one-way fallback for nodes that do not speak
+TLS yet: never after a verification failure, never for a node that has
+answered TLS, and not at all once every node has. `WithTLSIdentity` returns
+each dial's `endpoint.TLSIdentity{ServerName, VerifyName, ChainOnly, Verify}`:
+the SNI, the name the certificate must match, a chain-only check, and a check
+of its own over the `tls.ConnectionState`; a contact point's target has a zero
+host ID. Session tickets are keyed by node. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
 connection verifies the node's IP address. `ConfigBuilder.WithTLS` copies a
@@ -2059,8 +2076,9 @@ attempts...)` builds one for tests. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help;
-`Retryable(err, idempotent)` adds the execution status and rules out the
-caller's own cancellation or deadline. Driver
+`Retryable(err)` adds the execution status and the request's resolved
+idempotence (`ExecutionError.Idempotent`) and rules out the caller's own
+cancellation or deadline. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
 `ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
@@ -2191,6 +2209,6 @@ before request metrics and observers. No later row callbacks or continuation
 pages run. Ordinary callback errors remain failures. Result.FetchedRows continues
 counting fetched response rows, rather than callback invocations.
 
-exec.Options and exec.CompiledOptions remain separate. Compile recurring settings once;
+exec.Options are written, exec.CompiledOptions are passed. Compile recurring settings once;
 request-specific options may be compiled for one-shot calls. Worker settings remain
 immutable and request context deadlines need no new options compilation.

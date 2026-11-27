@@ -27,6 +27,9 @@ func (c Config) Connectivity() connectivity.Config {
 		DNSResolver:         c.DNSResolver,
 		TLS:                 c.TLS,
 		TLSSource:           c.TLSSource,
+		TLSIdentity:         c.TLSIdentity,
+		TLSPort:             c.TLSPort,
+		TLSFallback:         c.TLSFallback,
 		Pool:                c.Pool,
 		ClientRoutes:        c.ClientRoutes,
 		Metadata: connectivity.MetadataIO{

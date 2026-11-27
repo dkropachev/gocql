@@ -180,15 +180,14 @@ TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`
 routing/retry/speculation through `WithDefaultProfile` or a per-execution
 `*config.Profile`, built with `config.NewProfile` (a `config.Profile` literal is
 rejected).
-Per-execution settings are plain `exec.Options` values (package
+Per-execution settings are written as plain `exec.Options` values (package
 `github.com/scylladb/gocql/v2/exec`), for example
-`exec.Options{PageSize: 100}`; the zero `exec.Options{}` uses the
-session default. Worker constructors validate, resolve and encode them for their
-session once, so worker executions do no per-call work. One-shot executions
-(`prepared.Exec/One/Each`, `session.ExecBatch`, `session.ApplyBatch`, `session.RunConditionalBatch`) take
-`exec.CompiledOptions` from `session.CompileOptions(options)`, which does the same work up
-front. Compiled options carry their session's default profile and keyspace; on
-another session they are resolved again for that session on each execution.
+`exec.Options{PageSize: 100}`, and compiled once into `exec.CompiledOptions`,
+which every execution entry point takes. `session.CompileOptions` makes them,
+running the session's dialect checks up front and choosing the compiled form
+its protocol uses. Passing none uses the session default. Options compiled for
+another session are resolved against the executing session's defaults on each
+execution.
 `endpoint.Dialer`, `endpoint.Resolver`,
 `endpoint.Translator`, `ReconnectPolicy`, `routing.TokenPartitioner`,
 `routing.Policy`, observers and immutable

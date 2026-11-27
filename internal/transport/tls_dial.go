@@ -22,10 +22,16 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"io"
 	"net"
 	"net/netip"
 	"slices"
 	"strconv"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -38,7 +44,186 @@ import (
 
 type InternalV2TLSHostDialer struct {
 	InternalUnixHostID func() cql.UUID
-	InternalConfig     connectivity.Config
+	// InternalKnownHosts lists the host IDs of the session's nodes. With
+	// TLSFallback, once each of them has answered TLS, no node is dialed in
+	// plaintext again.
+	InternalKnownHosts func() []cql.UUID
+	// answered holds the keys (tlsHostKey) of the nodes that answered TLS,
+	// guarded by mu; allTLS is set once every known node is among them.
+	answered       map[string]struct{}
+	InternalConfig connectivity.Config
+	mu             sync.Mutex
+	allTLS         atomic.Bool
+}
+
+// tlsHostKey names a node for the fallback and session cache bookkeeping:
+// its host ID, or its address before the driver has learned the ID.
+func tlsHostKey(host metadata.HostSnapshot) string {
+	if !host.HostID.IsZero() {
+		return host.HostID.String()
+	}
+	return host.Address.String()
+}
+
+// answeredTLS reports whether the node keyed key, or every known node, has
+// answered TLS, so a TLS failure must not fall back to plaintext.
+func (d *InternalV2TLSHostDialer) answeredTLS(key string) bool {
+	if d.allTLS.Load() {
+		return true
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	_, ok := d.answered[key]
+	return ok
+}
+
+// markTLS records that the node keyed key answered TLS, and turns plaintext
+// fallback off for the session once every known node has.
+func (d *InternalV2TLSHostDialer) markTLS(key string) {
+	if d.allTLS.Load() {
+		return
+	}
+	d.mu.Lock()
+	if d.answered == nil {
+		d.answered = map[string]struct{}{}
+	}
+	d.answered[key] = struct{}{}
+	all := d.InternalKnownHosts != nil
+	if all {
+		hosts := d.InternalKnownHosts()
+		all = len(hosts) > 0
+		for _, id := range hosts {
+			if _, ok := d.answered[id.String()]; !ok {
+				all = false
+				break
+			}
+		}
+	}
+	d.mu.Unlock()
+	if all {
+		d.allTLS.Store(true)
+	}
+}
+
+// notTLS reports whether err shows the node does not speak TLS where it was
+// dialed, rather than that it failed verification: an answer that is not a
+// TLS record, a connection the node closed or reset during the handshake,
+// or, with a TLS port of its own, that port refusing the connection. A
+// certificate or alert error never falls back.
+func notTLS(err error, tlsPort bool) bool {
+	var record tls.RecordHeaderError
+	switch {
+	case errors.As(err, &record):
+		return true
+	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF), errors.Is(err, syscall.ECONNRESET):
+		var alert tls.AlertError
+		var verify *tls.CertificateVerificationError
+		return !errors.As(err, &alert) && !errors.As(err, &verify)
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return tlsPort
+	}
+	return false
+}
+
+// connectionTLS returns the configuration of one connection to target: the
+// default name from logicalAddress, the identity the session's
+// TLSIdentity chooses, and a session cache keyed by the node, so a ticket of
+// one node is never offered to another that shares its SNI. tlsConfig is a
+// copy the dial owns.
+func (d *InternalV2TLSHostDialer) connectionTLS(tlsConfig *tls.Config, target endpoint.DialTarget, logicalAddress string) *tls.Config {
+	tlsConfig = InternalTlsConfigForAddr(tlsConfig, logicalAddress)
+	if tlsConfig.ClientSessionCache != nil {
+		tlsConfig.ClientSessionCache = hostSessionCache{inner: tlsConfig.ClientSessionCache, host: tlsHostKey(target.Host) + "\x00"}
+	}
+	if d.InternalConfig.TLSIdentity == nil {
+		return tlsConfig
+	}
+	identity := d.InternalConfig.TLSIdentity(cloneV2DialTarget(target))
+	if identity.ServerName != "" {
+		tlsConfig.ServerName = identity.ServerName
+	}
+	name := identity.VerifyName
+	if name == "" {
+		name = tlsConfig.ServerName
+	}
+	if identity.Verify == nil && !identity.ChainOnly && name == tlsConfig.ServerName {
+		return tlsConfig
+	}
+	// crypto/tls verifies only ServerName, so the dial verifies the chain
+	// itself, against name or none, and then runs the checks of the
+	// configuration and of the identity.
+	skip := tlsConfig.InsecureSkipVerify
+	roots, now := tlsConfig.RootCAs, tlsConfig.Time
+	if identity.ChainOnly {
+		name = ""
+	}
+	connection, peer := tlsConfig.VerifyConnection, tlsConfig.VerifyPeerCertificate
+	tlsConfig.InsecureSkipVerify = true
+	tlsConfig.VerifyPeerCertificate = nil
+	tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+		if !skip {
+			chains, err := verifyChain(state.PeerCertificates, roots, now, name)
+			if err != nil {
+				return err
+			}
+			state.VerifiedChains = chains
+		}
+		if peer != nil {
+			raw := make([][]byte, len(state.PeerCertificates))
+			for i, cert := range state.PeerCertificates {
+				raw[i] = cert.Raw
+			}
+			if err := peer(raw, state.VerifiedChains); err != nil {
+				return err
+			}
+		}
+		if connection != nil {
+			if err := connection(state); err != nil {
+				return err
+			}
+		}
+		if identity.Verify != nil {
+			return identity.Verify(state)
+		}
+		return nil
+	}
+	return tlsConfig
+}
+
+// verifyChain verifies a node's certificates as crypto/tls does for a
+// client, against roots, or the system pool when roots is nil, and name
+// unless it is empty.
+func verifyChain(certs []*x509.Certificate, roots *x509.CertPool, now func() time.Time, name string) ([][]*x509.Certificate, error) {
+	if len(certs) == 0 {
+		return nil, errors.New("tls: the node sent no certificate")
+	}
+	options := x509.VerifyOptions{Roots: roots, DNSName: name, Intermediates: x509.NewCertPool()}
+	if now != nil {
+		options.CurrentTime = now()
+	}
+	for _, cert := range certs[1:] {
+		options.Intermediates.AddCert(cert)
+	}
+	chains, err := certs[0].Verify(options)
+	if err != nil {
+		return nil, &tls.CertificateVerificationError{UnverifiedCertificates: certs, Err: err}
+	}
+	return chains, nil
+}
+
+// hostSessionCache keys a session cache by node, as crypto/tls keys it by
+// SNI or address only.
+type hostSessionCache struct {
+	inner tls.ClientSessionCache
+	host  string
+}
+
+func (c hostSessionCache) Get(key string) (*tls.ClientSessionState, bool) {
+	return c.inner.Get(c.host + key)
+}
+
+func (c hostSessionCache) Put(key string, state *tls.ClientSessionState) {
+	c.inner.Put(c.host+key, state)
 }
 
 func (d *InternalV2TLSHostDialer) selectedTLS(ctx context.Context, host metadata.HostSnapshot) (*tls.Config, error) {
@@ -218,18 +403,46 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	if err != nil {
 		return nil, err
 	}
+	if tlsConfig == nil {
+		return d.dialWith(ctx, host, snapshot, shard, shards, nil, epoch, sharderEpoch)
+	}
+	key := tlsHostKey(snapshot)
+	fallback := d.InternalConfig.TLSFallback && !d.answeredTLS(key)
+	result, err := d.dialWith(ctx, host, snapshot, shard, shards, tlsConfig, epoch, sharderEpoch)
+	if err == nil {
+		if d.InternalConfig.TLSFallback {
+			d.markTLS(key)
+		}
+		return result, nil
+	}
+	if !fallback || ctx.Err() != nil || !notTLS(err, d.InternalConfig.TLSPort != 0) {
+		return nil, err
+	}
+	return d.dialWith(ctx, host, snapshot, shard, shards, nil, epoch, sharderEpoch)
+}
+
+// dialWith dials host, through TLS when tlsConfig is not nil.
+func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoint.HostInfo, snapshot metadata.HostSnapshot, shard, shards int, tlsConfig *tls.Config, epoch, sharderEpoch uint64) (*DialedHost, error) {
 	address := net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 	logicalAddress := logicalV2TLSAddress(host)
 	translated := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
 	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
 		address = translated.CQL.String()
 	}
+	if port := d.InternalConfig.TLSPort; tlsConfig != nil && port != 0 {
+		address = net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(int(port)))
+		if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQLTLS) {
+			address = translated.CQLTLS.String()
+		}
+	}
 	target := endpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)
 	}
 	var c net.Conn
+	var err error
 	var selectedShard cql.Option[uint32]
+	dialed := target
 	if shards > 0 && d.InternalConfig.Pool.AdvancedShardAwareness.Enabled && d.InternalConfig.Pool.ConnectionsPerHost == 0 {
 		if shard < 0 || shard >= shards {
 			return nil, cqltype.TypeValidation("shard", "target out of range")
@@ -262,6 +475,7 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 				c, err = d.raw(ctx, attempt)
 				if err == nil {
 					selectedShard = attempt.ShardID
+					dialed = attempt
 					break
 				}
 				if ctx.Err() != nil {
@@ -279,9 +493,12 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 			return nil, err
 		}
 	}
-	if tlsConfig != nil && tlsConfig.ServerName == "" && !snapshot.Address.IsValid() {
-		c.Close()
-		return nil, cqltype.TypeValidation("TLS identity", "missing logical host name")
+	if tlsConfig != nil {
+		tlsConfig = d.connectionTLS(tlsConfig, dialed, logicalAddress)
+		if tlsConfig.ServerName == "" && !tlsConfig.InsecureSkipVerify && !snapshot.Address.IsValid() {
+			c.Close()
+			return nil, cqltype.TypeValidation("TLS identity", "missing logical host name")
+		}
 	}
 	result, err := WrapTLS(ctx, c, logicalAddress, tlsConfig)
 	if err != nil {

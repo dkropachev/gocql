@@ -41,7 +41,7 @@ package gocql
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
 		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
 		gocql.Prepared method (*T) With(defaults exec.CompiledOptions) *gocql.Prepared[P, R]
-		gocql.Prepared method (*T) Worker(options ...exec.Options) (*gocql.Worker[P, R], error)
+		gocql.Prepared method (*T) Worker(options ...exec.CompiledOptions) (*gocql.Worker[P, R], error)
 	type gocql.PreparedInfo struct
 		gocql.PreparedInfo field Keyspace string
 		gocql.PreparedInfo field Table string
@@ -52,6 +52,7 @@ package gocql
 		gocql.PreparedStream method (*T) BindMarkers() cql.Columns
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
+		gocql.PreparedStream method (*T) With(defaults exec.CompiledOptions) *gocql.PreparedStream[P, R]
 		gocql.PreparedStream method (*T) Worker(options ...exec.StreamOptions) (*gocql.StreamWorker[P, R], error)
 	type gocql.RowStream[R any] struct
 		gocql.RowStream method (*T) All(dst *R) iter.Seq2[*R, error]
@@ -88,11 +89,11 @@ package gocql
 		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error
-		gocql.Session method (*T) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) iter.Seq2[*R, error]
-		gocql.Session method (*T) UnpreparedCommand(ctx context.Context, statement string, options ...exec.Options) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.Options) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.Options) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.Options) (bool, cql.Result, error)
+		gocql.Session method (*T) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Session method (*T) UnpreparedCommand(ctx context.Context, statement string, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
 	var gocql.StopIteration error
 	type gocql.StreamProgress struct
 		gocql.StreamProgress field Pages int64
@@ -192,6 +193,9 @@ package config
 		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLS(config *crypto/tls.Config) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSFallback(fallback bool) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSIdentity(identity func(target endpoint.DialTarget) endpoint.TLSIdentity) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithTLSPort(port uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLSSource(source endpoint.TLSSource) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTimestampGenerator(next func() int64) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithWriteTimeout(d time.Duration) *config.ConfigBuilder
@@ -525,10 +529,8 @@ package cql
 		cql.PageState method (T) MarshalBinary() ([]byte, error)
 		cql.PageState method (T) MarshalText() ([]byte, error)
 		cql.PageState method (T) More() bool
-		cql.PageState method (T) Token() []byte
 		cql.PageState method (*T) UnmarshalBinary(data []byte) error
 		cql.PageState method (*T) UnmarshalText(text []byte) error
-	func cql.PageStateFromToken(token []byte) cql.PageState
 	type cql.Pair[A any, B any] struct
 		cql.Pair field First A
 		cql.Pair field Second B
@@ -547,6 +549,7 @@ package cql
 	func cql.ParseConsistency(s string) (cql.Consistency, error)
 	func cql.ParseDataType(s string) (cql.DataType, error)
 	func cql.ParseDecimal(s string) (cql.Decimal, error)
+	func cql.ParsePageState(text string) (cql.PageState, error)
 	func cql.ParseTimeUUID(input string) (cql.TimeUUID, error)
 	func cql.ParseUUID(input string) (cql.UUID, error)
 	type cql.PayloadEntry struct
@@ -941,6 +944,7 @@ package cqlerr
 		cqlerr.ExecutionError field Statement string
 		cqlerr.ExecutionError field Result cql.Result
 		cqlerr.ExecutionError field BatchSize int
+		cqlerr.ExecutionError field Idempotent bool
 		cqlerr.ExecutionError method (*T) Error() string
 		cqlerr.ExecutionError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
 		cqlerr.ExecutionError method (*T) Unwrap() error
@@ -1052,7 +1056,7 @@ package cqlerr
 		cqlerr.ReadTimeoutError method (*T) Kind() cqlerr.Kind
 		cqlerr.ReadTimeoutError method (*T) Message() string
 		cqlerr.ReadTimeoutError method (*T) Warnings() []string
-	func cqlerr.Retryable(err error, idempotent bool) bool
+	func cqlerr.Retryable(err error) bool
 	type cqlerr.SchemaChangedError struct
 		cqlerr.SchemaChangedError field Statement string
 		cqlerr.SchemaChangedError field Previous cql.Columns
@@ -1206,6 +1210,11 @@ package endpoint
 	type endpoint.SimpleConvictionPolicy struct
 		endpoint.SimpleConvictionPolicy method (T) AddFailure(ev endpoint.ConvictionEvent) bool
 		endpoint.SimpleConvictionPolicy method (T) Reset(endpoint.ConvictionEvent)
+	type endpoint.TLSIdentity struct
+		endpoint.TLSIdentity field Verify func(crypto/tls.ConnectionState) error
+		endpoint.TLSIdentity field ServerName string
+		endpoint.TLSIdentity field VerifyName string
+		endpoint.TLSIdentity field ChainOnly bool
 	type endpoint.TLSSource interface
 		endpoint.TLSSource method TLSConfig() *crypto/tls.Config
 	type endpoint.Translator interface
@@ -1215,17 +1224,19 @@ package endpoint
 
 package event
 	type event.Change string
-	const event.ChangeConnected event.Change = "CONNECTED"
 	const event.ChangeCreated event.Change = "CREATED"
 	const event.ChangeDown event.Change = "DOWN"
 	const event.ChangeDropped event.Change = "DROPPED"
 	const event.ChangeMovedNode event.Change = "MOVED_NODE"
 	const event.ChangeNewNode event.Change = "NEW_NODE"
+	const event.ChangePoolDown event.Change = "POOL_DOWN"
+	const event.ChangePoolUp event.Change = "POOL_UP"
 	const event.ChangePublicationResync event.Change = "PUBLICATION_RESYNC"
 	const event.ChangeReconnected event.Change = "RECONNECTED"
-	const event.ChangeRefreshed event.Change = "REFRESHED"
 	const event.ChangeRemovedNode event.Change = "REMOVED_NODE"
 	const event.ChangeResync event.Change = "RESYNC"
+	const event.ChangeRoutesRefreshed event.Change = "ROUTES_REFRESHED"
+	const event.ChangeRoutesUpdated event.Change = "ROUTES_UPDATED"
 	const event.ChangeUp event.Change = "UP"
 	const event.ChangeUpdated event.Change = "UPDATED"
 	type event.Event struct
@@ -1260,6 +1271,7 @@ package event
 	type event.ObjectKind string
 	const event.ObjectTable event.ObjectKind = "TABLE"
 	const event.ObjectType event.ObjectKind = "TYPE"
+	const event.ObjectView event.ObjectKind = "VIEW"
 	type event.Subscription struct
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
@@ -1269,6 +1281,7 @@ package exec
 		exec.CompiledOptions method (T) Values() exec.Options
 	type exec.Options struct
 		exec.Options field Retry retry.Policy
+		exec.Options field Speculation retry.SpeculationPolicy
 		exec.Options field Observer observe.Hooks
 		exec.Options field Profile *config.Profile
 		exec.Options field Keyspace string
@@ -1304,7 +1317,6 @@ package exec
 		exec.StreamLimits field DiscardBytes int
 		exec.StreamLimits field MaxTransformBytes int64
 	type exec.StreamOptions struct
-		exec.StreamOptions field Options exec.Options
 		exec.StreamOptions field Limits exec.StreamLimits
 		exec.StreamOptions field Incremental bool
 
@@ -1532,6 +1544,7 @@ package retry
 	type retry.Action uint8
 		retry.Action method (T) String() string
 	type retry.Attempt struct
+		retry.Attempt field Context context.Context
 		retry.Attempt field Err error
 		retry.Attempt field Attempt int
 		retry.Attempt field Idempotent bool
@@ -1546,6 +1559,8 @@ package retry
 	type retry.Never struct
 		retry.Never method (T) Decide(retry.Attempt) retry.Decision
 	const retry.Next retry.Action = 2
+	type retry.NoSpeculation struct
+		retry.NoSpeculation method (T) Delay(retry.Speculation) (time.Duration, bool)
 	type retry.Policy interface
 		retry.Policy method Decide(retry.Attempt) retry.Decision
 	type retry.PolicyFunc func(retry.Attempt) retry.Decision
@@ -1554,10 +1569,21 @@ package retry
 		retry.Safe field MaxAttempts int
 		retry.Safe method (T) Decide(a retry.Attempt) retry.Decision
 	const retry.Same retry.Action = 1
+	type retry.Speculation struct
+		retry.Speculation field Deadline time.Time
+		retry.Speculation field Context context.Context
+		retry.Speculation field Keyspace string
+		retry.Speculation field Table string
+		retry.Speculation field Started int
+		retry.Speculation field Elapsed time.Duration
+		retry.Speculation field LatencyP50 time.Duration
+		retry.Speculation field LatencyP95 time.Duration
+		retry.Speculation field LatencyP99 time.Duration
+		retry.Speculation field Consistency cql.Consistency
 	type retry.SpeculationPolicy interface
-		retry.SpeculationPolicy method Delay(started int) (time.Duration, bool)
-	type retry.SpeculationPolicyFunc func(started int) (time.Duration, bool)
-		retry.SpeculationPolicyFunc method (T) Delay(started int) (time.Duration, bool)
+		retry.SpeculationPolicy method Delay(s retry.Speculation) (time.Duration, bool)
+	type retry.SpeculationPolicyFunc func(retry.Speculation) (time.Duration, bool)
+		retry.SpeculationPolicyFunc method (T) Delay(s retry.Speculation) (time.Duration, bool)
 	const retry.Stop retry.Action = 0
 
 package routing

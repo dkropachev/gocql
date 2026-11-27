@@ -56,13 +56,10 @@ state encodes as empty, and empty input decodes to it, so a request without a
 cursor starts paging; `"AA"`, the start state of earlier v2 releases, still
 decodes to it. Both carry
 the server token, so authenticate them as the `cql.PageState` doc describes
-before trusting one from a client. `state.Token()` returns an owned copy of
-the server continuation token alone; it does not serialize the full state. Check `state.More()` before exporting a token, and use
-`cql.PageStateFromToken(token)` to resume it. Empty continuation tokens are
-valid: nil or empty input to `PageStateFromToken` always creates a continuation.
-The initial and complete states both return nil from `Token()`; use `More()`
-and `Complete()` to distinguish them. An HTTP API can omit its next-page token
-when `More()` is false, representing completion separately from token bytes.
+before trusting one from a client. `cql.ParsePageState(cursor)` decodes a
+text cursor in one call. The raw server token is not exported: it cannot tell
+the start from completion, so a cursor built from it alone would restart a
+finished query. Use `More()` and `Complete()` to tell the states apart.
 A page can hold fewer rows than the page size, or none, while `More()` is
 still true, so decide whether to continue with `More()`, never with the
 number of rows on the page.

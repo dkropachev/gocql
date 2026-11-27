@@ -81,7 +81,7 @@ func (k Kind) String() string {
 // or PageTimeout ran out. Retryable tells the two apart and also checks the
 // execution status, so a retry loop needs only it:
 //
-//	for cqlerr.Retryable(err, idempotent) { ... }
+//	for cqlerr.Retryable(err) { ... }
 func (k Kind) Transient() bool {
 	switch k {
 	case KindTimeout, KindUnavailable, KindOverloaded, KindRateLimited, KindConnection:

@@ -80,7 +80,7 @@ func (p *recordingRetry) Decide(a retry.Attempt) retry.Decision {
 // launching speculative attempts.
 type neverSpeculate struct{}
 
-func (neverSpeculate) Delay(int) (time.Duration, bool) { return 0, false }
+func (neverSpeculate) Delay(retry.Speculation) (time.Duration, bool) { return 0, false }
 
 func TestExecutionStatusAggregation(t *testing.T) {
 	t.Run("Direct", func(t *testing.T) { testExecutionStatusAggregation(t, false) })

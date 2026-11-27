@@ -92,6 +92,7 @@ type Config struct {
 	DialHost                                                                         func(context.Context, endpoint.DialTarget) (net.Conn, error)
 	TLS                                                                              *tls.Config
 	TLSSource                                                                        endpoint.TLSSource
+	TLSIdentity                                                                      func(endpoint.DialTarget) endpoint.TLSIdentity
 	ClientRoutes                                                                     *ClientRoutesOptions
 	ContactPoints                                                                    []string
 	Pool                                                                             PoolOptions
@@ -101,6 +102,11 @@ type Config struct {
 	Protocol                                                                         int
 	ConnectTimeout, DNSTimeout, KeepaliveInterval, KeepaliveTimeout, SocketKeepalive time.Duration
 	NoDelay                                                                          bool
+	// TLSFallback dials in plaintext a node that does not answer TLS and
+	// never has.
+	TLSFallback bool
+	// TLSPort, when not zero, replaces each node's CQL port for TLS dials.
+	TLSPort uint16
 	// ChosenSocketOptions are the socket options a setter chose; a connection
 	// that cannot apply one of them fails to open.
 	ChosenSocketOptions SocketOptions

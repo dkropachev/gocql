@@ -164,7 +164,7 @@ func mergeResult(dst *Result, src Result) {
 // page boundary. Before handing a token to an untrusted client, for example as
 // a cursor in a web API, authenticate it (an HMAC over the token and the
 // statement it belongs to) or encrypt it, and verify it before
-// PageStateFromToken; a client could otherwise read key values from it or
+// ParsePageState; a client could otherwise read key values from it or
 // forge one to resume another query's paging. A token resumes the same
 // statement with the same parameters on any session of the same cluster and
 // protocol version. RunPage rejects a token longer than the session's paging
@@ -177,10 +177,9 @@ type PageState struct {
 
 func startPage() PageState { return PageState{} }
 
-// PageStateFromToken copies token into a continuation state. Nil and empty
-// inputs both represent an empty continuation. Use StartPage() to begin paging;
-// use PageState.More and PageState.Complete to distinguish continuation and completion.
-func PageStateFromToken(token []byte) PageState {
+// pageStateFromToken copies token into a continuation state. Nil and empty
+// inputs both represent an empty continuation.
+func pageStateFromToken(token []byte) PageState {
 	return PageState{token: append([]byte{}, token...), kind: 1}
 }
 
@@ -190,15 +189,6 @@ func (p PageState) More() bool { return p.kind == 1 }
 // Complete reports whether the server has finished paging.
 func (p PageState) Complete() bool { return p.kind == 2 }
 
-// Token returns an owned copy of a continuation token, including a non-nil
-// empty slice for an empty continuation. Initial and complete states return nil;
-// use More and Complete to distinguish them. This is not full-state serialization.
-func (p PageState) Token() []byte {
-	if p.kind != 1 {
-		return nil
-	}
-	return append([]byte{}, p.token...)
-}
 func completePageState() PageState { return PageState{kind: 2} }
 
 // MarshalBinary encodes the whole state, start and completion included. The
@@ -229,7 +219,7 @@ func (p *PageState) UnmarshalBinary(data []byte) error {
 	}
 	switch kind := data[0]; {
 	case kind == 1:
-		*p = PageStateFromToken(data[1:])
+		*p = pageStateFromToken(data[1:])
 	case kind > 2:
 		return typeValidation("page state", "unknown kind %d", kind)
 	case len(data) > 1:
