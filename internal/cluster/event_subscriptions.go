@@ -179,29 +179,35 @@ func eventV2Address(host net.IP, port int) netip.AddrPort {
 	return netip.AddrPortFrom(ip.Unmap(), uint16(port))
 }
 func (s *Core) PublishV2Event(source oldevents.Event) {
-	s.publishV2EventMode(source, true, true, nil)
+	s.publishV2EventMode(source, true, true, nil, false)
 }
-func (s *Core) recordV2Event(source oldevents.Event) { s.publishV2EventMode(source, true, false, nil) }
-func (s *Core) emitV2Event(source oldevents.Event)   { s.publishV2EventMode(source, false, true, nil) }
+func (s *Core) recordV2Event(source oldevents.Event) {
+	s.publishV2EventMode(source, true, false, nil, false)
+}
+func (s *Core) emitV2Event(source oldevents.Event) {
+	s.publishV2EventMode(source, false, true, nil, false)
+}
 
 // emitV2EventAfter delivers an event, consulting prev, the snapshot before
-// the event's changes, for what the current snapshot no longer holds.
-func (s *Core) emitV2EventAfter(source oldevents.Event, prev *routing.MetadataSnapshot) {
-	s.publishV2EventMode(source, false, true, prev)
+// the event's changes, for what the current snapshot no longer holds. An
+// incomplete event is one whose metadata refresh failed: it is marked
+// Incomplete.
+func (s *Core) emitV2EventAfter(source oldevents.Event, prev *routing.MetadataSnapshot, incomplete bool) {
+	s.publishV2EventMode(source, false, true, prev, incomplete)
 }
 
 // emitV2NodeEvent delivers a topology or status event, taking a host ID the
 // current snapshot no longer has, such as a removed node's, from prev.
 func (s *Core) emitV2NodeEvent(source oldevents.Event, prev *routing.MetadataSnapshot) {
-	s.publishV2EventMode(source, false, true, prev)
+	s.publishV2EventMode(source, false, true, prev, false)
 }
 
-func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool, prev *routing.MetadataSnapshot) {
+func (s *Core) publishV2EventMode(source oldevents.Event, invalidate, deliver bool, prev *routing.MetadataSnapshot, incomplete bool) {
 	p := s.Peripheral()
 	if p == nil {
 		return
 	}
-	e := event.Event{Generation: s.Metadata().Generation()}
+	e := event.Event{Generation: s.Metadata().Generation(), Incomplete: incomplete}
 	switch v := source.(type) {
 	case *oldevents.TopologyChangeEvent:
 		e.Kind = event.KindTopology

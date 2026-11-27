@@ -14,10 +14,10 @@ import (
 	"github.com/scylladb/gocql/v2/event"
 )
 
-// A subscriber keeps a metadata snapshot current: it subscribes before it
-// reads the snapshot and reads a newer one when an event's Generation passes
-// it. An Overflow event, which replaces events the queue had no room for,
-// carries the highest generation it replaced, so the same check catches up.
+// A subscriber waits for a schema change: it subscribes before it changes
+// the schema, so that no event falls between the two, and reads the current
+// metadata on each event. The session publishes the metadata of a change
+// before it delivers the change's event, unless the event is Incomplete.
 func ExampleSession_Subscribe() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
@@ -31,16 +31,11 @@ func ExampleSession_Subscribe() {
 	}
 	defer session.Close()
 
-	filter := event.Filter{Keyspace: "app", Kinds: []event.Kind{event.KindSchema}}
-	// Subscribe first, so that no change falls between the snapshot and the
-	// first event.
-	sub, err := session.Subscribe(filter)
+	sub, err := session.Subscribe(event.Filter{Keyspace: "app", Kinds: []event.Kind{event.KindSchema}})
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer sub.Close()
-	md := session.Metadata()
-
 	for _, stmt := range []string{
 		"CREATE KEYSPACE IF NOT EXISTS app WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': 1}",
 		"CREATE TABLE IF NOT EXISTS app.events (id int PRIMARY KEY, body text)",
@@ -51,17 +46,14 @@ func ExampleSession_Subscribe() {
 	}
 
 	for {
-		if table, ok := md.Table("app", "events"); ok {
+		if table, ok := session.Metadata().Table("app", "events"); ok {
 			fmt.Println(table.Keyspace+"."+table.Name, len(table.Columns), "columns")
 			return
 		}
 		select {
 		case <-ctx.Done():
 			log.Fatal(ctx.Err())
-		case e := <-sub.Events():
-			if e.Generation > md.Generation() {
-				md = session.Metadata()
-			}
+		case <-sub.Events():
 		}
 	}
 }

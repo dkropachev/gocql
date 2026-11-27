@@ -41,7 +41,7 @@ func TestEmptySnapshot(t *testing.T) {
 		if _, err := s.Token("ks", "t"); err == nil {
 			t.Errorf("%s: Token succeeded", name)
 		}
-		if _, err := s.TokenRanges("ks", "t"); err == nil {
+		if _, _, err := s.TokenRanges("ks", "t"); err == nil {
 			t.Errorf("%s: TokenRanges succeeded", name)
 		}
 	}
@@ -53,7 +53,7 @@ func TestSnapshotLookups(t *testing.T) {
 	column := &metadata.Column{Name: "id", Kind: metadata.ColumnKindPartitionKey, Type: "int"}
 	table := &metadata.Table{Name: "t", Columns: map[string]*metadata.Column{"id": column}, PartitionKey: []*metadata.Column{column}}
 	hosts := []metadata.HostSnapshot{{HostID: cql.UUID{1}, Tokens: []int64{1}}, {HostID: cql.UUID{2}, Tokens: []int64{2}}}
-	s := routingtest.NewSnapshot(routingtest.Cluster{
+	s, err := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts: hosts,
 		Keyspaces: map[string]*metadata.Keyspace{
 			"b": {
@@ -64,12 +64,18 @@ func TestSnapshotLookups(t *testing.T) {
 			"a": {Name: "a"},
 		},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if got := s.Keyspaces(); !slices.Equal(got, []string{"a", "b"}) {
 		t.Errorf("Keyspaces() = %v", got)
 	}
 	got, ok := s.Table("b", "t")
 	if !ok || got.Name != "t" || got.PartitionKey[0].Name != "id" {
 		t.Fatalf("Table(b, t) = %+v, %v", got, ok)
+	}
+	if got.Columns["id"] != got.PartitionKey[0] {
+		t.Error("Table copied a column once per list: the map and the partition key hold different copies")
 	}
 	got.PartitionKey[0].Name = "changed"
 	got.Columns["id"].Name = "changed"

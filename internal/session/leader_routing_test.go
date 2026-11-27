@@ -70,7 +70,7 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 		{name: "LeaderDown", options: local, mode: "global", versioned: true, replicas: []byte{2, 1, 3}, consistency: strong, first: 1,
 			edit: func(m *implRouting.MetadataSnapshot) { routing.SnapshotData(m).InternalHosts[1].Up = false }},
 		{name: "RemoteLeaderNotAllowed", options: local, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 1, absent: 3},
-		{name: "RemoteLeaderAllowed", options: routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true}, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 3},
+		{name: "RemoteLeaderAllowed", options: routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, RemoteForLocalConsistency: true}, mode: "global", versioned: true, replicas: []byte{3, 1, 2}, consistency: strong, first: 3},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

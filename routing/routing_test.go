@@ -40,8 +40,8 @@ func TestWithoutSession(t *testing.T) {
 }
 
 func TestNewPolicyValidates(t *testing.T) {
-	if _, err := routing.NewPolicy(routing.Options{Rack: "r1"}); err == nil {
-		t.Error("NewPolicy accepted a rack without a datacenter")
+	if _, err := routing.NewPolicy(routing.Options{MaxRemoteHostsPerDC: -1}); err == nil {
+		t.Error("NewPolicy accepted a negative MaxRemoteHostsPerDC")
 	}
 	if _, err := routing.NewPolicy(routing.Options{Datacenter: "dc", Latency: routing.LatencyOptions{Enabled: true, ExclusionThreshold: 0.5}}); err == nil {
 		t.Error("NewPolicy accepted an exclusion threshold below 1")

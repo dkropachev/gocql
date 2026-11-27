@@ -151,8 +151,8 @@ type InternalRoutingPolicy struct {
 }
 
 func NewRoutingPolicy(o routing2.Options) (RoutingPolicy, error) {
-	if o.Rack != "" && o.Datacenter == "" {
-		return nil, cqltype.TypeValidation("routing rack", "requires a datacenter")
+	if o.MaxRemoteHostsPerDC < 0 {
+		return nil, cqltype.TypeValidation("routing remote hosts", "must not be negative")
 	}
 	if o.Latency.Enabled {
 		if o.Latency.ExclusionThreshold == 0 {
@@ -202,6 +202,9 @@ func (p *InternalRoutingPolicy) Validate(m *MetadataSnapshot) error {
 		idx = m.routingIndex()
 	}
 	if p.locality(idx).dc == "" {
+		if p.InternalOptions.Rack != "" {
+			return cqltype.TypeValidation("routing rack", "requires a datacenter: the policy and the session name none")
+		}
 		return nil
 	}
 	if err := p.validateIndex(idx); err != nil {
@@ -234,6 +237,10 @@ func (p *InternalRoutingPolicy) validateIndex(idx *InternalRoutingHostIndex) err
 func (p *InternalRoutingPolicy) locality(x *InternalRoutingHostIndex) routingLocality {
 	if p.InternalOptions.Datacenter != "" || x == nil {
 		return routingLocality{p.InternalOptions.Datacenter, p.InternalOptions.Rack}
+	}
+	if p.InternalOptions.Rack != "" {
+		// A rack of the policy's own in the session's local datacenter.
+		return routingLocality{x.local.dc, p.InternalOptions.Rack}
 	}
 	return x.local
 }
@@ -325,7 +332,7 @@ func InternalBuildRoutingHostIndexWith(hosts []HostSnapshot, route func(cql.UUID
 		x.byID[h.HostID] = i
 		x.routes[i] = route(h.HostID)
 		x.routes[i].SetSharding(h.Shards, h.ShardingIgnoreMSB)
-		x.routes[i].SetLocality(h.Datacenter, h.Rack)
+		x.routes[i].SetLocality(h.Datacenter, h.Rack, h.Enabled)
 		if len(hosts) <= smallHostIndex {
 			x.ids = append(x.ids, h.HostID)
 		}
@@ -387,6 +394,10 @@ type InternalLazyRoutingPlan struct {
 	picking, unprepared bool
 	// conditional plans keep replica order and do not rotate fallbacks.
 	conditional bool
+	// remote plans may route outside the local datacenter: the policy
+	// allows it, and the request's consistency is not LOCAL_* unless the
+	// policy lets those go remote too.
+	remote bool
 }
 
 // Pick routes to a random replica of info's token that is routable and in
@@ -504,6 +515,7 @@ func (p *InternalRoutingPolicy) planWith(info routing2.Info, m *MetadataSnapshot
 		plan.replicas, _ = m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)
 	}
 	plan.conditional = info.Kind != cql.OrdinaryStatement || info.Consistency == cql.Serial || info.Consistency == cql.LocalSerial
+	plan.remote = o.AllowRemote && (o.RemoteForLocalConsistency || !localConsistency(info.Consistency))
 	if !o.NoLeaderAware {
 		plan.leader = p.leader(info, m, lookup)
 	}
@@ -578,7 +590,7 @@ func (plan *InternalLazyRoutingPlan) prepare() {
 		if l.rack != "" {
 			plan.groups[0] = plan.index.rack[l]
 		}
-		if o.AllowRemote {
+		if plan.remote {
 			plan.groups[2] = plan.index.all
 		}
 	}
@@ -667,7 +679,7 @@ func (p *InternalLazyRoutingPlan) host(t Target) (int, *HostSnapshot) {
 }
 func (p *InternalLazyRoutingPlan) eligible(h *HostSnapshot) bool {
 	l := p.local()
-	return h.Enabled && (l.dc == "" || h.Datacenter == l.dc || p.policy.InternalOptions.AllowRemote)
+	return h.Enabled && (l.dc == "" || h.Datacenter == l.dc || p.remote)
 }
 func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	if p.InternalSlow == nil {
@@ -701,6 +713,36 @@ func (p *InternalLazyRoutingPlan) InternalPenalty(t Target) bool {
 	}
 	sample.nextProbe = p.InternalNow.Add(p.policy.InternalOptions.Latency.RetryPeriod)
 	return false
+}
+
+// localConsistency reports a LOCAL_* consistency, which the coordinator's
+// datacenter alone satisfies.
+func localConsistency(c cql.Consistency) bool {
+	return c == cql.LocalOne || c == cql.LocalQuorum || c == cql.LocalSerial
+}
+
+// remoteFull reports whether the plan already routed to as many hosts of
+// remote host h's datacenter as the policy's MaxRemoteHostsPerDC allows.
+func (p *InternalLazyRoutingPlan) remoteFull(h *HostSnapshot) bool {
+	limit := p.policy.InternalOptions.MaxRemoteHostsPerDC
+	if limit <= 0 {
+		return false
+	}
+	n := 0
+	for i, e := range p.emitted {
+		if dc, _ := e.host.Locality(); dc != h.Datacenter {
+			continue
+		}
+		// A host routed to a shard and then to any shard counts once.
+		counted := false
+		for _, before := range p.emitted[:i] {
+			counted = counted || before.host == e.host
+		}
+		if !counted {
+			n++
+		}
+	}
+	return n >= limit
 }
 
 // duplicate reports whether the plan already routed to r: to its host and
@@ -757,7 +799,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 			return r, true
 		}
 	}
-	if !p.pinned && p.metadata != nil && SnapshotData(p.metadata).InternalPlacementSignal != nil && SnapshotData(p.metadata).InternalPlacementEpoch != SnapshotData(p.metadata).InternalPlacementSignal.Load() {
+	if !p.pinned && p.metadata != nil && placementStale(p.metadata) {
 		p.replicas = nil
 		p.permutation = nil
 		p.leader = cql.Option[Target]{}
@@ -810,7 +852,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 			// replicas up: the rack tier without a rack, the remote tier
 			// without a datacenter or without remote replicas allowed.
 			if p.policy != nil {
-				if l := p.local(); p.stage == 1 && l.rack == "" || p.stage == 3 && (l.dc == "" || !p.policy.InternalOptions.AllowRemote) {
+				if l := p.local(); p.stage == 1 && l.rack == "" || p.stage == 3 && (l.dc == "" || !p.remote) {
 					p.cursor = 0
 					p.stage++
 					continue
@@ -837,7 +879,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 						tier = 1
 					}
 				}
-				if tier != p.stage {
+				if tier != p.stage || tier == 3 && p.remoteFull(h) {
 					continue
 				}
 				if r, ok := p.accept(t, i, h, true, false); ok {
@@ -868,7 +910,7 @@ func (p *InternalLazyRoutingPlan) Next() (Route, bool) {
 				if !p.eligible(h) || connected && (!h.Connected || !h.Up) {
 					continue
 				}
-				if l := p.local(); group == 2 && l.dc != "" && h.Datacenter == l.dc {
+				if l := p.local(); group == 2 && l.dc != "" && (h.Datacenter == l.dc || p.remoteFull(h)) {
 					continue
 				}
 				if r, ok := p.accept(Target{HostID: h.HostID}, ids[k], h, false, false); ok {

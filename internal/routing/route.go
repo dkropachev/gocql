@@ -110,8 +110,8 @@ func (m *MetadataSnapshot) AppendReplicaRoutes(out []Route, info routing.Info) [
 	if m == nil || !info.Token.Set || info.Keyspace == "" || info.Table == "" {
 		return out
 	}
-	lookup := InternalLookupTablet(m, info)
-	replicas, _ := m.lookupReplicas(&lookup, info.Keyspace, info.Table, info.Token.Value)
+	// The snapshot's own placement, stale or not, as Replicas reads it.
+	replicas, _ := m.placementReplicas(info.Keyspace, info.Table, info.Token.Value)
 	x := m.routingIndex()
 	hosts := SnapshotData(m).InternalHosts
 	if out == nil {

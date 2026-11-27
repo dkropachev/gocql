@@ -127,12 +127,21 @@ func TestSnapshotToken(t *testing.T) {
 			"Token keyspace":    func() error { _, err := m.Token("nope", "single", cql.IntValue(1)); return err },
 			"Token table":       func() error { _, err := m.Token("ks", "missing", cql.IntValue(1)); return err },
 			"Replicas keyspace": func() error { _, err := m.Replicas("nope", "single", 0); return err },
-			"Replicas table":    func() error { _, err := m.Replicas("ks", "missing", 0); return err },
 		} {
 			err := call()
 			if _, ok := errors.AsType[*cql.ValidationError](err); !ok || !strings.Contains(err.Error(), "not loaded") || cqlerr.KindOf(err) != cqlerr.KindInvalid {
 				t.Errorf("%s: %v; want a validation error saying it is not loaded", name, err)
 			}
+		}
+		// A vnode keyspace's ring places a table the snapshot does not
+		// hold, as routing does; a tablet keyspace's does not.
+		if _, err := m.Replicas("ks", "missing", 0); err != nil {
+			t.Errorf("Replicas of a vnode table not loaded: %v", err)
+		}
+		SnapshotData(m).InternalKeyspaces["ks"].TabletBased = true
+		defer func() { SnapshotData(m).InternalKeyspaces["ks"].TabletBased = false }()
+		if _, err := m.Replicas("ks", "missing", 0); !errors.Is(err, cqlerr.ErrNoTable) || !strings.Contains(err.Error(), "not loaded") {
+			t.Errorf("Replicas of a tablet table not loaded: %v", err)
 		}
 	})
 }

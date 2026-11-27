@@ -4,6 +4,7 @@
 package routing_test
 
 import (
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -130,7 +131,7 @@ func withoutHost(tiers [][]byte, host byte) [][]byte {
 // drops it from the plan and changes nothing else, and with host 1 measured
 // slow by latency-aware routing, which moves it after every other host.
 func TestPolicyOptions(t *testing.T) {
-	vnode := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1), Kind: cql.OrdinaryStatement, Consistency: cql.LocalQuorum}
+	vnode := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1), Kind: cql.OrdinaryStatement, Consistency: cql.Quorum}
 	tablet := vnode
 	tablet.Table, tablet.Token = "tt", cql.Some[int64](50)
 	outside := tablet
@@ -255,8 +256,53 @@ func TestPolicyOptions(t *testing.T) {
 				}
 			})
 		}
-		if _, err := routing.NewPolicy(routing.Options{Rack: "r1"}); err == nil {
-			t.Fatal("a rack without a datacenter was accepted")
+		// A rack without a datacenter is a rack of the session's local
+		// datacenter; without one it fails validation.
+		policy, err := routing.NewPolicy(routing.Options{Rack: "r1"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := policy.Validate(optionsSnapshot(t, nil).Public()); err == nil {
+			t.Fatal("a rack without a datacenter validated in a session without one")
+		}
+	})
+
+	t.Run("RackOfSessionDatacenter", func(t *testing.T) {
+		policy, err := routing.NewPolicy(routing.Options{Rack: "r1", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m := optionsSnapshot(t, nil)
+		implRouting.SnapshotData(m).InternalHostIndex.InternalSetLocal("a", "r2")
+		if err := policy.Validate(m.Public()); err != nil {
+			t.Fatal(err)
+		}
+		if hosts := policyHosts(policy, routing.Info{Kind: cql.OrdinaryStatement}, m); !inTiers(hosts, [][]byte{{1, 4}, {2}}) {
+			t.Fatalf("plan %v, want rack r1 of the session's datacenter a, then the rest of a", hosts)
+		}
+	})
+
+	t.Run("LocalConsistencyStaysLocal", func(t *testing.T) {
+		local := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1), Kind: cql.OrdinaryStatement, Consistency: cql.LocalQuorum}
+		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		m := optionsSnapshot(t, nil)
+		if hosts := policyHosts(policy, local, m); !inTiers(hosts, [][]byte{{1, 2}, {4}}) {
+			t.Fatalf("LOCAL_QUORUM plan %v, want datacenter a only", hosts)
+		}
+		policy, _ = routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, RemoteForLocalConsistency: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		if hosts := policyHosts(policy, local, m); !inTiers(hosts, [][]byte{{1, 2}, {3}, {4}, {5}}) {
+			t.Fatalf("LOCAL_QUORUM plan with RemoteForLocalConsistency %v, want a's replicas, the remote replica, then the other hosts", hosts)
+		}
+	})
+
+	t.Run("MaxRemoteHostsPerDC", func(t *testing.T) {
+		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, MaxRemoteHostsPerDC: 1, FixedReplicaOrder: true, NoLeaderAware: true})
+		m := optionsSnapshot(t, nil)
+		if hosts := policyHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{1, 2}, {3}, {4}}) {
+			t.Fatalf("plan %v, want a's replicas, one host of b, then a's other host", hosts)
+		}
+		if _, err := routing.NewPolicy(routing.Options{MaxRemoteHostsPerDC: -1}); err == nil {
+			t.Fatal("a negative MaxRemoteHostsPerDC was accepted")
 		}
 	})
 
@@ -350,6 +396,9 @@ func TestTabletMigration(t *testing.T) {
 			for token, want := range step.first {
 				info := routing.Info{Keyspace: "ks", Table: "tt", Token: cql.Some(token), Kind: cql.OrdinaryStatement}
 				replicas, err := next.Replicas("ks", "tt", token)
+				if want == ([2]int{}) && errors.Is(err, metadata.ErrPlacementUnknown) {
+					continue
+				}
 				if err != nil {
 					t.Fatal(err)
 				}

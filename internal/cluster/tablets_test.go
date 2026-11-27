@@ -25,6 +25,7 @@
 package cluster
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -92,7 +93,7 @@ func TestTablets(t *testing.T) {
 		if _, known := routing.InternalMetadataSnapshotTabletRoot(snapshot, implRouting.InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "t"}); !known {
 			t.Fatal("resync lost tablet cache-miss marker")
 		}
-		if replicas, err := snapshot.Replicas("ks", "t", 4); err != nil || len(replicas) != 0 {
+		if replicas, err := snapshot.Replicas("ks", "t", 4); !errors.Is(err, metadata2.ErrPlacementUnknown) || len(replicas) != 0 {
 			t.Fatal("tablet cache miss invented vnode replicas", replicas, err)
 		}
 	})

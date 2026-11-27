@@ -5,6 +5,7 @@ package routing
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -52,7 +53,7 @@ func TestRoutingPolicy(t *testing.T) {
 		t.Run("TabletMissAndStrictShard", func(t *testing.T) {
 			m := v2TestMetadata()
 			SnapshotData(m).InternalTablets[InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}] = []metadata.TokenRange{{Start: 10, End: 20, Replicas: []metadata.Target{{HostID: SnapshotData(m).InternalHosts[1].HostID, ShardID: cql.Option[uint32]{Value: 2, Set: true}}}}}
-			if got, err := m.Replicas("ks", "table", 30); err != nil || len(got) != 0 {
+			if got, err := m.Replicas("ks", "table", 30); !errors.Is(err, metadata.ErrPlacementUnknown) || len(got) != 0 {
 				t.Fatal("tablet miss fell back to vnode", got, err)
 			}
 			single := SingleTargetRouting(metadata.Target{HostID: SnapshotData(m).InternalHosts[0].HostID, ShardID: cql.Option[uint32]{Value: 9, Set: true}})

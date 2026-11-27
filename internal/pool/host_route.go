@@ -22,8 +22,9 @@ const AnyShard int32 = -1
 type HostRoute struct {
 	owner *InternalPolicyConnPool // nil for a route made outside a session
 	pool  atomic.Pointer[InternalHostConnPool]
-	// locality is the host's datacenter and rack from the latest metadata
-	// snapshot indexed, nil until one is.
+	// locality is the host's datacenter and rack, and whether the host
+	// filter accepts it, from the latest metadata snapshot indexed, nil
+	// until one is.
 	locality atomic.Pointer[hostLocality]
 	id       cql.UUID
 	// sharding is the host's shard count and ignored token bits from the
@@ -32,15 +33,26 @@ type HostRoute struct {
 	sharding atomic.Uint64
 }
 
-// hostLocality is a host's datacenter and rack.
-type hostLocality struct{ datacenter, rack string }
+// hostLocality is a host's datacenter and rack, and whether the host filter
+// accepts it.
+type hostLocality struct {
+	datacenter, rack string
+	enabled          bool
+}
 
-// SetLocality records the host's datacenter and rack from a metadata
-// snapshot.
-func (r *HostRoute) SetLocality(datacenter, rack string) {
-	if l := r.locality.Load(); l == nil || l.datacenter != datacenter || l.rack != rack {
-		r.locality.Store(&hostLocality{datacenter: datacenter, rack: rack})
+// SetLocality records the host's datacenter and rack, and whether the host
+// filter accepts it, from a metadata snapshot.
+func (r *HostRoute) SetLocality(datacenter, rack string, enabled bool) {
+	if l := r.locality.Load(); l == nil || l.datacenter != datacenter || l.rack != rack || l.enabled != enabled {
+		r.locality.Store(&hostLocality{datacenter: datacenter, rack: rack, enabled: enabled})
 	}
+}
+
+// Enabled reports whether the host filter accepts the host, as the latest
+// metadata snapshot indexed has it, and false before one is.
+func (r *HostRoute) Enabled() bool {
+	l := r.locality.Load()
+	return l != nil && l.enabled
 }
 
 // Locality returns the host's datacenter and rack from the latest metadata

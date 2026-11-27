@@ -26,6 +26,7 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -274,10 +275,18 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 			scopes[v.SchemaKeyspace()] = true
 		}
 	}
+	// failed holds the scopes whose refresh failed: their events are
+	// delivered marked Incomplete, and the retry that publishes them
+	// delivers a ChangePublicationResync.
+	failed := make(map[string]bool)
 	for scope := range scopes {
-		if err := s.RefreshV2Keyspace(metadata.InternalV2SchemaContext(s.NewSchemaSource()), scope); err != nil {
-			s.scheduleV2SchemaRetry()
+		if err := s.RefreshV2Keyspace(metadata.InternalV2SchemaContext(s.NewSchemaSource()), scope); err != nil && !errors.Is(err, metadata.InternalErrKeyspaceDoesNotExist) {
+			failed[scope] = true
 		}
+	}
+	if len(failed) > 0 {
+		s.Peripheral().incompleteEvents.Store(true)
+		s.scheduleV2SchemaRetry()
 	}
 	if !s.PublishV2Metadata() {
 		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
@@ -285,7 +294,11 @@ func (s *Core) handleSchemaEventAndPublish(frames []protocol.Frame) {
 	}
 	for _, f := range frames {
 		if event := events.FrameToEvent(f); event != nil {
-			s.emitV2EventAfter(event, prev)
+			incomplete := false
+			if v, ok := f.(frm.SchemaChange); ok {
+				incomplete = failed[v.SchemaKeyspace()]
+			}
+			s.emitV2EventAfter(event, prev, incomplete)
 			if s.privateStorage.eventBus != nil {
 				s.privateStorage.eventBus.PublishEvent(event)
 			}
@@ -327,8 +340,11 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 	topologyEventReceived := false
 	// status change events
 	sEvents := make(map[string]*nodeEvent)
+	// applied is the index in frames of the status frame applied for each
+	// host: the latest. Only its event is delivered.
+	applied := make(map[string]int)
 
-	for _, frame := range frames {
+	for i, frame := range frames {
 		switch f := frame.(type) {
 		case *frm.TopologyChangeEventFrame:
 			topologyEventReceived = true
@@ -339,6 +355,7 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 				sEvents[eventV2Address(f.Host, f.Port).String()] = event
 			}
 			event.change = f.Change
+			applied[eventV2Address(f.Host, f.Port).String()] = i
 		}
 	}
 
@@ -369,9 +386,15 @@ func (s *Core) HandleNodeEvent(frames []protocol.Frame) {
 		s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 		return
 	}
-	for _, f := range frames {
+	for i, f := range frames {
+		// A debounced status change that a later one replaced was not
+		// applied, so subscribers do not get it.
+		status, ok := f.(*frm.StatusChangeEventFrame)
+		superseded := ok && applied[eventV2Address(status.Host, status.Port).String()] != i
 		if event := events.FrameToEvent(f); event != nil {
-			s.emitV2NodeEvent(event, prev)
+			if !superseded {
+				s.emitV2NodeEvent(event, prev)
+			}
 			if s.privateStorage.eventBus != nil {
 				s.privateStorage.eventBus.PublishEvent(event)
 			}

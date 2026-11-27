@@ -261,17 +261,39 @@ func InternalMetadataSnapshotTableIdentity(m *MetadataSnapshot, k InternalMetada
 	}
 	return ""
 }
+
+// InternalMetadataSnapshotTabletRoot returns the tablets m tracks for table
+// k, and whether it tracks them; a stale snapshot (see placementStale) tracks
+// none. Tablet feedback compares against it; public lookups use
+// snapshotTabletRoot, which answers from the snapshot's own tablets.
 func InternalMetadataSnapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataTable) (*InternalTabletRangeTree, bool) {
+	root, ok := snapshotTabletRoot(m, k)
+	if ok && placementStale(m) {
+		return nil, true
+	}
+	return root, ok
+}
+
+// snapshotTabletRoot returns the tablets m holds for table k, and whether it
+// tracks k's tablets, stale or not.
+func snapshotTabletRoot(m *MetadataSnapshot, k InternalMetadataTable) (*InternalTabletRangeTree, bool) {
 	if m == nil {
 		return nil, false
 	}
 	if n := SnapshotData(m).InternalPlacements.Get(k); n != nil {
-		if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
-			return nil, true
-		}
 		return n.InternalValue.InternalRanges, true
 	}
 	return nil, false
+}
+
+// placementStale reports that the session forgot every tablet it knew
+// after m was published, because more tablet hints arrived than it could
+// queue (internal/cluster's QueueTabletFeedback). The built-in plan then
+// routes m's requests to no replicas, since the tablets it holds may have
+// moved; a public lookup on m still answers from m's own tablets.
+func placementStale(m *MetadataSnapshot) bool {
+	d := SnapshotData(m)
+	return d.InternalPlacementSignal != nil && d.InternalPlacementEpoch != d.InternalPlacementSignal.Load()
 }
 
 // InternalTabletLookup is the tablet holding a request's token in a
@@ -311,14 +333,21 @@ func (l *InternalTabletLookup) cached() *placementCacheEntry {
 	return (*placementCacheEntry)(l.ref)
 }
 
-// InternalLookupTablet finds the tablet holding info's token in m.
+// InternalLookupTablet finds the tablet holding info's token in m for the
+// built-in plan: a stale snapshot (see placementStale) routes to no replicas.
 func InternalLookupTablet(m *MetadataSnapshot, info routing.Info) InternalTabletLookup {
+	return lookupTablet(m, info, true)
+}
+
+// lookupTablet finds the tablet holding info's token in m. With plan set a
+// stale snapshot holds no tablet; without it, as for the public lookups, the
+// snapshot answers from its own tablets.
+func lookupTablet(m *MetadataSnapshot, info routing.Info, plan bool) InternalTabletLookup {
 	l := InternalTabletLookup{done: true}
 	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return l
 	}
-	if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
-		// A stale snapshot routes to no replicas, as placementReplicas does.
+	if plan && placementStale(m) {
 		l.tracked = true
 		return l
 	}
@@ -359,7 +388,7 @@ func InternalLookupTabletCached(m *MetadataSnapshot, info routing.Info, c *Inter
 	if m == nil || info.Table == "" || info.Keyspace == "" || !info.Token.Set {
 		return l
 	}
-	if SnapshotData(m).InternalPlacementSignal != nil && SnapshotData(m).InternalPlacementEpoch != SnapshotData(m).InternalPlacementSignal.Load() {
+	if placementStale(m) {
 		l.tracked = true
 		return l
 	}
@@ -425,10 +454,22 @@ func InternalMetadataSnapshotTabletVersionBlock(m *MetadataSnapshot, info routin
 	return l.VersionBlock(info)
 }
 
-// placementReplicas is a private borrowed view; public accessors detach it.
-func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, *InternalTabletRange) {
-	l := InternalLookupTablet(m, routing.Info{Keyspace: keyspace, Table: table, Token: cql.Option[int64]{Value: token, Set: true}})
-	return m.lookupReplicas(&l, keyspace, table, token)
+// placementReplicas is a private borrowed view of the replicas of token in
+// keyspace.table, from the snapshot's own placement, stale or not; public
+// accessors detach it. It reports whether the table is placed by tablets.
+func (m *MetadataSnapshot) placementReplicas(keyspace, table string, token int64) ([]Target, bool) {
+	l := lookupTablet(m, routing.Info{Keyspace: keyspace, Table: table, Token: cql.Option[int64]{Value: token, Set: true}}, false)
+	if l.tracked {
+		if n := l.node(); n != nil {
+			return n.InternalSpan.Replicas, true
+		}
+		return nil, true
+	}
+	ranges, tablet, err := routingRanges(m, keyspace, table)
+	if err != nil || len(ranges) == 0 {
+		return nil, tablet
+	}
+	return m.legacyPlacementReplicas(ranges, tablet, token), tablet
 }
 
 // lookupReplicas is placementReplicas for a request whose tablet l was

@@ -20,7 +20,8 @@ datacenter, and `WithLocalRack(rack)` optionally its rack. Every built-in policy
 name no `Datacenter` of their own takes it: the default profile's, and those
 of every profile built with `config.NewProfile`. Such a policy prefers
 replicas in that datacenter and, unless `AllowRemote` is set, routes only
-there. The default consistency, `LOCAL_QUORUM`, is local to the datacenter of
+there. A `routing.Options` with a `Rack` but no `Datacenter` prefers that
+rack of the session's local datacenter. The default consistency, `LOCAL_QUORUM`, is local to the datacenter of
 the coordinator, so set it on a cluster with more than one datacenter.
 Without it every datacenter is local, and Connect logs a warning when the
 cluster has more than one. Connect fails when the local datacenter, or rack,
@@ -78,19 +79,31 @@ that owns the token when the host's sharding is known; `AppendReplicaRoutes`
 appends them to a buffer the policy reuses, one per concurrent call, as from
 a `sync.Pool`) and `routing.RouteTo` (one host,
 or one shard of it), and narrows them with `WithShardID` and `ShardOf`.
-`Route.Datacenter` and `Route.Rack` name a route's locality.
+`Route.Datacenter` and `Route.Rack` name a route's locality, from the latest
+snapshot that indexed the host. These helpers return routes to every host,
+including hosts the host filter rejects (`Route.Enabled` reports false) and
+hosts that are down (`Route.Usable`, the pool's state now, which can differ
+from the `HostSnapshot.Up` of the snapshot at hand).
 `routing.FilterPlan` drops routes from a plan lazily, and `routing.Routes`
-ranges over one:
+ranges over one.
+
+Three combinators wrap whole policies, and forward `Validate` and `Learn` to
+the policies they wrap: `routing.Filter(p, keep)` drops the routes `keep`
+rejects from both `Pick` and `Fallback`, `routing.Prefer(p, prefer)` tries
+the routes `prefer` accepts first, and `routing.Concat(p1, p2, ...)` tries
+each policy's routes in turn, skipping repeats:
 
 ```go
-// notDC2 tries no host in dc2 once its first route fails.
-type notDC2 struct{ *routing.Builtin }
-
-// Fallback tries the built-in plan's hosts outside dc2 only.
-func (p *notDC2) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
-	return routing.FilterPlan(p.Builtin.Fallback(info, m), func(r metadata.Route) bool {
+// notDC2 is the default policy, except that it never routes to a host in
+// dc2.
+func notDC2() (routing.Policy, error) {
+	builtin, err := routing.NewPolicy(routing.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return routing.Filter(builtin, func(r metadata.Route) bool {
 		return r.Datacenter() != "dc2"
-	})
+	}), nil
 }
 ```
 
@@ -110,7 +123,11 @@ replicas in the local datacenter (`Datacenter`, else the session's local
 datacenter, or every datacenter without one), the replicas in other datacenters when `AllowRemote` is set, then the
 hosts that are no replicas in the same tiers: local rack, local datacenter,
 other datacenters. So with `AllowRemote` a remote replica comes before a local
-host that is no replica. Hosts that are down or have no connection come after
+host that is no replica. A request at `LOCAL_ONE`, `LOCAL_QUORUM` or
+`LOCAL_SERIAL` stays in the local datacenter even with `AllowRemote`, since a
+remote coordinator would count its own datacenter's replicas, unless
+`RemoteForLocalConsistency` is set. `MaxRemoteHostsPerDC`, when positive,
+caps how many hosts of each other datacenter a plan tries, replicas included. Hosts that are down or have no connection come after
 every reachable host that latency-aware routing does not hold back.
 The replicas of a tier come in an order random per request, or with
 `FixedReplicaOrder` in an order fixed for each replica set; the hosts that are no
@@ -142,7 +159,9 @@ request was sent; a plan already built keeps the tablets it was built with.
 When more hints arrive than the driver can queue, it forgets every tablet it
 knows and relearns them from later responses; a plan already built then skips
 its remaining replicas, of tablets or of the token ring, and goes on with the
-hosts.
+hosts. A snapshot keeps its own tablets regardless: `Snapshot.Replicas`,
+`TokenRanges` and `routing.ReplicaRoutes` on a snapshot the application holds
+still answer from them.
 
 `config.ConfigBuilder.WithPartitioner(name, partitioner)` maps a partitioner
 class name to a `routing.TokenPartitioner`, next to the built-in
@@ -196,8 +215,14 @@ Each stage of a request has its own answer:
 - **Before any statement**: `session.Metadata()` returns a `metadata.Snapshot`.
   `Snapshot.Token(keyspace, table, key...)` computes a partition's token from
   its partition-key values, `Snapshot.Replicas(keyspace, table, token)` lists
-  its replicas as host and shard targets, and `Snapshot.TokenRanges` and
-  `Snapshot.Hosts` describe the ring.
+  its replicas as host and shard targets, the same ones `routing.ReplicaRoutes`
+  routes to, and `Snapshot.PartitionReplicas(keyspace, table, key...)` does
+  both and returns the hosts. A token of a tablet table whose tablet the
+  session has not learned yet is `metadata.ErrPlacementUnknown`.
+  `Snapshot.TokenRanges` and `Snapshot.Hosts` describe the ring;
+  `TokenRanges` also reports whether its ranges are complete, which a tablet
+  table's are only once every tablet is known. Lookups take internal names:
+  `metadata.Name` converts a CQL identifier such as `"MyTable"`.
 - **Statement and values, before executing**: `Prepared.Routing(value)`
   returns the keyspace, table, token and statement kind, and the consistency
   and any host or shard pinned by the options passed after the value, without

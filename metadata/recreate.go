@@ -30,19 +30,26 @@ func sortedByName[T any](m map[string]T) []T {
 	return out
 }
 
+// ServerCQL returns the server's DESCRIBE KEYSPACE ... WITH INTERNALS output
+// for the keyspace, as the session loaded it with the schema, and empty when
+// it did not: on Cassandra, and on a ScyllaDB version without the statement.
+// It is the server's own account of the schema, which can hold what the
+// metadata does not, such as options the driver does not model; ToCQL builds
+// the statements from the metadata instead.
+func (ks *Keyspace) ServerCQL() string {
+	if ks == nil {
+		return ""
+	}
+	return ks.state.ServerCQL
+}
+
 // ToCQL returns a CQL query that can be used to recreate keyspace with all
 // user defined types, tables, indexes, functions, aggregates and views associated
-// with this keyspace. It is the server's DESCRIBE KEYSPACE output when the
-// session loaded it, and otherwise built from the metadata. The built
-// statement states a ScyllaDB keyspace's tablets option rather than leave it
-// to the server's default.
+// with this keyspace, built from the metadata: a Keyspace changed or built by
+// the caller gets statements for what it holds. The statement states a
+// ScyllaDB keyspace's tablets option rather than leave it to the server's
+// default. ServerCQL returns the server's own DESCRIBE output.
 func (ks *Keyspace) ToCQL() (string, error) {
-	// The server's own DESCRIBE KEYSPACE ... WITH INTERNALS output, when the
-	// loader fetched it, is the authoritative schema.
-	if ks.state.ServerCQL != "" {
-		return ks.state.ServerCQL, nil
-	}
-
 	var sb strings.Builder
 
 	if err := keyspaceMetadataKeyspaceToCQL(ks, &sb); err != nil {
@@ -410,10 +417,10 @@ CREATE AGGREGATE {{ ident .Keyspace }}.{{ ident .Name }}(
     {{- if ne $i 0 }}, {{ end }}
     {{ stripFrozen $arg }}
     {{- end -}})
-    SFUNC {{ ident .StateFunc.Name }}
+    SFUNC {{ ident .StateFunc.Value.Name }}
     STYPE {{ stripFrozen .StateType }}
-    {{- if ne .FinalFunc.Name "" }}
-    FINALFUNC {{ ident .FinalFunc.Name }}
+    {{- if .FinalFunc.Set }}
+    FINALFUNC {{ ident .FinalFunc.Value.Name }}
     {{- end -}}
     {{- if ne .InitCond "" }}
     INITCOND {{ .InitCond }}

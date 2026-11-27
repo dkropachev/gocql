@@ -4,6 +4,7 @@
 package metadata
 
 import (
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/link"
 	"github.com/scylladb/gocql/v2/metadata"
 )
@@ -24,8 +25,8 @@ type aggregateRep struct {
 	ReturnType     string
 	StateType      string
 	ArgumentTypes  []string
-	FinalFunc      metadata.Function
-	StateFunc      metadata.Function
+	FinalFunc      cql.Option[metadata.Function]
+	StateFunc      cql.Option[metadata.Function]
 }
 
 // AggregateMetadataData returns the loader's state on v.

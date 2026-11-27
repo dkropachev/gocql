@@ -43,7 +43,10 @@ func (r Route) HostID() cql.UUID {
 	return id
 }
 
-// Usable reports whether the route's host is up and has connections.
+// Usable reports whether the route's host is up and has connections, as its
+// connection pool reports it now. It can differ from the HostSnapshot.Up and
+// Connected of the snapshot the route came from, which hold the host's state
+// when that snapshot was published.
 func (r Route) Usable() bool {
 	if r.host == nil {
 		return false
@@ -52,8 +55,23 @@ func (r Route) Usable() bool {
 	return usable
 }
 
+// Enabled reports whether the session's host filter
+// (config.ConfigBuilder.WithHostFilter) accepts the route's host, as the
+// latest snapshot that indexed the host has it. routing.HostRoutes,
+// ReplicaRoutes and RouteTo return routes to hosts the filter rejects, and to
+// hosts that are down, too; a request does not take a route to a host the
+// filter rejects.
+func (r Route) Enabled() bool {
+	if r.host == nil {
+		return false
+	}
+	return link.Get[func(unsafe.Pointer) bool](link.RouteEnabled)(r.host)
+}
+
 // Datacenter returns the datacenter of the route's host, as the latest
 // snapshot that indexed the host has it, and empty for a route with no host.
+// The latest snapshot can be newer than the one the route came from, whose
+// HostSnapshot.Datacenter it then may not match.
 func (r Route) Datacenter() string {
 	if r.host == nil {
 		return ""

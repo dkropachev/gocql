@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/scylladb/gocql/v2/cql"
 	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -140,14 +141,14 @@ func compileMetadata(
 	keyspace.Aggregates = make(map[string]*metadata2.Aggregate, len(aggregates))
 	for _, aggregate := range aggregates {
 		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalFinalFunc, []string{aggregate.StateType}); f != nil {
-			aggregate.FinalFunc = *f
+			aggregate.FinalFunc = cql.Some(*f)
 		} else if f := uniqueV2Function(functions, AggregateMetadataData(&aggregate).InternalFinalFunc); f != nil {
-			aggregate.FinalFunc = *f
+			aggregate.FinalFunc = cql.Some(*f)
 		}
 		if f := resolveV2Function(functions, AggregateMetadataData(&aggregate).InternalStateFunc, append([]string{aggregate.StateType}, aggregate.ArgumentTypes...)); f != nil {
-			aggregate.StateFunc = *f
+			aggregate.StateFunc = cql.Some(*f)
 		} else if f := uniqueV2Function(functions, AggregateMetadataData(&aggregate).InternalStateFunc); f != nil {
-			aggregate.StateFunc = *f
+			aggregate.StateFunc = cql.Some(*f)
 		}
 		keyspace.Aggregates[v2FunctionIdentity(aggregate.Name, aggregate.ArgumentTypes)] = &aggregate
 	}

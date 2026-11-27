@@ -4,6 +4,12 @@
 // Package routingtest builds metadata snapshots for the tests of a
 // routing.Policy, without a session or a cluster.
 //
+// A routing.Info describes the request a policy routes. Its zero Kind is
+// cql.UnknownStatement, which the built-in policies route as possibly
+// conditional: in replica order, without shuffling or Pick, and to a
+// replica's shard only. Set Kind to cql.OrdinaryStatement, as a session does
+// for a statement known not to be conditional, to test the usual plan.
+//
 // A program that imports it links the engine behind the built-in policies,
 // so a routing.NewPolicy or routing.SingleTarget policy routes over its
 // snapshots as it would in a session, and so do routing.HostRoutes and
@@ -12,6 +18,7 @@ package routingtest
 
 import (
 	"cmp"
+	"fmt"
 	"maps"
 	"slices"
 
@@ -62,7 +69,16 @@ type Table struct {
 // Murmur3 partitioner unless their options name the CDC one. The snapshot
 // shares c's keyspaces and its hosts' tokens, which the caller must not
 // modify afterwards.
-func NewSnapshot(c Cluster) *metadata.Snapshot {
+//
+// It fails with a cql.ValidationError when c is not a cluster a session
+// could see: two hosts with one HostID, a replica whose HostID no host has,
+// two token ranges of a keyspace with one End, a tablet that is empty or
+// overlaps another tablet of its table, or a tablet of a table that neither
+// Keyspaces nor Tables holds.
+func NewSnapshot(c Cluster) (*metadata.Snapshot, error) {
+	if err := c.validate(); err != nil {
+		return nil, err
+	}
 	hosts := slices.Clone(c.Hosts)
 	index := implRouting.InternalBuildRoutingHostIndex(hosts)
 	index.InternalSetLocal(c.LocalDatacenter, c.LocalRack)
@@ -103,7 +119,68 @@ func NewSnapshot(c Cluster) *metadata.Snapshot {
 	for t, r := range c.Tablets {
 		state.InternalTablets[implRouting.InternalMetadataTable{InternalKeyspace: t.Keyspace, InternalTable: t.Name}] = sorted(r)
 	}
-	return implRouting.NewMetadataSnapshot(state).Public()
+	return implRouting.NewMetadataSnapshot(state).Public(), nil
+}
+
+// validate checks that c is a cluster a session could see.
+func (c *Cluster) validate() error {
+	invalid := func(format string, args ...any) error {
+		return &cql.ValidationError{Field: "routingtest cluster", Err: fmt.Errorf(format, args...)}
+	}
+	hosts := make(map[cql.UUID]bool, len(c.Hosts))
+	for _, h := range c.Hosts {
+		if hosts[h.HostID] {
+			return invalid("host %s is listed twice", h.HostID)
+		}
+		hosts[h.HostID] = true
+	}
+	replicas := func(where string, r metadata.TokenRange) error {
+		for _, t := range r.Replicas {
+			if !hosts[t.HostID] {
+				return invalid("%s range (%d, %d]: replica %s is not a host of the cluster", where, r.Start, r.End, t.HostID)
+			}
+		}
+		return nil
+	}
+	for ks, ranges := range c.TokenRanges {
+		ends := make(map[int64]bool, len(ranges))
+		for _, r := range ranges {
+			if ends[r.End] {
+				return invalid("keyspace %s: two token ranges end at %d", ks, r.End)
+			}
+			ends[r.End] = true
+			if err := replicas("keyspace "+ks, r); err != nil {
+				return err
+			}
+		}
+	}
+	for t, ranges := range c.Tablets {
+		if !c.holds(t) {
+			return invalid("tablets of %s.%s: no such table in Keyspaces or Tables", t.Keyspace, t.Name)
+		}
+		for i, r := range sorted(ranges) {
+			if r.Start >= r.End {
+				return invalid("%s.%s: tablet (%d, %d] is empty", t.Keyspace, t.Name, r.Start, r.End)
+			}
+			if i > 0 && r.Start < sorted(ranges)[i-1].End {
+				return invalid("%s.%s: tablet (%d, %d] overlaps another", t.Keyspace, t.Name, r.Start, r.End)
+			}
+			if err := replicas(t.Keyspace+"."+t.Name, r); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// holds reports whether c's Keyspaces or Tables hold table t, or a view of
+// that name.
+func (c *Cluster) holds(t Table) bool {
+	if slices.Contains(c.Tables, t) {
+		return true
+	}
+	ks := c.Keyspaces[t.Keyspace]
+	return ks != nil && (ks.Tables[t.Name] != nil || ks.Views[t.Name] != nil)
 }
 
 // Host returns a host of the cluster with id, in datacenter and rack, that

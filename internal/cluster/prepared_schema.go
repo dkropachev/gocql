@@ -136,7 +136,7 @@ func equalPreparedAggregates(a, b map[string]*metadata.Aggregate) bool {
 			}
 			continue
 		}
-		if x.Keyspace != y.Keyspace || x.Name != y.Name || x.InitCond != y.InitCond || x.ReturnType != y.ReturnType || x.StateType != y.StateType || implMetadata.AggregateMetadataData(x).InternalStateFunc != implMetadata.AggregateMetadataData(y).InternalStateFunc || implMetadata.AggregateMetadataData(x).InternalFinalFunc != implMetadata.AggregateMetadataData(y).InternalFinalFunc || !slices.Equal(x.ArgumentTypes, y.ArgumentTypes) || !equalPreparedFunction(x.FinalFunc, y.FinalFunc) || !equalPreparedFunction(x.StateFunc, y.StateFunc) {
+		if x.Keyspace != y.Keyspace || x.Name != y.Name || x.InitCond != y.InitCond || x.ReturnType != y.ReturnType || x.StateType != y.StateType || implMetadata.AggregateMetadataData(x).InternalStateFunc != implMetadata.AggregateMetadataData(y).InternalStateFunc || implMetadata.AggregateMetadataData(x).InternalFinalFunc != implMetadata.AggregateMetadataData(y).InternalFinalFunc || !slices.Equal(x.ArgumentTypes, y.ArgumentTypes) || x.FinalFunc.Set != y.FinalFunc.Set || x.StateFunc.Set != y.StateFunc.Set || !equalPreparedFunction(x.FinalFunc.Value, y.FinalFunc.Value) || !equalPreparedFunction(x.StateFunc.Value, y.StateFunc.Value) {
 			return false
 		}
 	}

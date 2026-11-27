@@ -1293,6 +1293,7 @@ package event
 		event.Event field Generation uint64
 		event.Event field HostID cql.UUID
 		event.Event field Kind event.Kind
+		event.Event field Incomplete bool
 	type event.Filter struct
 		event.Filter field Keyspace string
 		event.Filter field Kinds []event.Kind
@@ -1368,8 +1369,8 @@ package metadata
 		metadata.Aggregate field ReturnType string
 		metadata.Aggregate field StateType string
 		metadata.Aggregate field ArgumentTypes []string
-		metadata.Aggregate field FinalFunc metadata.Function
-		metadata.Aggregate field StateFunc metadata.Function
+		metadata.Aggregate field FinalFunc cql.Option[metadata.Function]
+		metadata.Aggregate field StateFunc cql.Option[metadata.Function]
 	type metadata.Column struct
 		metadata.Column field Keyspace string
 		metadata.Column field Table string
@@ -1392,6 +1393,7 @@ package metadata
 	const metadata.ColumnOrderAsc metadata.ColumnOrder = 1
 	const metadata.ColumnOrderDesc metadata.ColumnOrder = 2
 	const metadata.ColumnOrderNone metadata.ColumnOrder = 0
+	var metadata.ErrPlacementUnknown error
 	type metadata.Function struct
 		metadata.Function field Keyspace string
 		metadata.Function field Name string
@@ -1401,6 +1403,7 @@ package metadata
 		metadata.Function field ArgumentTypes []string
 		metadata.Function field ArgumentNames []string
 		metadata.Function field CalledOnNullInput bool
+		metadata.Function method (*T) Equal(other *metadata.Function) bool
 	type metadata.HostSnapshot struct
 		metadata.HostSnapshot field Address net/netip.AddrPort
 		metadata.HostSnapshot field Datacenter string
@@ -1422,6 +1425,7 @@ package metadata
 		metadata.Index field OrderedColumns []*metadata.Column
 		metadata.Index field PartitionKey []*metadata.Column
 		metadata.Index field ClusteringColumns []*metadata.Column
+		metadata.Index method (*T) Equal(other *metadata.Index) bool
 	type metadata.IndexKind string
 	const metadata.IndexKindComposites metadata.IndexKind = "COMPOSITES"
 	const metadata.IndexKindCustom metadata.IndexKind = "CUSTOM"
@@ -1442,16 +1446,20 @@ package metadata
 		metadata.Keyspace field DurableWrites bool
 		metadata.Keyspace method (*T) Aggregate(name string, args ...string) (*metadata.Aggregate, bool)
 		metadata.Keyspace method (*T) AggregatesNamed(name string) []*metadata.Aggregate
+		metadata.Keyspace method (*T) Equal(other *metadata.Keyspace) bool
 		metadata.Keyspace method (*T) Function(name string, args ...string) (*metadata.Function, bool)
 		metadata.Keyspace method (*T) FunctionsNamed(name string) []*metadata.Function
+		metadata.Keyspace method (*T) ServerCQL() string
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
 		metadata.Mode method (T) String() string
 	const metadata.ModeFull metadata.Mode = 2
 	const metadata.ModeKeyspaces metadata.Mode = 1
 	const metadata.ModeNone metadata.Mode = 0
+	func metadata.Name(cqlIdent string) string
 	type metadata.Route struct
 		metadata.Route method (T) Datacenter() string
+		metadata.Route method (T) Enabled() bool
 		metadata.Route method (T) HostID() cql.UUID
 		metadata.Route method (T) Rack() string
 		metadata.Route method (T) ShardID() cql.Option[uint32]
@@ -1463,13 +1471,16 @@ package metadata
 		metadata.Snapshot method (*T) Diagnostics() []error
 		metadata.Snapshot method (*T) Generation() uint64
 		metadata.Snapshot method (*T) Host(id cql.UUID) (metadata.HostSnapshot, bool)
+		metadata.Snapshot method (*T) HostInfo(id cql.UUID) (metadata.HostSnapshot, bool)
 		metadata.Snapshot method (*T) Hosts() []metadata.HostSnapshot
 		metadata.Snapshot method (*T) Keyspace(name string) (*metadata.Keyspace, bool)
 		metadata.Snapshot method (*T) Keyspaces() []string
+		metadata.Snapshot method (*T) PartitionReplicas(keyspace string, table string, key ...cql.Value) ([]metadata.HostSnapshot, error)
 		metadata.Snapshot method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Target, error)
 		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
+		metadata.Snapshot method (*T) Tables(keyspace string) []string
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
-		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) ([]metadata.TokenRange, error)
+		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) (ranges []metadata.TokenRange, complete bool, err error)
 		metadata.Snapshot method (*T) Type(keyspace string, name string) (*metadata.Type, bool)
 		metadata.Snapshot method (*T) View(keyspace string, name string) (*metadata.View, bool)
 	type metadata.Table struct
@@ -1517,6 +1528,7 @@ package metadata
 		metadata.Type field Name string
 		metadata.Type field FieldNames []string
 		metadata.Type field FieldTypes []string
+		metadata.Type method (*T) Equal(other *metadata.Type) bool
 	type metadata.View struct
 		metadata.View field Columns map[string]*metadata.Column
 		metadata.View field Extensions map[string][]byte
@@ -1531,6 +1543,7 @@ package metadata
 		metadata.View field ID cql.UUID
 		metadata.View field BaseTableID cql.UUID
 		metadata.View field IncludeAllColumns bool
+		metadata.View method (*T) Equal(other *metadata.View) bool
 
 package metrics
 	type metrics.Host struct
@@ -1676,6 +1689,8 @@ package routing
 		routing.Builtin method (*T) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool)
 		routing.Builtin method (*T) Validate(m *metadata.Snapshot) error
 	var routing.CDCTokenPartitioner routing.TokenPartitioner
+	func routing.Concat(policies ...routing.Policy) routing.Policy
+	func routing.Filter(p routing.Policy, keep func(metadata.Route) bool) routing.Policy
 	func routing.FilterPlan(plan routing.Plan, keep func(metadata.Route) bool) routing.Plan
 	func routing.HostRoutes(snapshot *metadata.Snapshot) []metadata.Route
 	type routing.Info struct
@@ -1702,8 +1717,10 @@ package routing
 		routing.Options field Datacenter string
 		routing.Options field Rack string
 		routing.Options field Latency routing.LatencyOptions
+		routing.Options field MaxRemoteHostsPerDC int
 		routing.Options field NoTokenAware bool
 		routing.Options field AllowRemote bool
+		routing.Options field RemoteForLocalConsistency bool
 		routing.Options field FixedReplicaOrder bool
 		routing.Options field NoLeaderAware bool
 	type routing.PartitionKey struct
@@ -1715,6 +1732,7 @@ package routing
 	type routing.Policy interface
 		routing.Policy method Fallback(routing.Info, *metadata.Snapshot) routing.Plan
 		routing.Policy method Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool)
+	func routing.Prefer(p routing.Policy, prefer func(metadata.Route) bool) routing.Policy
 	func routing.ReplicaRoutes(snapshot *metadata.Snapshot, info routing.Info) []metadata.Route
 	func routing.RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool)
 	func routing.Routes(plan routing.Plan) iter.Seq[metadata.Route]
@@ -1737,7 +1755,7 @@ package routing/routingtest
 		routing/routingtest.Cluster field Hosts []metadata.HostSnapshot
 		routing/routingtest.Cluster field Generation uint64
 	func routing/routingtest.Host(id cql.UUID, datacenter string, rack string) metadata.HostSnapshot
-	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) *metadata.Snapshot
+	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) (*metadata.Snapshot, error)
 	type routing/routingtest.Table struct
 		routing/routingtest.Table field Keyspace string
 		routing/routingtest.Table field Name string

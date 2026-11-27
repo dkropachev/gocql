@@ -357,8 +357,10 @@ func TestTablets(t *testing.T) {
 			if target, ok := implRouting.InternalNextTarget(lazy); !ok || target.ShardID.Set {
 				t.Fatal("preexisting plan used invalidated placement", target)
 			}
-			if replicas, _ := before.Replicas("ks", "table", 150); len(replicas) != 0 {
-				t.Fatal("overflow retained known-stale mapping")
+			// Only plans skip a stale snapshot's tablets: a public lookup
+			// answers from the snapshot's own.
+			if replicas, err := before.Replicas("ks", "table", 150); err != nil || len(replicas) == 0 {
+				t.Fatal("overflow hid the snapshot's own tablets from a public lookup", replicas, err)
 			}
 			p.InternalFeedbackMu.Lock()
 			if len(p.InternalFeedback) > 1024 {
@@ -391,7 +393,7 @@ func TestTablets(t *testing.T) {
 			}
 			set(hTarget(3, 1), hTarget(2, 2), hTarget(1, 3))
 			info := routing2.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Value: 1, Set: true}, Consistency: cql.LocalQuorum, Kind: cql.ConditionalStatement}
-			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true}))
+			policy := codecTestMust(implRouting.NewRoutingPolicy(routing2.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, RemoteForLocalConsistency: true}))
 			for i := 0; i < 10; i++ {
 				plan := implRouting.NewPlan(policy, info, m)
 				first, ok := implRouting.InternalNextTarget(plan)

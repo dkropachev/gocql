@@ -334,7 +334,7 @@ func TestCompileFunctionKeys(t *testing.T) {
 		t.Errorf("FunctionsNamed(minus) = %v", got)
 	}
 	a, ok := keyspace.Aggregate("total", "int")
-	if !ok || a.StateFunc.Name != "state" {
+	if !ok || a.StateFunc.Value.Name != "state" {
 		t.Fatalf("Aggregate(total, int) = %v, %v", a, ok)
 	}
 	if got := keyspace.AggregatesNamed("total"); len(got) != 1 || got[0] != a {

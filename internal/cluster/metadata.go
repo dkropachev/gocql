@@ -17,6 +17,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/binding"
 	connectivity "github.com/scylladb/gocql/v2/internal/connectivity"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -87,6 +88,10 @@ type InternalV2PeripheralState struct {
 	InternalFeedbackMu     sync.Mutex
 	InternalRetryScheduled atomic.Bool
 	schemaRetryNeeded      atomic.Bool
+	// incompleteEvents reports that the session delivered a Schema event
+	// marked Incomplete, whose refresh failed; the schema retry that next
+	// publishes the whole schema delivers a ChangePublicationResync.
+	incompleteEvents       atomic.Bool
 	closed                 bool
 	InternalFeedbackResync bool
 }
@@ -1073,8 +1078,15 @@ func (s *Core) StartV2SchemaRetry() {
 		}
 		ctx, cancel := InternalExecutionContext(ctx, timeout)
 		if p.schemaRetryNeeded.Swap(false) {
+			incomplete := p.incompleteEvents.Swap(false)
 			if err := s.RefreshV2AllSchema(ctx); err != nil {
 				p.schemaRetryNeeded.Store(true)
+				if incomplete {
+					p.incompleteEvents.Store(true)
+				}
+			} else if incomplete {
+				// The schema the Incomplete events lacked is published now.
+				s.PublishV2LocalEvent(event.Event{Kind: event.KindOverflow, Generation: s.Metadata().Generation(), Change: event.ChangePublicationResync})
 			}
 		}
 		for keyspace, version := range scopes {

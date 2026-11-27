@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestKeyspaceToCQL(t *testing.T) {
@@ -112,8 +114,8 @@ func TestKeyspaceToCQL(t *testing.T) {
 				ReturnType:    "double",
 				StateType:     "frozen<tuple<int, double>>",
 				InitCond:      "(0, 0)",
-				StateFunc:     Function{Name: "avgstate"},
-				FinalFunc:     Function{Name: "avgfinal"},
+				StateFunc:     cql.Some(Function{Name: "avgstate"}),
+				FinalFunc:     cql.Some(Function{Name: "avgfinal"}),
 			}
 			var sb strings.Builder
 			if err := keyspaceMetadataAggregateToCQL(ks, &sb, am); err != nil {
@@ -368,7 +370,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 						Keyspace: "ks", Name: "total",
 						ArgumentTypes: []string{"int"}, ReturnType: "int", StateType: "int",
 						InitCond:  "0",
-						StateFunc: Function{Name: "fsum"},
+						StateFunc: cql.Some(Function{Name: "fsum"}),
 					},
 				},
 				Views: map[string]*View{
@@ -470,7 +472,7 @@ func TestKeyspaceToCQL(t *testing.T) {
 					ks.Aggregates[n+"_agg"] = &Aggregate{
 						Keyspace: "ks", Name: n + "_agg",
 						ArgumentTypes: []string{"int"}, ReturnType: "int", StateType: "int",
-						InitCond: "0", StateFunc: Function{Name: n + "_fn"},
+						InitCond: "0", StateFunc: cql.Some(Function{Name: n + "_fn"}),
 					}
 					ks.Views[n+"_v"] = &View{
 						Keyspace: "ks", Name: n + "_v", BaseTable: n,
@@ -549,8 +551,8 @@ func TestKeyspaceToCQL(t *testing.T) {
 				Aggregates: map[string]*Aggregate{
 					"my-agg": {
 						Keyspace: "my-ks", Name: "my-agg", ArgumentTypes: []string{"int"},
-						StateFunc: Function{Name: "my-fn"}, StateType: "int",
-						FinalFunc: Function{Name: "my-final"},
+						StateFunc: cql.Some(Function{Name: "my-fn"}), StateType: "int",
+						FinalFunc: cql.Some(Function{Name: "my-final"}),
 					},
 				},
 			}
@@ -590,10 +592,10 @@ func TestKeyspaceToCQL(t *testing.T) {
 				}
 			}
 		})
-		// Pins the short-circuit itself: a
-		// keyspace that carries the server's DESCRIBE output gets it back untouched, and the
-		// generator is not consulted. This is the branch that hides all the others.
-		t.Run("UsesServerStatements", func(t *testing.T) {
+		// A keyspace that carries the server's DESCRIBE output returns it
+		// from ServerCQL, while ToCQL builds the statements from the
+		// metadata, which the caller may have changed.
+		t.Run("ServerStatementsSeparate", func(t *testing.T) {
 			t.Parallel()
 
 			ks := &Keyspace{
@@ -610,15 +612,18 @@ func TestKeyspaceToCQL(t *testing.T) {
 
 			ks.state.ServerCQL = "CREATE KEYSPACE server_said_so;"
 
+			if got := ks.ServerCQL(); got != "CREATE KEYSPACE server_said_so;" {
+				t.Errorf("ServerCQL returned %q, want the server CQL verbatim", got)
+			}
 			got, err := ks.ToCQL()
 			if err != nil {
 				t.Fatalf("ToCQL: %v", err)
 			}
-			if got != "CREATE KEYSPACE server_said_so;" {
-				t.Errorf("ToCQL returned %q, want the server CQL verbatim", got)
+			if !strings.Contains(got, "CREATE TABLE") || strings.Contains(got, "server_said_so") {
+				t.Errorf("ToCQL returned %q, want statements built from the metadata", got)
 			}
-			if strings.Contains(got, "CREATE TABLE") {
-				t.Error("the generator ran even though the server CQL was present")
+			if (*Keyspace)(nil).ServerCQL() != "" {
+				t.Error("a nil keyspace has server CQL")
 			}
 		})
 	})

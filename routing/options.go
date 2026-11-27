@@ -19,18 +19,30 @@ import (
 // WithLocalDatacenter) or, without one, over every datacenter.
 type Options struct {
 	// Datacenter and Rack name the local datacenter and rack. Replicas there
-	// are tried first. A rack requires a datacenter. Empty takes the
-	// session's local datacenter and rack.
+	// are tried first. An empty Datacenter takes the session's local
+	// datacenter, and with it, when Rack is empty too, the session's local
+	// rack; a Rack without a Datacenter is a rack of the session's local
+	// datacenter, and Validate fails when the session has none.
 	Datacenter, Rack string
 	// Latency configures latency-aware routing.
 	Latency LatencyOptions
+	// MaxRemoteHostsPerDC, when positive, is the most hosts of each other
+	// datacenter a plan tries, replicas included, when AllowRemote is set.
+	// Zero tries every one; a negative value is rejected.
+	MaxRemoteHostsPerDC int
 	// NoTokenAware routes a request without regard to the replicas of its
 	// partition. It also turns leader-aware routing off.
 	NoTokenAware bool
 	// AllowRemote lets requests fall back to hosts outside the local
 	// datacenter. Unless NoTokenAware is set, replicas there are tried before
-	// local hosts that are not replicas.
+	// local hosts that are not replicas. A request at LOCAL_ONE,
+	// LOCAL_QUORUM or LOCAL_SERIAL consistency stays in the local datacenter
+	// unless RemoteForLocalConsistency is set: a remote coordinator would
+	// count the replicas of its own datacenter, not of the local one.
 	AllowRemote bool
+	// RemoteForLocalConsistency lets requests at a LOCAL_* consistency fall
+	// back to other datacenters too, when AllowRemote is set.
+	RemoteForLocalConsistency bool
 	// FixedReplicaOrder tries a token's replicas in a fixed order per token
 	// rather than shuffling them per request.
 	FixedReplicaOrder bool
@@ -70,8 +82,8 @@ type LatencyOptions struct {
 
 // normalized returns o with latency defaults applied, or a validation error.
 func (o Options) normalized() (Options, error) {
-	if o.Rack != "" && o.Datacenter == "" {
-		return o, &cql.ValidationError{Field: "routing rack", Err: errors.New("requires a datacenter")}
+	if o.MaxRemoteHostsPerDC < 0 {
+		return o, &cql.ValidationError{Field: "routing remote hosts", Err: errors.New("must not be negative")}
 	}
 	if !o.Latency.Enabled {
 		return o, nil

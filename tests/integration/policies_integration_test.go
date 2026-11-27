@@ -71,8 +71,8 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		t.Fatal(err)
 	}
 	metadata = session.Metadata()
-	ranges, err := metadata.TokenRanges(keyspace, "")
-	if err != nil || len(ranges) == 0 {
+	ranges, complete, err := metadata.TokenRanges(keyspace, "")
+	if err != nil || len(ranges) == 0 || !complete {
 		t.Fatalf("token-aware metadata has no keyspace ranges: %v", err)
 	}
 	for _, tokenRange := range ranges {

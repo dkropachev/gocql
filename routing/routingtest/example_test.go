@@ -12,29 +12,13 @@ import (
 	"github.com/scylladb/gocql/v2/routing/routingtest"
 )
 
-// avoid wraps the built-in policy and never routes to one host. Embedding
-// *routing.Builtin keeps its Validate and Learn.
-type avoid struct {
-	*routing.Builtin
-	host cql.UUID
-}
-
-func (a avoid) Pick(info routing.Info, m *metadata.Snapshot) (metadata.Route, bool) {
-	r, ok := a.Builtin.Pick(info, m)
-	return r, ok && r.HostID() != a.host
-}
-
-func (a avoid) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan {
-	return routing.FilterPlan(a.Builtin.Fallback(info, m), func(r metadata.Route) bool { return r.HostID() != a.host })
-}
-
 func ExampleNewSnapshot() {
 	hosts := []metadata.HostSnapshot{
 		routingtest.Host(cql.UUID{15: 1}, "dc1", ""),
 		routingtest.Host(cql.UUID{15: 2}, "dc1", ""),
 		routingtest.Host(cql.UUID{15: 3}, "dc2", ""),
 	}
-	m := routingtest.NewSnapshot(routingtest.Cluster{
+	m, err := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts:  hosts,
 		Tables: []routingtest.Table{{Keyspace: "ks", Name: "t"}},
 		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{
@@ -42,11 +26,18 @@ func ExampleNewSnapshot() {
 		}}}},
 		LocalDatacenter: "dc1",
 	})
+	if err != nil {
+		panic(err)
+	}
 	builtin, err := routing.NewPolicy(routing.Options{})
 	if err != nil {
 		panic(err)
 	}
-	policy := avoid{Builtin: builtin, host: hosts[0].HostID}
+	// The policy under test never routes to host 1. Filter keeps the
+	// built-in policy's validation and latency tracking.
+	policy := routing.Filter(builtin, func(r metadata.Route) bool { return r.HostID() != hosts[0].HostID })
+	// Kind defaults to cql.UnknownStatement, which routes as a conditional
+	// request would; a test of the usual plan sets OrdinaryStatement.
 	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](42), Kind: cql.OrdinaryStatement}
 	for r := range routing.Routes(policy.Fallback(info, m)) {
 		fmt.Println(r.HostID()[15], r.Datacenter(), r.ShardID().Set)

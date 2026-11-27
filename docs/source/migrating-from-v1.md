@@ -330,6 +330,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.TokenAwareHostPolicy(gocql.DCAwareRoundRobinPolicy(dc))` | the default policy with `config.ConfigBuilder.WithLocalDatacenter(dc)`, or `routing.NewPolicy(routing.Options{Datacenter: dc})` |
 | `gocql.TokenAwareHostPolicy(fallback, gocql.ShuffleReplicas())` | the default: replicas are shuffled unless `routing.Options.FixedReplicaOrder` is set |
 | `gocql.DCAwareRoundRobinPolicy(dc)` without token awareness | `routing.Options{Datacenter: dc, NoTokenAware: true}` |
+| `gocql.DCAwareRoundRobinPolicy` with remote failover (`HostPolicyOptionDisableDCFailover` not set) | `routing.Options{AllowRemote: true}`; `LOCAL_*` requests stay local unless `RemoteForLocalConsistency` is set, and `MaxRemoteHostsPerDC` caps the remote hosts per datacenter |
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.Learner`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
@@ -337,6 +338,10 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
 | `session.KeyspaceMetadata(ks)` to read one table | `session.Metadata().Table(ks, name)`, which copies one table rather than the keyspace; `Keyspaces()` lists the loaded keyspaces and `Host(id)` finds one host |
 | `KeyspaceMetadata.Functions[name]`, `Aggregates[name]` | keyed by signature, such as `"add(int,int)"`: `metadata.Keyspace.Function(name, argTypes...)`, or `FunctionsNamed(name)` for every overload |
+| `AggregateMetadata.FinalFunc`, `StateFunc` | `metadata.Aggregate.FinalFunc`, `StateFunc`: a `cql.Option[metadata.Function]`, unset when the aggregate has none or the function was not found |
+| `KeyspaceMetadata.ToCQL()` | `metadata.Keyspace.ToCQL()` builds the statements from the metadata; `ServerCQL()` returns ScyllaDB's own `DESCRIBE KEYSPACE` output |
+| `KeyspaceMetadata.Tables` to list table names | `session.Metadata().Tables(keyspace)`, sorted, without copying the schema |
+| `session.KeyspaceMetadata` with a quoted name such as `"MyTable"` | lookups take the internal name, `MyTable`; `metadata.Name(cqlIdent)` converts a CQL identifier |
 | `gocql.ColumnPartitionKey`, `ColumnClusteringKey`, `ColumnRegular`, `ColumnCompact`, `ColumnStatic` | `metadata.ColumnKindPartitionKey`, `ColumnKindClusteringKey`, `ColumnKindRegular`, `ColumnKindCompact`, `ColumnKindStatic` |
 | `HostInfo.HostID()` | `metadata.HostSnapshot.HostID` |
 | `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DCLocalReadRepairChance` |

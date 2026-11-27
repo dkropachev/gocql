@@ -339,12 +339,12 @@ type Aggregate struct {
 	StateType string
 	// ArgumentTypes lists the CQL types of the arguments, in order.
 	ArgumentTypes []string
-	// FinalFunc is the final function, or the zero Function when there is
-	// none or it was not found.
-	FinalFunc Function
-	// StateFunc is the state function, or the zero Function when it was not
-	// found.
-	StateFunc Function
+	// FinalFunc is the final function, unset when the aggregate has none or
+	// the snapshot does not hold it.
+	FinalFunc cql.Option[Function]
+	// StateFunc is the state function, unset when the snapshot does not hold
+	// it.
+	StateFunc cql.Option[Function]
 }
 
 // Type is a user-defined type: its fields' names and types, in order.

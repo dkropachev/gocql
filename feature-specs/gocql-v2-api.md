@@ -1599,12 +1599,16 @@ type Policy interface {
 type Validator interface { Validate(*metadata.Snapshot) error } // optional; once per snapshot
 type Learner interface { Learn(AttemptEvent) }                  // optional
 func PlanOf(routes ...metadata.Route) Plan                         // a plan of routes, in order
-func HostRoutes(*metadata.Snapshot) []metadata.Route               // every host, to any shard
-func ReplicaRoutes(*metadata.Snapshot, Info) []metadata.Route      // Info's replicas
+func HostRoutes(*metadata.Snapshot) []metadata.Route               // every host, to any shard; filtered-out and down hosts included
+func ReplicaRoutes(*metadata.Snapshot, Info) []metadata.Route      // Info's replicas, from the snapshot's own placement
 func AppendReplicaRoutes(dst []metadata.Route, *metadata.Snapshot, Info) []metadata.Route // ReplicaRoutes into a buffer
-func RouteTo(*metadata.Snapshot, metadata.Target) (metadata.Route, bool) // false: no such host
+func RouteTo(*metadata.Snapshot, metadata.Target) (metadata.Route, bool) // false: no such host; AnyShardFallback: a missing shard routes to any
 func FilterPlan(Plan, keep func(metadata.Route) bool) Plan         // lazy
 func Routes(Plan) iter.Seq[metadata.Route]                         // consumes the plan
+// Policy combinators; each forwards Validate and Learn to the policies it wraps.
+func Filter(p Policy, keep func(metadata.Route) bool) Policy       // p without the routes keep rejects
+func Prefer(p Policy, prefer func(metadata.Route) bool) Policy     // p's preferred routes first
+func Concat(policies ...Policy) Policy                             // each policy's routes in turn
 type AttemptEvent struct {
     RequestID uint64
     Page int    // 1-based, within the request
@@ -1732,9 +1736,11 @@ one.
 ```go
 // package routing
 type Options struct { // the zero Options is the default policy
-    Datacenter, Rack string // empty: the session's local datacenter and rack
+    Datacenter, Rack string // empty: the session's local datacenter and rack; a Rack alone is in the session's datacenter
     NoTokenAware bool
     AllowRemote bool
+    RemoteForLocalConsistency bool // LOCAL_* requests may go remote too; default: they stay local
+    MaxRemoteHostsPerDC int        // per remote datacenter, in a plan; 0: every host
     FixedReplicaOrder bool
     NoLeaderAware bool
     Latency LatencyOptions
@@ -1766,7 +1772,7 @@ type Cluster struct {
     Generation uint64
 }
 type Table struct { Keyspace, Name string }
-func NewSnapshot(Cluster) *metadata.Snapshot // links the built-in policies' engine
+func NewSnapshot(Cluster) (*metadata.Snapshot, error) // links the built-in policies' engine; rejects duplicate hosts, unknown replicas, overlapping tablets
 func Host(id cql.UUID, datacenter, rack string) metadata.HostSnapshot // enabled, up, connected
 ```
 
@@ -1908,13 +1914,14 @@ type Event struct {
     Kind Kind
     Generation uint64
     Address netip.AddrPort
-    HostID cql.UUID // Topology, Status, Pool and Control; REMOVED_NODE from the previous snapshot
+    HostID cql.UUID // Topology, Status, Pool and Control; REMOVED_NODE from the previous snapshot; the correlation key
     Change Change // typed string: ChangeNewNode, ChangeUp, ChangeCreated, ChangePoolUp and ChangePoolDown (Pool), ChangeRoutesUpdated (ClientRoute), ...
     ObjectKind ObjectKind // typed string: ObjectKeyspace, ObjectTable, ObjectView, ...
-    Keyspace, Object string
+    Keyspace, Object string // Object: a table, view, type, function or aggregate, by internal name
     ArgumentTypes []string  // function/aggregate argument types
     ConnectionIDs []string  // ClientRoute
     HostIDs []cql.UUID      // ClientRoute
+    Incomplete bool         // Schema: the refresh failed; a ChangePublicationResync follows once a retry publishes
 }
 func (s *Subscription) Events() <-chan Event
 func (s *Subscription) Close()
@@ -1923,21 +1930,31 @@ func (s *Subscription) Close()
 type Snapshot struct { /* immutable */ }
 func (m *Snapshot) Hosts() []HostSnapshot
 func (m *Snapshot) Host(cql.UUID) (HostSnapshot, bool)
+func (m *Snapshot) HostInfo(cql.UUID) (HostSnapshot, bool) // without Tokens
 func (m *Snapshot) Keyspaces() []string // sorted names
+func (m *Snapshot) Tables(keyspace string) []string // sorted names, no views
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
 func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
 func (m *Snapshot) View(keyspace, name string) (*View, bool)
 func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
+// Replicas reads the snapshot's own placement, as routing.ReplicaRoutes does:
+// a vnode keyspace's ring places a table not loaded, a vnode replica's shard
+// is filled in when the host's sharding is known, and a tablet token no known
+// tablet covers is ErrPlacementUnknown.
 func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error)
-func (m *Snapshot) TokenRanges(keyspace, table string) ([]TokenRange, error)
+func (m *Snapshot) PartitionReplicas(keyspace, table string, key ...cql.Value) ([]HostSnapshot, error) // Token, then Replicas
+func (m *Snapshot) TokenRanges(keyspace, table string) (ranges []TokenRange, complete bool, err error) // complete: the ranges cover the ring
 func (m *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error)
+var ErrPlacementUnknown error
+func Name(cqlIdent string) string // a CQL identifier's internal name, as lookups take it
 func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
 type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool }
 type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
-func (r Route) Usable() bool
+func (r Route) Usable() bool                        // the pool's state now, not the snapshot's HostSnapshot.Up
+func (r Route) Enabled() bool                       // the host filter accepts the host
 func (r Route) Datacenter() string                  // and Rack, from the latest snapshot that indexed the host
 func (r Route) ShardID() cql.Option[uint32]         // unset: any connection of the host
 func (r Route) ShardOf(token int64) cql.Option[uint32]
@@ -1947,7 +1964,11 @@ func (r Route) WithShardID(shard cql.Option[uint32]) Route
 // View, Type, Function, Aggregate.
 // Keyspace.Functions and Aggregates are keyed by signature, "name(int,text)";
 // Keyspace.Function(name, args...), FunctionsNamed(name), Aggregate and
-// AggregatesNamed look them up.
+// AggregatesNamed look them up. Aggregate.FinalFunc and StateFunc are
+// cql.Option[Function], unset when absent or not found. Keyspace, Table,
+// View, Index, Type, Function, Column and TableOptions have Equal.
+// Keyspace.ToCQL builds statements from the metadata; Keyspace.ServerCQL is
+// the server's DESCRIBE output, when it gave one.
 type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 
 // package metrics

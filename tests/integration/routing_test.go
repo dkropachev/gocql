@@ -29,6 +29,7 @@ package integration
 import (
 	stdcmp "cmp"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -562,7 +563,7 @@ func TestRouting(t *testing.T) {
 				}
 			}
 			snapshot := session.Metadata()
-			ranges, err := snapshot.TokenRanges(prepared.Info().Keyspace, table)
+			ranges, _, err := snapshot.TokenRanges(prepared.Info().Keyspace, table)
 			if err != nil || len(ranges) == 0 {
 				t.Fatalf("missing tablet ranges: %v", err)
 			}
@@ -576,6 +577,9 @@ func TestRouting(t *testing.T) {
 						}
 					}
 					actual, err := snapshot.Replicas(prepared.Info().Keyspace, table, token)
+					if expected == nil && errors.Is(err, metadata.ErrPlacementUnknown) {
+						continue
+					}
 					if err != nil || !slices.Equal(actual, expected) {
 						t.Fatalf("tablet boundary %d: got %v, want %v, error %v", token, actual, expected, err)
 					}

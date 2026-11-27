@@ -101,6 +101,9 @@ func init() {
 	link.Set(link.RouteLocality, func(host unsafe.Pointer) (string, string) {
 		return (*pool.HostRoute)(host).Locality()
 	})
+	link.Set(link.RouteEnabled, func(host unsafe.Pointer) bool {
+		return (*pool.HostRoute)(host).Enabled()
+	})
 	link.Set(link.RouteHost, func(host unsafe.Pointer) (cql.UUID, bool) {
 		h := (*pool.HostRoute)(host)
 		return h.ID(), h.Usable()

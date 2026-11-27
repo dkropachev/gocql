@@ -20,7 +20,10 @@ const (
 	KindUnknown Kind = iota
 	// KindTopology reports a node joining or leaving the cluster.
 	KindTopology
-	// KindStatus reports a node going up or down.
+	// KindStatus reports a node going up or down, as the server reports it.
+	// The session's own view of whether it can reach a host is KindPool.
+	// The session debounces status events: of several changes of one node
+	// that arrive together, it applies, and delivers, only the latest.
 	KindStatus
 	// KindSchema reports a keyspace, table, view, type, function or aggregate
 	// change.
@@ -32,6 +35,8 @@ const (
 	KindClientRoute
 	// KindPool reports the session's connection pool to a host connecting
 	// (ChangePoolUp) or the session marking the host down (ChangePoolDown).
+	// It is how to watch whether the session can reach a host: a Status
+	// event is only the server's report, which the session may not act on.
 	// The driver raises it, not the server, so config.WithIgnoreEvents does
 	// not take it.
 	KindPool
@@ -109,7 +114,9 @@ const (
 	// overflowed.
 	ChangeResync Change = "RESYNC"
 	// ChangePublicationResync is an Overflow event sent when the session
-	// fails to publish a metadata change.
+	// fails to publish a metadata change, and when a schema refresh retried
+	// after an Event.Incomplete event published the schema that event
+	// lacked.
 	ChangePublicationResync Change = "PUBLICATION_RESYNC"
 )
 
@@ -149,8 +156,9 @@ type Event struct {
 	ObjectKind ObjectKind
 	// Keyspace is the keyspace a Schema event concerns.
 	Keyspace string
-	// Object names the changed table, type, function or aggregate of a
-	// Schema event, and is empty for a keyspace.
+	// Object names the changed table, view, type, function or aggregate of
+	// a Schema event, and is empty for a keyspace. It is the server's
+	// internal name, as metadata.Snapshot lookups take it.
 	Object string
 	// ArgumentTypes lists the argument types of a changed function or
 	// aggregate, and is nil otherwise.
@@ -164,16 +172,25 @@ type Event struct {
 	// Generation is the metadata generation when the event was published.
 	// The session publishes the metadata that reflects a change before it
 	// delivers the change's event, so a snapshot of this generation or later
-	// already holds it. An Overflow event's is at least the highest
+	// already holds it, unless the event is Incomplete. An Overflow event's is at least the highest
 	// generation among the events it replaced.
 	Generation uint64
 	// HostID is the node of a Topology, Status or Pool event, or the new
 	// control host of a Control event, and zero when the driver does not
 	// know the node's ID. A REMOVED_NODE event takes it from the metadata
-	// before the removal.
+	// before the removal. It is the key that correlates an event with
+	// metadata.Snapshot.Host and with other events of the node: a node's
+	// Address can change, and a Pool event's is the address the driver
+	// connects to, which a translator can make differ from the address the
+	// server reports.
 	HostID cql.UUID
 	// Kind classifies the event.
 	Kind Kind
+	// Incomplete reports a Schema event whose metadata refresh failed: the
+	// snapshot of Generation does not hold the change yet. The session
+	// retries the refresh in the background and, once it publishes the
+	// schema, delivers an Overflow event with ChangePublicationResync.
+	Incomplete bool
 }
 
 // Filter selects the kinds of events a Subscription receives and its queue

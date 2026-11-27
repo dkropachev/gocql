@@ -40,23 +40,42 @@ func cloneV2Column(c *metadata.Column) *metadata.Column {
 	r := *c
 	return &r
 }
-func cloneV2Columns(c map[string]*metadata.Column) map[string]*metadata.Column {
+
+// v2ColumnCloner copies the columns of one table, view or index once: the
+// copy of a column its Columns map and its key and column lists share is
+// shared by the copies of them too, as it is in the schema the loader built.
+type v2ColumnCloner map[*metadata.Column]*metadata.Column
+
+func (m v2ColumnCloner) column(c *metadata.Column) *metadata.Column {
+	if c == nil {
+		return nil
+	}
+	if r, ok := m[c]; ok {
+		return r
+	}
+	r := cloneV2Column(c)
+	m[c] = r
+	return r
+}
+
+func (m v2ColumnCloner) columns(c map[string]*metadata.Column) map[string]*metadata.Column {
 	if c == nil {
 		return nil
 	}
 	r := make(map[string]*metadata.Column, len(c))
 	for k, v := range c {
-		r[k] = cloneV2Column(v)
+		r[k] = m.column(v)
 	}
 	return r
 }
-func cloneV2ColumnList(c []*metadata.Column) []*metadata.Column {
+
+func (m v2ColumnCloner) list(c []*metadata.Column) []*metadata.Column {
 	if c == nil {
 		return nil
 	}
 	r := make([]*metadata.Column, len(c))
 	for i, v := range c {
-		r[i] = cloneV2Column(v)
+		r[i] = m.column(v)
 	}
 	return r
 }
@@ -79,11 +98,12 @@ func InternalCloneV2Table(t *metadata.Table) *metadata.Table {
 		return nil
 	}
 	v := *t
-	v.Columns = cloneV2Columns(t.Columns)
+	columns := make(v2ColumnCloner, len(t.Columns))
+	v.Columns = columns.columns(t.Columns)
 	v.Extensions = cloneV2Extensions(t.Extensions)
-	v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
-	v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-	v.OrderedColumns = cloneV2ColumnList(t.OrderedColumns)
+	v.PartitionKey = columns.list(t.PartitionKey)
+	v.ClusteringColumns = columns.list(t.ClusteringColumns)
+	v.OrderedColumns = columns.list(t.OrderedColumns)
 	v.Flags = append([]string(nil), t.Flags...)
 	v.Options = cloneV2TableOptions(t.Options)
 	return &v
@@ -95,11 +115,12 @@ func InternalCloneV2View(v *metadata.View) *metadata.View {
 		return nil
 	}
 	r := *v
-	r.Columns = cloneV2Columns(v.Columns)
+	columns := make(v2ColumnCloner, len(v.Columns))
+	r.Columns = columns.columns(v.Columns)
 	r.Extensions = cloneV2Extensions(v.Extensions)
-	r.PartitionKey = cloneV2ColumnList(v.PartitionKey)
-	r.ClusteringColumns = cloneV2ColumnList(v.ClusteringColumns)
-	r.OrderedColumns = cloneV2ColumnList(v.OrderedColumns)
+	r.PartitionKey = columns.list(v.PartitionKey)
+	r.ClusteringColumns = columns.list(v.ClusteringColumns)
+	r.OrderedColumns = columns.list(v.OrderedColumns)
 	r.Options = cloneV2TableOptions(v.Options)
 	return &r
 }
@@ -162,8 +183,8 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 		}
 		v := *a
 		v.ArgumentTypes = append([]string(nil), a.ArgumentTypes...)
-		v.FinalFunc = cloneV2Function(a.FinalFunc)
-		v.StateFunc = cloneV2Function(a.StateFunc)
+		v.FinalFunc.Value = cloneV2Function(a.FinalFunc.Value)
+		v.StateFunc.Value = cloneV2Function(a.StateFunc.Value)
 		r.Aggregates[n] = &v
 	}
 	r.Types = make(map[string]*metadata.Type, len(k.Types))
@@ -182,10 +203,11 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 		}
 		v := *t
 		v.Options = maps.Clone(t.Options)
-		v.Columns = cloneV2Columns(t.Columns)
-		v.PartitionKey = cloneV2ColumnList(t.PartitionKey)
-		v.ClusteringColumns = cloneV2ColumnList(t.ClusteringColumns)
-		v.OrderedColumns = cloneV2ColumnList(t.OrderedColumns)
+		columns := make(v2ColumnCloner, len(t.Columns))
+		v.Columns = columns.columns(t.Columns)
+		v.PartitionKey = columns.list(t.PartitionKey)
+		v.ClusteringColumns = columns.list(t.ClusteringColumns)
+		v.OrderedColumns = columns.list(t.OrderedColumns)
 		r.Indexes[n] = &v
 	}
 	return &r

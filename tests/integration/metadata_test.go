@@ -524,7 +524,7 @@ func TestMetadata(t *testing.T) {
 				if !ok {
 					t.Fatal("keyspace missing from typed metadata snapshot:", ks)
 				}
-				dump, err := km.ToCQL()
+				dump, err := serverOrBuiltCQL(km)
 				if err != nil {
 					t.Fatal("recreate schema", err)
 				}
@@ -603,7 +603,7 @@ func TestMetadata(t *testing.T) {
 				if !ok {
 					t.Fatal("recreated keyspace missing from typed metadata snapshot:", ks)
 				}
-				secondDump, err := km.ToCQL()
+				secondDump, err := serverOrBuiltCQL(km)
 				if err != nil {
 					t.Fatal("recreate schema", err)
 				}
@@ -956,4 +956,16 @@ func metadataExecOnConn(ctx context.Context, s *gocql.Session, stmt string, opti
 		return cql.Result{}, err
 	}
 	return prepared.Exec(ctx, cql.EmptyParams{}, bindOptions(s, options))
+}
+
+// serverOrBuiltCQL returns the server's DESCRIBE output for a keyspace, or,
+// where the server has none, the statements ToCQL builds from the metadata.
+func serverOrBuiltCQL(ks interface {
+	ServerCQL() string
+	ToCQL() (string, error)
+}) (string, error) {
+	if s := ks.ServerCQL(); s != "" {
+		return s, nil
+	}
+	return ks.ToCQL()
 }

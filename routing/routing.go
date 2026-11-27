@@ -91,7 +91,11 @@ func SingleTarget(target metadata.Target) *Builtin {
 	return &Builtin{single: true, target: target}
 }
 
-// HostRoutes returns a route to every host of snapshot, to any shard.
+// HostRoutes returns a route to every host of snapshot, to any shard, in
+// the order of metadata.Snapshot.Hosts. It includes hosts the session's host
+// filter rejects (metadata.Route.Enabled) and hosts that are down or have no
+// connection (metadata.Route.Usable); a request skips a route to a host the
+// filter rejects.
 func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 	hostRoutes, ok := link.Lookup[func(*metadata.Snapshot) []metadata.Route](link.HostRoutes)
 	if !ok {
@@ -106,8 +110,10 @@ func HostRoutes(snapshot *metadata.Snapshot) []metadata.Route {
 // from metadata.HostSnapshot.Shards. A route goes to any shard when the
 // host's sharding is not known. It returns none when info has no token,
 // keyspace or table, or when no replica of the token is known; HostRoutes
-// then gives every host. AppendReplicaRoutes does the same without
-// allocating, for a policy's Pick.
+// then gives every host. Like HostRoutes, it includes replicas the host
+// filter rejects and replicas that are down. It reads the snapshot's own
+// placement, as metadata.Snapshot.Replicas does. AppendReplicaRoutes does the
+// same without allocating, for a policy's Pick.
 func ReplicaRoutes(snapshot *metadata.Snapshot, info Info) []metadata.Route {
 	return AppendReplicaRoutes(nil, snapshot, info)
 }
@@ -125,9 +131,14 @@ func AppendReplicaRoutes(dst []metadata.Route, snapshot *metadata.Snapshot, info
 }
 
 // RouteTo returns the route to target: to its shard when ShardID is set,
-// else to any shard of its host. It returns false when snapshot has no host
-// with target.HostID, which a policy pinning requests should treat as a
-// route it cannot take.
+// else to any shard of its host. With AnyShardFallback, a shard the host
+// does not have, by its HostSnapshot.Shards in snapshot, or any shard of a
+// host whose sharding is not known, routes to any shard of the host, as
+// SingleTarget does. A route names one shard, so it cannot itself fall back
+// from a shard that has no connection: a plan that should, as SingleTarget's
+// does, follows the route with RouteTo of the target without its ShardID.
+// RouteTo returns false when snapshot has no host with target.HostID, which a
+// policy pinning requests should treat as a route it cannot take.
 func RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Route, bool) {
 	routeTo, ok := link.Lookup[func(*metadata.Snapshot, cql.UUID) (metadata.Route, bool)](link.RouteTo)
 	if !ok {
@@ -137,7 +148,13 @@ func RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Rout
 	if !ok {
 		return metadata.Route{}, false
 	}
-	return r.WithShardID(target.ShardID), true
+	shard := target.ShardID
+	if target.AnyShardFallback && shard.Set {
+		if h, ok := snapshot.HostInfo(target.HostID); !ok || h.Shards == 0 || shard.Value >= h.Shards {
+			shard = cql.Option[uint32]{}
+		}
+	}
+	return r.WithShardID(shard), true
 }
 
 // Routes returns the routes plan has left, in order, as an iterator that

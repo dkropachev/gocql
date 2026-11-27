@@ -6,6 +6,7 @@ package routing
 import (
 	"fmt"
 	"maps"
+	"math"
 	"slices"
 	"sync/atomic"
 
@@ -108,10 +109,44 @@ func (m *MetadataSnapshot) Type(keyspace, name string) (*metadata.Type, bool) {
 	return implMetadata.InternalCloneV2Type(ks.Types[name]), true
 }
 
+// Tables returns the names of the tables of keyspace, sorted.
+func (m *MetadataSnapshot) Tables(keyspace string) []string {
+	if m == nil {
+		return nil
+	}
+	ks := SnapshotData(m).InternalKeyspaces[keyspace]
+	if ks == nil {
+		return nil
+	}
+	return slices.Sorted(maps.Keys(ks.Tables))
+}
+
 // Host returns a copy of the host with id.
 func (m *MetadataSnapshot) Host(id cql.UUID) (HostSnapshot, bool) {
-	if m == nil {
+	i := m.hostPosition(id)
+	if i < 0 {
 		return HostSnapshot{}, false
+	}
+	h := SnapshotData(m).InternalHosts[i]
+	h.Tokens = append([]int64(nil), h.Tokens...)
+	return h, true
+}
+
+// HostInfo returns a copy of the host with id without its tokens.
+func (m *MetadataSnapshot) HostInfo(id cql.UUID) (HostSnapshot, bool) {
+	i := m.hostPosition(id)
+	if i < 0 {
+		return HostSnapshot{}, false
+	}
+	h := SnapshotData(m).InternalHosts[i]
+	h.Tokens = nil
+	return h, true
+}
+
+// hostPosition returns the position of the host with id, or -1.
+func (m *MetadataSnapshot) hostPosition(id cql.UUID) int {
+	if m == nil {
+		return -1
 	}
 	hosts := SnapshotData(m).InternalHosts
 	i, ok := -1, false
@@ -120,21 +155,39 @@ func (m *MetadataSnapshot) Host(id cql.UUID) (HostSnapshot, bool) {
 	}
 	if !ok || i >= len(hosts) || hosts[i].HostID != id {
 		i = slices.IndexFunc(hosts, func(h HostSnapshot) bool { return h.HostID == id })
-		if i < 0 {
-			return HostSnapshot{}, false
-		}
 	}
-	h := hosts[i]
-	h.Tokens = append([]int64(nil), h.Tokens...)
-	return h, true
+	return i
 }
 
+// Replicas returns the replicas of token in keyspace.table from the
+// snapshot's own placement, as AppendReplicaRoutes finds them: a vnode
+// keyspace's ring places a table the snapshot does not hold, and a vnode
+// replica's shard is the one owning token on its host when the host's
+// sharding is known. A token of a tablet table that no tablet the snapshot
+// holds covers is metadata.ErrPlacementUnknown.
 func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
-	if _, _, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err != nil {
+	if m == nil {
+		return nil, cqlerr.ErrNoKeyspace
+	}
+	if _, _, err := routingRanges(m, keyspace, table); err != nil {
 		return nil, err
 	}
-	r, _ := m.placementReplicas(keyspace, table, token)
-	return append([]Target(nil), r...), nil
+	r, tablet := m.placementReplicas(keyspace, table, token)
+	if len(r) == 0 && tablet {
+		return nil, fmt.Errorf("%s.%s token %d: %w", keyspace, table, token, metadata.ErrPlacementUnknown)
+	}
+	out := append([]Target(nil), r...)
+	x := m.routingIndex()
+	hosts := SnapshotData(m).InternalHosts
+	for i := range out {
+		if out[i].ShardID.Set {
+			continue
+		}
+		if j, ok := x.host(out[i].HostID); ok && j < len(hosts) && hosts[j].Shards > 0 {
+			out[i].ShardID = cql.Option[uint32]{Value: uint32(shardOf(token, hosts[j].Shards, hosts[j].ShardingIgnoreMSB)), Set: true}
+		}
+	}
+	return out, nil
 }
 
 // Token returns the token of the partition whose partition-key columns hold
@@ -203,28 +256,45 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 	}
 	return token.Value, nil
 }
-func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]metadata.TokenRange, error) {
-	if root, ok := InternalMetadataSnapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
-		if _, _, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table); err != nil {
-			return nil, err
-		}
-		var out []metadata.TokenRange
-		for _, r := range root.All() {
-			v := r.InternalSpan
-			v.Replicas = append([]Target(nil), v.Replicas...)
-			out = append(out, v)
-		}
-		return out, nil
-	}
-	r, _, e := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
+
+// TokenRanges returns the token ranges of keyspace.table with their
+// replicas, from the snapshot's own placement, and whether they cover the
+// whole ring: a token ring does once it has a range, a tablet table only once
+// the snapshot holds every one of its tablets.
+func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]metadata.TokenRange, bool, error) {
+	r, tablet, e := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
 	if e != nil {
-		return nil, e
+		return nil, false, e
 	}
-	out := append([]metadata.TokenRange(nil), r...)
+	var out []metadata.TokenRange
+	if root, ok := snapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
+		tablet = true
+		for _, r := range root.All() {
+			out = append(out, r.InternalSpan)
+		}
+	} else {
+		out = append([]metadata.TokenRange(nil), r...)
+	}
 	for i := range out {
 		out[i].Replicas = append([]Target(nil), out[i].Replicas...)
 	}
-	return out, nil
+	if !tablet {
+		return out, len(out) > 0, nil
+	}
+	return out, tabletsComplete(out), nil
+}
+
+// tabletsComplete reports whether tablets, in token order, cover the whole
+// ring, (math.MinInt64, math.MaxInt64], without a gap.
+func tabletsComplete(tablets []metadata.TokenRange) bool {
+	next := int64(math.MinInt64)
+	for _, t := range tablets {
+		if t.Start != next {
+			return false
+		}
+		next = t.End
+	}
+	return len(tablets) > 0 && next == math.MaxInt64
 }
 func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
 	if m == nil {

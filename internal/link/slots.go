@@ -144,6 +144,9 @@ var (
 	// RouteLocality holds func(host unsafe.Pointer) (datacenter, rack
 	// string).
 	RouteLocality = NewSlot("metadata.routeLocality")
+	// RouteEnabled holds func(host unsafe.Pointer) bool: whether the host
+	// filter accepts a metadata.Route's host.
+	RouteEnabled = NewSlot("metadata.routeEnabled")
 )
 
 // NewSubscription holds func(events <-chan event.Event, close func())
