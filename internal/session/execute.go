@@ -1125,6 +1125,7 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 type inlineSpeculation struct {
 	timer   *time.Timer
 	due     time.Time // when timer next starts an attempt, or zero
+	first   time.Time // when the page's first attempt started; see speculationDelay
 	winner  typedAttemptOutcome
 	mu      sync.Mutex
 	running bool // the first attempt is still waiting
@@ -1245,7 +1246,6 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 	// With no page deadline, retain an independent cancellation scope so a winner
 	// still stops speculative siblings without cancelling the logical execution.
 	pageTimeout := request.options.InternalProfile.PageTimeout
-	var specFirst time.Time // when the first attempt started; see speculationDelay
 	var cancel context.CancelFunc = func() {}
 	deadline, bounded := ctx.Deadline()
 	if !direct {
@@ -1392,7 +1392,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			// only once the timer is stored.
 			spec.mu.Lock()
 			spec.running = true
-			if delay, ok := s.speculationDelay(ctx, request, startedCount, &specFirst); ok {
+			if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
 				spec.due = started.Add(delay)
 				spec.timer = time.AfterFunc(delay, func() {
 					spec.mu.Lock()
@@ -1402,7 +1402,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 					}
 					spec.due = time.Time{}
 					if launch(nil, consistency, true) == nil {
-						if delay, ok := s.speculationDelay(ctx, request, startedCount, &specFirst); ok {
+						if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
 							spec.due = time.Now().Add(delay)
 							spec.timer.Reset(delay)
 						}
@@ -1464,7 +1464,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			timer = nil
 		}
 		speculate = nil
-		delay, ok := s.speculationDelay(ctx, request, startedCount, &specFirst)
+		delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first)
 		if !ok {
 			return
 		}
