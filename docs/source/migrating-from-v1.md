@@ -308,7 +308,7 @@ conditional statements in prepared metadata: set
 | `*gocql.RequestErrWriteTimeout`, `RequestErrReadTimeout`, `RequestErrUnavailable` | `*cqlerr.WriteTimeoutError`, `*cqlerr.ReadTimeoutError`, `*cqlerr.UnavailableError` |
 | `gocql.RequestError` and its `Code()` | `cqlerr.ServerError`, or `errors.Is(err, cqlerr.CodeOverloaded)` |
 | `gocql.ErrTimeoutNoResponse`, `ErrNoConnections` | the same names in `cqlerr` |
-| `context.DeadlineExceeded` from the query's own `Timeout` | an error matching `cqlerr.ErrRequestTimeout`, which also matches `context.DeadlineExceeded`; the caller's own deadline matches only the latter |
+| `context.DeadlineExceeded` from the query's own `Timeout` | an error matching `cqlerr.ErrRequestTimeout`, which also matches `context.DeadlineExceeded` and is `cqlerr.KindTimeout`; the caller's own deadline matches only the latter and is `cqlerr.KindCanceled` |
 | `gocql.Ignore` from `RetryPolicy.GetRetryType` | removed: a policy returns `retry.Stop`, and the caller decides what an ignored failure means |
 | `gocql.ErrSessionClosed` | `cqlerr.ErrClosed` |
 | `gocql.ErrKeyspaceDoesNotExist` | removed: a schema refresh treats a keyspace the server no longer has as dropped; a missing keyspace is `cqlerr.ErrNoKeyspace` |
@@ -330,7 +330,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.RackAwareRoundRobinPolicy(dc, rack)` | `WithLocalDatacenter(dc).WithLocalRack(rack)`, or `routing.Options{Datacenter: dc, Rack: rack, NoTokenAware: true}` without token awareness |
 | `gocql.HostPoolHostPolicy` and other custom policies | implement `routing.Policy` (Pick and Fallback), and optionally `routing.Validator` and `routing.Learner`; test it on `routing/routingtest` snapshots; see [load balancing](load-balancing.md) |
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
-| `&gocql.SimpleSpeculativeExecution{...}` | implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
+| `&gocql.SimpleSpeculativeExecution{NumAttempts: n, TimeoutDelay: d}` | `retry.FixedSpeculation{After: d, Max: n + 1}`, or implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
 | `session.KeyspaceMetadata(ks)` to read one table | `session.Metadata().Table(ks, name)`, which copies one table rather than the keyspace; `Keyspaces()` lists the loaded keyspaces and `Host(id)` finds one host |
 | `KeyspaceMetadata.Functions[name]`, `Aggregates[name]` | keyed by signature, such as `"add(int,int)"`: `metadata.Keyspace.Function(name, argTypes...)`, or `FunctionsNamed(name)` for every overload |

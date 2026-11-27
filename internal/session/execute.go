@@ -1194,7 +1194,10 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 // inlineSpeculation is the state a first attempt running on its execution's
 // goroutine shares with the speculative attempts its timer starts.
 type inlineSpeculation struct {
-	timer   *time.Timer
+	timer *time.Timer
+	// err is the error of a policy that asked for a negative delay, which
+	// ends the execution.
+	err     error
 	due     time.Time // when timer next starts an attempt, or zero
 	first   time.Time // when the page's first attempt started; see speculationDelay
 	winner  typedAttemptOutcome
@@ -1227,26 +1230,47 @@ func speculationOnly(request *InternalExecutionRequest) bool {
 	return canUseDirectProfile(profile)
 }
 
+// speculationSkip reports why a request of kind, idempotent or not, whose
+// speculation policy is set would not speculate, or cql.SpeculationNotSkipped
+// when it would.
+func speculationSkip(kind cql.StatementKind, idempotent bool) cql.SpeculationSkip {
+	switch {
+	case kind != cql.OrdinaryStatement:
+		return cql.SpeculationSkippedConditional
+	case !idempotent:
+		return cql.SpeculationSkippedNotIdempotent
+	default:
+		return cql.SpeculationNotSkipped
+	}
+}
+
+// requestSpeculationSkip is speculationSkip for request, and
+// cql.SpeculationNotSkipped when it has no speculation policy.
+func requestSpeculationSkip(request *InternalExecutionRequest) cql.SpeculationSkip {
+	if request.options.InternalProfile.Speculation == nil {
+		return cql.SpeculationNotSkipped
+	}
+	return speculationSkip(request.routing.Kind, request.isIdempotent())
+}
+
 // speculationDelay returns the delay before the speculative attempt that
 // follows started attempts, if request speculates. first holds when the
-// page's first attempt started; the call that follows that attempt, the
-// first call, records it.
-func (s *InternalSessionRuntime) speculationDelay(ctx context.Context, request *InternalExecutionRequest, started int, first *time.Time) (time.Duration, bool) {
-	if !request.isIdempotent() || request.routing.Kind != cql.OrdinaryStatement || request.options.InternalProfile.Speculation == nil {
-		return 0, false
+// page's first attempt started; the first call records it. A policy that
+// returns a negative delay fails the execution with the error.
+func (s *InternalSessionRuntime) speculationDelay(ctx context.Context, request *InternalExecutionRequest, started int, first *time.Time) (time.Duration, bool, error) {
+	if request.options.InternalProfile.Speculation == nil || requestSpeculationSkip(request) != cql.SpeculationNotSkipped {
+		return 0, false, nil
 	}
 	perfAdd(2, 1)
 	now := time.Now()
 	if first.IsZero() {
 		*first = now
 	}
-	deadline, _ := ctx.Deadline()
 	p50, p95, p99 := s.LatencyPercentiles()
 	delay, ok := request.options.InternalProfile.Speculation.Delay(retry.Speculation{
 		Context:     ctx,
 		Started:     started,
 		Elapsed:     now.Sub(*first),
-		Deadline:    deadline,
 		Keyspace:    request.routing.Keyspace,
 		Table:       request.routing.Table,
 		Consistency: request.routing.Consistency,
@@ -1254,11 +1278,14 @@ func (s *InternalSessionRuntime) speculationDelay(ctx context.Context, request *
 		LatencyP95:  p95,
 		LatencyP99:  p99,
 	})
-	if !ok || delay < 0 {
-		return 0, false
+	if !ok {
+		return 0, false, nil
+	}
+	if delay < 0 {
+		return 0, false, cqltype.TypeValidation("speculation delay", "negative delay %v", delay)
 	}
 	perfAdd(3, 1)
-	return delay, true
+	return delay, true, nil
 }
 
 // pagePlan builds the routing plan for one page's attempts.
@@ -1354,6 +1381,9 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 	if direct {
 		return s.executePageDirect(ctx, request, state, plan)
 	}
+	// pageStarted is when the page's first attempt starts, as the retry
+	// policy reads it in retry.Attempt.Elapsed.
+	pageStarted := time.Now()
 	outcomes := make(chan typedAttemptOutcome)
 	type delayedAttempt struct {
 		conn        *transport.Conn
@@ -1385,7 +1415,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		}
 		delayFired, closing = delayTimer.C, s.sessionDone()
 	}
-	aggregate := cql.Result{AchievedConsistency: request.options.InternalProfile.Consistency}
+	aggregate := cql.Result{AchievedConsistency: request.options.InternalProfile.Consistency, SpeculationSkipped: requestSpeculationSkip(request)}
 	startedCount, active := 0, 0
 	// inflight lists the attempts started on goroutines whose outcome the
 	// loop has not received, so that an execution the context ends can
@@ -1456,6 +1486,12 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 			}
 		} else {
+			// The first delay is asked for before the attempt is sent, so
+			// a negative one fails the execution with nothing sent.
+			delay, speculates, err := s.speculationDelay(ctx, request, 1, &spec.first)
+			if err != nil {
+				return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
+			}
 			startedCount, active = 1, 1
 			s.attempts.Add(1)
 			target, started, end := s.beginAttempt(request, conn, 1, consistency, false)
@@ -1463,17 +1499,23 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			// only once the timer is stored.
 			spec.mu.Lock()
 			spec.running = true
-			if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
+			if speculates {
 				spec.due = started.Add(delay)
 				spec.timer = time.AfterFunc(delay, func() {
 					spec.mu.Lock()
 					defer spec.mu.Unlock()
-					if !spec.running || request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
+					if !spec.running || spec.err != nil || request.InternalLogical != nil && request.InternalLogical.ddlCoordinator.Load() != nil {
 						return
 					}
 					spec.due = time.Time{}
 					if launch(nil, consistency, true) == nil {
-						if delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first); ok {
+						delay, ok, err := s.speculationDelay(ctx, request, startedCount, &spec.first)
+						if err != nil {
+							// End the first attempt's wait: the execution
+							// fails with err.
+							spec.err = err
+							cancel()
+						} else if ok {
 							spec.due = time.Now().Add(delay)
 							spec.timer.Reset(delay)
 						}
@@ -1488,8 +1530,25 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				spec.timer.Stop()
 			}
 			won, specDue = spec.won, spec.due
+			specErr := spec.err
 			spec.mu.Unlock()
 			inline = s.attemptOutcome(request, conn, target, 1, started, response, err, consistency, false, end)
+			if specErr != nil {
+				// The policy asked for a negative delay: the attempts it
+				// left in flight are abandoned, as on a context's end.
+				if inline.response != nil {
+					inline.response.Owner.Release()
+				}
+				if won && spec.winner.response != nil {
+					spec.winner.response.Owner.Release()
+				}
+				aggregate.Attempts = startedCount
+				log.abandon(specErr, conn, 1, consistency)
+				for _, a := range inflight {
+					log.abandon(specErr, a.conn, a.number, a.consistency)
+				}
+				return nil, log.error(specErr, aggregate)
+			}
 			switch {
 			case won && inline.err == nil:
 				// Both succeeded before this attempt saw the cancel: keep its
@@ -1529,21 +1588,35 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 	}
 	var timer *time.Timer
 	var speculate <-chan time.Time
-	arm := func() {
+	// arm schedules the next speculative attempt. It returns the error of
+	// a policy that asked for a negative delay, which ends the execution.
+	arm := func() error {
 		if timer != nil {
 			timer.Stop()
 			timer = nil
 		}
 		speculate = nil
-		delay, ok := s.speculationDelay(ctx, request, startedCount, &spec.first)
+		delay, ok, err := s.speculationDelay(ctx, request, startedCount, &spec.first)
 		if !ok {
-			return
+			return err
 		}
 		timer = time.NewTimer(delay)
 		speculate = timer.C
+		return nil
+	}
+	// specFailed ends the execution with arm's error; the attempts in
+	// flight are abandoned, as on a context's end.
+	specFailed := func(err error) (*transport.InternalResponsePage, error) {
+		aggregate.Attempts = startedCount
+		for _, a := range inflight {
+			log.abandon(err, a.conn, a.number, a.consistency)
+		}
+		return nil, log.error(err, aggregate)
 	}
 	if firstOutcome == nil && !ended {
-		arm()
+		if err := arm(); err != nil {
+			return specFailed(err)
+		}
 	} else if firstOutcome != nil && !won && !specDue.IsZero() && (startedCount > 1 || firstOutcome.err != nil) {
 		// Attempts remain: keep the schedule the inline attempt started.
 		timer = time.NewTimer(max(time.Until(specDue), 0))
@@ -1605,7 +1678,9 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 						launchErr = err
 					} else {
 						s.retries.Add(1)
-						arm()
+						if err := arm(); err != nil {
+							return specFailed(err)
+						}
 					}
 				}
 				clear(delayed[len(due):])
@@ -1623,7 +1698,9 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 					continue
 				}
 				if err := launch(nil, request.options.InternalProfile.Consistency, true); err == nil {
-					arm()
+					if err := arm(); err != nil {
+						return specFailed(err)
+					}
 				} else {
 					speculate = nil
 				}
@@ -1674,28 +1751,19 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				// the cancellation is the cause.
 				return contextEnded()
 			}
-			decision := retry.Decision{}
-			if policy := request.options.InternalProfile.Retry; policy != nil {
-				decision = policy.Decide(retry.Attempt{Context: ctx, Err: attemptErr, Attempt: outcome.event.Attempt, Idempotent: request.isIdempotent(), Consistency: outcome.consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
-			}
+			decision := decideRetry(ctx, request, outcome.conn, attemptErr, outcome.event.Attempt, outcome.consistency, attemptStatus, pageStarted)
 			if decision.Action == retry.Stop {
 				if active == 0 && len(delayed) == 0 {
 					return nil, log.error(lastErr, aggregate)
 				}
 				continue
 			}
-			if decision.Action != retry.Same && decision.Action != retry.Next {
-				return nil, log.error(cqltype.TypeValidation("retry", "unknown retry action"), aggregate)
+			if err := checkDecision(decision, attemptErr); err != nil {
+				return nil, log.error(err, aggregate)
 			}
 			consistency := outcome.consistency
 			if decision.Consistency.Set {
-				if !settings.InternalValidConsistency(decision.Consistency.Value) {
-					return nil, log.error(cqltype.TypeValidation("retry consistency", "invalid consistency"), aggregate)
-				}
 				consistency = decision.Consistency.Value
-			}
-			if decision.Delay < 0 {
-				return nil, log.error(cqltype.TypeValidation("retry delay", "negative delay"), aggregate)
 			}
 			conn := outcome.conn
 			if decision.Action == retry.Next {
@@ -1715,7 +1783,9 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				}
 			} else {
 				s.retries.Add(1)
-				arm()
+				if err := arm(); err != nil {
+					return specFailed(err)
+				}
 			}
 		}
 	}

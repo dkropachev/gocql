@@ -55,8 +55,10 @@ func referenceKindOf(err error) Kind {
 	switch {
 	case has(context.Canceled):
 		return KindCanceled
-	case has(context.DeadlineExceeded):
+	case has(ErrRequestTimeout):
 		return KindTimeout
+	case has(context.DeadlineExceeded):
+		return KindCanceled
 	}
 	if server, ok := errors.AsType[ServerError](err); ok {
 		if _, ok := server.(*RateLimitReachedError); ok {
@@ -130,7 +132,7 @@ func (e netTimeout) Temporary() bool { return false }
 func classifiedLeaves() []error {
 	leaves := []error{
 		errors.New("unclassified"),
-		context.Canceled, context.DeadlineExceeded,
+		context.Canceled, context.DeadlineExceeded, ErrRequestTimeout,
 		ErrClosed, ErrStaleRows, cql.ErrReleased,
 		ErrUseStmt, ErrNoKeyspace, ErrNoTable, ErrBusy, ErrConditionalExec, ErrPagingComplete,
 		ErrFrameTooBig, ErrTimeoutNoResponse, ErrReadHeaderTimeout,

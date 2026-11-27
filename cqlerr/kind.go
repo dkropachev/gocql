@@ -14,8 +14,13 @@ type Kind uint8
 const (
 	// KindUnknown is an error the driver does not classify.
 	KindUnknown Kind = iota
-	// KindTimeout: the server or the driver gave up waiting, or the caller's
-	// deadline passed.
+	// KindTimeout: the server or the driver gave up waiting. The driver's
+	// errors of this kind that reach a caller are ErrRequestTimeout (the
+	// profile's or exec.Options' Timeout or PageTimeout ran out) and
+	// ErrTimeoutNoResponse (an attempt got no response from its connection
+	// in time); the server's are ReadTimeoutError, WriteTimeoutError and
+	// CASWriteUnknownError; a network error that reports Timeout, such as a
+	// dial timeout, is one too. The caller's own deadline is KindCanceled.
 	KindTimeout
 	// KindUnavailable: too few replicas were alive to try the request.
 	KindUnavailable
@@ -29,7 +34,8 @@ const (
 	KindUnauthorized
 	// KindConnection: no connection could carry the request, or it broke.
 	KindConnection
-	// KindCanceled: the caller canceled the request.
+	// KindCanceled: the caller's context ended the request, canceled or
+	// past its deadline. No retry under that context can succeed.
 	KindCanceled
 	// KindClosed: the session or worker was closed.
 	KindClosed
@@ -75,11 +81,10 @@ func (k Kind) String() string {
 // another host. Whether replaying it is safe is a separate question; see
 // ExecutionStatusOf.
 //
-// KindTimeout is transient, and it also covers the caller's own expired
-// context deadline, which no retry under that context can outlive.
-// errors.Is(err, ErrRequestTimeout) holds only when the driver's own Timeout
-// or PageTimeout ran out. Retryable tells the two apart and also checks the
-// execution status, so a retry loop needs only it:
+// KindTimeout is transient: the server's or the driver's timeout. The
+// caller's own deadline is KindCanceled, which is not. Retryable also checks
+// the execution status and the request's idempotence, so a retry loop needs
+// only it:
 //
 //	for cqlerr.Retryable(err) { ... }
 func (k Kind) Transient() bool {

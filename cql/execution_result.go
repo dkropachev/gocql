@@ -6,6 +6,7 @@ package cql
 import (
 	"encoding/base64"
 	"slices"
+	"strconv"
 	"time"
 )
 
@@ -34,6 +35,46 @@ type Result struct {
 	// AchievedConsistency is the consistency level of the last completed
 	// attempt, which a retry policy may have lowered.
 	AchievedConsistency Consistency
+	// SpeculationSkipped reports why an execution whose options name a
+	// speculation policy (config.Profile.Speculation or
+	// exec.Options.Speculation) started no speculative attempt because the
+	// request is not eligible, and is SpeculationNotSkipped otherwise.
+	// Streams never speculate and do not report it.
+	SpeculationSkipped SpeculationSkip
+}
+
+// SpeculationSkip says why an execution that has a speculation policy is not
+// eligible to speculate; see Result.SpeculationSkipped. Later releases may
+// add values, so a switch over them needs a default case.
+type SpeculationSkip uint8
+
+const (
+	// SpeculationNotSkipped: the execution had no speculation policy, or
+	// was eligible to speculate.
+	SpeculationNotSkipped SpeculationSkip = iota
+	// SpeculationSkippedConditional: the statement is conditional (an LWT,
+	// or a SERIAL read), or for a batch one of its statements is. Sending a
+	// conditional statement twice could apply it twice.
+	SpeculationSkippedConditional
+	// SpeculationSkippedNotIdempotent: the request is not idempotent, as
+	// the driver resolved it (exec.Options.Idempotent, else the statement's
+	// or the profile's).
+	SpeculationSkippedNotIdempotent
+)
+
+// String returns the reason's name, or SpeculationSkip(n) for a value it
+// does not define.
+func (s SpeculationSkip) String() string {
+	switch s {
+	case SpeculationNotSkipped:
+		return "not skipped"
+	case SpeculationSkippedConditional:
+		return "conditional"
+	case SpeculationSkippedNotIdempotent:
+		return "not idempotent"
+	default:
+		return "SpeculationSkip(" + strconv.Itoa(int(s)) + ")"
+	}
 }
 
 type resultDiagnostics struct {
@@ -153,6 +194,9 @@ func mergeResult(dst *Result, src Result) {
 	dst.addCQLTraces(src.CQLTraces()...)
 	dst.addCustomPayload(src.CustomPayload()...)
 	dst.AchievedConsistency = src.AchievedConsistency
+	if src.SpeculationSkipped != SpeculationNotSkipped {
+		dst.SpeculationSkipped = src.SpeculationSkipped
+	}
 }
 
 // PageState distinguishes the initial page, a continuation (whose token may be

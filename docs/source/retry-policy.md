@@ -7,12 +7,18 @@ The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
 statement's or the profile's, or `exec.Options.Idempotent` when set), its
 `Consistency`, its `StatementKind` (`cql.ConditionalStatement` when it or a
 batch member is conditional), the kind of batch it sends (`Batch`, unset for a
-single statement), and `ExecutionStatus`, which reports whether the attempt
-may have changed data (see [Errors](errors.md)). A `retry.Decision` selects
+single statement), `ExecutionStatus`, which reports whether the attempt
+may have changed data (see [Errors](errors.md)), the `Target` host and shard
+it went to, the statement's `Keyspace` and `Table`, and `Elapsed`, the time
+since the page's first attempt started. A `retry.Decision` selects
 `retry.Stop` (the zero value), `retry.Same` (the same host) or `retry.Next`
 (the next host of the plan), with an optional `Consistency` for the next attempt and a
 `Delay` before it; `Result.AchievedConsistency` reports the consistency that
-succeeded. `Decide` runs on the request goroutine and must not block.
+succeeded. `Decide` runs on the request goroutine and must not block. A
+decision the driver cannot carry out, an unknown `Action`, an invalid
+`Consistency` or a negative `Delay`, fails the request with a
+`cql.ValidationError` that wraps the attempt's error, so `errors.Is` and
+`errors.As` still find why the attempt failed.
 
 `exec.Options.Retry == nil` inherits the selected profile's retry policy. Use
 `exec.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
@@ -32,7 +38,17 @@ timeouts, read timeouts with data or too few replicas, read and write failures,
 and deterministic errors. A failure that is not a server error, such as a lost
 connection, is replayed on the next host only for an idempotent request or an
 attempt whose status is `cqlerr.NotExecuted`. The caller's cancellation or
-deadline never retries. A custom policy can build on `cqlerr.KindOf` and the
+deadline never retries.
+
+`retry.Safe` is more conservative than `cqlerr.Retryable`, which an
+application's own retry loop uses: `Retryable` accepts any transient error
+that was not executed, or was but is idempotent, so it allows a rate-limited
+request and an idempotent write timeout, which `Safe` stops on. The driver
+retries at once and on every request, where sending a rate-limited partition
+or an overloaded replica more work only adds load; an application loop can
+back off first.
+
+A custom policy can build on `cqlerr.KindOf` and the
 attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
 
 ```go

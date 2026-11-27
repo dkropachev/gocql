@@ -579,6 +579,7 @@ package cql
 		cql.Result field AttemptLatency time.Duration
 		cql.Result field FetchedRows int64
 		cql.Result field AchievedConsistency cql.Consistency
+		cql.Result field SpeculationSkipped cql.SpeculationSkip
 		cql.Result method (T) CQLTraces() []cql.CQLTraceRef
 		cql.Result method (T) CustomPayload() []cql.PayloadEntry
 		cql.Result method (T) Warnings() []string
@@ -605,6 +606,11 @@ package cql
 	func cql.SmallIntValue(n int16) cql.Value
 	const cql.SnappyCompression cql.Compression = 2
 	func cql.Some[T any](v T) cql.Option[T]
+	const cql.SpeculationNotSkipped cql.SpeculationSkip = 0
+	type cql.SpeculationSkip uint8
+		cql.SpeculationSkip method (T) String() string
+	const cql.SpeculationSkippedConditional cql.SpeculationSkip = 1
+	const cql.SpeculationSkippedNotIdempotent cql.SpeculationSkip = 2
 	func cql.StartPage() cql.PageState
 	type cql.Statement[P any, R any] struct
 		cql.Statement field CQL string
@@ -875,6 +881,7 @@ package cqlerr
 		cqlerr.AlreadyExistsError method (*T) Kind() cqlerr.Kind
 		cqlerr.AlreadyExistsError method (*T) Message() string
 		cqlerr.AlreadyExistsError method (*T) Warnings() []string
+	func cqlerr.AttemptAs[T error](err error) (T, bool)
 	type cqlerr.AttemptFailure struct
 		cqlerr.AttemptFailure field Err error
 		cqlerr.AttemptFailure field Address string
@@ -915,6 +922,7 @@ package cqlerr
 	const cqlerr.CodeUnprepared cqlerr.ErrorCode = 9472
 	const cqlerr.CodeWriteFailure cqlerr.ErrorCode = 5376
 	const cqlerr.CodeWriteTimeout cqlerr.ErrorCode = 4352
+	func cqlerr.ConditionalUnknown(err error) bool
 	type cqlerr.ConnectError struct
 		cqlerr.ConnectError field Stage string
 		cqlerr.ConnectError field Hosts []cqlerr.HostError
@@ -953,6 +961,7 @@ package cqlerr
 		cqlerr.ExecutionError field Result cql.Result
 		cqlerr.ExecutionError field BatchSize int
 		cqlerr.ExecutionError field Idempotent bool
+		cqlerr.ExecutionError field StatementKind cql.StatementKind
 		cqlerr.ExecutionError method (*T) Error() string
 		cqlerr.ExecutionError method (*T) ExecutionStatus() cqlerr.ExecutionStatus
 		cqlerr.ExecutionError method (*T) Unwrap() error
@@ -1320,7 +1329,6 @@ package exec
 		exec.PrepareOptions field CQLTrace bool
 	const exec.SerialInherit exec.SerialOverride = 0
 	const exec.SerialLocal exec.SerialOverride = 2
-	const exec.SerialOmit exec.SerialOverride = 3
 	type exec.SerialOverride uint8
 		exec.SerialOverride method (T) String() string
 	const exec.SerialSerial exec.SerialOverride = 1
@@ -1559,16 +1567,24 @@ package retry
 	type retry.Attempt struct
 		retry.Attempt field Context context.Context
 		retry.Attempt field Err error
+		retry.Attempt field Keyspace string
+		retry.Attempt field Table string
 		retry.Attempt field Attempt int
 		retry.Attempt field Idempotent bool
 		retry.Attempt field Consistency cql.Consistency
 		retry.Attempt field StatementKind cql.StatementKind
 		retry.Attempt field Batch cql.Option[cql.BatchKind]
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
+		retry.Attempt field Target metadata.Target
+		retry.Attempt field Elapsed time.Duration
 	type retry.Decision struct
 		retry.Decision field Action retry.Action
 		retry.Decision field Consistency cql.Option[cql.Consistency]
 		retry.Decision field Delay time.Duration
+	type retry.FixedSpeculation struct
+		retry.FixedSpeculation field After time.Duration
+		retry.FixedSpeculation field Max int
+		retry.FixedSpeculation method (T) Delay(s retry.Speculation) (time.Duration, bool)
 	type retry.Never struct
 		retry.Never method (T) Decide(retry.Attempt) retry.Decision
 	const retry.Next retry.Action = 2
@@ -1583,7 +1599,6 @@ package retry
 		retry.Safe method (T) Decide(a retry.Attempt) retry.Decision
 	const retry.Same retry.Action = 1
 	type retry.Speculation struct
-		retry.Speculation field Deadline time.Time
 		retry.Speculation field Context context.Context
 		retry.Speculation field Keyspace string
 		retry.Speculation field Table string

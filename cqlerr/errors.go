@@ -548,8 +548,10 @@ func (e *FunctionFailureError) Error() string { return e.text(CodeFunctionFailur
 // Is reports whether target is CodeFunctionFailure.
 func (e *FunctionFailureError) Is(target error) bool { return target == CodeFunctionFailure }
 
-// Kind returns KindInvalid.
-func (e *FunctionFailureError) Kind() Kind { return KindInvalid }
+// Kind returns KindServer: the function failed while the server executed
+// the request, which is not a fault of the request's form or values that
+// KindInvalid reports.
+func (e *FunctionFailureError) Kind() Kind { return KindServer }
 
 // CASWriteUnknownError reports that a conditional write timed out with an
 // unknown outcome. Cassandra sends it on protocol 5; see IsCASWriteUnknown
@@ -673,7 +675,7 @@ func codeKind(c ErrorCode) Kind {
 		return KindUnavailable
 	case CodeOverloaded, CodeBootstrapping:
 		return KindOverloaded
-	case CodeSyntax, CodeInvalid, CodeAlreadyExists, CodeConfig, CodeFunctionFailure, CodeUnprepared:
+	case CodeSyntax, CodeInvalid, CodeAlreadyExists, CodeConfig, CodeUnprepared:
 		return KindInvalid
 	case CodeUnauthorized, CodeBadCredentials:
 		return KindUnauthorized

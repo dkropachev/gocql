@@ -50,7 +50,7 @@ var (
 // context.DeadlineExceeded, so errors.Is(err, context.DeadlineExceeded)
 // holds for the driver's budget and for the caller's own deadline alike;
 // errors.Is(err, ErrRequestTimeout) holds only for the driver's. KindOf
-// reports KindTimeout.
+// reports KindTimeout for it and KindCanceled for the caller's deadline.
 var ErrRequestTimeout error = requestTimeoutError{}
 
 // requestTimeoutError is ErrRequestTimeout's type: a comparable value, so

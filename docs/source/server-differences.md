@@ -119,6 +119,10 @@ write timeout of type `CAS` on v4. ScyllaDB reports a write timeout of type
 `cqlerr.KindOf(err)` returns `KindTimeout`. Read the row
 back before retrying a non-idempotent conditional write, and use these checks
 instead of matching a specific error, so the check works on both servers.
+`IsCASWriteUnknown` covers only what the server reports: an LWT that the
+driver's timeout, a lost connection or the caller's cancellation ended has an
+unknown outcome too, and `cqlerr.ConditionalUnknown(err)` reports every
+such case.
 
 ## Server-specific errors
 

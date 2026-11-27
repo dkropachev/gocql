@@ -3,21 +3,17 @@
 
 package cqlerr
 
-import (
-	"context"
-	"errors"
-)
+import "errors"
 
 // Retryable reports whether sending the request that failed with err again
 // can succeed and is safe. It combines KindOf, ExecutionStatusOf and the
 // idempotence the driver resolved for the request (ExecutionError.Idempotent),
 // so the caller does not restate it:
 //
-//   - nil and errors whose Kind is not Transient are not retryable;
-//   - the caller's own cancellation or expired deadline is not either: an
-//     error matching context.Canceled, or context.DeadlineExceeded without
-//     matching ErrRequestTimeout, ends under a context no retry can outlive,
-//     so Retryable needs no context;
+//   - nil and errors whose Kind is not Transient are not retryable, the
+//     caller's own cancellation or expired deadline (KindCanceled) among
+//     them: it ends under a context no retry can outlive, so Retryable
+//     needs no context;
 //   - a request that NotExecuted reports is retryable;
 //   - one that MaybeExecuted or PartiallyExecuted reports is retryable only
 //     when err holds an ExecutionError whose Idempotent is set.
@@ -25,11 +21,7 @@ import (
 // The driver's own Timeout and PageTimeout, which match ErrRequestTimeout,
 // are retryable under the rules above.
 func Retryable(err error) bool {
-	if err == nil || errors.Is(err, context.Canceled) ||
-		(errors.Is(err, context.DeadlineExceeded) && !errors.Is(err, ErrRequestTimeout)) {
-		return false
-	}
-	if !KindOf(err).Transient() {
+	if err == nil || !KindOf(err).Transient() {
 		return false
 	}
 	switch ExecutionStatusOf(err) {

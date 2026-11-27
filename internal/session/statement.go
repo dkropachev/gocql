@@ -315,7 +315,10 @@ type PreparedStorage[P, R any] struct {
 	root *Prepared[P, R]
 	// defaults are the options of a view's calls made without options.
 	defaults CompiledOptions
-	poolOnce sync.Once
+	// defaultsErr is why defaults cannot run the statement, which fails
+	// every call of the view; see viewSpeculationError.
+	defaultsErr error
+	poolOnce    sync.Once
 	// kind is the kind executions run as, resolved at Prepare.
 	kind cql.StatementKind
 	// idempotent is the statement's cql.Statement.Idempotent.
@@ -336,7 +339,45 @@ func (p *Prepared[P, R]) With(defaults CompiledOptions) *Prepared[P, R] {
 	s := &p.privateStorage
 	v := new(Prepared[P, R])
 	v.privateStorage = PreparedStorage[P, R]{params: s.params, rows: s.rows, InternalState: s.InternalState, plans: s.plans, kind: s.kind, idempotent: s.idempotent, root: root, defaults: defaults}
+	if s.InternalState != nil {
+		v.privateStorage.defaultsErr = viewSpeculationError(s.InternalState.InternalSession, defaults, s.kind, s.idempotent)
+	}
 	return v
+}
+
+// DefaultsError returns why the defaults given to With cannot run the
+// statement, an error every call of the view fails with, or nil.
+func (p *Prepared[P, R]) DefaultsError() error {
+	if p == nil {
+		return nil
+	}
+	return p.privateStorage.defaultsErr
+}
+
+// viewSpeculationError returns the cql.ValidationError of defaults whose
+// exec.Options.Speculation names a policy for a statement of kind that cannot
+// speculate: a conditional statement, or one not idempotent by the defaults'
+// Idempotent, else the statement's, else the profile's. Speculation that
+// comes from a profile is not checked: a profile serves many statements, and
+// each execution reports its skip in cql.Result.SpeculationSkipped.
+func viewSpeculationError(s *implCluster.Core, defaults CompiledOptions, kind cql.StatementKind, idempotent bool) error {
+	if defaults.p == nil || defaults.values().Speculation == nil || s == nil {
+		return nil
+	}
+	var scratch InternalResolvedOptions
+	resolved := defaults.resolve(InternalRuntimeFor(s), &scratch)
+	if resolved.InternalProfile.Speculation == nil { // retry.NoSpeculation
+		return nil
+	}
+	if o := resolved.InternalOptions.Idempotent; o.Set {
+		idempotent = o.Value
+	} else if !idempotent {
+		idempotent = resolved.InternalProfile.Idempotent && kind != cql.ConditionalStatement
+	}
+	if skip := speculationSkip(kind, idempotent); skip != cql.SpeculationNotSkipped {
+		return cqltype.TypeValidation("speculation", "the statement cannot speculate: it is %v", skip)
+	}
+	return nil
 }
 
 // Defaults returns the options p's calls use when they are passed none: those
@@ -351,6 +392,9 @@ func (p *Prepared[P, R]) Defaults() CompiledOptions {
 // callOptions returns the options of a call passed options: those laid over
 // p's defaults field by field, or p's defaults when they are zero.
 func (p *Prepared[P, R]) callOptions(options CompiledOptions) (CompiledOptions, error) {
+	if err := p.privateStorage.defaultsErr; err != nil {
+		return CompiledOptions{}, err
+	}
 	if options.p == nil {
 		return p.privateStorage.defaults, nil
 	}

@@ -22,11 +22,14 @@ type kinded interface {
 // rank orders the errors of one tree: when it holds several, KindOf reports
 // the one of lowest rank. A cancellation explains the failure better than
 // the server error of an earlier attempt, and a server error better than the
-// connection the driver closed because of it.
+// connection the driver closed because of it. The driver's own budget
+// (ErrRequestTimeout) outranks the context.DeadlineExceeded it matches, so a
+// tree that holds both reports the driver's timeout.
 type rank uint8
 
 const (
 	rankCanceled rank = iota
+	rankRequestTimeout
 	rankDeadline
 	rankServer
 	rankClosed
@@ -100,11 +103,20 @@ func (w *kindWalk) visit(err error) bool {
 		w.kind, w.rank = KindCanceled, rankCanceled
 		return false
 	}
-	if w.rank <= rankDeadline {
-		return true // only a cancellation outranks a deadline
+	if w.rank <= rankRequestTimeout {
+		return true // only a cancellation outranks the driver's timeout
 	}
-	if err == context.DeadlineExceeded || err == ErrRequestTimeout { //nolint:errorlint // one node of a tree walkErrors walks
-		w.kind, w.rank = KindTimeout, rankDeadline
+	if err == ErrRequestTimeout { //nolint:errorlint // one node of a tree walkErrors walks
+		w.kind, w.rank = KindTimeout, rankRequestTimeout
+		return true
+	}
+	if w.rank <= rankDeadline {
+		return true
+	}
+	if err == context.DeadlineExceeded { //nolint:errorlint // one node of a tree walkErrors walks
+		// The caller's own deadline: the driver's budget reports
+		// ErrRequestTimeout instead.
+		w.kind, w.rank = KindCanceled, rankDeadline
 		return true
 	}
 	if w.rank <= rankServer {
@@ -148,9 +160,13 @@ func (w *kindWalk) visit(err error) bool {
 // classifies the reason the request stopped. Kind.Transient reports whether
 // trying again can help; ExecutionStatusOf reports whether it is safe.
 //
-// When err wraps several errors, a cancellation wins over a deadline, a
-// deadline over a server error, and a server error over the driver's own
-// errors, so a ConnectError whose host rejected the credentials reports
+// The caller's own context ending, by cancellation (context.Canceled) or by
+// its deadline (context.DeadlineExceeded), is KindCanceled. The driver's own
+// Timeout or PageTimeout running out (ErrRequestTimeout) is KindTimeout.
+//
+// When err wraps several errors, a cancellation wins over the driver's
+// timeout, that over the caller's deadline, a deadline over a server error,
+// and a server error over the driver's own errors, so a ConnectError whose host rejected the credentials reports
 // KindUnauthorized. A cql.CodecError reports KindProtocol when it wraps a
 // cql.ProtocolError, as for a malformed cell, and KindInvalid otherwise; an
 // error it wraps that ranks higher, such as cql.ErrReleased (KindClosed) or a

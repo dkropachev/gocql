@@ -122,13 +122,13 @@ func TestConfig(t *testing.T) {
 			}()
 
 			InternalRuntimeFor(s).InternalSetProfile(c.DefaultProfile)
-			options := testOptions(Options{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, SerialConsistency: SerialOmit, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
+			options := testOptions(Options{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, SerialConsistency: SerialLocal, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
 			resolved, err := resolveOptions(s, options)
 			if err != nil {
 				t.Fatal(err)
 			}
 			// A set zero timeout option removes the profile's limit.
-			if resolved.InternalProfile.Timeout != 0 || resolved.InternalProfile.PageTimeout != 0 || resolved.InternalProfile.Prefetch != 0 || resolved.InternalProfile.SerialConsistency.Set || !resolved.InternalOptions.Timestamp.Set || !resolved.InternalOptions.NowInSeconds.Set {
+			if resolved.InternalProfile.Timeout != 0 || resolved.InternalProfile.PageTimeout != 0 || resolved.InternalProfile.Prefetch != 0 || resolved.InternalProfile.SerialConsistency != implCql.Some(implCql.LocalSerial) || !resolved.InternalOptions.Timestamp.Set || !resolved.InternalOptions.NowInSeconds.Set {
 				t.Fatal(resolved)
 			}
 		})

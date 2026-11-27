@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"log"
+	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
@@ -49,12 +50,14 @@ func Example_errors() {
 
 	// KindOf says whether trying again can help, and Retryable whether it
 	// also is safe, from the idempotence the driver resolved for the
-	// request; it is false once ctx has ended. The profile's retry policy
-	// has already retried, so a loop here multiplies its attempts.
+	// request; it is false once ctx has ended or its deadline passed
+	// (KindCanceled). The profile's retry policy has already retried at
+	// once, so a loop here multiplies its attempts: back off first.
 	if kind := cqlerr.KindOf(err); kind.Transient() {
 		log.Printf("transient %v failure: %v", kind, err)
 	}
 	for attempt := 0; cqlerr.Retryable(err) && attempt < 3; attempt++ {
+		time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
 		_, err = insert.Exec(ctx, "hello")
 	}
 
@@ -64,6 +67,12 @@ func Example_errors() {
 	}
 	if timeout, ok := errors.AsType[*cqlerr.WriteTimeoutError](err); ok {
 		log.Printf("write timeout: %d of %d replicas acknowledged", timeout.Received, timeout.BlockFor)
+	}
+
+	// An earlier attempt's error is found by type even when the request
+	// stopped for another reason, such as its Timeout.
+	if unavailable, ok := cqlerr.AttemptAs[*cqlerr.UnavailableError](err); ok {
+		log.Printf("%d of %d replicas alive", unavailable.Alive, unavailable.Required)
 	}
 
 	// Every failed attempt is kept, with the host it went to.

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	implCql "github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	routing2 "github.com/scylladb/gocql/v2/routing"
@@ -26,10 +27,16 @@ func TestErrorKindMetrics(t *testing.T) {
 		b := runtimeQuery(t)
 		defer b.Close()
 
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
-		_, err := Exec(ctx, s, b, CompiledOptions{})
-		cancel()
+		// The driver's own timeout is a timeout.
+		_, err := Exec(context.Background(), s, b, testOptions(Options{Timeout: implCql.Option[time.Duration]{Value: 20 * time.Millisecond, Set: true}}))
 		if cqlerr.KindOf(err) != cqlerr.KindTimeout {
+			t.Fatalf("driver timeout: %v (%v)", err, cqlerr.KindOf(err))
+		}
+		// The caller's deadline and cancellation are cancellations.
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+		_, err = Exec(ctx, s, b, CompiledOptions{})
+		cancel()
+		if cqlerr.KindOf(err) != cqlerr.KindCanceled {
 			t.Fatalf("deadline: %v (%v)", err, cqlerr.KindOf(err))
 		}
 		ctx, cancel = context.WithCancel(context.Background())
@@ -39,10 +46,10 @@ func TestErrorKindMetrics(t *testing.T) {
 			t.Fatalf("cancel: %v (%v)", err, cqlerr.KindOf(err))
 		}
 		m := s.Metrics()
-		if m.Errors != 2 || m.Timeouts != 1 || m.Canceled != 1 {
-			t.Fatalf("Errors %d, Timeouts %d, Canceled %d; want 2, 1, 1", m.Errors, m.Timeouts, m.Canceled)
+		if m.Errors != 3 || m.Timeouts != 1 || m.Canceled != 2 {
+			t.Fatalf("Errors %d, Timeouts %d, Canceled %d; want 3, 1, 2", m.Errors, m.Timeouts, m.Canceled)
 		}
-		if len(m.ErrorsByKind) != 2 || m.ErrorsByKind[cqlerr.KindTimeout] != 1 || m.ErrorsByKind[cqlerr.KindCanceled] != 1 {
+		if len(m.ErrorsByKind) != 2 || m.ErrorsByKind[cqlerr.KindTimeout] != 1 || m.ErrorsByKind[cqlerr.KindCanceled] != 2 {
 			t.Fatalf("ErrorsByKind = %v", m.ErrorsByKind)
 		}
 	})
@@ -57,7 +64,7 @@ func TestErrorKindMetrics(t *testing.T) {
 		}{
 			{nil, false, false, false, cqlerr.Executed},
 			{context.Canceled, false, true, false, cqlerr.NotExecuted},
-			{context.DeadlineExceeded, false, false, true, cqlerr.NotExecuted},
+			{context.DeadlineExceeded, false, true, false, cqlerr.NotExecuted},
 			{cqlerr.ErrRequestTimeout, false, false, true, cqlerr.NotExecuted},
 			{errors.New("other"), false, false, false, cqlerr.MaybeExecuted},
 			{unavailable, false, false, false, cqlerr.NotExecuted},

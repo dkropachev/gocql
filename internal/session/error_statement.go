@@ -8,8 +8,8 @@ import (
 	"unicode/utf8"
 )
 
-// describeStatement records request's resolved idempotence in the
-// ExecutionError in err, and adds its statement when the session reports
+// describeStatement records request's resolved idempotence and statement
+// kind in the ExecutionError in err, and adds its statement when the session reports
 // statements in errors
 // (ConfigBuilder.WithErrorStatementText): its CQL text cut to the configured
 // limit, and for a batch the statement count with the first statement. Bound
@@ -18,10 +18,13 @@ func (rt *InternalSessionRuntime) describeStatement(err error, request *Internal
 	if request == nil {
 		return
 	}
-	if failure, ok := errors.AsType[*ExecutionError](err); ok && request.options != nil {
-		// A request refused before its options were resolved keeps what
-		// the resolved request recorded, if anything.
-		failure.Idempotent = request.isIdempotent()
+	if failure, ok := errors.AsType[*ExecutionError](err); ok {
+		failure.StatementKind = request.routing.Kind
+		if request.options != nil {
+			// A request refused before its options were resolved keeps
+			// what the resolved request recorded, if anything.
+			failure.Idempotent = request.isIdempotent()
+		}
 	}
 	var entries []batchEntry
 	if request.batch != nil {

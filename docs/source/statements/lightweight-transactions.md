@@ -55,8 +55,8 @@ members are all known not to be conditional.
 The ordinary `exec.Options` carries regular and serial consistency; profile defaults
 apply when an explicit override is absent. `exec.Options.SerialConsistency` is an
 `exec.SerialOverride`: `exec.SerialInherit` (the zero value) keeps the profile's,
-`exec.SerialSerial` and `exec.SerialLocal` send SERIAL or LOCAL_SERIAL, and `exec.SerialOmit`
-sends none. Inspect every returned row and close
+and `exec.SerialSerial` and `exec.SerialLocal` send SERIAL or LOCAL_SERIAL. A profile whose
+`SerialConsistency` is unset sends none, and the server applies its default. Inspect every returned row and close
 the result rows even when the condition was not applied.
 
 Cassandra and ScyllaDB return different rows and columns for conditional

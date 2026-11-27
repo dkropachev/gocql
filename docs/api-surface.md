@@ -94,7 +94,10 @@ a stream's receive mode.
   other fields, then the call's. The combination is compiled once and cached
   on the call's options for the view it was last passed to, so a warm call
   allocates nothing. The view shares the preparation and its pool, so it is
-  not a new row.
+  not a new row. A view whose `exec.Options.Speculation` names a policy for
+  a statement that cannot speculate (conditional, or not idempotent) fails
+  every call, its `Worker` included, with a `cql.ValidationError` before
+  sending, so `With` keeps its one-result form.
 - Throwaway: each call ends in `options ...exec.CompiledOptions`, the same
   optional parameter with at most one value, resolved against the session
   on the call.

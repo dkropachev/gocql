@@ -36,7 +36,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/paging"
 	implPool "github.com/scylladb/gocql/v2/internal/pool"
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
-	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -571,6 +570,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		pagectx, s.privateStorage.pageCancel = context.WithTimeoutCause(s.privateStorage.ctx, timeout, cqlerr.ErrRequestTimeout)
 	}
 	consistency := request.options.InternalProfile.Consistency
+	pageStarted := time.Now() // read by the retry policy as retry.Attempt.Elapsed
 	for attempt := 1; ; attempt++ {
 		if err := transport.ContextError(pagectx); err != nil {
 			return err
@@ -734,23 +734,14 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			rt.retries.Add(1)
 			continue
 		}
-		decision := retry.Decision{}
-		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Context: pagectx, Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
-		}
+		decision := decideRetry(pagectx, request, conn, err, attempt, consistency, attemptStatus, pageStarted)
 		if decision.Action == retry.Stop {
 			return err
 		}
-		if decision.Action != retry.Same && decision.Action != retry.Next {
-			return cqltype.TypeValidation("retry", "unknown retry action")
-		}
-		if decision.Delay < 0 {
-			return cqltype.TypeValidation("retry delay", "negative delay")
+		if invalid := checkDecision(decision, err); invalid != nil {
+			return invalid
 		}
 		if decision.Consistency.Set {
-			if !settings.InternalValidConsistency(decision.Consistency.Value) {
-				return cqltype.TypeValidation("retry consistency", "invalid consistency")
-			}
 			consistency = decision.Consistency.Value
 		}
 		if decision.Action == retry.Same && s.privateStorage.reservation.InternalClosing.Load() {

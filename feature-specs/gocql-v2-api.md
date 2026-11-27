@@ -814,7 +814,12 @@ profile, exec.Options.Profile (the call's, else the view's), the view's other
 fields, then the call's. Observers join, view first; a HostID brings its
 ShardID and AnyShardFallback. The combination is compiled once and cached in a
 one-entry atomic pointer on the call's compiled options, keyed by the view's,
-so a warm call allocates nothing. Prepared.Apply and Worker.Apply run a
+so a warm call allocates nothing. A view whose exec.Options.Speculation names
+a policy for a statement that cannot speculate (conditional, or not
+idempotent by the view's options, the statement and the profile) fails every
+call, its Worker included, with a cql.ValidationError before sending;
+speculation from a profile is reported per call in
+Result.SpeculationSkipped. Prepared.Apply and Worker.Apply run a
 conditional statement and report its [applied] column through cql.CASApplied,
 whatever R is; One with a nil dst on a conditional statement is rejected
 before sending, since the row always exists. A Profile's Idempotent does not
@@ -1388,7 +1393,7 @@ func (CompiledOptions) Values() Options          // a copy, to derive other opti
 type Options struct {
     Profile *config.Profile                       // copied when resolved
     Consistency cql.Option[cql.Consistency]
-    SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
+    SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal
     Timeout cql.Option[time.Duration]             // replaces the profile timeout; Some(0): no limit
     PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
     PageSize int                                  // 0 inherits; cql.Unpaged: whole result; above it rejected
@@ -1413,7 +1418,7 @@ type PayloadEntry struct { Key string; Value Nullable[Bytes] }
 
 // package exec
 type SerialOverride uint8                         // one field, so no invalid combination exists
-const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal; SerialOmit)
+const (SerialInherit SerialOverride = iota; SerialSerial; SerialLocal) // a profile without SerialConsistency sends none
 
 // package config
 type Profile struct {
@@ -1457,8 +1462,11 @@ type Result struct {
     AttemptLatency time.Duration // summed over completed attempts
     FetchedRows int64
     AchievedConsistency cql.Consistency
+    SpeculationSkipped SpeculationSkip // why a request with a speculation policy did not speculate
     /* unexported diagnostics */
 }
+type SpeculationSkip uint8
+const (SpeculationNotSkipped SpeculationSkip = iota; SpeculationSkippedConditional; SpeculationSkippedNotIdempotent)
 func (r Result) Warnings() []string
 func (r Result) CQLTraces() []CQLTraceRef
 func (r Result) CustomPayload() []cql.PayloadEntry
@@ -1586,9 +1594,11 @@ type AttemptStart struct {
 type SpeculationPolicy interface { Delay(Speculation) (time.Duration, bool) }
 type SpeculationPolicyFunc func(Speculation) (time.Duration, bool)
 type NoSpeculation struct{} // for exec.Options.Speculation: disables it
+type FixedSpeculation struct { After time.Duration; Max int } // Max attempts, the first included
+// A negative delay fails the execution with a cql.ValidationError.
 type Speculation struct {
-    Context context.Context // the execution's; carries the caller's values
-    Started int; Elapsed time.Duration; Deadline time.Time
+    Context context.Context // the execution's; carries the caller's values and deadline
+    Started int; Elapsed time.Duration
     Keyspace, Table string; Consistency cql.Consistency
     LatencyP50, LatencyP95, LatencyP99 time.Duration
 }
@@ -1621,7 +1631,7 @@ func Join(hooks ...Hooks) Hooks
 ```
 
 Retry types live in the public package `github.com/scylladb/gocql/v2/retry`.
-A retry policy depends on packages `cql` and `cqlerr` only, not on the root
+A retry policy depends on packages `cql`, `cqlerr` and `metadata` only, not on the root
 package:
 
 ```go
@@ -1632,13 +1642,17 @@ const (Stop Action = iota; Same; Next)
 type Attempt struct {
     Context context.Context // the execution's; carries the caller's values
     Err error
+    Keyspace, Table string
     Attempt int // 1-based
     Idempotent bool
     Consistency cql.Consistency
     StatementKind cql.StatementKind
+    Batch cql.Option[cql.BatchKind]
     ExecutionStatus cqlerr.ExecutionStatus
+    Target metadata.Target // the failed attempt's host and shard
+    Elapsed time.Duration // since the page's first attempt started
 }
-type Decision struct {
+type Decision struct { // an invalid decision fails with a ValidationError wrapping Err
     Action Action
     Consistency cql.Option[cql.Consistency]
     Delay time.Duration
@@ -1890,7 +1904,7 @@ type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 // Fields may be added later; read them by name and do not compare snapshots whole.
 type Snapshot struct {
     Requests, Attempts uint64 // never decrease
-    Errors, Canceled, Timeouts uint64 // Canceled: KindCanceled; Timeouts: KindTimeout
+    Errors, Canceled, Timeouts uint64 // Canceled: KindCanceled (the caller's cancel or deadline); Timeouts: KindTimeout (server or driver)
     ErrorsByKind map[cqlerr.Kind]uint64
     Retries, Speculations uint64
     Orphans uint64
@@ -2107,13 +2121,18 @@ reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
 `PartiallyExecuted`, and `Executed`, which `ExecutionStatusOf(nil)` returns;
 `ExecutionStatusOf(err)`; compare with `==`, as the
 numeric order is not the severity order). `NewExecutionError(err, status,
-attempts...)` builds one for tests. The driver's own timeout ends a request
-with `ErrRequestTimeout`, which matches `context.DeadlineExceeded`. `KindOf(err)`
+attempts...)` builds one for tests; `ExecutionError.StatementKind` records
+the request's resolved statement kind. `AttemptAs[T](err)` finds an error of
+type `T` in `err`, then in the attempts, newest first. `ConditionalUnknown(err)`
+reports a conditional request that may have applied; `IsCASWriteUnknown(err)`
+is its server-reported case. The driver's own timeout ends a request
+with `ErrRequestTimeout`, which matches `context.DeadlineExceeded` and is
+`KindTimeout`; the caller's own deadline, like its cancellation, is
+`KindCanceled`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help;
 `Retryable(err)` adds the execution status and the request's resolved
-idempotence (`ExecutionError.Idempotent`) and rules out the caller's own
-cancellation or deadline. Driver
+idempotence (`ExecutionError.Idempotent`). Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
 `ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
 `ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,

@@ -25,13 +25,14 @@ type QueryErrorState struct {
 
 // executionErrorRep mirrors cqlerr.ExecutionError.
 type executionErrorRep struct {
-	Err        error
-	Attempts   []cqlerr.AttemptFailure
-	Statement  string
-	Result     cql.Result
-	BatchSize  int
-	Idempotent bool
-	status     cqlerr.ExecutionStatus
+	Err           error
+	Attempts      []cqlerr.AttemptFailure
+	Statement     string
+	Result        cql.Result
+	BatchSize     int
+	Idempotent    bool
+	StatementKind cql.StatementKind
+	status        cqlerr.ExecutionStatus
 }
 
 var (

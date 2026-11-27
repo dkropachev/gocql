@@ -7,10 +7,12 @@ replaces the profile's Timeout for that execution, longer or shorter, and
 `cql.Some(time.Duration(0))` removes it, so a long scan can outlast the
 default 30s; `PageTimeout` works the same way for each page fetch. The
 context still bounds the execution either way. When the driver's limit runs
-out, the error matches `cqlerr.ErrRequestTimeout`; when the caller's context
-deadline passes, it does not. Both match `context.DeadlineExceeded` and
-report `cqlerr.KindTimeout`. Custom providers and hooks honor
-the caller's cancellation.
+out, the error matches `cqlerr.ErrRequestTimeout` and reports
+`cqlerr.KindTimeout`; when the caller's context deadline passes, it does not,
+and reports `cqlerr.KindCanceled`, as the caller's cancellation does. Both
+match `context.DeadlineExceeded`. `metrics.Snapshot.Timeouts` and
+`routing.AttemptEvent.TimedOut` count only the server's and the driver's
+timeouts. Custom providers and hooks honor the caller's cancellation.
 
 Cancellation keeps transmitted stream IDs reserved until their late response
 or connection close. Accepted writers finish or fail before borrowed input is

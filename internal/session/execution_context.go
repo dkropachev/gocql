@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
@@ -267,7 +268,9 @@ func (c *executionContext) expire() {
 		c.mu.Unlock()
 		return
 	}
-	c.cancelLocked(context.DeadlineExceeded)
+	// The query's own timeout ran out, not the parent's deadline: report the
+	// driver's budget, as context.WithTimeoutCause does on the general path.
+	c.cancelLocked(cqlerr.ErrRequestTimeout)
 }
 
 // parentCancelled follows the current generation's parent. A late callback

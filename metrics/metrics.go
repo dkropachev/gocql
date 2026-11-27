@@ -36,10 +36,9 @@ type Snapshot struct {
 	// execution refused because the session is closing is not counted.
 	Requests, Attempts uint64
 	// Errors counts executions that ended with an error. Canceled counts
-	// those of them whose error is cqlerr.KindCanceled: the caller canceled
-	// the context. Timeouts counts those whose error is cqlerr.KindTimeout:
-	// the server or the driver gave up waiting, or the caller's deadline
-	// passed.
+	// those of them whose error is cqlerr.KindCanceled: the caller's context
+	// was canceled or its deadline passed. Timeouts counts those whose error
+	// is cqlerr.KindTimeout: the server or the driver gave up waiting.
 	Errors, Canceled, Timeouts uint64
 	// Retries counts attempts the retry policy asked for, and Speculations
 	// the speculative attempts the speculation policy started.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // Action is what the driver does after a failed attempt. The zero Action is
@@ -54,6 +55,8 @@ type Attempt struct {
 	Context context.Context
 	// Err is the attempt's error.
 	Err error
+	// Keyspace and Table name the statement's table, when known.
+	Keyspace, Table string
 	// Attempt is the 1-based number of the failed attempt.
 	Attempt int
 	// Idempotent reports that the request was marked idempotent.
@@ -71,6 +74,14 @@ type Attempt struct {
 	Batch cql.Option[cql.BatchKind]
 	// ExecutionStatus reports what this attempt may have done on the cluster.
 	ExecutionStatus cqlerr.ExecutionStatus
+	// Target is the host, and shard, the failed attempt was sent to, as in
+	// routing.AttemptEvent.Target. It is zero when the attempt failed
+	// before a connection was chosen.
+	Target metadata.Target
+	// Elapsed is the time since the page's first attempt started, the
+	// failed attempt included, as in Speculation.Elapsed. A policy that
+	// bounds a page's retries by time reads it.
+	Elapsed time.Duration
 }
 
 // Decision is a policy's answer. The zero value stops retrying.

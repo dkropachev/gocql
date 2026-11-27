@@ -211,7 +211,7 @@ func TestConditional(t *testing.T) {
 		for i, tc := range []struct {
 			name     string
 			override exec.SerialOverride
-		}{{"Inherit", exec.SerialInherit}, {"Serial", exec.SerialSerial}, {"Local", exec.SerialLocal}, {"Omit", exec.SerialOmit}, {"Unknown", exec.SerialOmit + 1}} {
+		}{{"Inherit", exec.SerialInherit}, {"Serial", exec.SerialSerial}, {"Local", exec.SerialLocal}, {"Unknown", exec.SerialLocal + 1}} {
 			t.Run(tc.name, func(t *testing.T) {
 				insert := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), exec.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
@@ -219,7 +219,7 @@ func TestConditional(t *testing.T) {
 				if err == nil {
 					_, err = insert.Exec(context.Background(), []cql.Value{cql.IntValue(int32(i + 1))}, options)
 				}
-				if tc.override <= exec.SerialOmit {
+				if tc.override <= exec.SerialLocal {
 					require.NoError(t, err)
 					require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(int32(i+1))), "id"))
 				} else {

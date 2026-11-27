@@ -57,8 +57,6 @@ const (
 	SerialSerial
 	// SerialLocal sends LOCAL_SERIAL.
 	SerialLocal
-	// SerialOmit sends no serial consistency.
-	SerialOmit
 )
 
 type InternalResolvedOptions struct {
@@ -96,8 +94,6 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 		p.SerialConsistency = cql.Some(cql.Serial)
 	case SerialLocal:
 		p.SerialConsistency = cql.Some(cql.LocalSerial)
-	case SerialOmit:
-		p.SerialConsistency = cql.Option[cql.Consistency]{}
 	default:
 		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
 	}

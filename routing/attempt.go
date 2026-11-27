@@ -69,10 +69,9 @@ type AttemptEvent struct {
 	// cqlerr.AttemptFailure.ExecutionStatus reports for it.
 	ExecutionStatus cqlerr.ExecutionStatus
 	// Canceled reports an attempt whose error is cqlerr.KindCanceled: the
-	// caller canceled the request, or the driver canceled the attempt, as
-	// when another attempt of the request won. TimedOut reports one whose
-	// error is cqlerr.KindTimeout: the server or the driver gave up
-	// waiting, or the caller's deadline passed. Speculative reports a
-	// speculative attempt.
+	// caller's context was canceled or its deadline passed, or the driver
+	// canceled the attempt, as when another attempt of the request won.
+	// TimedOut reports one whose error is cqlerr.KindTimeout: the server or
+	// the driver gave up waiting. Speculative reports a speculative attempt.
 	Canceled, TimedOut, Speculative bool
 }

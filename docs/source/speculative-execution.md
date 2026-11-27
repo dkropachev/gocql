@@ -3,23 +3,29 @@
 Speculation starts another attempt of a request on the next host of its plan
 when the first one is slow, and returns whichever answers first. It is off by
 default. Set `Profile.Speculation`, with `ProfileBuilder.WithSpeculation`, to a
-`retry.SpeculationPolicy`; nil disables it. The driver ships no policy:
-`Delay` receives a `retry.Speculation` and returns how long to wait before
-starting another attempt and whether to start one at all. The `Speculation`
-holds the attempts started so far, the time since the first, the page's
-deadline, the statement's keyspace, table and consistency, and the session's
-latency percentiles. Its `Context` is the execution's context, so a value the
-application attached with `context.WithValue`, such as a request's priority,
-reaches the policy; `retry.Attempt.Context` does the same for a retry policy.
+`retry.SpeculationPolicy`; nil disables it. `Delay` receives a
+`retry.Speculation` and returns how long to wait before starting another
+attempt and whether to start one at all. The `Speculation` holds the attempts
+started so far, the time since the first, the statement's keyspace, table and
+consistency, and the session's latency percentiles. Its `Context` is the
+execution's context, so a value the application attached with
+`context.WithValue`, such as a request's priority, reaches the policy, and
+`Context.Deadline` reports when the page's context ends;
+`retry.Attempt.Context` does the same for a retry policy. A negative delay
+fails the execution with a `cql.ValidationError`, as a negative retry delay
+does.
 
-`retry.SpeculationPolicyFunc` makes one from a function:
+`retry.FixedSpeculation{After: d, Max: n}` starts another attempt every `d`
+until `n` attempts have started, as v1's `SimpleSpeculativeExecution` did.
+`retry.SpeculationPolicyFunc` makes a policy from a function:
 
 ```go
 // Start a second attempt once the first has taken the session's p95
 // latency, and only when it can still finish before the deadline.
 speculation := retry.SpeculationPolicyFunc(func(s retry.Speculation) (time.Duration, bool) {
 	delay := max(s.LatencyP95, 10*time.Millisecond)
-	if s.Started >= 2 || !s.Deadline.IsZero() && time.Until(s.Deadline) < delay {
+	deadline, bounded := s.Context.Deadline()
+	if s.Started >= 2 || bounded && time.Until(deadline) < delay {
 		return 0, false
 	}
 	return delay, true
@@ -70,6 +76,15 @@ Conditional statements, requests with SERIAL or LOCAL_SERIAL
 consistency, and batches that hold a conditional member never
 speculate; an idempotent batch of ordinary members can. Streams never
 speculate or prefetch, whatever their profile says.
+
+A request whose policy is set but that cannot speculate says why in
+`cql.Result.SpeculationSkipped`, on success and in `ExecutionError.Result`:
+`cql.SpeculationSkippedConditional` or `cql.SpeculationSkippedNotIdempotent`.
+A `Prepared.With` view whose `exec.Options.Speculation` names a policy for a
+statement that cannot speculate, by the view's own options, the statement and
+the profile, is a mistake found once: every call of the view, and its
+`Worker`, fails with a `cql.ValidationError` before sending. Speculation that
+comes from a profile serves many statements, so it is only reported per call.
 
 Concurrent branches share serialized plan advancement and the same encoded
 input owner. Losing attempts are cancelled and drain before borrowed input can

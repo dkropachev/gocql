@@ -60,7 +60,9 @@ type Options struct {
 	// Speculation replaces the profile's speculation policy; nil keeps it.
 	// Use retry.NoSpeculation{} to disable speculation. Set it on a
 	// statement with Prepared.With to speculate only that statement's
-	// executions, or per call through Session.CompileOptions.
+	// executions, or per call through Session.CompileOptions. A request
+	// that cannot speculate reports why in cql.Result.SpeculationSkipped;
+	// a Prepared.With view whose statement cannot fails its calls.
 	Speculation retry.SpeculationPolicy
 	// Observer observes the execution as well as the session's hooks
 	// (config.ConfigBuilder.WithObserver), joined after them as observe.Join
@@ -163,9 +165,6 @@ const (
 	SerialSerial = SerialOverride(implSession.SerialSerial)
 	// SerialLocal sends LOCAL_SERIAL.
 	SerialLocal = SerialOverride(implSession.SerialLocal)
-	// SerialOmit sends no serial consistency, so the server applies its own
-	// default (SERIAL).
-	SerialOmit = SerialOverride(implSession.SerialOmit)
 )
 
 // String returns the serial override name, or SerialOverride(n) for a value
@@ -178,8 +177,6 @@ func (s SerialOverride) String() string {
 		return "serial"
 	case SerialLocal:
 		return "local serial"
-	case SerialOmit:
-		return "omit"
 	default:
 		return fmt.Sprintf("SerialOverride(%d)", uint8(s))
 	}

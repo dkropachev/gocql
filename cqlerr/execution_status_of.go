@@ -166,14 +166,19 @@ type ExecutionError struct {
 	// resolved it: exec.Options.Idempotent when set, else the statement's
 	// or the profile's. Retryable reads it.
 	Idempotent bool
-	status     ExecutionStatus
+	// StatementKind classifies the request's statement, or a batch's
+	// statements together, as retry.Attempt.StatementKind does:
+	// cql.ConditionalStatement when it is a lightweight transaction or a
+	// SERIAL read. ConditionalUnknown reads it.
+	StatementKind cql.StatementKind
+	status        ExecutionStatus
 }
 
 // NewExecutionError returns the failure of a request that stopped with err
 // after attempts, whose ExecutionStatus reports status. Tests of code that
 // handles the driver's errors, such as a retry.Policy or a caller's
-// fallback, can use it; set Statement, Result, BatchSize and Idempotent
-// directly.
+// fallback, can use it; set Statement, Result, BatchSize, Idempotent and
+// StatementKind directly.
 func NewExecutionError(err error, status ExecutionStatus, attempts ...AttemptFailure) *ExecutionError {
 	return &ExecutionError{Err: err, status: status, Attempts: attempts}
 }
@@ -249,6 +254,12 @@ func (e *ExecutionError) ExecutionStatus() ExecutionStatus { return e.status }
 // attempt, so a request the caller canceled after such a timeout is
 // reported too. Read the row back before retrying a write that is not
 // idempotent.
+//
+// It is the server-reported case only, and has false negatives: an LWT
+// whose attempt timed out in the driver (ErrRequestTimeout or
+// ErrTimeoutNoResponse), lost its connection, or was abandoned by the
+// caller's cancellation has an unknown outcome too, without the server
+// saying so. ConditionalUnknown covers them all.
 func IsCASWriteUnknown(err error) bool {
 	if casWriteUnknown(err) {
 		return true
@@ -261,6 +272,18 @@ func IsCASWriteUnknown(err error) bool {
 		}
 	}
 	return false
+}
+
+// ConditionalUnknown reports whether err is the failure of a conditional
+// request (ExecutionError.StatementKind is cql.ConditionalStatement) that may
+// have applied: its ExecutionStatus is not NotExecuted. The outcome of such
+// an LWT is unknown whatever the cause, a server's CAS timeout
+// (IsCASWriteUnknown), the driver's timeout, a lost connection or the
+// caller's cancellation; read the row back, with a SERIAL read, before
+// sending it again. An error that holds no ExecutionError reports false.
+func ConditionalUnknown(err error) bool {
+	request, ok := errors.AsType[*ExecutionError](err)
+	return ok && request.StatementKind == cql.ConditionalStatement && request.status != NotExecuted
 }
 
 // casWriteUnknown reports whether err wraps a conditional write's unknown

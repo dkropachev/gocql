@@ -28,7 +28,7 @@ func (s *Core) TypedGeneration() uint64 {
 // first of plan's routes that has one, or, without a plan, of the request's
 // pinned host, or of any host.
 func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan implRouting.QueryPlan) (*transport.Conn, error) {
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return nil, err
 	}
 	if s.Closed() {
@@ -79,7 +79,7 @@ func (s *Core) SelectTypedConn(ctx context.Context, routing routing.Info, plan i
 // once Close has begun; the error also matches ErrNoConnections, so
 // ExecutionStatusOf still reports the request as not executed.
 func (s *Core) noConnection(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
+	if err := transport.ContextError(ctx); err != nil {
 		return err
 	}
 	if s.Closed() {

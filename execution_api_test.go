@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/exec"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	"github.com/scylladb/gocql/v2/retry"
 )
 
 // TestPreparedRouting reads a statement's routing from the Prepared itself,
@@ -359,6 +360,32 @@ func TestPreparedWith(t *testing.T) {
 	if _, _, err := new(Prepared[int32, []byte]).With(quorum).One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("One on a view of a zero Prepared = %v, want a cql.ValidationError", err)
 	}
+
+	// A view that speculates a statement that is not idempotent fails every
+	// call, and its Worker, before sending.
+	speculate := exec.Options{Speculation: retry.FixedSpeculation{After: time.Hour, Max: 2}}
+	futile := f.p.With(f.s.MustCompileOptions(speculate))
+	before = len(f.srv.sent())
+	if _, _, err := futile.One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) || len(f.srv.sent()) != before {
+		t.Fatalf("One on a view speculating a non-idempotent statement = %v, sent %d; want a cql.ValidationError before sending", err, len(f.srv.sent())-before)
+	}
+	if _, _, err := futile.One(f.ctx, gridKey, &dst, one); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("One with options on the view = %v, want a cql.ValidationError", err)
+	}
+	if _, err := futile.Worker(); !errors.As(err, new(*cql.ValidationError)) {
+		t.Fatalf("Worker of the view = %v, want a cql.ValidationError", err)
+	}
+	// The view's own Idempotent makes it eligible, and a view that turns
+	// speculation off is not checked.
+	speculate.Idempotent = cql.Some(true)
+	sent("speculating idempotent view.One", cql.LocalQuorum, 5000, func() error {
+		_, _, err := f.p.With(f.s.MustCompileOptions(speculate)).One(f.ctx, gridKey, &dst)
+		return err
+	})
+	sent("NoSpeculation view.One", cql.LocalQuorum, 5000, func() error {
+		_, _, err := f.p.With(f.s.MustCompileOptions(exec.Options{Speculation: retry.NoSpeculation{}})).One(f.ctx, gridKey, &dst)
+		return err
+	})
 }
 
 // TestUnpreparedCommand sends CQL text with nothing to bind as one QUERY,

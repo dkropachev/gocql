@@ -446,7 +446,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 					return r, nil
 				}
 				if ctx.Err() != nil {
-					return nil, ctx.Err()
+					return nil, transport.ContextError(ctx)
 				}
 				if _, ok := errors.AsType[*cql.StreamCapabilityError](err); ok {
 					capability = err
@@ -479,7 +479,7 @@ func (pool *InternalHostConnPool) InternalReserveStreamWithLimits(ctx context.Co
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return nil, transport.ContextError(ctx)
 		case <-pool.InternalRepairCtx.Done():
 			return nil, cqlerr.ErrClosed
 		case <-changed:

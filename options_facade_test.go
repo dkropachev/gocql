@@ -35,9 +35,6 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 	if got := roundTripOptions(t, want); !reflect.DeepEqual(got, want) {
 		t.Fatalf("public options lost settings:\n got %+v\nwant %+v", got, want)
 	}
-	if got := roundTripOptions(t, exec.Options{SerialConsistency: exec.SerialOmit}); got.SerialConsistency != exec.SerialOmit {
-		t.Fatal("explicitly omitted serial consistency was lost")
-	}
 	if _, err := compileOptions(exec.Options{HostID: want.HostID, AnyShardFallback: true}); err == nil {
 		t.Fatal("AnyShardFallback without a shard ID was accepted")
 	}

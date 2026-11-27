@@ -11,7 +11,7 @@ safe:
 | Status | Meaning |
 | --- | --- |
 | `NotExecuted` | Nothing was applied: the request never left the driver, or the server rejected it first (Unavailable, Overloaded, Syntax, Invalid, Unauthorized, ...). Retrying cannot duplicate it. An unlogged or counter batch rejected as Unavailable or Overloaded is the exception: the server may have written some of its partitions, so its attempt reports `MaybeExecuted`. |
-| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.IsCASWriteUnknown(err)` identifies it. See [server differences](server-differences.md). |
+| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.ConditionalUnknown(err)` identifies it, whatever ended it; `cqlerr.IsCASWriteUnknown(err)` is the case the server reports. See [server differences](server-differences.md). |
 | `PartiallyExecuted` | Some replicas applied a write without reaching the requested consistency, an unlogged or counter batch applied some of its statements, or a schema change succeeded but its follow-up failed. Treat it as executed for work that is not idempotent: read back what it changed before sending it again. A logged batch that failed after its batch log was written reports `MaybeExecuted` instead: the server replays the batch log until every statement is applied. |
 | `Executed` | The request succeeded: `ExecutionStatusOf(nil)` returns it. |
 
@@ -28,13 +28,26 @@ limited, invalid, unauthorized, connection, canceled, closed, protocol or
 server. `Kind.Transient` reports whether a later attempt can succeed. It does
 not say whether a retry is safe; combine it with the execution status.
 
-`KindTimeout` covers both the driver's own budget and the caller's expired
-context. When the profile's `Timeout` or `exec.Options.Timeout` (or
-`PageTimeout`) runs out, the error matches `cqlerr.ErrRequestTimeout`; it
-also matches `context.DeadlineExceeded`, as the caller's deadline does.
+`KindTimeout` means the server or the driver gave up waiting. The errors of
+that kind a caller sees are:
+
+- `cqlerr.ErrRequestTimeout`: the profile's `Timeout` or `exec.Options.Timeout`
+  (or `PageTimeout`) ran out. It also matches `context.DeadlineExceeded`.
+- `cqlerr.ErrTimeoutNoResponse`: an attempt got no response from its
+  connection in time.
+- The server's `*cqlerr.ReadTimeoutError`, `*cqlerr.WriteTimeoutError` and
+  `*cqlerr.CASWriteUnknownError`.
+- A network error that reports `Timeout()`, such as a dial timeout.
+
+The caller's own context ending, by cancellation or by its deadline, is
+`KindCanceled`, which is not transient: no retry under that context can
+succeed. Its error matches `context.Canceled` or `context.DeadlineExceeded`
+and never `cqlerr.ErrRequestTimeout`. `metrics.Snapshot.Timeouts` and
+`routing.AttemptEvent.TimedOut` count `KindTimeout` only, `Canceled` the
+rest.
 
 `cqlerr.Retryable(err)` puts the two questions together: the error is
-transient, it is not the caller's own cancellation or deadline, and the
+transient, which rules out the caller's own cancellation or deadline, and the
 request was not executed or is idempotent. The idempotence is the one the
 driver resolved for the request (`exec.Options.Idempotent`, else the
 statement's or the profile's), kept in `ExecutionError.Idempotent`, so the
@@ -47,12 +60,19 @@ var row int32
 -->
 ```go
 for attempt := 0; cqlerr.Retryable(err) && attempt < 3; attempt++ {
+	time.Sleep(time.Duration(attempt+1) * 100 * time.Millisecond)
 	_, err = insert.Exec(ctx, row)
 }
 ```
 
-When an error wraps several others, a cancellation decides first, then a
-deadline, then a server error, then the driver's own errors. A `Connect` that
+`Retryable` also accepts errors the default `retry.Safe` stops on, such as a
+rate-limited request or an idempotent write timeout: the driver retries at
+once, an application loop can back off first, as above (see
+[retry policy](retry-policy.md)).
+
+When an error wraps several others, a cancellation decides first, then the
+driver's timeout, then the caller's deadline, then a server error, then the
+driver's own errors. A `Connect` that
 failed because a host rejected the credentials therefore reports
 `KindUnauthorized`, not `KindConnection`. Server errors and the driver's error
 types also report their own kind with a `Kind` method.
@@ -92,8 +112,20 @@ consistency, execution status, error and, when the request ran with
 `exec.Options.CQLTrace`, the `CQLTraceID` of the server's trace session. The
 error wraps `Err` only, so `errors.Is` and `errors.As` see why the request
 stopped, the error `KindOf` classifies; read an earlier attempt's error from
-`Attempts`. `cqlerr.IsCASWriteUnknown` checks every attempt, so it still
-reports an LWT timeout that the caller's cancellation ended.
+`Attempts`, or find one by type with `cqlerr.AttemptAs`, which searches `err`
+and then the attempts, newest first: a request that failed Unavailable and
+then ran out of its `Timeout` stops with `ErrRequestTimeout`, and
+`cqlerr.AttemptAs[*cqlerr.UnavailableError](err)` still finds the
+Unavailable. A retry decision the driver cannot carry out fails the request
+with a `*cql.ValidationError` that wraps the attempt's error the same way.
+
+`failure.StatementKind` is the request's statement kind as the driver
+resolved it. `cqlerr.ConditionalUnknown(err)` reports a conditional request
+whose status is not `NotExecuted`: an LWT that may have applied, whatever
+ended it. `cqlerr.IsCASWriteUnknown` reports only the server's CAS timeout
+and misses the rest, such as the driver's timeout or a lost connection; it
+checks every attempt, so it still reports an LWT timeout that the caller's
+cancellation ended.
 
 <!-- snippet
 var insert *gocql.Prepared[int32, cql.EmptyRow]
@@ -135,7 +167,9 @@ statement in `failure.Statement`, rendered as
 every mode; only literals written into the CQL text itself appear.
 
 `failure.Result` holds what the execution gathered before it failed, such as
-its attempt count and latency.
+its attempt count and latency. Its `Warnings` are the authoritative copy of
+the server's warnings: they gather every attempt's and page's, while
+`ServerError.Warnings()` holds only those sent with that one error response.
 
 To test code that handles these errors, such as a `retry.Policy` or a
 fallback path, build one with `cqlerr.NewExecutionError(err, status,

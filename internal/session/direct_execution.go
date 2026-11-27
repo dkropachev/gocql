@@ -62,6 +62,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 	var conn *transport.Conn
 	pinned := false // the first attempt went to request.pinned
 	observe := request.InternalLogical.observesAttempts() || routingObservesLatency(request.options.InternalProfile.Routing)
+	var first time.Time // when the page's first attempt started
 	for attempt := 1; ; attempt++ {
 		if err := transport.ContextError(ctx); err != nil {
 			return failure(err)
@@ -110,6 +111,9 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			started = l.started
 		} else {
 			started = time.Now()
+		}
+		if attempt == 1 {
+			first = started
 		}
 		var end func(routing2.AttemptEvent)
 		var observed time.Time
@@ -164,25 +168,15 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 			// cancellation is the cause.
 			return failure(ctxErr)
 		}
-		decision := retry.Decision{}
-		if policy := request.options.InternalProfile.Retry; policy != nil {
-			decision = policy.Decide(retry.Attempt{Context: ctx, Err: err, Attempt: attempt, Idempotent: request.isIdempotent(), Consistency: consistency, StatementKind: request.routing.Kind, Batch: request.batchKind(), ExecutionStatus: attemptStatus})
-		}
-		switch decision.Action {
-		case retry.Stop:
+		decision := decideRetry(ctx, request, conn, err, attempt, consistency, attemptStatus, first)
+		if decision.Action == retry.Stop {
 			return failure(err)
-		case retry.Same, retry.Next:
-		default:
-			return failure(cqltype.TypeValidation("retry", "unknown retry action"))
+		}
+		if invalid := checkDecision(decision, err); invalid != nil {
+			return failure(invalid)
 		}
 		if decision.Consistency.Set {
-			if !settings.InternalValidConsistency(decision.Consistency.Value) {
-				return failure(cqltype.TypeValidation("retry consistency", "invalid consistency"))
-			}
 			consistency = decision.Consistency.Value
-		}
-		if decision.Delay < 0 {
-			return failure(cqltype.TypeValidation("retry delay", "negative delay"))
 		}
 		if decision.Delay > 0 {
 			timer := time.NewTimer(decision.Delay)

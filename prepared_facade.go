@@ -196,6 +196,9 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 // with a Timestamp are rejected with a cql.ValidationError, since every
 // write of the worker would carry it.
 func (p *Prepared[P, R]) Worker() (*Worker[P, R], error) {
+	if err := p.internal().DefaultsError(); err != nil {
+		return nil, err
+	}
 	o := p.internal().Defaults().Values()
 	if o.Timestamp.Set {
 		return nil, fixedWorkerTimestamp()
@@ -244,6 +247,14 @@ func (p *Prepared[P, R]) Routing(value P, options ...exec.CompiledOptions) (rout
 // compiles again at each switch. A combination that is not valid, such as an
 // unpaged view and a call that sets Prefetch, fails the call with a
 // cql.ValidationError before anything is sent.
+//
+// Defaults whose exec.Options.Speculation names a policy for a statement
+// that cannot speculate, a conditional one or one that is not idempotent by
+// the defaults' Idempotent, the statement's or the profile's, make a view
+// whose every call, Routing and Worker included, fails with a
+// cql.ValidationError before anything is sent, whatever options the call
+// passes. Speculation that comes from a profile is not checked: each
+// execution reports why it did not speculate in cql.Result.SpeculationSkipped.
 //
 // The view shares p's preparation and its pool of queries: making one costs
 // one small allocation, and neither the view nor p needs closing. With on a

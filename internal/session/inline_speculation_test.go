@@ -6,6 +6,7 @@ package session
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"net"
 	"testing"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/internal/cluster"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
@@ -274,8 +276,8 @@ func TestSpeculationInput(t *testing.T) {
 	var rt InternalSessionRuntime
 	var first time.Time
 	for started := 1; started <= 2; started++ {
-		if _, ok := rt.speculationDelay(ctx, request, started, &first); !ok {
-			t.Fatal("speculation declined")
+		if _, ok, err := rt.speculationDelay(ctx, request, started, &first); !ok || err != nil {
+			t.Fatalf("speculation declined: %v", err)
 		}
 		time.Sleep(time.Millisecond)
 	}
@@ -283,7 +285,7 @@ func TestSpeculationInput(t *testing.T) {
 		t.Fatalf("Delay called %d times", len(seen))
 	}
 	for i, s := range seen {
-		if s.Context.Value(key{}) != "tier-1" || !s.Deadline.Equal(deadline) || s.Started != i+1 || s.Keyspace != "ks" || s.Table != "tbl" || s.Consistency != cql.LocalQuorum {
+		if got, _ := s.Context.Deadline(); s.Context.Value(key{}) != "tier-1" || !got.Equal(deadline) || s.Started != i+1 || s.Keyspace != "ks" || s.Table != "tbl" || s.Consistency != cql.LocalQuorum {
 			t.Errorf("call %d: %+v", i+1, s)
 		}
 	}
@@ -333,5 +335,92 @@ func TestSpeculationOverride(t *testing.T) {
 	}
 	if d, ok := (retry.NoSpeculation{}).Delay(retry.Speculation{}); ok || d != 0 {
 		t.Fatalf("NoSpeculation.Delay = %v, %v", d, ok)
+	}
+}
+
+// TestNegativeSpeculationDelayFails checks that a speculation policy that
+// returns a negative delay fails the execution with a cql.ValidationError,
+// as a negative retry delay does, instead of silently not speculating:
+// before anything is sent when it is the page's first answer, and with the
+// attempts in flight abandoned when it is a later one.
+func TestNegativeSpeculationDelayFails(t *testing.T) {
+	negativeFrom := func(started int) retry.SpeculationPolicy {
+		return retry.SpeculationPolicyFunc(func(s retry.Speculation) (time.Duration, bool) {
+			if s.Started >= started {
+				return -time.Millisecond, true
+			}
+			return time.Millisecond, true
+		})
+	}
+	run := func(t *testing.T, s *cluster.Core, profile settings.Profile) error {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		bound := runtimeQuery(t)
+		defer bound.Close()
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: &profile, Idempotent: cql.Some(true)}))
+		if page != nil {
+			page.Close()
+		}
+		return err
+	}
+	check := func(t *testing.T, err error, status cqlerr.ExecutionStatus) {
+		t.Helper()
+		if _, ok := errors.AsType[*cql.ValidationError](err); !ok || cqlerr.ExecutionStatusOf(err) != status {
+			t.Fatalf("err = %v (%v); want a cql.ValidationError reporting %v", err, cqlerr.ExecutionStatusOf(err), status)
+		}
+	}
+
+	t.Run("InlineFirst", func(t *testing.T) {
+		s, _, peers := runtimeTestSession(t, 1)
+		quiet := silent(t, peers[0])
+		profile := settings.InternalDefaultProfile()
+		profile.Speculation = negativeFrom(1)
+		check(t, run(t, s, profile), cqlerr.NotExecuted)
+		peers[0].Close()
+		if !<-quiet {
+			t.Fatal("the request was sent")
+		}
+	})
+	t.Run("InlineLater", func(t *testing.T) {
+		s, _, peers := runtimeTestSession(t, 2)
+		for _, peer := range peers {
+			go func() { _, _ = io.Copy(io.Discard, peer) }()
+		}
+		profile := settings.InternalDefaultProfile()
+		profile.Speculation = negativeFrom(2)
+		check(t, run(t, s, profile), cqlerr.MaybeExecuted)
+	})
+	t.Run("General", func(t *testing.T) {
+		s, routes, _, _, peers := hostsSession(t, 2)
+		for _, peer := range peers {
+			go func() { _, _ = io.Copy(io.Discard, peer) }()
+		}
+		profile := settings.InternalDefaultProfile()
+		profile.Routing = routes
+		profile.Speculation = negativeFrom(1)
+		if speculationOnly(&InternalExecutionRequest{InternalLogical: &logicalExecution{}, options: &InternalResolvedOptions{InternalProfile: profile}}) {
+			t.Fatal("a custom routing policy must keep the general path")
+		}
+		check(t, run(t, s, profile), cqlerr.MaybeExecuted)
+	})
+}
+
+// TestSpeculationSkip pins the reason an execution with a speculation
+// policy reports for not speculating.
+func TestSpeculationSkip(t *testing.T) {
+	for _, c := range []struct {
+		kind       cql.StatementKind
+		idempotent bool
+		want       cql.SpeculationSkip
+	}{
+		{cql.OrdinaryStatement, true, cql.SpeculationNotSkipped},
+		{cql.OrdinaryStatement, false, cql.SpeculationSkippedNotIdempotent},
+		{cql.ConditionalStatement, true, cql.SpeculationSkippedConditional},
+		{cql.UnknownStatement, false, cql.SpeculationSkippedConditional},
+	} {
+		if got := speculationSkip(c.kind, c.idempotent); got != c.want {
+			t.Errorf("speculationSkip(%v, %t) = %v, want %v", c.kind, c.idempotent, got, c.want)
+		}
 	}
 }
