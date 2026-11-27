@@ -66,11 +66,6 @@ func compileOptions(o exec.Options) (exec.CompiledOptions, error) {
 	return exec.CompiledOptions(c), err
 }
 
-// mustCompileOptions is compileOptions for options known to be valid.
-func mustCompileOptions(o exec.Options) exec.CompiledOptions {
-	return codecTestMust(compileOptions(o))
-}
-
 // roundTripOptions converts o to the internal options, compiles them and
 // reads them back through exec.CompiledOptions.Values.
 func roundTripOptions(t *testing.T, o exec.Options) exec.Options {
@@ -188,15 +183,15 @@ func TestTooManyOptions(t *testing.T) {
 func TestWorkerRejectsFixedTimestamp(t *testing.T) {
 	options := exec.Options{Timestamp: cql.Some(time.Now())}
 	var prepared Prepared[cql.EmptyParams, cql.EmptyRow]
-	if _, err := prepared.Worker(mustCompileOptions(options)); !isTimestampValidation(err) {
+	if _, err := prepared.With(codecTestMust(compileOptions(options))).Worker(); !isTimestampValidation(err) {
 		t.Fatalf("Prepared.Worker = %v, want a Timestamp ValidationError", err)
 	}
 	var stream PreparedStream[cql.EmptyParams, cql.EmptyRow]
-	if _, err := stream.With(mustCompileOptions(options)).Worker(); !isTimestampValidation(err) {
+	if _, err := stream.With(codecTestMust(compileOptions(options))).Worker(); !isTimestampValidation(err) {
 		t.Fatalf("PreparedStream.Worker = %v, want a Timestamp ValidationError", err)
 	}
 	// One-shot options carry it, in microseconds.
-	if got := implSession.CompiledOptions(mustCompileOptions(exec.Options{Timestamp: cql.Some(time.UnixMicro(1234567))})).Values().Timestamp; !got.Set || got.Value != 1234567 {
+	if got := implSession.CompiledOptions(codecTestMust(compileOptions(exec.Options{Timestamp: cql.Some(time.UnixMicro(1234567))}))).Values().Timestamp; !got.Set || got.Value != 1234567 {
 		t.Fatalf("internal timestamp = %+v", got)
 	}
 }

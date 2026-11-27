@@ -12,8 +12,14 @@ the leading `[applied]` column `CASRows` needs, or if ScyllaDB reports the
 statement is not a lightweight transaction. `Exec` and
 `ExecBatch` reject a statement or batch known to be conditional with
 `cqlerr.ErrConditionalExec` before sending it, because the result of a
-conditional write reports whether it applied: read it with `One`, `Each`,
-`All`, `Run` or `RunConditionalBatch`. ScyllaDB marks conditional statements in
+conditional write reports whether it applied. `prepared.Apply(ctx, params)`
+returns `(applied, result, err)` for a statement, as `session.ApplyBatch`
+does for a batch, whatever the statement's row decoder; `Apply` rejects a
+statement known not to be conditional before sending it. Read the previous
+values with `One`, `Each`, `All`, `Run` or `RunConditionalBatch` and a
+`cql.CASRows` decoder. `One` with a nil destination on a conditional
+statement fails before sending: the row exists whether or not the write
+applied, so it reports nothing. ScyllaDB marks conditional statements in
 prepared metadata. Server conditional
 metadata and SERIAL/LOCAL_SERIAL consistency also force safe conditional
 classification. Conditional requests never speculate and use deterministic
@@ -29,8 +35,14 @@ consistent (`consistency = 'global'`) keyspace, the built-in policy puts
 the tablet's Raft leader ahead of that order, unless
 `routing.Options.NoLeaderAware` is set or the consistency is ONE or LOCAL_ONE (see "Strongly consistent tables" in [Routing](../load-balancing.md)). A statement
 executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read, not a
-conditional statement: `Exec` does not reject it up front, and fails on its
-result columns like any other row-returning statement.
+conditional statement. Other statements whose prepare metadata has result
+columns, such as a SELECT, fail `Exec` before they are sent; a SERIAL read
+is sent anyway, since it completes the Paxos rounds in progress on its
+partition, and fails on its result columns.
+
+A profile's `Idempotent` does not mark a conditional statement, a SERIAL
+read or a counter write: replaying one could apply it twice. The statement's
+own `Idempotent` or `exec.Options.Idempotent` still does.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
 typed `CASResult[R]`. `cql.CASApplied`, which is `CASRows[cql.EmptyRow](nil)`,

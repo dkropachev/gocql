@@ -521,6 +521,6 @@ func pagingRunStream[P, R any](ctx context.Context, t testing.TB, s *gocql.Sessi
 	if err != nil {
 		return nil, err
 	}
-	t.Cleanup(q.Close)
+	t.Cleanup(func() { _ = q.Close() })
 	return q.Run(ctx, value)
 }

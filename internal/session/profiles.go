@@ -28,7 +28,7 @@ type Options struct {
 	Timeout, PageTimeout cql.Option[time.Duration]
 	Prefetch             cql.Option[int]
 	Timestamp            cql.Option[int64]
-	PageSize             int32
+	PageSize             int
 	NowInSeconds         cql.Option[int32]
 	ShardID              cql.Option[uint32]
 	Consistency          cql.Option[cql.Consistency]
@@ -108,8 +108,11 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.PageTimeout.Set {
 		p.PageTimeout = options.PageTimeout.Value
 	}
+	if options.PageSize < 0 || options.PageSize > cql.Unpaged {
+		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive and at most cql.Unpaged")
+	}
 	if options.PageSize != 0 {
-		p.PageSize = options.PageSize
+		p.PageSize = int32(options.PageSize)
 	}
 	if options.Prefetch.Set {
 		p.Prefetch = options.Prefetch.Value
@@ -130,9 +133,6 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	}
 	if options.Timeout.Set && options.Timeout.Value < 0 || options.PageTimeout.Set && options.PageTimeout.Value < 0 {
 		return InternalResolvedOptions{}, cqltype.TypeValidation("timeout", "must not be negative")
-	}
-	if options.PageSize < 0 {
-		return InternalResolvedOptions{}, cqltype.TypeValidation("page size", "must be positive")
 	}
 	if p.PageSize == cql.Unpaged {
 		if options.Prefetch.Set && options.Prefetch.Value != 0 {

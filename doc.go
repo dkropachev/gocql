@@ -31,8 +31,11 @@
 //
 // Prepared.Exec, One and Each execute a prepared statement once. They are safe
 // for concurrent use and run on queries the statement keeps for them, so they
-// allocate no per-call execution state. Each takes at most one exec.CompiledOptions,
-// made once by Session.CompileOptions; none uses the session's default profile.
+// allocate no per-call execution state. Every call takes at most one
+// exec.CompiledOptions, made once by Session.CompileOptions; none uses the
+// session's default profile, or the defaults of a view made by Prepared.With,
+// over which a call's options are laid field by field. Prepared.Apply runs a
+// conditional statement and reports whether it applied.
 // Exec and Each return (cql.Result, error) and One returns (bool, cql.Result, error),
 // on Prepared and Worker alike. One detaches borrowed fields before returning;
 // Each lends them only until its callback returns. Returning StopIteration
@@ -44,7 +47,8 @@
 // argument; each handle holds a pooled query until it is closed.
 //
 // Prepared.Worker creates a reusable execution owned by one goroutine, a
-// Worker. It resolves its exec.CompiledOptions once and saves the pool hand-off of
+// Worker, with the statement's options: p.With(options).Worker() fixes others.
+// It resolves its options once and saves the pool hand-off of
 // the one-shot calls (about 2 to 4 percent of client CPU at high
 // concurrency), and has the same calls. A call while a Rows, Page or
 // RowStream of the worker is open, or while another goroutine's call runs,

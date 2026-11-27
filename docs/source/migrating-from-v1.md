@@ -166,7 +166,7 @@ if !found {
 | `session.Query(stmt, values...)` | `session.Prepare(ctx, cql.Statement[P, R]{...})` once, then calls on the `*Prepared` |
 | `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text, or `session.UnpreparedCommand(ctx, text)` for text without bind markers such as DDL |
 | `query.Scan(&a, &b)` | `prepared.One(ctx, params, &row)`; `found` is false instead of `gocql.ErrNotFound` |
-| `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &row, fn)`, `for row, err := range prepared.All(ctx, params, &row)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
+| `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &dst, fn)`, `for row, err := range prepared.All(ctx, params, &dst)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
 | `iter.MapScan(m)`, `iter.SliceMap()` | rows decoded with `cql.DynamicRows`; `row.Get(name)` returns a `cql.Value` |
 | `query.WithContext(ctx)` | `ctx` is the first argument |
 | `query.Consistency(c)` | `exec.Options{Consistency: cql.Some(c)}` |
@@ -175,7 +175,8 @@ if !found {
 | `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
 | a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
-| `query.WithTimestamp(ts)` | `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`; a `Worker` (`Prepared.Worker`) rejects a fixed timestamp |
+| `query.WithTimestamp(ts)` | a `USING TIMESTAMP ?` marker bound like any parameter; for an occasional request, `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`, which a `Worker` rejects |
+| `query.MapScanCAS(m)`, `query.ScanCAS(...)` for whether a write applied | `prepared.Apply(ctx, params)`, which returns `(applied, result, err)`; `prepared.One` with a `cql.CASRows` decoder reads the previous values too |
 | `query.Attempts()`, `query.Latency()` | the returned `cql.Result`'s `Attempts` and `AttemptLatency`, the sum of the completed attempts' latencies |
 | `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page; `rows.Result().FetchedRows` on an open `Rows` |
 | `query.Observer(o)` | `exec.Options{Observer: o}`, which v2 joins after the session's observer; add `NoSessionObserver: true` for v1's replacement |
@@ -183,7 +184,7 @@ if !found {
 | `query.GetRoutingKey()` | `prepared.Routing(params)`, whose `Token` is the partition's token |
 | `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
 | a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
-| `query.Release()` | nothing to release; a reusable `prepared.Worker(options)` is closed with `Close` |
+| `query.Release()` | nothing to release; a reusable `prepared.Worker()` is closed with `Close` |
 
 v1 sent a client timestamp with every request. v2 stamps only ordinary
 statements. A statement left `cql.UnknownStatement`, as a ported v1
@@ -197,7 +198,7 @@ reading a SELECT through `cql.CASRows` or declaring it
 
 Every execution entry point takes `exec.CompiledOptions`, from
 `session.CompileOptions`; compile them once and reuse them. A goroutine that runs a statement in a loop can own a `*gocql.Worker`
-from `prepared.Worker(options)`. See [statements](statements/index.md).
+from `prepared.Worker()`, or `prepared.With(options).Worker()` with options of its own. See [statements](statements/index.md).
 
 ### Struct mapping
 

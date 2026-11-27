@@ -3,7 +3,9 @@
 Set `Profile.Routing` to a typed `routing.Policy` with
 `ProfileBuilder.WithRouting`, in the session's default profile
 (`config.ConfigBuilder.WithDefaultProfile`) or in
-the `exec.Options.Profile` of an execution. The default is token-aware and
+the `exec.Options.Profile` of an execution, which you derive from the
+session's with `session.DefaultProfile().Builder().WithRouting(policy)` so
+that its other settings stay the session's. The default is token-aware and
 leader-aware with shuffled replicas, and `WithRouting(nil)` restores it.
 `routing.NewPolicy(routing.Options{...})` configures
 datacenter/rack preference, remote fallback, latency ordering, and turns off

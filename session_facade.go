@@ -94,6 +94,19 @@ func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, er
 	return exec.CompiledOptions(o), err
 }
 
+// MustCompileOptions is CompileOptions that panics on error, for options
+// written from constants and compiled once at setup, such as the defaults
+// of a Prepared.With view:
+//
+//	quorum := session.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.Quorum)})
+func (s *Session) MustCompileOptions(options exec.Options) exec.CompiledOptions {
+	o, err := s.CompileOptions(options)
+	if err != nil {
+		panic(err)
+	}
+	return o
+}
+
 // UnpreparedExec executes an occasional statement without preparing it or
 // leaving a worker to close. It must return no result columns. Parameters are
 // described by statement.BindMarkers, which a statement with parameters (P
@@ -169,7 +182,8 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.C
 // batch.Kind and returns its rows as CASBatchRows, whose Applied reports
 // whether the batch applied. decoder is a cql.CASRows decoder, typically the
 // Rows of a member's statement; it maps the previous values of the columns it
-// names and skips the rest. Which rows the server returns differs between
+// names and skips the rest. A nil decoder reads [applied] alone, as
+// cql.CASRows[X](nil) does; ApplyBatch does that with nothing to close. Which rows the server returns differs between
 // Cassandra and ScyllaDB: on ScyllaDB row i belongs to statement i, on
 // Cassandra rows belong to rows of the partition. A batch without a
 // conditional member, declared or inferred (see cql.UnknownStatement), is
@@ -242,7 +256,9 @@ func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
 // Close stops new work, cancels in-flight requests and joins connections,
 // writers and callbacks. It is idempotent. Retained output page leases remain
 // valid. Rows, CASBatchRows, Page and RowStream handles left open report
-// cqlerr.ErrClosed; close them as usual. Queries need no Close afterwards.
+// cqlerr.ErrClosed; close them as usual. Workers and StreamWorkers stop
+// with the session: their later calls return cqlerr.ErrClosed, and closing
+// them afterwards does nothing more. Prepared statements have no Close.
 //
 // Close cannot interrupt application code: it waits for a running Each or
 // All callback, or loop body, to return, because the borrowed fields that
@@ -261,6 +277,23 @@ func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata()
 // zero Session. Every execution calls them unless its exec.Options set
 // NoSessionObserver.
 func (s *Session) Observer() observe.Hooks { return s.internal().Observer() }
+
+// DefaultProfile returns a copy of the session's default profile
+// (config.ConfigBuilder.WithDefaultProfile), the one every execution starts
+// from. Derive a per-call profile from it, so that the settings it does not
+// change stay the session's:
+//
+//	reads := session.DefaultProfile().Builder().WithConsistency(cql.One).MustBuild()
+//
+// config.NewProfile, by contrast, starts from the driver's defaults. A zero
+// Session returns the driver's default profile.
+func (s *Session) DefaultProfile() config.Profile {
+	p := s.internal().DefaultProfile()
+	if p == nil {
+		return implSettings.InternalProfileToPublic[config.Profile](implSettings.InternalDefaultProfile())
+	}
+	return implSettings.InternalProfileToPublic[config.Profile](*p)
+}
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }

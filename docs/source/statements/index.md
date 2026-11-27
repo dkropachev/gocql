@@ -29,8 +29,8 @@ Each handle holds one of the statement's pooled queries until it is closed.
 
 For manual cursor lifetimes, explicit paging, or a worker that runs one
 statement repeatedly and benefits from skipping the pool hand-off, create one `Worker` per goroutine
-with `prepared.Worker()`, or `prepared.Worker(options)` to fix its options; it has the same `Exec`, `One`, `Each`, `All`,
-`Run` and `RunPage`.
+with `prepared.Worker()`, or `prepared.With(options).Worker()` to fix its options; it has the same `Exec`, `One`, `Each`, `All`,
+`Apply`, `Run` and `RunPage`.
 The `session.Unprepared*` calls run a statement without preparing it and take the
 parameter columns from `Statement.BindMarkers`; with `cql.DynamicParams` and
 no markers, the markers take the types of the values. To decode into caller storage,
@@ -85,9 +85,11 @@ For execution options:
 - Omit them to use the session defaults.
 - Compile recurring overrides once with `session.CompileOptions` and reuse the result.
 - Give a statement its own defaults with `prepared.With(compiled)`, which
-  returns a view of the statement whose calls without options use them; the
-  view shares the preparation, and options passed to a call replace its
-  defaults whole.
+  returns a view of the statement whose calls use them; the view shares the
+  preparation, and options passed to a call are laid over its defaults field
+  by field: a view that speculates and a call that sets `CQLTrace` do both.
+  The order, lowest first, is the session's profile, `exec.Options.Profile`,
+  the view's other fields, then the call's.
 - Use a request context deadline for a per-request time limit.
 
 Compiled options snapshot explicit overrides and the originating session's defaults.
@@ -99,8 +101,10 @@ support concurrent use.
 Compiling options snapshots custom payloads and profiles and precomputes request
 parameters. Keep recurring compiled options alongside prepared statements rather
 than rebuilding them per call. A worker's options remain fixed for its lifetime.
-For an occasional request-specific timestamp or payload, compile a fresh options
-value and pass it to a one-shot call. Normal default timestamps already vary
-per execution; an explicit `USING TIMESTAMP ?` bind marker is another option
-for statements whose timestamp comes from application data. Context deadlines
+Normal default timestamps already vary per execution. A statement whose
+timestamp comes from application data binds it with a `USING TIMESTAMP ?`
+marker, a parameter like any other, which works with every call, a worker
+included, and costs no compile per request. `exec.Options.Timestamp` is for an
+occasional request: compile a fresh options value and pass it to a one-shot
+call; a worker rejects it. The same goes for a request-specific payload. Context deadlines
 provide request-specific time limits independently of compiled options.

@@ -211,7 +211,7 @@ func TestApplyBatch(t *testing.T) {
 // cqlerr.ErrBusy.
 func TestRowStreamAll(t *testing.T) {
 	f := newLifetimeFixture(t)
-	w, err := f.ps.With(mustCompileOptions(gridOptions)).Worker()
+	w, err := f.ps.With(f.s.MustCompileOptions(gridOptions)).Worker()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -284,46 +284,45 @@ func TestRowStreamAll(t *testing.T) {
 }
 
 // TestPreparedWith runs a statement through views made by With: a call
-// without options uses the view's defaults, options passed to a call replace
-// them, and p itself keeps the session defaults. Views share p's preparation
-// and pool, and a Worker of a view takes its defaults.
+// without options uses the view's defaults, options passed to a call are laid
+// over them field by field, and p itself keeps the session defaults. Views
+// share p's preparation and pool, and a Worker of a view takes its defaults.
 func TestPreparedWith(t *testing.T) {
 	f := newLifetimeFixture(t)
-	compile := func(o exec.Options) exec.CompiledOptions {
-		t.Helper()
-		c, err := f.s.CompileOptions(o)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return c
-	}
-	quorum := compile(exec.Options{Consistency: cql.Some(cql.Quorum), PageSize: 2})
-	one := compile(exec.Options{Consistency: cql.Some(cql.One), PageSize: 2})
+	quorum := f.s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.Quorum), PageSize: 7})
+	one := f.s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.One)})
 	view := f.p.With(quorum)
 	var dst []byte
-	sent := func(what string, want cql.Consistency, call func() error) {
+	sent := func(what string, want cql.Consistency, wantPageSize int32, call func() error) {
 		t.Helper()
 		before := len(f.srv.sent())
 		if err := call(); err != nil {
 			t.Fatalf("%s: %v", what, err)
 		}
 		requests := f.srv.sent()[before:]
-		if len(requests) == 0 || requests[0].consistency != want {
-			t.Fatalf("%s sent %+v, want %v", what, requests, want)
+		if len(requests) == 0 || requests[0].consistency != want || requests[0].pageSize != wantPageSize {
+			t.Fatalf("%s sent %+v, want %v with page size %d", what, requests, want, wantPageSize)
 		}
 	}
-	sent("view.One", cql.Quorum, func() error { _, _, err := view.One(f.ctx, gridKey, &dst); return err })
-	sent("view.One with options", cql.One, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
-	sent("view.One with zero options", cql.Quorum, func() error {
+	sent("view.One", cql.Quorum, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst); return err })
+	// The call's consistency wins; the view's page size stays.
+	sent("view.One with options", cql.One, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
+	sent("view.One with options again", cql.One, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
+	sent("view.One with zero options", cql.Quorum, 7, func() error {
 		_, _, err := view.One(f.ctx, gridKey, &dst, exec.CompiledOptions{})
 		return err
 	})
-	sent("p.One", cql.LocalQuorum, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst); return err })
-	sent("view.Each", cql.Quorum, func() error {
+	// Options that set neither field keep both of the view's.
+	timeout := f.s.MustCompileOptions(exec.Options{Timeout: cql.Some(time.Minute)})
+	sent("view.One with a timeout", cql.Quorum, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, timeout); return err })
+	sent("p.One", cql.LocalQuorum, 5000, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst); return err })
+	sent("p.One with options", cql.One, 5000, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst, one); return err })
+	sent("view.Each", cql.Quorum, 7, func() error {
 		_, err := view.Each(f.ctx, gridKey, &dst, func(*[]byte) error { return nil })
 		return err
 	})
-	sent("view.With(one).Run", cql.One, func() error {
+	// With on a view replaces its defaults.
+	sent("view.With(one).Run", cql.One, 5000, func() error {
 		rows, err := view.With(one).Run(f.ctx, gridKey)
 		if err != nil {
 			return err
@@ -333,17 +332,27 @@ func TestPreparedWith(t *testing.T) {
 	if info, err := view.Routing(gridKey); err != nil || info.Consistency != cql.Quorum {
 		t.Fatalf("view.Routing = %+v, %v; want QUORUM", info, err)
 	}
+	if info, err := view.Routing(gridKey, one); err != nil || info.Consistency != cql.One {
+		t.Fatalf("view.Routing with options = %+v, %v; want ONE", info, err)
+	}
 	if view.Info().Generation != f.p.Info().Generation || view.Columns().Len() != 1 {
 		t.Fatal("the view does not share p's preparation")
+	}
+	// A combination the options do not allow fails before sending.
+	unpaged := f.p.With(f.s.MustCompileOptions(exec.Options{PageSize: cql.Unpaged}))
+	prefetch := f.s.MustCompileOptions(exec.Options{Prefetch: cql.Some(1)})
+	before := len(f.srv.sent())
+	if _, _, err := unpaged.One(f.ctx, gridKey, &dst, prefetch); !errors.As(err, new(*cqlerr.UnsupportedSettingError)) || len(f.srv.sent()) != before {
+		t.Fatalf("unpaged view with a prefetch = %v, sent %d; want an UnsupportedSettingError before sending", err, len(f.srv.sent())-before)
 	}
 	w, err := view.Worker()
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer w.Close()
-	sent("view.Worker().One", cql.Quorum, func() error { _, _, err := w.One(f.ctx, gridKey, &dst); return err })
+	sent("view.Worker().One", cql.Quorum, 7, func() error { _, _, err := w.One(f.ctx, gridKey, &dst); return err })
 
-	stamped := f.p.With(compile(exec.Options{Timestamp: cql.Some(time.Unix(1, 0))}))
+	stamped := f.p.With(f.s.MustCompileOptions(exec.Options{Timestamp: cql.Some(time.Unix(1, 0))}))
 	if _, err := stamped.Worker(); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("Worker of a view with a Timestamp = %v, want a cql.ValidationError", err)
 	}
@@ -365,7 +374,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	defer func() { _ = s.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", mustCompileOptions(exec.Options{Consistency: cql.Some(cql.All)}))
+	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.All)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -375,7 +384,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	if sent := srv.sent(); len(sent) != 1 || sent[0].consistency != cql.All || sent[0].batch {
 		t.Fatalf("sent %+v, want one QUERY at ALL", sent)
 	}
-	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", mustCompileOptions(exec.Options{}), mustCompileOptions(exec.Options{})); !errors.As(err, new(*cql.ValidationError)) {
+	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.CompiledOptions{}, exec.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("UnpreparedCommand with two options = %v, want a cql.ValidationError", err)
 	}
 	if len(srv.sent()) != 1 {

@@ -51,6 +51,16 @@ func executionHooks(rt *InternalSessionRuntime, values *Options) *observe.Hooks 
 	return &hooks
 }
 
+// DefaultProfile returns the session's default profile, the one executions
+// without a profile of their own resolve against, or nil for a zero
+// session. It is shared: copy it before changing it.
+func (s *Session) DefaultProfile() *settings.Profile {
+	if s.Core() == nil {
+		return nil
+	}
+	return InternalRuntimeFor(s.Core()).InternalProfile
+}
+
 // Observer returns the hooks the session was configured with, the zero
 // Hooks without them.
 func (s *Session) Observer() observe.Hooks {

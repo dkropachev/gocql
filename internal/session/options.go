@@ -4,9 +4,12 @@
 package session
 
 import (
+	"sync/atomic"
+
 	"github.com/scylladb/gocql/v2/cql"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/settings"
+	"github.com/scylladb/gocql/v2/observe"
 )
 
 // CompiledOptions is a frozen set of execution options, validated, resolved and
@@ -23,6 +26,10 @@ type frozenOptions struct {
 	// rt is the runtime of the session the options were built for, nil when
 	// they were built without one.
 	rt *InternalSessionRuntime
+	// layered caches these options laid over the defaults of the view
+	// they were last passed to, so that a call passing options to a view
+	// with defaults allocates nothing once warm.
+	layered atomic.Pointer[layeredOptions]
 	// resolved holds the profile merged with the values, the values
 	// themselves and their encoded parameters blocks.
 	resolved InternalResolvedOptions
@@ -31,6 +38,117 @@ type frozenOptions struct {
 	// session, are resolved again for each execution, and so are bound
 	// options executed on a session other than rt.
 	bound bool
+}
+
+// layeredOptions is call options laid over the defaults of one view: the
+// result, or the error the combination fails with.
+type layeredOptions struct {
+	defaults *frozenOptions
+	options  CompiledOptions
+	err      error
+}
+
+// layeredOver returns o laid over defaults field by field, as the options of a
+// call are laid over the defaults of a view made by With: each field o sets
+// replaces the one of defaults, and the fields it leaves unset keep those
+// of defaults. Either one zero returns the other as it is. The result is
+// cached on o for the latest defaults, so a call that passes the same
+// options to the same view again allocates nothing. A combination the
+// options do not allow, such as an unpaged page size from defaults with a
+// prefetch from o, returns the cql.ValidationError compiling it would.
+func (o CompiledOptions) layeredOver(defaults CompiledOptions) (CompiledOptions, error) {
+	if o.p == nil {
+		return defaults, nil
+	}
+	if defaults.p == nil {
+		return o, nil
+	}
+	if l := o.p.layered.Load(); l != nil && l.defaults == defaults.p {
+		return l.options, l.err
+	}
+	return o.layer(defaults)
+}
+
+// layer compiles o over defaults and caches the result on o. It stays out
+// of line, off the cached path.
+//
+//go:noinline
+func (o CompiledOptions) layer(defaults CompiledOptions) (CompiledOptions, error) {
+	rt := defaults.p.rt
+	if rt == nil {
+		rt = o.p.rt
+	}
+	var core *implCluster.Core
+	if rt != nil {
+		core = rt.Core
+	}
+	// Both were validated and copied when compiled; the values are shared
+	// with them, and NewCompiledOptions copies the payload again.
+	layered, err := NewCompiledOptions(core, overlayOptions(defaults.p.resolved.InternalOptions, o.p.resolved.InternalOptions))
+	// The call fails before anything is sent.
+	err = notSent(err)
+	o.p.layered.Store(&layeredOptions{defaults: defaults.p, options: layered, err: err})
+	return layered, err
+}
+
+// overlayOptions returns over laid on base field by field: each field over
+// sets replaces base's, as resolveOptionValues lays options over a profile.
+// A cql.Option is set when its Set is true, a policy or keyspace when it is
+// not nil or empty, a page size when it is not zero, a serial consistency
+// when it is not SerialInherit and a payload when it has entries. Observers
+// join, base's first, and the flags IncludeMetadata, CQLTrace and
+// NoSessionObserver are set when either sets them. A HostID pin brings its
+// ShardID and AnyShardFallback with it, so a pin to another host does not
+// keep base's shard.
+func overlayOptions(base, over Options) Options {
+	out := base
+	if over.Retry != nil {
+		out.Retry = over.Retry
+	}
+	if over.Speculation != nil {
+		out.Speculation = over.Speculation
+	}
+	if !over.Observer.IsZero() {
+		out.Observer = observe.Join(base.Observer, over.Observer)
+	}
+	if over.Profile != nil {
+		out.Profile = over.Profile
+	}
+	if over.privateStorage.InternalConnection != nil {
+		out.privateStorage = over.privateStorage
+	}
+	if over.Keyspace != "" {
+		out.Keyspace = over.Keyspace
+	}
+	if len(over.CustomPayload) != 0 {
+		out.CustomPayload = over.CustomPayload
+	}
+	overlayOption(&out.Timeout, over.Timeout)
+	overlayOption(&out.PageTimeout, over.PageTimeout)
+	overlayOption(&out.Prefetch, over.Prefetch)
+	overlayOption(&out.Timestamp, over.Timestamp)
+	overlayOption(&out.NowInSeconds, over.NowInSeconds)
+	overlayOption(&out.Consistency, over.Consistency)
+	overlayOption(&out.Idempotent, over.Idempotent)
+	if over.PageSize != 0 {
+		out.PageSize = over.PageSize
+	}
+	if over.HostID.Set {
+		out.HostID, out.ShardID, out.AnyShardFallback = over.HostID, over.ShardID, over.AnyShardFallback
+	}
+	if over.SerialConsistency != SerialInherit {
+		out.SerialConsistency = over.SerialConsistency
+	}
+	out.IncludeMetadata = base.IncludeMetadata || over.IncludeMetadata
+	out.CQLTrace = base.CQLTrace || over.CQLTrace
+	out.NoSessionObserver = base.NoSessionObserver || over.NoSessionObserver
+	return out
+}
+
+func overlayOption[T any](dst *cql.Option[T], over cql.Option[T]) {
+	if over.Set {
+		*dst = over
+	}
 }
 
 // noOptionValues backs the values of the zero CompiledOptions.

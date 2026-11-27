@@ -44,12 +44,12 @@ var gridVerbs = map[string][]string{
 // gridExceptions.
 var gridNonExecution = map[string][]string{
 	"Session": {
-		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "Dialect",
-		"ID", "Metadata", "Metrics", "Observer", "Prepare", "PrepareStream",
+		"AwaitSchemaAgreement", "Close", "Closed", "CompileOptions", "DefaultProfile", "Dialect",
+		"ID", "Metadata", "Metrics", "MustCompileOptions", "Observer", "Prepare", "PrepareStream",
 		"RefreshMetadata", "Subscribe", "UnpreparedAddToBatch", "UnpreparedCommand",
 	},
-	"Worker":   {"AddToBatch", "Close", "Wait"},
-	"Prepared": {"AddToBatch", "BindMarkers", "Columns", "Info", "Routing", "With", "Worker"},
+	"Worker":   {"AddToBatch", "Apply", "Close", "Wait"},
+	"Prepared": {"AddToBatch", "Apply", "BindMarkers", "Columns", "Info", "Routing", "With", "Worker"},
 }
 
 // gridExceptions are the execution methods outside the grid that
@@ -58,6 +58,10 @@ var gridNonExecution = map[string][]string{
 var gridExceptions = map[string]string{
 	// The throwaway none cell for a statement with nothing to bind.
 	"Session.UnpreparedCommand": "options ...exec.CompiledOptions",
+	// The one-row shape of a conditional statement, as ApplyBatch is of a
+	// conditional batch.
+	"Prepared.Apply": "options ...exec.CompiledOptions",
+	"Worker.Apply":   "",
 }
 
 // apiMethod matches a method line of testdata/api.txt, which TestPublicAPI

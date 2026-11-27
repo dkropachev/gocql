@@ -314,7 +314,7 @@ func TestPreparedOneShot(t *testing.T) {
 				}
 				call := make(chan error, 1)
 				go func() {
-					_, err := p.Exec(context.Background(), 1, testOptions(Options{Profile: &profile}))
+					_, _, err := p.One(context.Background(), 1, nil, testOptions(Options{Profile: &profile}))
 					call <- err
 				}()
 				r := <-requests

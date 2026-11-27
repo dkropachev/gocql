@@ -155,7 +155,7 @@ func TestClusterExamples(t *testing.T) {
 			want: []string{"applied: false", "ck1 1", "applied: false", "ck2 1"},
 		},
 		{
-			name: "SessionRunConditionalBatch", run: ExampleSession_RunConditionalBatch,
+			name: "SessionApplyBatch", run: ExampleSession_ApplyBatch,
 			setup: []string{
 				"UPDATE example.my_lwt_batch_table SET version = 2 WHERE pk = 'pk1' AND ck = 'ck1'",
 				"UPDATE example.my_lwt_batch_table SET version = 2 WHERE pk = 'pk1' AND ck = 'ck2'",

@@ -24,15 +24,24 @@ type Worker[P, R any] implSession.Query[P, R]
 func (w *Worker[P, R]) internal() *implSession.Query[P, R] { return (*implSession.Query[P, R])(w) }
 
 // Exec executes a statement with no result columns, capturing value once for
-// routing, retries and paging. Overlapping calls return cqlerr.ErrBusy.
+// routing, retries and paging. A statement whose prepared metadata has
+// result columns, or that is conditional, is rejected before it is sent, as
+// for Prepared.Exec. Overlapping calls return cqlerr.ErrBusy.
 func (w *Worker[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
 	return w.internal().Exec(ctx, value)
+}
+
+// Apply executes a conditional statement and reports whether its condition
+// applied, as Prepared.Apply does. Overlapping calls return cqlerr.ErrBusy.
+func (w *Worker[P, R]) Apply(ctx context.Context, value P) (bool, cql.Result, error) {
+	return w.internal().Apply(ctx, value)
 }
 
 // One decodes the first row into dst, ignoring further rows. It reports whether
 // a row exists and clears dst when none exists. Borrowed fields are detached
 // before return; built-in owning fields keep their destination buffers. With
-// a nil dst, One only reports whether a row exists.
+// a nil dst, One only reports whether a row exists; on a conditional
+// statement it is rejected before sending, as for Prepared.One: use Apply.
 func (w *Worker[P, R]) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error) {
 	return w.internal().One(ctx, value, dst)
 }
@@ -84,9 +93,13 @@ func (w *Worker[P, R]) Run(ctx context.Context, value P) (Rows[R], error) {
 // a page size that changes per request needs no new options. With
 // cql.Unpaged the page is the whole result: the response is bounded by the
 // server and by the configured frame and decompression limits. A negative
-// pageSize is rejected.
-func (w *Worker[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*Page[R], error) {
-	page, err := w.internal().RunPage(ctx, value, cql.PageState(state), pageSize)
+// pageSize, or one above cql.Unpaged, is rejected with a cql.ValidationError.
+func (w *Worker[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int) (*Page[R], error) {
+	size, err := pageSize32(pageSize)
+	if err != nil {
+		return nil, err
+	}
+	page, err := w.internal().RunPage(ctx, value, cql.PageState(state), size)
 	return (*Page[R])(page), err
 }
 
@@ -108,8 +121,14 @@ func (w *Worker[P, R]) AddToBatch(batch *Batch, value P) error {
 // cqlerr.ErrClosed, and later calls return cqlerr.ErrClosed. Accepted writes and observer callbacks drain
 // in the background; Wait joins them and Session.Close joins any that remain.
 // A worker dropped without Close is closed when the garbage collector finds it
-// unreachable, but call Close: collection timing is unspecified.
-func (w *Worker[P, R]) Close() { w.internal().Close() }
+// unreachable, but call Close: collection timing is unspecified. Close
+// returns nil: a failure of the drain is reported to the call that started
+// it, and Wait reports a drain still under way. The error result makes the
+// Worker an io.Closer, like every other handle the driver returns.
+func (w *Worker[P, R]) Close() error {
+	w.internal().Close()
+	return nil
+}
 
 // Wait waits until the worker's last execution has drained: accepted writes,
 // attempts in flight and observer callbacks. It returns ctx.Err() if ctx ends
@@ -135,8 +154,11 @@ func (w *StreamWorker[P, R]) Run(ctx context.Context, value P) (*RowStream[R], e
 }
 
 // Close stops the worker permanently and returns at once, as Worker.Close
-// does. An open RowStream reports cqlerr.ErrClosed.
-func (w *StreamWorker[P, R]) Close() { (*implSession.StreamQuery[P, R])(w).Close() }
+// does, and returns nil. An open RowStream reports cqlerr.ErrClosed.
+func (w *StreamWorker[P, R]) Close() error {
+	(*implSession.StreamQuery[P, R])(w).Close()
+	return nil
+}
 
 // Wait waits until the worker's last execution has drained, as Worker.Wait
 // does.

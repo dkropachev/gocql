@@ -9,5 +9,7 @@ import "math"
 // Options{PageSize: cql.Unpaged} or Profile.PageSize. The request
 // carries no page size, so the server returns the whole result in one
 // response, within its own result size limits. Use it for results known to be
-// small; a large unpaged result costs server and client memory at once.
-const Unpaged int32 = math.MaxInt32
+// small; a large unpaged result costs server and client memory at once. It is
+// untyped, the largest int32, so it fits both exec.Options.PageSize, an int,
+// and config.Profile.PageSize, an int32.
+const Unpaged = math.MaxInt32

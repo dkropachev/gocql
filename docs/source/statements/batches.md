@@ -85,7 +85,8 @@ conditional batch applied, send it with
 `applied, result, err := session.ApplyBatch(ctx, &batch)`, which leaves
 nothing to close. To read the rows the server returns, use
 `session.RunConditionalBatch(ctx, &batch, decoder)`, which takes a
-`cql.CASRows` decoder and returns `CASBatchRows`. Iterate them with
+`cql.CASRows` decoder, or nil for `[applied]` alone, and returns
+`CASBatchRows`. Iterate them with
 `NextInto`, like the `Rows` of `prepared.Run`, or call `Applied`, which
 reports whether the batch applied without you checking every row. Close the
 rows when done: until then they hold one of the session's pooled queries.

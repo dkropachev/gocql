@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 )
 
@@ -22,10 +23,24 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 			s, _, peers := runtimeTestSession(t, 1)
 			defer peers[0].Close()
 			requests := make(chan oneShotRequest, 1)
-			p := oneShotPrepare(t, s, peers[0], requests)
-			q, err := p.Query(Options{})
+			var q *Query[int32, []byte]
+			var w *Query[int32, cql.EmptyRow]
+			var err error
+			if op == "Exec" {
+				// Exec rejects the SELECT of oneShotPrepare before sending.
+				w, err = oneShotPrepareWrite(t, s, peers[0], requests).Query(Options{})
+			} else {
+				q, err = oneShotPrepare(t, s, peers[0], requests).Query(Options{})
+			}
 			if err != nil {
 				t.Fatal(err)
+			}
+			closeQuery := func() {
+				if w != nil {
+					w.Close()
+				} else {
+					q.Close()
+				}
 			}
 			call := make(chan error, 1)
 			go func() {
@@ -33,7 +48,7 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 				var err error
 				switch op {
 				case "Exec":
-					_, err = q.Exec(context.Background(), 1)
+					_, err = w.Exec(context.Background(), 1)
 				case "One":
 					_, _, err = q.One(context.Background(), 1, &dst)
 				default:
@@ -42,7 +57,7 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 				call <- err
 			}()
 			<-requests
-			q.Close()
+			closeQuery()
 			select {
 			case err := <-call:
 				// The call's own context is cancelled, so it reports
@@ -58,10 +73,14 @@ func TestQueryCloseCancelsRunningCall(t *testing.T) {
 			}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
-			if err := q.Wait(ctx); err != nil {
+			wait, again := q.Wait, func() error { _, _, err := q.One(context.Background(), 2, nil); return err }
+			if w != nil {
+				wait, again = w.Wait, func() error { _, err := w.Exec(context.Background(), 2); return err }
+			}
+			if err := wait(ctx); err != nil {
 				t.Fatal(err)
 			}
-			if _, err := q.Exec(context.Background(), 2); !errors.Is(err, cqlerr.ErrClosed) {
+			if err := again(); !errors.Is(err, cqlerr.ErrClosed) {
 				t.Fatalf("call after Close: %v", err)
 			}
 		})

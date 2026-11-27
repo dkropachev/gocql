@@ -48,10 +48,13 @@ type Profile struct {
 	SerialConsistency cql.Option[cql.Consistency]
 	// Consistency is the consistency level.
 	Consistency cql.Consistency
-	// Idempotent marks every statement the profile runs safe to run more
-	// than once, as cql.Statement.Idempotent marks one; false leaves each
-	// statement's own. exec.Options.Idempotent overrides it for one
-	// execution.
+	// Idempotent marks every ordinary statement the profile runs safe to
+	// run more than once, as cql.Statement.Idempotent marks one; false
+	// leaves each statement's own. It does not mark a conditional
+	// statement, a SERIAL or LOCAL_SERIAL read, or a counter write, which
+	// replaying could apply twice: only the statement's own Idempotent or
+	// exec.Options.Idempotent marks those. exec.Options.Idempotent
+	// overrides it for one execution.
 	Idempotent bool
 	// built reports that ProfileBuilder.Build made the profile.
 	built bool

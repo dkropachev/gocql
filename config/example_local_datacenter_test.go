@@ -22,7 +22,9 @@ func ExampleConfigBuilder_WithLocalDatacenter() {
 	if err != nil {
 		panic(err)
 	}
-	profile, err := config.NewProfile().WithRouting(analytics).Build()
+	// Derive the profile from the session's, so only its routing differs;
+	// with a session, start from session.DefaultProfile().Builder().
+	profile, err := cfg.DefaultProfile().Builder().WithRouting(analytics).Build()
 	if err != nil {
 		panic(err)
 	}

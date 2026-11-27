@@ -18,8 +18,13 @@ import (
 // PageLease does nothing.
 type PageLease implSession.PageLease
 
-// Close releases the retained page. It is idempotent and accepts a nil receiver.
-func (l *PageLease) Close() { (*implSession.PageLease)(l).Close() }
+// Close releases the retained page. It is idempotent, accepts a nil receiver
+// and returns nil: the error result makes PageLease an io.Closer, like every
+// other handle the driver returns.
+func (l *PageLease) Close() error {
+	(*implSession.PageLease)(l).Close()
+	return nil
+}
 
 // Rows iterates one execution across automatically fetched pages. Close it on
 // early termination and check Err after iteration. Borrowed fields expire on
@@ -97,7 +102,9 @@ func (r CASBatchRows[X]) NextInto(dst *cql.CASResult[X]) bool {
 // iterating first. It returns an error instead when iteration failed, when
 // the rows were closed before NextInto or Applied reported their end (even
 // right after the last row), when the result had no rows, when the handle is
-// stale, and for the zero CASBatchRows.
+// stale, and for the zero CASBatchRows. Once NextInto or Applied has
+// reported the end, Applied keeps reporting the outcome after Close, until
+// the batch is sent again and the handle becomes stale.
 func (r CASBatchRows[X]) Applied() (bool, error) {
 	return (implSession.CASBatchRows[X])(r).Applied()
 }

@@ -323,7 +323,8 @@ type PreparedStorage[P, R any] struct {
 }
 
 // With returns a view of p that shares its preparation and its pool of
-// queries, and whose calls without options use defaults.
+// queries, and whose calls use defaults: the options a call passes are laid
+// over them field by field.
 func (p *Prepared[P, R]) With(defaults CompiledOptions) *Prepared[P, R] {
 	if p == nil {
 		return nil
@@ -347,13 +348,13 @@ func (p *Prepared[P, R]) Defaults() CompiledOptions {
 	return p.privateStorage.defaults
 }
 
-// callOptions returns the options of a call passed options: those, or p's
-// defaults when they are zero.
-func (p *Prepared[P, R]) callOptions(options CompiledOptions) CompiledOptions {
+// callOptions returns the options of a call passed options: those laid over
+// p's defaults field by field, or p's defaults when they are zero.
+func (p *Prepared[P, R]) callOptions(options CompiledOptions) (CompiledOptions, error) {
 	if options.p == nil {
-		return p.privateStorage.defaults
+		return p.privateStorage.defaults, nil
 	}
-	return options
+	return options.layeredOver(p.privateStorage.defaults)
 }
 
 type BoundStorage[R any] struct {

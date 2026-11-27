@@ -32,6 +32,7 @@ import (
 // safe for concurrent use and must not be copied. It may be sent any number of
 // times; Reset empties it for the next batch and keeps its Kind.
 type Batch struct {
+	_       noCopy
 	session *implCluster.Core
 	// lastQuery is the query of the latest execution, tracked by its
 	// generation lastGen.

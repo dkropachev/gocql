@@ -130,7 +130,8 @@ func (r CASBatchRows[X]) Info() cql.Result { return r.rows.Info() }
 
 // RunConditionalBatch sends batch as RunBatch does and returns its rows as
 // CASBatchRows, whose Applied reports whether the batch applied. decoder is
-// a CASRows decoder, typically the Rows of a member's statement. A batch
+// a CASRows decoder, typically the Rows of a member's statement; nil reads
+// [applied] alone, as cql.CASRows[X](nil) does. A batch
 // whose members are all known not to be conditional is rejected before it is
 // sent.
 func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options CompiledOptions) (CASBatchRows[X], error) {
@@ -138,7 +139,8 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("session", "nil session"))
 	}
 	if decoder == nil {
-		return CASBatchRows[X]{}, notSent(cqltype.TypeValidation("batch rows", "nil decoder"))
+		// [applied] alone, as cql.CASApplied reads it.
+		decoder = cql.CASRows[X](nil)
 	}
 	core := s.Core()
 	if err := validateBatch(core, batch); err != nil {

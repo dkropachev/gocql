@@ -101,7 +101,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		if err != nil {
 			return nil, err
 		}
-		q, err := read.Worker(o)
+		q, err := read.With(o).Worker()
 		if err != nil {
 			return nil, err
 		}
@@ -178,7 +178,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		if err != nil {
 			return nil, err
 		}
-		q, err := read.Worker(o)
+		q, err := read.With(o).Worker()
 		if err != nil {
 			return nil, err
 		}
@@ -396,7 +396,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 	if err != nil {
 		return nil, err
 	}
-	q, err := update.Worker(o)
+	q, err := update.With(o).Worker()
 	if err != nil {
 		return nil, err
 	}

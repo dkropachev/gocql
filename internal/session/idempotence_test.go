@@ -17,26 +17,36 @@ import (
 
 // TestRequestIdempotence pins how a request's idempotence combines its
 // statement's, its profile's and its options': a set option wins, and
-// otherwise either the statement or the profile marks it idempotent.
+// otherwise either the statement or the profile marks it idempotent. The
+// profile does not mark a conditional request or a counter write; the
+// statement and the option still do.
 func TestRequestIdempotence(t *testing.T) {
 	for _, tc := range []struct {
 		name               string
 		statement, profile bool
 		option             cql.Option[bool]
+		kind               cql.StatementKind
+		counter            bool
 		want               bool
 	}{
-		{"Neither", false, false, cql.Option[bool]{}, false},
-		{"Statement", true, false, cql.Option[bool]{}, true},
-		{"Profile", false, true, cql.Option[bool]{}, true},
-		{"OptionOverridesProfile", false, true, cql.Some(false), false},
-		{"OptionOverridesStatement", true, false, cql.Some(false), false},
-		{"OptionMarks", false, false, cql.Some(true), true},
+		{"Neither", false, false, cql.Option[bool]{}, cql.OrdinaryStatement, false, false},
+		{"Statement", true, false, cql.Option[bool]{}, cql.OrdinaryStatement, false, true},
+		{"Profile", false, true, cql.Option[bool]{}, cql.OrdinaryStatement, false, true},
+		{"OptionOverridesProfile", false, true, cql.Some(false), cql.OrdinaryStatement, false, false},
+		{"OptionOverridesStatement", true, false, cql.Some(false), cql.OrdinaryStatement, false, false},
+		{"OptionMarks", false, false, cql.Some(true), cql.OrdinaryStatement, false, true},
+		{"ProfileSkipsConditional", false, true, cql.Option[bool]{}, cql.ConditionalStatement, false, false},
+		{"ProfileSkipsCounter", false, true, cql.Option[bool]{}, cql.OrdinaryStatement, true, false},
+		{"StatementMarksConditional", true, true, cql.Option[bool]{}, cql.ConditionalStatement, false, true},
+		{"OptionMarksConditional", false, true, cql.Some(true), cql.ConditionalStatement, false, true},
+		{"OptionMarksCounter", false, true, cql.Some(true), cql.OrdinaryStatement, true, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			options := &InternalResolvedOptions{}
 			options.InternalProfile.Idempotent = tc.profile
 			options.InternalOptions.Idempotent = tc.option
-			r := InternalExecutionRequest{idempotent: tc.statement, options: options}
+			r := InternalExecutionRequest{idempotent: tc.statement, options: options, hasCounter: tc.counter}
+			r.routing.Kind = tc.kind
 			if got := r.isIdempotent(); got != tc.want {
 				t.Fatalf("isIdempotent() = %v, want %v", got, tc.want)
 			}

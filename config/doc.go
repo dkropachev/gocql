@@ -32,7 +32,9 @@
 //     profile did not choose keeps the driver's default, not the session's.
 //  3. Each exec.Options field that is set overrides the matching field of the
 //     profile: a cql.Option whose Set is true, a non-nil Retry, a non-zero
-//     PageSize, and a SerialConsistency other than exec.SerialInherit.
+//     PageSize, and a SerialConsistency other than exec.SerialInherit. The
+//     options a call passes to a view made by gocql.Prepared.With are laid
+//     over the view's own, field by field, first; see package exec.
 //
 // A set exec.Options.Timeout replaces the profile's Timeout, longer or
 // shorter, and a set zero removes it. The resulting limit and the context

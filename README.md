@@ -100,7 +100,8 @@ one of the statement's pooled queries until closed; `Session.Close` stops
 handles still open, and a handle dropped without Close releases its query once
 collected.
 
-`prepared.Worker(options)` creates a reusable `Worker` owned by one goroutine;
+`prepared.Worker()` creates a reusable `Worker` owned by one goroutine, with
+the statement's options or, through `prepared.With(options).Worker()`, others;
 any number of workers can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
 client CPU at high concurrency, and it adds the executions whose handles
@@ -133,7 +134,7 @@ borrow their pages.
 
 `session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
 prepares directly for caller-storage decoding. Share its immutable handle and
-create a `StreamWorker` per goroutine with `prepared.Worker(options)`. It decodes into
+create a `StreamWorker` per goroutine with `prepared.Worker(streamOptions)`. It decodes into
 seeded caller storage. It buffers each page on
 normal multiplexed connections by default. `exec.StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the

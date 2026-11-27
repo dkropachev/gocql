@@ -724,7 +724,7 @@ func TestQuery(t *testing.T) {
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
-		q := codecTestMust(read.Worker(bindOptions(session, exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+		q := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}})).Worker())
 		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
@@ -781,7 +781,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.Worker(bindOptions(session, exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+		unpaged := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}})).Worker())
 		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage(), 0))
 		n := 0

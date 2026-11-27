@@ -176,7 +176,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					}()
 					implSession.ResetPerfCounters()
 					wire.ResetPerfCounters()
-					rows := codecTestMust(runtimeRun(s, bound, bindOptions(s, options)))
+					rows := codecTestMust(runtimeRun(s, bound, s.MustCompileOptions(options)))
 					var row cql.Bytes
 					for rows.NextInto(&row) {
 					}
@@ -346,7 +346,7 @@ func TestWorkCountsPerf(t *testing.T) {
 											ps[0].Write(typedTestResponse(t, 4, id, runtimeRowsBody(token, values...)))
 										}
 									}()
-									rows, e := runtimeRun(s, bound, bindOptions(s, options))
+									rows, e := runtimeRun(s, bound, s.MustCompileOptions(options))
 									if e != nil {
 										errors <- e
 										return

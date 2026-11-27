@@ -4,6 +4,7 @@
 package session
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"net"
@@ -25,12 +26,13 @@ type oneShotRequest struct {
 }
 
 // oneShotServer answers PREPARE on peer with a statement of one int
-// parameter and one blob column, and passes each EXECUTE to requests. It
-// returns when peer closes.
+// parameter and one blob column, or none for a statement that is not a
+// SELECT, and passes each EXECUTE to requests. It returns when peer closes.
 func oneShotServer(t testing.TB, peer net.Conn, requests chan<- oneShotRequest) {
 	key := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType})
 	value := cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "value", Type: cql.BlobType})
 	prepared := preparedBody([]byte("oneshot"), key, value, 0)
+	write := preparedBody([]byte("oneshot-write"), key, cql.NewColumns(), 0)
 	go func() {
 		defer close(requests)
 		for {
@@ -39,7 +41,11 @@ func oneShotServer(t testing.TB, peer net.Conn, requests chan<- oneShotRequest) 
 				return
 			}
 			if op == byte(frm.OpPrepare) {
-				if _, err := peer.Write(typedTestResponse(t, 4, stream, prepared)); err != nil {
+				answer := prepared
+				if len(body) > 4 && !bytes.HasPrefix(body[4:], []byte("SELECT")) {
+					answer = write
+				}
+				if _, err := peer.Write(typedTestResponse(t, 4, stream, answer)); err != nil {
 					return
 				}
 				continue
@@ -72,6 +78,25 @@ func parseOneShotExecute(stream int, b []byte) oneShotRequest {
 
 func oneShotStatement() binding.Statement[int32, []byte] {
 	return binding.Statement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst }))}
+}
+
+// oneShotWriteStatement is a write of one int parameter and no result
+// columns, which oneShotServer prepares without result metadata, for Exec.
+func oneShotWriteStatement() binding.Statement[int32, cql.EmptyRow] {
+	return binding.Statement[int32, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "UPDATE ks.tbl SET value = 0x00 WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.Row[cql.EmptyRow]()}
+}
+
+// oneShotPrepareWrite prepares oneShotWriteStatement on a oneShotServer.
+func oneShotPrepareWrite(t testing.TB, s *cluster.Core, peer net.Conn, requests chan oneShotRequest) *Prepared[int32, cql.EmptyRow] {
+	t.Helper()
+	oneShotServer(t, peer, requests)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	p, err := Prepare(ctx, s, oneShotWriteStatement(), PrepareOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
 }
 
 func oneShotPrepare(t testing.TB, s *cluster.Core, peer net.Conn, requests chan oneShotRequest) *Prepared[int32, []byte] {

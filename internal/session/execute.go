@@ -1031,6 +1031,11 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 		rt.describeStatement(err, &b.privateStorage.InternalRequest)
 		return result, err
 	}
+	if src, ok := b.privateStorage.InternalRequest.InternalSource.(preparedSource); ok && src.state.InternalColumns.Len() != 0 {
+		if err := rt.execColumns(&b.privateStorage.InternalRequest, options); err != nil {
+			return InternalExecutionErrorResult(err), err
+		}
+	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
@@ -1066,6 +1071,72 @@ func (rt *InternalSessionRuntime) exec[R any](ctx context.Context, b *Bound[R], 
 	for rows.NextInto(&row) {
 	}
 	return rows.Info(), rows.Err()
+}
+
+// apply executes b, a conditional statement, once and reports whether its
+// condition applied: the [applied] column of the first row, read through
+// cql.CASApplied, so the statement's own row decoder does not matter. The
+// response is released before apply returns. A statement known not to be
+// conditional is rejected before it is sent.
+func (rt *InternalSessionRuntime) apply[R any](ctx context.Context, b *Bound[R], options CompiledOptions, scratch *eachScratch) (bool, cql.Result, error) {
+	if b == nil {
+		return false, cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
+	}
+	if b.privateStorage.InternalRequest.routing.Kind == cql.OrdinaryStatement {
+		err := notSent(cqltype.TypeValidation("Apply", "statement is not conditional; run it with Exec"))
+		rt.describeStatement(err, &b.privateStorage.InternalRequest)
+		return false, InternalExecutionErrorResult(err), err
+	}
+	runctx, cancel, request, err := rt.admit(ctx, b, options)
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	applied, result, err := rt.applyPage(runctx, request, scratch)
+	*scratch = eachScratch{} // drop response references
+	cancel()
+	request.InternalLogical.InternalFinish(result, err)
+	request.InternalLogical.releaseInput()
+	return applied, result, err
+}
+
+func (rt *InternalSessionRuntime) applyPage(ctx context.Context, request *InternalExecutionRequest, scratch *eachScratch) (bool, cql.Result, error) {
+	response, err := rt.executePage(ctx, request, cql.StartPage())
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	result := response.Result
+	var row cql.CASResult[cql.EmptyRow]
+	err = rt.decodeEach(ctx, response, cql.CASApplied, &InternalResultPlanCache[cql.CASResult[cql.EmptyRow]]{}, &row, nil, scratch)
+	response.Owner.Release()
+	switch {
+	case errors.Is(err, errStopEach):
+		return row.Applied, result, nil
+	case err != nil:
+		return false, result, err
+	default:
+		return false, result, cqltype.TypeValidation("Apply", "conditional statement returned no rows")
+	}
+}
+
+// execColumns rejects an Exec of a prepared statement whose prepare metadata
+// has result columns, such as a SELECT, before it is sent: Exec reads no
+// rows. A SERIAL or LOCAL_SERIAL read is sent anyway, since running one
+// completes the Paxos rounds in progress on its partition, and fails on its
+// result columns as before. It stays out of line, off Exec's path.
+//
+//go:noinline
+func (rt *InternalSessionRuntime) execColumns(request *InternalExecutionRequest, options CompiledOptions) error {
+	if rt.Closed() {
+		return nil // admission reports cqlerr.ErrClosed
+	}
+	var scratch InternalResolvedOptions
+	switch options.resolve(rt, &scratch).InternalProfile.Consistency {
+	case cql.Serial, cql.LocalSerial:
+		return nil
+	}
+	err := notSent(cqltype.TypeValidation("Exec", "the statement returns result columns; read them with One, Each, All or Run"))
+	rt.describeStatement(err, request)
+	return err
 }
 
 // conditionalExec rejects an Exec of a statement known to be conditional

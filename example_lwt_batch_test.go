@@ -100,8 +100,9 @@ func ExampleCASBatchRows() {
 	}
 }
 
-// ExampleSession_RunConditionalBatch reports whether a conditional batch applied.
-func ExampleSession_RunConditionalBatch() {
+// ExampleSession_ApplyBatch reports whether a conditional batch applied,
+// with nothing to close.
+func ExampleSession_ApplyBatch() {
 	// Assumes example.my_lwt_batch_table(pk text, ck text, version int, value text,
 	// PRIMARY KEY(pk, ck)), with rows (pk1,ck1) and (pk1,ck2) at version 2.
 	ctx := context.Background()
@@ -141,12 +142,7 @@ func ExampleSession_RunConditionalBatch() {
 			log.Fatal(err)
 		}
 	}
-	rows, err := session.RunConditionalBatch(ctx, &batch, statement.Rows)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer rows.Close()
-	applied, err := rows.Applied()
+	applied, _, err := session.ApplyBatch(ctx, &batch)
 	if err != nil {
 		log.Fatal(err)
 	}

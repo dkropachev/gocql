@@ -205,7 +205,7 @@ func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[i
 	if err != nil {
 		return nil, err
 	}
-	return p.Worker(o)
+	return p.With(o).Worker()
 }
 
 // gridShared prepares statement and compiles options for it.
@@ -296,7 +296,7 @@ var gridModes = []gridMode{
 				return Rows[[]byte]{}, func() {}, err
 			}
 			rows, err := q.Run(ctx, gridKey)
-			return rows, q.Close, err
+			return rows, func() { _ = q.Close() }, err
 		},
 		runPage: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], state cql.PageState, o exec.Options) (*Page[[]byte], func(), error) {
 			q, err := gridQuery(ctx, s, st, o)
@@ -304,7 +304,7 @@ var gridModes = []gridMode{
 				return nil, func() {}, err
 			}
 			page, err := q.RunPage(ctx, gridKey, state, 0)
-			return page, q.Close, err
+			return page, func() { _ = q.Close() }, err
 		},
 	},
 	{

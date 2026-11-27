@@ -30,7 +30,7 @@ markers. `Select` marks the statement ordinary and idempotent.
 Parameters are copied on admission.
 
 A goroutine that runs one statement many times can own a reusable `Worker`:
-`prepared.Worker(options)` keeps parameter buffers and resolved options across
+`prepared.Worker()`, or `prepared.With(options).Worker()`, keeps parameter buffers and resolved options across
 executions, and several workers can share one preparation. A worker has the
 same `Exec`, `One`, `Each` and `All`, plus `worker.Run`, which returns typed rows:
 check `Rows.Err()` after iteration and close the rows. A worker call while a

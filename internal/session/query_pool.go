@@ -258,6 +258,16 @@ func (p *queryPool[P, R]) each(ctx context.Context, value P, dst *R, fn func(*R)
 	return found, result, err
 }
 
+func (p *queryPool[P, R]) apply(ctx context.Context, value P, options CompiledOptions) (bool, cql.Result, error) {
+	q, err := p.capture(ctx, value)
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	applied, result, err := q.state.runtime.apply(ctx, &q.bound, options, &q.scratch)
+	q.state.owner.InternalRelease()
+	return applied, result, err
+}
+
 // hold marks a captured pooled query as held open by a handle its caller
 // will own, and registers it with the session: Session.Close then stops the
 // handle, and a handle dropped without Close is accounted for when its query
@@ -356,8 +366,12 @@ func (p *Prepared[P, R]) Routing(value P, options CompiledOptions) (routing2.Inf
 		return routing2.Info{}, err
 	}
 	rt := InternalRuntimeFor(s)
+	options, err = p.callOptions(options)
+	if err != nil {
+		return routing2.Info{}, err
+	}
 	var resolvedScratch InternalResolvedOptions
-	resolved := p.callOptions(options).resolve(rt, &resolvedScratch)
+	resolved := options.resolve(rt, &resolvedScratch)
 	if err := fillOptionRouting(&info, rt, resolved); err != nil {
 		return routing2.Info{}, err
 	}
@@ -402,10 +416,27 @@ func fillOptionRouting(info *routing2.Info, rt *InternalSessionRuntime, resolved
 // per-call execution state.
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOptions) (cql.Result, error) {
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	return pool.exec(ctx, value, p.callOptions(options))
+	return pool.exec(ctx, value, options)
+}
+
+// Apply binds value, executes the statement, which must be conditional,
+// once and reports whether its condition applied. Options are as for Exec.
+// Apply is safe for concurrent use.
+func (p *Prepared[P, R]) Apply(ctx context.Context, value P, options CompiledOptions) (bool, cql.Result, error) {
+	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
+	if err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	return pool.apply(ctx, value, options)
 }
 
 // One binds value, executes the statement once and decodes its first row
@@ -414,10 +445,13 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options CompiledOpti
 // are as for Exec. One is safe for concurrent use.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options CompiledOptions) (bool, cql.Result, error) {
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
 	}
-	found, result, err := pool.each(ctx, value, dst, nil, p.callOptions(options))
+	found, result, err := pool.each(ctx, value, dst, nil, options)
 	if !found && err == nil {
 		clearDestination(dst)
 	}
@@ -434,10 +468,13 @@ func (p *Prepared[P, R]) Each(ctx context.Context, value P, dst *R, fn func(*R) 
 		return nilEachCallback()
 	}
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		return InternalExecutionErrorResult(err), err
 	}
-	_, result, err := pool.each(ctx, value, dst, fn, p.callOptions(options))
+	_, result, err := pool.each(ctx, value, dst, fn, options)
 	return result, err
 }
 
@@ -456,11 +493,14 @@ func (p *Prepared[P, R]) All(ctx context.Context, value P, dst *R, options Compi
 
 func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options CompiledOptions, yield func(*R, error) bool) {
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		yield(nil, err)
 		return
 	}
-	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), p.callOptions(options)); err != nil {
+	if _, _, err := pool.each(ctx, value, dst, yieldRow(yield), options); err != nil {
 		yield(nil, err)
 	}
 }
@@ -473,10 +513,13 @@ func (p *Prepared[P, R]) all(ctx context.Context, value P, dst *R, options Compi
 // concurrent use; each Rows is not.
 func (p *Prepared[P, R]) Run(ctx context.Context, value P, options CompiledOptions) (Rows[R], error) {
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		return Rows[R]{}, err
 	}
-	return pool.run(ctx, value, p.callOptions(options))
+	return pool.run(ctx, value, options)
 }
 
 // RunPage binds value and executes one page of the statement, resuming from
@@ -485,10 +528,13 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options CompiledOptio
 // as for Exec. RunPage is safe for concurrent use; each Page is not.
 func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options CompiledOptions) (*Page[R], error) {
 	pool, err := p.pool()
+	if err == nil {
+		options, err = p.callOptions(options)
+	}
 	if err != nil {
 		return nil, err
 	}
-	return pool.runPage(ctx, value, state, pageSize, p.callOptions(options))
+	return pool.runPage(ctx, value, state, pageSize, options)
 }
 
 // preparedPoolIdle reports how many idle queries p's pool holds.

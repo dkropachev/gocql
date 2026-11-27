@@ -430,7 +430,7 @@ func TestStructMapping(t *testing.T) {
 		if _, err := insertPrepared.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Worker(bindOptions(f.session, exec.Options{PageSize: 2}))
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, exec.Options{PageSize: 2})).Worker()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -502,7 +502,7 @@ func TestStructMapping(t *testing.T) {
 		})
 		t.Run("Unpaged", func(t *testing.T) {
 			// The cql.Unpaged page size returns the whole result as one page.
-			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).Worker(bindOptions(f.session, exec.Options{PageSize: cql.Unpaged}))
+			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, exec.Options{PageSize: cql.Unpaged})).Worker()
 			if err != nil {
 				t.Fatal(err)
 			}

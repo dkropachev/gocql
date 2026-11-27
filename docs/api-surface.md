@@ -77,9 +77,10 @@ things: `exec.PrepareOptions` the PREPARE request, and `exec.StreamOptions`
 a stream's receive mode.
 
 - Worker-owned: options are fixed when the worker is created, as the
-  `exec.CompiledOptions` passed to `Prepared.Worker` or the defaults of a
-  `With` view, and its methods take none. A stream worker's overrides are
-  the defaults of `PreparedStream.With`.
+  defaults of the `With` view `Prepared.Worker` is called on
+  (`p.With(options).Worker()`), or the session defaults; `Worker` takes no
+  arguments and its methods take no options. A stream worker's overrides
+  are the defaults of `PreparedStream.With`.
 - Shared: each call ends in `options ...exec.CompiledOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
   and uses the session defaults. At most one value is accepted; a second
@@ -87,9 +88,13 @@ a stream's receive mode.
   `exec.CompiledOptions`, not `exec.Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
   and each call passes a pointer to the frozen result. `Prepared.With`
-  returns a view whose calls without options use given defaults instead of
-  the session's; options passed to a call replace them whole. The view
-  shares the preparation and its pool, so it is not a new row.
+  returns a view whose calls use given defaults instead of the session's;
+  options passed to a call are laid over them field by field, so the order,
+  lowest first, is the session's profile, `exec.Options.Profile`, the view's
+  other fields, then the call's. The combination is compiled once and cached
+  on the call's options for the view it was last passed to, so a warm call
+  allocates nothing. The view shares the preparation and its pool, so it is
+  not a new row.
 - Throwaway: each call ends in `options ...exec.CompiledOptions`, the same
   optional parameter with at most one value, resolved against the session
   on the call.
@@ -145,9 +150,15 @@ page state. Explicit paging is the pages column only.
   `cql.ConditionalStatement` or decoded with `cql.CASRows`. Prepare fails
   when PREPARE metadata, where the server returns it, lacks the leading
   `[applied]` column a `cql.CASRows` decoder needs.
-  A statement executed with SERIAL or LOCAL_SERIAL consistency is a Paxos read:
-  it is not rejected up front, and `Exec` fails on its result columns like any
-  other row-returning statement.
+  The none column also rejects, before sending, a prepared statement whose
+  PREPARE metadata has result columns, such as a SELECT: the none shape
+  reads no rows. A statement executed with SERIAL or LOCAL_SERIAL
+  consistency is a Paxos read, which completes the Paxos rounds in progress
+  on its partition: it is sent, and `Exec` fails on its result columns.
+- The one-row column's `One` with a nil destination on a conditional
+  statement fails before sending with a `cql.ValidationError`: every
+  conditional write returns a row, so whether one exists says nothing of
+  whether it applied. `Apply`, an exception below, reports that.
 - Each column uses the same verbs in every row that fills it: `Exec`, `One`,
   `Each` with `All` and `Run` (no `Run` in the throwaway row), `RunPage`.
   Throwaway methods carry the `Unprepared` prefix in front of the verb. The
@@ -240,6 +251,15 @@ removes boilerplate from a common call without adding a way to execute.
   `...exec.CompiledOptions`. Schema setup and occasional commands are most of the
   throwaway calls, and spelling the statement type and the empty parameters
   out in each one hid the CQL.
+- `Prepared.Apply` and `Worker.Apply` run a conditional statement and return
+  `(applied bool, cql.Result, error)`, as `Session.ApplyBatch` does for a
+  batch, reading only `[applied]` whatever the statement's row decoder. They
+  take the options form of their row. They are the one-row shape of a
+  conditional statement, where `One` would report a row that always exists;
+  without them, reading whether a write applied meant declaring a
+  `cql.CASRows` decoder on the statement. A statement known not to be
+  conditional is rejected before it is sent. There is no `UnpreparedApply`:
+  a conditional write that runs often is prepared.
 
 ## Current deviations
 

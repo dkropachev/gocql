@@ -34,6 +34,7 @@ func (s *RowStream[R]) rememberPlan(columns cql.Columns, plan cql.CompiledStream
 // StreamQuery reuses owned parameters and an immutable streaming decoder plan.
 // Page buffering is the default; Incremental explicitly bounds receive storage.
 type StreamQuery[P, R any] struct {
+	_       noCopy
 	plans   streamPlanCache[R]
 	decoder cql.StreamRowDecoder[R]
 	query   *Query[P, cql.EmptyRow]

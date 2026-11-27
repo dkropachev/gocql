@@ -10,9 +10,17 @@
 // (config.ConfigBuilder.WithDefaultProfile). Options.Profile, when set,
 // replaces that profile whole, and then each Options field that is set
 // overrides the matching field of the profile: a cql.Option whose Set is
-// true, a non-nil Retry or Speculation, a non-zero PageSize, and a SerialConsistency other
-// than SerialInherit. Idempotent, when set, overrides the statement's
-// cql.Statement.Idempotent and the profile's Idempotent.
+// true, a non-nil Retry or Speculation, a non-empty Keyspace or
+// CustomPayload, a non-zero PageSize, a SerialConsistency other than
+// SerialInherit, and a true flag. Idempotent, when set, overrides the
+// statement's cql.Statement.Idempotent and the profile's Idempotent.
+//
+// The options of a call to a view made by gocql.Prepared.With are laid over
+// the view's defaults by the same rule, field by field, before they are laid
+// over the profile, so the order, lowest first, is: the session's default
+// profile, Options.Profile (the call's, or else the view's), the view's other
+// fields, and the call's. Observers join, the view's first, and a HostID
+// brings its ShardID and AnyShardFallback with it.
 //
 // Options.Timeout, when set, replaces the profile's Timeout, so it can
 // lengthen the limit as well as shorten it, and cql.Some(time.Duration(0))
@@ -89,8 +97,9 @@ type Options struct {
 	Prefetch cql.Option[int]
 	// PageSize is the rows per page; zero keeps the profile's, and
 	// cql.Unpaged requests the whole result in one response. A negative
-	// value is rejected.
-	PageSize int32
+	// value, or one above cql.Unpaged, the largest the protocol carries, is
+	// rejected with a cql.ValidationError.
+	PageSize int
 	// NowInSeconds sets the server's current time, in seconds since the Unix
 	// epoch, for TTL and expiry. Only native protocol 5 carries it: on a
 	// session of another dialect, Session.CompileOptions and every execution

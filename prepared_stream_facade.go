@@ -33,7 +33,7 @@ func (p *PreparedStream[P, R]) Worker(options ...exec.StreamOptions) (*StreamWor
 	case 1:
 		o = options[0]
 	default:
-		return nil, tooManyWorkerOptions(true)
+		return nil, tooManyStreamWorkerOptions()
 	}
 	internal := (*implSession.PreparedStream[P, R])(p)
 	values := internal.Defaults().Values()

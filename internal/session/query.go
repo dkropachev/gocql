@@ -99,6 +99,7 @@ func (c queryCursor) stopped() bool {
 // Query owns reusable parameter storage and allows one active execution.
 // Prepared statements remain shareable; a Query must not be copied.
 type Query[P, R any] struct {
+	_       noCopy
 	params  cql.CompiledParams[P]
 	options CompiledOptions
 	columns cql.Columns
@@ -111,6 +112,16 @@ type Query[P, R any] struct {
 	// text, from Protocol v4 for a prepared statement.
 	allowUnset bool
 }
+
+// noCopy makes go vet's copylocks check report a copy of the struct that
+// holds it, as the first field, where it takes no space. Batch, Query and
+// StreamQuery, and so the public Batch, Worker and StreamWorker, hold one:
+// their storage is reused by address, so a copy would share it.
+type noCopy struct{}
+
+// Lock and Unlock are the methods copylocks looks for; they do nothing.
+func (*noCopy) Lock()   {}
+func (*noCopy) Unlock() {}
 
 // routingScratch holds Prepared.Routing's encoding buffers. Routing is rare,
 // so the buffers live in a pool rather than in every pooled Query next to its
@@ -364,6 +375,17 @@ func (q *Query[P, R]) Exec(ctx context.Context, value P) (cql.Result, error) {
 	}
 	defer q.state.owner.InternalRelease()
 	return q.state.runtime.exec(ctx, &q.bound, q.options)
+}
+
+// Apply executes the query, a conditional statement, with value and reports
+// whether its condition applied. The query is ready for its next execution
+// when Apply returns.
+func (q *Query[P, R]) Apply(ctx context.Context, value P) (bool, cql.Result, error) {
+	if err := q.capture(ctx, value); err != nil {
+		return false, InternalExecutionErrorResult(err), err
+	}
+	defer q.state.owner.InternalRelease()
+	return q.state.runtime.apply(ctx, &q.bound, q.options, &q.scratch)
 }
 
 // Run executes the query and returns an iterator over its rows. The query

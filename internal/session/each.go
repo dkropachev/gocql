@@ -62,6 +62,9 @@ func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], 
 	if b == nil {
 		return false, cql.Result{}, notSent(cqltype.TypeValidation("binding", "nil binding"))
 	}
+	if fn == nil && dst == nil && b.privateStorage.InternalRequest.routing.Kind == cql.ConditionalStatement {
+		return rt.conditionalExists(&b.privateStorage.InternalRequest)
+	}
 	runctx, cancel, request, err := rt.admit(ctx, b, options)
 	if err != nil {
 		return false, InternalExecutionErrorResult(err), err
@@ -72,6 +75,18 @@ func (rt *InternalSessionRuntime) each[R any](ctx context.Context, b *Bound[R], 
 	request.InternalLogical.InternalFinish(result, err)
 	request.InternalLogical.releaseInput()
 	return found, result, err
+}
+
+// conditionalExists rejects One with a nil destination on a conditional
+// statement before it is sent: every conditional write returns a row, so
+// whether one exists says nothing of whether the write applied. It stays out
+// of line, off One's path.
+//
+//go:noinline
+func (rt *InternalSessionRuntime) conditionalExists(request *InternalExecutionRequest) (bool, cql.Result, error) {
+	err := notSent(cqltype.TypeValidation("destination", "One with a nil destination on a conditional statement reports a row, not whether it applied; use Apply"))
+	rt.describeStatement(err, request)
+	return false, InternalExecutionErrorResult(err), err
 }
 
 func (rt *InternalSessionRuntime) eachPage[R any](ctx context.Context, b *Bound[R], request *InternalExecutionRequest, dst *R, fn func(*R) error, scratch *eachScratch) (bool, cql.Result, error) {

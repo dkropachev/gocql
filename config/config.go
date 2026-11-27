@@ -884,7 +884,11 @@ type ProfileBuilder struct {
 	started bool
 }
 
-// NewProfile starts a profile.
+// NewProfile starts a profile from the driver's defaults, which
+// ProfileBuilder lists, not from any session's: to change a few settings of
+// the profile a session runs with, for exec.Options.Profile, start from
+// gocql.Session.DefaultProfile().Builder() or Config.DefaultProfile().Builder()
+// instead.
 func NewProfile() *ProfileBuilder {
 	return &ProfileBuilder{profile: *implSettings.DefaultConfig().DefaultProfile, started: true}
 }

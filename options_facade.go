@@ -35,6 +35,22 @@ func internalOptions(o exec.Options) implSession.Options {
 	return v
 }
 
+// pageSize32 checks a RunPage page size, which the protocol carries as an
+// int32: a negative one, or one above cql.Unpaged, is a cql.ValidationError.
+func pageSize32(pageSize int) (int32, error) {
+	if pageSize < 0 || pageSize > cql.Unpaged {
+		return 0, pageSizeRange()
+	}
+	return int32(pageSize), nil
+}
+
+// pageSizeRange is the error of a page size out of range.
+//
+//go:noinline
+func pageSizeRange() error {
+	return &cql.ValidationError{Field: "page size", Err: errors.New("must not be negative or above cql.Unpaged")}
+}
+
 // tooManyPrepareOptions is the error of a call given more than one
 // PrepareOptions.
 //
@@ -43,15 +59,12 @@ func tooManyPrepareOptions() error {
 	return &cql.ValidationError{Field: "options", Err: errors.New("at most one PrepareOptions")}
 }
 
-// tooManyWorkerOptions is the error of a Worker call given more than one
-// Options, or StreamOptions when stream is set.
+// tooManyStreamWorkerOptions is the error of a PreparedStream.Worker call
+// given more than one StreamOptions.
 //
 //go:noinline
-func tooManyWorkerOptions(stream bool) error {
-	if stream {
-		return &cql.ValidationError{Field: "options", Err: errors.New("at most one StreamOptions")}
-	}
-	return &cql.ValidationError{Field: "options", Err: errors.New("at most one Options")}
+func tooManyStreamWorkerOptions() error {
+	return &cql.ValidationError{Field: "options", Err: errors.New("at most one StreamOptions")}
 }
 
 // fixedWorkerTimestamp is the error of a worker given a fixed

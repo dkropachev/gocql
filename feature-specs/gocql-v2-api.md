@@ -772,18 +772,19 @@ type PreparedInfo struct {
 }
 
 // One-shot calls, safe for concurrent use; at most one exec.CompiledOptions.
-func (p *Prepared[P, R]) Exec(context.Context, P, ...exec.CompiledOptions) (Result, error)
-func (p *Prepared[P, R]) One(context.Context, P, *R, ...exec.CompiledOptions) (bool, Result, error)
+func (p *Prepared[P, R]) Exec(context.Context, P, ...exec.CompiledOptions) (Result, error) // rejects result columns before sending, but SERIAL reads
+func (p *Prepared[P, R]) Apply(context.Context, P, ...exec.CompiledOptions) (applied bool, Result, error) // conditional only
+func (p *Prepared[P, R]) One(context.Context, P, *R, ...exec.CompiledOptions) (bool, Result, error) // nil dst rejected on a conditional statement
 func (p *Prepared[P, R]) Each(context.Context, P, *R, func(*R) error, ...exec.CompiledOptions) (Result, error)
 func (p *Prepared[P, R]) All(context.Context, P, *R, ...exec.CompiledOptions) iter.Seq2[*R, error]
 func (p *Prepared[P, R]) Run(context.Context, P, ...exec.CompiledOptions) (Rows[R], error)                // holds a pooled query until closed
-func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int32, ...exec.CompiledOptions) (*Page[R], error)
+func (p *Prepared[P, R]) RunPage(context.Context, P, cql.PageState, int, ...exec.CompiledOptions) (*Page[R], error) // 0..cql.Unpaged
 func (p *Prepared[P, R]) AddToBatch(*Batch, P) error
 func (p *Prepared[P, R]) Routing(P, ...exec.CompiledOptions) (routing.Info, error)
-func (p *Prepared[P, R]) With(exec.CompiledOptions) *Prepared[P, R] // a view with its own defaults, sharing the preparation and pool
+func (p *Prepared[P, R]) With(exec.CompiledOptions) *Prepared[P, R] // a view with its own defaults, sharing the preparation and pool; call options are laid over them field by field
 
 // Worker-owned reusable executions.
-func (p *Prepared[P, R]) Worker(...exec.CompiledOptions) (*Worker[P, R], error) // at most one; none or zero uses With's defaults
+func (p *Prepared[P, R]) Worker() (*Worker[P, R], error) // the view's defaults: p.With(o).Worker()
 func (s *Session) UnpreparedCommand(context.Context, string, ...exec.CompiledOptions) (Result, error) // UnpreparedExec of cql.Command
 func (s *Session) UnpreparedExec[P any](context.Context, cql.Statement[P, cql.EmptyRow], P, ...exec.CompiledOptions) (Result, error)
 func (s *Session) UnpreparedOne[P, R any](context.Context, cql.Statement[P, R], P, *R, ...exec.CompiledOptions) (bool, Result, error)
@@ -793,17 +794,31 @@ func (s *Session) UnpreparedAddToBatch[P, R any](*Batch, cql.Statement[P, R], P)
 func (w *Worker[P, R]) Exec(context.Context, P) (Result, error)
 func (w *Worker[P, R]) Each(context.Context, P, *R, func(*R) error) (Result, error)
 func (w *Worker[P, R]) One(context.Context, P, *R) (bool, Result, error)
+func (w *Worker[P, R]) Apply(context.Context, P) (applied bool, Result, error)
 func (w *Worker[P, R]) All(context.Context, P, *R) iter.Seq2[*R, error]
 func (w *Worker[P, R]) Run(context.Context, P) (Rows[R], error)
-func (w *Worker[P, R]) RunPage(context.Context, P, cql.PageState, int32) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
+func (w *Worker[P, R]) RunPage(context.Context, P, cql.PageState, int) (*Page[R], error) // page size: 0 resolved, cql.Unpaged
 func (w *Worker[P, R]) AddToBatch(*Batch, P) error
-func (w *Worker[P, R]) Close()                       // stop at once
+func (w *Worker[P, R]) Close() error                 // stop at once; returns nil
 func (w *Worker[P, R]) Wait(context.Context) error   // join the drain
 
 func (s *Session) ExecBatch(context.Context, *Batch, ...exec.CompiledOptions) (Result, error)          // sends batch.Kind
 func (s *Session) ApplyBatch(context.Context, *Batch, ...exec.CompiledOptions) (bool, Result, error)
-func (s *Session) RunConditionalBatch[X any](context.Context, *Batch, cql.RowDecoder[cql.CASResult[X]], ...exec.CompiledOptions) (CASBatchRows[X], error)
+func (s *Session) RunConditionalBatch[X any](context.Context, *Batch, cql.RowDecoder[cql.CASResult[X]], ...exec.CompiledOptions) (CASBatchRows[X], error) // nil decoder: cql.CASRows[X](nil)
 ```
+
+A view made by Prepared.With keeps its exec.CompiledOptions as defaults, and
+the options a call passes are laid over them field by field, as options are
+laid over a profile: the order, lowest first, is the session's default
+profile, exec.Options.Profile (the call's, else the view's), the view's other
+fields, then the call's. Observers join, view first; a HostID brings its
+ShardID and AnyShardFallback. The combination is compiled once and cached in a
+one-entry atomic pointer on the call's compiled options, keyed by the view's,
+so a warm call allocates nothing. Prepared.Apply and Worker.Apply run a
+conditional statement and report its [applied] column through cql.CASApplied,
+whatever R is; One with a nil dst on a conditional statement is rejected
+before sending, since the row always exists. A Profile's Idempotent does not
+mark a conditional request (a SERIAL read included) or a counter write.
 
 Prepared.Exec, One, Each and All run on queries the prepared statement keeps in
 a lock-free pool, so they allocate no per-call execution state. Prepared.Run and
@@ -933,7 +948,7 @@ func (p *Page[R]) Result() Result
 func (p *Page[R]) Columns() cql.Columns
 
 type PageLease struct { /* stable shared reference to receive storage */ }
-func (l *PageLease) Close()
+func (l *PageLease) Close() error // returns nil
 
 // package cql
 type PageState struct { /* start / more / complete, opaque owned token */ }
@@ -1054,7 +1069,9 @@ zero PageState and StartPage() mean start; use More/Complete to distinguish
 the others. A continuation with zero token bytes still has More()==true. Complete is
 output-only: passing it to RunPage returns cqlerr.ErrPagingComplete before
 admission/I/O. The page size cql.Unpaged (math.MaxInt32) resolves to
-a request without a page size and rejects an explicit nonzero prefetch. Exec drains and
+a request without a page size and rejects an explicit nonzero prefetch. Exec of a
+prepared statement whose PREPARE metadata has result columns fails before sending,
+except at SERIAL or LOCAL_SERIAL; otherwise Exec drains and
 closes all rows and fails if result columns exist; conditional writes use
 CASRows and consume every row, including multi-row conditional batches. CASRows
 handles an applied-only response and checked previous-value metadata; Previous
@@ -1080,10 +1097,10 @@ func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R
 func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
-func (p *PreparedStream[P, R]) Worker(...exec.StreamOptions) (*StreamWorker[P, R], error) // at most one
+func (p *PreparedStream[P, R]) Worker(...exec.StreamOptions) (*StreamWorker[P, R], error) // at most one StreamOptions
 func (p *PreparedStream[P, R]) With(exec.CompiledOptions) *PreparedStream[P, R] // a view whose workers use these overrides
 func (w *StreamWorker[P, R]) Run(context.Context, P) (*RowStream[R], error)
-func (w *StreamWorker[P, R]) Close()
+func (w *StreamWorker[P, R]) Close() error // returns nil
 func (w *StreamWorker[P, R]) Wait(context.Context) error
 type RowStream[R any] struct { /* exclusive pull receiver, automatic paging */ }
 func (s *RowStream[R]) NextInto(*R) bool
@@ -1353,7 +1370,7 @@ also interrupts active streams; already written caller output remains valid.
 ```go
 // exec.Options are plain values, compiled once into exec.CompiledOptions, the
 // one overrides type every execution entry point takes: prepared and
-// unprepared calls, batches, Prepared.Worker, and PreparedStream.With.
+// unprepared calls, batches, Prepared.With, and PreparedStream.With.
 // Session.CompileOptions is the only constructor: it runs the dialect checks
 // up front, resolves the session's default profile and keyspace once, and
 // chooses the compiled form the session's protocol uses, so a later protocol
@@ -1361,6 +1378,8 @@ also interrupts active streams; already written caller output remains valid.
 // for that session on each execution. The zero exec.CompiledOptions uses the
 // executing session's default profile.
 func (s *Session) CompileOptions(exec.Options) (exec.CompiledOptions, error)
+func (s *Session) MustCompileOptions(exec.Options) exec.CompiledOptions // panics on error
+func (s *Session) DefaultProfile() config.Profile // derive per-call profiles: DefaultProfile().Builder()
 
 // package exec
 type CompiledOptions struct { /* frozen, resolved options */ }
@@ -1372,7 +1391,7 @@ type Options struct {
     SerialConsistency SerialOverride              // SerialInherit (zero), SerialSerial, SerialLocal, SerialOmit
     Timeout cql.Option[time.Duration]             // replaces the profile timeout; Some(0): no limit
     PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
-    PageSize int32                                // 0 inherits; cql.Unpaged: whole result
+    PageSize int                                  // 0 inherits; cql.Unpaged: whole result; above it rejected
     Prefetch cql.Option[int]                      // 0 or 1 page
     Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent and Profile.Idempotent
     Timestamp cql.Option[time.Time]               // sent in microseconds; workers reject it
@@ -1406,10 +1425,10 @@ type Profile struct {
     Retry retry.Policy
     Routing routing.Policy
     Speculation SpeculationPolicy
-    Idempotent bool // every statement the profile runs; v1 DefaultIdempotence
+    Idempotent bool // every ordinary statement the profile runs, not conditional or counter writes; v1 DefaultIdempotence
     /* unexported built mark */
 }
-func NewProfile() *ProfileBuilder
+func NewProfile() *ProfileBuilder // starts from the driver's defaults, not a session's
 func (*ProfileBuilder) MustBuild() Profile // Build that panics on error
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
@@ -1452,7 +1471,8 @@ type CQLTraceRef struct {
 }
 ```
 
-Invalid values fail in the Worker constructor or Session.CompileOptions, before any
+Invalid values fail in Session.CompileOptions, the Worker constructor, or a
+call whose options laid over a view's defaults do not combine, before any
 execution. A worker uses its options as resolved when it is created; options
 passed per call use the resolution CompileOptions made. A zero exec.Options inherits the selected session profile, is non-idempotent, and has
 no tracing/timestamp/keyspace override. Override validation returns typed

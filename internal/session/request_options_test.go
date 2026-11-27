@@ -5,13 +5,11 @@ package session
 
 import (
 	"context"
-	"encoding/binary"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/binding"
-	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
@@ -42,7 +40,6 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		}()
 		return got
 	}
-	void := binary.BigEndian.AppendUint32(nil, frm.ResultKindVoid)
 	runPage := func(t *testing.T, run func() (*Page[[]byte], error)) {
 		t.Helper()
 		got := serve(runtimeRowsBody(nil, "v"))
@@ -55,21 +52,23 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		}
 		page.Close()
 	}
-	exec := func(t *testing.T, exec func() (cql.Result, error)) {
+	// exec runs a one-shot call that reads no rows: One with a nil
+	// destination, since Exec rejects the SELECT before sending it.
+	exec := func(t *testing.T, exec func() (bool, cql.Result, error)) {
 		t.Helper()
-		got := serve(void)
-		if _, err := exec(); err != nil {
+		got := serve(runtimeRowsBody(nil))
+		if _, _, err := exec(); err != nil {
 			t.Fatal(err)
 		}
 		if size := <-got; size != want {
-			t.Fatalf("Exec after RunPage sent page size %d, want %d", size, want)
+			t.Fatalf("One after RunPage sent page size %d, want %d", size, want)
 		}
 	}
 
 	t.Run("Pooled", func(t *testing.T) {
 		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage(), 7, CompiledOptions{}) })
 		waitIdle(t, p, 1)
-		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, CompiledOptions{}) })
+		exec(t, func() (bool, cql.Result, error) { return p.One(ctx, 1, nil, CompiledOptions{}) })
 	})
 	t.Run("Query", func(t *testing.T) {
 		q, err := p.Query(Options{})
@@ -78,7 +77,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		}
 		defer q.Close()
 		runPage(t, func() (*Page[[]byte], error) { return q.RunPage(ctx, 1, cql.StartPage(), 7) })
-		exec(t, func() (cql.Result, error) { return q.Exec(ctx, 1) })
+		exec(t, func() (bool, cql.Result, error) { return q.One(ctx, 1, nil) })
 	})
 	t.Run("CompiledOptions", func(t *testing.T) {
 		profile := settings.InternalDefaultProfile()
@@ -88,7 +87,7 @@ func TestRunPagePageSizeDoesNotLeak(t *testing.T) {
 		}
 		runPage(t, func() (*Page[[]byte], error) { return p.RunPage(ctx, 1, cql.StartPage(), 7, options) })
 		waitIdle(t, p, 1)
-		exec(t, func() (cql.Result, error) { return p.Exec(ctx, 1, options) })
+		exec(t, func() (bool, cql.Result, error) { return p.One(ctx, 1, nil, options) })
 		if size := options.p.resolved.InternalProfile.PageSize; size != want {
 			t.Fatalf("compiled options' page size changed to %d", size)
 		}

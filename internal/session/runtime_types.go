@@ -216,7 +216,10 @@ type InternalExecutionRequest struct {
 }
 
 // isIdempotent reports whether r may run more than once: its options'
-// Idempotent when set, else whether its statement or its profile is.
+// Idempotent when set, else whether its statement or its profile is. The
+// profile's Idempotent does not mark a conditional request, a SERIAL read
+// included, or a counter write, which are never safe to replay: only the
+// statement's own flag or the options' do.
 func (r *InternalExecutionRequest) isIdempotent() bool {
 	if r.options == nil { // refused before its options were resolved
 		return r.idempotent
@@ -224,7 +227,10 @@ func (r *InternalExecutionRequest) isIdempotent() bool {
 	if o := r.options.InternalOptions.Idempotent; o.Set {
 		return o.Value
 	}
-	return r.idempotent || r.options.InternalProfile.Idempotent
+	if r.idempotent {
+		return true
+	}
+	return r.options.InternalProfile.Idempotent && r.routing.Kind != cql.ConditionalStatement && !r.hasCounter
 }
 
 // batchKind returns the kind of batch r sends, unset when r is not a batch.

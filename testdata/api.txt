@@ -27,10 +27,11 @@ package gocql
 		gocql.Page method (*T) Retain() (*gocql.PageLease, error)
 		gocql.Page method (*T) State() cql.PageState
 	type gocql.PageLease struct
-		gocql.PageLease method (*T) Close()
+		gocql.PageLease method (*T) Close() error
 	type gocql.Prepared[P any, R any] struct
 		gocql.Prepared method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Prepared method (*T) All(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Prepared method (*T) Apply(ctx context.Context, value P, options ...exec.CompiledOptions) (bool, cql.Result, error)
 		gocql.Prepared method (*T) BindMarkers() cql.Columns
 		gocql.Prepared method (*T) Columns() cql.Columns
 		gocql.Prepared method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
@@ -39,9 +40,9 @@ package gocql
 		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
 		gocql.Prepared method (*T) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error)
 		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
-		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*gocql.Page[R], error)
+		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int, options ...exec.CompiledOptions) (*gocql.Page[R], error)
 		gocql.Prepared method (*T) With(defaults exec.CompiledOptions) *gocql.Prepared[P, R]
-		gocql.Prepared method (*T) Worker(options ...exec.CompiledOptions) (*gocql.Worker[P, R], error)
+		gocql.Prepared method (*T) Worker() (*gocql.Worker[P, R], error)
 	type gocql.PreparedInfo struct
 		gocql.PreparedInfo field Keyspace string
 		gocql.PreparedInfo field Table string
@@ -77,11 +78,13 @@ package gocql
 		gocql.Session method (*T) Close() error
 		gocql.Session method (*T) Closed() bool
 		gocql.Session method (*T) CompileOptions(options exec.Options) (exec.CompiledOptions, error)
+		gocql.Session method (*T) DefaultProfile() config.Profile
 		gocql.Session method (*T) Dialect() config.Dialect
 		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (cql.Result, error)
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
+		gocql.Session method (*T) MustCompileOptions(options exec.Options) exec.CompiledOptions
 		gocql.Session method (*T) Observer() observe.Hooks
 		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
 		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
@@ -99,18 +102,19 @@ package gocql
 		gocql.StreamProgress field Pages int64
 		gocql.StreamProgress field OutputStarted bool
 	type gocql.StreamWorker[P any, R any] struct
-		gocql.StreamWorker method (*T) Close()
+		gocql.StreamWorker method (*T) Close() error
 		gocql.StreamWorker method (*T) Run(ctx context.Context, value P) (*gocql.RowStream[R], error)
 		gocql.StreamWorker method (*T) Wait(ctx context.Context) error
 	type gocql.Worker[P any, R any] struct
 		gocql.Worker method (*T) AddToBatch(batch *gocql.Batch, value P) error
 		gocql.Worker method (*T) All(ctx context.Context, value P, dst *R) iter.Seq2[*R, error]
-		gocql.Worker method (*T) Close()
+		gocql.Worker method (*T) Apply(ctx context.Context, value P) (bool, cql.Result, error)
+		gocql.Worker method (*T) Close() error
 		gocql.Worker method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error) (cql.Result, error)
 		gocql.Worker method (*T) Exec(ctx context.Context, value P) (cql.Result, error)
 		gocql.Worker method (*T) One(ctx context.Context, value P, dst *R) (bool, cql.Result, error)
 		gocql.Worker method (*T) Run(ctx context.Context, value P) (gocql.Rows[R], error)
-		gocql.Worker method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32) (*gocql.Page[R], error)
+		gocql.Worker method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int) (*gocql.Page[R], error)
 		gocql.Worker method (*T) Wait(ctx context.Context) error
 
 package auth
@@ -768,7 +772,7 @@ package cql
 	func cql.UUIDValue(u cql.UUID) cql.Value
 	const cql.UnknownStatement cql.StatementKind = 0
 	const cql.UnloggedBatch cql.BatchKind = 1
-	const cql.Unpaged int32 = 2147483647
+	const cql.Unpaged untyped int = 2147483647
 	const cql.Unset cql.CellState = 2
 	func cql.UnsetValue(t cql.DataType) cql.Value
 	type cql.ValidationError struct
@@ -1290,7 +1294,7 @@ package exec
 		exec.Options field Timeout cql.Option[time.Duration]
 		exec.Options field PageTimeout cql.Option[time.Duration]
 		exec.Options field Prefetch cql.Option[int]
-		exec.Options field PageSize int32
+		exec.Options field PageSize int
 		exec.Options field NowInSeconds cql.Option[int32]
 		exec.Options field ShardID cql.Option[uint32]
 		exec.Options field Consistency cql.Option[cql.Consistency]

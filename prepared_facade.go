@@ -35,8 +35,14 @@ func (p *Prepared[P, R]) internal() *implSession.Prepared[P, R] {
 	return (*implSession.Prepared[P, R])(p)
 }
 
-// Exec executes a statement with no result columns. It is safe for concurrent
-// use. At most one exec.CompiledOptions may be passed.
+// Exec executes a statement with no result columns. A statement whose
+// prepared metadata has result columns, such as a SELECT, is rejected with a
+// cql.ValidationError before it is sent, unless it runs at SERIAL or
+// LOCAL_SERIAL consistency: such a read completes the Paxos rounds in
+// progress on its partition, so it is sent, and fails on its columns. A
+// conditional statement is rejected with cqlerr.ErrConditionalExec: use
+// Apply. Exec is safe for concurrent use. At most one exec.CompiledOptions
+// may be passed.
 func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
@@ -49,11 +55,35 @@ func (p *Prepared[P, R]) Exec(ctx context.Context, value P, options ...exec.Comp
 	return p.internal().Exec(ctx, value, o)
 }
 
+// Apply executes a conditional statement, an INSERT, UPDATE or DELETE with
+// IF, and reports whether its condition applied, as Session.ApplyBatch does
+// for a conditional batch: it reads only the [applied] column of the first
+// row, through cql.CASApplied, whatever R is, and releases the response
+// before it returns. The Result is that of the execution, and with an error
+// that of the failed execution. A statement known not to be conditional is
+// rejected with a cql.ValidationError before it is sent; run it with Exec.
+// To read the previous values a failed condition returns, decode the row
+// with One and a cql.CASRows decoder. Apply is safe for concurrent use. At
+// most one exec.CompiledOptions may be passed.
+func (p *Prepared[P, R]) Apply(ctx context.Context, value P, options ...exec.CompiledOptions) (bool, cql.Result, error) {
+	var o implSession.CompiledOptions
+	switch len(options) {
+	case 0:
+	case 1:
+		o = implSession.CompiledOptions(options[0])
+	default:
+		return tooManyOptionsFound()
+	}
+	return p.internal().Apply(ctx, value, o)
+}
+
 // One decodes the first row into dst, reporting whether a row exists. Further
 // rows are ignored; if none exists dst is cleared. Borrowed fields are detached
 // before return, while built-in owning fields retain reusable destination
 // buffers. The result stays valid after the call. With a nil dst, One only
-// reports whether a row exists. One is safe for concurrent use with
+// reports whether a row exists; on a conditional statement, which always
+// returns a row, a nil dst is rejected with a cql.ValidationError before
+// anything is sent: use Apply. One is safe for concurrent use with
 // independent destinations. At most one exec.CompiledOptions may be passed.
 func (p *Prepared[P, R]) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error) {
 	var o implSession.CompiledOptions
@@ -141,7 +171,11 @@ func (p *Prepared[P, R]) Run(ctx context.Context, value P, options ...exec.Compi
 // Page.State, not the page. The page holds one of the statement's pooled
 // queries until it is closed, as Run's rows do. RunPage is safe for concurrent
 // use; each Page is not. At most one exec.CompiledOptions may be passed.
-func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int32, options ...exec.CompiledOptions) (*Page[R], error) {
+func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int, options ...exec.CompiledOptions) (*Page[R], error) {
+	size, err := pageSize32(pageSize)
+	if err != nil {
+		return nil, err
+	}
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -150,31 +184,19 @@ func (p *Prepared[P, R]) RunPage(ctx context.Context, value P, state cql.PageSta
 	default:
 		return nil, tooManyOptions()
 	}
-	page, err := p.internal().RunPage(ctx, value, cql.PageState(state), pageSize, o)
+	page, err := p.internal().RunPage(ctx, value, cql.PageState(state), size, o)
 	return (*Page[R])(page), err
 }
 
 // Worker creates a reusable execution of the statement, owned by one
 // goroutine, with fixed options. It also provides cursors and explicit
-// paging. Close it when the goroutine is done with it. At most one
-// exec.CompiledOptions may be passed; omitting it, or passing the zero
-// value, uses the defaults of a view made by With, or else the session
-// defaults. Options with a Timestamp, passed or taken from the view's
-// defaults, are rejected with a cql.ValidationError, since every write of the
-// worker would carry it.
-func (p *Prepared[P, R]) Worker(options ...exec.CompiledOptions) (*Worker[P, R], error) {
-	var c implSession.CompiledOptions
-	switch len(options) {
-	case 0:
-	case 1:
-		c = implSession.CompiledOptions(options[0])
-	default:
-		return nil, tooManyWorkerOptions(false)
-	}
-	if c == (implSession.CompiledOptions{}) {
-		c = p.internal().Defaults()
-	}
-	o := c.Values()
+// paging. Close it when the goroutine is done with it. Its options are the
+// defaults of a view made by With, or else the session defaults: write
+// p.With(options).Worker() for a worker with options of its own. Defaults
+// with a Timestamp are rejected with a cql.ValidationError, since every
+// write of the worker would carry it.
+func (p *Prepared[P, R]) Worker() (*Worker[P, R], error) {
+	o := p.internal().Defaults().Values()
 	if o.Timestamp.Set {
 		return nil, fixedWorkerTimestamp()
 	}
@@ -204,12 +226,24 @@ func (p *Prepared[P, R]) Routing(value P, options ...exec.CompiledOptions) (rout
 	return p.internal().Routing(value, o)
 }
 
-// With returns a view of p whose calls passed no options use defaults
-// instead of the session defaults: Exec, One, Each, All, Run, RunPage and
-// Routing, and Worker. A
-// zero exec.CompiledOptions passed to a call counts as none. Options passed
-// to a call replace defaults whole, as they replace the session defaults,
-// rather than adding to them field by field.
+// With returns a view of p whose calls use defaults in place of the session
+// defaults: Exec, One, Each, All, Run, RunPage and Routing, and Worker.
+// Options passed to a call are laid over defaults field by field, as defaults
+// are laid over the session's profile: each field the call's options set
+// wins, and the fields they leave unset keep the view's. A view that
+// speculates and a call that adds exec.Options.CQLTrace thus run with both.
+// The order, lowest first, is the session's default profile, the profile an
+// exec.Options.Profile names (the call's, or else the view's), the view's
+// other fields, then the call's. exec.Options describes when each field is
+// set. A zero exec.CompiledOptions passed to a call counts as none.
+//
+// Laying options over a view's defaults compiles the combination once and
+// keeps it on the call's exec.CompiledOptions for the view it was last
+// passed to, so a call that passes the same options to the same view again
+// allocates nothing; alternating one exec.CompiledOptions between views
+// compiles again at each switch. A combination that is not valid, such as an
+// unpaged view and a call that sets Prefetch, fails the call with a
+// cql.ValidationError before anything is sent.
 //
 // The view shares p's preparation and its pool of queries: making one costs
 // one small allocation, and neither the view nor p needs closing. With on a
