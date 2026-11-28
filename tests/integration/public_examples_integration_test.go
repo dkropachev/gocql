@@ -131,7 +131,6 @@ func (p *testConviction) AddFailure(e endpoint.ConvictionEvent) bool {
 	if !errors.Is(e.Err, p.cause) {
 		panic("conviction lost original failure")
 	}
-	host.Tokens = append([]int64(nil), host.Tokens...)
 	p.hosts = append(p.hosts, host)
 	return p.verdict
 }

@@ -1769,7 +1769,7 @@ var CDCTokenPartitioner TokenPartitioner
 type Cluster struct {
     Keyspaces map[string]*metadata.Keyspace
     Tables []Table // added without columns; Keyspaces is not modified
-    TokenRanges map[string][]metadata.TokenRange
+    TokenRanges map[string][]metadata.TokenRange // of each replica, Host.HostID and ShardID are read
     Tablets map[Table][]metadata.TokenRange
     LocalDatacenter, LocalRack string
     Hosts []metadata.HostSnapshot
@@ -1931,17 +1931,23 @@ type Event struct {
     HostIDs []cql.UUID      // ClientRoute
     Incomplete bool         // Schema: the refresh failed; a ChangePublicationResync follows once a retry publishes
 }
+func (e Event) String() string // "schema UPDATED TABLE app.events gen=42"
+// A server DOWN status event makes the session mark the host down: a Pool
+// event with ChangePoolDown precedes the Status event. KindPool also reports
+// hosts the session marks down or up from their connections.
 func (s *Subscription) Events() <-chan Event
 func (s *Subscription) Close()
 
 // package metadata
 type Snapshot struct { /* immutable */ }
-func (m *Snapshot) Hosts() []HostSnapshot
+func (m *Snapshot) Hosts() []HostSnapshot // sorted by HostID text
 func (m *Snapshot) Host(cql.UUID) (HostSnapshot, bool)
-func (m *Snapshot) HostInfo(cql.UUID) (HostSnapshot, bool) // without Tokens
-func (m *Snapshot) Keyspaces() []string // sorted names
-func (m *Snapshot) Tables(keyspace string) []string // sorted names, no views
+func (m *Snapshot) HostTokens(cql.UUID) ([]int64, bool) // sorted vnode tokens
+func (m *Snapshot) KeyspaceNames() []string // sorted names
+func (m *Snapshot) TableNames(keyspace string) []string // sorted names, no views
 func (m *Snapshot) Keyspace(string) (*Keyspace, bool)
+func (m *Snapshot) Replication(keyspace string) (Replication, bool) // without the schema
+func (m *Snapshot) Index(keyspace, name string) (*Index, bool)
 func (m *Snapshot) Table(keyspace, name string) (*Table, bool)
 func (m *Snapshot) View(keyspace, name string) (*View, bool)
 func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
@@ -1949,15 +1955,20 @@ func (m *Snapshot) Type(keyspace, name string) (*Type, bool)
 // a vnode keyspace's ring places a table not loaded, a vnode replica's shard
 // is filled in when the host's sharding is known, and a tablet token no known
 // tablet covers is ErrPlacementUnknown.
-func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error)
-func (m *Snapshot) PartitionReplicas(keyspace, table string, key ...cql.Value) ([]HostSnapshot, error) // Token, then Replicas
+func (m *Snapshot) Replicas(keyspace, table string, token int64) ([]Replica, error)
+func (m *Snapshot) PartitionReplicas(keyspace, table string, key ...cql.Value) ([]Replica, error) // Token, then Replicas
 func (m *Snapshot) TokenRanges(keyspace, table string) (ranges []TokenRange, complete bool, err error) // complete: the ranges cover the ring
 func (m *Snapshot) Token(keyspace, table string, key ...cql.Value) (int64, error)
 var ErrPlacementUnknown error
 func Name(cqlIdent string) string // a CQL identifier's internal name, as lookups take it
 func (m *Snapshot) Diagnostics() []error
 func (m *Snapshot) Generation() uint64
-type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool }
+type Replica struct { Host HostSnapshot; ShardID cql.Option[uint32] } // placement
+func (r Replica) Target() Target
+type Target struct { HostID cql.UUID; ShardID cql.Option[uint32]; AnyShardFallback bool } // pinning
+type Replication struct { Options map[string]string; Class string; TabletBased bool }
+func (r Replication) Factor(dc string) (int, bool) // NTS, Simple (any dc), Local; not Everywhere
+func (ks *Keyspace) ReplicationFactor(dc string) (int, bool)
 type Route struct { /* unexported host route and shard */ }
 func (r Route) HostID() cql.UUID
 func (r Route) Target() Target
@@ -1969,7 +1980,10 @@ func (r Route) ShardOf(token int64) cql.Option[uint32]
 func (r Route) WithShardID(shard cql.Option[uint32]) Route
 // Schema types: Keyspace, Table, TableOptions, Column, ColumnKind
 // (ColumnKindPartitionKey, ...), ColumnOrder (ASC, DESC), Index, IndexKind,
-// View, Type, Function, Aggregate.
+// IndexTargetKind, View, Type, Function, Aggregate, ConsistencyMode
+// (ConsistencyGlobal). Index.Target is the indexed column and TargetKind
+// what of it (column, keys, values, entries, full); Index.BackingView is
+// ScyllaDB's view that stores the index, which Keyspace.Views does not list.
 // Keyspace.Functions and Aggregates are keyed by signature, "name(int,text)";
 // Keyspace.Function(name, args...), FunctionsNamed(name), Aggregate and
 // AggregatesNamed look them up. Aggregate.FinalFunc and StateFunc are
@@ -2004,13 +2018,12 @@ type Host struct {
 type HostSnapshot struct {
     Address netip.AddrPort
     Datacenter, Rack string
-    Tokens []int64
     Shards uint32
     ShardingIgnoreMSB uint8
     HostID cql.UUID
     Enabled, Connected, Up bool
 }
-type TokenRange struct { Start, End int64; Replicas []Target }
+type TokenRange struct { Start, End int64; Replicas []Replica }
 ```
 
 ConfigBuilder.WithMetadataMode selects how much schema a session loads

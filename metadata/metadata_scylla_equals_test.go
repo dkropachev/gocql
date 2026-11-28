@@ -53,6 +53,19 @@ func differentValue(v reflect.Value) (reflect.Value, bool) {
 		}
 		changed.Index(0).Set(first)
 		return changed, true
+	case reflect.Pointer:
+		// A pointer to a copy of the pointee with one field changed, or to a
+		// zero value when the pointer is nil.
+		if v.IsNil() {
+			return reflect.New(v.Type().Elem()), true
+		}
+		changed, ok := differentValue(v.Elem())
+		if !ok {
+			return reflect.Value{}, false
+		}
+		p := reflect.New(v.Type().Elem())
+		p.Elem().Set(changed)
+		return p, true
 	case reflect.Map:
 		if v.Type().Key().Kind() != reflect.String {
 			return reflect.Value{}, false

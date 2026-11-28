@@ -175,7 +175,7 @@ func pickTypedPoolLocked(s *Core, pool *implPool.InternalHostConnPool, target me
 	if !shard.Set && routing.Token.Set && routing.Keyspace != "" && routing.Table != "" {
 		if targets, err := s.Metadata().Replicas(routing.Keyspace, routing.Table, routing.Token.Value); err == nil {
 			for _, candidate := range targets {
-				if candidate.HostID == implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) && candidate.ShardID.Set {
+				if candidate.Host.HostID == implEndpoint.InternalHostInfoHostUUID(pool.InternalHost) && candidate.ShardID.Set {
 					shard = candidate.ShardID
 					break
 				}

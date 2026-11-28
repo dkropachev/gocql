@@ -9,6 +9,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/link"
 	"github.com/scylladb/gocql/v2/internal/model"
+	"github.com/scylladb/gocql/v2/metadata"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 
 	"context"
@@ -452,7 +453,7 @@ func (p *InternalRoutingPolicy) leader(info routing2.Info, m *MetadataSnapshot, 
 	if o.NoLeaderAware || o.NoTokenAware || !info.Token.Set || info.Consistency == cql.One || info.Consistency == cql.LocalOne {
 		return cql.Option[Target]{}
 	}
-	if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks == nil || ks.ConsistencyMode != "global" {
+	if ks := SnapshotData(m).InternalKeyspaces[info.Keyspace]; ks == nil || ks.ConsistencyMode != metadata.ConsistencyGlobal {
 		return cql.Option[Target]{}
 	}
 	_, r := m.lookupReplicas(lookup, info.Keyspace, info.Table, info.Token.Value)

@@ -75,7 +75,7 @@ when the server reports it, is a documented no-op on the other dialect.
 | Shard awareness: `config.PerShard` `Connections`, `MaxExcess` | ScyllaV4 | Apply per node: a Cassandra node counts as one shard | Pool |
 | Shard-aware port: `config.PerShard.ShardAwarePort` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
 | `config.PerShard.SourcePorts` | ScyllaV4 | `ConfigBuilder.Build` fails | `applyPool` (`config/pool.go`) |
-| Tablet routing, `routing.Options.NoLeaderAware`, `metadata.Keyspace.TabletBased`, `InitialTablets` and `ConsistencyMode` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
+| Tablet routing, `routing.Options.NoLeaderAware`, `metadata.Keyspace.TabletBased`, `InitialTablets` and `ConsistencyMode` (`metadata.ConsistencyGlobal`) | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
 | LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
 | `routing.CDCTokenPartitioner`, `config.ConfigBuilder.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
@@ -237,7 +237,7 @@ negotiation or metadata does not drop one.
 
 | Difference | Driver |
 |---|---|
-| Partitioner: ScyllaDB only Murmur3; Cassandra Murmur3 by default, `RandomPartitioner` or `ByteOrderedPartitioner` if configured | Tokens are `int64` (`metadata.HostSnapshot.Tokens`, `routing.TokenPartitioner`); a host token that does not parse fails opening the session (`internal/endpoint/snapshot.go`, `TestRandomPartitionerClusterIsRejected`) |
+| Partitioner: ScyllaDB only Murmur3; Cassandra Murmur3 by default, `RandomPartitioner` or `ByteOrderedPartitioner` if configured | Tokens are `int64` (`metadata.Snapshot.HostTokens`, `routing.TokenPartitioner`); a host token that does not parse fails opening the session (`internal/endpoint/snapshot.go`, `TestRandomPartitionerClusterIsRejected`) |
 | Highest protocol version: Cassandra v5, ScyllaDB v4 plus extensions | The dialect fixes the version (`CassandraV5`, `ScyllaV4`); nothing is negotiated |
 | Result metadata ID: v5 on Cassandra, v4 via `SCYLLA_USE_METADATA_ID` on ScyllaDB | `internal/transport/conn.go`, `internal/protocol/framer.go` |
 | Shard information in SUPPORTED (`SCYLLA_SHARD`, `SCYLLA_NR_SHARDS`, `SCYLLA_SHARD_AWARE_PORT` and others): ScyllaDB only | `internal/transport/supported.go` |

@@ -113,7 +113,7 @@ func TestPool(t *testing.T) {
 				if resets != 1 {
 					t.Fatal("public reset callback not usable")
 				}
-				t.Log("PUBLIC CONVICTION CALLBACK", verdict, hosts[0].HostID, hosts[0].Address, len(hosts[0].Tokens))
+				t.Log("PUBLIC CONVICTION CALLBACK", verdict, hosts[0].HostID, hosts[0].Address)
 			})
 		}
 	})

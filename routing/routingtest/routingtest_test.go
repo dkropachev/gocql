@@ -23,9 +23,9 @@ func host(id byte, dc, rack string) metadata.HostSnapshot {
 // whose replicas are 3, 1, 4, 2.
 func cluster() routingtest.Cluster {
 	hosts := []metadata.HostSnapshot{host(1, "a", "r1"), host(2, "a", "r2"), host(3, "b", "r1"), host(4, "b", "r2")}
-	var replicas []metadata.Target
+	var replicas []metadata.Replica
 	for _, i := range []int{2, 0, 3, 1} {
-		replicas = append(replicas, metadata.Target{HostID: hosts[i].HostID})
+		replicas = append(replicas, metadata.Replica{Host: hosts[i]})
 	}
 	return routingtest.Cluster{
 		Hosts:       hosts,
@@ -73,7 +73,7 @@ func TestNewSnapshot(t *testing.T) {
 		t.Fatalf("generation %d, %d hosts", m.Generation(), len(m.Hosts()))
 	}
 	replicas, err := m.Replicas("ks", "t", 42)
-	if err != nil || len(replicas) != 4 || replicas[0].HostID[15] != 3 {
+	if err != nil || len(replicas) != 4 || replicas[0].Host.HostID[15] != 3 || replicas[0].Host.Datacenter != "b" {
 		t.Fatalf("Replicas = %v, %v", replicas, err)
 	}
 	if routes := routing.ReplicaRoutes(m, info); len(routes) != 4 {
@@ -87,9 +87,9 @@ func TestNewSnapshot(t *testing.T) {
 	}
 
 	c := cluster()
-	c.Tablets = map[routingtest.Table][]metadata.TokenRange{{Keyspace: "ks", Name: "t"}: {{Start: 100, End: 200, Replicas: []metadata.Target{{HostID: c.Hosts[1].HostID}}}}}
+	c.Tablets = map[routingtest.Table][]metadata.TokenRange{{Keyspace: "ks", Name: "t"}: {{Start: 100, End: 200, Replicas: []metadata.Replica{{Host: c.Hosts[1]}}}}}
 	m = mustSnapshot(t, c)
-	if replicas, err := m.Replicas("ks", "t", 150); err != nil || len(replicas) != 1 || replicas[0].HostID[15] != 2 {
+	if replicas, err := m.Replicas("ks", "t", 150); err != nil || len(replicas) != 1 || replicas[0].Host.HostID[15] != 2 {
 		t.Fatalf("tablet Replicas = %v, %v", replicas, err)
 	}
 	if replicas, err := m.Replicas("ks", "t", 42); !errors.Is(err, metadata.ErrPlacementUnknown) || len(replicas) != 0 {
@@ -223,7 +223,7 @@ func TestVnodeReplicaShards(t *testing.T) {
 func TestReplicaRoutesWithoutTableSchema(t *testing.T) {
 	c := cluster()
 	c.Keyspaces = map[string]*metadata.Keyspace{"ks": {Name: "ks"}}
-	c.TokenRanges = map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{{HostID: c.Hosts[2].HostID}}}}}
+	c.TokenRanges = map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Replica{{Host: c.Hosts[2]}}}}}
 	m := mustSnapshot(t, c)
 	if routes := routing.ReplicaRoutes(m, info); len(routes) != 1 || routes[0].HostID()[15] != 3 {
 		t.Fatalf("ReplicaRoutes without table schema = %v", routes)
@@ -250,8 +250,8 @@ func TestRouteHelpers(t *testing.T) {
 	m := mustSnapshot(t, routingtest.Cluster{
 		Hosts:  hosts,
 		Tables: []routingtest.Table{{Keyspace: "ks", Name: "t"}},
-		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{
-			{HostID: hosts[1].HostID}, {HostID: hosts[0].HostID},
+		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Replica{
+			{Host: hosts[1]}, {Host: hosts[0]},
 		}}}},
 	})
 	if _, ok := m.Table("ks", "t"); !ok {
@@ -305,7 +305,7 @@ func TestNewSnapshotValidates(t *testing.T) {
 	for name, edit := range map[string]func(c *routingtest.Cluster){
 		"duplicate host": func(c *routingtest.Cluster) { c.Hosts = append(c.Hosts, c.Hosts[0]) },
 		"unknown replica": func(c *routingtest.Cluster) {
-			c.TokenRanges["ks"][0].Replicas = append(c.TokenRanges["ks"][0].Replicas, metadata.Target{HostID: cql.UUID{15: 9}})
+			c.TokenRanges["ks"][0].Replicas = append(c.TokenRanges["ks"][0].Replicas, metadata.Replica{Host: metadata.HostSnapshot{HostID: cql.UUID{15: 9}}})
 		},
 		"duplicate token": func(c *routingtest.Cluster) {
 			c.TokenRanges["ks"] = append(c.TokenRanges["ks"], c.TokenRanges["ks"][0])
@@ -413,9 +413,9 @@ func TestRouteEnabledAndRouteTo(t *testing.T) {
 	}
 }
 
-// TestSnapshotTopologyLookups checks Snapshot.Tables, HostInfo,
-// PartitionReplicas, the shards Replicas fills in and TokenRanges'
-// completeness.
+// TestSnapshotTopologyLookups checks Snapshot.TableNames, HostTokens,
+// PartitionReplicas, the hosts and shards Replicas fills in and TokenRanges'
+// replicas and completeness.
 func TestSnapshotTopologyLookups(t *testing.T) {
 	c := cluster()
 	c.Hosts[2].Shards = 4
@@ -423,18 +423,21 @@ func TestSnapshotTopologyLookups(t *testing.T) {
 	c.Keyspaces["ks"].Tables["t"] = &metadata.Table{Keyspace: "ks", Name: "t", Columns: map[string]*metadata.Column{"id": id}, PartitionKey: []*metadata.Column{id}}
 	c.Keyspaces["ks"].Tables["b"] = &metadata.Table{Keyspace: "ks", Name: "b"}
 	m := mustSnapshot(t, c)
-	if got := m.Tables("ks"); !slices.Equal(got, []string{"b", "t"}) {
-		t.Fatalf("Tables = %v", got)
+	if got := m.TableNames("ks"); !slices.Equal(got, []string{"b", "t"}) {
+		t.Fatalf("TableNames = %v", got)
 	}
-	if m.Tables("missing") != nil {
-		t.Fatal("Tables of a missing keyspace")
+	if m.TableNames("missing") != nil {
+		t.Fatal("TableNames of a missing keyspace")
 	}
-	if h, ok := m.HostInfo(c.Hosts[0].HostID); !ok || h.Tokens != nil || h.Datacenter != "a" {
-		t.Fatalf("HostInfo = %+v, %v", h, ok)
+	if tokens, ok := m.HostTokens(c.Hosts[0].HostID); !ok || tokens != nil {
+		t.Fatalf("HostTokens = %v, %v; want a held host without tokens", tokens, ok)
 	}
-	hosts, err := m.PartitionReplicas("ks", "t", cql.IntValue(1))
-	if err != nil || len(hosts) != 4 || hosts[0].HostID[15] != 3 {
-		t.Fatalf("PartitionReplicas = %v, %v", hosts, err)
+	if _, ok := m.HostTokens(cql.UUID{15: 9}); ok {
+		t.Fatal("HostTokens of a host the snapshot does not hold")
+	}
+	partition, err := m.PartitionReplicas("ks", "t", cql.IntValue(1))
+	if err != nil || len(partition) != 4 || partition[0].Host != c.Hosts[2] || !partition[0].ShardID.Set {
+		t.Fatalf("PartitionReplicas = %v, %v", partition, err)
 	}
 	token, _ := m.Token("ks", "t", cql.IntValue(1))
 	replicas, err := m.Replicas("ks", "t", token)
@@ -449,8 +452,8 @@ func TestSnapshotTopologyLookups(t *testing.T) {
 	if replicas, err := m.Replicas("ks", "unloaded", token); err != nil || len(replicas) != 4 {
 		t.Fatalf("Replicas of a table not loaded = %v, %v", replicas, err)
 	}
-	if _, complete, err := m.TokenRanges("ks", "t"); err != nil || !complete {
-		t.Fatalf("token ring complete %v, %v", complete, err)
+	if ranges, complete, err := m.TokenRanges("ks", "t"); err != nil || !complete || len(ranges) != 1 || ranges[0].Replicas[1].Host != c.Hosts[0] || ranges[0].Replicas[0].ShardID.Set {
+		t.Fatalf("token ring %v complete %v, %v", ranges, complete, err)
 	}
 	c.Tablets = map[routingtest.Table][]metadata.TokenRange{{Keyspace: "ks", Name: "t"}: {{Start: math.MinInt64, End: 0}}}
 	m = mustSnapshot(t, c)

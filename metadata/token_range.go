@@ -9,7 +9,7 @@ package metadata
 // The driver fills it; its zero value is empty.
 type TokenRange struct {
 	// Replicas lists the range's replicas, in placement order.
-	Replicas []Target
+	Replicas []Replica
 	// Start and End bound the range: it holds the tokens greater than Start
 	// and at most End.
 	Start, End int64

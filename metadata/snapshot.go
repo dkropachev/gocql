@@ -28,14 +28,16 @@ type snapshotSource interface {
 	Generation() uint64
 	Hosts() []HostSnapshot
 	Host(id cql.UUID) (HostSnapshot, bool)
-	HostInfo(id cql.UUID) (HostSnapshot, bool)
-	Keyspaces() []string
-	Tables(keyspace string) []string
+	HostTokens(id cql.UUID) ([]int64, bool)
+	KeyspaceNames() []string
+	TableNames(keyspace string) []string
 	Keyspace(name string) (*Keyspace, bool)
+	Replication(keyspace string) (Replication, bool)
+	Index(keyspace, name string) (*Index, bool)
 	Table(keyspace, name string) (*Table, bool)
 	View(keyspace, name string) (*View, bool)
 	Type(keyspace, name string) (*Type, bool)
-	Replicas(keyspace, table string, token int64) ([]Target, error)
+	Replicas(keyspace, table string, token int64) ([]Replica, error)
 	Token(keyspace, table string, key ...cql.Value) (int64, error)
 	TokenRanges(keyspace, table string) ([]TokenRange, bool, error)
 	Diagnostics() []error
@@ -62,8 +64,8 @@ func (s *Snapshot) Generation() uint64 {
 	return s.src.Generation()
 }
 
-// Hosts returns the hosts of the cluster the session knows of. Host looks
-// up one host without copying the others.
+// Hosts returns the hosts of the cluster the session knows of, sorted by the
+// text of their HostID. Host looks up one host without copying the others.
 func (s *Snapshot) Hosts() []HostSnapshot {
 	if s.empty() {
 		return nil
@@ -79,42 +81,56 @@ func (s *Snapshot) Host(id cql.UUID) (HostSnapshot, bool) {
 	return s.src.Host(id)
 }
 
-// HostInfo returns the host with id, as Host does, but without its Tokens,
-// which Host copies: a host has 256 vnode tokens by default, and a caller
-// that wants only its address, location or state need not copy them.
-func (s *Snapshot) HostInfo(id cql.UUID) (HostSnapshot, bool) {
+// HostTokens returns the vnode tokens of the host with id, sorted, and
+// reports whether the snapshot holds the host. A host the snapshot holds may
+// have no tokens: a zero-token node, or one whose tokens the session has not
+// read yet. Tokens are int64, as the Murmur3 partitioner makes them: the
+// driver does not open sessions to clusters whose partitioner has wider
+// tokens (RandomPartitioner, ByteOrderedPartitioner).
+func (s *Snapshot) HostTokens(id cql.UUID) ([]int64, bool) {
 	if s.empty() {
-		return HostSnapshot{}, false
+		return nil, false
 	}
-	return s.src.HostInfo(id)
+	return s.src.HostTokens(id)
 }
 
-// Keyspaces returns the names of the keyspaces whose schema the snapshot
+// KeyspaceNames returns the names of the keyspaces whose schema the snapshot
 // holds, sorted. Which keyspaces those are depends on Mode.
-func (s *Snapshot) Keyspaces() []string {
+func (s *Snapshot) KeyspaceNames() []string {
 	if s.empty() {
 		return nil
 	}
-	return s.src.Keyspaces()
+	return s.src.KeyspaceNames()
 }
 
-// Tables returns the names of the tables of keyspace that the snapshot
+// TableNames returns the names of the tables of keyspace that the snapshot
 // holds, sorted, without copying their schema. It lists no materialized
 // views, and returns nil for a keyspace the snapshot does not hold.
-func (s *Snapshot) Tables(keyspace string) []string {
+func (s *Snapshot) TableNames(keyspace string) []string {
 	if s.empty() {
 		return nil
 	}
-	return s.src.Tables(keyspace)
+	return s.src.TableNames(keyspace)
 }
 
 // Keyspace returns the schema of the named keyspace, as far as Mode loads it.
-// It copies the whole keyspace; Table copies one table.
+// It copies the whole keyspace; Table copies one table, and Replication only
+// the keyspace's replication.
 func (s *Snapshot) Keyspace(name string) (*Keyspace, bool) {
 	if s.empty() {
 		return nil, false
 	}
 	return s.src.Keyspace(name)
+}
+
+// Replication returns the replication of keyspace, without copying the
+// schema in it, and reports whether the snapshot holds the keyspace, which it
+// does under ModeKeyspaces and ModeFull.
+func (s *Snapshot) Replication(keyspace string) (Replication, bool) {
+	if s.empty() {
+		return Replication{}, false
+	}
+	return s.src.Replication(keyspace)
 }
 
 // Table returns the schema of keyspace.name, a table (not a materialized
@@ -144,11 +160,22 @@ func (s *Snapshot) Type(keyspace, name string) (*Type, bool) {
 	return s.src.Type(keyspace, name)
 }
 
-// Replicas returns the replicas of token in keyspace.table, from the
-// snapshot's own token ring or, for a tablet table, its own tablets, as
-// routing.ReplicaRoutes finds them. A tablet replica's ShardID is its
-// tablet's, and a vnode replica's the shard that owns token on the host when
-// HostSnapshot.Shards is known.
+// Index returns the secondary index keyspace.name, as far as Mode loads it,
+// without copying the rest of the keyspace. Index.Table names the table it
+// indexes; Keyspace.Indexes holds every index of a keyspace.
+func (s *Snapshot) Index(keyspace, name string) (*Index, bool) {
+	if s.empty() {
+		return nil, false
+	}
+	return s.src.Index(keyspace, name)
+}
+
+// Replicas returns the replicas of token in keyspace.table, in placement
+// order, from the snapshot's own token ring or, for a tablet table, its own
+// tablets, as routing.ReplicaRoutes finds them. A tablet replica's ShardID
+// is its tablet's, and a vnode replica's the shard that owns token on the
+// host when HostSnapshot.Shards is known. Replica.Target pins a request to a
+// replica.
 //
 // A keyspace the snapshot does not hold, because it does not exist or is not
 // loaded, is a cql.ValidationError that wraps cqlerr.ErrNoKeyspace. A table
@@ -157,33 +184,22 @@ func (s *Snapshot) Type(keyspace, name string) (*Type, bool) {
 // own placement: there it is a cql.ValidationError that wraps
 // cqlerr.ErrNoTable. A token of a tablet table that no tablet the snapshot
 // holds covers is an error that wraps ErrPlacementUnknown.
-func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
+func (s *Snapshot) Replicas(keyspace, table string, token int64) ([]Replica, error) {
 	if s.empty() {
 		return nil, errNoSnapshot
 	}
 	return s.src.Replicas(keyspace, table, token)
 }
 
-// PartitionReplicas returns the hosts of the replicas of the partition whose
+// PartitionReplicas returns the replicas of the partition whose
 // partition-key columns hold key, in column order, in keyspace.table: Token
-// and then Replicas, with each replica's host as HostInfo returns it. It fails
-// as Token and Replicas do.
-func (s *Snapshot) PartitionReplicas(keyspace, table string, key ...cql.Value) ([]HostSnapshot, error) {
+// and then Replicas. It fails as Token and Replicas do.
+func (s *Snapshot) PartitionReplicas(keyspace, table string, key ...cql.Value) ([]Replica, error) {
 	token, err := s.Token(keyspace, table, key...)
 	if err != nil {
 		return nil, err
 	}
-	targets, err := s.Replicas(keyspace, table, token)
-	if err != nil {
-		return nil, err
-	}
-	hosts := make([]HostSnapshot, 0, len(targets))
-	for _, t := range targets {
-		if h, ok := s.src.HostInfo(t.HostID); ok {
-			hosts = append(hosts, h)
-		}
-	}
-	return hosts, nil
+	return s.Replicas(keyspace, table, token)
 }
 
 // Token returns the token of the partition whose partition-key columns hold

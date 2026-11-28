@@ -198,7 +198,7 @@ tries the leader first, ahead of nearer replicas:
   server's tablet differs, the response reports the tablet's range, replicas
   and shards, leader first, and its version, which later plans use. A
   response with no report means the driver's tablet is current.
-- `metadata.Keyspace.ConsistencyMode` is `"global"` for such a keyspace; it is
+- `metadata.Keyspace.ConsistencyMode` is `metadata.ConsistencyGlobal` for such a keyspace; it is
   read from `system_schema.scylla_keyspaces` on every schema refresh when the
   session's connections negotiate V2.
 - The leader comes first for every request, write, read or conditional
@@ -224,11 +224,12 @@ Each stage of a request has its own answer:
 - **Before any statement**: `session.Metadata()` returns a `metadata.Snapshot`.
   `Snapshot.Token(keyspace, table, key...)` computes a partition's token from
   its partition-key values, `Snapshot.Replicas(keyspace, table, token)` lists
-  its replicas as host and shard targets, the same ones `routing.ReplicaRoutes`
-  routes to, and `Snapshot.PartitionReplicas(keyspace, table, key...)` does
-  both and returns the hosts. A token of a tablet table whose tablet the
+  its replicas, each a `metadata.Replica` with its host and shard, the same
+  ones `routing.ReplicaRoutes` routes to, and
+  `Snapshot.PartitionReplicas(keyspace, table, key...)` does both.
+  `Replica.Target()` pins a request to one of them. A token of a tablet table whose tablet the
   session has not learned yet is `metadata.ErrPlacementUnknown`.
-  `Snapshot.TokenRanges` and `Snapshot.Hosts` describe the ring;
+  `Snapshot.TokenRanges`, `Snapshot.Hosts` and `Snapshot.HostTokens` describe the ring;
   `TokenRanges` also reports whether its ranges are complete, which a tablet
   table's are only once every tablet is known. Lookups take internal names:
   `metadata.Name` converts a CQL identifier such as `"MyTable"`.

@@ -42,7 +42,8 @@ type Cluster struct {
 	Tables []Table
 	// TokenRanges holds the token ranges of each keyspace with their
 	// replicas, as a token ring places them. The last range wraps around to
-	// the first.
+	// the first. Of each replica, only Host.HostID and ShardID are read: a
+	// snapshot's replicas carry the host as Hosts lists it.
 	TokenRanges map[string][]metadata.TokenRange
 	// Tablets holds the tablets of each tablet table with their replicas. A
 	// table listed here is placed by its tablets alone: a token outside them
@@ -67,9 +68,9 @@ type Table struct {
 }
 
 // NewSnapshot returns a snapshot of c. Its keyspaces' tables use the
-// Murmur3 partitioner unless their options name the CDC one. The snapshot
-// shares c's keyspaces and its hosts' tokens, which the caller must not
-// modify afterwards.
+// Murmur3 partitioner unless their options name the CDC one, and its hosts
+// have no tokens. The snapshot shares c's keyspaces, which the caller must
+// not modify afterwards.
 //
 // It fails with a cql.ValidationError when c is not a cluster a session
 // could see: two hosts with one HostID, a replica whose HostID no host has,
@@ -88,8 +89,8 @@ func NewSnapshot(c Cluster) (*metadata.Snapshot, error) {
 		InternalHosts:        hosts,
 		InternalHostIndex:    index,
 		InternalKeyspaces:    maps.Clone(c.Keyspaces),
-		InternalRanges:       make(map[string][]metadata.TokenRange, len(c.TokenRanges)),
-		InternalTablets:      make(map[implRouting.InternalMetadataTable][]metadata.TokenRange, len(c.Tablets)),
+		InternalRanges:       make(map[string][]implRouting.Span, len(c.TokenRanges)),
+		InternalTablets:      make(map[implRouting.InternalMetadataTable][]implRouting.Span, len(c.Tablets)),
 		InternalPartitioner:  murmur3,
 		InternalPartitioners: partitioners,
 	}
@@ -115,10 +116,10 @@ func NewSnapshot(c Cluster) (*metadata.Snapshot, error) {
 		state.InternalKeyspaces[t.Keyspace] = ks
 	}
 	for ks, r := range c.TokenRanges {
-		state.InternalRanges[ks] = sorted(r)
+		state.InternalRanges[ks] = spans(r)
 	}
 	for t, r := range c.Tablets {
-		state.InternalTablets[implRouting.InternalMetadataTable{InternalKeyspace: t.Keyspace, InternalTable: t.Name}] = sorted(r)
+		state.InternalTablets[implRouting.InternalMetadataTable{InternalKeyspace: t.Keyspace, InternalTable: t.Name}] = spans(r)
 	}
 	return implRouting.NewMetadataSnapshot(state).Public(), nil
 }
@@ -137,8 +138,8 @@ func (c *Cluster) validate() error {
 	}
 	replicas := func(where string, r metadata.TokenRange) error {
 		for _, t := range r.Replicas {
-			if !hosts[t.HostID] {
-				return invalid("%s range (%d, %d]: replica %s is not a host of the cluster", where, r.Start, r.End, t.HostID)
+			if !hosts[t.Host.HostID] {
+				return invalid("%s range (%d, %d]: replica %s is not a host of the cluster", where, r.Start, r.End, t.Host.HostID)
 			}
 		}
 		return nil
@@ -207,12 +208,22 @@ var partitioners = map[string]routing.TokenPartitioner{
 	"CDCPartitioner":                  routing.CDCTokenPartitioner,
 }
 
-// sorted returns a copy of ranges in token order, with copied replicas.
+// sorted returns a copy of ranges in token order.
 func sorted(ranges []metadata.TokenRange) []metadata.TokenRange {
 	out := slices.Clone(ranges)
-	for i := range out {
-		out[i].Replicas = slices.Clone(out[i].Replicas)
-	}
 	slices.SortFunc(out, func(a, b metadata.TokenRange) int { return cmp.Compare(a.End, b.End) })
+	return out
+}
+
+// spans returns ranges in token order as a snapshot stores them.
+func spans(ranges []metadata.TokenRange) []implRouting.Span {
+	out := make([]implRouting.Span, 0, len(ranges))
+	for _, r := range sorted(ranges) {
+		span := implRouting.Span{Start: r.Start, End: r.End, Replicas: make([]metadata.Target, len(r.Replicas))}
+		for i, replica := range r.Replicas {
+			span.Replicas[i] = replica.Target()
+		}
+		out = append(out, span)
+	}
 	return out
 }

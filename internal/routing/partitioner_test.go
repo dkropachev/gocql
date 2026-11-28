@@ -143,7 +143,7 @@ func TestPartitioners(t *testing.T) {
 		// own, and host 1 also those after 100, wrapping around.
 		m := implRouting.NewMetadataSnapshot(implRouting.SnapshotState{
 			InternalKeyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata.Table{"t": {Name: "t"}}}},
-			InternalRanges: map[string][]metadata.TokenRange{"ks": {
+			InternalRanges: map[string][]implRouting.Span{"ks": {
 				{Start: 100, End: -100, Replicas: []metadata.Target{{HostID: cql.UUID{15: 1}}}},
 				{Start: -100, End: 0, Replicas: []metadata.Target{{HostID: cql.UUID{15: 2}}}},
 				{Start: 0, End: 100, Replicas: []metadata.Target{{HostID: cql.UUID{15: 3}}}},
@@ -151,7 +151,7 @@ func TestPartitioners(t *testing.T) {
 		})
 		for token, host := range map[int64]byte{math.MinInt64: 1, -101: 1, -100: 1, -99: 2, 0: 2, 1: 3, 100: 3, 101: 1, math.MaxInt64: 1} {
 			replicas, err := m.Replicas("ks", "t", token)
-			if err != nil || len(replicas) != 1 || replicas[0].HostID[15] != host {
+			if err != nil || len(replicas) != 1 || replicas[0].Host.HostID[15] != host {
 				t.Fatalf("token %d: replicas %v, %v; want host %d", token, replicas, err, host)
 			}
 		}

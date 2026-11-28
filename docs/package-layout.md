@@ -235,7 +235,8 @@ documented methods.
 
 - **Contains:** schema structs (`Keyspace`, `Table`, `Column`, `View`,
   `Index`, `Type`, `Function`, `Aggregate`), `Mode`, the cluster placement
-  types (`HostSnapshot`, `Target`, `TokenRange`, `Route`), and the
+  types (`HostSnapshot`, `Replica`, `Replication`, `Target`, `TokenRange`,
+  `Route`), and the
   `Snapshot` handle with its read methods. The placement types live here,
   not in `routing`, because `Snapshot` returns them and `routing` imports
   `metadata`. `Keyspace.ToCQL` is pure logic and stays.

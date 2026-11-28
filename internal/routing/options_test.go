@@ -58,8 +58,8 @@ func optionsSnapshot(t *testing.T, change func(hosts []metadata.HostSnapshot)) *
 		InternalHosts:     hosts,
 		InternalHostIndex: implRouting.InternalBuildRoutingHostIndex(hosts),
 		InternalKeyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata.Table{"t": {Name: "t"}, "tt": {Name: "tt"}}}},
-		InternalRanges:    map[string][]metadata.TokenRange{"ks": {{Start: 0, End: 0, Replicas: []metadata.Target{{HostID: cql.UUID{15: 3}}, {HostID: cql.UUID{15: 2}}, {HostID: cql.UUID{15: 1}}}}}},
-		InternalTablets:   map[implRouting.InternalMetadataTable][]metadata.TokenRange{},
+		InternalRanges:    map[string][]implRouting.Span{"ks": {{Start: 0, End: 0, Replicas: []metadata.Target{{HostID: cql.UUID{15: 3}}, {HostID: cql.UUID{15: 2}}, {HostID: cql.UUID{15: 1}}}}}},
+		InternalTablets:   map[implRouting.InternalMetadataTable][]implRouting.Span{},
 	}
 	state.InternalPlacements = state.InternalPlacements.Put(tabletTable, implRouting.InternalIndexTabletPlacement(implRouting.InternalTabletPlacement{InternalRanges: ranges}))
 	return implRouting.NewMetadataSnapshot(state)
@@ -397,7 +397,7 @@ func TestTabletMigration(t *testing.T) {
 					}
 					continue
 				}
-				if len(replicas) != 1 || replicas[0] != optionsTarget(byte(want[0]), uint32(want[1])) {
+				if len(replicas) != 1 || replicas[0].Target() != optionsTarget(byte(want[0]), uint32(want[1])) {
 					t.Fatalf("token %d: replicas %v, want host %d shard %d", token, replicas, want[0], want[1])
 				}
 				if routes := planRoutes(policy, info, next); len(routes) == 0 || routes[0] != want {

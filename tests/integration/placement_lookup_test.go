@@ -98,7 +98,7 @@ func TestPlacementLookups(t *testing.T) {
 		// faster than the session publishes them, which makes it forget
 		// every tablet it knows.
 		core := (*implSession.Session)(session).Core()
-		host := tablets.HostUUID(want[0].HostID)
+		host := tablets.HostUUID(want[0].Host.HostID)
 		info := routing.Info{Keyspace: keyspace, Table: table}
 		before := core.Peripheral().InternalPlacementEpoch.Load()
 		for i := range int64(1100) {

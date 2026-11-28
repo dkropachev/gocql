@@ -35,7 +35,7 @@ func compactFixture(n int) (*MetadataSnapshot, routing.Info) {
 	m := NewMetadataSnapshot(SnapshotState{
 		InternalHosts: hosts, InternalHostIndex: InternalBuildRoutingHostIndex(hosts),
 		InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": {Tables: map[string]*metadata2.Table{"table": {Name: "table"}}}},
-		InternalRanges:    map[string][]metadata2.TokenRange{"ks": {{Replicas: replicas}}},
+		InternalRanges:    map[string][]Span{"ks": {{Replicas: replicas}}},
 	})
 	return m, routing.Info{Keyspace: "ks", Table: "table", Token: cql.Option[int64]{Set: true}, Consistency: cql.Quorum, Kind: cql.OrdinaryStatement}
 }
@@ -154,7 +154,7 @@ func TestCompactPermutation(t *testing.T) {
 								}
 								SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = "global"
 								var root *InternalTabletRangeTree
-								root = root.Put(1, &InternalTabletRange{InternalSpan: metadata2.TokenRange{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cql.Option[uint64]{Set: true}})
+								root = root.Put(1, &InternalTabletRange{InternalSpan: Span{Start: -1, End: 1, Replicas: replicas}, InternalVersion: cql.Option[uint64]{Set: true}})
 								var placements *tabletPlacementTree
 								SnapshotData(m).InternalPlacements = placements.Put(InternalMetadataTable{InternalKeyspace: "ks", InternalTable: "table"}, InternalTabletPlacement{InternalRanges: root})
 								policy := &InternalRoutingPolicy{InternalOptions: routing.Options{NoLeaderAware: !leader, Datacenter: "local", Rack: "rack", AllowRemote: remote, FixedReplicaOrder: true}}

@@ -24,7 +24,7 @@ func vnodeCacheSnapshot(hosts ...byte) *MetadataSnapshot {
 	}
 	return NewMetadataSnapshot(SnapshotState{
 		InternalKeyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", Tables: map[string]*metadata.Table{"t": {Name: "t"}}}},
-		InternalRanges:    map[string][]metadata.TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: replicas}}},
+		InternalRanges:    map[string][]Span{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: replicas}}},
 	})
 }
 
@@ -54,7 +54,7 @@ func TestRoutingCacheReusesRanges(t *testing.T) {
 	}
 	// Snapshots are never changed once published; changing this one's ranges
 	// shows whether the second request looked them up again.
-	SnapshotData(m).InternalRanges = map[string][]metadata.TokenRange{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: []Target{{HostID: cql.UUID{15: 9}}}}}}
+	SnapshotData(m).InternalRanges = map[string][]Span{"ks": {{Start: math.MinInt64, End: math.MaxInt64, Replicas: []Target{{HostID: cql.UUID{15: 9}}}}}}
 	if got := replicaHosts(cachedReplicas(m, &c)); string(got) != "\x01\x02\x03" {
 		t.Fatalf("second route on the same snapshot looked the ranges up again: replicas %v", got)
 	}
@@ -123,7 +123,7 @@ func TestRoutingCacheStalePlacementSignal(t *testing.T) {
 func TestRoutingCacheTabletRanges(t *testing.T) {
 	var c InternalPlacementCache
 	m := vnodeCacheSnapshot(1, 2, 3)
-	SnapshotData(m).InternalTablets = map[InternalMetadataTable][]metadata.TokenRange{
+	SnapshotData(m).InternalTablets = map[InternalMetadataTable][]Span{
 		{InternalKeyspace: "ks", InternalTable: "t"}: {{Start: 0, End: 100, Replicas: []Target{{HostID: cql.UUID{15: 4}}}}},
 	}
 	for range 2 {

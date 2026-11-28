@@ -93,6 +93,15 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 	return observation
 }
 
+// replicaTargets returns the targets of replicas.
+func replicaTargets(replicas []metadata.Replica) []metadata.Target {
+	out := make([]metadata.Target, len(replicas))
+	for i, r := range replicas {
+		out[i] = r.Target()
+	}
+	return out
+}
+
 // Placement is a set of distinct host/shard destinations. Duplicate entries
 // cannot satisfy an exact authoritative-set assertion in either direction.
 func sameReplicaSet(a, b []metadata.Target) bool {

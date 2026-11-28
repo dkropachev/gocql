@@ -275,7 +275,7 @@ func (s *Core) tryPublishV2Metadata() bool {
 		diagnostics = append(diagnostics, p.routeDiagnostic)
 	}
 	p.InternalMu.Unlock()
-	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*metadata.Keyspace), InternalRanges: make(map[string][]metadata.TokenRange), InternalTablets: make(map[routing.InternalMetadataTable][]metadata.TokenRange)})
+	m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 1, InternalKeyspaces: make(map[string]*metadata.Keyspace), InternalRanges: make(map[string][]routing.Span), InternalTablets: make(map[routing.InternalMetadataTable][]routing.Span)})
 	routing.SnapshotData(m).InternalDiagnostics = diagnostics
 	routing.SnapshotData(m).InternalPartitioners = config.Partitioners
 	if old != nil {
@@ -300,12 +300,19 @@ func (s *Core) tryPublishV2Metadata() bool {
 	replicaHosts := make([]*implEndpoint.HostInfo, 0, len(hosts))
 	validTokens := true
 	for _, h := range hosts {
-		snapshot, err := snapshotV2Host(s, h)
+		snapshot, tokens, err := snapshotV2HostTokens(s, h)
 		if err != nil {
 			routing.SnapshotData(m).InternalDiagnostics = append(routing.SnapshotData(m).InternalDiagnostics, err)
 			validTokens = false
 		}
 		routing.SnapshotData(m).InternalHosts = append(routing.SnapshotData(m).InternalHosts, snapshot)
+		if len(tokens) > 0 {
+			if routing.SnapshotData(m).InternalHostTokens == nil {
+				routing.SnapshotData(m).InternalHostTokens = make(map[cql.UUID][]int64, len(hosts))
+			}
+			slices.Sort(tokens)
+			routing.SnapshotData(m).InternalHostTokens[snapshot.HostID] = tokens
+		}
 		if routing.SnapshotData(m).InternalPartitioner == "" {
 			routing.SnapshotData(m).InternalPartitioner = h.Partitioner()
 		}
@@ -340,9 +347,9 @@ func (s *Core) tryPublishV2Metadata() bool {
 		}
 		if md.privateStorage.InternalTabletsMetadata != nil && (old == nil || routing.SnapshotData(old).InternalPlacements == nil) {
 			md.privateStorage.InternalTabletsMetadata.ForEach(func(ks, table string, entries tablets.TabletEntryList) bool {
-				r := make([]metadata.TokenRange, len(entries))
+				r := make([]routing.Span, len(entries))
 				for i, e := range entries {
-					r[i] = metadata.TokenRange{Start: e.FirstToken(), End: e.LastToken()}
+					r[i] = routing.Span{Start: e.FirstToken(), End: e.LastToken()}
 					for _, replica := range e.ReplicasUnsafe() {
 						r[i].Replicas = append(r[i].Replicas, metadata.Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: replica.ShardID() >= 0}})
 					}
@@ -466,9 +473,15 @@ func (s *Core) tryPublishV2Metadata() bool {
 	return true
 }
 func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, error) {
-	out, tokenErr := implEndpoint.SnapshotHost(h)
+	out, _, err := snapshotV2HostTokens(s, h)
+	return out, err
+}
+
+// snapshotV2HostTokens is snapshotV2Host with the host's tokens.
+func snapshotV2HostTokens(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, []int64, error) {
+	out, tokens, tokenErr := implEndpoint.SnapshotHostTokens(h)
 	if h == nil {
-		return out, tokenErr
+		return out, tokens, tokenErr
 	}
 	if s != nil {
 		if cfg, ok := s.v2PoolConfig(); ok {
@@ -484,7 +497,7 @@ func snapshotV2Host(s *Core, h *implEndpoint.HostInfo) (metadata.HostSnapshot, e
 			out.Connected = ok && pool.Size() > 0
 		}
 	}
-	return out, tokenErr
+	return out, tokens, tokenErr
 }
 
 // RefreshMetadata waits for the shared topology refresh under the caller's

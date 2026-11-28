@@ -357,17 +357,21 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `&gocql.SimpleRetryPolicy{NumRetries: n}` | `retry.Safe{MaxAttempts: n + 1}`; it retries a non-idempotent request only after a failure that reports it was not executed, or a read timeout that returned no data |
 | `&gocql.SimpleSpeculativeExecution{NumAttempts: n, TimeoutDelay: d}` | `retry.FixedSpeculation{After: d, MaxAttempts: n + 1}`, or implement `retry.SpeculationPolicy`; see [speculation](speculative-execution.md) |
 | `session.KeyspaceMetadata(name)` | `session.Metadata().Keyspace(name)` on an immutable `*metadata.Snapshot` |
-| `session.KeyspaceMetadata(ks)` to read one table | `session.Metadata().Table(ks, name)`, which copies one table rather than the keyspace; `Keyspaces()` lists the loaded keyspaces and `Host(id)` finds one host |
+| `session.KeyspaceMetadata(ks)` to read one table | `session.Metadata().Table(ks, name)`, which copies one table rather than the keyspace; `KeyspaceNames()` lists the loaded keyspaces and `Host(id)` finds one host |
 | `KeyspaceMetadata.Functions[name]`, `Aggregates[name]` | keyed by signature, such as `"add(int,int)"`: `metadata.Keyspace.Function(name, argTypes...)`, or `FunctionsNamed(name)` for every overload |
 | `AggregateMetadata.FinalFunc`, `StateFunc` | `metadata.Aggregate.FinalFunc`, `StateFunc`: a `cql.Option[metadata.Function]`, unset when the aggregate has none or the function was not found |
 | `KeyspaceMetadata.ToCQL()` | `metadata.Keyspace.ToCQL()` builds the statements from the metadata; `ServerCQL()` returns ScyllaDB's own `DESCRIBE KEYSPACE` output |
-| `KeyspaceMetadata.Tables` to list table names | `session.Metadata().Tables(keyspace)`, sorted, without copying the schema |
+| `KeyspaceMetadata.Tables` to list table names | `session.Metadata().TableNames(keyspace)`, sorted, without copying the schema |
+| `KeyspaceMetadata.StrategyOptions` to read a replication factor | `metadata.Keyspace.ReplicationFactor(dc)`, or `session.Metadata().Replication(ks).Factor(dc)`, which does not copy the keyspace's schema |
 | `session.KeyspaceMetadata` with a quoted name such as `"MyTable"` | lookups take the internal name, `MyTable`; `metadata.Name(cqlIdent)` converts a CQL identifier |
 | `gocql.ColumnPartitionKey`, `ColumnClusteringKey`, `ColumnRegular`, `ColumnCompact`, `ColumnStatic` | `metadata.ColumnKindPartitionKey`, `ColumnKindClusteringKey`, `ColumnKindRegular`, `ColumnKindCompact`, `ColumnKindStatic` |
 | `HostInfo.HostID()` | `metadata.HostSnapshot.HostID` |
+| `HostInfo.Tokens()` | `session.Metadata().HostTokens(hostID)`, sorted `int64` tokens |
 | `ViewMetadata.ReadRepairChance`, `DcLocalReadRepairChance` | `metadata.View.Options.ReadRepairChance`, `DCLocalReadRepairChance` |
 | `ViewMetadata.KeyspaceName`, `ViewName`, `BaseTableName` | `metadata.View.Keyspace`, `Name`, `BaseTable`, as `metadata.Table` names them |
 | `IndexMetadata.KeyspaceName`, `TableName` | `metadata.Index.Keyspace`, `Table` |
+| `IndexMetadata.Options["target"]` | `metadata.Index.Target`, the indexed column, and `TargetKind` (column, keys, values, entries, full); `Options` still holds the server's text |
+| `IndexMetadata.Columns`, `PartitionKey`, `ClusteringColumns`, `OrderedColumns` | `metadata.Index.BackingView`, ScyllaDB's view that stores the index; nil on Cassandra |
 | `TableMetadata.Equals` and the other metadata `Equals` methods | `Equal` |
 | `TableMetadataOptions.GcGraceSeconds`, `MemtableFlushPeriodInMs`, `DcLocalReadRepairChance`, `BloomFilterFpChance`, `CrcCheckChance` | `metadata.TableOptions.GCGraceSeconds`, `MemtableFlushPeriodInMS`, `DCLocalReadRepairChance`, `BloomFilterFPChance`, `CRCCheckChance` |
 | `ColumnMetadata.ClusteringOrder` (string) and `Order` (`ASC`/`DESC`) | `metadata.Column.ClusteringOrder`, a `metadata.ColumnOrder`: `ColumnOrderAsc`, `ColumnOrderDesc`, or `ColumnOrderNone` for a column that is not a clustering column |
@@ -379,7 +383,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `gocql.ObservedQuery`, `QueryObserver` | the `Request` and `Attempt` hooks of `observe.Hooks`; `observe.Join` combines several |
 | `ObservedQuery.Values`, `ObservedBatch.Values` | `observe.RequestStart.Values`, and each `RequestStart.BatchStatements` entry's `Values`: an `observe.BoundValues` view, valid until the request's end function returns, whose `Format` can redact columns |
 | `ObservedQuery.Metrics`, per-host query metrics | `Session.HostMetrics`, which appends a `metrics.Host` per host: attempts, failures, timeouts, connections and requests in flight |
-| `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangePoolUp`) or the host marked down (`ChangePoolDown`), `KindStatus` and `KindTopology` the cluster's own events |
+| `gocql.ConnectObserver`, `HostStateNotifier` | `session.Subscribe(event.Filter{...})`: `event.KindPool` reports a host's pool connecting (`ChangePoolUp`) or the host marked down (`ChangePoolDown`), `KindStatus` and `KindTopology` the cluster's own events; a DOWN status event makes the session mark the host down, which a `ChangePoolDown` event reports first |
 
 ## Not carried over
 

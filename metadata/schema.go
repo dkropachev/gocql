@@ -38,12 +38,12 @@ type Keyspace struct {
 	// Views holds the materialized views by name. A view that backs a
 	// secondary index is listed in Indexes instead.
 	Views map[string]*View
-	// ConsistencyMode is "global" for a ScyllaDB tablet keyspace created with
-	// consistency = 'global' (a strongly consistent keyspace), and empty
-	// otherwise. It is read only when the session's connections negotiate
-	// TABLETS_ROUTING_V2_EXPERIMENTAL, the extension that reports tablet
-	// leaders.
-	ConsistencyMode string
+	// ConsistencyMode is ConsistencyGlobal for a ScyllaDB tablet keyspace
+	// created with consistency = 'global' (a strongly consistent keyspace),
+	// and empty otherwise. It is read only when the session's connections
+	// negotiate TABLETS_ROUTING_V2_EXPERIMENTAL, the extension that reports
+	// tablet leaders.
+	ConsistencyMode ConsistencyMode
 	// Name is the keyspace's name.
 	Name string
 	// StrategyClass is the replication strategy class, such as
@@ -59,6 +59,19 @@ type Keyspace struct {
 	// DurableWrites reports whether writes go through the commit log.
 	DurableWrites bool
 }
+
+// ConsistencyMode is the consistency option of a ScyllaDB keyspace, as
+// system_schema.scylla_keyspaces stores it. The zero ConsistencyMode is empty:
+// the keyspace is eventually consistent, as every Cassandra keyspace is.
+// Later releases may add values, so a switch over them needs a default case.
+type ConsistencyMode string
+
+// The consistency modes.
+const (
+	// ConsistencyGlobal is a strongly consistent tablet keyspace, created
+	// with consistency = 'global', whose requests go to each tablet's leader.
+	ConsistencyGlobal ConsistencyMode = "global"
+)
 
 // Function returns the user-defined function name(args), where args are
 // the argument types as the server writes them, such as "int" or
@@ -365,6 +378,13 @@ type Type struct {
 //
 // The driver fills it; its zero value is empty.
 type Index struct {
+	// Options holds the index's options, such as "target".
+	Options map[string]string
+	// BackingView is, on ScyllaDB, the materialized view that stores the
+	// index, named after it with an "_index" suffix, and nil on Cassandra or
+	// when the snapshot does not hold the view. Keyspace.Views does not list
+	// it.
+	BackingView *View
 	// Name is the index's name.
 	Name string
 	// Keyspace is the name of the index's keyspace.
@@ -373,20 +393,60 @@ type Index struct {
 	Table string
 	// Kind is the kind of index.
 	Kind IndexKind
-	// Options holds the index's options, such as "target".
-	Options map[string]string
-	// Columns holds, on ScyllaDB, the columns of the view that backs the
-	// index, by name.
-	Columns map[string]*Column
-	// OrderedColumns lists the backing view's columns in
-	// Table.OrderedColumns order.
-	OrderedColumns []*Column
-	// PartitionKey lists the backing view's partition key columns, in key
-	// order.
-	PartitionKey []*Column
-	// ClusteringColumns lists the backing view's clustering columns, in key
-	// order.
-	ClusteringColumns []*Column
+	// Target is the internal name of the indexed column, as the "target"
+	// option names it, unquoted. It is empty when the option names no single
+	// column, as a ScyllaDB local index on several columns does; Options
+	// then holds the server's text.
+	Target string
+	// TargetKind is what of Target the index indexes: a collection's keys,
+	// values or entries, a frozen collection as a whole, or the column's
+	// value. It is IndexTargetUnknown when Target is empty.
+	TargetKind IndexTargetKind
+}
+
+// IndexTargetKind is what of its target column a secondary index indexes, as
+// the function in its "target" option names it. The zero IndexTargetKind is
+// IndexTargetUnknown. Later releases may add values, so a switch over them
+// needs a default case.
+type IndexTargetKind uint8
+
+// The kinds of index targets.
+const (
+	// IndexTargetUnknown is an index whose target the driver does not parse.
+	IndexTargetUnknown IndexTargetKind = iota
+	// IndexTargetColumn indexes the value of a column that is not a
+	// collection: the target names the column alone.
+	IndexTargetColumn
+	// IndexTargetKeys indexes the keys of a map: keys(column).
+	IndexTargetKeys
+	// IndexTargetValues indexes the values of a collection: values(column).
+	IndexTargetValues
+	// IndexTargetEntries indexes the entries of a map: entries(column).
+	IndexTargetEntries
+	// IndexTargetFull indexes a frozen collection as a whole: full(column).
+	IndexTargetFull
+)
+
+// String returns "column", or the target function name ("keys", "values",
+// "entries", "full"), or "unknown", or IndexTargetKind(n) for a value it does
+// not define.
+func (k IndexTargetKind) String() string {
+	switch k {
+	case IndexTargetUnknown:
+		return "unknown"
+	case IndexTargetColumn:
+		return "column"
+	case IndexTargetKeys:
+		return "keys"
+	case IndexTargetValues:
+		return "values"
+	case IndexTargetEntries:
+		return "entries"
+	case IndexTargetFull:
+		return "full"
+	default:
+		return fmt.Sprintf("IndexTargetKind(%d)", uint8(k))
+	}
 }
 
 // Equal reports whether t and other have the same ID, keyspace, name,

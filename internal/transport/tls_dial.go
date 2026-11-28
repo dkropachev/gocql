@@ -28,7 +28,6 @@ import (
 	"io"
 	"net"
 	"net/netip"
-	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -155,7 +154,7 @@ func (d *InternalV2TLSHostDialer) connectionTLS(tlsConfig *tls.Config, target en
 	if d.InternalConfig.TLSIdentity == nil {
 		return tlsConfig
 	}
-	identity := d.InternalConfig.TLSIdentity(cloneV2DialTarget(target))
+	identity := d.InternalConfig.TLSIdentity(target)
 	if identity.ServerName != "" {
 		tlsConfig.ServerName = identity.ServerName
 	}
@@ -262,9 +261,9 @@ func (d *InternalV2TLSHostDialer) raw(ctx context.Context, target endpoint.DialT
 	var c net.Conn
 	var err error
 	if d.InternalConfig.DialHost != nil {
-		c, err = d.InternalConfig.DialHost(ctx, cloneV2DialTarget(target))
+		c, err = d.InternalConfig.DialHost(ctx, target)
 	} else if d.InternalConfig.Dialer != nil {
-		c, err = d.InternalConfig.Dialer.DialContext(ctx, cloneV2DialTarget(target))
+		c, err = d.InternalConfig.Dialer.DialContext(ctx, target)
 	} else {
 		c, err = endpoint.DefaultDialer{}.DialContext(ctx, target)
 	}
@@ -565,15 +564,6 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 		return nil
 	}
 	return result, nil
-}
-
-func cloneV2HostSnapshot(v metadata.HostSnapshot) metadata.HostSnapshot {
-	v.Tokens = slices.Clone(v.Tokens)
-	return v
-}
-func cloneV2DialTarget(v endpoint.DialTarget) endpoint.DialTarget {
-	v.Host = cloneV2HostSnapshot(v.Host)
-	return v
 }
 
 func logicalV2TLSAddress(host *implEndpoint.HostInfo) string {

@@ -13,6 +13,7 @@ import (
 	implRouting "github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metadata"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
@@ -20,7 +21,7 @@ import (
 // (0, 100] whose replicas are leader first, then the others, as
 // TABLETS_ROUTING_V2 reports them. A tablet without a version is one learned
 // over TABLETS_ROUTING_V1, which reports no leader.
-func leaderTestMetadata(t *testing.T, mode string, versioned bool, replicas ...byte) *implRouting.MetadataSnapshot {
+func leaderTestMetadata(t *testing.T, mode metadata.ConsistencyMode, versioned bool, replicas ...byte) *implRouting.MetadataSnapshot {
 	t.Helper()
 	m := v2TestMetadata()
 	routing.SnapshotData(m).InternalKeyspaces["ks"].ConsistencyMode = mode
@@ -49,7 +50,7 @@ func TestLeaderAwarePlanOrder(t *testing.T) {
 	type test struct {
 		name        string
 		options     routing2.Options
-		mode        string
+		mode        metadata.ConsistencyMode
 		versioned   bool
 		replicas    []byte
 		consistency []cql.Consistency

@@ -82,9 +82,9 @@ func TestReadV2ScyllaKeyspacesConsistency(t *testing.T) {
 			t.Fatal(err)
 		}
 		for name, ks := range keyspaces {
-			want := ""
+			var want metadata.ConsistencyMode
 			if v2 && (name == "global" || name == "upper") {
-				want = "global"
+				want = metadata.ConsistencyGlobal
 			}
 			if ks.ConsistencyMode != want {
 				t.Errorf("TabletsV2 %v, %s: ConsistencyMode %q, want %q", v2, name, ks.ConsistencyMode, want)
