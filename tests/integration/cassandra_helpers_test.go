@@ -239,8 +239,13 @@ func cassandraOtherSession(t testing.TB, s *gocql.Session, keyspace string) *goc
 
 type cassandraObserver struct {
 	mu       sync.Mutex
+	starts   []observe.RequestStart
 	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
+	// values holds each request's bound values as BoundValues.Format
+	// writes them, read while they are valid: a batch's statements' are
+	// joined by "; ".
+	values []string
 }
 
 func (o *cassandraObserver) ObserveRequest(e observe.RequestEvent) {
@@ -254,8 +259,36 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+func (o *cassandraObserver) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	var values strings.Builder
+	if start.BatchStatements == nil {
+		_ = start.Values.Format(&values, nil)
+	}
+	for i, statement := range start.BatchStatements {
+		if i > 0 {
+			values.WriteString("; ")
+		}
+		_ = statement.Values.Format(&values, nil)
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	// The views are not valid once the request ends.
+	start.Values = observe.BoundValues{}
+	start.BatchStatements = append([]observe.BatchStatement(nil), start.BatchStatements...)
+	for i := range start.BatchStatements {
+		start.BatchStatements[i].Values = observe.BoundValues{}
+	}
+	o.starts = append(o.starts, start)
+	o.values = append(o.values, values.String())
 	return ctx, o.ObserveRequest
+}
+
+// started returns the RequestStart of every request observed, without their
+// bound values, and the values as Format wrote them.
+func (o *cassandraObserver) started() ([]observe.RequestStart, []string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]observe.RequestStart(nil), o.starts...), append([]string(nil), o.values...)
 }
 func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
@@ -263,6 +296,7 @@ func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) 
 func (o *cassandraObserver) reset() {
 	o.mu.Lock()
 	defer o.mu.Unlock()
+	o.starts, o.values = nil, nil
 	o.requests = nil
 	o.attempts = nil
 }

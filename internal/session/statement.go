@@ -25,7 +25,6 @@ type PrepareOptions struct {
 	privateStorage PrepareOptionsStorage
 	Keyspace       string
 	HostID         cql.Option[cql.UUID]
-	CQLTrace       bool
 }
 type PreparedInfo struct {
 	Keyspace, Table     string

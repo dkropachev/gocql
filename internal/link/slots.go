@@ -149,3 +149,13 @@ var NewSubscription = NewSlot("event.newSubscription")
 // IsMurmur3Partitioner holds func(routing.TokenPartitioner) bool: whether a
 // partitioner is routing's built-in Murmur3 one.
 var IsMurmur3Partitioner = NewSlot("routing.isMurmur3Partitioner")
+
+// NewBoundValues holds func(columns cql.Columns, n int, src any, at
+// func(src any, i int) cql.ValueReader) observe.BoundValues: a view of n
+// values whose i-th at reads from src.
+var NewBoundValues = NewSlot("observe.newBoundValues")
+
+// CompileUntracked holds func(*gocql.Session, exec.Options)
+// (exec.CompiledOptions, error): Session.CompileOptions for executions the
+// session's metrics leave out, such as package cqltrace's reads.
+var CompileUntracked = NewSlot("gocql.compileUntracked")

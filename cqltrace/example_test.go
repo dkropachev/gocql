@@ -44,7 +44,7 @@ func ExampleFetch() {
 	}
 	for _, trace := range result.CQLTraces() {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		info, err := cqltrace.Fetch(ctx, session, trace.ID)
+		info, err := cqltrace.Fetch(ctx, session, trace)
 		cancel()
 		if err != nil {
 			log.Fatal(err)

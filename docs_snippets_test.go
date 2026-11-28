@@ -187,6 +187,7 @@ const snippetPrelude = `import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"

@@ -286,7 +286,7 @@ func TestFetchReadiness(t *testing.T) {
 		}
 	})
 	t.Run("NilSession", func(t *testing.T) {
-		info, err := Fetch(context.Background(), nil, id)
+		info, err := Fetch(context.Background(), nil, cql.CQLTraceRef{ID: id})
 		if _, ok := errors.AsType[*cql.ValidationError](err); !ok || info.ID != id {
 			t.Fatalf("err %v, info %+v", err, info)
 		}
@@ -298,15 +298,18 @@ func TestFetchAll(t *testing.T) {
 	refs := []cql.CQLTraceRef{{ID: ok, Attempt: 1, Failed: true}, {ID: bad, Attempt: 2}, {ID: ok, Attempt: 3}}
 	broken := errors.New("broken")
 	var read []cql.UUID
-	infos, err := fetchAll(context.Background(), refs, func(_ context.Context, id cql.UUID) (Info, error) {
+	var attempts []int
+	infos, err := fetchAll(context.Background(), refs, func(_ context.Context, ref cql.CQLTraceRef) (Info, error) {
+		id := ref.ID
 		read = append(read, id)
+		attempts = append(attempts, ref.Attempt)
 		if id == bad {
 			return Info{ID: id, Command: "partial"}, broken
 		}
 		return Info{ID: id, Command: "QUERY"}, nil
 	})
-	if !slices.Equal(read, []cql.UUID{ok, bad, ok}) {
-		t.Fatalf("read %v", read)
+	if !slices.Equal(read, []cql.UUID{ok, bad, ok}) || !slices.Equal(attempts, []int{1, 2, 3}) {
+		t.Fatalf("read %v, attempts %v", read, attempts)
 	}
 	if len(infos) != 3 || infos[0].Command != "QUERY" || infos[1].ID != bad || infos[1].Command != "" || infos[2].Command != "QUERY" {
 		t.Fatalf("infos %+v", infos)

@@ -19,8 +19,9 @@ type ctxKey string
 func requestHook(name string, log *[]string) observe.Hooks {
 	return observe.Hooks{Request: func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 		*log = append(*log, fmt.Sprintf("%s start %d parent=%v", name, start.ID, ctx.Value(ctxKey("span"))))
-		return context.WithValue(ctx, ctxKey("span"), name), func(e observe.RequestEvent) {
-			*log = append(*log, fmt.Sprintf("%s end %d", name, e.ID))
+		id := start.ID
+		return context.WithValue(ctx, ctxKey("span"), name), func(observe.RequestEvent) {
+			*log = append(*log, fmt.Sprintf("%s end %d", name, id))
 		}
 	}}
 }
@@ -46,7 +47,7 @@ func TestJoin(t *testing.T) {
 		ctx, endRequest := o.Request(context.Background(), observe.RequestStart{ID: 7})
 		endAttempt := o.Attempt(ctx, observe.AttemptStart{Attempt: 1})
 		endAttempt(routing.AttemptEvent{Attempt: 1})
-		endRequest(observe.RequestEvent{ID: 7})
+		endRequest(observe.RequestEvent{})
 		want := []string{
 			"a start 7 parent=<nil>",
 			"c start 7 parent=a",
@@ -69,7 +70,7 @@ func TestJoin(t *testing.T) {
 			t.Fatal("a join of request hooks has an attempt hook or no request hook")
 		}
 		_, end := o.Request(context.Background(), observe.RequestStart{ID: 3})
-		end(observe.RequestEvent{ID: 3})
+		end(observe.RequestEvent{})
 		want := []string{"a start 3 parent=<nil>", "b start 3 parent=a", "a end 3", "b end 3"}
 		if !slices.Equal(log, want) {
 			t.Fatalf("calls\n%q\nwant\n%q", log, want)
@@ -126,7 +127,7 @@ func TestJoin(t *testing.T) {
 		if end == nil {
 			t.Fatal("no end function after a panicking start")
 		}
-		if v := recovered(func() { end(observe.RequestEvent{ID: 1}) }); v != "start" {
+		if v := recovered(func() { end(observe.RequestEvent{}) }); v != "start" {
 			t.Fatalf("end raised %v, want the start panic", v)
 		}
 		// A panic in an end function still ends the others.

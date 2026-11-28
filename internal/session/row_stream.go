@@ -554,6 +554,7 @@ func (s *RowStream[R]) loadPage() error {
 // rowStreamLoadPage loads the next page, recording its failed attempts in log.
 func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 	request := s.privateStorage.request
+	request.page = request.InternalLogical.nextPage()
 	snapshot := s.privateStorage.session.Metadata()
 	request.tabletFeedback = s.privateStorage.session.CaptureTabletFeedback(request.routing, snapshot)
 	tablet := lookupRequestTablet(snapshot, request)
@@ -616,7 +617,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		started := time.Now()
 		var end func(routing.AttemptEvent)
 		if request.InternalLogical.observesAttempts() {
-			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Address: conn.Address(), Consistency: consistency, Started: started})
+			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Page: int(request.page), Attempt: attempt, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started})
 		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()
@@ -624,13 +625,14 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			traces = response.InternalInfo.CQLTraces()
 		}
-		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err}
+		event := routing.AttemptEvent{RequestID: request.InternalLogical.id, Page: int(request.page), Attempt: attempt, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err}
 		attemptEnded(&event, request.partialBatch())
 		if len(traces) > 0 {
 			event.CQLTraceID = cql.Option[cql.UUID]{Value: traces[len(traces)-1].ID, Set: true}
 		}
 		rt := InternalRuntimeFor(s.privateStorage.session)
-		rt.attempts.Add(1)
+		rt.countAttempt(request, conn)
+		rt.countAttemptEnd(request, conn, err)
 		if end != nil {
 			s.privateStorage.session.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
 		}
@@ -641,6 +643,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		s.privateStorage.info.Result.Attempts++
 		s.privateStorage.info.Result.AttemptLatency += event.Latency
 		s.privateStorage.info.Result.HostID = event.Target.HostID
+		s.privateStorage.info.Result.Address = event.Address
 		s.privateStorage.info.Result.AchievedConsistency = consistency
 
 		// Warnings and custom payload describe the latest attempt, including
@@ -657,7 +660,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		tracedOK := err == nil && len(traces) > 0
 		all := s.privateStorage.info.Result.CQLTraces()
 		for _, trace := range traces {
-			trace.HostID, trace.Attempt, trace.Failed = target.HostID, attempt, err != nil
+			trace.HostID, trace.Page, trace.Attempt, trace.Failed = target.HostID, int(request.page), attempt, err != nil
 			all = append(all, trace)
 		}
 		codec.SetDiagnostics(&s.privateStorage.info.Result, warnings, all, payload)
@@ -697,6 +700,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 				s.privateStorage.info.Pages++
 				s.privateStorage.info.Result.FetchedRows += int64(response.InternalRowCount)
 				s.privateStorage.mu.Unlock()
+				rt.recordPage(request, time.Since(pageStarted))
 				if prior != nil {
 					prior.InternalReleaseMetadata()
 				}
@@ -731,7 +735,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			if err != nil {
 				return err
 			}
-			rt.retries.Add(1)
+			rt.countRetry(request)
 			continue
 		}
 		decision := decideRetry(pagectx, request, conn, err, attempt, consistency, attemptStatus, pageStarted)
@@ -761,7 +765,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			case <-timer.C:
 			}
 		}
-		rt.retries.Add(1)
+		rt.countRetry(request)
 	}
 }
 

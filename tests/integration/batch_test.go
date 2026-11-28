@@ -139,8 +139,11 @@ func TestBatch(t *testing.T) {
 			requests, attempts := observer.snapshot()
 			require.Len(t, requests, 2)
 			require.Len(t, attempts, 2)
-			for _, request := range requests {
+			for _, request := range observer.started() {
 				require.Len(t, request.BatchStatements, 2)
+				for _, statement := range request.BatchStatements {
+					require.Equal(t, 1, statement.Values.Len())
+				}
 			}
 			for _, id := range []int32{1, 2} {
 				row, err := v2ReadOne(ctx, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(id))

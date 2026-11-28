@@ -97,7 +97,7 @@ func TestInlineSpeculation(t *testing.T) {
 		traces := page.Info().CQLTraces()
 		page.Close()
 		host := implEndpoint.InternalHostInfoHostUUID(conns[<-winner].InternalHost)
-		if len(traces) != 1 || traces[0] != (cql.CQLTraceRef{ID: trace, HostID: host, Attempt: 2, Speculative: true}) {
+		if len(traces) != 1 || traces[0] != (cql.CQLTraceRef{ID: trace, HostID: host, Page: 1, Attempt: 2, Speculative: true}) {
 			t.Fatalf("traces %+v, want the speculative winner's ref from %v", traces, host)
 		}
 		bound.Close()

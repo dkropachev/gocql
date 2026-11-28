@@ -84,6 +84,13 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	// if that context ends during startup.
 	ctx, cancel := context.WithCancel(context.Background())
 
+	// Every record the session logs names it, so that the records of
+	// several sessions in one process can be told apart.
+	id := newSessionID(cfg.logger())
+	if cfg.Logger != nil {
+		cfg.Logger = cfg.Logger.With(logging.KeySession, id.String())
+	}
+
 	s := func() *Core {
 		opaqueStorageValue := new(Core)
 		opaqueStorageValue.privateStorage.InternalCfg = cfg
@@ -104,7 +111,7 @@ func newSessionCommonWithRuntime(cfg InternalClusterSettings, typedConfig *implS
 	if !cfg.DisableDriverConfigReporting {
 		s.privateStorage.driverConfigReporter = newDriverConfigReporter(s)
 	}
-	s.privateStorage.id = newSessionID(s.privateStorage.InternalLogger)
+	s.privateStorage.id = id
 
 	// Close created resources on error otherwise they'll leak
 	var err error

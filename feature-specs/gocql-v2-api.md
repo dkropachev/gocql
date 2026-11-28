@@ -756,7 +756,6 @@ captured parameters through retries, pages, accepted writes and callbacks.
 type PrepareOptions struct {
     Keyspace string
     HostID cql.Option[cql.UUID]
-    CQLTrace bool
 }
 
 // package gocql
@@ -1431,6 +1430,7 @@ type Profile struct {
     Routing routing.Policy
     Speculation SpeculationPolicy
     Idempotent bool // every ordinary statement the profile runs, not conditional or counter writes; v1 DefaultIdempotence
+    CQLTraceSampler func(routing.Info) bool // asked once per request not already traced
     /* unexported built mark */
 }
 func NewProfile() *ProfileBuilder // starts from the driver's defaults, not a session's
@@ -1458,6 +1458,7 @@ func (b *Batch) Reset() // keeps storage and Kind
 
 type Result struct {
     HostID cql.UUID
+    Address string // host:port of the last completed attempt's connection
     Attempts int
     AttemptLatency time.Duration // summed over completed attempts
     FetchedRows int64
@@ -1474,6 +1475,7 @@ func (r Result) CustomPayload() []cql.PayloadEntry
 // CQLTraceRef names a CQL trace session and the attempt it records.
 type CQLTraceRef struct {
     ID, HostID cql.UUID
+    Page int    // 1-based, within the execution
     Attempt int // 1-based, within its page
     Failed, Speculative bool
 }
@@ -1569,9 +1571,11 @@ func FilterPlan(Plan, keep func(metadata.Route) bool) Plan         // lazy
 func Routes(Plan) iter.Seq[metadata.Route]                         // consumes the plan
 type AttemptEvent struct {
     RequestID uint64
-    Attempt int
+    Page int    // 1-based, within the request
+    Attempt int // 1-based, within the page
     Target metadata.Target
     Address string
+    AddrPort netip.AddrPort // zero for a Unix socket
     Consistency cql.Consistency
     Started time.Time
     Latency time.Duration
@@ -1584,9 +1588,10 @@ type AttemptEvent struct {
 // package observe
 type AttemptStart struct {
     RequestID uint64
-    Attempt int
+    Page, Attempt int
     Target Target
     Address string
+    AddrPort netip.AddrPort
     Consistency cql.Consistency
     Started time.Time
     Speculative bool
@@ -1609,21 +1614,26 @@ type Hooks struct { // a nil hook is skipped; later hooks are new fields
 func (Hooks) IsZero() bool
 type RequestStart struct {
     ID uint64
+    SessionID cql.UUID
     Started time.Time
     Statement string
-    BatchStatements []string
+    BatchStatements []BatchStatement
     Parameters cql.Columns
+    Values BoundValues // borrowed until the request's end function returns
     Routing routing.Info
-    CQLTrace bool
+    PageSize int
+    CQLTrace bool // CQLTrace option or the profile's CQLTraceSampler
 }
-type RequestEvent struct {
-    ID uint64
-    Statement string
-    BatchStatements []string
-    Parameters cql.Columns
-    Routing routing.Info
-    Result Result
+type BatchStatement struct { Statement string; Values BoundValues }
+type BoundValues struct { /* borrowed view of the encoded values */ }
+func (BoundValues) Len() int
+func (BoundValues) At(int) (cql.ColumnSpec, cql.ValueReader)
+func (BoundValues) Format(w io.Writer, redact func(cql.ColumnSpec) bool) error
+type RequestEvent struct { // what ran is in the RequestStart
     Err error
+    Result Result
+    Finished time.Time
+    Pages int
 }
 // Join calls every argument's hooks in order, field by field. A pool
 // connecting or a host marked down is an event.KindPool event, not a hook.
@@ -1770,7 +1780,8 @@ outside the core module; AttemptEvent.CQLTraceID links an attempt to the
 server-side CQL trace session it produced. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
 Learn feedback, metrics and Result accounting still run. Latency percentile
-snapshots are maintained outside individual request completion; disabled
+snapshots are maintained outside individual request completion, from each
+successful page's send-to-response latency; disabled
 speculation does not create a scheduler/timer. Row
 cardinality is separate from successful server execution. Trace
 IDs/warnings are preserved per response; Result aggregates across consumed
@@ -1833,8 +1844,10 @@ type Fetcher struct {
     Settle time.Duration        // 0: 200ms; <0: return once ready
     Consistency cql.Consistency // 0 (Any): One
 }
-func (f Fetcher) Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
-func Fetch(context.Context, *gocql.Session, cql.UUID) (Info, error)
+// Fetch reads from ref.HostID, then from any replica once a read there fails;
+// its reads skip the session's hooks and metrics.
+func (f Fetcher) Fetch(context.Context, *gocql.Session, cql.CQLTraceRef) (Info, error)
+func Fetch(context.Context, *gocql.Session, cql.CQLTraceRef) (Info, error)
 // FetchAll reads every session of refs in order, one Info per reference, the
 // failures joined; Fetcher has the same method.
 func FetchAll(context.Context, *gocql.Session, []cql.CQLTraceRef) ([]Info, error)
@@ -1847,6 +1860,7 @@ func (s *Session) RefreshMetadata(context.Context) (*metadata.Snapshot, error)
 func (s *Session) AwaitSchemaAgreement(context.Context) error
 func (s *Session) Subscribe(event.Filter) (*event.Subscription, error)
 func (s *Session) Metrics() metrics.Snapshot // session-wide counters
+func (s *Session) HostMetrics(dst []metrics.Host) []metrics.Host // appends one per host pool
 func (s *Session) Close() error
 func (s *Session) Closed() bool
 
@@ -1902,15 +1916,23 @@ type Mode /* ModeNone, ModeKeyspaces, ModeFull (default) */
 
 // package metrics
 // Fields may be added later; read them by name and do not compare snapshots whole.
+// cqltrace's reads are counted nowhere.
 type Snapshot struct {
-    Requests, Attempts uint64 // never decrease
-    Errors, Canceled, Timeouts uint64 // Canceled: KindCanceled (the caller's cancel or deadline); Timeouts: KindTimeout (server or driver)
+    Requests, Pages, Attempts uint64 // never decrease
+    Errors, Canceled, Timeouts uint64 // Canceled and Timeouts repeat ErrorsOf(KindCanceled) and ErrorsOf(KindTimeout)
     ErrorsByKind map[cqlerr.Kind]uint64
     Retries, Speculations uint64
     Orphans uint64
     InFlight int64
     Connections int // of every host pool, the control connection not included
-    LatencyP50, LatencyP95, LatencyP99 time.Duration
+    LatencyP50, LatencyP95, LatencyP99 time.Duration // of successful pages, send to response
+}
+func (Snapshot) ErrorsOf(cqlerr.Kind) uint64
+type Host struct {
+    HostID cql.UUID
+    Address string
+    Attempts, Errors, Timeouts uint64 // per-pool atomic counters
+    Connections, InFlight int
 }
 
 // package routing

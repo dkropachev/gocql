@@ -18,6 +18,10 @@ import (
 // The zero Result is empty: no warnings, CQL traces or custom payload.
 type Result struct {
 	diag *resultDiagnostics
+	// Address is the host:port of the connection the last completed attempt
+	// used, the coordinator HostID names, or the socket path of a Unix
+	// socket connection.
+	Address string
 	// HostID is the host ID of the coordinator of the last completed attempt.
 	HostID UUID
 	// Attempts is the number of attempts started, speculative ones included.
@@ -92,6 +96,9 @@ type CQLTraceRef struct {
 	ID UUID
 	// HostID is the node that coordinated the attempt.
 	HostID UUID
+	// Page is the 1-based number, within its execution, of the page the
+	// attempt fetched.
+	Page int
 	// Attempt is the attempt's 1-based number within its page.
 	Attempt int
 	// Failed reports that the attempt ended in an error, such as a timeout
@@ -186,7 +193,7 @@ func cloneResult(result Result) Result {
 	return result
 }
 func mergeResult(dst *Result, src Result) {
-	dst.HostID = src.HostID
+	dst.HostID, dst.Address = src.HostID, src.Address
 	dst.Attempts += src.Attempts
 	dst.AttemptLatency += src.AttemptLatency
 	dst.FetchedRows += src.FetchedRows

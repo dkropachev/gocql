@@ -115,8 +115,9 @@ func overlayOptions(base, over Options) Options {
 		out.Profile = over.Profile
 	}
 	if over.privateStorage.InternalConnection != nil {
-		out.privateStorage = over.privateStorage
+		out.privateStorage.InternalConnection = over.privateStorage.InternalConnection
 	}
+	out.privateStorage.InternalUntracked = base.privateStorage.InternalUntracked || over.privateStorage.InternalUntracked
 	if over.Keyspace != "" {
 		out.Keyspace = over.Keyspace
 	}

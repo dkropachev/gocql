@@ -91,6 +91,7 @@
 // so handlers and log queries may rely on them:
 //
 //	logger      always "gocql"
+//	session     the session's ID, Session.ID
 //	host        the address of the node
 //	host_id     the node's host ID
 //	dc          the node's datacenter

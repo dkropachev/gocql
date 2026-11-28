@@ -96,8 +96,8 @@ type InternalSessionRuntime struct {
 	// requests counts the registered executions. It is written next to
 	// inflight, after registerExecution accepted the execution, so it never
 	// counts an admission that is then refused and never decreases.
-	requests, attempts, errors, retries, speculations atomic.Uint64
-	inflight                                          atomic.Int64
+	requests, pages, attempts, errors, retries, speculations atomic.Uint64
+	inflight                                                 atomic.Int64
 	// errorKinds counts the failed executions by cqlerr.KindOf.
 	errorKinds [errorKindCount]atomic.Uint64
 	// pooledBusy counts busy queries of prepared statements' one-shot pools.
@@ -166,7 +166,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	m := metrics.Snapshot{Requests: rt.requests.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), InFlight: rt.inflight.Load()}
+	m := metrics.Snapshot{Requests: rt.requests.Load(), Pages: rt.pages.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), InFlight: rt.inflight.Load()}
 	for kind := range rt.errorKinds {
 		if n := rt.errorKinds[kind].Load(); n > 0 {
 			if m.ErrorsByKind == nil {
@@ -292,7 +292,7 @@ func (s *InternalSessionRuntime) prepareTypedOnce(ctx context.Context, statement
 		}
 		wireKeyspace = ""
 	}
-	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true, Trace: options.CQLTrace})
+	page, err := conn.InternalExecuteTyped(ctx, &model.AttemptRequest{Statement: statement, Keyspace: wireKeyspace, Prepare: true})
 	if page != nil {
 		defer page.Owner.Release()
 	}
@@ -588,9 +588,13 @@ type logicalExecution struct {
 	lifetime       executionLifetime
 	id             uint64
 	finished       atomic.Bool
+	// pages counts the pages the execution started; nextPage numbers them.
+	pages atomic.Int32
 	// attemptTimed is set once an attempt took started as its own start:
 	// the first attempt starts with the execution, later ones read the clock.
 	attemptTimed bool
+	// untracked leaves the execution out of the session's metrics.
+	untracked bool
 }
 
 func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
@@ -602,27 +606,44 @@ func (l *logicalExecution) InternalFinish(result cql.Result, err error) {
 		return
 	}
 	rt := l.rt
-	rt.inflight.Add(-1)
-	// Failed executions stay out of the percentiles: a burst of timeouts
-	// would otherwise pin them at the timeout, and a speculation policy
-	// reading them would wait that long before speculating.
-	if err != nil {
-		rt.errors.Add(1)
-		rt.countErrorKind(err)
-	} else {
-		rt.RecordV2Latency(l.id, time.Since(l.started))
+	// The latency percentiles are recorded per page as each succeeds
+	// (recordPage), so a caller's time reading rows stays out of them.
+	if !l.untracked {
+		rt.inflight.Add(-1)
+		if err != nil {
+			rt.errors.Add(1)
+			rt.countErrorKind(err)
+		}
 	}
 	if end := l.requestEnd; end != nil {
 		perfAdd(0, 1)
-		event := observe.RequestEvent{ID: l.id, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), Result: codec.CloneResult(result), Err: err}
+		event := observe.RequestEvent{Result: codec.CloneResult(result), Err: err, Finished: time.Now(), Pages: int(l.pages.Load())}
 		rt.ObserveSafely(l.observerCtx, func() { end(event) })
 	}
+}
+
+// nextPage numbers the page the execution starts, counting it in the
+// session's metrics, and returns its 1-based number.
+func (l *logicalExecution) nextPage() int32 {
+	if l == nil {
+		return 1
+	}
+	if !l.untracked {
+		l.rt.pages.Add(1)
+	}
+	return l.pages.Add(1)
 }
 
 // startRequest calls the observer's StartRequest with the caller's context.
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
-	start := observe.RequestStart{ID: l.id, Started: l.started, Statement: l.request.statement, Parameters: l.requestParameters(), Routing: l.request.routing, BatchStatements: l.batchStatements(), CQLTrace: l.request.options.InternalOptions.CQLTrace}
+	request := l.request
+	start := observe.RequestStart{ID: l.id, SessionID: l.rt.ID(), Started: l.started, Statement: request.statement, Parameters: l.requestParameters(), Routing: request.routing, PageSize: requestPageSize(request), CQLTrace: request.cqlTrace}
+	if request.batch == nil {
+		start.Values = encodedBoundValues(&request.InternalValues)
+	} else {
+		start.BatchStatements = request.batch.boundStatements()
+	}
 	l.rt.ObserveSafely(ctx, func() {
 		observerCtx, end := l.hooks.Request(ctx, start)
 		if observerCtx != nil {
@@ -662,17 +683,6 @@ func (l *logicalExecution) requestParameters() cql.Columns {
 		return state.InternalParameters
 	}
 	return l.request.InternalValues.Columns
-}
-
-func (l *logicalExecution) batchStatements() []string {
-	if l.request.batch == nil {
-		return nil
-	}
-	statements := make([]string, 0, len(l.request.batch.entries))
-	for _, entry := range l.request.batch.entries {
-		statements = append(statements, entry.statement)
-	}
-	return statements
 }
 
 // runtimeOf returns s's runtime, or nil for a nil session so that the
@@ -835,8 +845,15 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 		request.InternalLogical.releaseInput()
 		return nil, nil, nil, err
 	}
-	rt.requests.Add(1)
-	rt.inflight.Add(1)
+	logical.untracked = values.privateStorage.InternalUntracked
+	if !logical.untracked {
+		rt.requests.Add(1)
+		rt.inflight.Add(1)
+	}
+	request.cqlTrace = values.CQLTrace
+	if sample := resolved.InternalProfile.CQLTraceSampler; sample != nil && !request.cqlTrace {
+		request.cqlTrace = sampleCQLTrace(rt, logical, sample, request.routing)
+	}
 	if hooks != nil && hooks.Request != nil {
 		logical.startRequest(ctx)
 	} else {
@@ -1168,7 +1185,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Page: int(request.page), Attempt: index, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Speculative: speculative})
 	return target, started, end
 }
 
@@ -1179,8 +1196,9 @@ func (s *InternalSessionRuntime) attemptOutcome(request *InternalExecutionReques
 	if request.InternalLogical != nil {
 		requestID = request.InternalLogical.id
 	}
-	event := routing2.AttemptEvent{RequestID: requestID, Attempt: index, Target: target, Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
+	event := routing2.AttemptEvent{RequestID: requestID, Page: int(request.page), Attempt: index, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response), Speculative: speculative}
 	attemptEnded(&event, request.partialBatch())
+	s.countAttemptEnd(request, conn, err)
 	if end != nil {
 		perfAdd(1, 1)
 		s.Core.ObserveSafely(request.InternalLogical.logContext(), func() { end(event) })
@@ -1326,6 +1344,7 @@ func pinnedUsable(conn *transport.Conn) bool {
 
 // executePage executes one page of request, starting from state.
 func (s *InternalSessionRuntime) executePage(ctx context.Context, request *InternalExecutionRequest, state cql.PageState) (*transport.InternalResponsePage, error) {
+	request.page = request.InternalLogical.nextPage()
 	response, err := s.executePageAttempts(ctx, request, state)
 	if err != nil {
 		s.describeStatement(err, request)
@@ -1441,8 +1460,8 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		index := startedCount
 		inflight = append(inflight, inflightAttempt{conn: conn, number: index, consistency: consistency})
 		request.InternalOwner.retain()
-		s.attempts.Add(1)
-		if speculative {
+		s.countAttempt(request, conn)
+		if speculative && request.InternalLogical.tracked() {
 			s.speculations.Add(1)
 		}
 		go func() {
@@ -1493,7 +1512,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				return nil, newExecutionError(err, aggregate, cqlerr.NotExecuted, nil)
 			}
 			startedCount, active = 1, 1
-			s.attempts.Add(1)
+			s.countAttempt(request, conn)
 			target, started, end := s.beginAttempt(request, conn, 1, consistency, false)
 			// The callback takes spec.mu, so even after a zero delay it runs
 			// only once the timer is stored.
@@ -1677,7 +1696,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 					if err := launch(pending.conn, pending.consistency, false); err != nil {
 						launchErr = err
 					} else {
-						s.retries.Add(1)
+						s.countRetry(request)
 						if err := arm(); err != nil {
 							return specFailed(err)
 						}
@@ -1718,11 +1737,13 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 			aggregate.Attempts = startedCount
 			aggregate.AttemptLatency += outcome.event.Latency
 			aggregate.HostID = outcome.event.Target.HostID
+			aggregate.Address = outcome.event.Address
 			aggregate.AchievedConsistency = outcome.consistency
 			if response != nil {
-				mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: outcome.event.Target.HostID, Attempt: outcome.event.Attempt, Failed: attemptErr != nil, Speculative: outcome.event.Speculative})
+				mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: outcome.event.Target.HostID, Page: outcome.event.Page, Attempt: outcome.event.Attempt, Failed: attemptErr != nil, Speculative: outcome.event.Speculative})
 			}
 			if attemptErr == nil {
+				s.recordPage(request, time.Since(pageStarted))
 				response.Result = aggregate
 				response.Result.FetchedRows = int64(response.RowCount)
 				if response.PagingState != nil {
@@ -1782,7 +1803,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 					return nil, log.error(lastErr, aggregate)
 				}
 			} else {
-				s.retries.Add(1)
+				s.countRetry(request)
 				if err := arm(); err != nil {
 					return specFailed(err)
 				}
@@ -1804,7 +1825,7 @@ func (s *InternalSessionRuntime) newAttempt(w *model.AttemptRequest, conn *trans
 	if opts.NowInSeconds.Set && !version.NowInSeconds {
 		return cqltype.TypeValidation("now in seconds", "requires protocol v5")
 	}
-	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: opts.CQLTrace, Payload: opts.CustomPayload}
+	*w = model.AttemptRequest{TabletVersionBlock: request.tabletVersionBlock, Statement: request.statement, Values: request.InternalValues.Framed, ValueCount: len(request.InternalValues.Cells), Consistency: consistency, PageSize: int(request.options.InternalProfile.PageSize), Keyspace: request.keyspace, Trace: request.cqlTrace, Payload: opts.CustomPayload}
 	if !version.QueryKeyspace {
 		w.Keyspace = ""
 	}

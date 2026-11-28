@@ -95,14 +95,16 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if conn.InternalStreamObserver != nil {
 			fallback := *request
 			fallback.query, fallback.connection, fallback.responseDest = nil, conn, nil
-			page, err := s.executePage(ctx, &fallback, state)
+			// The same page continues on the general path, under the
+			// number executePage gave it.
+			page, err := s.executePageAttempts(ctx, &fallback, state)
 			if err != nil {
 				// Keep the attempts that failed before the hand-off.
 				err = log.merge(err, aggregate)
 			}
 			return page, err
 		}
-		s.attempts.Add(1)
+		s.countAttempt(request, conn)
 		var started time.Time
 		if l := request.InternalLogical; l != nil && !l.attemptTimed && !l.started.IsZero() {
 			// The first attempt starts with the execution: routing it took
@@ -125,13 +127,18 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if observe {
 			s.endDirectAttempt(request, conn, attempt, consistency, observed, response, err, end)
 		}
+		if err != nil {
+			s.countAttemptEnd(request, conn, err)
+		}
 		aggregate.Attempts = attempt
 		aggregate.AttemptLatency += latency
 		aggregate.HostID = conn.InternalHostID()
+		aggregate.Address = conn.Address()
 		aggregate.AchievedConsistency = consistency
-		mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: aggregate.HostID, Attempt: attempt, Failed: err != nil})
+		mergeResponseResult(&aggregate, response, cql.CQLTraceRef{HostID: aggregate.HostID, Page: int(request.page), Attempt: attempt, Failed: err != nil})
 		trace := responseTraceID(response)
 		if err == nil {
+			s.recordPage(request, time.Since(first))
 			// Attempts run one at a time here, and a failed attempt's response
 			// is released before the next; later pages get their own storage.
 			request.responseDest = nil
@@ -195,7 +202,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 		if decision.Action == retry.Next {
 			conn = nil
 		}
-		s.retries.Add(1)
+		s.countRetry(request)
 	}
 }
 
@@ -259,7 +266,7 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) meta
 func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, consistency cql.Consistency) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), Consistency: consistency, Started: started}), started
+	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Page: int(request.page), Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end
@@ -267,7 +274,7 @@ func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn,
 //
 //go:noinline
 func (s *InternalSessionRuntime) endDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, consistency cql.Consistency, started time.Time, response *transport.InternalResponsePage, err error, end func(routing2.AttemptEvent)) {
-	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response)}
+	event := routing2.AttemptEvent{RequestID: request.InternalLogical.id, Page: int(request.page), Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Latency: time.Since(started), Err: err, CQLTraceID: responseTraceID(response)}
 	attemptEnded(&event, request.partialBatch())
 	if end != nil {
 		perfAdd(1, 1)

@@ -168,4 +168,7 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 
 type OptionsStorage struct {
 	InternalConnection *transport.Conn
+	// InternalUntracked leaves the execution out of the session's metrics,
+	// as package cqltrace's reads are.
+	InternalUntracked bool
 }

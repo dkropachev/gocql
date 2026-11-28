@@ -31,6 +31,7 @@ const (
 	KeyStream     = "stream"
 	KeyErr        = "err"
 	KeySuppressed = "suppressed"
+	KeySession    = "session"
 )
 
 // Err returns the standard error attribute.

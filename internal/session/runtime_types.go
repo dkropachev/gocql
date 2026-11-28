@@ -210,6 +210,13 @@ type InternalExecutionRequest struct {
 	// values.
 	hasCounter   bool
 	hasTimestamp bool
+	// cqlTrace reports that the request's attempts ask for a CQL trace
+	// session: its options' CQLTrace, or its profile's sampler chose it at
+	// admission.
+	cqlTrace bool
+	// page is the 1-based number of the page the request is fetching;
+	// executePage numbers each page as it starts.
+	page int32
 	// idempotent is the statement's cql.Statement.Idempotent, or for a
 	// batch whether every member is; Options.Idempotent overrides it.
 	idempotent bool

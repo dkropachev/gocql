@@ -10,6 +10,10 @@
 // CQL tracing is unrelated to client-side tracing such as OpenTelemetry,
 // which instruments the driver through observe.Hooks. An Attempt hook can link
 // the two through routing.AttemptEvent.CQLTraceID.
+//
+// The reads of a trace session are the package's own: the session's
+// observe.Hooks do not see them, and its metrics do not count them, so
+// reading traces does not show up as application traffic.
 package cqltrace
 
 import (
@@ -25,6 +29,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/internal/link"
 )
 
 // Info is one CQL trace session: a row of system_traces.sessions and its
@@ -133,9 +138,9 @@ type Fetcher struct {
 // context.DeadlineExceeded.
 var ErrNotReady = errors.New("gocql: CQL trace session not ready")
 
-// Fetch reads the trace session id with a zero Fetcher.
-func Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
-	return Fetcher{}.Fetch(ctx, s, id)
+// Fetch reads the trace session ref names with a zero Fetcher.
+func Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRef) (Info, error) {
+	return Fetcher{}.Fetch(ctx, s, ref)
 }
 
 // FetchAll reads the trace sessions refs name with a zero Fetcher.
@@ -151,15 +156,15 @@ func FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]
 // session that fails does not keep the later ones from being read. Once ctx
 // ends, the remaining sessions fail with ErrNotReady.
 func (f Fetcher) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]Info, error) {
-	return fetchAll(ctx, refs, func(ctx context.Context, id cql.UUID) (Info, error) { return f.Fetch(ctx, s, id) })
+	return fetchAll(ctx, refs, func(ctx context.Context, ref cql.CQLTraceRef) (Info, error) { return f.Fetch(ctx, s, ref) })
 }
 
 // fetchAll is FetchAll reading each session with fetch.
-func fetchAll(ctx context.Context, refs []cql.CQLTraceRef, fetch func(context.Context, cql.UUID) (Info, error)) ([]Info, error) {
+func fetchAll(ctx context.Context, refs []cql.CQLTraceRef, fetch func(context.Context, cql.CQLTraceRef) (Info, error)) ([]Info, error) {
 	infos := make([]Info, len(refs))
 	var errs []error
 	for i, ref := range refs {
-		info, err := fetch(ctx, ref.ID)
+		info, err := fetch(ctx, ref)
 		if err != nil {
 			info = Info{ID: ref.ID}
 			errs = append(errs, fmt.Errorf("trace session %s: %w", ref.ID, err))
@@ -169,15 +174,29 @@ func fetchAll(ctx context.Context, refs []cql.CQLTraceRef, fetch func(context.Co
 	return infos, errors.Join(errs...)
 }
 
-// Fetch reads the trace session id, polling until it is ready or ctx ends.
+// compileUntracked is gocql.Session.CompileOptions for reads the session's
+// metrics leave out.
+var compileUntracked = link.Get[func(*gocql.Session, exec.Options) (exec.CompiledOptions, error)](link.CompileUntracked)
+
+// Fetch reads the trace session ref names, polling until it is ready or ctx
+// ends.
 //
 // The cluster writes a trace session asynchronously, after it answers the
 // traced request. A session is ready once its row records a duration and at
 // least one event is visible. Events can still arrive after that, so Fetch
 // then waits for them to settle; Info.Settled reports whether they did. Only
-// ctx bounds the wait; each read also uses the
-// session's default profile timeout.
-func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info, error) {
+// ctx bounds the wait; each read also uses the session's default profile
+// timeout.
+//
+// The reads go to ref.HostID, the coordinator of the traced attempt, which
+// writes the session's row and its own events first, so that a read at a
+// low consistency finds them soonest. Once a read sent there fails, as when
+// the host is down or has no connection, the reads that follow are routed
+// as the session's default profile routes them, to any replica; a ref
+// without a HostID is routed that way from the start. The reads run without
+// the session's observe.Hooks and are not counted in its metrics.
+func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRef) (Info, error) {
+	id := ref.ID
 	if s == nil {
 		return Info{ID: id}, &cql.ValidationError{Field: "session", Err: errors.New("nil session")}
 	}
@@ -185,17 +204,48 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (Info
 	if consistency == cql.Any {
 		consistency = cql.One
 	}
-	options, err := s.CompileOptions(exec.Options{Consistency: cql.Some(consistency), Idempotent: cql.Some(true)})
+	base := exec.Options{Consistency: cql.Some(consistency), Idempotent: cql.Some(true), NoSessionObserver: true}
+	anywhere, err := compileUntracked(s, base)
 	if err != nil {
 		return Info{ID: id}, err
+	}
+	options := anywhere
+	pinned := !ref.HostID.IsZero()
+	if pinned {
+		base.HostID = cql.Some(ref.HostID)
+		if options, err = compileUntracked(s, base); err != nil {
+			return Info{ID: id}, err
+		}
+	}
+	// read runs one read with options and, when a read pinned to the
+	// coordinator fails, unpins the rest and runs it again.
+	read := func(ctx context.Context, run func(exec.CompiledOptions) error) error {
+		err := run(options)
+		if err != nil && pinned && ctx.Err() == nil {
+			pinned, options = false, anywhere
+			err = run(options)
+		}
+		return err
 	}
 	statement := sessionStatement(s.Dialect() == config.ScyllaV4)
 	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow
-		found, _, err := s.UnpreparedOne(ctx, statement, id, &row, options)
+		var found bool
+		err := read(ctx, func(options exec.CompiledOptions) error {
+			var err error
+			row = sessionRow{}
+			found, _, err = s.UnpreparedOne(ctx, statement, id, &row, options)
+			return err
+		})
 		return row, found, err
 	}, func(ctx context.Context) ([]Event, error) {
-		return readEvents(ctx, s, id, options)
+		var events []Event
+		err := read(ctx, func(options exec.CompiledOptions) error {
+			var err error
+			events, err = readEvents(ctx, s, id, options)
+			return err
+		})
+		return events, err
 	})
 }
 

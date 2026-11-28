@@ -11,12 +11,16 @@ import (
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	"github.com/scylladb/gocql/v2/internal/routing"
 	"github.com/scylladb/gocql/v2/retry"
+	routing2 "github.com/scylladb/gocql/v2/routing"
 )
 
 type Profile struct {
-	Retry                retry.Policy
-	Routing              routing.RoutingPolicy
-	Speculation          retry.SpeculationPolicy
+	Retry       retry.Policy
+	Routing     routing.RoutingPolicy
+	Speculation retry.SpeculationPolicy
+	// CQLTraceSampler chooses, per request, whether to ask for a CQL trace
+	// session; nil traces only what exec.Options.CQLTrace asks for.
+	CQLTraceSampler      func(routing2.Info) bool
 	Timeout, PageTimeout time.Duration
 	Prefetch             int
 	PageSize             int32

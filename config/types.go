@@ -35,6 +35,11 @@ type Profile struct {
 	Routing routing.Policy
 	// Speculation is the speculative execution policy; nil disables it.
 	Speculation retry.SpeculationPolicy
+	// CQLTraceSampler, when not nil, is asked once per request, as it is
+	// admitted, whether to record a CQL trace session of its attempts, as
+	// exec.Options.CQLTrace does for every request it is set on; see
+	// ProfileBuilder.WithCQLTraceSampler.
+	CQLTraceSampler func(routing.Info) bool
 	// Timeout bounds one execution, retries included, and PageTimeout the
 	// fetch of one page. Zero means no limit.
 	Timeout, PageTimeout time.Duration
@@ -137,7 +142,8 @@ var defaultRouting = sync.OnceValue(implSettings.DefaultRouting)
 func internalProfile(p Profile) implSettings.Profile {
 	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: prefetchPages(p.Prefetch),
-		SerialConsistency: p.SerialConsistency, Consistency: p.Consistency, Idempotent: p.Idempotent}
+		SerialConsistency: p.SerialConsistency, Consistency: p.Consistency, Idempotent: p.Idempotent,
+		CQLTraceSampler: p.CQLTraceSampler}
 	v.InternalSetPageSize(p.PageSize)
 	if v.Retry == nil {
 		v.Retry = defaultRetry
@@ -158,7 +164,7 @@ func publicProfile(p implSettings.Profile) Profile {
 	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,
 		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch != 0,
 		PageSize: int(p.PageSize), SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
-		Idempotent: p.Idempotent, built: p.InternalBuilt()}
+		Idempotent: p.Idempotent, CQLTraceSampler: p.CQLTraceSampler, built: p.InternalBuilt()}
 }
 
 // prefetchPages is the internal prefetch depth of the public flag.

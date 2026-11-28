@@ -280,6 +280,9 @@ type Conn struct {
 	// before serve() starts.
 	headerReader headerReader
 	InternalAddr string
+	// InternalAddrPort is InternalAddr as an IP address and port, zero for a
+	// Unix socket connection.
+	InternalAddrPort netip.AddrPort
 	// segScratch holds the reusable buffers inbound v5 segments are read into.
 	// Only touched by the receive path, which runs on the serve() goroutine.
 	segScratch                  segment.Scratch
@@ -1689,6 +1692,12 @@ func (c *Conn) Closed() bool {
 
 func (c *Conn) Address() string {
 	return c.InternalAddr
+}
+
+// AddrPort returns Address as an IP address and port, or the zero AddrPort
+// for a Unix socket connection.
+func (c *Conn) AddrPort() netip.AddrPort {
+	return c.InternalAddrPort
 }
 
 func (c *Conn) AvailableStreams() int {

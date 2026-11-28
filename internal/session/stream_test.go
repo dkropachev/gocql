@@ -1072,7 +1072,7 @@ func TestStream(t *testing.T) {
 						t.Fatalf("pages %d, traces %+v, want %v", info.Pages, traces, ids)
 					}
 					for i, trace := range traces {
-						if trace != (cql.CQLTraceRef{ID: ids[i], HostID: info.Result.HostID, Attempt: 1}) {
+						if trace != (cql.CQLTraceRef{ID: ids[i], HostID: info.Result.HostID, Page: i + 1, Attempt: 1}) {
 							t.Fatalf("page %d trace %+v, want ID %v", i+1, trace, ids[i])
 						}
 					}

@@ -42,6 +42,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/logging"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/internal/transport"
+	"github.com/scylladb/gocql/v2/metrics"
 
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -148,6 +149,34 @@ func (p *InternalPolicyConnPool) Size() int {
 	return count
 }
 
+// AppendHostMetrics appends a metrics.Host for each host pool to dst, in
+// no particular order, and returns the extended slice.
+func (p *InternalPolicyConnPool) AppendHostMetrics(dst []metrics.Host) []metrics.Host {
+	if p == nil {
+		return dst
+	}
+	p.InternalMu.RLock()
+	start := len(dst)
+	pools := make([]*InternalHostConnPool, 0, len(p.InternalHostConnPools))
+	for id, pool := range p.InternalHostConnPools {
+		dst = append(dst, metrics.Host{HostID: id})
+		pools = append(pools, pool)
+	}
+	// Each pool is read after the map's lock is released: Size and
+	// InFlight take the pool's own lock.
+	p.InternalMu.RUnlock()
+	for i, pool := range pools {
+		h := &dst[start+i]
+		h.Address = pool.InternalHost.ConnectAddressAndPort()
+		h.Attempts = pool.InternalCounters.Attempts.Load()
+		h.Errors = pool.InternalCounters.Errors.Load()
+		h.Timeouts = pool.InternalCounters.Timeouts.Load()
+		h.Connections = pool.Size()
+		h.InFlight = pool.InFlight()
+	}
+	return dst
+}
+
 func (p *InternalPolicyConnPool) InternalGetPool(host *implEndpoint.HostInfo) (pool *InternalHostConnPool, ok bool) {
 	hostID := implEndpoint.InternalHostInfoHostUUID(host)
 	p.InternalMu.RLock()
@@ -251,6 +280,21 @@ func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cql.UUID) {
 	go pool.Close()
 }
 
+// HostCounters are the per-host counters metrics.Host reports. Executions
+// add to them as their attempts end.
+type HostCounters struct {
+	Attempts, Errors, Timeouts atomic.Uint64
+}
+
+// CountersOf returns the counters of the pool conn belongs to, or nil for a
+// connection outside a host pool, such as the control connection.
+func CountersOf(conn *transport.Conn) *HostCounters {
+	if pool, ok := conn.InternalErrorHandler.(*InternalHostConnPool); ok {
+		return &pool.InternalCounters
+	}
+	return nil
+}
+
 // hostConnPool is a connection pool for a single host.
 // Connection selection is based on a provided ConnSelectionPolicy
 func (pool *InternalHostConnPool) logger() *slog.Logger { return logging.Or(pool.InternalLogger) }
@@ -288,6 +332,9 @@ type InternalHostConnPool struct {
 	// shardConvicted reports that the conviction policy convicted the host
 	// on a shard failure; fillingStopped marks the host down.
 	shardConvicted bool
+	// InternalCounters counts the attempts sent on the pool's connections,
+	// for Session.HostMetrics.
+	InternalCounters HostCounters
 }
 
 func (pool *InternalHostConnPool) String() string {

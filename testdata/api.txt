@@ -81,6 +81,7 @@ package gocql
 		gocql.Session method (*T) DefaultProfile() config.Profile
 		gocql.Session method (*T) Dialect() config.Dialect
 		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) HostMetrics(dst []metrics.Host) []metrics.Host
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
@@ -221,6 +222,7 @@ package config
 		config.Profile field Retry retry.Policy
 		config.Profile field Routing routing.Policy
 		config.Profile field Speculation retry.SpeculationPolicy
+		config.Profile field CQLTraceSampler func(routing.Info) bool
 		config.Profile field Timeout time.Duration
 		config.Profile field PageTimeout time.Duration
 		config.Profile field PageSize int
@@ -233,6 +235,7 @@ package config
 		config.ProfileBuilder method (*T) Build() (config.Profile, error)
 		config.ProfileBuilder method (*T) MustBuild() config.Profile
 		config.ProfileBuilder method (*T) NoSerialConsistency() *config.ProfileBuilder
+		config.ProfileBuilder method (*T) WithCQLTraceSampler(sample func(routing.Info) bool) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithConsistency(c cql.Consistency) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithIdempotent(on bool) *config.ProfileBuilder
 		config.ProfileBuilder method (*T) WithPageSize(rows int) *config.ProfileBuilder
@@ -296,6 +299,7 @@ package cql
 	type cql.CQLTraceRef struct
 		cql.CQLTraceRef field ID cql.UUID
 		cql.CQLTraceRef field HostID cql.UUID
+		cql.CQLTraceRef field Page int
 		cql.CQLTraceRef field Attempt int
 		cql.CQLTraceRef field Failed bool
 		cql.CQLTraceRef field Speculative bool
@@ -574,6 +578,7 @@ package cql
 	const cql.Quorum cql.Consistency = 4
 	func cql.RandomUUID() cql.UUID
 	type cql.Result struct
+		cql.Result field Address string
 		cql.Result field HostID cql.UUID
 		cql.Result field Attempts int
 		cql.Result field AttemptLatency time.Duration
@@ -1158,13 +1163,13 @@ package cqltrace
 		cqltrace.Event field Thread string
 		cqltrace.Event field Elapsed time.Duration
 		cqltrace.Event field ID cql.TimeUUID
-	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRef) (cqltrace.Info, error)
 	func cqltrace.FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Fetcher struct
 		cqltrace.Fetcher field Poll time.Duration
 		cqltrace.Fetcher field Settle time.Duration
 		cqltrace.Fetcher field Consistency cql.Consistency
-		cqltrace.Fetcher method (T) Fetch(ctx context.Context, s *gocql.Session, id cql.UUID) (cqltrace.Info, error)
+		cqltrace.Fetcher method (T) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRef) (cqltrace.Info, error)
 		cqltrace.Fetcher method (T) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Info struct
 		cqltrace.Info field Started time.Time
@@ -1326,7 +1331,6 @@ package exec
 	type exec.PrepareOptions struct
 		exec.PrepareOptions field Keyspace string
 		exec.PrepareOptions field HostID cql.Option[cql.UUID]
-		exec.PrepareOptions field CQLTrace bool
 	const exec.SerialInherit exec.SerialOverride = 0
 	const exec.SerialLocal exec.SerialOverride = 2
 	type exec.SerialOverride uint8
@@ -1514,9 +1518,18 @@ package metadata
 		metadata.View field IncludeAllColumns bool
 
 package metrics
+	type metrics.Host struct
+		metrics.Host field Address string
+		metrics.Host field HostID cql.UUID
+		metrics.Host field Attempts uint64
+		metrics.Host field Errors uint64
+		metrics.Host field Timeouts uint64
+		metrics.Host field Connections int
+		metrics.Host field InFlight int
 	type metrics.Snapshot struct
 		metrics.Snapshot field ErrorsByKind map[cqlerr.Kind]uint64
 		metrics.Snapshot field Requests uint64
+		metrics.Snapshot field Pages uint64
 		metrics.Snapshot field Attempts uint64
 		metrics.Snapshot field Errors uint64
 		metrics.Snapshot field Canceled uint64
@@ -1529,16 +1542,26 @@ package metrics
 		metrics.Snapshot field LatencyP50 time.Duration
 		metrics.Snapshot field LatencyP95 time.Duration
 		metrics.Snapshot field LatencyP99 time.Duration
+		metrics.Snapshot method (T) ErrorsOf(kind cqlerr.Kind) uint64
 
 package observe
 	type observe.AttemptStart struct
 		observe.AttemptStart field Started time.Time
 		observe.AttemptStart field Address string
+		observe.AttemptStart field AddrPort net/netip.AddrPort
 		observe.AttemptStart field RequestID uint64
+		observe.AttemptStart field Page int
 		observe.AttemptStart field Attempt int
 		observe.AttemptStart field Target metadata.Target
 		observe.AttemptStart field Consistency cql.Consistency
 		observe.AttemptStart field Speculative bool
+	type observe.BatchStatement struct
+		observe.BatchStatement field Statement string
+		observe.BatchStatement field Values observe.BoundValues
+	type observe.BoundValues struct
+		observe.BoundValues method (T) At(i int) (cql.ColumnSpec, cql.ValueReader)
+		observe.BoundValues method (T) Format(w io.Writer, redact func(cql.ColumnSpec) bool) error
+		observe.BoundValues method (T) Len() int
 	type observe.Hooks struct
 		observe.Hooks field Request func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
 		observe.Hooks field Attempt func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
@@ -1546,19 +1569,19 @@ package observe
 	func observe.Join(hooks ...observe.Hooks) observe.Hooks
 	type observe.RequestEvent struct
 		observe.RequestEvent field Err error
-		observe.RequestEvent field Statement string
-		observe.RequestEvent field BatchStatements []string
-		observe.RequestEvent field Parameters cql.Columns
+		observe.RequestEvent field Finished time.Time
 		observe.RequestEvent field Result cql.Result
-		observe.RequestEvent field Routing routing.Info
-		observe.RequestEvent field ID uint64
+		observe.RequestEvent field Pages int
 	type observe.RequestStart struct
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
-		observe.RequestStart field BatchStatements []string
+		observe.RequestStart field BatchStatements []observe.BatchStatement
 		observe.RequestStart field Parameters cql.Columns
+		observe.RequestStart field Values observe.BoundValues
 		observe.RequestStart field Routing routing.Info
+		observe.RequestStart field SessionID cql.UUID
 		observe.RequestStart field ID uint64
+		observe.RequestStart field PageSize int
 		observe.RequestStart field CQLTrace bool
 
 package retry
@@ -1620,7 +1643,9 @@ package routing
 		routing.AttemptEvent field Started time.Time
 		routing.AttemptEvent field Err error
 		routing.AttemptEvent field Address string
+		routing.AttemptEvent field AddrPort net/netip.AddrPort
 		routing.AttemptEvent field RequestID uint64
+		routing.AttemptEvent field Page int
 		routing.AttemptEvent field Attempt int
 		routing.AttemptEvent field Latency time.Duration
 		routing.AttemptEvent field Target metadata.Target

@@ -60,7 +60,7 @@ func editedProfile(edit func(*Profile)) Profile {
 // observer back, and derives a profile from it.
 func TestConfigReadBack(t *testing.T) {
 	var zero Config
-	if p := zero.DefaultProfile(); p != (Profile{}) || !zero.Observer().IsZero() {
+	if p := zero.DefaultProfile(); !reflect.DeepEqual(p, Profile{}) || !zero.Observer().IsZero() {
 		t.Fatalf("zero Config: profile %+v, observer %+v", p, zero.Observer())
 	}
 	observer := observe.Hooks{Request: func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {

@@ -1106,7 +1106,17 @@ func (s *Core) StartV2SchemaRetry() {
 // It stays out of line so that TypedGeneration, which every execution calls,
 // inlines into its callers.
 //
+// HostMetrics appends a metrics.Host for each of the session's host pools to
+// dst and returns the extended slice.
+//
 //go:noinline
+func (s *Core) HostMetrics(dst []metrics.Host) []metrics.Host {
+	if s == nil {
+		return dst
+	}
+	return s.privateStorage.InternalPool.AppendHostMetrics(dst)
+}
+
 func sessionTypedSchemaGeneration(s *Core) uint64 {
 	p := s.Peripheral()
 	if p == nil {
@@ -1133,6 +1143,13 @@ func (s *Core) RecordV2Latency(id uint64, latency time.Duration) {
 		return
 	}
 	s.Peripheral().latency[v2LatencySlot(id)].Store(int64(latency) + 1)
+}
+
+// InternalLatencySample returns the latency recorded for the request with
+// this id and not yet read by the metrics worker, or false; tests read it.
+func (s *Core) InternalLatencySample(id uint64) (time.Duration, bool) {
+	v := s.Peripheral().latency[v2LatencySlot(id)].Load()
+	return time.Duration(v - 1), v != 0
 }
 
 // publishLatencySummary recomputes the percentiles from the samples recorded

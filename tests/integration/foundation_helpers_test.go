@@ -58,7 +58,7 @@ func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, sess
 	var internal implSession.PrepareOptions
 	switch o := any(options).(type) {
 	case exec.PrepareOptions:
-		internal = implSession.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID, CQLTrace: o.CQLTrace}
+		internal = implSession.PrepareOptions{Keyspace: o.Keyspace, HostID: o.HostID}
 	case implSession.PrepareOptions:
 		internal = o
 	}

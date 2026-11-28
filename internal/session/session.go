@@ -196,6 +196,10 @@ func (s *Session) Metadata() *routing.MetadataSnapshot {
 // Metrics returns a snapshot of the session's metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.Core().Metrics() }
 
+// HostMetrics appends a metrics.Host for each host the session has a pool
+// for to dst and returns the extended slice.
+func (s *Session) HostMetrics(dst []metrics.Host) []metrics.Host { return s.Core().HostMetrics(dst) }
+
 // RefreshMetadata waits for the shared topology refresh under the caller's
 // context. Metadata queries themselves use the session metadata timeout.
 func (s *Session) RefreshMetadata(ctx context.Context) error {

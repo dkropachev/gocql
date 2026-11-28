@@ -81,6 +81,7 @@ func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 
 type sessionTestObserver struct {
 	mu       sync.Mutex
+	starts   []observe.RequestStart
 	requests []observe.RequestEvent
 	attempts []routing.AttemptEvent
 }
@@ -96,8 +97,19 @@ func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 	o.attempts = append(o.attempts, e)
 }
 
-func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+func (o *sessionTestObserver) StartRequest(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.starts = append(o.starts, start)
 	return ctx, o.ObserveRequest
+}
+
+// started returns the RequestStart of every request observed. Their bound
+// values are no longer valid.
+func (o *sessionTestObserver) started() []observe.RequestStart {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]observe.RequestStart(nil), o.starts...)
 }
 func (o *sessionTestObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt

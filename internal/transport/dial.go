@@ -114,6 +114,7 @@ func Dial(ctx context.Context, host *implEndpoint.HostInfo, cfg *ConnConfig, err
 		InternalOpeningDeadline:     openingDeadline,
 		InternalValidateTarget:      DialedHostData(dialedHost).InternalValidateTarget,
 		InternalAddr:                dialedHost.Conn.RemoteAddr().String(),
+		InternalAddrPort:            remoteAddrPort(dialedHost.Conn.RemoteAddr()),
 		InternalErrorHandler:        errorHandler,
 		InternalCompressor:          cfg.Compressor,
 		InternalHooks:               opening.Hooks,
@@ -180,4 +181,14 @@ func WrapTLS(ctx context.Context, conn net.Conn, addr string, tlsConfig *tls.Con
 		Conn:            conn,
 		DisableCoalesce: tlsConfig != nil,
 	}, nil
+}
+
+// remoteAddrPort is addr as an IP address and port, or the zero AddrPort for
+// an address that is not TCP, such as a Unix socket's.
+func remoteAddrPort(addr net.Addr) netip.AddrPort {
+	if tcp, ok := addr.(*net.TCPAddr); ok {
+		ap := tcp.AddrPort()
+		return netip.AddrPortFrom(ap.Addr().Unmap(), ap.Port())
+	}
+	return netip.AddrPort{}
 }

@@ -52,7 +52,7 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement
 	switch len(options) {
 	case 0:
 	case 1:
-		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, CQLTrace: options[0].CQLTrace}
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID}
 	default:
 		return nil, tooManyPrepareOptions()
 	}
@@ -70,7 +70,7 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 	switch len(options) {
 	case 0:
 	case 1:
-		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID, CQLTrace: options[0].CQLTrace}
+		o = implSession.PrepareOptions{Keyspace: options[0].Keyspace, HostID: options[0].HostID}
 	default:
 		return nil, tooManyPrepareOptions()
 	}
@@ -297,6 +297,17 @@ func (s *Session) DefaultProfile() config.Profile {
 
 // Metrics returns a copy of the session's counters; see package metrics.
 func (s *Session) Metrics() metrics.Snapshot { return s.internal().Metrics() }
+
+// HostMetrics appends a metrics.Host for each host the session has a
+// connection pool for, in no particular order, to dst and returns the
+// extended slice, as append does, so that a caller polling it can reuse one
+// slice: hosts = session.HostMetrics(hosts[:0]). Each Host is read from
+// counters its pool keeps, without stopping requests; reading the
+// connections and requests in flight takes each pool's lock. Package
+// cqltrace's reads are not counted. A zero Session appends nothing.
+func (s *Session) HostMetrics(dst []metrics.Host) []metrics.Host {
+	return s.internal().HostMetrics(dst)
+}
 
 // RefreshMetadata reloads the topology, the client routes, when the session
 // uses them, and the schema Mode loads, then publishes a new Snapshot. A

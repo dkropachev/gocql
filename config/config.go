@@ -1025,6 +1025,26 @@ func (p *ProfileBuilder) WithIdempotent(on bool) *ProfileBuilder {
 	return p
 }
 
+// WithCQLTraceSampler sets a function the driver asks, once per request as
+// it is admitted, whether to record a server-side CQL trace session of the
+// request's attempts, so that a sample of production traffic can be traced
+// without setting exec.Options.CQLTrace on chosen calls. It receives the
+// request's routing.Info: its keyspace, table, token, consistency and kind.
+// A request whose options set CQLTrace is traced without asking. The
+// function is shared by every request of the profile and must be safe for
+// concurrent use and fast: it runs on every request. Tracing writes to
+// system_traces on the cluster, so sample sparingly, such as one request in
+// a thousand. Default nil, which traces only what CQLTrace asks for.
+//
+//	var n atomic.Uint64
+//	profile := session.DefaultProfile().Builder().
+//		WithCQLTraceSampler(func(routing.Info) bool { return n.Add(1)%1000 == 0 }).
+//		MustBuild()
+func (p *ProfileBuilder) WithCQLTraceSampler(sample func(routing.Info) bool) *ProfileBuilder {
+	p.profile.CQLTraceSampler = sample
+	return p
+}
+
 // WithSpeculation sets the speculative execution policy; nil disables it.
 // Default none. Only an idempotent execution of ordinary statements
 // speculates; see retry.SpeculationPolicy.

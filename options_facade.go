@@ -9,9 +9,21 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/exec"
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
+	"github.com/scylladb/gocql/v2/internal/link"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 )
+
+func init() { link.Set(link.CompileUntracked, compileUntracked) }
+
+// compileUntracked is Session.CompileOptions for executions that the
+// session's metrics leave out, such as package cqltrace's reads.
+func compileUntracked(s *Session, options exec.Options) (exec.CompiledOptions, error) {
+	o := internalOptions(options)
+	implSession.OptionsData(&o).InternalUntracked = true
+	compiled, err := s.internal().CompileOptions(o)
+	return exec.CompiledOptions(compiled), err
+}
 
 func internalOptions(o exec.Options) implSession.Options {
 	v := implSession.Options{

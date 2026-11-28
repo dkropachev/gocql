@@ -4,6 +4,7 @@
 package routing
 
 import (
+	"net/netip"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -51,11 +52,22 @@ type AttemptEvent struct {
 	// or the socket path of a Unix socket connection, as in
 	// cqlerr.AttemptFailure.
 	Address string
+	// AddrPort is Address as an IP address and port, such as an
+	// OpenTelemetry span's server.address and server.port, and is the zero
+	// AddrPort for a Unix socket connection.
+	AddrPort netip.AddrPort
 	// RequestID is the ID of the attempt's request.
 	RequestID uint64
-	// Attempt is the 1-based number of the attempt within its request.
+	// Page is the 1-based number of the page the attempt fetched within its
+	// request: a statement that returns rows over several pages sends each
+	// page's attempts in turn.
+	Page int
+	// Attempt is the 1-based number of the attempt within its page: the
+	// first attempt of every page is 1, and retries and speculative
+	// attempts of that page count on from it.
 	Attempt int
-	// Latency is how long the attempt took.
+	// Latency is how long the attempt took, from sending it to its
+	// response or its failure.
 	Latency time.Duration
 	// Target is the host, and shard, the attempt was sent to.
 	Target metadata.Target

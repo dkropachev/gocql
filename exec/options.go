@@ -200,7 +200,7 @@ func (o CompiledOptions) Values() Options {
 	return publicOptions(implSession.CompiledOptions(o).Values())
 }
 
-// PrepareOptions selects the keyspace, host and tracing of preparation.
+// PrepareOptions selects the keyspace and host of preparation.
 // The zero value uses the session's keyspace and any eligible host.
 // Use CompiledOptions for execution settings.
 type PrepareOptions struct {
@@ -213,9 +213,6 @@ type PrepareOptions struct {
 	// HostID prepares on the host with this host ID when set, and on any
 	// eligible host otherwise.
 	HostID cql.Option[cql.UUID]
-	// CQLTrace records a server-side CQL trace session of the PREPARE. The
-	// driver does not report its session ID.
-	CQLTrace bool
 }
 
 // StreamOptions chooses caller-storage decoding and its receive mode. The zero
