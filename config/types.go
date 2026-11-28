@@ -28,7 +28,7 @@ import (
 // The zero Profile is such a literal, and is rejected the same way.
 type Profile struct {
 	// Retry is the retry policy; nil is the default, retry.Safe{MaxAttempts:
-	// 3}, as for ProfileBuilder.WithRetry. retry.Never{} disables retries.
+	// 3}, as for ProfileBuilder.WithRetry. retry.NeverRetry{} disables retries.
 	Retry retry.Policy
 	// Routing is the routing policy; nil is the default policy, as for
 	// ProfileBuilder.WithRouting.

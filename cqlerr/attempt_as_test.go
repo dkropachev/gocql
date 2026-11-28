@@ -38,9 +38,38 @@ func TestAttemptAs(t *testing.T) {
 	}
 }
 
+// TestAttemptIs checks that AttemptIs searches the error first, then the
+// attempts, as AttemptAs does.
+func TestAttemptIs(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("op: %w", NewExecutionError(ErrRequestTimeout, MaybeExecuted,
+		AttemptFailure{Err: &UnavailableError{}, Attempt: 1}, AttemptFailure{Err: fmt.Errorf("wrap: %w", ErrConnectionClosed), Attempt: 2}))
+	if errors.Is(err, ErrConnectionClosed) {
+		t.Fatal("errors.Is found an attempt's error")
+	}
+	for _, c := range []struct {
+		name   string
+		err    error
+		target error
+		want   bool
+	}{
+		{"own error", err, ErrRequestTimeout, true},
+		{"own error through Is", err, context.DeadlineExceeded, true},
+		{"newest attempt", err, ErrConnectionClosed, true},
+		{"older attempt's code", err, CodeUnavailable, true},
+		{"absent", err, ErrNoConnections, false},
+		{"plain error", ErrClosed, ErrClosed, true},
+		{"nil", nil, ErrClosed, false},
+	} {
+		if got := AttemptIs(c.err, c.target); got != c.want {
+			t.Errorf("%s: AttemptIs = %t, want %t", c.name, got, c.want)
+		}
+	}
+}
+
 // TestConditionalUnknown checks that ConditionalUnknown reports every
-// conditional request that may have applied, which IsCASWriteUnknown misses
-// unless the server said so.
+// conditional request that may have applied, not only those the server
+// reported as a CAS timeout.
 func TestConditionalUnknown(t *testing.T) {
 	t.Parallel()
 	failed := func(err error, status ExecutionStatus, kind cql.StatementKind) error {
@@ -50,24 +79,21 @@ func TestConditionalUnknown(t *testing.T) {
 	}
 	casTimeout := &WriteTimeoutError{WriteType: WriteTypeCAS}
 	for _, c := range []struct {
-		name         string
-		err          error
-		unknown, cas bool
+		name    string
+		err     error
+		unknown bool
 	}{
-		{"server CAS timeout", failed(casTimeout, MaybeExecuted, cql.ConditionalStatement), true, true},
-		{"driver timeout", failed(ErrRequestTimeout, MaybeExecuted, cql.ConditionalStatement), true, false},
-		{"lost connection", failed(ErrConnectionClosed, MaybeExecuted, cql.ConditionalStatement), true, false},
-		{"caller canceled in flight", fmt.Errorf("op: %w", failed(context.Canceled, MaybeExecuted, cql.ConditionalStatement)), true, false},
-		{"not sent", failed(ErrNoConnections, NotExecuted, cql.ConditionalStatement), false, false},
-		{"ordinary", failed(ErrRequestTimeout, MaybeExecuted, cql.OrdinaryStatement), false, false},
-		{"no execution error", casTimeout, false, true},
-		{"nil", nil, false, false},
+		{"server CAS timeout", failed(casTimeout, MaybeExecuted, cql.ConditionalStatement), true},
+		{"driver timeout", failed(ErrRequestTimeout, MaybeExecuted, cql.ConditionalStatement), true},
+		{"lost connection", failed(ErrConnectionClosed, MaybeExecuted, cql.ConditionalStatement), true},
+		{"caller canceled in flight", fmt.Errorf("op: %w", failed(context.Canceled, MaybeExecuted, cql.ConditionalStatement)), true},
+		{"not sent", failed(ErrNoConnections, NotExecuted, cql.ConditionalStatement), false},
+		{"ordinary", failed(ErrRequestTimeout, MaybeExecuted, cql.OrdinaryStatement), false},
+		{"no execution error", casTimeout, false},
+		{"nil", nil, false},
 	} {
 		if got := ConditionalUnknown(c.err); got != c.unknown {
 			t.Errorf("%s: ConditionalUnknown = %t, want %t", c.name, got, c.unknown)
-		}
-		if got := IsCASWriteUnknown(c.err); got != c.cas {
-			t.Errorf("%s: IsCASWriteUnknown = %t, want %t", c.name, got, c.cas)
 		}
 	}
 }

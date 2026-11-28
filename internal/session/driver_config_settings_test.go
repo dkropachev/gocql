@@ -231,7 +231,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			edit: func(c *settings.Config) {
 				c.Reconnect = reportReconnect{}
 				p := *c.DefaultProfile
-				p.Retry, p.Routing = retry.Never{}, implRouting.EngineOf(reportRouting{newReportRouting(t)})
+				p.Retry, p.Routing = retry.NeverRetry{}, implRouting.EngineOf(reportRouting{newReportRouting(t)})
 				c.DefaultProfile = &p
 			},
 			want: map[string]any{

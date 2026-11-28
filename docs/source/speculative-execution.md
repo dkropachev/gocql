@@ -15,8 +15,10 @@ execution's context, so a value the application attached with
 fails the execution with a `cql.ValidationError`, as a negative retry delay
 does.
 
-`retry.FixedSpeculation{After: d, Max: n}` starts another attempt every `d`
-until `n` attempts have started, as v1's `SimpleSpeculativeExecution` did.
+`retry.FixedSpeculation{After: d, MaxAttempts: n}` starts another attempt
+every `d` until `n` attempts have started, as v1's
+`SimpleSpeculativeExecution` did; a `MaxAttempts` of zero means two, one
+speculative attempt.
 `retry.SpeculationPolicyFunc` makes a policy from a function:
 
 ```go

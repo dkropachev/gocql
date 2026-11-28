@@ -43,21 +43,28 @@ type NoSpeculation struct{}
 func (NoSpeculation) Delay(Speculation) (time.Duration, bool) { return 0, false }
 
 // FixedSpeculation starts another attempt After the previous one, until
-// Max attempts have started, the first included, as v1's
-// SimpleSpeculativeExecution did with NumAttempts = Max-1 and
-// TimeoutDelay = After. A Max of one or less starts none, so the zero
-// FixedSpeculation does not speculate; a negative After fails the
-// execution, as a negative delay from any SpeculationPolicy does.
+// MaxAttempts have started, the first included, as v1's
+// SimpleSpeculativeExecution did with NumAttempts = MaxAttempts-1 and
+// TimeoutDelay = After. A MaxAttempts of zero or less means two: the zero
+// FixedSpeculation starts one speculative attempt right away. A negative
+// After fails the execution, as a negative delay from any SpeculationPolicy
+// does.
 type FixedSpeculation struct {
 	// After is the wait before each additional attempt.
 	After time.Duration
-	// Max bounds the attempts started, the first and the speculative ones.
-	Max int
+	// MaxAttempts bounds the attempts started, the first and the
+	// speculative ones; zero or less means two.
+	MaxAttempts int
 }
 
-// Delay returns f.After while fewer than f.Max attempts have started.
+// Delay returns f.After while fewer than f.MaxAttempts attempts have
+// started.
 func (f FixedSpeculation) Delay(s Speculation) (time.Duration, bool) {
-	if s.Started >= f.Max {
+	limit := f.MaxAttempts
+	if limit <= 0 {
+		limit = 2
+	}
+	if s.Started >= limit {
 		return 0, false
 	}
 	return f.After, true

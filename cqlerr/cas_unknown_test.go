@@ -12,40 +12,31 @@ import (
 
 // Cassandra over protocol 5 reports an LWT with an unknown outcome as
 // CAS_WRITE_UNKNOWN; ScyllaDB and Cassandra over protocol 4 as a write timeout
-// of write type CAS. One check covers both.
-func TestIsCASWriteUnknown(t *testing.T) {
-	for _, tc := range []struct {
-		err  error
-		want bool
-	}{
-		{&CASWriteUnknownError{}, true},
-		{fmt.Errorf("wrapped: %w", &CASWriteUnknownError{}), true},
-		{&WriteTimeoutError{WriteType: WriteTypeCAS}, true},
-		{&WriteTimeoutError{WriteType: WriteTypeSimple}, false},
-		{&ReadTimeoutError{}, false},
-		{nil, false},
+// of write type CAS. Both are MaybeExecuted.
+func TestCASWriteUnknownStatus(t *testing.T) {
+	for _, err := range []error{
+		&CASWriteUnknownError{},
+		fmt.Errorf("wrapped: %w", &CASWriteUnknownError{}),
+		&WriteTimeoutError{WriteType: WriteTypeCAS},
 	} {
-		if got := IsCASWriteUnknown(tc.err); got != tc.want {
-			t.Errorf("%v: %t, want %t", tc.err, got, tc.want)
-		}
-		if tc.want && ExecutionStatusOf(tc.err) != MaybeExecuted {
-			t.Errorf("%v: status %v, want MaybeExecuted", tc.err, ExecutionStatusOf(tc.err))
+		if ExecutionStatusOf(err) != MaybeExecuted {
+			t.Errorf("%v: status %v, want MaybeExecuted", err, ExecutionStatusOf(err))
 		}
 	}
 }
 
-// An ExecutionError wraps only its cause, so IsCASWriteUnknown looks at every
-// attempt: an LWT timeout the caller's cancellation ended is still reported.
-func TestIsCASWriteUnknownInAttempts(t *testing.T) {
+// An ExecutionError wraps only its cause, so the CAS timeout of an attempt
+// the caller's cancellation ended is found by AttemptAs, not errors.As.
+func TestCASWriteUnknownInAttempts(t *testing.T) {
 	timeout := &WriteTimeoutError{WriteType: WriteTypeCAS}
 	err := NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: timeout, Attempt: 1})
 	if errors.Is(err, CodeWriteTimeout) {
 		t.Fatal("ExecutionError unwraps an earlier attempt")
 	}
-	if !IsCASWriteUnknown(err) || !IsCASWriteUnknown(fmt.Errorf("wrapped: %w", err)) {
-		t.Fatal("CAS timeout of an earlier attempt not reported")
+	if found, ok := AttemptAs[*WriteTimeoutError](fmt.Errorf("wrapped: %w", err)); !ok || found.WriteType != WriteTypeCAS {
+		t.Fatal("CAS timeout of an earlier attempt not found")
 	}
-	if IsCASWriteUnknown(NewExecutionError(context.Canceled, MaybeExecuted, AttemptFailure{Err: &WriteTimeoutError{WriteType: WriteTypeSimple}})) {
-		t.Fatal("a simple write timeout reported as CAS")
+	if !AttemptIs(err, CodeWriteTimeout) {
+		t.Fatal("AttemptIs missed the code of an earlier attempt")
 	}
 }

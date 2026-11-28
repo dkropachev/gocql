@@ -78,7 +78,7 @@ func TestWorkerRequestTimeoutCause(t *testing.T) {
 	for _, driver := range []bool{false, true} {
 		t.Run(map[bool]string{false: "Caller", true: "Driver"}[driver], func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			values := Options{Retry: retry.Never{}}
+			values := Options{Retry: retry.NeverRetry{}}
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if driver {

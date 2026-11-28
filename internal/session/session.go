@@ -160,11 +160,11 @@ func errZeroSession() error {
 	return cqltype.TypeValidation("session", "zero Session; open one with gocql.Connect")
 }
 
-// AwaitSchemaAgreement waits until schema versions across all nodes in the
-// cluster are the same, as seen from the control connection. The
-// MaxWaitSchemaAgreement setting (default: 60s) bounds the wait; when it
-// elapses with versions still differing, AwaitSchemaAgreement returns an
-// error.
+// AwaitSchemaAgreement waits until the schema versions of all hosts the
+// host filter accepts are the same. The agreement timeout (default: 60s)
+// bounds the wait; when it elapses with versions still differing or hosts
+// unreachable, AwaitSchemaAgreement returns a *cqlerr.SchemaAgreementError
+// wrapping cqlerr.ErrRequestTimeout.
 func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
 	if s.Core() == nil {
 		return errZeroSession()

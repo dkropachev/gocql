@@ -84,7 +84,7 @@ func referenceKindOf(err error) Kind {
 		return KindTimeout
 	}
 	switch {
-	case hasType[*ConnectError](err), hasType[*NoHostsError](err), hasType[net.Error](err),
+	case hasType[*ConnectError](err), hasType[*NoHostsError](err), hasType[*PartialRefreshError](err), hasType[net.Error](err),
 		has(ErrNoConnections, ErrNoConnectionsStarted, ErrConnectionClosed, ErrNoStreams,
 			ErrNoControl, ErrScyllaSourcePortAlreadyInUse, io.EOF, io.ErrUnexpectedEOF, net.ErrClosed):
 		return KindConnection
@@ -140,6 +140,8 @@ func classifiedLeaves() []error {
 		io.EOF, io.ErrUnexpectedEOF, net.ErrClosed, ErrNoCurrentRow, ErrPagingStateLimit,
 		ErrPagingNoProgress, ErrNoControl, ErrScyllaSourcePortAlreadyInUse,
 		&NoHostsError{Operation: "o"}, &NoHostsError{Operation: "o", Causes: []error{ErrNoConnections}},
+		&PartialRefreshError{Keyspaces: map[string]error{"ks": errors.New("changed")}},
+		&SchemaAgreementError{Err: ErrRequestTimeout}, &SchemaAgreementError{Applied: true, Err: &UnavailableError{}},
 		&cql.ValidationError{Field: "f", Err: errors.New("bad")},
 		&cql.CodecError{Stage: "decode", Err: errors.New("bad")},
 		&cql.CodecError{Stage: "decode", Err: &cql.ProtocolError{Stage: "cell", Err: io.ErrUnexpectedEOF}},

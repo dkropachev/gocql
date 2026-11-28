@@ -32,7 +32,7 @@ func decideRetry(ctx context.Context, request *InternalExecutionRequest, conn *t
 		Attempt:         number,
 		Idempotent:      request.isIdempotent(),
 		Consistency:     consistency,
-		StatementKind:   request.routing.Kind,
+		StatementKind:   request.statementKind(),
 		Batch:           request.batchKind(),
 		ExecutionStatus: status,
 		Keyspace:        request.routing.Keyspace,

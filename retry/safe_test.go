@@ -95,8 +95,8 @@ func TestSafe(t *testing.T) {
 				if got := (retry.Safe{}).Decide(a); got.Action != want {
 					t.Errorf("idempotent=%t wrapped: %v, want %v", idempotent, got.Action, want)
 				}
-				if got := (retry.Never{}).Decide(a); got != (retry.Decision{}) {
-					t.Errorf("Never decided %+v", got)
+				if got := (retry.NeverRetry{}).Decide(a); got != (retry.Decision{}) {
+					t.Errorf("NeverRetry decided %+v", got)
 				}
 			}
 		})

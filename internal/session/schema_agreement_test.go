@@ -96,8 +96,21 @@ func TestSchemaAgreement(t *testing.T) {
 						hosts = append(hosts, metadata.HostSnapshot{HostID: id, Enabled: true, Up: true})
 					}
 					s.Peripheral().InternalSnapshot.Store(routing.NewMetadataSnapshot(routing.SnapshotState{InternalHosts: hosts}))
-					if err := s.AwaitSchemaAgreement(context.Background()); !errors.Is(err, context.DeadlineExceeded) {
+					err := s.AwaitSchemaAgreement(context.Background())
+					if !errors.Is(err, context.DeadlineExceeded) {
 						t.Fatal("missing enabled host/zero successes counted as agreement", err)
+					}
+					// The agreement's own timeout is the driver's, not the
+					// caller's deadline, and the error names the down host.
+					if !errors.Is(err, cqlerr.ErrRequestTimeout) || cqlerr.KindOf(err) != cqlerr.KindTimeout {
+						t.Fatalf("err = %v (%v); want the agreement timeout", err, cqlerr.KindOf(err))
+					}
+					agreement, ok := errors.AsType[*cqlerr.SchemaAgreementError](err)
+					if !ok || agreement.Applied || len(agreement.Unreachable) != 1 || agreement.Unreachable[0] != missing {
+						t.Fatalf("err = %#v; want the down host unreachable", err)
+					}
+					if _, reported := agreement.Versions[id]; reported != success || len(agreement.Versions) != map[bool]int{false: 0, true: 1}[success] {
+						t.Fatalf("Versions = %v", agreement.Versions)
 					}
 				})
 			}
@@ -202,8 +215,11 @@ func TestSchemaAgreement(t *testing.T) {
 				opaqueStorageValuexxxxxx.Retry = retryOnce{}
 				return opaqueStorageValuexxxxxx
 			}()))
-			if err == nil || !strings.Contains(err.Error(), "DDL succeeded") {
+			if agreement, ok := errors.AsType[*cqlerr.SchemaAgreementError](err); !ok || !agreement.Applied {
 				t.Fatal("successful DDL failure not distinguished", err)
+			}
+			if cqlerr.ExecutionStatusOf(err) != cqlerr.PartiallyExecuted {
+				t.Fatal("successful DDL failure not PartiallyExecuted", err)
 			}
 			conn.Close()
 			peers[0].Close()
@@ -253,7 +269,7 @@ func TestSchemaAgreement(t *testing.T) {
 			<-entered
 			cancel()
 			err := <-result
-			if !errors.Is(err, context.Canceled) || !strings.Contains(err.Error(), "DDL succeeded") {
+			if agreement, ok := errors.AsType[*cqlerr.SchemaAgreementError](err); !errors.Is(err, context.Canceled) || !ok || !agreement.Applied {
 				t.Fatal("canceled post-DDL agreement lost acknowledged success", err)
 			}
 			conn.Close()

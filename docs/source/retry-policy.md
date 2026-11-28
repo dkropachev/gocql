@@ -21,10 +21,10 @@ decision the driver cannot carry out, an unknown `Action`, an invalid
 `errors.As` still find why the attempt failed.
 
 `execopt.Options.Retry == nil` inherits the selected profile's retry policy. Use
-`execopt.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
+`execopt.Options{Retry: retry.NeverRetry{}}` to stop after the first failed attempt without
 replacing other profile settings. In a profile, `ProfileBuilder.WithRetry(nil)`
 and a nil `Profile.Retry` mean the default, `retry.Safe{MaxAttempts: 3}`;
-`WithRetry(retry.Never{})` disables retries.
+`WithRetry(retry.NeverRetry{})` disables retries.
 
 `retry.Safe` bounds attempts (`MaxAttempts`, the first included; zero means
 three) and retries only when replay is safe. Among server errors, it moves to
@@ -49,7 +49,12 @@ or an overloaded replica more work only adds load; an application loop can
 back off first.
 
 A custom policy can build on `cqlerr.KindOf` and the
-attempt's `ExecutionStatus`; `retry.PolicyFunc` adapts a function:
+attempt's `ExecutionStatus`, or on `Attempt.Retryable()`, which applies
+`cqlerr.Retryable`'s rule to the attempt: `cqlerr.Retryable(a.Err)` cannot,
+since `Attempt.Err` holds no `ExecutionError` and so no idempotence, and it
+reports an idempotent attempt that timed out as not retryable.
+`Attempt.StatementKind` of a SERIAL or LOCAL_SERIAL read is
+`OrdinaryStatement`. `retry.PolicyFunc` adapts a function:
 
 ```go
 policy := retry.PolicyFunc(func(a retry.Attempt) retry.Decision {

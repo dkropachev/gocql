@@ -65,9 +65,11 @@ type Attempt struct {
 	Consistency cql.Consistency
 	// StatementKind classifies the request's statement, or a batch's statements
 	// together: ConditionalStatement when one of them is conditional, else
-	// OrdinaryStatement. The driver resolves an UnknownStatement before
-	// sending it (see cql.UnknownStatement); a policy should still treat
-	// anything but OrdinaryStatement as a possible lightweight transaction.
+	// OrdinaryStatement. A SERIAL or LOCAL_SERIAL read is OrdinaryStatement,
+	// though the driver routes it as it routes a conditional statement. The
+	// driver resolves an UnknownStatement before sending it (see
+	// cql.UnknownStatement); a policy should still treat anything but
+	// OrdinaryStatement as a possible lightweight transaction.
 	StatementKind cql.StatementKind
 	// Batch is the kind of batch the request sends; it is unset for any
 	// other request.
@@ -82,6 +84,30 @@ type Attempt struct {
 	// failed attempt included, as in Speculation.Elapsed. A policy that
 	// bounds a page's retries by time reads it.
 	Elapsed time.Duration
+}
+
+// Retryable reports whether sending the request again after this attempt can
+// succeed and is safe, as cqlerr.Retryable does for the error a call
+// returns: Err's Kind is Transient, and the attempt did not execute
+// (ExecutionStatus is cqlerr.NotExecuted) or the request is Idempotent and
+// not a possible lightweight transaction (StatementKind is
+// cql.OrdinaryStatement). Err holds no cqlerr.ExecutionError, so
+// cqlerr.Retryable(a.Err) cannot see the request's idempotence; a policy
+// reads this instead.
+//
+// It is false for the zero Attempt.
+func (a Attempt) Retryable() bool {
+	if a.Err == nil || !cqlerr.KindOf(a.Err).Transient() {
+		return false
+	}
+	switch a.ExecutionStatus {
+	case cqlerr.NotExecuted:
+		return true
+	case cqlerr.MaybeExecuted, cqlerr.PartiallyExecuted:
+		return a.Idempotent && a.StatementKind == cql.OrdinaryStatement
+	default:
+		return false
+	}
 }
 
 // Decision is a policy's answer. The zero value stops retrying.
@@ -101,14 +127,15 @@ type Policy interface {
 	Decide(Attempt) Decision
 }
 
-// Never stops after the first failed attempt. Set execopt.Options.Retry to Never{}
-// to disable retries for an execution while nil inherits the profile's policy.
+// NeverRetry stops after the first failed attempt. Set
+// execopt.Options.Retry to NeverRetry{} to disable retries for an execution
+// while nil inherits the profile's policy.
 //
 // It has no fields; its zero value is ready to use.
-type Never struct{}
+type NeverRetry struct{}
 
 // Decide always returns Stop.
-func (Never) Decide(Attempt) Decision { return Decision{Action: Stop} }
+func (NeverRetry) Decide(Attempt) Decision { return Decision{Action: Stop} }
 
 // PolicyFunc adapts a function to Policy.
 type PolicyFunc func(Attempt) Decision

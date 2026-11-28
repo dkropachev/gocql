@@ -4,6 +4,7 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -590,15 +591,27 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 	if timeout <= 0 {
 		timeout = time.Minute
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	// The agreement's own timeout ends it with ErrRequestTimeout, a
+	// driver timeout, unlike the caller's deadline.
+	ctx, cancel := context.WithTimeoutCause(ctx, timeout, cqlerr.ErrRequestTimeout)
 	defer cancel()
 	interval := options.AgreementPoll
 	if interval <= 0 {
 		interval = 200 * time.Millisecond
 	}
+	// failure reports the last check's versions and unreachable hosts
+	// with the cause.
+	var last *cqlerr.SchemaAgreementError
+	failure := func(cause error) error {
+		if last == nil {
+			return &cqlerr.SchemaAgreementError{Err: cause}
+		}
+		last.Err = cause
+		return last
+	}
 	for {
-		if err := ctx.Err(); err != nil {
-			return err
+		if ctx.Err() != nil {
+			return failure(context.Cause(ctx))
 		}
 		if s.Closed() {
 			return cqlerr.ErrClosed
@@ -615,10 +628,11 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 			scope[required] = append([]*transport.Conn{coordinator}, scope[required]...)
 		}
 		if len(scope) == 0 {
-			return &cqlerr.NoHostsError{Operation: "schema agreement", Causes: []error{cqlerr.ErrNoConnections}}
+			return failure(&cqlerr.NoHostsError{Operation: "schema agreement", Causes: []error{cqlerr.ErrNoConnections}})
 		}
 		type observation struct {
 			err     error
+			id      cql.UUID
 			version cql.UUID
 		}
 		results := make(chan observation, len(scope))
@@ -641,36 +655,44 @@ func (s *Core) awaitV2SchemaAgreementUsing(ctx context.Context, coordinator *tra
 				defer workers.Done()
 				for job := range jobs {
 					v, err := readV2AgreementHost(ctx, job.id, job.conns)
-					results <- observation{err: err, version: v}
+					results <- observation{err: err, id: job.id, version: v}
 				}
 			}()
 		}
 		workers.Wait()
 		close(results)
-		complete := true
+		check := &cqlerr.SchemaAgreementError{Versions: make(map[cql.UUID]cql.UUID, len(scope))}
 		versions := make(map[cql.UUID]bool)
 		var terminal error
 		for result := range results {
 			if result.err != nil {
-				complete = false
+				check.Unreachable = append(check.Unreachable, result.id)
 				if terminalV2AgreementError(result.err) {
 					terminal = result.err
 				}
 			} else {
+				check.Versions[result.id] = result.version
 				versions[result.version] = true
 			}
 		}
-		if terminal != nil {
-			return terminal
+		slices.SortFunc(check.Unreachable, func(a, b cql.UUID) int { return bytes.Compare(a[:], b[:]) })
+		// A check the deadline cut short reports its in-flight reads as
+		// unreachable, so the error keeps the last complete check.
+		if ctx.Err() != nil && last != nil {
+			return failure(context.Cause(ctx))
 		}
-		if complete && len(versions) == 1 {
+		last = check
+		if terminal != nil {
+			return failure(terminal)
+		}
+		if len(check.Unreachable) == 0 && len(versions) == 1 {
 			return nil
 		}
 		timer := time.NewTimer(interval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
-			return ctx.Err()
+			return failure(context.Cause(ctx))
 		case <-timer.C:
 		}
 	}

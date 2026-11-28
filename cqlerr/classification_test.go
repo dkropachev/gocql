@@ -33,7 +33,7 @@ var sentinels = map[string]struct {
 	"ErrPagingNoProgress":             {ErrPagingNoProgress, "gocql: paging made no progress"},
 	"ErrPagingStateLimit":             {ErrPagingStateLimit, "gocql: paging state history limit exceeded"},
 	"ErrRequestTimeout":               {ErrRequestTimeout, "gocql: request timeout exceeded"},
-	"ErrReadHeaderTimeout":            {ErrReadHeaderTimeout, "gocql: unable to read frame header"},
+	"ErrReadHeaderTimeout":            {ErrReadHeaderTimeout, "gocql: timeout reading frame header"},
 	"ErrScyllaSourcePortAlreadyInUse": {ErrScyllaSourcePortAlreadyInUse, "gocql: shard-aware source port is already in use"},
 	"ErrStaleRows":                    {ErrStaleRows, "gocql: rows belong to an earlier execution of the query"},
 	"ErrTimeoutNoResponse":            {ErrTimeoutNoResponse, "gocql: no response from server within timeout"},
@@ -54,6 +54,7 @@ func errorTypes() map[string]error {
 		"RateLimitReachedError":   &RateLimitReachedError{OpType: OpTypeWrite},
 		"ReadFailureError":        &ReadFailureError{Received: 1, BlockFor: 2},
 		"ReadTimeoutError":        &ReadTimeoutError{Received: 1, BlockFor: 2},
+		"SchemaAgreementError":    &SchemaAgreementError{Err: ErrRequestTimeout},
 		"SchemaChangedError":      &SchemaChangedError{Statement: "SELECT"},
 		"ServerMismatchError":     &ServerMismatchError{Want: "ScyllaDB", Got: "Cassandra"},
 		"UnavailableError":        &UnavailableError{Required: 2, Alive: 1},
@@ -123,7 +124,7 @@ func TestErrorTypesClassified(t *testing.T) {
 		}
 	}
 	// Wrappers: their Kind is that of the error they carry.
-	wrappers := map[string]bool{"ExecutionError": true, "PartialRefreshError": true}
+	wrappers := map[string]bool{"ExecutionError": true, "SchemaAgreementError": true}
 	for name, err := range types {
 		if !listed[name] {
 			t.Errorf("%s is not an exported error type", name)

@@ -249,8 +249,21 @@ func (s *Session) UnpreparedAddToBatch[P, R any](batch *Batch, statement cql.Sta
 // appears. A zero Session's ID is the zero UUID.
 func (s *Session) ID() cql.UUID { return s.internal().ID() }
 
-// AwaitSchemaAgreement waits for nodes' schema versions to agree, bounded by
-// ctx and the configured schema agreement timeout.
+// AwaitSchemaAgreement waits until every host the host filter accepts
+// reports the same schema version, bounded by ctx and the configured schema
+// agreement timeout (config.ConfigBuilder.WithSchemaAgreement,
+// default one minute). A host the filter accepts counts even while it is
+// down or has no open connection: it cannot report a version, so the wait
+// lasts until it comes back or the timeout ends. Exclude a host that is
+// gone for good with the host filter.
+//
+// A failure is a *cqlerr.SchemaAgreementError: its Versions and Unreachable
+// describe the last check, and its Err is cqlerr.ErrRequestTimeout when the
+// agreement timeout ran out, ctx's error when ctx ended, a
+// *cqlerr.NoHostsError when the filter accepts no host, or a check's error.
+// A schema change statement waits the same way, unless
+// config.SchemaChangeWaitNone is set, and fails with the same error, its
+// Applied set.
 func (s *Session) AwaitSchemaAgreement(ctx context.Context) error {
 	return s.internal().AwaitSchemaAgreement(ctx)
 }

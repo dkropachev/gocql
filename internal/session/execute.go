@@ -795,6 +795,9 @@ func (rt *InternalSessionRuntime) admitRequest[R any](ctx context.Context, b *Bo
 	// speculation, no client timestamp), but its result is ordinary rows, so
 	// the none column's up-front conditional rejection does not apply.
 	if resolved.InternalProfile.Consistency == cql.Serial || resolved.InternalProfile.Consistency == cql.LocalSerial {
+		// Errors and retry policies see the statement's own kind: an
+		// outcome-unknown SERIAL read applied nothing.
+		request.serialRead, request.ownKind = true, request.routing.Kind
 		request.routing.Kind = cql.ConditionalStatement
 	}
 	hooks := rt.observerHooks
@@ -1661,7 +1664,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 		if request.InternalLogical != nil {
 			if coordinator := request.InternalLogical.ddlCoordinator.Load(); coordinator != nil {
 				aggregate.HostID = *coordinator
-				failure = fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", failure)
+				failure = schemaChangeFailure(failure)
 				log.raise(cqlerr.PartiallyExecuted)
 			}
 		}
@@ -1758,7 +1761,7 @@ func (s *InternalSessionRuntime) executePageAttempts(ctx context.Context, reques
 				response.Owner.Release()
 				log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID, request.partialBatch())
 				log.raise(cqlerr.PartiallyExecuted)
-				return nil, log.error(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", attemptErr), aggregate)
+				return nil, log.error(schemaChangeFailure(attemptErr), aggregate)
 			}
 			lastErr = attemptErr
 			attemptStatus := log.fail(attemptErr, outcome.conn, outcome.event.Attempt, outcome.consistency, outcome.event.CQLTraceID, request.partialBatch())
@@ -1951,6 +1954,18 @@ func (s *InternalSessionRuntime) executeTypedAttempt(ctx context.Context, conn *
 		return response, nil
 	}
 	return nil, fmt.Errorf("gocql: failed unprepared repair")
+}
+
+// schemaChangeFailure returns err, the failure of the automatic schema
+// agreement or metadata refresh after a schema change the server applied,
+// as a cqlerr.SchemaAgreementError whose Applied is set: the agreement's own
+// error, or a new one that wraps err.
+func schemaChangeFailure(err error) error {
+	if agreement, ok := errors.AsType[*cqlerr.SchemaAgreementError](err); ok {
+		agreement.Applied = true
+		return err
+	}
+	return &cqlerr.SchemaAgreementError{Applied: true, Err: err}
 }
 
 func (rt *InternalSessionRuntime) forgetPrepareOrder(key prepareCacheKey) {

@@ -19,14 +19,14 @@ func layers(err error) map[string]error {
 	wrapped := fmt.Errorf("gocql: prepare: %w", attempt)
 	other := NewOtherServerError(CodeOverloaded, "other")
 	return map[string]error{
-		"QueryError":          attempt,
-		"fmt.Errorf":          wrapped,
-		"ExecutionError.Err":  NewExecutionError(wrapped, MaybeExecuted, AttemptFailure{Err: other}, AttemptFailure{Err: wrapped}),
-		"ConnectError":        &ConnectError{Stage: "s", Hosts: []HostError{{Address: "a", Err: other}, {Address: "b", Err: wrapped}}},
-		"NoHostsError":        &NoHostsError{Operation: "o", Causes: []error{other, wrapped}},
-		"PartialRefreshError": &PartialRefreshError{Topology: other, Keyspaces: map[string]error{"ks": wrapped}},
-		"errors.Join":         errors.Join(other, wrapped),
-		"DDL":                 fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", NewExecutionError(wrapped, PartiallyExecuted)),
+		"QueryError":           attempt,
+		"fmt.Errorf":           wrapped,
+		"ExecutionError.Err":   NewExecutionError(wrapped, MaybeExecuted, AttemptFailure{Err: other}, AttemptFailure{Err: wrapped}),
+		"ConnectError":         &ConnectError{Stage: "s", Hosts: []HostError{{Address: "a", Err: other}, {Address: "b", Err: wrapped}}},
+		"NoHostsError":         &NoHostsError{Operation: "o", Causes: []error{other, wrapped}},
+		"PartialRefreshError":  &PartialRefreshError{Topology: other, Keyspaces: map[string]error{"ks": wrapped}},
+		"errors.Join":          errors.Join(other, wrapped),
+		"SchemaAgreementError": NewExecutionError(&SchemaAgreementError{Applied: true, Err: wrapped}, PartiallyExecuted),
 	}
 }
 
@@ -49,7 +49,7 @@ func TestErrorsAsIsThroughLayers(t *testing.T) {
 	// The layers are of these types themselves, so errors.As may find a
 	// layer before a leaf of the same type.
 	layerTypes := map[reflect.Type]bool{}
-	for _, err := range []error{&queryError{}, &ExecutionError{}, &ConnectError{}, &NoHostsError{}, &PartialRefreshError{}, &OtherServerError{}} {
+	for _, err := range []error{&queryError{}, &ExecutionError{}, &ConnectError{}, &NoHostsError{}, &PartialRefreshError{}, &SchemaAgreementError{}, &OtherServerError{}} {
 		layerTypes[reflect.TypeOf(err)] = true
 	}
 	for name, leaf := range leaves {
