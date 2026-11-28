@@ -919,6 +919,7 @@ package cqlerr
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
 		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
 		cqlerr.AttemptFailure method (T) String() string
+	func cqlerr.AttemptIs(err error, target error) bool
 	type cqlerr.CASWriteUnknownError struct
 		cqlerr.CASWriteUnknownError field Consistency cql.Consistency
 		cqlerr.CASWriteUnknownError field Received int
@@ -1022,7 +1023,6 @@ package cqlerr
 	type cqlerr.HostError struct
 		cqlerr.HostError field Err error
 		cqlerr.HostError field Address string
-	func cqlerr.IsCASWriteUnknown(err error) bool
 	type cqlerr.Kind uint8
 		cqlerr.Kind method (T) String() string
 		cqlerr.Kind method (T) Transient() bool
@@ -1066,6 +1066,7 @@ package cqlerr
 		cqlerr.PartialRefreshError field Keyspaces map[string]error
 		cqlerr.PartialRefreshError field Generation uint64
 		cqlerr.PartialRefreshError method (*T) Error() string
+		cqlerr.PartialRefreshError method (*T) Kind() cqlerr.Kind
 		cqlerr.PartialRefreshError method (*T) Unwrap() []error
 	const cqlerr.PartiallyExecuted cqlerr.ExecutionStatus = 2
 	type cqlerr.RateLimitReachedError struct
@@ -1102,6 +1103,13 @@ package cqlerr
 		cqlerr.ReadTimeoutError method (*T) Message() string
 		cqlerr.ReadTimeoutError method (*T) Warnings() []string
 	func cqlerr.Retryable(err error) bool
+	type cqlerr.SchemaAgreementError struct
+		cqlerr.SchemaAgreementError field Err error
+		cqlerr.SchemaAgreementError field Versions map[cql.UUID]cql.UUID
+		cqlerr.SchemaAgreementError field Unreachable []cql.UUID
+		cqlerr.SchemaAgreementError field Applied bool
+		cqlerr.SchemaAgreementError method (*T) Error() string
+		cqlerr.SchemaAgreementError method (*T) Unwrap() error
 	type cqlerr.SchemaChangedError struct
 		cqlerr.SchemaChangedError field Statement string
 		cqlerr.SchemaChangedError field Previous cql.Columns
@@ -1638,16 +1646,17 @@ package retry
 		retry.Attempt field ExecutionStatus cqlerr.ExecutionStatus
 		retry.Attempt field Target metadata.Target
 		retry.Attempt field Elapsed time.Duration
+		retry.Attempt method (T) Retryable() bool
 	type retry.Decision struct
 		retry.Decision field Action retry.Action
 		retry.Decision field Consistency cql.Option[cql.Consistency]
 		retry.Decision field Delay time.Duration
 	type retry.FixedSpeculation struct
 		retry.FixedSpeculation field After time.Duration
-		retry.FixedSpeculation field Max int
+		retry.FixedSpeculation field MaxAttempts int
 		retry.FixedSpeculation method (T) Delay(s retry.Speculation) (time.Duration, bool)
-	type retry.Never struct
-		retry.Never method (T) Decide(retry.Attempt) retry.Decision
+	type retry.NeverRetry struct
+		retry.NeverRetry method (T) Decide(retry.Attempt) retry.Decision
 	const retry.Next retry.Action = 2
 	type retry.NoSpeculation struct
 		retry.NoSpeculation method (T) Delay(retry.Speculation) (time.Duration, bool)
