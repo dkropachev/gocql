@@ -63,8 +63,7 @@ func TestPool(t *testing.T) {
 				var dials atomic.Int32
 				cfg := newFixtureConfig(getClusterHosts()[:1], 0, func(c *config.ConfigBuilder) {
 					c.WithDiscovery(false).
-						WithConnectionsPerHost(1).
-						WithAdvancedShardAwareness(false).
+						WithPool(config.PerHost{Connections: 1}).
 						WithReconnect(noReconnect{}).
 						WithConviction(policy).
 						WithHeartbeat(0, 0).
@@ -129,7 +128,7 @@ func TestPool(t *testing.T) {
 			compression = "no-compression"
 		}
 		cfg := createV2ClusterWithout(skip)
-		cfg.WithConnectionsPerHost(1).WithHeartbeat(0, 0)
+		cfg.WithPool(config.PerHost{Connections: 1}).WithHeartbeat(0, 0)
 		if *flagProto < 5 {
 			cfg.WithCompression(cql.NoCompression)
 		}
@@ -292,9 +291,9 @@ func TestPool(t *testing.T) {
 				cfg := createV2ClusterWithout(fixtureTLS)
 				cfg.WithHeartbeat(0, 0)
 				if mode == "host" {
-					cfg.WithConnectionsPerHost(2)
+					cfg.WithPool(config.PerHost{Connections: 2})
 				} else {
-					cfg.WithConnectionsPerShard(2)
+					cfg.WithPool(config.PerShard{Connections: 2})
 				}
 				// The fixture enables the shard-aware port by default.
 				const shardAwarePort = true

@@ -42,6 +42,8 @@ func TestEnumStrings(t *testing.T) {
 		{retry.Action(9), "Action(9)"},
 		{endpoint.ConvictionControl, "control"},
 		{endpoint.ConvictionSource(9), "ConvictionSource(9)"},
+		{endpoint.PortShardAwareTLS, "shard-aware-tls"},
+		{endpoint.PortKind(0), "PortKind(0)"},
 		{cqlerr.OpTypeWrite, "write"},
 		{cqlerr.OpType(9), "OpType(9)"},
 		{config.ScyllaV4, "ScyllaV4"},

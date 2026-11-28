@@ -108,7 +108,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("BuildValidatesFinalSettings", func(t *testing.T) {
-		b := New(ScyllaV4, "h").WithPort(0).WithConnectionsPerShard(-1)
+		b := New(ScyllaV4, "h").WithPort(0).WithMaxRequestsPerConnection(-1)
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted an invalid port")
 		} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPort" || !strings.Contains(err.Error(), "1 to 65535") {
@@ -118,7 +118,7 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := b.Build(); err == nil {
 			t.Fatal("correcting the port hid the invalid pool size")
 		}
-		b.WithConnectionsPerShard(2)
+		b.WithMaxRequestsPerConnection(2)
 		mustBuildConfig(t, b)
 	})
 
@@ -185,12 +185,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("LastCallWins", func(t *testing.T) {
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerShard{Connections: 3}).WithPool(PerShard{Connections: 4, ShardAwarePort: cql.Some(false)}).
 			WithDefaultProfile(NewProfile().WithConsistency(cql.One)).
 			WithDefaultProfile(NewProfile().WithConsistency(cql.All)).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "a"}, ClientRoute{ConnectionID: "c2", Hostname: "x"}).
-			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "b"}).
-			WithAdvancedShardAwareness(false)).settings
+			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "b"})).settings
 		if c.Pool.ConnectionsPerShard != 4 || c.DefaultProfile.Consistency != cql.All {
 			t.Fatalf("pool %+v consistency %v", c.Pool, c.DefaultProfile.Consistency)
 		}
@@ -203,8 +202,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("ExclusiveOptionsReplace", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").
 			WithHeartbeat(time.Second, time.Second).WithHeartbeat(0, 0).
-			WithConnectionsPerHost(4).WithConnectionsPerShard(2).
-			WithAdvancedShardAwareness(true).WithAdvancedShardAwareness(false).
+			WithPool(PerHost{Connections: 4}).WithPool(PerShard{Connections: 2, ShardAwarePort: cql.Some(false)}).
 			WithMetadataRefresh(time.Second).WithMetadataRefresh(0).
 			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
 			WithTimestampGenerator(func() time.Time { return time.UnixMicro(1) }).WithTimestampGenerator(nil)).settings
@@ -221,7 +219,7 @@ func TestConfigBuilder(t *testing.T) {
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(nil)).settings; c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a nil timestamp generator: mode %d", c.Timestamps.Mode())
 		}
-		c = mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithConnectionsPerShard(2).WithConnectionsPerHost(4)).settings
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithHeartbeat(time.Second, 2*time.Second).WithPool(PerShard{Connections: 2}).WithPool(PerHost{Connections: 4})).settings
 		if c.KeepaliveInterval != time.Second || c.KeepaliveTimeout != 2*time.Second || c.Pool.ConnectionsPerHost != 4 {
 			t.Fatalf("reverse order: %+v", c)
 		}
@@ -233,47 +231,47 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h")).settings
 		p := c.DefaultProfile
 		for name, ok := range map[string]bool{
-			"WithPort 9042":                           c.Port == 9042,
-			"WithKeyspace none":                       c.Keyspace == "",
-			"WithAuth none":                           c.Auth == nil,
-			"WithTLS plaintext":                       c.TLS == nil && c.TLSSource == nil,
-			"WithCompression none":                    c.Compression == cql.NoCompression,
-			"WithCQLVersion 3.0.0":                    c.CQLVersion == "3.0.0",
-			"WithLimits MaxFrameBytes 256 MiB":        c.Limits.MaxFrameBytes == 256<<20,
-			"WithLimits MaxDecompressedBytes 256 MiB": c.Limits.MaxDecompressedBytes == 256<<20,
-			"WithLimits MaxMetadataDepth 64":          c.Limits.MaxMetadataDepth == 64,
-			"WithLimits MaxPagingStates 65536":        c.Limits.MaxPagingStates == 65536,
-			"WithLimits MaxPagingStateBytes 16 MiB":   c.Limits.MaxPagingStateBytes == 16<<20,
-			"WithDialer net.Dialer":                   c.Dialer == nil,
-			"WithResolver net.DefaultResolver":        c.DNSResolver == nil,
-			"WithLocalAddress any":                    !c.LocalAddress.IsValid(),
-			"WithConnectTimeout 5s":                   c.ConnectTimeout == 5*time.Second,
-			"WithDNSTimeout 5s":                       c.DNSTimeout == 5*time.Second,
-			"WithNagle off":                           c.NoDelay,
-			"WithTCPKeepalive off":                    c.SocketKeepalive == 0,
-			"WithReceiveBuffer the OS's":              c.ReceiveBuffer == 0,
-			"WithSendBuffer the OS's":                 c.SendBuffer == 0,
-			"WithLinger the OS's":                     !c.Linger.Set,
-			"WithReadStallTimeout none":               c.ReadTimeout == 0,
-			"WithWriteStallTimeout none":              c.WriteTimeout == 0,
-			"WithHeartbeat 30s and 30s":               c.KeepaliveInterval == 30*time.Second && c.KeepaliveTimeout == 30*time.Second,
-			"WithConnectionsPerShard 1":               c.Pool.ConnectionsPerShard == 1 && c.Pool.ConnectionsPerHost == 0,
-			"WithMaxExcessPerShard 2":                 c.Pool.MaxExcessPerShard == 2,
-			"WithMaxRequestsPerConnection 32768":      c.Pool.MaxRequestsPerConnection == 32768,
-			"WithMaxOrphanedStreams 1024":             c.Pool.MaxOrphanedStreams == 1024,
-			"WithAdvancedShardAwareness true":         c.Pool.AdvancedShardAwareness.Enabled,
-			"WithShardAwareSourcePorts 49152-65535":   c.Pool.AdvancedShardAwareness.SourcePortStart == 49152 && c.Pool.AdvancedShardAwareness.SourcePortEnd == 65535,
-			"WithDiscovery true":                      c.Metadata.InitialDiscovery,
-			"WithHostFilter all nodes":                c.HostFilter == nil,
-			"WithAddressTranslator identity":          c.AddressTranslator == nil,
-			"WithClientRoutes none":                   c.ClientRoutes == nil,
-			"WithReconnect jittered backoff":          implSettings.IsDefaultReconnect(c.Reconnect),
-			"WithConviction SimpleConvictionPolicy":   c.Conviction == nil,
-			"WithMetadataMode ModeFull":               c.Metadata.Mode == metadata.ModeFull,
-			"WithMetadataKeyspaces all":               len(c.Metadata.Keyspaces) == 0,
-			"WithPartitioner built-ins only":          len(c.Partitioners) == 4,
-			"WithMetadataRefresh 60s":                 c.Metadata.PeriodicRefresh == 60*time.Second,
-			"WithMetadataTimeout 31s":                 c.Metadata.RequestTimeout == 31*time.Second,
+			"WithPort 9042":                             c.Port == 9042,
+			"WithKeyspace none":                         c.Keyspace == "",
+			"WithAuth none":                             c.Auth == nil,
+			"WithTLS plaintext":                         c.TLS == nil && c.TLSSource == nil,
+			"WithCompression none":                      c.Compression == cql.NoCompression,
+			"WithCQLVersion 3.0.0":                      c.CQLVersion == "3.0.0",
+			"WithLimits MaxFrameBytes 256 MiB":          c.Limits.MaxFrameBytes == 256<<20,
+			"WithLimits MaxDecompressedBytes 256 MiB":   c.Limits.MaxDecompressedBytes == 256<<20,
+			"WithLimits MaxMetadataDepth 64":            c.Limits.MaxMetadataDepth == 64,
+			"WithLimits MaxPagingStates 65536":          c.Limits.MaxPagingStates == 65536,
+			"WithLimits MaxPagingStateBytes 16 MiB":     c.Limits.MaxPagingStateBytes == 16<<20,
+			"WithDialer net.Dialer":                     c.Dialer == nil,
+			"WithResolver net.DefaultResolver":          c.DNSResolver == nil,
+			"WithLocalAddress any":                      !c.LocalAddress.IsValid(),
+			"WithConnectTimeout 5s":                     c.ConnectTimeout == 5*time.Second,
+			"WithDNSTimeout 5s":                         c.DNSTimeout == 5*time.Second,
+			"WithNagle off":                             c.NoDelay,
+			"WithTCPKeepalive off":                      c.SocketKeepalive == 0,
+			"WithReceiveBuffer the OS's":                c.ReceiveBuffer == 0,
+			"WithSendBuffer the OS's":                   c.SendBuffer == 0,
+			"WithLinger the OS's":                       !c.Linger.Set,
+			"WithReadStallTimeout none":                 c.ReadTimeout == 0,
+			"WithWriteStallTimeout none":                c.WriteTimeout == 0,
+			"WithHeartbeat 30s and 30s":                 c.KeepaliveInterval == 30*time.Second && c.KeepaliveTimeout == 30*time.Second,
+			"WithPool PerShard 1":                       c.Pool.ConnectionsPerShard == 1 && c.Pool.ConnectionsPerHost == 0,
+			"WithPool PerShard MaxExcess 2":             c.Pool.MaxExcessPerShard == 2,
+			"WithMaxRequestsPerConnection 32768":        c.Pool.MaxRequestsPerConnection == 32768,
+			"WithMaxOrphanedStreams 1024":               c.Pool.MaxOrphanedStreams == 1024,
+			"WithPool PerShard ShardAwarePort true":     c.Pool.AdvancedShardAwareness.Enabled,
+			"WithPool PerShard SourcePorts 49152-65535": c.Pool.AdvancedShardAwareness.SourcePortStart == 49152 && c.Pool.AdvancedShardAwareness.SourcePortEnd == 65535,
+			"WithDiscovery true":                        c.Metadata.InitialDiscovery,
+			"WithHostFilter all nodes":                  c.HostFilter == nil,
+			"WithAddressTranslator identity":            c.AddressTranslator == nil,
+			"WithClientRoutes none":                     c.ClientRoutes == nil,
+			"WithReconnect jittered backoff":            implSettings.IsDefaultReconnect(c.Reconnect),
+			"WithConviction SimpleConvictionPolicy":     c.Conviction == nil,
+			"WithMetadataMode ModeFull":                 c.Metadata.Mode == metadata.ModeFull,
+			"WithMetadataKeyspaces all":                 len(c.Metadata.Keyspaces) == 0,
+			"WithPartitioner built-ins only":            len(c.Partitioners) == 4,
+			"WithMetadataRefresh 60s":                   c.Metadata.PeriodicRefresh == 60*time.Second,
+			"WithMetadataTimeout 31s":                   c.Metadata.RequestTimeout == 31*time.Second,
 			"WithMetadataServerTimeout not chosen (30s on ScyllaDB, none on Cassandra)": !c.Metadata.ServerTimeout.Set,
 			"WithIgnoreEvents none ignored":                                             c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
 			"WithSchemaAgreement 200ms and 60s":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
@@ -316,7 +314,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("ClientRoutesRejectAddressTranslator", func(t *testing.T) {
 		routes := ClientRoute{ConnectionID: "c1"}
-		translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+		translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 			return endpoint.AddressOf(addr), nil
 		})
 		for name, b := range map[string]*ConfigBuilder{
@@ -335,14 +333,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("InvalidLastValueReplacesPreviousValue", func(t *testing.T) {
-		b := New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(-1)
-		if got := b.settings.Pool.ConnectionsPerShard; got != -1 {
-			t.Fatalf("ConnectionsPerShard = %d, want the last value -1", got)
-		}
+		b := New(ScyllaV4, "h").WithPool(PerShard{Connections: 3}).WithPool(PerShard{Connections: -1})
 		if _, err := b.Build(); err == nil {
 			t.Fatal("Build accepted the invalid last value")
 		}
-		b.WithConnectionsPerHost(4)
+		b.WithPool(PerHost{Connections: 4})
 		mustBuildConfig(t, b)
 	})
 
@@ -455,52 +450,47 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
-	t.Run("ClientRoutesAdvancedShardAwareness", func(t *testing.T) {
+	t.Run("ClientRoutesShardAwarePort", func(t *testing.T) {
 		route := ClientRoute{ConnectionID: "c1"}
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithClientRoutes(route)).settings; c.Pool.AdvancedShardAwareness.Enabled {
-			t.Fatal("advanced shard awareness stayed on under client routes")
+			t.Fatal("the shard-aware port stayed on under client routes")
 		}
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(true).WithShardAwareSourcePorts(50000, 60000).WithClientRoutes(route)).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerShard{ShardAwarePort: cql.Some(true), SourcePorts: PortRange{First: 50000, Last: 60000}}).WithClientRoutes(route)).settings
 		if !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.AdvancedShardAwareness.SourcePortStart != 50000 || c.Pool.AdvancedShardAwareness.SourcePortEnd != 60000 {
-			t.Fatalf("explicit advanced shard awareness under client routes: %+v", c.Pool)
+			t.Fatalf("explicit shard-aware port under client routes: %+v", c.Pool)
 		}
-		if _, err := New(ScyllaV4, "h").WithShardAwareSourcePorts(50000, 60000).WithClientRoutes(route).Build(); err == nil {
-			t.Fatal("Build accepted source ports that client routes leave unused")
-		}
-		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(true).WithAdvancedShardAwareness(false).WithClientRoutes(route)).settings; c.Pool.AdvancedShardAwareness.Enabled {
-			t.Fatal("the last WithAdvancedShardAwareness did not win")
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerShard{ShardAwarePort: cql.Some(true)}).WithPool(PerShard{}).WithClientRoutes(route)).settings; c.Pool.AdvancedShardAwareness.Enabled {
+			t.Fatal("the last WithPool did not win")
 		}
 	})
 
-	t.Run("ShardAwareSourcePorts", func(t *testing.T) {
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithAdvancedShardAwareness(false).WithShardAwareSourcePorts(50000, 60000).WithAdvancedShardAwareness(true)).settings
+	t.Run("PoolSourcePorts", func(t *testing.T) {
+		route := ClientRoute{ConnectionID: "c1"}
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithPool(&PerShard{SourcePorts: PortRange{First: 50000, Last: 60000}})).settings
 		if sa := c.Pool.AdvancedShardAwareness; !sa.Enabled || sa.SourcePortStart != 50000 || sa.SourcePortEnd != 60000 {
 			t.Fatalf("source ports: %+v", sa)
 		}
 		for name, b := range map[string]*ConfigBuilder{
-			"BelowPrivileged": New(ScyllaV4, "h").WithShardAwareSourcePorts(80, 60000),
-			"Reversed":        New(ScyllaV4, "h").WithShardAwareSourcePorts(60000, 50000),
-			"WhileOff":        New(ScyllaV4, "h").WithAdvancedShardAwareness(false).WithShardAwareSourcePorts(60000, 50000),
+			"BelowPrivileged": New(ScyllaV4, "h").WithPool(PerShard{SourcePorts: PortRange{First: 80, Last: 60000}}),
+			"Reversed":        New(ScyllaV4, "h").WithPool(PerShard{SourcePorts: PortRange{First: 60000, Last: 50000}}),
+			"PortOff":         New(ScyllaV4, "h").WithPool(PerShard{ShardAwarePort: cql.Some(false), SourcePorts: PortRange{First: 50000, Last: 60000}}),
+			"ClientRoutes":    New(ScyllaV4, "h").WithClientRoutes(route).WithPool(PerShard{SourcePorts: PortRange{First: 50000, Last: 60000}}),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
 					t.Fatal("Build accepted the source ports")
-				} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithShardAwareSourcePorts" {
-					t.Fatalf("Build = %v, want a WithShardAwareSourcePorts ValidationError", err)
+				} else if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "WithPool" || !strings.Contains(err.Error(), "PerShard.SourcePorts") {
+					t.Fatalf("Build = %v, want a WithPool ValidationError naming PerShard.SourcePorts", err)
 				}
 			})
 		}
 	})
 
 	t.Run("IgnoredSettings", func(t *testing.T) {
-		route := ClientRoute{ConnectionID: "c1"}
 		for name, tc := range map[string]struct {
 			b     *ConfigBuilder
 			field string
 		}{
-			"SourcePortsPerHost":        {New(ScyllaV4, "h").WithConnectionsPerHost(2).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
-			"SourcePortsAwarenessOff":   {New(ScyllaV4, "h").WithAdvancedShardAwareness(false).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
-			"SourcePortsClientRoutes":   {New(ScyllaV4, "h").WithClientRoutes(route).WithShardAwareSourcePorts(50000, 60000), "WithShardAwareSourcePorts"},
 			"MetadataKeyspacesModeNone": {New(ScyllaV4, "h").WithMetadataMode(metadata.ModeNone).WithMetadataKeyspaces("ks"), "WithMetadataKeyspaces"},
 			"ZeroConnectTimeout":        {New(ScyllaV4, "h").WithConnectTimeout(0), "WithConnectTimeout"},
 			"ZeroDNSTimeout":            {New(ScyllaV4, "h").WithDNSTimeout(0), "WithDNSTimeout"},
@@ -515,10 +505,8 @@ func TestConfigBuilder(t *testing.T) {
 				}
 			})
 		}
-		// Accepted: a server timeout below the client's, and source ports
-		// under advanced shard awareness.
+		// Accepted: a server timeout below the client's.
 		mustBuildConfig(t, New(ScyllaV4, "h").WithMetadataTimeout(10*time.Second).WithMetadataServerTimeout(9*time.Second))
-		mustBuildConfig(t, New(ScyllaV4, "h").WithShardAwareSourcePorts(50000, 60000))
 		mustBuildConfig(t, New(ScyllaV4, "h").WithMetadataMode(metadata.ModeKeyspaces).WithMetadataKeyspaces("ks"))
 	})
 
@@ -543,23 +531,24 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("PoolSize", func(t *testing.T) {
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3)).settings
-		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.AdvancedShardAwareness.Enabled {
-			t.Fatalf("WithConnectionsPerHost(3) pool = %+v, want 3 per host without the shard-aware port", c.Pool)
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerHost{Connections: 3})).settings
+		if c.Pool.ConnectionsPerHost != 3 || c.Pool.ConnectionsPerShard != 0 || c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 0 {
+			t.Fatalf("PerHost{3} pool = %+v, want 3 per host without the shard-aware port", c.Pool)
 		}
-		c = mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3).WithAdvancedShardAwareness(false)).settings
-		if c.Pool.ConnectionsPerHost != 3 || c.Pool.AdvancedShardAwareness.Enabled {
-			t.Fatalf("PerHost with WithAdvancedShardAwareness(false): %+v", c.Pool)
+		if c = mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerHost{})).settings; c.Pool.ConnectionsPerHost != 1 {
+			t.Fatalf("PerHost{} pool = %+v, want 1 per host", c.Pool)
 		}
-		c = mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerHost(3).WithConnectionsPerShard(2).
-			WithAdvancedShardAwareness(true).WithMaxExcessPerShard(1)).settings
-		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 1 {
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerHost{Connections: 3}).WithPool(PerShard{Connections: 2, MaxExcess: cql.Some(0)})).settings
+		if c.Pool.ConnectionsPerShard != 2 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 0 {
 			t.Fatalf("PerShard after PerHost: %+v", c.Pool)
 		}
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithPool(PerHost{Connections: 3}).WithPool(nil)).settings
+		if c.Pool.ConnectionsPerShard != 1 || c.Pool.ConnectionsPerHost != 0 || !c.Pool.AdvancedShardAwareness.Enabled || c.Pool.MaxExcessPerShard != 2 {
+			t.Fatalf("WithPool(nil): %+v, want the default", c.Pool)
+		}
 		for name, b := range map[string]*ConfigBuilder{
-			"AdvancedShardAwareness": New(ScyllaV4, "h").WithAdvancedShardAwareness(true).WithConnectionsPerHost(2),
-			"MaxExcessPerShard":      New(ScyllaV4, "h").WithConnectionsPerHost(2).WithMaxExcessPerShard(2),
-			"Zero":                   New(ScyllaV4, "h").WithConnectionsPerHost(0),
+			"PerHostNegative":   New(ScyllaV4, "h").WithPool(PerHost{Connections: -1}),
+			"MaxExcessNegative": New(ScyllaV4, "h").WithPool(PerShard{MaxExcess: cql.Some(-2)}),
 		} {
 			t.Run(name, func(t *testing.T) {
 				if _, err := b.Build(); err == nil {
@@ -677,7 +666,7 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DisableMethods", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithHeartbeat(0, 0).WithMetadataRefresh(0).WithPreparedCacheSize(0).WithTimestampGenerator(nil).
-			WithConfigReport(false).WithDiscovery(false).WithSchemaChangeWait(SchemaChangeWaitNone).WithAdvancedShardAwareness(false).WithNagle(true)).settings
+			WithConfigReport(false).WithDiscovery(false).WithSchemaChangeWait(SchemaChangeWaitNone).WithPool(PerShard{ShardAwarePort: cql.Some(false)}).WithNagle(true)).settings
 		if c.KeepaliveInterval != 0 || c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode ||
 			c.ReportConfiguration || c.Metadata.InitialDiscovery || c.Metadata.AutomaticAgreement || c.Metadata.RefreshAfterAgreement || c.Pool.AdvancedShardAwareness.Enabled || c.NoDelay {
 			t.Fatalf("a disabling setting left its feature on: %+v", c)
@@ -776,6 +765,18 @@ func TestConfigBuilder(t *testing.T) {
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLinger(0)).settings; c.Linger != cql.Some(time.Duration(0)) {
 			t.Errorf("WithLinger(0) = %+v, want a chosen zero linger", c.Linger)
 		}
+		// Units the server or the socket count in round up.
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithLinger(1500*time.Millisecond).WithMetadataServerTimeout(1500*time.Microsecond)).settings
+		if c.Linger != cql.Some(2*time.Second) || c.Metadata.ServerTimeout != cql.Some(2*time.Millisecond) {
+			t.Errorf("WithLinger(1.5s), WithMetadataServerTimeout(1.5ms) = %v, %v; want 2s and 2ms", c.Linger, c.Metadata.ServerTimeout)
+		}
+		retryPolicy := endpoint.ReconnectFunc(func(int) (time.Duration, bool) { return 0, false })
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectRetry(retryPolicy)).settings; c.ConnectRetry == nil {
+			t.Error("WithConnectRetry did not reach the settings")
+		}
+		if c := mustBuildConfig(t, New(ScyllaV4, "h")).settings; c.ConnectRetry != nil {
+			t.Error("Connect retries by default")
+		}
 	})
 
 	// SettersRejectInvalidValues checks that Build names the setter that
@@ -799,11 +800,15 @@ func TestConfigBuilder(t *testing.T) {
 			"TCPKeepaliveNegative":             {New(ScyllaV4, "h").WithTCPKeepalive(-time.Second), "WithTCPKeepalive", "negative"},
 			"ReceiveBufferNegative":            {New(ScyllaV4, "h").WithReceiveBuffer(-1), "WithReceiveBuffer", "negative"},
 			"SendBufferNegative":               {New(ScyllaV4, "h").WithSendBuffer(-1), "WithSendBuffer", "negative"},
-			"LingerNegative":                   {New(ScyllaV4, "h").WithLinger(-time.Second), "WithLinger", "whole seconds"},
-			"LingerFractionalSeconds":          {New(ScyllaV4, "h").WithLinger(1500 * time.Millisecond), "WithLinger", "whole seconds"},
-			"ConnectionsPerShardNegative":      {New(ScyllaV4, "h").WithConnectionsPerShard(-1), "WithConnectionsPerShard", "positive"},
-			"ConnectionsPerHostZero":           {New(ScyllaV4, "h").WithConnectionsPerHost(0), "WithConnectionsPerShard", "positive"},
-			"MaxExcessPerShardNegative":        {New(ScyllaV4, "h").WithMaxExcessPerShard(-1), "WithMaxExcessPerShard", "negative"},
+			"LingerNegative":                   {New(ScyllaV4, "h").WithLinger(-time.Second), "WithLinger", "from 0 to"},
+			"ServerTimeoutNegative":            {New(ScyllaV4, "h").WithMetadataServerTimeout(-time.Millisecond), "WithMetadataServerTimeout", "negative"},
+			"ContactPointsCommaSeparated":      {New(ScyllaV4, "h1,h2"), "WithContactPoints", "own argument"},
+			"ContactPointWithSpace":            {New(ScyllaV4).WithContactPoints("h1 "), "WithContactPoints", "whitespace"},
+			"PasswordWithNUL":                  {New(ScyllaV4, "h").WithAuth(auth.Password("user\x00", "pass")), "WithAuth", "NUL"},
+			"ProviderValidateError":            {New(ScyllaV4, "h").WithAuth(invalidProvider{}), "WithAuth", "no credentials"},
+			"ConnectionsPerShardNegative":      {New(ScyllaV4, "h").WithPool(PerShard{Connections: -1}), "WithPool", "PerShard.Connections"},
+			"ConnectionsPerHostNegative":       {New(ScyllaV4, "h").WithPool(PerHost{Connections: -1}), "WithPool", "PerHost.Connections"},
+			"MaxExcessPerShardNegative":        {New(ScyllaV4, "h").WithPool(PerShard{MaxExcess: cql.Some(-1)}), "WithPool", "PerShard.MaxExcess"},
 			"MaxRequestsPerConnectionZero":     {New(ScyllaV4, "h").WithMaxRequestsPerConnection(0), "WithMaxRequestsPerConnection", "1 to 32768"},
 			"MaxRequestsPerConnectionOver32Ki": {New(ScyllaV4, "h").WithMaxRequestsPerConnection(32769), "WithMaxRequestsPerConnection", "1 to 32768"},
 			"MaxOrphanedStreamsNegative":       {New(ScyllaV4, "h").WithMaxOrphanedStreams(-1), "WithMaxOrphanedStreams", "negative"},
@@ -983,7 +988,7 @@ func (secretDialer) DialContext(context.Context, endpoint.DialTarget) (net.Conn,
 }
 
 func secretTranslator(secret string) endpoint.Translator {
-	return endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+	return endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 		_ = secret
 		return endpoint.AddressOf(addr), nil
 	})
@@ -1139,3 +1144,8 @@ func TestProfileCQLTraceSampler(t *testing.T) {
 		t.Fatalf("nil sampler: %v, %v", p.CQLTraceSampler != nil, err)
 	}
 }
+
+// invalidProvider is an auth.Provider whose Validate fails.
+type invalidProvider struct{ auth.Provider }
+
+func (invalidProvider) Validate() error { return errors.New("no credentials") }

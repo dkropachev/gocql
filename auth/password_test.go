@@ -51,21 +51,31 @@ func TestPasswordExchange(t *testing.T) {
 	if want := []byte("\x00user\x00pass"); !response.Valid || !bytes.Equal(response.Value, want) {
 		t.Fatalf("initial response = %q (valid %v), want %q", response.Value, response.Valid, want)
 	}
-	if got, err := exchange.Challenge(ctx, cql.Nullable[cql.Bytes]{}); err == nil || got.Valid {
+	if got, err := exchange.Challenge(ctx, cql.Nullable[[]byte]{}); err == nil || got.Valid {
 		t.Fatalf("Challenge = %v, %v; want an unexpected-challenge error", got, err)
 	}
-	if err := exchange.Success(ctx, cql.Nullable[cql.Bytes]{}); err != nil {
+	if err := exchange.Success(ctx, cql.Nullable[[]byte]{}); err != nil {
 		t.Fatalf("Success: %v", err)
 	}
 	exchange.Close()
 
 	cancelled, cancel := context.WithCancel(ctx)
 	cancel()
-	if err := exchange.Success(cancelled, cql.Nullable[cql.Bytes]{}); !errors.Is(err, context.Canceled) {
+	if err := exchange.Success(cancelled, cql.Nullable[[]byte]{}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("Success after cancel = %v, want context.Canceled", err)
 	}
 	if _, _, err := Password("us\x00er", "pass").Start(ctx, metadata.HostSnapshot{}, ""); err == nil {
 		t.Fatal("Start accepted credentials containing NUL")
+	}
+	validator, ok := Password("user", "pa\x00ss").(interface{ Validate() error })
+	if !ok {
+		t.Fatal("Password has no Validate method")
+	}
+	if v, ok := errors.AsType[*cql.ValidationError](validator.Validate()); !ok || v.Field != "WithAuth" {
+		t.Fatalf("Validate = %v, want a WithAuth ValidationError", validator.Validate())
+	}
+	if err := Password("user", "pass").(interface{ Validate() error }).Validate(); err != nil {
+		t.Fatalf("Validate of valid credentials = %v", err)
 	}
 }
 

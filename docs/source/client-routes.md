@@ -26,8 +26,8 @@ Client routes turn advanced shard awareness off by default, because a proxy in
 front of them commonly rewrites the source port that picks the shard. When
 every route endpoint forwards to ScyllaDB's Proxy Protocol v2 shard-aware
 listener and passes the client's source port, turn it on with
-`ConfigBuilder.WithAdvancedShardAwareness(true)`; `WithShardAwareSourcePorts`
-picks the source ports. Off, shard-aware routing still
+`ConfigBuilder.WithPool(config.PerShard{ShardAwarePort: cql.Some(true)})`;
+`PerShard.SourcePorts` picks the source ports. Off, shard-aware routing still
 works: the pool keeps dialing the regular port until every shard has a
 connection.
 The driver uses typed internal metadata queries; route refresh and connection lifecycle obey context cancellation.

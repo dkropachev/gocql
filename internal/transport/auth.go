@@ -69,9 +69,9 @@ func (a *v2Authenticator) Close() {
 		}
 	})
 }
-func nullableAuthBytes(data []byte) cql.Nullable[cql.Bytes] {
+func nullableAuthBytes(data []byte) cql.Nullable[[]byte] {
 	if data == nil {
-		return cql.Nullable[cql.Bytes]{}
+		return cql.Nullable[[]byte]{}
 	}
-	return cql.Nullable[cql.Bytes]{Value: cql.BorrowBytes(data), Valid: true}
+	return cql.Nullable[[]byte]{Value: data, Valid: true}
 }

@@ -120,9 +120,9 @@ package gocql
 
 package auth
 	type auth.Exchange interface
-		auth.Exchange method Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
+		auth.Exchange method Challenge(context.Context, cql.Nullable[[]byte]) (cql.Nullable[[]byte], error)
 		auth.Exchange method Close()
-		auth.Exchange method Success(context.Context, cql.Nullable[cql.Bytes]) error
+		auth.Exchange method Success(context.Context, cql.Nullable[[]byte]) error
 	func auth.Password(username string, password string, allowed ...string) auth.Provider
 	const auth.PasswordAuthenticator untyped string = "org.apache.cassandra.auth.PasswordAuthenticator"
 	type auth.Provider interface
@@ -144,7 +144,6 @@ package config
 		config.ConfigBuilder method (*T) Build() (config.Config, error)
 		config.ConfigBuilder method (*T) Clone() *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAddressTranslator(translator endpoint.Translator) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithAdvancedShardAwareness(on bool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithApplication(name string, version string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithAuth(provider auth.Provider) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCQLVersion(version string) *config.ConfigBuilder
@@ -152,9 +151,8 @@ package config
 		config.ConfigBuilder method (*T) WithClientRoutes(routes ...config.ClientRoute) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithCompression(compression cql.Compression) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConfigReport(on bool) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithConnectRetry(policy endpoint.ReconnectPolicy) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConnectTimeout(d time.Duration) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithConnectionsPerHost(n int) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithConnectionsPerShard(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithContactPoints(contactPoints ...string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithConviction(policy endpoint.ConvictionPolicy) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithDNSTimeout(d time.Duration) *config.ConfigBuilder
@@ -173,7 +171,6 @@ package config
 		config.ConfigBuilder method (*T) WithLocalRack(rack string) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogRateLimit(window time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithLogger(logger *log/slog.Logger) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithMaxExcessPerShard(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxOrphanedStreams(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMaxRequestsPerConnection(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithMetadataKeyspaces(keyspaces ...string) *config.ConfigBuilder
@@ -185,6 +182,7 @@ package config
 		config.ConfigBuilder method (*T) WithObserver(hooks observe.Hooks) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithOnlyHost(id cql.UUID) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPartitioner(name string, partitioner routing.TokenPartitioner) *config.ConfigBuilder
+		config.ConfigBuilder method (*T) WithPool(pool config.Pool) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPort(port uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithPreparedCacheSize(n int) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithReadStallTimeout(d time.Duration) *config.ConfigBuilder
@@ -194,7 +192,6 @@ package config
 		config.ConfigBuilder method (*T) WithSchemaAgreement(poll time.Duration, timeout time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSchemaChangeWait(wait config.SchemaChangeWait) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithSendBuffer(bytes int) *config.ConfigBuilder
-		config.ConfigBuilder method (*T) WithShardAwareSourcePorts(first uint16, last uint16) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTCPKeepalive(period time.Duration) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLS(config *crypto/tls.Config) *config.ConfigBuilder
 		config.ConfigBuilder method (*T) WithTLSFallback(on bool) *config.ConfigBuilder
@@ -218,6 +215,17 @@ package config
 	func config.NewProfile() *config.ProfileBuilder
 	func config.NewTLSFileSource(base *crypto/tls.Config, files config.TLSFiles, interval time.Duration) (*config.TLSFileSource, error)
 	func config.ParseDialect(s string) (config.Dialect, error)
+	type config.PerHost struct
+		config.PerHost field Connections int
+	type config.PerShard struct
+		config.PerShard field Connections int
+		config.PerShard field MaxExcess cql.Option[int]
+		config.PerShard field SourcePorts config.PortRange
+		config.PerShard field ShardAwarePort cql.Option[bool]
+	type config.Pool interface (sealed)
+	type config.PortRange struct
+		config.PortRange field First uint16
+		config.PortRange field Last uint16
 	type config.Profile struct
 		config.Profile field Retry retry.Policy
 		config.Profile field Routing routing.Policy
@@ -1241,8 +1249,15 @@ package endpoint
 		endpoint.Peer field Rack string
 		endpoint.Peer field HostID cql.UUID
 		endpoint.Peer field Port uint16
+		endpoint.Peer field TLSPort uint16
 		endpoint.Peer field ShardAwarePort uint16
 		endpoint.Peer field ShardAwarePortTLS uint16
+	const endpoint.PortCQL endpoint.PortKind = 1
+	type endpoint.PortKind uint8
+		endpoint.PortKind method (T) String() string
+	const endpoint.PortShardAware endpoint.PortKind = 3
+	const endpoint.PortShardAwareTLS endpoint.PortKind = 4
+	const endpoint.PortTLS endpoint.PortKind = 2
 	type endpoint.ReconnectFunc func(attempt int) (time.Duration, bool)
 		endpoint.ReconnectFunc method (T) Delay(attempt int) (time.Duration, bool)
 	type endpoint.ReconnectPolicy interface
@@ -1260,9 +1275,9 @@ package endpoint
 	type endpoint.TLSSource interface
 		endpoint.TLSSource method TLSConfig() *crypto/tls.Config
 	type endpoint.Translator interface
-		endpoint.Translator method Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort) (endpoint.Address, error)
-	type endpoint.TranslatorFunc func(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort) (endpoint.Address, error)
-		endpoint.TranslatorFunc method (T) Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort) (endpoint.Address, error)
+		endpoint.Translator method Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort, kind endpoint.PortKind) (endpoint.Address, error)
+	type endpoint.TranslatorFunc func(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort, kind endpoint.PortKind) (endpoint.Address, error)
+		endpoint.TranslatorFunc method (T) Translate(ctx context.Context, peer endpoint.Peer, addr net/netip.AddrPort, kind endpoint.PortKind) (endpoint.Address, error)
 
 package event
 	type event.Change string

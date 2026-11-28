@@ -14,6 +14,7 @@ import (
 	"syscall"
 
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
 )
@@ -41,9 +42,12 @@ func (sd *InternalScyllaDialer) DialHost(ctx context.Context, host *implEndpoint
 	}
 
 	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
-	translatedInfo := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	if translatedInfo != nil {
-		addr = translatedInfo.CQL.String()
+	translated, _, err := implEndpoint.InternalDialEndpoint(ctx, host, endpoint.PortCQL, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	if implEndpoint.InternalUsableAddrPort(translated) {
+		addr = translated.String()
 	}
 
 	conn, err := sd.InternalDialer.DialContext(ctx, "tcp", addr)
@@ -66,16 +70,19 @@ func (sd *InternalScyllaDialer) DialShard(ctx context.Context, host *implEndpoin
 	iter := InternalNewScyllaPortIterator(shardID, nrShards)
 	addr := net.JoinHostPort(ip.String(), strconv.Itoa(port))
 	shardAwareAddr := ""
-	translatedInfo := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	if translatedInfo != nil {
-		addr = translatedInfo.CQL.String()
-		if sd.InternalTlsConfig != nil {
-			if implEndpoint.InternalUsableAddrPort(translatedInfo.ShardAwareTLS) {
-				shardAwareAddr = translatedInfo.ShardAwareTLS.String()
-			}
-		} else if implEndpoint.InternalUsableAddrPort(translatedInfo.ShardAware) {
-			shardAwareAddr = translatedInfo.ShardAware.String()
-		}
+	translated, _, err := implEndpoint.InternalDialEndpoint(ctx, host, endpoint.PortCQL, 0, nil)
+	if err != nil {
+		return nil, err
+	}
+	if implEndpoint.InternalUsableAddrPort(translated) {
+		addr = translated.String()
+	}
+	kind := endpoint.PortShardAware
+	if sd.InternalTlsConfig != nil {
+		kind = endpoint.PortShardAwareTLS
+	}
+	if shardAware, _, err := implEndpoint.InternalDialEndpoint(ctx, host, kind, 0, nil); err == nil && implEndpoint.InternalUsableAddrPort(shardAware) {
+		shardAwareAddr = shardAware.String()
 	}
 
 	sd.logger().Debug("connecting to shard", logging.KeyHost, addr, logging.KeyShard, shardID)

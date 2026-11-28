@@ -54,7 +54,7 @@ func run() (resultErr error) {
 	uri := flag.String("tls-uri", "", "explicit TLS URI identity instead of DNS")
 	flag.Parse()
 	builder := config.New(d, strings.Split(*hosts, ",")...).
-		WithConnectionsPerHost(1).
+		WithPool(config.PerHost{Connections: 1}).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
 	if *password == "" {

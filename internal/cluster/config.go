@@ -71,6 +71,7 @@ func InternalConnectCluster(ctx context.Context, config implSettings.Config, ini
 		legacy.ConvictionPolicy = config.Conviction
 	}
 	legacy.ReconnectionPolicy = &pool.NoReconnectionPolicy{}
+	legacy.ConnectRetry = config.ConnectRetry
 	// config.Build asked the policy for its first delay; settings made
 	// without it are asked here, once.
 	if err := config.ProbeReconnect(); err != nil {

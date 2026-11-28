@@ -792,7 +792,7 @@ func TestRouting(t *testing.T) {
 		t.Run("ConnPool", func(t *testing.T) {
 			t.Parallel()
 			session := createV2SessionFromConfig(createV2ClusterWithout(fixtureConsistency, func(c *config.ConfigBuilder) {
-				c.WithConnectionsPerHost(1)
+				c.WithPool(config.PerHost{Connections: 1})
 				// The row is read back at ONE: write it at ALL so any replica has it.
 				editDefaultProfile(c, func(p *config.ProfileBuilder) { p.WithPageSize(1).WithConsistency(cql.All) })
 			}), t, false)

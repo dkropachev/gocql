@@ -68,7 +68,7 @@ func (DefaultDialer) DialContext(ctx context.Context, target DialTarget) (net.Co
 	n := net.Dialer{KeepAlive: -1}
 	if target.LocalAddress.IsValid() {
 		if target.Network != "tcp" && target.Network != "tcp4" && target.Network != "tcp6" {
-			return nil, &cql.ValidationError{Field: "local address", Err: errors.New("source selection requires TCP")}
+			return nil, &cql.ValidationError{Field: "WithLocalAddress", Err: errors.New("source selection requires TCP")}
 		}
 		n.LocalAddr = net.TCPAddrFromAddrPort(target.LocalAddress)
 	}

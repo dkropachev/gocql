@@ -41,6 +41,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
 	"github.com/scylladb/gocql/v2/internal/debounce"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -262,6 +263,73 @@ func sessionSubscribeToEvents(s *Core, name string, queueSize int, filter eventb
 	return s.privateStorage.eventBus.Subscribe(name, queueSize, filter)
 }
 
+// connectControlLegacy opens the control connection under the legacy
+// InitialReconnectionPolicy.
+func (s *Core) connectControlLegacy(hosts []*implEndpoint.HostInfo) error {
+	reconnectionPolicy := s.privateStorage.InternalCfg.InitialReconnectionPolicy
+	// Validate rejects a non-positive limit, but a custom policy can still
+	// return one here; read it once so the loop runs at least once.
+	maxRetries := reconnectionPolicy.GetMaxRetries()
+	if maxRetries <= 0 {
+		return fmt.Errorf("no connection attempted, %T.GetMaxRetries returned %d", reconnectionPolicy, maxRetries)
+	}
+	var err error
+	for i := 0; i < maxRetries; i++ {
+		if i != 0 {
+			time.Sleep(reconnectionPolicy.GetInterval(i))
+		}
+
+		if err = s.privateStorage.InternalControl.InternalConnect(hosts); err != nil {
+			s.logger().Debug("control connection attempt failed", "attempt", i, logging.Err(err))
+			continue
+		}
+		break
+	}
+	return err
+}
+
+// connectControlRetrying opens the control connection, asking policy for
+// the delay before each new attempt (config.ConfigBuilder.WithConnectRetry).
+// An error no retry can fix, rejected credentials or a configuration the
+// cluster refuses, ends the attempts at once.
+func (s *Core) connectControlRetrying(hosts []*implEndpoint.HostInfo, policy endpoint2.ReconnectPolicy) error {
+	for attempt := 1; ; attempt++ {
+		err := s.privateStorage.InternalControl.InternalConnect(hosts)
+		if err == nil {
+			return nil
+		}
+		s.logger().Debug("control connection attempt failed", "attempt", attempt, logging.Err(err))
+		if !connectRetryable(err) {
+			return err
+		}
+		delay, again := policy.Delay(attempt)
+		if !again || delay < 0 {
+			return err
+		}
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-s.privateStorage.InternalCtx.Done():
+			timer.Stop()
+			return err
+		}
+	}
+}
+
+// connectRetryable reports whether a failed connect may succeed when tried
+// again: not when the cluster rejected the credentials, the request or the
+// dialect, or the session is gone.
+func connectRetryable(err error) bool {
+	if _, ok := errors.AsType[*cqlerr.ServerMismatchError](err); ok {
+		return false
+	}
+	switch cqlerr.KindOf(err) {
+	case cqlerr.KindUnauthorized, cqlerr.KindInvalid, cqlerr.KindProtocol, cqlerr.KindClosed, cqlerr.KindCanceled:
+		return false
+	}
+	return true
+}
+
 func (s *Core) init() error {
 	if s.privateStorage.InternalCfg.privateStorage.disableInit {
 		return nil
@@ -274,23 +342,10 @@ func (s *Core) init() error {
 
 	if !s.privateStorage.InternalCfg.privateStorage.InternalDisableControlConn {
 		s.privateStorage.InternalControl = createControlConn(s)
-		reconnectionPolicy := s.privateStorage.InternalCfg.InitialReconnectionPolicy
-		// Validate rejects a non-positive limit, but a custom policy can still
-		// return one here; read it once so the loop runs at least once.
-		maxRetries := reconnectionPolicy.GetMaxRetries()
-		if maxRetries <= 0 {
-			return fmt.Errorf("no connection attempted, %T.GetMaxRetries returned %d", reconnectionPolicy, maxRetries)
-		}
-		for i := 0; i < maxRetries; i++ {
-			if i != 0 {
-				time.Sleep(reconnectionPolicy.GetInterval(i))
-			}
-
-			if err = s.privateStorage.InternalControl.InternalConnect(hosts); err != nil {
-				s.logger().Debug("control connection attempt failed", "attempt", i, logging.Err(err))
-				continue
-			}
-			break
+		if retry := s.privateStorage.InternalCfg.ConnectRetry; retry != nil {
+			err = s.connectControlRetrying(hosts, retry)
+		} else {
+			err = s.connectControlLegacy(hosts)
 		}
 		if err != nil {
 			return err

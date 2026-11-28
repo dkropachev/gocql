@@ -438,29 +438,28 @@ func (d *InternalV2TLSHostDialer) dial(ctx context.Context, host *implEndpoint.H
 	return d.dialWith(ctx, host, snapshot, shard, shards, nil, epoch, sharderEpoch)
 }
 
-// dialWith dials host, through TLS when tlsConfig is not nil.
+// dialWith dials host, through TLS when tlsConfig is not nil. It translates
+// only the endpoints it dials: a shard-aware port first when the connection
+// picks its shard by port, and the CQL or TLS port when it does not or the
+// shard-aware port fails.
 func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoint.HostInfo, snapshot metadata.HostSnapshot, shard, shards int, tlsConfig *tls.Config, epoch, sharderEpoch uint64) (*DialedHost, error) {
-	address := net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(host.Port()))
 	logicalAddress := logicalV2TLSAddress(host)
-	translated := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
-		address = translated.CQL.String()
-	}
-	// A DNS name the address translator returned is the TLS identity the
-	// connection sends and verifies by default, as a contact point's name is.
-	tlsAddress := logicalAddress
-	if translated != nil && translated.TLSName != "" {
-		tlsAddress = net.JoinHostPort(translated.TLSName, strconv.Itoa(host.Port()))
-	}
+	regularKind, tlsPort := endpoint.PortCQL, uint16(0)
 	if port := d.InternalConfig.TLSPort; tlsConfig != nil && port != 0 {
-		address = net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(int(port)))
-		if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQLTLS) {
-			address = translated.CQLTLS.String()
-		}
+		regularKind, tlsPort = endpoint.PortTLS, port
 	}
-	target := endpoint.DialTarget{Host: snapshot, Network: "tcp", Address: address}
+	target := endpoint.DialTarget{Host: snapshot, Network: "tcp"}
 	if d.InternalConfig.LocalAddress.IsValid() {
 		target.LocalAddress = netip.AddrPortFrom(d.InternalConfig.LocalAddress, 0)
+	}
+	// A DNS name the address translator returned for the endpoint dialed is
+	// the TLS identity the connection sends and verifies by default, as a
+	// contact point's name is.
+	tlsAddress := logicalAddress
+	tlsName := func(name string) {
+		if name != "" {
+			tlsAddress = net.JoinHostPort(name, strconv.Itoa(host.Port()))
+		}
 	}
 	var c net.Conn
 	var err error
@@ -470,22 +469,24 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 		if shard < 0 || shard >= shards {
 			return nil, cqltype.TypeValidation("shard", "target out of range")
 		}
-		endpoint := ""
-		if translated != nil {
-			if tlsConfig != nil && implEndpoint.InternalUsableAddrPort(translated.ShardAwareTLS) {
-				endpoint = translated.ShardAwareTLS.String()
-			} else if tlsConfig == nil && implEndpoint.InternalUsableAddrPort(translated.ShardAware) {
-				endpoint = translated.ShardAware.String()
-			}
+		kind := endpoint.PortShardAware
+		if tlsConfig != nil {
+			kind = endpoint.PortShardAwareTLS
 		}
-		if endpoint != "" {
+		// A shard-aware port that does not translate is skipped like one
+		// that refuses the connection: the regular port still works.
+		addr, name, terr := implEndpoint.InternalDialEndpoint(ctx, host, kind, tlsPort, &epoch)
+		if terr != nil && ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if terr == nil && implEndpoint.InternalUsableAddrPort(addr) {
 			sa := d.InternalConfig.Pool.AdvancedShardAwareness
 			for port := int(sa.SourcePortStart); port <= int(sa.SourcePortEnd); port++ {
 				if port%shards != shard {
 					continue
 				}
 				attempt := target
-				attempt.Address = endpoint
+				attempt.Address = addr.String()
 				attempt.ShardID = cql.Option[uint32]{Value: uint32(shard), Set: true}
 				ip := d.InternalConfig.LocalAddress
 				if !ip.IsValid() {
@@ -499,6 +500,7 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 				if err == nil {
 					selectedShard = attempt.ShardID
 					dialed = attempt
+					tlsName(name)
 					break
 				}
 				if ctx.Err() != nil {
@@ -511,6 +513,28 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 		}
 	}
 	if c == nil {
+		addr, name, err := implEndpoint.InternalDialEndpoint(ctx, host, regularKind, tlsPort, &epoch)
+		if err != nil {
+			return nil, err
+		}
+		target.Address = addr.String()
+		if !implEndpoint.InternalUsableAddrPort(addr) {
+			port := host.Port()
+			if tlsPort != 0 {
+				port = int(tlsPort)
+			}
+			target.Address = net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(port))
+		}
+		tlsName(name)
+		if regularKind == endpoint.PortCQL {
+			// The node's address is its CQL port's translation, which
+			// this dial may have just stored.
+			if snapshot, err = implEndpoint.SnapshotHost(host); err != nil {
+				return nil, err
+			}
+			target.Host = snapshot
+		}
+		dialed = target
 		c, err = d.raw(ctx, target)
 		if err != nil {
 			return nil, err

@@ -10,7 +10,7 @@
 //
 //	cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 //		WithKeyspace("app").
-//		WithConnectionsPerShard(2).
+//		WithPool(config.PerShard{Connections: 2}).
 //		Build()
 //	session, err := gocql.Connect(ctx, cfg)
 //

@@ -11,7 +11,7 @@ replaces an earlier one even if it was invalid:
 ```go
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
-    WithConnectionsPerShard(2).
+    WithPool(config.PerShard{Connections: 2}).
     WithDefaultProfile(config.NewProfile().
         WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second)).
     Build()
@@ -24,7 +24,9 @@ that all name one port make it the default, so `config.New(config.ScyllaV4,
 "10.0.0.1:19042")` dials discovered nodes on 19042 too, and `Config.String`
 shows it. With `WithPort` chosen, `Build` rejects contact points that all name
 another port, unless `WithDiscovery(false)` or client routes are set. `Build` also
-rejects a contact point it cannot parse, such as `"h:abc"`. A single absolute path, optionally prefixed with `unix:`, connects to a
+rejects a contact point it cannot parse, such as `"h:abc"`, and one that holds a
+comma or whitespace, such as `"h1,h2"`: pass each contact point as its own
+argument. A single absolute path, optionally prefixed with `unix:`, connects to a
 Unix socket: no host discovery is then filled in unless chosen.
 
 ## Dialects
@@ -68,8 +70,7 @@ sends no heartbeats, `WithMetadataRefresh(0)` stops periodic metadata reloads,
 `WithPreparedCacheSize(0)` caches no prepared statements and
 `WithErrorStatementText(0)`, the default, leaves the statement out of request
 errors ([errors](../errors.md)). On/off settings take a bool: `WithNagle`,
-`WithDiscovery`, `WithConfigReport` and `WithAdvancedShardAwareness`, whose
-source ports `WithShardAwareSourcePorts` sets. `WithSchemaChangeWait` chooses
+`WithDiscovery` and `WithConfigReport`. `WithSchemaChangeWait` chooses
 what a schema change waits for before it returns: `config.SchemaChangeWaitNone`,
 `SchemaChangeWaitAgreement` among the nodes, or, the default,
 `SchemaChangeWaitRefresh`, agreement and then a metadata reload. `WithReceiveBuffer(0)` and
@@ -108,13 +109,24 @@ WithMaxRequestsPerConnection: must be 1 to 32768, got 0`. `WithTLS` copies its i
 when called. Callbacks and provider objects remain shared and must support
 concurrent use.
 
-`WithConnectionsPerShard(n)` keeps n connections to every shard of each node
-(the default is 1), and `WithConnectionsPerHost(n)` keeps n per node regardless
-of its shard count; the later call wins. `WithConnectionsPerHost` turns shard-aware connection
-management off: connections use the regular port only, the node picks their
-shards, and requests for a shard without a connection take another shard's
-connection. `Build` rejects `WithConnectionsPerHost` with `WithAdvancedShardAwareness(true)` or
-`WithMaxExcessPerShard`. An explicit incremental stream occupies one configured connection through
+`WithPool` sizes the pool. `config.PerShard{Connections: n}` keeps n
+connections to every shard of each node (the zero `PerShard` is the default:
+one connection, at most two excess, `MaxExcess`, dialing ScyllaDB's
+shard-aware port from the source ports `SourcePorts`, which `ShardAwarePort`
+turns off), and `config.PerHost{Connections: n}` keeps n per node regardless of
+its shard count; each call replaces the whole setting. `PerHost` turns
+shard-aware connection management off: connections use the regular port
+only, the node picks their shards, and requests for a shard without a
+connection take another shard's connection.
+
+`WithConnectRetry(policy)` retries `Connect` when no contact point answers,
+waiting `policy.Delay(n)` after the nth failed round, until `Delay` declines or
+`Connect`'s context ends; rejected credentials, an invalid request and a
+`cqlerr.ServerMismatchError` end it at once. Without it `Connect` tries once.
+`WithLinger` and `WithMetadataServerTimeout` round a fraction of their unit, a
+second and a millisecond, up.
+
+An explicit incremental stream occupies one configured connection through
 idle time and pages. Default page-buffered streams use normal multiplexing. Cancellation interrupts work;
 Session.Close rejects new work, cancels requests and joins writers/workers.
 Queries copy parameters during admission; the next execution waits within its
@@ -133,17 +145,21 @@ bounded by `WithDNSTimeout`, so a resolver must return once that context is
 done. To prefer or require IPv4, wrap a `*net.Resolver` and filter its result
 or pass `"ip4"` as the network.
 
-`WithAddressTranslator` takes an `endpoint.Translator`. Before each connection
+`WithAddressTranslator` takes an `endpoint.Translator`. On each connection
 attempt it is called with the setup context, the node's `endpoint.Peer` (host ID,
-datacenter, rack, advertised addresses and ports) and each endpoint to dial as a
-`netip.AddrPort`: the CQL port and, on ScyllaDB, the shard-aware ports. It
-returns the `endpoint.Address` to dial, a host and a port, or
-`endpoint.AddressOf(addr)` for the input unchanged. A host that is a DNS name,
-such as a load balancer's, is resolved on every dial through `WithResolver`
-within `WithDNSTimeout`, as client route host names are, and the first
-address it resolves to is dialed. That name is then the default name a TLS
-connection sends and verifies, in place of the node's IP address. A
-translation or lookup error fails that connection attempt like a dial error.
+datacenter, rack, advertised addresses and ports), the endpoint to dial as a
+`netip.AddrPort` and its `endpoint.PortKind`: only the endpoint that attempt
+opens, a ScyllaDB shard-aware port (`PortShardAware`, `PortShardAwareTLS`)
+when the connection picks its shard by port, else the CQL port (`PortCQL`) or
+the `WithTLSPort` port (`PortTLS`). It returns the `endpoint.Address` to dial,
+a host and a port, or `endpoint.AddressOf(addr)` for the input unchanged. A
+host that is a DNS name, such as a load balancer's, is resolved once per
+attempt through `WithResolver` within `WithDNSTimeout`, as client route host
+names are, and the first address it resolves to is dialed. That name is then
+the default name a TLS connection dialed on that endpoint sends and verifies,
+in place of the node's IP address. A translation or lookup error fails the
+attempt like a dial error, except for a shard-aware port, whose attempt falls
+back to the CQL or TLS port.
 `endpoint.TranslatorFunc` adapts a function.
 
 `WithOnlyHost(id)` restricts a session to the node with that host ID, for

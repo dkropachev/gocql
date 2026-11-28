@@ -287,7 +287,7 @@ func TestShardAwarePool(t *testing.T) {
 		translated := map[uint16]bool{}
 		s := connect(t, n, func(c *settings.Config) {
 			c.ContactPoints = []string{fmt.Sprintf("127.0.0.2:%d", n.port(regularPort))}
-			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 				if addr.Addr() != netip.MustParseAddr("127.0.0.2") {
 					return endpoint.AddressOf(addr), nil
 				}
@@ -305,6 +305,34 @@ func TestShardAwarePool(t *testing.T) {
 		defer mu.Unlock()
 		if !translated[uint16(n.port(regularPort))] || !translated[uint16(n.port(shardAwarePort))] {
 			t.Errorf("translated ports %v, want the regular port %d and the shard-aware port %d", translated, n.port(regularPort), n.port(shardAwarePort))
+		}
+	})
+
+	t.Run("ShardAwareTranslationFails", func(t *testing.T) {
+		// A translator that fails for the shard-aware port does not fail the
+		// dial: the pool fills through the regular port, which translates.
+		n := newFakeNode(t, testShards, nil, shardAwarePort)
+		var mu sync.Mutex
+		kinds := map[endpoint.PortKind]int{}
+		s := connect(t, n, func(c *settings.Config) {
+			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, kind endpoint.PortKind) (endpoint.Address, error) {
+				mu.Lock()
+				kinds[kind]++
+				mu.Unlock()
+				if kind == endpoint.PortShardAware {
+					return endpoint.Address{}, errors.New("no shard-aware route")
+				}
+				return endpoint.AddressOf(addr), nil
+			})
+		})
+		waitFull(t, s, n)
+		if got := n.acceptedOn(shardAwarePort); got != 0 {
+			t.Errorf("shard-aware port accepted %d connections", got)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if kinds[endpoint.PortShardAware] == 0 || kinds[endpoint.PortCQL] == 0 || kinds[endpoint.PortShardAwareTLS] != 0 || kinds[endpoint.PortTLS] != 0 {
+			t.Errorf("translated kinds %v, want the shard-aware and CQL ports only", kinds)
 		}
 	})
 

@@ -577,7 +577,8 @@ apply to an individual page. The connection layer can still reprepare and resend
 EXECUTE once after `UNPREPARED`, within that page's deadline. Other failures follow
 the topology tolerance, compatibility fallback, or worker recovery rules above.
 The server-side timeout is encoded in whole milliseconds
-in the prepared query when prepared, truncating submillisecond precision. Cache
+in the prepared query when prepared; `WithMetadataServerTimeout` rounds a
+submillisecond fraction up. Cache
 hits do not render that query again or reevaluate the current server family:
 the cached statement retains whether its original preparation included
 `USING TIMEOUT`. Consequently, switching the control connection between server
