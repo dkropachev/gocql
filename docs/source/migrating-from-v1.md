@@ -237,7 +237,7 @@ column named in one word (`createdat`).
 | a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
 | a UDT struct implementing `gocqlx.UDT` | a `CQLCodec` method, which `cqlgen -udt=Address` generates, or `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTName("", "address")))`; either maps `[]Address`, `*Address`, map values and the other derived forms too |
 | a UDT value written before `ALTER TYPE ADD` | the same: a missing or NULL UDT field decodes as the zero value |
-| `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :from AND ck < :to`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
+| `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :low AND ck < :high`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
 | a tuple scanned into a struct | `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, by field position |
 | `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraFields())`; without it every result column needs a field |
 

@@ -212,7 +212,10 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 	}
 	wk, gk := want.Type().Kind(), got.Type().Kind()
 	textKinds := func(k cql.Kind) bool { return k == cql.KindText }
-	if wk != gk && !(textKinds(wk) && textKinds(gk)) {
+	// A NULL decoded from a column carries the column's type; an expected
+	// NULL built without one matches any type.
+	untypedNull := want.State() != cql.Present && want.Type().Equal(cql.DataType{})
+	if wk != gk && !(textKinds(wk) && textKinds(gk)) && !untypedNull {
 		t.Fatalf("type: expected %s, got %s", want.Type(), got.Type())
 	}
 	if want.State() != cql.Present {

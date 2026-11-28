@@ -37,7 +37,7 @@ type StructFields[P any] struct {
 // statement repeats binds the same field each time; two ? markers the server
 // names alike, as it names WHERE a > ? AND a < ? after their column, are
 // rejected when the statement is prepared, since one field would bind both:
-// name them, as in WHERE a > :from AND a < :to. The fields of a struct
+// name them, as in WHERE a > :low AND a < :high. The fields of a struct
 // embedded by value, exported or not, map as if declared in P. Like Go's
 // field promotion, but by column rather than Go name, a shallower field
 // hides deeper ones with the same column whatever their order, and two at

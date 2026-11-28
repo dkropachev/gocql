@@ -745,8 +745,11 @@ func TestRouting(t *testing.T) {
 					}
 					after := tabletAuthority(t, ctx, s, id, token.Value)
 					latest = after
+					// The driver learns a tablet from the feedback of a query
+					// routed off it; until then the placement is unknown, which
+					// the loop retries like any other mismatch.
 					replicas, err := s.Metadata().Replicas(keyspace, "records", token.Value)
-					if err != nil {
+					if err != nil && !errors.Is(err, metadata.ErrPlacementUnknown) {
 						t.Fatal(err)
 					}
 					stable := before.stable && after.stable && before.last == after.last && sameReplicaSet(before.replicas, after.replicas)

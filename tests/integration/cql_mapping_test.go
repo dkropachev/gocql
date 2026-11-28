@@ -66,18 +66,18 @@ func TestRepeatedPositionalMarkers(t *testing.T) {
 	}
 	type key struct{ PK, CK int32 }
 	positional := cql.Select(fmt.Sprintf("SELECT ck FROM %s WHERE pk = ? AND ck > ? AND ck < ?", table), cql.MustParamsOf[key](), cql.OneColumn(cql.Int32Codec))
-	if _, err := s.Prepare(ctx, positional, execopt.PrepareOptions{}); err == nil || !strings.Contains(err.Error(), ":from and :to") {
+	if _, err := s.Prepare(ctx, positional, execopt.PrepareOptions{}); err == nil || !strings.Contains(err.Error(), ":low and :high") {
 		t.Fatalf("repeated ? markers: %v", err)
 	}
-	type bounds struct{ PK, From, To int32 }
-	named := cql.Select(fmt.Sprintf("SELECT ck FROM %s WHERE pk = :pk AND ck > :from AND ck < :to", table), cql.MustParamsOf[bounds](), cql.OneColumn(cql.Int32Codec))
+	type bounds struct{ PK, Low, High int32 }
+	named := cql.Select(fmt.Sprintf("SELECT ck FROM %s WHERE pk = :pk AND ck > :low AND ck < :high", table), cql.MustParamsOf[bounds](), cql.OneColumn(cql.Int32Codec))
 	p, err := s.Prepare(ctx, named, execopt.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	var got []int32
 	var ck int32
-	if _, err := p.Each(ctx, bounds{PK: 1, From: 1, To: 4}, &ck, func(v *int32) error { got = append(got, *v); return nil }); err != nil {
+	if _, err := p.Each(ctx, bounds{PK: 1, Low: 1, High: 4}, &ck, func(v *int32) error { got = append(got, *v); return nil }); err != nil {
 		t.Fatal(err)
 	}
 	if fmt.Sprint(got) != "[2 3]" {

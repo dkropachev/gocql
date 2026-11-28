@@ -352,7 +352,7 @@ tuple's members to T's fields by position. Options are not generic, so
 apply with a ValidationError. A struct mapping's parameters reject two
 `?` markers the server names alike, as it names both markers of
 `ck > ? AND ck < ?` `ck`, when the statement is prepared; named markers
-(`:from`, `:to`) bind distinct fields.
+(`:low`, `:high`) bind distinct fields.
 
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a

@@ -338,7 +338,7 @@ func checkRepeatedMarkers[P any](columns Columns, mapping []int, fields []InputF
 		if prev, ok := first[field]; ok {
 			column, _ := columns.At(index)
 			return columnError(CodecStageCompile, index, column.Name, typeValidation("bind marker",
-				"markers %d and %d are both named %q by the server, which names a ? marker after its column, so one field would bind both; name them, as in :from and :to, or bind them by position with ParamAt", prev, index, column.Name))
+				"markers %d and %d are both named %q by the server, which names a ? marker after its column, so one field would bind both; name them, as in :low and :high, or bind them by position with ParamAt", prev, index, column.Name))
 		}
 		first[field] = index
 	}
