@@ -148,7 +148,7 @@ func TestWorkCountsPerf(t *testing.T) {
 					s, conns, peers := runtimeTestSession(t, 1)
 					observer := new(testObserver)
 					profile := defaultProfile()
-					profile.Prefetch = 0
+					profile.Prefetch = false
 					if enabled {
 						profile.Speculation = speculation{}
 					}
@@ -328,7 +328,7 @@ func TestWorkCountsPerf(t *testing.T) {
 									bound := runtimeQuery(t)
 									defer bound.Close()
 									profile := defaultProfile()
-									profile.Prefetch = prefetch
+									profile.Prefetch = prefetch == 1
 									options := execopt.Options{Profile: new(profile)}
 									values := make([]string, cells)
 									for i := range values {
