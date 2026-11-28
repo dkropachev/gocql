@@ -63,7 +63,7 @@ func Example_dynamicColumns() {
 			if err != nil {
 				return err
 			}
-			if value.State() == cql.Null {
+			if value.State() == cql.CellNull {
 				fmt.Print("null ")
 				continue
 			}

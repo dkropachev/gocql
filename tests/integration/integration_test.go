@@ -80,7 +80,7 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 	if !ok {
 		return nil, fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := cql.Statement[cql.EmptyParams, []cql.Entry[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextViewCodec, cql.TextViewCodec))}
+	statement := cql.Statement[cql.EmptyParams, []cql.Entry[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapEntriesDecoder(cql.TextViewCodec, cql.TextViewCodec))}
 	rows, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return nil, err

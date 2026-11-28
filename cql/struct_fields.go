@@ -40,7 +40,7 @@ func builtinFieldTypes() []structmap.BuiltinFieldType {
 //   - WithEncoder and NilAsUnset: ParamsOf.
 //   - ReuseBuffers: RowOf.
 //   - NullAsZero: RowOf, StreamRowOf, UDTCodecOf and TupleCodecOf.
-//   - IgnoreExtraFields: RowOf, StreamRowOf, UDTCodecOf and the UDT
+//   - IgnoreUnknownFields: RowOf, StreamRowOf, UDTCodecOf and the UDT
 //     constructors.
 //   - UDTName and AllowMissingFields: UDTCodecOf and the UDT constructors.
 //   - WithStreamDecoder: StreamRowOf.
@@ -63,6 +63,7 @@ const (
 	targetUDT
 	targetTuple
 	targetUDTValue // UDTEncoder, UDTDecoder and StreamUDT
+	targetValue    // CodecOf
 )
 
 func (t structTarget) String() string {
@@ -77,6 +78,8 @@ func (t structTarget) String() string {
 		return "TupleCodecOf"
 	case targetUDTValue:
 		return "UDTEncoder, UDTDecoder or StreamUDT"
+	case targetValue:
+		return "CodecOf"
 	default:
 		return "UDTCodecOf"
 	}
@@ -285,7 +288,7 @@ func (o codecOption[V]) option() (string, structTarget) {
 	if o.codec == nil {
 		return o.name, targetParams
 	}
-	return o.name, targetParams | targetRows | targetUDT | targetTuple
+	return o.name, targetParams | targetRows | targetUDT | targetTuple | targetValue
 }
 
 func (o codecOption[V]) apply(c *structOptionSet) {
@@ -304,8 +307,8 @@ func (o codecOption[V]) apply(c *structOptionSet) {
 // package, or to replace V's default. V is inferred from codec, as in
 // WithCodec(statusCodec). Recognized built-in codec tags take precedence. The
 // option also applies to generated mappings; other generated
-// custom-expression codecs remain defaults. ParamsOf, RowOf, UDTCodecOf and
-// TupleCodecOf apply it; StreamRowOf decodes with stream decoders, so it
+// custom-expression codecs remain defaults. ParamsOf, RowOf, UDTCodecOf,
+// TupleCodecOf and CodecOf apply it; StreamRowOf decodes with stream decoders, so it
 // rejects it: use WithStreamDecoder.
 func WithCodec[V any](codec Codec[V]) StructOption {
 	return codecOption[V]{enc: codec, codec: codec, name: "WithCodec"}
@@ -631,20 +634,20 @@ func (reuseBuffersOption) apply(c *structOptionSet)       { c.reuseBuffers = tru
 // reuses slice storage.
 func ReuseBuffers() StructOption { return reuseBuffersOption{} }
 
-type ignoreExtraFieldsOption struct{}
+type ignoreUnknownFieldsOption struct{}
 
-func (ignoreExtraFieldsOption) option() (string, structTarget) {
-	return "IgnoreExtraFields", targetRows | targetStream | targetUDT | targetUDTValue
+func (ignoreUnknownFieldsOption) option() (string, structTarget) {
+	return "IgnoreUnknownFields", targetRows | targetStream | targetUDT | targetUDTValue
 }
-func (ignoreExtraFieldsOption) apply(c *structOptionSet) { c.udt.allowExtra = true }
+func (ignoreUnknownFieldsOption) apply(c *structOptionSet) { c.udt.allowExtra = true }
 
-// IgnoreExtraFields skips database fields that no struct field maps: a
+// IgnoreUnknownFields skips database fields that no struct field maps: a
 // result column in RowOf and StreamRowOf, so that SELECT * keeps working
 // after ALTER TABLE ADD, and a UDT field in UDTCodecOf, UDTEncoder,
 // UDTDecoder and StreamUDT, so that a UDT keeps decoding after ALTER TYPE
 // ADD; such a UDT field is bound as NULL. Without it every database field
 // needs a struct field, which catches a misspelled tag.
-func IgnoreExtraFields() StructOption { return ignoreExtraFieldsOption{} }
+func IgnoreUnknownFields() StructOption { return ignoreUnknownFieldsOption{} }
 
 type allowMissingFieldsOption struct{}
 
@@ -764,7 +767,7 @@ func structOptions[P any](target structTarget, opts []StructOption) (structConfi
 	t := reflect.TypeFor[P]()
 	config := structConfig[P]{codecs: map[reflect.Type]derived{}, streams: map[reflect.Type]streamBuiltinField[P]{}}
 	if t.Kind() != reflect.Struct {
-		return config, typeValidation("struct", "%s is not a struct", t)
+		return config, typeValidation("struct", "%s is not a struct; map one value with ParamOf, ColumnOf or CodecOf", t)
 	}
 	set, err := applyOptions(target, t.String(), opts)
 	if err != nil {
@@ -988,30 +991,30 @@ type erasedStreamBuiltin struct {
 func erasedStreamBuiltins() []erasedStreamBuiltin {
 	var fields []erasedStreamBuiltin
 	add := func(entries ...erasedStreamBuiltin) { fields = append(fields, entries...) }
-	add(streamBuiltin(StreamBool, "bool", "Bool", true)...)
-	add(streamBuiltin(StreamInt8, "int8", "Int8", true)...)
-	add(streamBuiltin(StreamInt16, "int16", "Int16", true)...)
-	add(streamBuiltin(StreamInt32, "int32", "Int32", true)...)
-	add(streamBuiltin(StreamInt64, "int64", "Int64", true)...)
-	add(streamBuiltin(StreamFloat32, "float32", "Float32", true)...)
-	add(streamBuiltin(StreamFloat64, "float64", "Float64", true)...)
-	add(streamBuiltin(StreamBlob, "[]byte", "Blob", true)...)
-	// ASCII names StreamText, which decodes ascii too, in a tag.
-	add(streamBuiltin(StreamText, "[]byte", "Text", false, "ASCII")...)
-	add(streamBuiltin(StreamVarint, "[]byte", "Varint", false)...)
-	add(streamBuiltin(StreamUUID, "cql.UUID", "UUID", true)...)
-	add(streamBuiltin(StreamTimeUUID, "cql.TimeUUID", "TimeUUID", true)...)
-	add(streamBuiltin(StreamInet, "netip.Addr", "Inet", true)...)
-	add(streamBuiltin(StreamDecimal, "cql.DecimalParts", "Decimal", true)...)
-	add(streamBuiltin(StreamDate, "cql.Date", "Date", true)...)
-	add(streamBuiltin(StreamTime, "cql.TimeOfDay", "Time", true)...)
-	add(streamBuiltin(StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
-	add(streamBuiltin(StreamDuration, "cql.Duration", "Duration", true)...)
+	add(streamBuiltin(StreamBool, "bool", "Bool", "Bool", true)...)
+	add(streamBuiltin(StreamInt8, "int8", "Int8", "Int8", true)...)
+	add(streamBuiltin(StreamInt16, "int16", "Int16", "Int16", true)...)
+	add(streamBuiltin(StreamInt32, "int32", "Int32", "Int32", true)...)
+	add(streamBuiltin(StreamInt64, "int64", "Int64", "Int64", true)...)
+	add(streamBuiltin(StreamFloat32, "float32", "Float32", "Float32", true)...)
+	add(streamBuiltin(StreamFloat64, "float64", "Float64", "Float64", true)...)
+	add(streamBuiltin(StreamByteSlice, "[]byte", "ByteSlice", "Blob", true)...)
+	// ASCII names StreamTextBytes, which decodes ascii too, in a tag.
+	add(streamBuiltin(StreamTextBytes, "[]byte", "TextBytes", "Text", false, "ASCII", "TextBytes")...)
+	add(streamBuiltin(StreamVarintBytes, "[]byte", "VarintBytes", "Varint", false, "VarintBytes")...)
+	add(streamBuiltin(StreamUUID, "cql.UUID", "UUID", "UUID", true)...)
+	add(streamBuiltin(StreamTimeUUID, "cql.TimeUUID", "TimeUUID", "TimeUUID", true)...)
+	add(streamBuiltin(StreamInet, "netip.Addr", "Inet", "Inet", true)...)
+	add(streamBuiltin(StreamDecimalParts, "cql.DecimalParts", "DecimalParts", "Decimal", true, "DecimalParts")...)
+	add(streamBuiltin(StreamDate, "cql.Date", "Date", "Date", true)...)
+	add(streamBuiltin(StreamTimeOfDay, "cql.TimeOfDay", "TimeOfDay", "Time", true, "TimeOfDay")...)
+	add(streamBuiltin(StreamTimestamp, "cql.Timestamp", "Timestamp", "Timestamp", true)...)
+	add(streamBuiltin(StreamDuration, "cql.Duration", "Duration", "Duration", true)...)
 	// The allocating decoders, for the types the seeded ones do not cover.
-	add(streamBuiltin(StreamString, "string", "String", true)...)
-	add(streamBuiltin(StreamTimestampTime, "time.Time", "TimestampTime", true)...)
-	add(streamBuiltin(StreamTimeDuration, "time.Duration", "TimeDuration", true)...)
-	add(streamBuiltin(StreamDecimalValue, "cql.Decimal", "DecimalValue", true)...)
+	add(streamBuiltin(StreamString, "string", "String", "String", true)...)
+	add(streamBuiltin(StreamTimestampTime, "time.Time", "TimestampTime", "TimestampTime", true)...)
+	add(streamBuiltin(StreamTimeDuration, "time.Duration", "TimeDuration", "TimeDuration", true)...)
+	add(streamBuiltin(StreamDecimal, "cql.Decimal", "Decimal", "DecimalValue", true)...)
 	return fields
 }
 
@@ -1022,14 +1025,14 @@ func erasedStreamBuiltins() []erasedStreamBuiltin {
 // that names it, or one of aliases, also selects the slice of it, and there
 // is no list, set or vector entry: those tags already select the default
 // decoder's.
-func streamBuiltin[V any](dec StreamDecoder[V], typeSrc, name string, def bool, aliases ...string) []erasedStreamBuiltin {
+func streamBuiltin[V any](dec StreamDecoder[V], typeSrc, goName, name string, def bool, aliases ...string) []erasedStreamBuiltin {
 	names := append([]string{name}, aliases...)
 	entry := func(typ reflect.Type, typeSrc, decSrc string, names []string, def bool, column func(string, uintptr) StreamOutputField[erasedBase]) erasedStreamBuiltin {
 		return erasedStreamBuiltin{erasedStreamEntry: erasedStreamEntry{column: column}, BuiltinFieldType: structmap.BuiltinFieldType{
 			Type: typ, TypeSrc: typeSrc, DecoderSrc: decSrc, Names: names, Default: def,
 		}}
 	}
-	src := "cql.Stream" + name
+	src := "cql.Stream" + goName
 	plain := []erasedStreamBuiltin{
 		entry(reflect.TypeFor[V](), typeSrc, src, names, def, erasedStreamColumnOf(dec)),
 		entry(reflect.TypeFor[Nullable[V]](), "cql.Nullable["+typeSrc+"]", "cql.StreamNullable("+src+")",

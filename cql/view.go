@@ -55,6 +55,21 @@ func BorrowText(s string) (Text, error) {
 
 // Len returns the number of bytes in the view.
 func (b Bytes) Len() int64 { return b.chain.Len() }
+
+// Format writes the bytes for fmt verbs: %v as lowercase hex, as %x does,
+// and any other verb as a []byte would print, or "<released>" once the view
+// has expired, so that formatting and logging an expired view never panics.
+func (b Bytes) Format(f fmt.State, verb rune) {
+	owned, err := b.Copy()
+	if err != nil {
+		fmt.Fprint(f, "<released>")
+		return
+	}
+	if verb == 'v' {
+		verb = 'x'
+	}
+	fmt.Fprintf(f, fmt.FormatString(f, verb), owned)
+}
 func (b Bytes) checkAlive() error {
 	if !b.lease.IsZero() && !b.lease.Alive() {
 		return ErrReleased

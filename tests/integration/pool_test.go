@@ -155,7 +155,7 @@ func TestPool(t *testing.T) {
 		defer func() {
 			cleanup, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
-			_, err := s.UnpreparedExec(cleanup, cql.Command("DROP TABLE IF EXISTS "+qualified), cql.EmptyParams{})
+			_, err := s.UnpreparedExec(cleanup, cql.Write("DROP TABLE IF EXISTS "+qualified, cql.NoParams), cql.EmptyParams{})
 			if err != nil {
 				t.Errorf("cleanup unique stream table: %v", err)
 			}
@@ -178,7 +178,7 @@ func TestPool(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer r.InternalClose(false)
-		decoder := cql.StreamRowInto(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamBlob, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
+		decoder := cql.StreamRowInto(func(*cql.Pair[int32, []byte]) {}, cql.StreamColumn("id", cql.StreamInt32, func(r *cql.Pair[int32, []byte]) *int32 { return &r.First }), cql.StreamColumn("value", cql.StreamByteSlice, func(r *cql.Pair[int32, []byte]) *[]byte { return &r.Second }))
 		request := &attemptRequest{Statement: "SELECT id,value FROM " + qualified, Consistency: cql.Quorum, PageSize: 2}
 		seen := map[int32]bool{}
 		pages := 0

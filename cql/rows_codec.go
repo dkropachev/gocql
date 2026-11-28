@@ -107,8 +107,8 @@ func (w *ParamWriter) WriteParam[T any](encoder Encoder[T], value T) error {
 			return fmt.Errorf("gocql: missing parameter capture slot")
 		}
 		state := cell.state
-		if state == EmptyCell {
-			state = Present
+		if state == CellEmpty {
+			state = CellPresent
 		} // empty has a zero-length present wire body
 		w.capture[w.index] = paramCell{Start: cell.start + 4, End: w.builder.Len(), State: state}
 	}
@@ -149,7 +149,7 @@ func (r *RowReader) nextValue() (ValueReader, error) {
 	}
 	if r.allowMissing && r.cursor.Remaining() == 0 {
 		r.index++
-		return newValueReader(column.Type, Null, wire.Chain{}, r.lease), nil
+		return newValueReader(column.Type, CellNull, wire.Chain{}, r.lease), nil
 	}
 	v, err := readFramedValue(r.cursor, column.Type, r.lease, false, false)
 	if err != nil {
@@ -489,7 +489,7 @@ type rowCodec[R any] struct {
 	reset    func(*R)
 	fields   []OutputField[R]
 	optional bool // fields without a column are skipped (struct mappings)
-	extra    bool // columns without a field are skipped (IgnoreExtraFields)
+	extra    bool // columns without a field are skipped (IgnoreUnknownFields)
 	nullZero bool // a NULL cell leaves any field zero (NullAsZero)
 }
 type compiledRow[R any] struct {
@@ -617,12 +617,14 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	return nil
 }
 
-// OneParam encodes one positional bind marker using encoder.
+// OneParam encodes one positional bind marker using encoder. ParamOf
+// derives the encoder from the value type instead.
 func OneParam[T any](encoder Encoder[T]) ParamEncoder[T] {
 	return Params(ParamAt(0, encoder, func(value T) T { return value }))
 }
 
-// OneColumn decodes exactly one result column using decoder.
+// OneColumn decodes exactly one result column using decoder. ColumnOf
+// derives the decoder from the value type instead.
 func OneColumn[T any](decoder Decoder[T]) RowDecoder[T] {
 	return singleColumnRows[T]{decoder: decoder}
 }
@@ -665,16 +667,17 @@ var (
 
 type mappedParams[A, B any] struct {
 	codec    ParamEncoder[B]
-	mapValue func(A) B
+	mapValue func(A) (B, error)
 }
 type compiledMappedParams[A, B any] struct {
 	plan     CompiledParams[B]
-	mapValue func(A) B
+	mapValue func(A) (B, error)
 }
 
 // ConvertParams adapts an encoder for B to input A by converting each A to a B
-// with mapValue before encoding it.
-func ConvertParams[A, B any](codec ParamEncoder[B], mapValue func(A) B) ParamEncoder[A] {
+// with mapValue before encoding it. An error from mapValue fails the encode
+// with a CodecError whose Index is -1, as it is not of one parameter.
+func ConvertParams[A, B any](codec ParamEncoder[B], mapValue func(A) (B, error)) ParamEncoder[A] {
 	return mappedParams[A, B]{codec: codec, mapValue: mapValue}
 }
 func (c mappedParams[A, B]) Compile(columns Columns) (CompiledParams[A], error) {
@@ -688,42 +691,51 @@ func (c mappedParams[A, B]) Compile(columns Columns) (CompiledParams[A], error) 
 	return compiledMappedParams[A, B]{plan: plan, mapValue: c.mapValue}, nil
 }
 func (p compiledMappedParams[A, B]) Encode(w *ParamWriter, value A) error {
-	return p.plan.Encode(w, p.mapValue(value))
+	b, err := p.mapValue(value)
+	if err != nil {
+		return &CodecError{Err: err, Stage: CodecStageEncode, Index: -1}
+	}
+	return p.plan.Encode(w, b)
 }
 
 type mappedRows[A, B any] struct {
 	codec      RowDecoder[A]
-	mapValue   func(A) B
+	mapValue   func(A) (B, error)
 	cloneValue func(B) B
 }
 type compiledMappedRow[A, B any] struct {
 	plan       CompiledRow[A]
-	mapValue   func(A) B
+	codec      RowDecoder[A]
+	mapValue   func(A) (B, error)
 	cloneValue func(B) B
 }
 
 // ConvertRows decodes A rows with codec and converts each to a B with
-// mapValue; cloneValue must recursively detach borrowed data in B.
-func ConvertRows[A, B any](codec RowDecoder[A], mapValue func(A) B, cloneValue func(B) B) RowDecoder[B] {
+// mapValue. An error from mapValue fails the decode with a CodecError whose
+// Index is -1, as it is not of one column. cloneValue must recursively detach
+// borrowed data in B. When it is nil, each row's A is detached with
+// codec.Clone before mapValue converts it, so a B never borrows and Clone
+// returns it as it is; that costs a copy of every row, which a cloneValue
+// that copies only what B keeps avoids.
+func ConvertRows[A, B any](codec RowDecoder[A], mapValue func(A) (B, error), cloneValue func(B) B) RowDecoder[B] {
 	return mappedRows[A, B]{codec: codec, mapValue: mapValue, cloneValue: cloneValue}
 }
 func (c mappedRows[A, B]) Clone(value B) B {
-	// Compile rejects a nil cloneValue, so such a decoder never produced
-	// value; it is returned as it is.
+	// Without cloneValue, a decoded B holds no borrowed storage.
 	if c.cloneValue == nil {
 		return value
 	}
 	return c.cloneValue(value)
 }
 func (c mappedRows[A, B]) Compile(columns Columns) (CompiledRow[B], error) {
-	if c.codec == nil || c.mapValue == nil || c.cloneValue == nil {
+	if c.codec == nil || c.mapValue == nil {
 		return nil, fmt.Errorf("gocql: nil row mapping")
 	}
 	plan, err := compileRow(c.codec, columns)
 	if err != nil {
 		return nil, err
 	}
-	return compiledMappedRow[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
+	return compiledMappedRow[A, B]{plan: plan, codec: c.codec, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
 func (p compiledMappedRow[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	if dst == nil {
@@ -735,7 +747,14 @@ func (p compiledMappedRow[A, B]) DecodeInto(reader *RowReader, dst *B) error {
 	if err := p.plan.DecodeInto(reader, &value); err != nil {
 		return err
 	}
-	*dst = p.mapValue(value) // Explicit value-returning application mapping.
+	if p.cloneValue == nil {
+		value = p.codec.Clone(value)
+	}
+	b, err := p.mapValue(value) // Explicit value-returning application mapping.
+	if err != nil {
+		return &CodecError{Err: err, Stage: CodecStageDecode, Index: -1}
+	}
+	*dst = b
 	return nil
 }
 

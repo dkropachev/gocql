@@ -26,7 +26,7 @@ func BenchmarkScalar(b *testing.B) {
 		b.Run("Varchar1024IntoBytes", func(b *testing.B) {
 			data := bytes.Repeat([]byte{'x'}, 1024)
 			typ := TextType
-			r := valueReaderFromLease(typ, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
+			r := valueReaderFromLease(typ, CellPresent, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)
 			dst := make([]byte, 1024)
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -41,7 +41,7 @@ func BenchmarkScalar(b *testing.B) {
 			}
 		})
 		b.Run("UUID", func(b *testing.B) {
-			r := ScalarReader(b, KindUUID, Present, make([]byte, 16))
+			r := ScalarReader(b, KindUUID, CellPresent, make([]byte, 16))
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
@@ -55,7 +55,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("BlobDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
-		r := ScalarReader(b, KindBlob, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindBlob, CellPresent, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -113,7 +113,7 @@ func BenchmarkScalar(b *testing.B) {
 						}
 					})
 					chain := CodecTestMust(wire.NewChain(wire.Borrow(data)))
-					reader := valueReaderFromLease(typ, Present, chain, nil)
+					reader := valueReaderFromLease(typ, CellPresent, chain, nil)
 					b.Run("decode", func(b *testing.B) {
 						b.ReportAllocs()
 						b.SetBytes(int64(size))
@@ -139,7 +139,7 @@ func BenchmarkScalar(b *testing.B) {
 	})
 	b.Run("Int64Decode", func(b *testing.B) {
 		data := []byte{0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-		r := ScalarReader(b, KindBigInt, Present, data[:3], data[3:])
+		r := ScalarReader(b, KindBigInt, CellPresent, data[:3], data[3:])
 		b.ReportAllocs()
 		b.SetBytes(8)
 		b.ResetTimer()
@@ -156,7 +156,7 @@ func BenchmarkScalar(b *testing.B) {
 		for i := range data {
 			data[i] = 'a'
 		}
-		r := ScalarReader(b, KindText, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindText, CellPresent, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
@@ -171,7 +171,7 @@ func BenchmarkScalar(b *testing.B) {
 	b.Run("VarintDecode", func(b *testing.B) {
 		data := make([]byte, 1<<20)
 		data[0] = 0x01
-		r := ScalarReader(b, KindVarint, Present, data[:123], data[123:])
+		r := ScalarReader(b, KindVarint, CellPresent, data[:123], data[123:])
 		b.ReportAllocs()
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()

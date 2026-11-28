@@ -49,7 +49,6 @@ func TestLWTDialect(t *testing.T) {
 	)
 	updateCQL := fmt.Sprintf("UPDATE %s SET v = ? WHERE k = ? AND c = ? IF v = ?", table)
 	conditional := cassandraPrepared(t, session, cql.Statement[update, cql.CASResult[row]]{
-		Kind:   cql.ConditionalStatement,
 		CQL:    updateCQL,
 		Params: updateParams,
 		Rows:   decoder,
@@ -71,7 +70,7 @@ func TestLWTDialect(t *testing.T) {
 	t.Run("ExecRejected", func(t *testing.T) {
 		// Declared conditional: rejected before anything is sent.
 		conditional := cassandraPrepared(t, session, cql.Statement[update, cql.EmptyRow]{
-			Kind: cql.ConditionalStatement, CQL: updateCQL, Params: updateParams,
+			CQL: updateCQL, Params: updateParams,
 		}, execopt.PrepareOptions{})
 		_, err := conditional.Exec(ctx, update{K: 1, C: 1, V: 11, Expect: 10})
 		require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)

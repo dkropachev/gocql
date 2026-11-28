@@ -39,13 +39,13 @@ func newEncodedValue(typ DataType, state CellState, body Bytes) (EncodedValue, e
 	if body.Len() > math.MaxInt32 {
 		return EncodedValue{}, typeValidation("value", "cell body exceeds signed 32-bit length")
 	}
-	if state > EmptyCell {
+	if state > CellEmpty {
 		return EncodedValue{}, typeValidation("state", "unknown cell state %v", state)
 	}
-	if state != Present && body.Len() != 0 {
+	if state != CellPresent && body.Len() != 0 {
 		return EncodedValue{}, typeValidation("value", "state %v cannot contain payload bytes", state)
 	}
-	if state == EmptyCell && !emptySupported(typ) {
+	if state == CellEmpty && !emptySupported(typ) {
 		return EncodedValue{}, typeValidation("type", "%s does not support empty values", typ)
 	}
 	return EncodedValue{typ: typ, state: state, body: body}, nil
@@ -111,9 +111,9 @@ func encodeValue[T any](typ DataType, encoder Encoder[T], value T, owned bool) (
 	return EncodedValue{typ: typ, state: writer.state, body: bytesView(body, wire.Ref{})}, nil
 }
 
-// DecodeValue checks the requested type before invoking the decoder. Unset is
+// DecodeValue checks the requested type before invoking the decoder. CellUnset is
 // an input-binding state and is never admitted as a result value. The decoder
-// sees an EmptyCell value as a response holds it: Present, with an empty body.
+// sees a CellEmpty value as a response holds it: CellPresent, with an empty body.
 func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
 	var zero T
 	if err := validateDataType(value.typ); err != nil {
@@ -129,12 +129,12 @@ func DecodeValue[T any](decoder Decoder[T], value EncodedValue) (T, error) {
 	if err := checkBytesAlive(value.body); err != nil {
 		return zero, err
 	}
-	if value.state == Unset {
+	if value.state == CellUnset {
 		return zero, typeValidation("state", "unset cannot be decoded as a result")
 	}
 	state := value.state
-	if state == EmptyCell {
-		state = Present
+	if state == CellEmpty {
+		state = CellPresent
 	}
 	return compiled.Decode(newValueReader(value.typ, state, bytesChain(value.body), bytesLease(value.body)))
 }

@@ -21,12 +21,13 @@ results, `prepared.One` reads one row, and `prepared.Each` or a range loop over
 `prepared.All` visits every row.
 A statement without results has the row type `cql.EmptyRow`; one with no bind
 markers takes `cql.EmptyParams`. Leave `Params` or `Rows` nil for those empty
-types; `cql.Command(text)` builds a statement with neither, such as DDL, and
+types; `cql.Write(text, cql.NoParams)` builds a statement with neither, such
+as DDL, and
 `session.UnpreparedCommand(ctx, text)` runs one once without preparing it.
 `cql.Select(text, params, rows)`, `cql.Write(text, params)` and
 `cql.NewStatement(text, params, rows)` build a statement whose type arguments
 Go infers from the codecs; pass `cql.NoParams` for a statement without bind
-markers. `Select` marks the statement ordinary and idempotent.
+markers. `Select` marks the statement idempotent, as `WithIdempotent(true)` does for any statement.
 Parameters are copied on admission.
 
 A goroutine that runs one statement many times can own a reusable `Worker`:

@@ -14,7 +14,7 @@ func BenchmarkRoutingTokenAPI(b *testing.B) {
 	b.Run("CompositeSpans", func(b *testing.B) {
 		data := make([]byte, 4096)
 		chain, _ := wire.NewChain(wire.Borrow(data[:15]), wire.Borrow(data[15:]))
-		cells := []encodedCell{{State: cql.Present, Body: chain}, {State: cql.Present, Body: chain}}
+		cells := []encodedCell{{State: cql.CellPresent, Body: chain}, {State: cql.CellPresent, Body: chain}}
 		indexes := []int{0, 1}
 		b.ReportAllocs()
 		b.SetBytes(8192)

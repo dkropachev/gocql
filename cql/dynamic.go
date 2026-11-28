@@ -8,6 +8,7 @@ import (
 	"iter"
 	"math"
 	"net/netip"
+	"slices"
 	"sync"
 	"time"
 
@@ -89,17 +90,17 @@ func dynamicScalar(kind Kind) Value { return Value{typ: dynamicScalarTypes[kind]
 // whatever type the bind marker, collection element or tuple or UDT member
 // has, so Type returns the zero DataType. A decoded NULL keeps its column's
 // type.
-func NullValue() Value { return Value{state: Null} }
+func NullValue() Value { return Value{state: CellNull} }
 
 // UnsetValue constructs an UNSET parameter, which leaves the bind marker's
 // column unchanged. Like NullValue it has no type; UNSET is not a valid
 // result or nested value.
-func UnsetValue() Value { return Value{state: Unset} }
+func UnsetValue() Value { return Value{state: CellUnset} }
 
 // untypedMarker reports whether v is a NullValue or UnsetValue, which match
 // any type.
 func untypedMarker(v Value) bool {
-	return (v.state == Null || v.state == Unset) && descriptorOf(v.typ) == nil
+	return (v.state == CellNull || v.state == CellUnset) && descriptorOf(v.typ) == nil
 }
 
 // EmptyValue constructs an empty cell of t, rejecting types that cannot represent it.
@@ -110,7 +111,7 @@ func EmptyValue(t DataType) (Value, error) {
 	if !emptySupported(t) {
 		return Value{}, typeValidation("type", "%s does not support Empty", t)
 	}
-	return Value{typ: t, state: EmptyCell}, nil
+	return Value{typ: t, state: CellEmpty}, nil
 }
 
 // BooleanValue constructs a dynamic CQL boolean value.
@@ -242,16 +243,16 @@ func DecimalValue(n Decimal) Value {
 }
 
 func (v Value) require(kinds ...Kind) error {
-	if untypedMarker(v) && v.state == Null {
+	if untypedMarker(v) && v.state == CellNull {
 		return typeValidation("value", "value is %w", ErrNull)
 	}
 	if err := validateDataType(v.typ); err != nil {
 		return err
 	}
-	if v.state == Null {
+	if v.state == CellNull {
 		return typeValidation("value", "%s is %w", v.typ, ErrNull)
 	}
-	if v.state != Present {
+	if v.state != CellPresent {
 		return typeValidation("value", "%s has state %v", v.typ, v.state)
 	}
 	for _, kind := range kinds {
@@ -309,9 +310,21 @@ func (v Value) Text() (string, error) {
 	return text.Copy()
 }
 
-// Bytes returns a present blob. A decoded Bytes borrows the response; see
+// Bytes returns a present blob as a newly allocated slice, which stays
+// valid after the response is released. It fails with ErrReleased for a
+// decoded value whose response was released. BytesView returns the bytes
+// without copying.
+func (v Value) Bytes() ([]byte, error) {
+	b, err := v.BytesView()
+	if err != nil {
+		return nil, err
+	}
+	return b.Copy()
+}
+
+// BytesView returns a present blob. A decoded Bytes borrows the response; see
 // Clone.
-func (v Value) Bytes() (Bytes, error) {
+func (v Value) BytesView() (Bytes, error) {
 	if err := v.require(KindBlob); err != nil {
 		return Bytes{}, err
 	}
@@ -370,22 +383,23 @@ func (v Value) Duration() (Duration, error) {
 	return v.duration, nil
 }
 
-// Varint returns a present varint. A decoded Varint borrows the response; see
-// Clone.
+// Varint returns a present varint, which owns its bytes. It fails with
+// ErrReleased for a decoded value whose response was released.
 func (v Value) Varint() (Varint, error) {
 	if err := v.require(KindVarint); err != nil {
 		return Varint{}, err
 	}
-	return varintView(v.bytes), nil
+	return varintOf(v.bytes)
 }
 
-// Decimal returns a present decimal. A decoded Decimal borrows the response;
-// see Clone.
+// Decimal returns a present decimal, which owns its value. It fails with
+// ErrReleased for a decoded value whose response was released.
 func (v Value) Decimal() (Decimal, error) {
 	if err := v.require(KindDecimal); err != nil {
 		return Decimal{}, err
 	}
-	return Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)}, nil
+	n, err := varintOf(v.bytes)
+	return Decimal{Scale: v.scale, Unscaled: n}, err
 }
 
 // Clone detaches a lazy aggregate by copying its encoded backing, without
@@ -499,17 +513,118 @@ func checkedTypeHeight(t DataType, depth int, heights map[*dataTypeDescriptor]in
 	heights[d] = height
 	return height, nil
 }
-func dynamicCompatible(actual, wanted DataType) bool {
+
+// dynamicCompatible reports why a dynamic value of type actual cannot bind
+// a cell of type wanted, or nil when it can, by the rules of the typed
+// codecs: an integer binds any integer type and a float or double either
+// float type, with a range check when it is encoded; text and ascii bind
+// each other, validated for the cell's kind; a uuid and a timeuuid bind each
+// other, with the version checked; collections, tuples and vectors bind
+// alike when their members do; and a UDT binds the same UDT with more
+// fields, as after ALTER TYPE ADD, whose added fields are sent as NULL.
+func dynamicCompatible(actual, wanted DataType) error {
 	if actual.Equal(wanted) {
+		return nil
+	}
+	mismatch := func() error {
+		return typeValidation("value", "a dynamic %s value does not bind %s", actual, wanted)
+	}
+	a, w := actual.Kind(), wanted.Kind()
+	switch {
+	case dynamicInteger(a) && dynamicInteger(w),
+		(a == KindFloat || a == KindDouble) && (w == KindFloat || w == KindDouble),
+		(a == KindText || a == KindASCII) && (w == KindText || w == KindASCII),
+		(a == KindUUID || a == KindTimeUUID) && (w == KindUUID || w == KindTimeUUID):
+		return nil
+	case a != w:
+		return mismatch()
+	}
+	ad, wd := descriptorOf(actual), descriptorOf(wanted)
+	member := func(what string, actual, wanted DataType) error {
+		if err := dynamicCompatible(actual, wanted); err != nil {
+			return fmt.Errorf("%s: %w", what, err)
+		}
+		return nil
+	}
+	switch a {
+	case KindList, KindSet:
+		return member("element", ad.Element, wd.Element)
+	case KindVector:
+		if ad.Dimension != wd.Dimension {
+			return mismatch()
+		}
+		return member("element", ad.Element, wd.Element)
+	case KindMap:
+		if err := member("key", ad.Key, wd.Key); err != nil {
+			return err
+		}
+		return member("value", ad.Element, wd.Element)
+	case KindTuple:
+		af, wf := columnSlice(ad.Fields), columnSlice(wd.Fields)
+		if len(af) != len(wf) {
+			return typeValidation("value", "a dynamic tuple of %d members does not bind %s", len(af), wanted)
+		}
+		for i := range af {
+			if err := member(fmt.Sprintf("member %d", i), af[i].Type, wf[i].Type); err != nil {
+				return err
+			}
+		}
+		return nil
+	case KindUDT:
+		if ad.Keyspace != wd.Keyspace || ad.Name != wd.Name {
+			return mismatch()
+		}
+		for _, f := range columnSlice(ad.Fields) {
+			col, ok := udtField(wanted, f.Name)
+			if !ok {
+				return typeValidation("value", "%s has no field %q of the dynamic value", wanted, f.Name)
+			}
+			if err := member(fmt.Sprintf("field %q", f.Name), f.Type, col.Type); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return mismatch()
+	}
+}
+
+// dynamicInteger reports whether k is an integer kind a dynamic integer
+// binds.
+func dynamicInteger(k Kind) bool {
+	switch k {
+	case KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter:
 		return true
 	}
-	// A bigint binds a counter.
-	a, w := actual.Kind(), wanted.Kind()
-	return (a == KindBigInt || a == KindCounter) && (w == KindBigInt || w == KindCounter)
+	return false
+}
+
+// udtField returns UDT t's field name.
+func udtField(t DataType, name string) (ColumnSpec, bool) {
+	for _, col := range columnSlice(descriptorOf(t).Fields) {
+		if col.Name == name {
+			return col, true
+		}
+	}
+	return ColumnSpec{}, false
+}
+
+// dynamicInt64 returns a dynamic integer value's int64.
+func dynamicInt64(v Value) int64 {
+	switch v.typ.Kind() {
+	case KindTinyInt:
+		return int64(int8(v.bits))
+	case KindSmallInt:
+		return int64(int16(v.bits))
+	case KindInt:
+		return int64(int32(v.bits))
+	default:
+		return int64(v.bits)
+	}
 }
 func checkDynamicValue(t DataType, v Value, nested bool) error {
 	if untypedMarker(v) {
-		if v.state == Unset && nested {
+		if v.state == CellUnset && nested {
 			return typeValidation("value", "unset is not permitted in nested values")
 		}
 		return nil
@@ -517,16 +632,16 @@ func checkDynamicValue(t DataType, v Value, nested bool) error {
 	if err := validateDataType(v.typ); err != nil {
 		return err
 	}
-	if !dynamicCompatible(v.typ, t) {
-		return typeValidation("value", "dynamic type %s does not match %s", v.typ, t)
+	if err := dynamicCompatible(v.typ, t); err != nil {
+		return err
 	}
 	switch v.state {
-	case Present, Null:
-	case Unset:
+	case CellPresent, CellNull:
+	case CellUnset:
 		if nested {
 			return typeValidation("value", "unset is not permitted in nested values")
 		}
-	case EmptyCell:
+	case CellEmpty:
 		if !emptySupported(t) {
 			return typeValidation("value", "%s does not support Empty", t)
 		}
@@ -559,15 +674,15 @@ func dynamicAggregateChecked(t DataType, kind Kind, values []Value) (Value, erro
 		if err := checkDynamicValue(typ, v, true); err != nil {
 			return Value{}, fmt.Errorf("dynamic element %d: %w", i, err)
 		}
-		if (kind == KindList || kind == KindSet) && v.state == Null {
+		if (kind == KindList || kind == KindSet) && v.state == CellNull {
 			return Value{}, typeValidation("element", "collection element %d cannot be null", i)
 		}
-		if kind == KindVector && v.state != Present {
+		if kind == KindVector && v.state != CellPresent {
 			width, err := vectorFixedWidth(typ)
 			if err != nil {
 				return Value{}, err
 			}
-			if v.state != EmptyCell || width != 0 {
+			if v.state != CellEmpty || width != 0 {
 				return Value{}, typeValidation("vector", "element %d must have a present body", i)
 			}
 		}
@@ -597,10 +712,11 @@ func SetValue(element DataType, values ...Value) (Value, error) {
 	return dynamicAggregate(t, KindSet, values)
 }
 
-// TupleValue constructs a dynamic tuple value, validating its members against t.
-// Input storage is borrowed until captured; Clone recursively detaches it.
-func TupleValue(t DataType, v []Value) (Value, error) {
-	return dynamicAggregate(t, KindTuple, v)
+// TupleValue constructs a dynamic tuple value of type t, validating each
+// member against t. The value keeps a slice passed as values..., so it and
+// borrowed values must remain unchanged until captured; Clone detaches them.
+func TupleValue(t DataType, values ...Value) (Value, error) {
+	return dynamicAggregate(t, KindTuple, values)
 }
 
 // VectorValue constructs a dynamic vector of element values, whose
@@ -618,9 +734,15 @@ func VectorValue(element DataType, values ...Value) (Value, error) {
 	return dynamicAggregate(t, KindVector, values)
 }
 
-// MapValue constructs a dynamic map value, validating its members against t.
-// Input storage is borrowed until captured; Clone recursively detaches it.
-func MapValue(t DataType, entries []ValueEntry) (Value, error) {
+// MapValue constructs a dynamic map of key and value types, validating each
+// entry against them. The value keeps a slice passed as entries..., so it
+// and borrowed values must remain unchanged until captured; Clone detaches
+// them.
+func MapValue(key, value DataType, entries ...ValueEntry) (Value, error) {
+	t, err := MapType(key, value)
+	if err != nil {
+		return Value{}, err
+	}
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
 	}
@@ -631,7 +753,7 @@ func mapValueChecked(t DataType, entries []ValueEntry) (Value, error) {
 		return Value{}, typeValidation("type", "expected map, got %s", t)
 	}
 	for i, e := range entries {
-		if e.Key.state == Null || e.Value.state == Null {
+		if e.Key.state == CellNull || e.Value.state == CellNull {
 			return Value{}, typeValidation("element", "map entry %d cannot contain null", i)
 		}
 		if err := checkDynamicValue(descriptorOf(t).Key, e.Key, true); err != nil {
@@ -644,9 +766,12 @@ func mapValueChecked(t DataType, entries []ValueEntry) (Value, error) {
 	return Value{typ: t, entries: entries, count: len(entries)}, nil
 }
 
-// UDTValue constructs a dynamic UDT value, validating its members against t.
-// Input storage is borrowed until captured; Clone recursively detaches it.
-func UDTValue(t DataType, fields []ValueField) (Value, error) {
+// UDTValue constructs a dynamic UDT value of type t from fields, in any
+// order, validating each against the field of t it names. A field of t the
+// value does not name is bound as NULL, as CQL stores a field never set.
+// The value keeps a slice passed as fields..., so it and borrowed values must
+// remain unchanged until captured; Clone detaches them.
+func UDTValue(t DataType, fields ...ValueField) (Value, error) {
 	if err := DynamicCodec.CheckType(t); err != nil {
 		return Value{}, err
 	}
@@ -655,9 +780,6 @@ func UDTValue(t DataType, fields []ValueField) (Value, error) {
 func udtValueChecked(t DataType, fields []ValueField) (Value, error) {
 	if t.Kind() != KindUDT {
 		return Value{}, typeValidation("type", "expected UDT, got %s", t)
-	}
-	if len(fields) != descriptorOf(t).Fields.Len() {
-		return Value{}, typeValidation("fields", "expected %d UDT fields, got %d", descriptorOf(t).Fields.Len(), len(fields))
 	}
 	for i, f := range fields {
 		for j := 0; j < i; j++ {
@@ -679,7 +801,7 @@ func udtValueChecked(t DataType, fields []ValueField) (Value, error) {
 			return Value{}, typeValidation("fields", "unknown UDT field %q", f.Name)
 		}
 	}
-	return Value{typ: t, fields: fields, count: len(fields)}, nil
+	return Value{typ: t, fields: fields, count: descriptorOf(t).Fields.Len()}, nil
 }
 
 func (dynamicCodec) Clone(v Value) Value { return v.Clone() }
@@ -697,12 +819,33 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		return err
 	}
 	switch v.state {
-	case Null:
+	case CellNull:
 		return w.Null()
-	case Unset:
+	case CellUnset:
 		return w.Unset()
-	case EmptyCell:
+	case CellEmpty:
 		return w.emptyValue()
+	}
+	if want := w.Type().Kind(); want != v.typ.Kind() {
+		// A value of another kind that checkDynamicValue let bind the cell
+		// is encoded by the typed codec that widens or checks it.
+		switch {
+		case dynamicInteger(want):
+			return Int64Codec.Encode(w, dynamicInt64(v))
+		case want == KindFloat || want == KindDouble:
+			f := math.Float64frombits(v.bits)
+			if v.typ.Kind() == KindFloat {
+				f = float64(math.Float32frombits(uint32(v.bits)))
+			}
+			return Float64Codec.Encode(w, f)
+		case want == KindText || want == KindASCII:
+			if err := validateText(v.bytes, want == KindASCII); err != nil {
+				return err
+			}
+			return w.borrowView(v.bytes)
+		case want == KindUUID || want == KindTimeUUID:
+			return UUIDCodec.Encode(w, v.uuid)
+		}
 	}
 	switch v.typ.Kind() {
 	case KindBoolean:
@@ -746,9 +889,17 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 	case KindDuration:
 		return encodeDynamicScalar(w, DurationCodec, v.duration)
 	case KindVarint:
-		return encodeDynamicScalar(w, VarintCodec, varintView(v.bytes))
+		n, err := varintOf(v.bytes)
+		if err != nil {
+			return err
+		}
+		return encodeDynamicScalar(w, VarintCodec, n)
 	case KindDecimal:
-		return encodeDynamicScalar(w, DecimalCodec, Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)})
+		n, err := varintOf(v.bytes)
+		if err != nil {
+			return err
+		}
+		return encodeDynamicScalar(w, DecimalCodec, Decimal{Scale: v.scale, Unscaled: n})
 	default:
 		return encodeDynamicAggregate(w, v)
 	}
@@ -783,16 +934,16 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 		return Value{}, err
 	}
 	switch r.State() {
-	case Null:
-		return Value{typ: r.Type(), state: Null}, nil
-	case Unset:
+	case CellNull:
+		return Value{typ: r.Type(), state: CellNull}, nil
+	case CellUnset:
 		return Value{}, typeValidation("state", "unset cannot be decoded as a result")
-	case Present:
+	case CellPresent:
 	default:
 		return Value{}, typeValidation("state", "invalid state %v", r.State())
 	}
 	if r.Bytes().Len() == 0 && emptySupported(r.Type()) {
-		return Value{typ: r.Type(), state: EmptyCell}, nil
+		return Value{typ: r.Type(), state: CellEmpty}, nil
 	}
 	switch r.Type().Kind() {
 	case KindBoolean:
@@ -877,7 +1028,7 @@ func dynamicField(c *ValueCursor, t DataType, shape *streamValidationPlan) (Valu
 		return Value{}, err
 	}
 	if c.Remaining() == 0 {
-		return Value{typ: t, state: Null}, nil
+		return Value{typ: t, state: CellNull}, nil
 	}
 	r, err := c.Child(t)
 	if err != nil {
@@ -1002,7 +1153,8 @@ func (v Value) iterFields() (*valueIterator[ValueField], error) {
 					return f, nil
 				}
 			}
-			return ValueField{}, typeValidation("fields", "missing UDT field %q", field.Name)
+			// A field the value does not name is NULL, as UDTValue documents.
+			return ValueField{Name: field.Name, Value: Value{typ: field.Type, state: CellNull}}, nil
 		}), nil
 	}
 	return &valueIterator[ValueField]{count: columns.Len(), cursor: dynamicCursor(v.bytes), nextCursor: func(c *ValueCursor, i int) (ValueField, error) {
@@ -1121,19 +1273,37 @@ func encodeDynamicAggregate(w *ValueWriter, v Value) error {
 		if err != nil {
 			return err
 		}
-		index := 0
+		// The value's fields, in its order, which may name only some of the
+		// cell's fields; each cell field the value does not have is NULL.
+		var fields []ValueField
 		for iterator.Next() {
-			f := iterator.Value()
-			col := columnSlice(descriptorOf(typ).Fields)[index]
-			if f.Name != col.Name {
-				return typeValidation("fields", "expected %q, got %q", col.Name, f.Name)
-			}
-			if err := encodeDynamicChild(w, col.Type, f.Value, dynamicShapeField(v.shape, index)); err != nil {
-				return fmt.Errorf("dynamic field %s: %w", f.Name, err)
-			}
-			index++
+			fields = append(fields, iterator.Value())
 		}
-		return iterator.Err()
+		if err := iterator.Err(); err != nil {
+			return err
+		}
+		used := 0
+		for index, col := range columnSlice(descriptorOf(typ).Fields) {
+			i := slices.IndexFunc(fields, func(f ValueField) bool { return f.Name == col.Name })
+			if i < 0 {
+				if err := w.Child(col.Type, func(child *ValueWriter) error { return child.Null() }); err != nil {
+					return fmt.Errorf("dynamic field %s: %w", col.Name, err)
+				}
+				continue
+			}
+			used++
+			if err := encodeDynamicChild(w, col.Type, fields[i].Value, dynamicShapeField(v.shape, index)); err != nil {
+				return fmt.Errorf("dynamic field %s: %w", col.Name, err)
+			}
+		}
+		if used != len(fields) {
+			for _, f := range fields {
+				if _, ok := udtField(typ, f.Name); !ok {
+					return typeValidation("fields", "%s has no field %q", typ, f.Name)
+				}
+			}
+		}
+		return nil
 	default:
 		return typeValidation("type", "unsupported dynamic aggregate %s", typ)
 	}
@@ -1328,7 +1498,7 @@ func (r DynamicRow) buildPhysicalIndex() {
 		cursor := wire.NewCursor(chain)
 		for i, col := range columnSlice(r.columns) {
 			if r.allowMissing && cursor.Remaining() == 0 {
-				cells[i].state = Null
+				cells[i].state = CellNull
 				continue
 			}
 			value, e := readFramedValue(cursor, col.Type, bytesLease(r.body), false, false)

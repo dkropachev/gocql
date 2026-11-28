@@ -80,7 +80,7 @@ func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind Kind, value T
 		t.Fatalf("encoding: got %x, want body %x", frame, want)
 	}
 	for split := 0; split <= len(want); split++ {
-		r := ScalarReader(t, kind, Present, want[:split], want[split:])
+		r := ScalarReader(t, kind, CellPresent, want[:split], want[split:])
 		got, err := codec.Decode(r)
 		if err != nil {
 			t.Fatalf("split %d: %v", split, err)
@@ -89,7 +89,7 @@ func scalarGolden[T comparable](t *testing.T, codec Codec[T], kind Kind, value T
 			t.Fatalf("split %d: wrong decoded scalar", split)
 		}
 	}
-	for _, state := range []CellState{Null, Unset, EmptyCell} {
+	for _, state := range []CellState{CellNull, CellUnset, CellEmpty} {
 		if _, err := codec.Decode(ScalarReader(t, kind, state)); err == nil {
 			t.Fatalf("accepted state %d", state)
 		}
@@ -102,7 +102,7 @@ func scalarRejectLengths[T any](t *testing.T, codec Codec[T], kind Kind, width i
 		if n == width {
 			continue
 		}
-		if _, err := codec.Decode(ScalarReader(t, kind, Present, make([]byte, n))); err == nil {
+		if _, err := codec.Decode(ScalarReader(t, kind, CellPresent, make([]byte, n))); err == nil {
 			t.Fatalf("%s accepted length %d", kind, n)
 		}
 	}
@@ -114,7 +114,7 @@ func FuzzV2ScalarUTF8(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, data []byte, splitPoint uint32) {
 		split := int(uint64(splitPoint) % uint64(len(data)+1))
-		decoded, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:]))
+		decoded, err := TextViewCodec.Decode(ScalarReader(t, KindText, CellPresent, data[:split], data[split:]))
 		if (err == nil) != utf8.Valid(data) {
 			t.Fatalf("UTF-8 validation disagreed at split %d: %x", split, data)
 		}
@@ -130,7 +130,7 @@ func TestScalar(t *testing.T) {
 		if err != nil || !bytes.Equal(frame, []byte{0, 0, 0, 0}) {
 			t.Fatalf("nil blob should be present empty: %x %v", frame, err)
 		}
-		empty, err := BytesViewCodec.Decode(ScalarReader(t, KindBlob, Present))
+		empty, err := BytesViewCodec.Decode(ScalarReader(t, KindBlob, CellPresent))
 		if err != nil || empty.Len() != 0 {
 			t.Fatal("empty blob rejected")
 		}
@@ -139,40 +139,40 @@ func TestScalar(t *testing.T) {
 		if err != nil || !bytes.Equal(frame, []byte{255, 255, 255, 255}) {
 			t.Fatal("nullable did not encode null")
 		}
-		null, err := nullable.Decode(ScalarReader(t, KindInt, Null))
+		null, err := nullable.Decode(ScalarReader(t, KindInt, CellNull))
 		if err != nil || null.Valid {
 			t.Fatal("nullable null decoded incorrectly")
 		}
-		valid, err := nullable.Decode(ScalarReader(t, KindInt, Present, []byte{0, 0, 0, 0}))
+		valid, err := nullable.Decode(ScalarReader(t, KindInt, CellPresent, []byte{0, 0, 0, 0}))
 		if err != nil || !valid.Valid {
 			t.Fatal("nullable lost present zero")
 		}
-		if _, err := nullable.Decode(ScalarReader(t, KindInt, Unset)); err == nil {
+		if _, err := nullable.Decode(ScalarReader(t, KindInt, CellUnset)); err == nil {
 			t.Fatal("nullable accepted unset")
 		}
 		if _, err := scalarEncode(t, nullable, KindBlob, Nullable[int32]{}); err == nil {
 			t.Fatal("null bypassed type checking")
 		}
-		if _, err := scalarEncode(t, BindEncoder(Int32Codec), KindBlob, BindValue[int32]{State: Unset}); err == nil {
+		if _, err := scalarEncode(t, BindEncoder(Int32Codec), KindBlob, BindUnset[int32]()); err == nil {
 			t.Fatal("unset bypassed type checking")
 		}
-		frame, err = scalarEncode(t, BindEncoder(Int32Codec), KindInt, BindValue[int32]{State: Unset})
+		frame, err = scalarEncode(t, BindEncoder(Int32Codec), KindInt, BindUnset[int32]())
 		if err != nil || !bytes.Equal(frame, []byte{255, 255, 255, 254}) {
 			t.Fatal("unset marker incorrect")
 		}
 		builder := wire.NewBuilder(16)
 		writer := newValueWriter(builder, scalarType(t, KindInt), false)
-		if err := BindEncoder(Int32Codec).Encode(writer, BindValue[int32]{State: Unset}); err == nil {
+		if err := BindEncoder(Int32Codec).Encode(writer, BindUnset[int32]()); err == nil {
 			t.Fatal("nested unset accepted")
 		}
 		abortValueWriter(writer)
-		wrapped := EmptyCodec(Int32Codec)
+		wrapped := MaybeEmptyCodec(Int32Codec)
 		frame, err = scalarEncode(t, wrapped, KindInt, MaybeEmpty[int32]{Empty: true})
 		if err != nil || len(frame) != 4 {
 			t.Fatal("empty encoding incorrect")
 		}
 		// A decoder sees an empty value as a response holds it.
-		if v, err := wrapped.Decode(ScalarReader(t, KindInt, Present)); err != nil || !v.Empty {
+		if v, err := wrapped.Decode(ScalarReader(t, KindInt, CellPresent)); err != nil || !v.Empty {
 			t.Fatal("empty decoding incorrect")
 		}
 		for _, kind := range []Kind{KindText, KindASCII, KindBlob, KindCounter, KindDuration} {
@@ -180,8 +180,8 @@ func TestScalar(t *testing.T) {
 				t.Fatalf("unexpected empty support for %s", kind)
 			}
 		}
-		if err := EmptyCodec(TextViewCodec).CheckType(scalarType(t, KindText)); err == nil {
-			t.Fatal("EmptyCodec accepted text")
+		if err := MaybeEmptyCodec(TextViewCodec).CheckType(scalarType(t, KindText)); err == nil {
+			t.Fatal("MaybeEmptyCodec accepted text")
 		}
 		type customID int32
 		named := ConvertCodec(Int32Codec, func(v customID) (int32, error) { return int32(v), nil }, func(v int32) (customID, error) { return customID(v), nil })
@@ -232,12 +232,12 @@ func TestScalar(t *testing.T) {
 		for split := 0; split <= len(data); split++ {
 			chain := CodecTestMust(wire.NewChain(wire.Borrow(data[:split]), wire.Borrow(data[split:])))
 			lease := wire.NewLease(chain, nil)
-			r := valueReaderFromLease(uuidType, Present, chain, lease)
+			r := valueReaderFromLease(uuidType, CellPresent, chain, lease)
 			got := CodecTestMust(UUIDCodec.Decode(r))
 			if !bytes.Equal(got[:], data) {
 				t.Fatal("UUID result")
 			}
-			if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, Present, chain, lease)); e != nil {
+			if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, CellPresent, chain, lease)); e != nil {
 				t.Fatal(e)
 			}
 			lease.Release()
@@ -250,28 +250,28 @@ func TestScalar(t *testing.T) {
 				continue
 			}
 			raw := make([]byte, width)
-			if _, e := UUIDCodec.Decode(valueReaderFromLease(uuidType, Present, CodecTestMust(wire.NewChain(wire.Borrow(raw))), nil)); e == nil {
+			if _, e := UUIDCodec.Decode(valueReaderFromLease(uuidType, CellPresent, CodecTestMust(wire.NewChain(wire.Borrow(raw))), nil)); e == nil {
 				t.Fatal("UUID width", width)
 			}
 		}
-		for _, state := range []CellState{Null, Unset, EmptyCell} {
+		for _, state := range []CellState{CellNull, CellUnset, CellEmpty} {
 			if _, e := UUIDCodec.Decode(valueReaderFromLease(uuidType, state, wire.Chain{}, nil)); e == nil {
 				t.Fatal("UUID state", state)
 			}
 		}
-		if _, e := UUIDCodec.Decode(valueReaderFromLease(textType, Present, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)); e == nil {
+		if _, e := UUIDCodec.Decode(valueReaderFromLease(textType, CellPresent, CodecTestMust(wire.NewChain(wire.Borrow(data))), nil)); e == nil {
 			t.Fatal("wrong UUID metadata")
 		}
 		invalidVersion := append([]byte(nil), data...)
 		invalidVersion[6] = 0x40
-		if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, Present, CodecTestMust(wire.NewChain(wire.Borrow(invalidVersion))), nil)); e == nil {
+		if _, e := TimeUUIDCodec.Decode(valueReaderFromLease(timeType, CellPresent, CodecTestMust(wire.NewChain(wire.Borrow(invalidVersion))), nil)); e == nil {
 			t.Fatal("TimeUUID version bypass")
 		}
 		for _, input := range [][]byte{[]byte("valid-🙂"), {0xc0, 0x80}, {0xed, 0xa0, 0x80}, {0xf4, 0x90, 0x80, 0x80}, {0xe2, 0x82}} {
 			for split := 0; split <= len(input); split++ {
 				chain := CodecTestMust(wire.NewChain(wire.Borrow(input[:split]), wire.Borrow(input[split:])))
 				lease := wire.NewLease(chain, nil)
-				r := valueReaderFromLease(textType, Present, chain, lease)
+				r := valueReaderFromLease(textType, CellPresent, chain, lease)
 				v, e := TextViewCodec.Decode(r)
 				if input[0] == 'v' {
 					if e != nil {
@@ -323,7 +323,7 @@ func TestScalar(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := Float32Codec.Decode(ScalarReader(t, KindFloat, Present, frame[4:5], frame[5:]))
+			actual, err := Float32Codec.Decode(ScalarReader(t, KindFloat, CellPresent, frame[4:5], frame[5:]))
 			if err != nil || math.Float32bits(actual) != bits {
 				t.Fatalf("float bits %x changed", bits)
 			}
@@ -334,7 +334,7 @@ func TestScalar(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			actual, err := Float64Codec.Decode(ScalarReader(t, KindDouble, Present, frame[4:7], frame[7:]))
+			actual, err := Float64Codec.Decode(ScalarReader(t, KindDouble, CellPresent, frame[4:7], frame[7:]))
 			if err != nil || math.Float64bits(actual) != bits {
 				t.Fatalf("float bits %x changed", bits)
 			}
@@ -399,7 +399,7 @@ func TestScalar(t *testing.T) {
 		scalarRejectLengths(t, TimestampCodec, KindTimestamp, 8)
 		scalarRejectLengths(t, UUIDCodec, KindUUID, 16)
 		scalarRejectLengths(t, TimeUUIDCodec, KindTimeUUID, 16)
-		if _, err := BoolCodec.Decode(ScalarReader(t, KindBoolean, Present, []byte{2})); err == nil {
+		if _, err := BoolCodec.Decode(ScalarReader(t, KindBoolean, CellPresent, []byte{2})); err == nil {
 			t.Fatal("accepted boolean 2")
 		}
 		for _, v := range []TimeOfDay{-1, TimeOfDay(nanosecondsPerDay)} {
@@ -408,7 +408,7 @@ func TestScalar(t *testing.T) {
 			}
 			var data [8]byte
 			binary.BigEndian.PutUint64(data[:], uint64(v))
-			if _, err := TimeOfDayCodec.Decode(ScalarReader(t, KindTime, Present, data[:])); err == nil {
+			if _, err := TimeOfDayCodec.Decode(ScalarReader(t, KindTime, CellPresent, data[:])); err == nil {
 				t.Fatal("decoded invalid time")
 			}
 		}
@@ -424,22 +424,22 @@ func TestScalar(t *testing.T) {
 			if n == 4 || n == 16 {
 				continue
 			}
-			if _, err := InetCodec.Decode(ScalarReader(t, KindInet, Present, make([]byte, n))); err == nil {
+			if _, err := InetCodec.Decode(ScalarReader(t, KindInet, CellPresent, make([]byte, n))); err == nil {
 				t.Fatalf("inet accepted %d bytes", n)
 			}
 		}
 		for _, data := range [][]byte{nil, {0}, {0, 0}, {0, 0, 0, 0}, {1, 2, 0}, {0xff}, {0xf1, 0, 0, 0, 0, 0, 0}} {
-			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, data)); err == nil {
+			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, CellPresent, data)); err == nil {
 				t.Fatalf("accepted malformed duration %x", data)
 			}
 		}
 		durationMax := scalarHex(t, "f0fffffffef0fffffffefffffffffffffffffe")
 		for n := 0; n < len(durationMax); n++ {
-			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, durationMax[:n])); err == nil {
+			if _, err := DurationCodec.Decode(ScalarReader(t, KindDuration, CellPresent, durationMax[:n])); err == nil {
 				t.Fatalf("duration accepted truncated prefix of %d bytes", n)
 			}
 		}
-		if value, err := DurationCodec.Decode(ScalarReader(t, KindDuration, Present, durationMax)); err != nil || value != (Duration{Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64}) {
+		if value, err := DurationCodec.Decode(ScalarReader(t, KindDuration, CellPresent, durationMax)); err != nil || value != (Duration{Months: math.MaxInt32, Days: math.MaxInt32, Nanoseconds: math.MaxInt64}) {
 			t.Fatalf("duration maximum failed: %v", err)
 		}
 		for _, v := range []Duration{{Months: 1, Days: -1}, {Days: 1, Nanoseconds: -1}, {Months: -1, Nanoseconds: 1}} {
@@ -448,17 +448,17 @@ func TestScalar(t *testing.T) {
 			}
 		}
 		for _, data := range [][]byte{nil, {0}, {0, 0, 0, 0}} {
-			if _, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, Present, data)); err == nil {
+			if _, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, CellPresent, data)); err == nil {
 				t.Fatal("accepted malformed decimal")
 			}
 		}
 		if _, err := VarintFromBytes(nil); err == nil {
 			t.Fatal("accepted empty varint input")
 		}
-		if _, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present)); err == nil {
+		if _, err := VarintCodec.Decode(ScalarReader(t, KindVarint, CellPresent)); err == nil {
 			t.Fatal("decoded empty varint")
 		}
-		if _, err := BoolCodec.Decode(valueReaderFromLease(scalarType(t, KindBoolean), Null, bytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
+		if _, err := BoolCodec.Decode(valueReaderFromLease(scalarType(t, KindBoolean), CellNull, bytesChain(BorrowBytes([]byte{1})), nil)); err == nil {
 			t.Fatal("accepted null with bytes")
 		}
 	})
@@ -470,7 +470,7 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			lease := wire.NewLease(chain, nil)
-			value, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease))
+			value, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), CellPresent, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -482,7 +482,7 @@ func TestScalar(t *testing.T) {
 			if clone.string() != "borrowed" {
 				t.Fatal("clone did not detach")
 			}
-			if _, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
+			if _, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), CellPresent, chain, lease)); !errors.Is(err, ErrReleased) {
 				t.Fatal("decode accepted released lease")
 			}
 			builder := wire.NewBuilder(16)
@@ -537,21 +537,21 @@ func TestScalar(t *testing.T) {
 			if b, _ := ownedBytes.At(0); b != 1 {
 				t.Fatal("owned encoding retained input alias")
 			}
-			empty, err := encodeValueBorrowed(scalarType(t, KindInt), EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
-			if err != nil || empty.State() != EmptyCell || empty.Bytes().Len() != 0 {
+			empty, err := encodeValueBorrowed(scalarType(t, KindInt), MaybeEmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
+			if err != nil || empty.State() != CellEmpty || empty.Bytes().Len() != 0 {
 				t.Fatalf("explicit Empty state lost: %v", err)
 			}
-			decoded, err := DecodeValue(EmptyCodec(Int32Codec), empty)
+			decoded, err := DecodeValue(MaybeEmptyCodec(Int32Codec), empty)
 			if err != nil || !decoded.Empty {
 				t.Fatal("explicit Empty did not decode")
 			}
 			if _, err := DecodeValue(Int32Codec, empty); err == nil {
 				t.Fatal("nonempty decoder accepted Empty")
 			}
-			if _, err := newEncodedValue(typ, EmptyCell, Bytes{}); err == nil {
+			if _, err := newEncodedValue(typ, CellEmpty, Bytes{}); err == nil {
 				t.Fatal("blob admitted a distinct Empty state")
 			}
-			if _, err := newEncodedValue(scalarType(t, KindInt), Null, BorrowBytes([]byte{1})); err == nil {
+			if _, err := newEncodedValue(scalarType(t, KindInt), CellNull, BorrowBytes([]byte{1})); err == nil {
 				t.Fatal("null admitted payload bytes")
 			}
 		})
@@ -589,7 +589,7 @@ func TestScalar(t *testing.T) {
 			if got != "héllo" {
 				t.Fatalf("decoded %q", got)
 			}
-			null, err := newEncodedValue(typ, Null, BorrowBytes(nil))
+			null, err := newEncodedValue(typ, CellNull, BorrowBytes(nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -613,7 +613,7 @@ func TestScalar(t *testing.T) {
 	t.Run("TextViewCodec", func(t *testing.T) {
 		for _, s := range []string{"", "plain ASCII", "é€😀\x00", "\u007f\u0080\u07ff\u0800\ud7ff\ue000\uffff\U00010000\U0010ffff"} {
 			for split := 0; split <= len(s); split++ {
-				value, err := TextViewCodec.Decode(ScalarReader(t, Kind(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
+				value, err := TextViewCodec.Decode(ScalarReader(t, Kind(0x000A), CellPresent, []byte(s[:split]), []byte(s[split:])))
 				if err != nil || value.string() != s {
 					t.Fatalf("valid UTF-8 split %d: %v", split, err)
 				}
@@ -625,7 +625,7 @@ func TestScalar(t *testing.T) {
 		}
 		for _, data := range [][]byte{{0x80}, {0xc0, 0x80}, {0xc1, 0xbf}, {0xe0, 0x9f, 0xbf}, {0xed, 0xa0, 0x80}, {0xf0, 0x8f, 0xbf, 0xbf}, {0xf4, 0x90, 0x80, 0x80}, {0xf5, 0x80, 0x80, 0x80}, {0xe2, 0x82}, {0xc2, 0x41}} {
 			for split := 0; split <= len(data); split++ {
-				if _, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:])); err == nil {
+				if _, err := TextViewCodec.Decode(ScalarReader(t, KindText, CellPresent, data[:split], data[split:])); err == nil {
 					t.Fatalf("accepted invalid UTF-8 %x split %d", data, split)
 				}
 			}
@@ -636,7 +636,7 @@ func TestScalar(t *testing.T) {
 		if _, err := scalarEncode(t, StringCodec, KindASCII, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
-		if _, err := TextViewCodec.Decode(ScalarReader(t, KindASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
+		if _, err := TextViewCodec.Decode(ScalarReader(t, KindASCII, CellPresent, []byte{0x7f}, []byte{0x80})); err == nil {
 			t.Fatal("decoded non-ASCII")
 		}
 		if _, err := scalarEncode(t, TextViewCodec, KindASCII, CodecTestMust(BorrowText("é"))); err == nil {
@@ -646,17 +646,17 @@ func TestScalar(t *testing.T) {
 		if err := StringCodec.CheckType(scalarType(t, KindASCII)); err != nil {
 			t.Fatal("StringCodec rejected ASCII metadata:", err)
 		}
-		if got, err := StringCodec.Decode(ScalarReader(t, KindASCII, Present, []byte("pl"), []byte("ain"))); err != nil || got != "plain" {
+		if got, err := StringCodec.Decode(ScalarReader(t, KindASCII, CellPresent, []byte("pl"), []byte("ain"))); err != nil || got != "plain" {
 			t.Fatalf("ascii decode = %q, %v", got, err)
 		}
-		if _, err := StringCodec.Decode(ScalarReader(t, KindASCII, Present, []byte("caf\xc3\xa9"))); err == nil {
+		if _, err := StringCodec.Decode(ScalarReader(t, KindASCII, CellPresent, []byte("caf\xc3\xa9"))); err == nil {
 			t.Fatal("StringCodec decoded non-ASCII from ascii")
 		}
 		if _, err := scalarEncode(t, StringCodec, KindText, "café"); err != nil {
 			t.Fatal("StringCodec rejected UTF-8 for text:", err)
 		}
 		source := []byte("hello")
-		value, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, source[:2], source[2:]))
+		value, err := TextViewCodec.Decode(ScalarReader(t, KindText, CellPresent, source[:2], source[2:]))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -683,7 +683,7 @@ func TestScalar(t *testing.T) {
 				t.Fatalf("BigInt %s roundtrip failed", test.decimal)
 			}
 			for split := 0; split <= len(want); split++ {
-				decoded, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present, want[:split], want[split:]))
+				decoded, err := VarintCodec.Decode(ScalarReader(t, KindVarint, CellPresent, want[:split], want[split:]))
 				if err != nil || decoded.BigInt().Cmp(value) != 0 {
 					t.Fatalf("varint %s split %d: %v", test.decimal, split, err)
 				}
@@ -691,7 +691,7 @@ func TestScalar(t *testing.T) {
 		}
 		for _, test := range []struct{ in, out string }{{"0000007f", "7f"}, {"ffffff80", "80"}, {"00000080", "0080"}, {"ffffff7f", "ff7f"}} {
 			data := scalarHex(t, test.in)
-			v, err := VarintCodec.Decode(ScalarReader(t, KindVarint, Present, data[:1], data[1:2], data[2:]))
+			v, err := VarintCodec.Decode(ScalarReader(t, KindVarint, CellPresent, data[:1], data[1:2], data[2:]))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -705,19 +705,18 @@ func TestScalar(t *testing.T) {
 		if err != nil || hex.EncodeToString(frame[4:]) != "fffffffeff7f" {
 			t.Fatal("decimal signed scale incorrect")
 		}
-		decoded, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, Present, frame[4:6], frame[6:9], frame[9:]))
+		decoded, err := DecimalCodec.Decode(ScalarReader(t, KindDecimal, CellPresent, frame[4:6], frame[6:9], frame[9:]))
 		if err != nil || decoded.Scale != -2 || decoded.Unscaled.BigInt().Int64() != -129 {
 			t.Fatal("decimal decode failed")
 		}
 		data := []byte{0x01, 0x02}
-		borrowed, err := VarintFromBytes(data)
+		owned, err := VarintFromBytes(data)
 		if err != nil {
 			t.Fatal(err)
 		}
-		clone := VarintCodec.Clone(borrowed)
 		data[1] = 3
-		if borrowed.BigInt().Int64() != 259 || clone.BigInt().Int64() != 258 {
-			t.Fatal("varint borrow/clone wrong")
+		if owned.BigInt().Int64() != 258 || VarintCodec.Clone(owned) != owned {
+			t.Fatal("VarintFromBytes did not copy its input")
 		}
 		huge := new(big.Int).Lsh(big.NewInt(1), 20000)
 		huge.Neg(huge)
@@ -742,7 +741,7 @@ func TestUUIDCodecTimeUUID(t *testing.T) {
 	if _, err := scalarEncode(t, UUIDCodec, KindUUID, v4); err != nil {
 		t.Fatal("encode version 4 into uuid:", err)
 	}
-	got, err := UUIDCodec.Decode(ScalarReader(t, KindTimeUUID, Present, frame[4:]))
+	got, err := UUIDCodec.Decode(ScalarReader(t, KindTimeUUID, CellPresent, frame[4:]))
 	if err != nil || got != v1 {
 		t.Fatalf("decode timeuuid = %v, %v; want %v", got, err, v1)
 	}

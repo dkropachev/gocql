@@ -67,7 +67,7 @@ func FuzzStreamExecutionBoundary(f *testing.F) {
 			RowStreamData(opaqueStorageValuexx).cancel = cancel
 			RowStreamData(opaqueStorageValuexx).session = s
 			RowStreamData(opaqueStorageValuexx).request = request
-			RowStreamData(opaqueStorageValuexx).decoder = cql.StreamOneColumn(cql.StreamBlob)
+			RowStreamData(opaqueStorageValuexx).decoder = cql.StreamOneColumn(cql.StreamByteSlice)
 			RowStreamData(opaqueStorageValuexx).reservation = reservation
 			RowStreamData(opaqueStorageValuexx).history = paging.InternalPagingHistory{InternalMaxCount: 4, InternalMaxBytes: 64}
 			return opaqueStorageValuexx

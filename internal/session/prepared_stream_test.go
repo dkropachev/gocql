@@ -24,7 +24,7 @@ func TestPreparedStream(t *testing.T) {
 		statement := StreamStatement[int32, []byte]{
 			CQL:    "SELECT value FROM ks.tbl WHERE k = ?",
 			Params: cql.OneParam(cql.Int32Codec),
-			Rows:   cql.StreamOneColumn(cql.StreamBlob),
+			Rows:   cql.StreamOneColumn(cql.StreamByteSlice),
 		}
 		if _, err := unpreparedStreamQuery(session.Core(), statement, StreamOptions{}); err == nil {
 			t.Fatal("missing bind metadata accepted")
@@ -345,7 +345,7 @@ func TestPreparedStream(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 		s, _ := attachmentSession()
-		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: "SELECT value FROM ks.tbl", Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamBlob)}, PrepareOptions{})
+		_, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: "SELECT value FROM ks.tbl", Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamByteSlice)}, PrepareOptions{})
 		if !errors.Is(err, context.Canceled) {
 			t.Fatalf("cancelled preparation: %v", err)
 		}

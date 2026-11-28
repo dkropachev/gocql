@@ -189,7 +189,7 @@ func (d decoderError) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error
 }
 func (d decoderError) Reset(dst *[]byte) { *dst = (*dst)[:0] }
 func (d decoderError) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
-	p, err := cql.StreamBlob.Compile(cql.BlobType)
+	p, err := cql.StreamByteSlice.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}

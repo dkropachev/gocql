@@ -88,7 +88,7 @@ func ParamsOf[P any](opts ...StructOption) (ParamEncoder[P], error) {
 
 // RowOf decodes rows into struct R by column name, mapped like ParamsOf. A
 // field whose column is not selected stays zero, but every result column
-// needs a field, unless IgnoreExtraFields is given, and a result with two
+// needs a field, unless IgnoreUnknownFields is given, and a result with two
 // columns of the same name needs positional Row and ColumnAt instead.
 //
 // A NULL cell fails to decode into a field that cannot hold NULL, with an
@@ -100,7 +100,7 @@ func ParamsOf[P any](opts ...StructOption) (ParamEncoder[P], error) {
 // Explicit Params and Row are stricter: every field needs a column, and
 // every column a field.
 //
-// RowOf applies WithCodec, ReuseBuffers, IgnoreExtraFields and NullAsZero,
+// RowOf applies WithCodec, ReuseBuffers, IgnoreUnknownFields and NullAsZero,
 // and rejects other options.
 func RowOf[R any](opts ...StructOption) (RowDecoder[R], error) {
 	return generatedRow(generatedFields[R](), targetRows, opts...)
@@ -117,7 +117,7 @@ func MustRowOf[R any](opts ...StructOption) RowDecoder[R] { return must(RowOf[R]
 // UDTCodecOf maps a UDT's fields to the fields of struct T by name, as
 // ParamsOf and RowOf map columns, for a UDT column or a UDT inside a
 // collection. Every UDT field needs a struct field and every struct field a
-// UDT field, unless IgnoreExtraFields or AllowMissingFields relaxes it; a UDT
+// UDT field, unless IgnoreUnknownFields or AllowMissingFields relaxes it; a UDT
 // field the struct leaves out is bound as NULL. UDTName names the UDT it
 // expects; without it the UDT matches by fields alone.
 //
@@ -130,7 +130,7 @@ func MustRowOf[R any](opts ...StructOption) RowDecoder[R] { return must(RowOf[R]
 // map values of T, in an enclosing struct, or return it from T's CQLCodec
 // method, as cmd/cqlgen -udt generates, to map T wherever it appears without
 // an option. UDTCodecOf applies WithCodec, for T's own fields, UDTName,
-// IgnoreExtraFields, AllowMissingFields and NullAsZero, and rejects other
+// IgnoreUnknownFields, AllowMissingFields and NullAsZero, and rejects other
 // options.
 func UDTCodecOf[T any](opts ...StructOption) (Codec[T], error) {
 	config, err := structOptions[T](targetUDT, opts)

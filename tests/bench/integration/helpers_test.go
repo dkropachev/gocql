@@ -625,7 +625,7 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 		if err != nil {
 			return false, err
 		}
-		if value.State() == cql.Null {
+		if value.State() == cql.CellNull {
 			return false, nil
 		}
 		features, err := value.TextView()
@@ -682,7 +682,7 @@ func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) err
 	if err != nil {
 		return err
 	}
-	if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}, options); err != nil {
+	if _, err := session.UnpreparedExec(ctx, cql.Write(stmt, cql.NoParams), cql.EmptyParams{}, options); err != nil {
 		return err
 	}
 	if err := session.AwaitSchemaAgreement(ctx); err != nil {
@@ -1289,20 +1289,20 @@ type serializationMapCodec[K comparable, V any] struct {
 }
 
 func (c serializationMapCodec[K, V]) CheckType(t cql.DataType) error {
-	if e := cql.MapEncoder(c.key, c.value).CheckType(t); e != nil {
+	if e := cql.MapEntriesEncoder(c.key, c.value).CheckType(t); e != nil {
 		return e
 	}
-	return cql.MapDecoder(c.key, c.value).CheckType(t)
+	return cql.MapEntriesDecoder(c.key, c.value).CheckType(t)
 }
 func (c serializationMapCodec[K, V]) Encode(w *cql.ValueWriter, v map[K]V) error {
 	entries := make([]cql.Entry[K, V], 0, len(v))
 	for k, x := range v {
 		entries = append(entries, cql.Entry[K, V]{Key: k, Value: x})
 	}
-	return cql.MapEncoder(c.key, c.value).Encode(w, entries)
+	return cql.MapEntriesEncoder(c.key, c.value).Encode(w, entries)
 }
 func (c serializationMapCodec[K, V]) Decode(r cql.ValueReader) (map[K]V, error) {
-	m, e := cql.MapDecoder(c.key, c.value).Decode(r)
+	m, e := cql.MapEntriesDecoder(c.key, c.value).Decode(r)
 	if e != nil {
 		return nil, e
 	}

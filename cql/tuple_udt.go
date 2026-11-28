@@ -9,7 +9,7 @@ import (
 )
 
 // udtOptions names the UDT a UDT codec expects and relaxes field matching:
-// UDTName, IgnoreExtraFields and AllowMissingFields.
+// UDTName, IgnoreUnknownFields and AllowMissingFields.
 type udtOptions struct {
 	keyspace, name string
 	allowExtra     bool // UDT fields that no struct field maps
@@ -38,7 +38,7 @@ func TupleEncoder[T any](codec ParamEncoder[T]) Encoder[T] {
 }
 
 // UDTEncoder encodes a UDT's fields with codec, matched by name against the
-// UDT's metadata, as named by UDTName and relaxed by IgnoreExtraFields and
+// UDT's metadata, as named by UDTName and relaxed by IgnoreUnknownFields and
 // AllowMissingFields; it rejects other options when it is compiled.
 func UDTEncoder[T any](codec ParamEncoder[T], opts ...StructOption) Encoder[T] {
 	options, err := udtOptionsOf(opts)
@@ -135,7 +135,7 @@ func TupleDecoder[T any](codec RowDecoder[T]) Decoder[T] {
 }
 
 // UDTDecoder decodes a UDT's fields with codec, matched by name against the
-// UDT's metadata, as named by UDTName and relaxed by IgnoreExtraFields and
+// UDT's metadata, as named by UDTName and relaxed by IgnoreUnknownFields and
 // AllowMissingFields; it rejects other options when it is compiled. With a
 // Row or RowOf codec, a NULL field, and a trailing field the server left
 // out because it was added by ALTER TYPE ADD after the value was written,

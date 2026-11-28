@@ -240,7 +240,7 @@ func writeCollectionElement[T any](w *ValueWriter, typ DataType, encoder Encoder
 		if err := encoder.Encode(child, value); err != nil {
 			return err
 		}
-		if child.state != Present && child.state != EmptyCell {
+		if child.state != CellPresent && child.state != CellEmpty {
 			return typeValidation("element", "collection elements cannot be null or unset")
 		}
 		return nil
@@ -298,8 +298,8 @@ type mapEncoder[K, V any] struct {
 	typ   DataType
 }
 
-// MapEncoder encodes ordered entries as a CQL map; keys need not be Go-comparable.
-func MapEncoder[K, V any](key Encoder[K], value Encoder[V]) Encoder[[]Entry[K, V]] {
+// MapEntriesEncoder encodes ordered entries as a CQL map; keys need not be Go-comparable.
+func MapEntriesEncoder[K, V any](key Encoder[K], value Encoder[V]) Encoder[[]Entry[K, V]] {
 	return mapEncoder[K, V]{key: key, value: value}
 }
 func (c mapEncoder[K, V]) CheckType(typ DataType) error {
@@ -361,9 +361,9 @@ type mapDecoder[K, V any] struct {
 	typ       DataType
 }
 
-// MapDecoder eagerly decodes ordered entries; keys need not be Go-comparable.
+// MapEntriesDecoder eagerly decodes ordered entries; keys need not be Go-comparable.
 // Entries may contain borrowed values; Clone recursively detaches them.
-func MapDecoder[K, V any](key Decoder[K], value Decoder[V]) Decoder[[]Entry[K, V]] {
+func MapEntriesDecoder[K, V any](key Decoder[K], value Decoder[V]) Decoder[[]Entry[K, V]] {
 	return mapDecoder[K, V]{key: key, value: value}
 }
 func (c mapDecoder[K, V]) CheckType(typ DataType) error {
@@ -402,7 +402,7 @@ func validatedChild(cursor *ValueCursor, typ DataType) (ValueReader, error) {
 	}
 	prefix, _ := cursor.cursor.Uint32()
 	body, _ := cursor.cursor.TakeNested(int64(int32(prefix)))
-	return ValueReader{typ: typ, state: Present, body: body, lease: cursor.lease}, nil
+	return ValueReader{typ: typ, state: CellPresent, body: body, lease: cursor.lease}, nil
 }
 
 // Collection framing is checked before allocating and decoding elements.
@@ -421,7 +421,7 @@ func checkedCollectionChild(cursor *ValueCursor, typ DataType) error {
 	if err != nil {
 		return err
 	}
-	if child.State() != Present {
+	if child.State() != CellPresent {
 		return typeValidation("element", "collection elements cannot be null or unset")
 	}
 	return nil
@@ -569,7 +569,7 @@ func readVectorElement(cursor *ValueCursor, typ DataType, width int64) (ValueRea
 	if err != nil {
 		return ValueReader{}, err
 	}
-	return newValueReader(typ, Present, bytesChain(body), bytesLease(body)), nil
+	return newValueReader(typ, CellPresent, bytesChain(body), bytesLease(body)), nil
 }
 
 // Fixed vector members write directly into the enclosing builder. Variable
@@ -590,7 +590,7 @@ func writeVectorElement[T any](w *ValueWriter, typ DataType, width int64, encode
 			abortValueWriter(child)
 			return w.fail(child.err)
 		}
-		if child.state != Present || w.builder.Len()-start != width {
+		if child.state != CellPresent || w.builder.Len()-start != width {
 			abortValueWriter(child)
 			return w.fail(typeValidation("element", "fixed vector element requires %d present bytes", width))
 		}
@@ -604,7 +604,7 @@ func writeVectorElement[T any](w *ValueWriter, typ DataType, width int64, encode
 		abortValueWriter(child)
 		return w.fail(err)
 	}
-	if child.state != Present && child.state != EmptyCell {
+	if child.state != CellPresent && child.state != CellEmpty {
 		abortValueWriter(child)
 		return w.fail(typeValidation("element", "vector elements cannot be null or unset"))
 	}

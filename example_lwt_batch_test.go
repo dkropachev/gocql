@@ -49,27 +49,19 @@ func ExampleCASBatchRows() {
 	}
 	defer session.Close()
 	type update struct {
-		PK, CK, Value string
-		Version       int32
+		PK      string `cql:"pk"`
+		CK      string `cql:"ck"`
+		Value   string `cql:"value"`
+		Version int32  `cql:"version"`
 	}
 	type previous struct {
-		PK, CK  string
-		Version int32
+		PK      string `cql:"pk"`
+		CK      string `cql:"ck"`
+		Version int32  `cql:"version"`
 	}
-	statement := cql.Statement[update, cql.CASResult[previous]]{
-		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
-		Params: cql.Params(
-			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
-			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
-			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
-			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),
-		),
-		Rows: cql.CASRows(cql.Row(
-			cql.Column("pk", cql.StringCodec, func(v *previous) *string { return &v.PK }),
-			cql.Column("ck", cql.StringCodec, func(v *previous) *string { return &v.CK }),
-			cql.Column("version", cql.Int32Codec, func(v *previous) *int32 { return &v.Version }),
-		)),
-	}
+	// The IF makes the statement conditional; the driver infers that.
+	statement := cql.NewStatement("UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
+		cql.MustParamsOf[update](), cql.CASRows(cql.MustRowOf[previous]()))
 	queryPrepared, err := session.Prepare(ctx, statement)
 	if err != nil {
 		log.Fatal(err)
@@ -116,19 +108,13 @@ func ExampleSession_ApplyBatch() {
 	}
 	defer session.Close()
 	type update struct {
-		PK, CK, Value string
-		Version       int32
+		PK      string `cql:"pk"`
+		CK      string `cql:"ck"`
+		Value   string `cql:"value"`
+		Version int32  `cql:"version"`
 	}
-	statement := cql.Statement[update, cql.CASResult[cql.EmptyRow]]{
-		CQL: "UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
-		Params: cql.Params(
-			cql.Param("value", cql.StringCodec, func(v update) string { return v.Value }),
-			cql.Param("pk", cql.StringCodec, func(v update) string { return v.PK }),
-			cql.Param("ck", cql.StringCodec, func(v update) string { return v.CK }),
-			cql.Param("version", cql.Int32Codec, func(v update) int32 { return v.Version }),
-		),
-		Rows: cql.CASApplied,
-	}
+	statement := cql.NewStatement("UPDATE example.my_lwt_batch_table SET value=? WHERE pk=? AND ck=? IF version=?",
+		cql.MustParamsOf[update](), cql.CASApplied)
 	queryPrepared, err := session.Prepare(ctx, statement)
 	if err != nil {
 		log.Fatal(err)

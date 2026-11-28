@@ -210,7 +210,7 @@ func TestErrorStatementPaths(t *testing.T) {
 			}
 			_, _ = peer.Write(serverError(t, stream, cqlerr.CodeInvalid, nil))
 		}()
-		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 		select {
 		case <-served:
 		case <-ctx.Done():
@@ -227,7 +227,7 @@ func TestErrorStatementPaths(t *testing.T) {
 		s, _, _ := runtimeTestSession(t, 0)
 		defer s.Close()
 		InternalRuntimeFor(s).config.ErrorStatementBytes = 1000
-		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+		_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 		if failure, ok := errors.AsType[*cqlerr.ExecutionError](err); !ok || len(failure.Attempts) != 0 {
 			t.Fatalf("RunStream without connections = %v, want an ExecutionError without attempts", err)
 		}

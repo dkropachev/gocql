@@ -80,7 +80,7 @@ func SnakeCase(name string) string {
 }
 
 // splitTag splits a tag value at the commas outside brackets, so a codec
-// expression such as MapCodec(StringCodec, Int64) stays one option.
+// expression such as MapEntriesCodec(StringCodec, Int64) stays one option.
 func splitTag(value string) []string {
 	var parts []string
 	depth, start := 0, 0

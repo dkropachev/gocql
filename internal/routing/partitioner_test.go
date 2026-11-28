@@ -32,7 +32,7 @@ func (p constPartitioner) Token(routing.PartitionKey) (int64, error) { return in
 
 func blobCell(b []byte) model.EncodedCell {
 	typ, _ := cql.ScalarType(cql.KindBlob)
-	return model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(cql.BorrowBytes(b)), State: cql.Present}
+	return model.EncodedCell{Typ: typ, Body: cqltype.BytesChain(cql.BorrowBytes(b)), State: cql.CellPresent}
 }
 
 // partitionerSnapshot has keyspace ks with a table for each partitioner

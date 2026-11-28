@@ -101,7 +101,7 @@ func TestStreamTransport(t *testing.T) {
 					if e = response.InternalInstallColumns(response.InternalColumns); e != nil {
 						t.Fatal(e)
 					}
-					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 					var peak uint64
 					var peakCapacity int64
 					sample := func() {
@@ -149,7 +149,7 @@ func TestStreamTransport(t *testing.T) {
 				if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 					t.Fatal(err)
 				}
-				plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+				plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 				if ok, err := InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || !bytes.Equal(dst, payload) {
 					t.Fatal(ok, err)
 				}

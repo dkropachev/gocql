@@ -29,7 +29,7 @@ func BenchmarkStream(b *testing.B) {
 	b.Run("FinalStorage", func(b *testing.B) {
 		typ := BlobType
 		cols := NewColumns(ColumnSpec{Name: "blob", Type: typ})
-		plan := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
+		plan := CodecTestMust(StreamOneColumn(StreamByteSlice).Compile(cols))
 		for _, size := range []int{32, 4096, 512000} {
 			b.Run(fmt.Sprint(size), func(b *testing.B) {
 				data := streamCellBytes(bytes.Repeat([]byte{0x71}, size))

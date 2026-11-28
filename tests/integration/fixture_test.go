@@ -109,7 +109,7 @@ func TestFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		got, err := value.Bytes()
+		got, err := value.BytesView()
 		if err != nil {
 			t.Fatal(err)
 		}

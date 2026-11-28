@@ -21,8 +21,8 @@ type download struct {
 func ExampleStreamRowInto() {
 	decoder := cql.StreamRowInto(func(*download) {},
 		cql.StreamColumn("id", cql.StreamInt32, func(r *download) *int32 { return &r.ID }),
-		cql.StreamColumn("payload", cql.StreamBlob, func(r *download) *[]byte { return &r.Payload }),
-		cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *download) *[][]byte { return &r.Pieces }),
+		cql.StreamColumn("payload", cql.StreamByteSlice, func(r *download) *[]byte { return &r.Payload }),
+		cql.StreamColumn("pieces", cql.StreamList(cql.StreamByteSlice), func(r *download) *[][]byte { return &r.Pieces }),
 	)
 	pieces, err := cql.ListType(cql.BlobType)
 	if err != nil {

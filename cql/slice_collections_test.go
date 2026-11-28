@@ -28,7 +28,7 @@ func collectionColumns(t testing.TB) Columns {
 	)
 }
 
-var attrsCodec = WithCodec(MapCodec(StringCodec, Int64Codec))
+var attrsCodec = WithCodec(MapEntriesCodec(StringCodec, Int64Codec))
 
 func TestVectorStructMapping(t *testing.T) {
 	type row struct {

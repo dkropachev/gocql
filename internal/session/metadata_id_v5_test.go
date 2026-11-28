@@ -104,12 +104,12 @@ func TestResultMetadataIDV5(t *testing.T) {
 				return "", err
 			}
 			defer bound.Close()
-			stream, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			stream, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if err != nil {
 				return "", err
 			}
 			defer stream.Close()
-			dst := make([]byte, 0, 16) // StreamBlob decodes into caller capacity
+			dst := make([]byte, 0, 16) // StreamByteSlice decodes into caller capacity
 			if !stream.NextInto(&dst) {
 				return "", fmt.Errorf("no row: %v", stream.Err())
 			}

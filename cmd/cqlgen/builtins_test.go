@@ -53,8 +53,8 @@ func derivedShapes(e structmap.BuiltinFieldType) (buffered, bound []builtinField
 	case "int32", "string", "cql.UUID":
 		buffered = append(buffered,
 			builtinField{"[][]" + t, "", "cql.SliceCodec(cql.SliceCodec(" + c + "))"},
-			builtinField{"map[string][]" + t, "", "cql.GoMapCodec(cql.StringCodec, cql.SliceCodec(" + c + "))"},
-			builtinField{"map[" + t + "]" + t, "", "cql.GoMapCodec(" + c + ", " + c + ")"},
+			builtinField{"map[string][]" + t, "", "cql.MapCodec(cql.StringCodec, cql.SliceCodec(" + c + "))"},
+			builtinField{"map[" + t + "]" + t, "", "cql.MapCodec(" + c + ", " + c + ")"},
 			builtinField{"*[]" + t, "", "cql.PointerCodec(cql.SliceCodec(" + c + "))"},
 			builtinField{"cql.Nullable[[]" + t + "]", "", "cql.NullableDecoder(cql.SliceCodec(" + c + "))"},
 			builtinField{"[]cql.Nullable[" + t + "]", "", "cql.SliceCodec(cql.NullableCodec(" + c + "))"},
@@ -62,7 +62,7 @@ func derivedShapes(e structmap.BuiltinFieldType) (buffered, bound []builtinField
 			builtinField{"[2]" + t, "", "cql.ConvertCodec(cql.SliceCodec(" + c + "), ...)"},
 		)
 	case "time.Time", "time.Duration":
-		buffered = append(buffered, builtinField{"map[string]" + t, "", "cql.GoMapCodec(cql.StringCodec, " + c + ")"})
+		buffered = append(buffered, builtinField{"map[string]" + t, "", "cql.MapCodec(cql.StringCodec, " + c + ")"})
 	}
 	bound = []builtinField{{"cql.BindValue[" + t + "]", "", "cql.BindEncoder(" + c + ")"}}
 	return buffered, bound

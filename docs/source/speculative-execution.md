@@ -65,14 +65,14 @@ caller put on the context, from `Speculation.Context`, and return false when
 it is absent.
 
 A request speculates only when it is idempotent and known to be ordinary.
-Mark a statement idempotent with `Statement.Idempotent`, which its prepared
+Mark a statement idempotent with `Statement.WithIdempotent(true)`, which its prepared
 statement, workers and batch members carry, or every statement a profile runs
 with `ProfileBuilder.WithIdempotent(true)`; `execopt.Options.Idempotent`, when
-set, overrides both for one execution. A statement left
-`cql.UnknownStatement` is classified when it is prepared or bound: one read
+set, overrides both for one execution. A statement is classified when it is
+prepared or bound: one read
 with `cql.CASRows`, or an INSERT, UPDATE, DELETE or BATCH with `IF` in its
 CQL, is conditional, and anything else, a SELECT included, is ordinary (see
-`cql.UnknownStatement`); ScyllaDB also marks conditional statements in
+`cql.StatementKind`); ScyllaDB also marks conditional statements in
 prepared metadata.
 Conditional statements, requests with SERIAL or LOCAL_SERIAL
 consistency, and batches that hold a conditional member never

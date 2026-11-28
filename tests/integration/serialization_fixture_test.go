@@ -166,20 +166,20 @@ type serializationMapCodec[K comparable, V any] struct {
 }
 
 func (c serializationMapCodec[K, V]) CheckType(t cql.DataType) error {
-	if e := cql.MapEncoder(c.key, c.value).CheckType(t); e != nil {
+	if e := cql.MapEntriesEncoder(c.key, c.value).CheckType(t); e != nil {
 		return e
 	}
-	return cql.MapDecoder(c.key, c.value).CheckType(t)
+	return cql.MapEntriesDecoder(c.key, c.value).CheckType(t)
 }
 func (c serializationMapCodec[K, V]) Encode(w *cql.ValueWriter, v map[K]V) error {
 	entries := make([]cql.Entry[K, V], 0, len(v))
 	for k, x := range v {
 		entries = append(entries, cql.Entry[K, V]{Key: k, Value: x})
 	}
-	return cql.MapEncoder(c.key, c.value).Encode(w, entries)
+	return cql.MapEntriesEncoder(c.key, c.value).Encode(w, entries)
 }
 func (c serializationMapCodec[K, V]) Decode(r cql.ValueReader) (map[K]V, error) {
-	m, e := cql.MapDecoder(c.key, c.value).Decode(r)
+	m, e := cql.MapEntriesDecoder(c.key, c.value).Decode(r)
 	if e != nil {
 		return nil, e
 	}
@@ -214,11 +214,11 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 	textKinds := func(k cql.Kind) bool { return k == cql.KindText }
 	// A NULL decoded from a column carries the column's type; an expected
 	// NULL built without one matches any type.
-	untypedNull := want.State() != cql.Present && want.Type().Equal(cql.DataType{})
+	untypedNull := want.State() != cql.CellPresent && want.Type().Equal(cql.DataType{})
 	if wk != gk && !(textKinds(wk) && textKinds(gk)) && !untypedNull {
 		t.Fatalf("type: expected %s, got %s", want.Type(), got.Type())
 	}
-	if want.State() != cql.Present {
+	if want.State() != cql.CellPresent {
 		return
 	}
 	var equal bool
@@ -240,8 +240,8 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		b, f := got.TextView()
 		equal = e == nil && f == nil && fmt.Sprint(a) == fmt.Sprint(b)
 	case cql.KindBlob:
-		a, e := want.Bytes()
-		b, f := got.Bytes()
+		a, e := want.BytesView()
+		b, f := got.BytesView()
 		equal = e == nil && f == nil && bytes.Equal(ownedBytesForTest(a), ownedBytesForTest(b))
 	case cql.KindUUID, cql.KindTimeUUID:
 		a, e := want.UUID()

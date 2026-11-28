@@ -95,7 +95,7 @@ func (d *finalAccess) Compile(cql.Columns) (cql.CompiledStreamRow[[]byte], error
 }
 func (d *finalAccess) Reset(dst *[]byte) { *dst = (*dst)[:0] }
 func (d *finalAccess) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
-	plan, err := cql.StreamBlob.Compile(cql.BlobType)
+	plan, err := cql.StreamByteSlice.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}

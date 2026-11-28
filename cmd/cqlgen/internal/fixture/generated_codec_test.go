@@ -40,7 +40,7 @@ func TestGeneratedCodec(t *testing.T) {
 		cols := columns(t)
 		v := value()
 		withPoint := cql.WithCodec(PointCodec)
-		withAttrs := cql.WithCodec(cql.MapCodec(cql.StringCodec, cql.Int64Codec))
+		withAttrs := cql.WithCodec(cql.MapEntriesCodec(cql.StringCodec, cql.Int64Codec))
 		reflectedParams := reflectParams(t, withPoint, withAttrs)
 		reflectedRows := reflectRows(t, withPoint, withAttrs)
 		genChain, gen := encode(t, cols, cql.MustParamsOf[Fixture](), v)

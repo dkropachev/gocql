@@ -79,7 +79,7 @@ func TestBindValueFields(t *testing.T) {
 		ColumnSpec{Name: "name", Type: rowTestType(t, KindText)},
 		ColumnSpec{Name: "point", Type: rowTestType(t, KindBigInt)},
 	)
-	value := bindRow{ID: 1, Name: BindValue[string]{State: Unset}, Point: BindValue[structPoint]{State: Null}}
+	value := bindRow{ID: 1, Name: BindUnset[string](), Point: BindNull[structPoint]()}
 	for name, opt := range map[string]StructOption{"WithCodec": WithCodec(Codec[structPoint](pointCodec{})), "WithEncoder": WithEncoder(Encoder[structPoint](pointCodec{}))} {
 		t.Run(name, func(t *testing.T) {
 			got := chainBytes(t, encodeTestParams(t, columns, MustParamsOf[bindRow](opt), value))
@@ -87,7 +87,7 @@ func TestBindValueFields(t *testing.T) {
 			if !bytes.Equal(got, want) {
 				t.Fatalf("encoded %x, want %x", got, want)
 			}
-			present := bindRow{Name: BindValue[string]{Value: "n"}, Point: BindValue[structPoint]{Value: structPoint{X: 1, Y: 2}}}
+			present := bindRow{Name: Bind[string]("n"), Point: Bind[structPoint](structPoint{X: 1, Y: 2})}
 			want = chainBytes(t, encodeTestParams(t, columns, Params(
 				Param("id", Int32Codec, func(bindRow) int32 { return 0 }),
 				Param("name", StringCodec, func(bindRow) string { return "n" }),
@@ -116,14 +116,14 @@ func TestStructOptionTargets(t *testing.T) {
 		build        func() error
 	}{
 		{"ParamsOf ReuseBuffers", "ReuseBuffers", func() error { _, err := ParamsOf[row](ReuseBuffers()); return err }},
-		{"ParamsOf IgnoreExtraFields", "IgnoreExtraFields", func() error { _, err := ParamsOf[row](IgnoreExtraFields()); return err }},
+		{"ParamsOf IgnoreUnknownFields", "IgnoreUnknownFields", func() error { _, err := ParamsOf[row](IgnoreUnknownFields()); return err }},
 		{"ParamsOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := ParamsOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"RowOf WithEncoder", "WithEncoder", func() error { _, err := RowOf[row](WithEncoder(Int32Codec)); return err }},
 		{"RowOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := RowOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"StreamRowOf WithCodec", "WithCodec", func() error { _, err := StreamRowOf[row](codec); return err }},
 		{"StreamRowOf ReuseBuffers", "ReuseBuffers", func() error { _, err := StreamRowOf[row](ReuseBuffers()); return err }},
 		{"UDTCodecOf ReuseBuffers", "ReuseBuffers", func() error { _, err := UDTCodecOf[row](UDTName("", "u"), ReuseBuffers()); return err }},
-		{"TupleCodecOf IgnoreExtraFields", "IgnoreExtraFields", func() error { _, err := TupleCodecOf[row](IgnoreExtraFields()); return err }},
+		{"TupleCodecOf IgnoreUnknownFields", "IgnoreUnknownFields", func() error { _, err := TupleCodecOf[row](IgnoreUnknownFields()); return err }},
 		{"nil", "StructOption", func() error { _, err := RowOf[row](nil); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,10 +138,10 @@ func TestStructOptionTargets(t *testing.T) {
 	if _, err := ParamsOf[row](codec, WithEncoder(Int32Codec)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := RowOf[row](codec, ReuseBuffers(), IgnoreExtraFields()); err != nil {
+	if _, err := RowOf[row](codec, ReuseBuffers(), IgnoreUnknownFields()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := StreamRowOf[row](WithStreamDecoder(StreamInt32), IgnoreExtraFields()); err != nil {
+	if _, err := StreamRowOf[row](WithStreamDecoder(StreamInt32), IgnoreUnknownFields()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := UDTCodecOf[row](UDTName("", "u"), codec); err != nil {
@@ -195,7 +195,7 @@ func TestIgnoreExtraColumns(t *testing.T) {
 		Param("added", ByteSliceCodec, func(row) []byte { return []byte{1} }),
 		Param("name", StringCodec, func(row) string { return "n" }),
 	), row{})
-	if got := decodeTestRow(t, columns, MustRowOf[row](IgnoreExtraFields()), chain); got != (row{ID: 7, Name: "n"}) {
+	if got := decodeTestRow(t, columns, MustRowOf[row](IgnoreUnknownFields()), chain); got != (row{ID: 7, Name: "n"}) {
 		t.Fatalf("RowOf: %+v", got)
 	}
 
@@ -208,7 +208,7 @@ func TestIgnoreExtraColumns(t *testing.T) {
 	}
 	data := append(append(streamCellBytes([]byte{0, 0, 0, 7}), streamCellBytes([]byte{1})...), streamCellBytes([]byte("n"))...)
 	dst := streamed{Name: make([]byte, 0, 1)}
-	streamDecodeRow(t, columns, MustStreamRowOf[streamed](IgnoreExtraFields()), data, &dst)
+	streamDecodeRow(t, columns, MustStreamRowOf[streamed](IgnoreUnknownFields()), data, &dst)
 	if dst.ID != 7 || string(dst.Name) != "n" {
 		t.Fatalf("StreamRowOf: %+v", dst)
 	}
@@ -309,7 +309,7 @@ func TestTupleCodec(t *testing.T) {
 }
 
 // WithCodec of a UDT codec also maps []T, *T and map values of T, and
-// UDTCodecOf takes IgnoreExtraFields for extra UDT fields.
+// UDTCodecOf takes IgnoreUnknownFields for extra UDT fields.
 func TestUDTCodecCollections(t *testing.T) {
 	address := CodecTestMust(UDTType("ks", "address",
 		ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
@@ -346,8 +346,8 @@ func TestUDTCodecCollections(t *testing.T) {
 	if err := MustUDTCodecOf[udtAddress]().CheckType(wide); err == nil {
 		t.Fatal("accepted an extra UDT field")
 	}
-	if err := MustUDTCodecOf[udtAddress](IgnoreExtraFields()).CheckType(wide); err != nil {
-		t.Fatal("IgnoreExtraFields:", err)
+	if err := MustUDTCodecOf[udtAddress](IgnoreUnknownFields()).CheckType(wide); err != nil {
+		t.Fatal("IgnoreUnknownFields:", err)
 	}
 }
 

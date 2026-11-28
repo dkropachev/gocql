@@ -280,10 +280,10 @@ func (r *StreamValueReader) present() error {
 	if err := r.check(); err != nil {
 		return err
 	}
-	if r.state == Null {
+	if r.state == CellNull {
 		return r.fail(typeValidation("stream value", "nonnullable %s has state null: %w", r.typ, ErrNull))
 	}
-	if r.state != Present {
+	if r.state != CellPresent {
 		return r.fail(typeValidation("stream value", "nonnullable %s has state %v", r.typ, r.state))
 	}
 	return nil
@@ -321,9 +321,9 @@ func (r *StreamValueReader) child(typ DataType, validation *streamValidationPlan
 		return err
 	}
 	n := int64(int32(length))
-	state := Present
+	state := CellPresent
 	if n == -1 && allowNull {
-		state, n = Null, 0
+		state, n = CellNull, 0
 	} else if n < 0 {
 		return r.fail(typeValidation("stream length", "invalid nested cell length %d", n))
 	}
@@ -529,10 +529,10 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 	}
 	i := r.index
 	r.index++
-	state := Present
+	state := CellPresent
 	var size int64
 	if r.allowMissing && r.scope.Remaining() == 0 {
-		state = Null
+		state = CellNull
 	} else {
 		n, err := r.framingUint32()
 		if err != nil {
@@ -543,7 +543,7 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 		}
 		size = int64(int32(n))
 		if size == -1 {
-			state, size = Null, 0
+			state, size = CellNull, 0
 		} else if size < 0 {
 			err := typeValidation("stream length", "invalid result length %d", size)
 			return r.shared.fail(&CodecError{Column: column.Name, Index: i, Stage: CodecStageStreamDecode, Err: err})
@@ -572,7 +572,7 @@ func (r *StreamRowReader) ReadColumn[T any](plan CompiledStreamValue[T], dst *T)
 	if r.nullZero {
 		r.nullZero = false
 		return r.column(func(value *StreamValueReader) error {
-			if value.State() == Null {
+			if value.State() == CellNull {
 				plan.Reset(dst)
 				return nil
 			}

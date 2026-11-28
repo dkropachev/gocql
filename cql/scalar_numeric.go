@@ -9,21 +9,42 @@ import (
 )
 
 func canonicalVarint(b Bytes) (Varint, error) { return varintFromCanonical(b) }
-func cloneVarint(v Varint) Varint             { return varintView(varintBytes(v).Clone()) }
 func encodeVarint(w *ValueWriter, v Varint) error {
-	if err := checkBytesAlive(varintBytes(v)); err != nil {
-		return err
-	}
-	if varintBytes(v).Len() == 0 {
+	if len(v.b) == 0 {
 		return w.Uint8(0)
 	}
-	return w.borrowView(varintBytes(v))
+	// A Varint's string never changes, so the writer may borrow it.
+	return w.BorrowText(v.b)
 }
 func decodeVarint(r ValueReader) (Varint, error) { return canonicalVarint(r.Bytes()) }
 
-// VarintCodec maps varint to Varint. A decoded Varint borrows the response;
-// use VarintCodec.Clone to detach it.
-var VarintCodec Codec[Varint] = scalarCodec[Varint]{kind: KindVarint, encode: encodeVarint, decode: decodeVarint, clone: cloneVarint}
+// VarintCodec maps varint to Varint. A decoded Varint owns its bytes;
+// VarintViewCodec reads them without copying.
+var VarintCodec Codec[Varint] = scalarCodec[Varint]{kind: KindVarint, encode: encodeVarint, decode: decodeVarint}
+
+// VarintViewCodec maps varint to Bytes holding its two's-complement
+// big-endian body, as the server sent it. A decoded Bytes borrows the
+// response, and encoding borrows the Bytes, as BytesViewCodec does; Clone
+// detaches it. Encoding rejects an empty Bytes, which is no varint;
+// VarintFromBytes converts the bytes to a Varint.
+var VarintViewCodec Codec[Bytes] = scalarCodec[Bytes]{kind: KindVarint,
+	encode: func(w *ValueWriter, v Bytes) error {
+		if err := checkBytesAlive(v); err != nil {
+			return err
+		}
+		if v.Len() == 0 {
+			return errors.New("gocql: varint requires at least one byte")
+		}
+		return w.borrowView(v)
+	},
+	decode: func(r ValueReader) (Bytes, error) {
+		if r.Bytes().Len() == 0 {
+			return Bytes{}, errors.New("gocql: varint requires at least one byte")
+		}
+		return r.Bytes(), nil
+	},
+	clone: func(v Bytes) Bytes { return v.Clone() },
+}
 
 // VarintBigIntCodec maps varint to *big.Int. A nil *big.Int encodes NULL,
 // and NULL decodes to nil, as PointerCodec does; a present value decodes
@@ -49,7 +70,7 @@ func (varintBigIntCodec) Decode(r ValueReader) (*big.Int, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		return nil, checkBytesAlive(r.Bytes())
 	}
 	v, err := VarintCodec.Decode(r)
@@ -65,8 +86,7 @@ func (varintBigIntCodec) Clone(v *big.Int) *big.Int {
 	return new(big.Int).Set(v)
 }
 
-// DecimalCodec maps decimal to Decimal. A decoded Decimal borrows the
-// response; use DecimalCodec.Clone to detach it.
+// DecimalCodec maps decimal to Decimal. A decoded Decimal owns its value.
 var DecimalCodec Codec[Decimal] = scalarCodec[Decimal]{kind: KindDecimal,
 	encode: func(w *ValueWriter, v Decimal) error {
 		if err := w.Uint32(uint32(v.Scale)); err != nil {
@@ -93,5 +113,4 @@ var DecimalCodec Codec[Decimal] = scalarCodec[Decimal]{kind: KindDecimal,
 		}
 		return Decimal{Scale: int32(scale), Unscaled: v}, nil
 	},
-	clone: func(v Decimal) Decimal { return Decimal{Scale: v.Scale, Unscaled: cloneVarint(v.Unscaled)} },
 }

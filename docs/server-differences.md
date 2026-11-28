@@ -76,7 +76,7 @@ when the server reports it, is a documented no-op on the other dialect.
 | Shard-aware port: `config.PerShard.ShardAwarePort` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
 | `config.PerShard.SourcePorts` | ScyllaV4 | `ConfigBuilder.Build` fails | `applyPool` (`config/pool.go`) |
 | Tablet routing, `routing.Options.NoLeaderAware`, `metadata.Keyspace.TabletBased`, `InitialTablets` and `ConsistencyMode` (`metadata.ConsistencyGlobal`) | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |
-| LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the declared `Statement.Kind` does | `internal/routing/policy.go` |
+| LWT routing (conditional and SERIAL statements keep replica order, unshuffled) | Both | Not dialect-only: ScyllaDB marks conditional statements in prepared metadata, and on Cassandra the driver infers it from the CQL | `internal/routing/policy.go` |
 | `routing.CDCTokenPartitioner`, `config.ConfigBuilder.WithPartitioner` | ScyllaV4 for CDC log tables | No-op: chosen by a table's partitioner class, which no Cassandra table names | Metadata |
 | `cqlerr.RateLimitReachedError` | ScyllaV4 | Never returned: Cassandra does not send it | Error parsing |
 | `event.KindClientRoute` events | ScyllaV4 | Never delivered | Events |

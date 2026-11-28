@@ -144,15 +144,12 @@ page state. Explicit paging is the pages column only.
 - The none column (`Exec`, `UnpreparedExec`, `ExecBatch`) rejects a statement
   or batch the driver knows to be conditional with `cqlerr.ErrConditionalExec`
   before sending it. A conditional result reports whether the write applied,
-  and the none shape cannot return that. The kind is known when the statement
-  declares it, the server marks it, as ScyllaDB does in prepared metadata, or
-  the driver infers it for an undeclared kind, on every server: a
-  `cql.CASRows` decoder, or an INSERT, UPDATE, DELETE or BATCH whose CQL has
-  an `IF` outside literals and comments, is conditional. A statement declared
-  `cql.OrdinaryStatement` that the inference finds conditional is rejected
-  with a `cql.ValidationError` before it is sent, and so is one that can
-  never be conditional, such as a SELECT, declared
-  `cql.ConditionalStatement` or decoded with `cql.CASRows`. Prepare fails
+  and the none shape cannot return that. The driver infers the kind on every
+  server, and the server may mark it, as ScyllaDB does in prepared metadata:
+  a `cql.CASRows` decoder, or an INSERT, UPDATE, DELETE or BATCH whose CQL has
+  an `IF` outside literals and comments, is conditional. A statement that can
+  never be conditional, such as a SELECT, decoded with `cql.CASRows` is
+  rejected with a `cql.ValidationError` before it is sent. Prepare fails
   when PREPARE metadata, where the server returns it, lacks the leading
   `[applied]` column a `cql.CASRows` decoder needs.
   The none column also rejects, before sending, a prepared statement whose
@@ -251,7 +248,7 @@ removes boilerplate from a common call without adding a way to execute.
 
 - `Session.UnpreparedCommand` runs CQL text, given as a string, with no
   bind markers and no result columns, such as DDL. It is the
-  throwaway none cell, `UnpreparedExec`, with `cql.Command(statement)` and
+  throwaway none cell, `UnpreparedExec`, with `cql.Write(statement, cql.NoParams)` and
   `cql.EmptyParams{}` filled in, so it takes the throwaway row's
   `...execopt.CompiledOptions`. Schema setup and occasional commands are most of the
   throwaway calls, and spelling the statement type and the empty parameters

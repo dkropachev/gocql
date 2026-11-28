@@ -115,7 +115,7 @@ func TestCodecPerf(t *testing.T) {
 		}
 		cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "text", Type: text}, ColumnSpec{Name: "blob", Type: blob}, ColumnSpec{Name: "list", Type: list}, ColumnSpec{Name: "nullable", Type: integer}, ColumnSpec{Name: "empty", Type: integer}, ColumnSpec{Name: "dynamic", Type: integer})
 		body := encodeTestParams(t, cols, DynamicParams, []Value{IntValue(3), TextValue("safe-🙂"), BlobValue([]byte("borrowed")), CodecTestMust(ListValue(integer, IntValue(7))), IntValue(4), IntValue(5), IntValue(6)})
-		decoder := Row(Column("n", Int32Codec, func(r *result) *int32 { return &r.N }), Column("text", TextViewCodec, func(r *result) *Text { return &r.Text }), Column("blob", BytesViewCodec, func(r *result) *Bytes { return &r.Blob }), Column("list", ListDecoder(Int32Codec), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32Codec), func(r *result) *Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32Codec), func(r *result) *MaybeEmpty[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
+		decoder := Row(Column("n", Int32Codec, func(r *result) *int32 { return &r.N }), Column("text", TextViewCodec, func(r *result) *Text { return &r.Text }), Column("blob", BytesViewCodec, func(r *result) *Bytes { return &r.Blob }), Column("list", ListDecoder(Int32Codec), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32Codec), func(r *result) *Nullable[int32] { return &r.Nullable }), Column("empty", MaybeEmptyCodec(Int32Codec), func(r *result) *MaybeEmpty[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		lease := wire.NewLease(body, nil)
 		var dst result
@@ -191,7 +191,7 @@ func TestCodecPerf(t *testing.T) {
 			cols := NewColumns(ColumnSpec{Name: "list", Type: list})
 			values := make([]Value, 1024)
 			for i := range values {
-				values[i] = CodecTestMust(TupleValue(tuple, []Value{IntValue(int32(i)), BlobValue(bytes.Repeat([]byte{'x'}, 4096))}))
+				values[i] = CodecTestMust(TupleValue(tuple, IntValue(int32(i)), BlobValue(bytes.Repeat([]byte{'x'}, 4096))))
 			}
 			sequence := CodecTestMust(ListValue(tuple, values...))
 			source := dynamicTestRowBody(t, cols, []Value{sequence})
@@ -250,11 +250,11 @@ func TestCodecPerf(t *testing.T) {
 				for i := range values {
 					values[i] = Entry[int32, int32]{Key: int32(i), Value: int32(i)}
 				}
-				encoded := CodecTestMust(encodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), values))
-				compiled := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
+				encoded := CodecTestMust(encodeValueBorrowed(typ, MapEntriesEncoder(Int32Codec, Int32Codec), values))
+				compiled := CodecTestMust(compileValueDecoder(MapEntriesDecoder(Int32Codec, Int32Codec), typ))
 				ResetPerfCounters()
 				wire.ResetPerfCounters()
-				v := CodecTestMust(compiled.Decode(valueReaderFromLease(typ, Present, bytesChain(encoded.body), nil)))
+				v := CodecTestMust(compiled.Decode(valueReaderFromLease(typ, CellPresent, bytesChain(encoded.body), nil)))
 				if len(v) != n {
 					t.Fatal(len(v))
 				}
@@ -287,7 +287,7 @@ func TestCodecPerf(t *testing.T) {
 					plan := CodecTestMust(compileValueDecoder(DynamicCodec, typ))
 					wire.ResetPerfCounters()
 					ResetPerfCounters()
-					value := CodecTestMust(plan.Decode(valueReaderFromLease(typ, Present, chain, nil)))
+					value := CodecTestMust(plan.Decode(valueReaderFromLease(typ, CellPresent, chain, nil)))
 					for i := 0; i < depth; i++ {
 						it := CodecTestMust(value.iterElements())
 						if !it.Next() {

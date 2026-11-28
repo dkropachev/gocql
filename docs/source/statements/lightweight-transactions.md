@@ -1,12 +1,11 @@
 # Lightweight transactions
 
-A statement left `UnknownStatement` is conditional when its `Rows` is a
-`cql.CASRows` decoder or its CQL is an INSERT, UPDATE, DELETE or BATCH with
-an `IF` outside string literals, quoted identifiers and comments; declaring
-such a statement `OrdinaryStatement` fails with a `cql.ValidationError`
-before it is sent. Only an INSERT, UPDATE, DELETE or BATCH can be
-conditional: a SELECT or other statement declared `ConditionalStatement` or
-decoded with `CASRows` fails the same way. When the server returns result
+A statement is conditional when its `Rows` is a `cql.CASRows` decoder or its
+CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` outside string
+literals, quoted identifiers and comments; the driver infers it, and there
+is no kind to declare. Only an INSERT, UPDATE, DELETE or BATCH can be
+conditional: a SELECT or other statement decoded with `CASRows` fails with a
+`cql.ValidationError` before it is sent. When the server returns result
 metadata at prepare time, as ScyllaDB does, `Prepare` also fails if it lacks
 the leading `[applied]` column `CASRows` needs, or if ScyllaDB reports the
 statement is not a lightweight transaction. `Exec` and

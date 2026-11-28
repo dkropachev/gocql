@@ -120,13 +120,13 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 
 // UnpreparedCommand executes statement, CQL text without bind markers or
 // result columns such as DDL, once and unprepared. It is
-// UnpreparedExec(ctx, cql.Command(statement), cql.EmptyParams{}, options...)
+// UnpreparedExec(ctx, cql.Write(statement, cql.NoParams), cql.EmptyParams{}, options...)
 // without the statement and parameter values to spell out, and so a
 // documented exception to the execution grid: the none cell of the throwaway
 // row for a statement with nothing to bind. At most one execopt.CompiledOptions may
 // be passed, as for UnpreparedExec.
 func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...execopt.CompiledOptions) (cql.Result, error) {
-	return s.internal().UnpreparedExec(ctx, internalStatement(cql.Command(statement)), cql.EmptyParams{}, internalOptionList(options)...)
+	return s.internal().UnpreparedExec(ctx, internalStatement(cql.Write(statement, cql.NoParams)), cql.EmptyParams{}, internalOptionList(options)...)
 }
 
 // UnpreparedOne executes an occasional statement and decodes its first row.

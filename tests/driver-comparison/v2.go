@@ -42,7 +42,7 @@ type v2Worker struct {
 	out         row
 }
 
-var streamDecoder = cql.StreamRowInto(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamBlob, func(r *row) *[]byte { return &r.P }))
+var streamDecoder = cql.StreamRowInto(func(*row) {}, cql.StreamColumn("k", cql.StreamInt32, func(r *row) *int32 { return &r.K }), cql.StreamColumn("r", cql.StreamInt32, func(r *row) *int32 { return &r.R }), cql.StreamColumn("p", cql.StreamByteSlice, func(r *row) *[]byte { return &r.P }))
 var bufferedDecoder = cql.RowInto(func(*row) {}, cql.Column("k", cql.Int32Codec, func(r *row) *int32 { return &r.K }), cql.Column("r", cql.Int32Codec, func(r *row) *int32 { return &r.R }), cql.Column("p", cql.ByteSliceCodec, func(r *row) *[]byte { return &r.P }))
 
 func connect(hosts []string) (adapter, error) {
@@ -87,7 +87,7 @@ func connect(hosts []string) (adapter, error) {
 }
 func (a *v2Adapter) Close() error { return a.s.Close() }
 func (a *v2Adapter) Exec(ctx context.Context, q string) error {
-	_, e := a.s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: q, Params: cql.NoParams}, cql.EmptyParams{})
+	_, e := a.s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: q, Params: cql.NoParams}, cql.EmptyParams{})
 	return e
 }
 func (a *v2Adapter) Evidence() any {
@@ -119,7 +119,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 	}
 	ctx := context.Background()
 	if a.reads[idx] == nil {
-		p, e := a.s.Prepare(ctx, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, execopt.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[int32, row]{CQL: rd, Params: keyParams, Rows: bufferedDecoder}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -133,7 +133,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := a.s.Prepare(ctx, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams}, execopt.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[row, cql.EmptyRow]{CQL: wr, Params: rowParams}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -151,7 +151,7 @@ func (a *v2Adapter) preparedStream(paged bool) (*g.PreparedStream[int32, row], e
 		idx, rd = 1, pageRead
 	}
 	if a.streams[idx] == nil {
-		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, execopt.PrepareOptions{})
+		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{CQL: rd, Params: keyParams, Rows: streamDecoder}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, e
 		}

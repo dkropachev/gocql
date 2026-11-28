@@ -111,7 +111,7 @@ func (c sequenceDecoder[T]) DecodeInto(r ValueReader, dst *[]T) error {
 	} else if !dec.typ.Equal(r.Type()) {
 		return typeValidation("type", "sequence metadata changed after compilation")
 	}
-	if dec.kind != KindVector && r.err == nil && r.State() == Null {
+	if dec.kind != KindVector && r.err == nil && r.State() == CellNull {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
@@ -165,11 +165,11 @@ type mapSliceCodec[K, V any] struct {
 	dec mapDecoder[K, V]
 }
 
-// MapCodec encodes and decodes a map as a []Entry[K, V], in the order the
+// MapEntriesCodec encodes and decodes a map as a []Entry[K, V], in the order the
 // server sends; keys need not be comparable, and DecodeInto reuses the
 // slice's capacity. Struct mappings take it through WithCodec or a `codec=`
-// tag. GoMapCodec decodes into a Go map instead.
-func MapCodec[K, V any](key Codec[K], value Codec[V]) Codec[[]Entry[K, V]] {
+// tag. MapCodec decodes into a Go map instead.
+func MapEntriesCodec[K, V any](key Codec[K], value Codec[V]) Codec[[]Entry[K, V]] {
 	return mapSliceCodec[K, V]{enc: mapEncoder[K, V]{key: key, value: value}, dec: mapDecoder[K, V]{key: key, value: value}}
 }
 
@@ -233,7 +233,7 @@ func (c mapDecoder[K, V]) DecodeInto(r ValueReader, dst *[]Entry[K, V]) error {
 	} else if !dec.typ.Equal(r.Type()) {
 		return typeValidation("type", "map metadata changed after compilation")
 	}
-	if r.err == nil && r.State() == Null {
+	if r.err == nil && r.State() == CellNull {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

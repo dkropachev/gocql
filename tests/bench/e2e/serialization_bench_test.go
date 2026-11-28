@@ -56,7 +56,7 @@ func BenchmarkSerialization(b *testing.B) {
 			benchmarkValue(b, set, cql.SetEncoder(cql.StringCodec), cql.SetDecoder(cql.TextViewCodec), []string{"foo", "bar", "baz"})
 		})
 		b.Run("Map", func(b *testing.B) {
-			benchmarkValue(b, mapping, cql.MapEncoder(cql.StringCodec, cql.Int32Codec), cql.MapDecoder(cql.TextViewCodec, cql.Int32Codec), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
+			benchmarkValue(b, mapping, cql.MapEntriesEncoder(cql.StringCodec, cql.Int32Codec), cql.MapEntriesDecoder(cql.TextViewCodec, cql.Int32Codec), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
 		})
 		type record struct {
 			ID    cql.UUID
@@ -83,7 +83,7 @@ func BenchmarkSerialization(b *testing.B) {
 		nested, _ := cql.ListType(nestedMap)
 		nestedValue := [][]cql.Entry[string, record]{{{Key: "key1", Value: record{Name: "name1", Value: 123}}, {Key: "key2", Value: record{Name: "name2", Value: 456}}}, {{Key: "key3", Value: record{Name: "name3", Value: 789}}}}
 		b.Run("Nested/3-lvl", func(b *testing.B) {
-			benchmarkValue(b, nested, cql.ListEncoder(cql.MapEncoder(cql.StringCodec, udtEnc)), cql.ListDecoder(cql.MapDecoder(cql.TextViewCodec, udtDec)), nestedValue)
+			benchmarkValue(b, nested, cql.ListEncoder(cql.MapEntriesEncoder(cql.StringCodec, udtEnc)), cql.ListDecoder(cql.MapEntriesDecoder(cql.TextViewCodec, udtDec)), nestedValue)
 		})
 	})
 

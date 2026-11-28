@@ -151,7 +151,7 @@ func TestTupleUDT(t *testing.T) {
 	t.Run("UDTDecoder", func(t *testing.T) {
 		t.Run("IgnoredSuffixValidatesFraming", func(t *testing.T) {
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "ignored", Type: rowTestType(t, KindBlob)})
-			decoder := UDTDecoder(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), UDTName("ks", "record"), IgnoreExtraFields())
+			decoder := UDTDecoder(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), UDTName("ks", "record"), IgnoreUnknownFields())
 			for _, bad := range []string{"000000040000000700", "00000004000000070000000401", "0000000400000007fffffffe", "0000000400000007ffffffff00"} {
 				body, _ := hex.DecodeString(bad)
 				if _, err := DecodeValue(decoder, containerValue(t, typ, body)); err == nil {
@@ -172,7 +172,7 @@ func TestTupleUDT(t *testing.T) {
 			short, _ := hex.DecodeString("0000000400000007")
 			// A trailing field the value predates, as after ALTER TYPE ADD,
 			// decodes as zero whatever the matching options.
-			for _, options := range [][]StructOption{{UDTName("ks", "record")}, {UDTName("ks", "record"), AllowMissingFields()}, {UDTName("ks", "record"), IgnoreExtraFields(), AllowMissingFields()}} {
+			for _, options := range [][]StructOption{{UDTName("ks", "record")}, {UDTName("ks", "record"), AllowMissingFields()}, {UDTName("ks", "record"), IgnoreUnknownFields(), AllowMissingFields()}} {
 				got, err := DecodeValue(UDTDecoder(rows, options...), containerValue(t, typ, short))
 				if err != nil || got.ID != 7 || got.Body.Bytes().Len() != 0 {
 					t.Fatalf("missing serialized field: got %+v, %v; want it zero", got, err)
@@ -213,7 +213,7 @@ func TestTupleUDT(t *testing.T) {
 			if err := UDTDecoder(rows, UDTName("ks", "record")).CheckType(typ); err == nil {
 				t.Fatal("extra database field accepted without option")
 			}
-			options := []StructOption{UDTName("ks", "record"), IgnoreExtraFields()}
+			options := []StructOption{UDTName("ks", "record"), IgnoreUnknownFields()}
 			encoder, decoder := UDTEncoder(params, options...), UDTDecoder(rows, options...)
 			encoded := containerGolden(t, typ, encoder, record{ID: 7, Body: CodecTestMust(BorrowText("x"))}, "0000000178ffffffff0000000400000007")
 			decoded, err := DecodeValue(decoder, encoded)
@@ -245,7 +245,7 @@ func TestTupleUDT(t *testing.T) {
 				t.Fatal(err)
 			}
 			other, _ := UDTType("other", "record", columnSlice(typ.Fields())...)
-			if _, err := bound.Decode(valueReaderFromLease(other, Present, bytesChain(encoded.body), nil)); err == nil {
+			if _, err := bound.Decode(valueReaderFromLease(other, CellPresent, bytesChain(encoded.body), nil)); err == nil {
 				t.Fatal("compiled UDT accepted different identity")
 			}
 		})
@@ -285,9 +285,9 @@ func TestTupleUDT(t *testing.T) {
 		t.Run("PropagateThroughComposition", func(t *testing.T) {
 			integer := rowTestType(t, KindInt)
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "extra", Type: integer})
-			options := []StructOption{UDTName("ks", "record"), IgnoreExtraFields()}
-			params := ConvertParams(Params(Param("id", Int32Codec, func(v int32) int32 { return v })), func(v int64) int32 { return int32(v) })
-			rows := ConvertRows(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), func(v int32) int64 { return int64(v) }, func(v int64) int64 { return v })
+			options := []StructOption{UDTName("ks", "record"), IgnoreUnknownFields()}
+			params := ConvertParams(Params(Param("id", Int32Codec, func(v int32) int32 { return v })), func(v int64) (int32, error) { return int32(v), nil })
+			rows := ConvertRows(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), func(v int32) (int64, error) { return int64(v), nil }, func(v int64) int64 { return v })
 			encoded := containerGolden(t, typ, UDTEncoder(params, options...), int64(7), "0000000400000007ffffffff")
 			decoded, err := DecodeValue(UDTDecoder(rows, options...), encoded)
 			if err != nil || decoded != 7 {

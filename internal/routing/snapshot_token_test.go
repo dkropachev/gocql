@@ -94,7 +94,7 @@ func TestSnapshotToken(t *testing.T) {
 			t.Fatal(err)
 		}
 		text := cql.TextValue("x")
-		tuple, err := cql.TupleValue(tupleType.WithFrozen(true), []cql.Value{cql.IntValue(1), text})
+		tuple, err := cql.TupleValue(tupleType.WithFrozen(true), cql.IntValue(1), text)
 		if err != nil {
 			t.Fatal(err)
 		}

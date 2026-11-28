@@ -264,7 +264,7 @@ func (m *MetadataSnapshot) Token(keyspace, table string, key ...cql.Value) (int6
 		if err != nil {
 			return 0, fmt.Errorf("partition key column %q: %w", column.Name, err)
 		}
-		if key[i].State() != cql.Present {
+		if key[i].State() != cql.CellPresent {
 			return 0, cqltype.TypeValidation("partition key", "column %q must have a value", column.Name)
 		}
 		encoded, err := link.Get[func(cql.DataType, cql.Value) (cql.EncodedValue, error)](link.EncodeDynamicBorrowed)(typ, key[i])

@@ -14,7 +14,7 @@ import (
 // entries of a present map, or of fields of a present tuple or UDT. It
 // returns 0 for any other value.
 func (v Value) Len() int {
-	if v.state != Present || descriptorOf(v.typ) == nil {
+	if v.state != CellPresent || descriptorOf(v.typ) == nil {
 		return 0
 	}
 	switch v.typ.Kind() {
@@ -70,7 +70,7 @@ func (v Value) String() string {
 
 func (v Value) format(b *strings.Builder) {
 	if untypedMarker(v) {
-		if v.state == Null {
+		if v.state == CellNull {
 			b.WriteString("null")
 		} else {
 			b.WriteString("unset")
@@ -82,14 +82,14 @@ func (v Value) format(b *strings.Builder) {
 		return
 	}
 	switch v.state {
-	case Present:
-	case Null:
+	case CellPresent:
+	case CellNull:
 		b.WriteString("null")
 		return
-	case Unset:
+	case CellUnset:
 		b.WriteString("unset")
 		return
-	case EmptyCell:
+	case CellEmpty:
 		b.WriteString("empty")
 		return
 	default:
@@ -136,10 +136,17 @@ func (v Value) format(b *strings.Builder) {
 		quoted(Timestamp(int64(v.bits)).String())
 	case KindDuration:
 		b.WriteString(v.duration.String())
-	case KindVarint:
-		b.WriteString(varintView(v.bytes).String())
-	case KindDecimal:
-		b.WriteString(Decimal{Scale: v.scale, Unscaled: varintView(v.bytes)}.String())
+	case KindVarint, KindDecimal:
+		n, err := varintOf(v.bytes)
+		if err != nil {
+			fail(err)
+			return
+		}
+		if v.typ.Kind() == KindVarint {
+			b.WriteString(n.String())
+		} else {
+			b.WriteString(Decimal{Scale: v.scale, Unscaled: n}.String())
+		}
 	case KindList, KindVector, KindSet, KindTuple:
 		open, end := "[", "]"
 		switch v.typ.Kind() {

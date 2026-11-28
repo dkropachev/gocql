@@ -238,7 +238,7 @@ func TestBatch(t *testing.T) {
 			}
 			batch := &gocql.Batch{Kind: cql.UnloggedBatch}
 			for range 100 {
-				require.NoError(t, session.UnpreparedAddToBatch(batch, cql.Command(fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table)), cql.EmptyParams{}))
+				require.NoError(t, session.UnpreparedAddToBatch(batch, cql.Write(fmt.Sprintf("UPDATE %s SET c=c+1 WHERE id=1", table), cql.NoParams), cql.EmptyParams{}))
 			}
 			cassandraBatch(t, session, batch, execopt.Options{})
 			require.Equal(t, int64(1), cassandraInt(t, cassandraRead(t, session, "SELECT COUNT(*) FROM "+table), "count"))

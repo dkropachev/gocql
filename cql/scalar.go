@@ -113,7 +113,7 @@ func requirePresent(r ValueReader) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.state != Present {
+	if r.state != CellPresent {
 		return cellStateError(r)
 	}
 	if !r.lease.IsZero() && !r.lease.Alive() {
@@ -124,7 +124,7 @@ func requirePresent(r ValueReader) error {
 
 //go:noinline
 func cellStateError(r ValueReader) error {
-	if r.state == Null {
+	if r.state == CellNull {
 		return nullCellError{kind: r.typ.Kind()}
 	}
 	return fmt.Errorf("gocql: nonnullable %s cannot decode cell state %v", r.typ.Kind(), r.state)
@@ -371,9 +371,10 @@ func exactIntegerCodec[T signedScalar](kind Kind, width int64) scalarCodec[T] {
 	}
 }
 
-// Codecs of the scalar CQL types. Each accepts only the CQL types it names,
-// and decodes a value without borrowing response storage unless its Go type
-// is a view (Text, Bytes).
+// Codecs of the scalar CQL types. Each accepts the CQL types it names, and
+// the integer and float codecs the narrower ones they widen from; each
+// decodes a value without borrowing response storage unless its Go type is
+// a view (Text, Bytes).
 var (
 	// BoolCodec maps boolean to bool.
 	BoolCodec Codec[bool] = scalarCodec[bool]{kind: KindBoolean, encode: encodeBool, decode: decodeBool}
@@ -384,7 +385,8 @@ var (
 	// Int16Codec maps smallint to int16.
 	Int16Codec Codec[int16] = integerCodec[int16](KindSmallInt, 2)
 
-	// Int32Codec maps int to int32.
+	// Int32Codec maps int to int32, and widens smallint and tinyint: it
+	// decodes them losslessly and encodes into them checking the range.
 	Int32Codec Codec[int32] = integerCodec[int32](KindInt, 4)
 
 	// Int64Codec maps bigint and counter to int64.
@@ -815,7 +817,7 @@ func (c nullableDecoder[T]) Decode(r ValueReader) (Nullable[T], error) {
 	if r.err != nil {
 		return Nullable[T]{}, r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		if e := checkBytesAlive(r.Bytes()); e != nil {
 			return Nullable[T]{}, e
 		}
@@ -845,7 +847,7 @@ func (c nullableCodec[T]) CheckType(t DataType) error {
 	return c.nullableEncoder.CheckType(t)
 }
 
-// BindEncoder wraps base to encode Present, Null and Unset parameter states.
+// BindEncoder wraps base to encode CellPresent, CellNull and CellUnset parameter states.
 func BindEncoder[T any](base Encoder[T]) Encoder[BindValue[T]] {
 	return bindEncoder[T]{base: base}
 }
@@ -873,20 +875,18 @@ func (c bindEncoder[T]) Encode(w *ValueWriter, v BindValue[T]) error {
 	if e := c.typeGuard(w.Type()); e != nil {
 		return e
 	}
-	switch v.State {
-	case Present:
-		return c.base.Encode(w, v.Value)
-	case Null:
+	switch v.state {
+	case bindPresent:
+		return c.base.Encode(w, v.value)
+	case bindNull:
 		return w.Null()
-	case Unset:
-		return w.Unset()
 	default:
-		return errors.New("gocql: invalid bind state")
+		return w.Unset()
 	}
 }
 
-// EmptyCodec adds the explicit empty-cell state to base; it does not add NULL support.
-func EmptyCodec[T any](base Codec[T]) Codec[MaybeEmpty[T]] {
+// MaybeEmptyCodec adds the explicit empty-cell state to base; it does not add NULL support.
+func MaybeEmptyCodec[T any](base Codec[T]) Codec[MaybeEmpty[T]] {
 	return emptyCodec[T]{base: base}
 }
 
@@ -943,7 +943,7 @@ func (c emptyCodec[T]) Decode(r ValueReader) (MaybeEmpty[T], error) {
 	if r.err != nil {
 		return MaybeEmpty[T]{}, r.err
 	}
-	if r.State() == Present && r.Bytes().Len() == 0 {
+	if r.State() == CellPresent && r.Bytes().Len() == 0 {
 		if e := checkBytesAlive(r.Bytes()); e != nil {
 			return MaybeEmpty[T]{}, e
 		}
@@ -994,7 +994,7 @@ func (c nullableDecoder[T]) DecodeInto(r ValueReader, dst *Nullable[T]) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		return checkBytesAlive(r.Bytes())
 	}
 	if err := decodeValueInto(c.base, r, &dst.Value); err != nil {
@@ -1044,7 +1044,7 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *MaybeEmpty[T]) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == Present && r.Bytes().Len() == 0 {
+	if r.State() == CellPresent && r.Bytes().Len() == 0 {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

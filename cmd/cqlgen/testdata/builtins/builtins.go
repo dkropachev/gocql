@@ -49,8 +49,8 @@ type Buffered struct {
 	F026 []int32                     `cql:"b026,codec=VectorCodec"`      // cql.VectorCodec(cql.Int32Codec)
 	F027 *int32                      `cql:"b027"`                        // cql.PointerCodec(cql.Int32Codec)
 	F028 [][]int32                   `cql:"b028"`                        // cql.SliceCodec(cql.SliceCodec(cql.Int32Codec))
-	F029 map[string][]int32          `cql:"b029"`                        // cql.GoMapCodec(cql.StringCodec, cql.SliceCodec(cql.Int32Codec))
-	F030 map[int32]int32             `cql:"b030"`                        // cql.GoMapCodec(cql.Int32Codec, cql.Int32Codec)
+	F029 map[string][]int32          `cql:"b029"`                        // cql.MapCodec(cql.StringCodec, cql.SliceCodec(cql.Int32Codec))
+	F030 map[int32]int32             `cql:"b030"`                        // cql.MapCodec(cql.Int32Codec, cql.Int32Codec)
 	F031 *[]int32                    `cql:"b031"`                        // cql.PointerCodec(cql.SliceCodec(cql.Int32Codec))
 	F032 cql.Nullable[[]int32]       `cql:"b032"`                        // cql.NullableDecoder(cql.SliceCodec(cql.Int32Codec))
 	F033 []cql.Nullable[int32]       `cql:"b033"`                        // cql.SliceCodec(cql.NullableCodec(cql.Int32Codec))
@@ -93,8 +93,8 @@ type Buffered struct {
 	F070 string                      `cql:"b070,codec=ASCIIStringCodec"` // cql.StringCodec
 	F071 *string                     `cql:"b071"`                        // cql.PointerCodec(cql.StringCodec)
 	F072 [][]string                  `cql:"b072"`                        // cql.SliceCodec(cql.SliceCodec(cql.StringCodec))
-	F073 map[string][]string         `cql:"b073"`                        // cql.GoMapCodec(cql.StringCodec, cql.SliceCodec(cql.StringCodec))
-	F074 map[string]string           `cql:"b074"`                        // cql.GoMapCodec(cql.StringCodec, cql.StringCodec)
+	F073 map[string][]string         `cql:"b073"`                        // cql.MapCodec(cql.StringCodec, cql.SliceCodec(cql.StringCodec))
+	F074 map[string]string           `cql:"b074"`                        // cql.MapCodec(cql.StringCodec, cql.StringCodec)
 	F075 *[]string                   `cql:"b075"`                        // cql.PointerCodec(cql.SliceCodec(cql.StringCodec))
 	F076 cql.Nullable[[]string]      `cql:"b076"`                        // cql.NullableDecoder(cql.SliceCodec(cql.StringCodec))
 	F077 []cql.Nullable[string]      `cql:"b077"`                        // cql.SliceCodec(cql.NullableCodec(cql.StringCodec))
@@ -129,8 +129,8 @@ type Buffered struct {
 	F106 []cql.UUID                  `cql:"b106,codec=VectorCodec"`      // cql.VectorCodec(cql.UUIDCodec)
 	F107 *cql.UUID                   `cql:"b107"`                        // cql.PointerCodec(cql.UUIDCodec)
 	F108 [][]cql.UUID                `cql:"b108"`                        // cql.SliceCodec(cql.SliceCodec(cql.UUIDCodec))
-	F109 map[string][]cql.UUID       `cql:"b109"`                        // cql.GoMapCodec(cql.StringCodec, cql.SliceCodec(cql.UUIDCodec))
-	F110 map[cql.UUID]cql.UUID       `cql:"b110"`                        // cql.GoMapCodec(cql.UUIDCodec, cql.UUIDCodec)
+	F109 map[string][]cql.UUID       `cql:"b109"`                        // cql.MapCodec(cql.StringCodec, cql.SliceCodec(cql.UUIDCodec))
+	F110 map[cql.UUID]cql.UUID       `cql:"b110"`                        // cql.MapCodec(cql.UUIDCodec, cql.UUIDCodec)
 	F111 *[]cql.UUID                 `cql:"b111"`                        // cql.PointerCodec(cql.SliceCodec(cql.UUIDCodec))
 	F112 cql.Nullable[[]cql.UUID]    `cql:"b112"`                        // cql.NullableDecoder(cql.SliceCodec(cql.UUIDCodec))
 	F113 []cql.Nullable[cql.UUID]    `cql:"b113"`                        // cql.SliceCodec(cql.NullableCodec(cql.UUIDCodec))
@@ -205,7 +205,7 @@ type Buffered struct {
 	F182 []time.Time                 `cql:"b182,codec=SetCodec"`         // cql.SetCodec(cql.TimestampTimeCodec)
 	F183 []time.Time                 `cql:"b183,codec=VectorCodec"`      // cql.VectorCodec(cql.TimestampTimeCodec)
 	F184 *time.Time                  `cql:"b184"`                        // cql.PointerCodec(cql.TimestampTimeCodec)
-	F185 map[string]time.Time        `cql:"b185"`                        // cql.GoMapCodec(cql.StringCodec, cql.TimestampTimeCodec)
+	F185 map[string]time.Time        `cql:"b185"`                        // cql.MapCodec(cql.StringCodec, cql.TimestampTimeCodec)
 	F186 time.Duration               `cql:"b186"`                        // cql.TimeDurationCodec
 	F187 cql.Nullable[time.Duration] `cql:"b187"`                        // cql.NullableDecoder(cql.TimeDurationCodec)
 	F188 []time.Duration             `cql:"b188"`                        // cql.SliceCodec(cql.TimeDurationCodec)
@@ -213,7 +213,7 @@ type Buffered struct {
 	F190 []time.Duration             `cql:"b190,codec=SetCodec"`         // cql.SetCodec(cql.TimeDurationCodec)
 	F191 []time.Duration             `cql:"b191,codec=VectorCodec"`      // cql.VectorCodec(cql.TimeDurationCodec)
 	F192 *time.Duration              `cql:"b192"`                        // cql.PointerCodec(cql.TimeDurationCodec)
-	F193 map[string]time.Duration    `cql:"b193"`                        // cql.GoMapCodec(cql.StringCodec, cql.TimeDurationCodec)
+	F193 map[string]time.Duration    `cql:"b193"`                        // cql.MapCodec(cql.StringCodec, cql.TimeDurationCodec)
 	F194 [16]byte                    `cql:"b194"`                        // cql.UUIDCodec
 }
 
@@ -294,18 +294,18 @@ type Streamed struct {
 	F046 []float64                      `cql:"s046,stream=List"`   // cql.StreamList(cql.StreamFloat64)
 	F047 []float64                      `cql:"s047,stream=Set"`    // cql.StreamSet(cql.StreamFloat64)
 	F048 []float64                      `cql:"s048,stream=Vector"` // cql.StreamVector(cql.StreamFloat64)
-	F049 []byte                         `cql:"s049"`               // cql.StreamBlob
-	F050 cql.Nullable[[]byte]           `cql:"s050"`               // cql.StreamNullable(cql.StreamBlob)
-	F051 [][]byte                       `cql:"s051"`               // cql.StreamSlice(cql.StreamBlob)
-	F052 [][]byte                       `cql:"s052,stream=List"`   // cql.StreamList(cql.StreamBlob)
-	F053 [][]byte                       `cql:"s053,stream=Set"`    // cql.StreamSet(cql.StreamBlob)
-	F054 [][]byte                       `cql:"s054,stream=Vector"` // cql.StreamVector(cql.StreamBlob)
-	F055 []byte                         `cql:"s055,stream=Text"`   // cql.StreamText
-	F056 cql.Nullable[[]byte]           `cql:"s056,stream=Text"`   // cql.StreamNullable(cql.StreamText)
-	F057 [][]byte                       `cql:"s057,stream=Text"`   // cql.StreamSlice(cql.StreamText)
-	F058 []byte                         `cql:"s058,stream=Varint"` // cql.StreamVarint
-	F059 cql.Nullable[[]byte]           `cql:"s059,stream=Varint"` // cql.StreamNullable(cql.StreamVarint)
-	F060 [][]byte                       `cql:"s060,stream=Varint"` // cql.StreamSlice(cql.StreamVarint)
+	F049 []byte                         `cql:"s049"`               // cql.StreamByteSlice
+	F050 cql.Nullable[[]byte]           `cql:"s050"`               // cql.StreamNullable(cql.StreamByteSlice)
+	F051 [][]byte                       `cql:"s051"`               // cql.StreamSlice(cql.StreamByteSlice)
+	F052 [][]byte                       `cql:"s052,stream=List"`   // cql.StreamList(cql.StreamByteSlice)
+	F053 [][]byte                       `cql:"s053,stream=Set"`    // cql.StreamSet(cql.StreamByteSlice)
+	F054 [][]byte                       `cql:"s054,stream=Vector"` // cql.StreamVector(cql.StreamByteSlice)
+	F055 []byte                         `cql:"s055,stream=Text"`   // cql.StreamTextBytes
+	F056 cql.Nullable[[]byte]           `cql:"s056,stream=Text"`   // cql.StreamNullable(cql.StreamTextBytes)
+	F057 [][]byte                       `cql:"s057,stream=Text"`   // cql.StreamSlice(cql.StreamTextBytes)
+	F058 []byte                         `cql:"s058,stream=Varint"` // cql.StreamVarintBytes
+	F059 cql.Nullable[[]byte]           `cql:"s059,stream=Varint"` // cql.StreamNullable(cql.StreamVarintBytes)
+	F060 [][]byte                       `cql:"s060,stream=Varint"` // cql.StreamSlice(cql.StreamVarintBytes)
 	F061 cql.UUID                       `cql:"s061"`               // cql.StreamUUID
 	F062 cql.Nullable[cql.UUID]         `cql:"s062"`               // cql.StreamNullable(cql.StreamUUID)
 	F063 *cql.UUID                      `cql:"s063"`               // cql.StreamPointer(cql.StreamUUID)
@@ -327,12 +327,12 @@ type Streamed struct {
 	F079 []netip.Addr                   `cql:"s079,stream=List"`   // cql.StreamList(cql.StreamInet)
 	F080 []netip.Addr                   `cql:"s080,stream=Set"`    // cql.StreamSet(cql.StreamInet)
 	F081 []netip.Addr                   `cql:"s081,stream=Vector"` // cql.StreamVector(cql.StreamInet)
-	F082 cql.DecimalParts               `cql:"s082"`               // cql.StreamDecimal
-	F083 cql.Nullable[cql.DecimalParts] `cql:"s083"`               // cql.StreamNullable(cql.StreamDecimal)
-	F084 []cql.DecimalParts             `cql:"s084"`               // cql.StreamSlice(cql.StreamDecimal)
-	F085 []cql.DecimalParts             `cql:"s085,stream=List"`   // cql.StreamList(cql.StreamDecimal)
-	F086 []cql.DecimalParts             `cql:"s086,stream=Set"`    // cql.StreamSet(cql.StreamDecimal)
-	F087 []cql.DecimalParts             `cql:"s087,stream=Vector"` // cql.StreamVector(cql.StreamDecimal)
+	F082 cql.DecimalParts               `cql:"s082"`               // cql.StreamDecimalParts
+	F083 cql.Nullable[cql.DecimalParts] `cql:"s083"`               // cql.StreamNullable(cql.StreamDecimalParts)
+	F084 []cql.DecimalParts             `cql:"s084"`               // cql.StreamSlice(cql.StreamDecimalParts)
+	F085 []cql.DecimalParts             `cql:"s085,stream=List"`   // cql.StreamList(cql.StreamDecimalParts)
+	F086 []cql.DecimalParts             `cql:"s086,stream=Set"`    // cql.StreamSet(cql.StreamDecimalParts)
+	F087 []cql.DecimalParts             `cql:"s087,stream=Vector"` // cql.StreamVector(cql.StreamDecimalParts)
 	F088 cql.Date                       `cql:"s088"`               // cql.StreamDate
 	F089 cql.Nullable[cql.Date]         `cql:"s089"`               // cql.StreamNullable(cql.StreamDate)
 	F090 *cql.Date                      `cql:"s090"`               // cql.StreamPointer(cql.StreamDate)
@@ -340,13 +340,13 @@ type Streamed struct {
 	F092 []cql.Date                     `cql:"s092,stream=List"`   // cql.StreamList(cql.StreamDate)
 	F093 []cql.Date                     `cql:"s093,stream=Set"`    // cql.StreamSet(cql.StreamDate)
 	F094 []cql.Date                     `cql:"s094,stream=Vector"` // cql.StreamVector(cql.StreamDate)
-	F095 cql.TimeOfDay                  `cql:"s095"`               // cql.StreamTime
-	F096 cql.Nullable[cql.TimeOfDay]    `cql:"s096"`               // cql.StreamNullable(cql.StreamTime)
-	F097 *cql.TimeOfDay                 `cql:"s097"`               // cql.StreamPointer(cql.StreamTime)
-	F098 []cql.TimeOfDay                `cql:"s098"`               // cql.StreamSlice(cql.StreamTime)
-	F099 []cql.TimeOfDay                `cql:"s099,stream=List"`   // cql.StreamList(cql.StreamTime)
-	F100 []cql.TimeOfDay                `cql:"s100,stream=Set"`    // cql.StreamSet(cql.StreamTime)
-	F101 []cql.TimeOfDay                `cql:"s101,stream=Vector"` // cql.StreamVector(cql.StreamTime)
+	F095 cql.TimeOfDay                  `cql:"s095"`               // cql.StreamTimeOfDay
+	F096 cql.Nullable[cql.TimeOfDay]    `cql:"s096"`               // cql.StreamNullable(cql.StreamTimeOfDay)
+	F097 *cql.TimeOfDay                 `cql:"s097"`               // cql.StreamPointer(cql.StreamTimeOfDay)
+	F098 []cql.TimeOfDay                `cql:"s098"`               // cql.StreamSlice(cql.StreamTimeOfDay)
+	F099 []cql.TimeOfDay                `cql:"s099,stream=List"`   // cql.StreamList(cql.StreamTimeOfDay)
+	F100 []cql.TimeOfDay                `cql:"s100,stream=Set"`    // cql.StreamSet(cql.StreamTimeOfDay)
+	F101 []cql.TimeOfDay                `cql:"s101,stream=Vector"` // cql.StreamVector(cql.StreamTimeOfDay)
 	F102 cql.Timestamp                  `cql:"s102"`               // cql.StreamTimestamp
 	F103 cql.Nullable[cql.Timestamp]    `cql:"s103"`               // cql.StreamNullable(cql.StreamTimestamp)
 	F104 *cql.Timestamp                 `cql:"s104"`               // cql.StreamPointer(cql.StreamTimestamp)
@@ -382,11 +382,11 @@ type Streamed struct {
 	F134 []time.Duration                `cql:"s134,stream=List"`   // cql.StreamList(cql.StreamTimeDuration)
 	F135 []time.Duration                `cql:"s135,stream=Set"`    // cql.StreamSet(cql.StreamTimeDuration)
 	F136 []time.Duration                `cql:"s136,stream=Vector"` // cql.StreamVector(cql.StreamTimeDuration)
-	F137 cql.Decimal                    `cql:"s137"`               // cql.StreamDecimalValue
-	F138 cql.Nullable[cql.Decimal]      `cql:"s138"`               // cql.StreamNullable(cql.StreamDecimalValue)
-	F139 *cql.Decimal                   `cql:"s139"`               // cql.StreamPointer(cql.StreamDecimalValue)
-	F140 []cql.Decimal                  `cql:"s140"`               // cql.StreamSlice(cql.StreamDecimalValue)
-	F141 []cql.Decimal                  `cql:"s141,stream=List"`   // cql.StreamList(cql.StreamDecimalValue)
-	F142 []cql.Decimal                  `cql:"s142,stream=Set"`    // cql.StreamSet(cql.StreamDecimalValue)
-	F143 []cql.Decimal                  `cql:"s143,stream=Vector"` // cql.StreamVector(cql.StreamDecimalValue)
+	F137 cql.Decimal                    `cql:"s137"`               // cql.StreamDecimal
+	F138 cql.Nullable[cql.Decimal]      `cql:"s138"`               // cql.StreamNullable(cql.StreamDecimal)
+	F139 *cql.Decimal                   `cql:"s139"`               // cql.StreamPointer(cql.StreamDecimal)
+	F140 []cql.Decimal                  `cql:"s140"`               // cql.StreamSlice(cql.StreamDecimal)
+	F141 []cql.Decimal                  `cql:"s141,stream=List"`   // cql.StreamList(cql.StreamDecimal)
+	F142 []cql.Decimal                  `cql:"s142,stream=Set"`    // cql.StreamSet(cql.StreamDecimal)
+	F143 []cql.Decimal                  `cql:"s143,stream=Vector"` // cql.StreamVector(cql.StreamDecimal)
 }

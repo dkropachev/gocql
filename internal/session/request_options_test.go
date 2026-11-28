@@ -119,7 +119,7 @@ func TestStreamOptionsOverrideIsolated(t *testing.T) {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 		defer cancel()
-		if cursor, err := rt.runStream(ctx, bound, cql.StreamOneColumn(cql.StreamBlob), options, StreamOptions{}.Limits, false, nil); err == nil {
+		if cursor, err := rt.runStream(ctx, bound, cql.StreamOneColumn(cql.StreamByteSlice), options, StreamOptions{}.Limits, false, nil); err == nil {
 			cursor.Close()
 			t.Fatal("stream without hosts succeeded")
 		}

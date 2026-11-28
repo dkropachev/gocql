@@ -258,7 +258,7 @@ func (d *typeDeriver) derive(typ types.Type, forced string, top bool) (derivedSr
 		if err != nil {
 			return derivedSrc{}, err
 		}
-		src := cql + ".GoMapCodec(" + kc + ", " + vc + ")"
+		src := cql + ".MapCodec(" + kc + ", " + vc + ")"
 		return derivedSrc{codec: src, enc: src, dec: src, canonical: types.NewMap(key.canonical, value.canonical)}, nil
 	}
 	if args, ok := cqlGeneric(typ, "Nullable"); ok {

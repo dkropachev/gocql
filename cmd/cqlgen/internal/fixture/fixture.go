@@ -37,7 +37,7 @@ type Fixture struct { //nolint:govet // field order mirrors the column list, not
 	Span      cql.Duration
 	Names     []string                   `cql:"names"`
 	Scores    []int32                    `cql:"scores,codec=SetCodec"`
-	Attrs     []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapCodec(cql.StringCodec, cql.Int64Codec)"`
+	Attrs     []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapEntriesCodec(cql.StringCodec, cql.Int64Codec)"`
 	MaybeInt  cql.Nullable[int32]
 	MaybeText cql.Nullable[string] `cql:"maybe_text"`
 	Origin    Point                `cql:"origin,codec=PointCodec"`

@@ -37,7 +37,7 @@ type codecMatrix[T any] struct {
 	// emptyDecodes reports that the codec decodes an empty cell into the
 	// zero T; otherwise decoding an empty cell fails.
 	emptyDecodes bool
-	// noEmptyCodec reports that EmptyCodec rejects the type: text and blob,
+	// noEmptyCodec reports that MaybeEmptyCodec rejects the type: text and blob,
 	// whose values can be empty anyway, and types without an empty value.
 	noEmptyCodec bool
 	// nullDecodes reports that the codec decodes NULL into the zero T, as
@@ -92,7 +92,7 @@ func matrixDecoders[T any](dec cql.Decoder[T]) map[string]cql.RowDecoder[matrixR
 		"ColumnAt": cql.Row(cql.ColumnAt(0, cql.Int32Codec, k), cql.ColumnAt(1, dec, v)),
 		"RowInto":  cql.RowInto(func(r *matrixRow[T]) { *r = matrixRow[T]{} }, cql.Column("v", dec, v), cql.Column("k", cql.Int32Codec, k)),
 		"Pair": cql.ConvertRows(cql.PairRows(cql.OneColumn(cql.Int32Codec), cql.OneColumn(dec)),
-			func(p cql.Pair[int32, T]) matrixRow[T] { return matrixRow[T]{K: p.First, V: p.Second} },
+			func(p cql.Pair[int32, T]) (matrixRow[T], error) { return matrixRow[T]{K: p.First, V: p.Second}, nil },
 			func(r matrixRow[T]) matrixRow[T] { return matrixRow[T]{K: r.K, V: dec.Clone(r.V)} }),
 	}
 }
@@ -125,7 +125,7 @@ func (c codecMatrix[T]) run(t *testing.T) {
 	bind := cql.BindEncoder(c.enc)
 	t.Run("RoundTrip", func(t *testing.T) {
 		for i, value := range c.values {
-			w, err := matrixEncode(columns, bind, cql.BindValue[T]{Value: value}, false)
+			w, err := matrixEncode(columns, bind, cql.Bind[T](value), false)
 			if err != nil {
 				t.Fatalf("value %d: encode: %v", i, err)
 			}
@@ -145,7 +145,7 @@ func (c codecMatrix[T]) run(t *testing.T) {
 		}
 	})
 	t.Run("Null", func(t *testing.T) {
-		w, err := matrixEncode(columns, bind, cql.BindValue[T]{State: cql.Null}, false)
+		w, err := matrixEncode(columns, bind, cql.BindNull[T](), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -164,7 +164,7 @@ func (c codecMatrix[T]) run(t *testing.T) {
 		if err != nil || row.V.Valid {
 			t.Fatalf("Nullable: got %+v, %v", row.V, err)
 		}
-		nullable, err := matrixEncode(columns, cql.BindEncoder(cql.NullableEncoder(c.enc)), cql.BindValue[cql.Nullable[T]]{}, false)
+		nullable, err := matrixEncode(columns, cql.BindEncoder(cql.NullableEncoder(c.enc)), cql.Bind(cql.Nullable[T]{}), false)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -175,9 +175,9 @@ func (c codecMatrix[T]) run(t *testing.T) {
 	t.Run("Empty", func(t *testing.T) {
 		// k = 7 and an empty v.
 		w := wire.ChainOf([]byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 0})
-		empty := cql.EmptyCodec(cql.Codec[T](matrixCodec[T]{c.enc, c.dec}))
+		empty := cql.MaybeEmptyCodec(cql.Codec[T](matrixCodec[T]{c.enc, c.dec}))
 		emptyBind := cql.BindEncoder(cql.Encoder[cql.MaybeEmpty[T]](empty))
-		encoded, err := matrixEncode(columns, emptyBind, cql.BindValue[cql.MaybeEmpty[T]]{Value: cql.MaybeEmpty[T]{Empty: true}}, false)
+		encoded, err := matrixEncode(columns, emptyBind, cql.Bind[cql.MaybeEmpty[T]](cql.MaybeEmpty[T]{Empty: true}), false)
 		if c.noEmptyCodec {
 			wantColumnError(t, err, "compile", 1, "v")
 		} else {
@@ -185,11 +185,11 @@ func (c codecMatrix[T]) run(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got := matrixBytes(t, encoded); string(got) != string(matrixBytes(t, w)) {
-				t.Fatalf("EmptyCodec encoded %x, want %x", got, matrixBytes(t, w))
+				t.Fatalf("MaybeEmptyCodec encoded %x, want %x", got, matrixBytes(t, w))
 			}
 			row, err := matrixDecode(columns, w, matrixColumn(cql.Decoder[cql.MaybeEmpty[T]](empty)))
 			if err != nil || !row.V.Empty {
-				t.Fatalf("EmptyCodec: got %+v, %v", row.V, err)
+				t.Fatalf("MaybeEmptyCodec: got %+v, %v", row.V, err)
 			}
 		}
 		for path, decoder := range c.decoders() {
@@ -203,22 +203,17 @@ func (c codecMatrix[T]) run(t *testing.T) {
 				t.Fatalf("%s: got %+v, %v; want the zero value", path, row.V, err)
 			}
 		}
-		if _, err := matrixEncode(columns, bind, cql.BindValue[T]{State: cql.EmptyCell}, false); err == nil {
-			t.Fatal("BindValue bound an empty cell")
-		} else {
-			wantColumnError(t, err, "encode", 1, "v")
-		}
 	})
 	t.Run("Unset", func(t *testing.T) {
-		if _, err := matrixEncode(columns, bind, cql.BindValue[T]{State: cql.Unset}, true); err != nil {
+		if _, err := matrixEncode(columns, bind, cql.BindUnset[T](), true); err != nil {
 			t.Fatal(err)
 		}
-		_, err := matrixEncode(columns, bind, cql.BindValue[T]{State: cql.Unset}, false)
+		_, err := matrixEncode(columns, bind, cql.BindUnset[T](), false)
 		wantColumnError(t, err, "encode", 1, "v")
 	})
 	t.Run("OutOfRange", func(t *testing.T) {
 		for i, value := range c.badValues {
-			_, err := matrixEncode(columns, bind, cql.BindValue[T]{Value: value}, false)
+			_, err := matrixEncode(columns, bind, cql.Bind[T](value), false)
 			if err == nil {
 				t.Fatalf("bad value %d (%+v) encoded", i, value)
 			}
@@ -329,9 +324,9 @@ func TestCodecMatrix(t *testing.T) {
 	vector := matrixOfType("vector<float,3>/[]float32", mustMatrixType(cql.VectorType(matrixType(cql.KindFloat), 3)), cql.VectorCodec(cql.Float32Codec), mustMatrixType(cql.ListType(matrixType(cql.KindFloat))), []float32{1, -2, 3})
 	vector.noEmptyCodec = true
 	vector.badValues = [][]float32{{1, 2}, {1, 2, 3, 4}}
-	entries := matrixOfType("map<int,text>/[]Entry", mustMatrixType(cql.MapType(intType, textType)), cql.MapCodec(cql.Int32Codec, cql.StringCodec), mustMatrixType(cql.ListType(intType)), []cql.Entry[int32, string]{{Key: 1, Value: "a"}})
+	entries := matrixOfType("map<int,text>/[]Entry", mustMatrixType(cql.MapType(intType, textType)), cql.MapEntriesCodec(cql.Int32Codec, cql.StringCodec), mustMatrixType(cql.ListType(intType)), []cql.Entry[int32, string]{{Key: 1, Value: "a"}})
 	entries.noEmptyCodec, entries.nullDecodes, entries.equal = true, true, nilAsEmptyEqual[cql.Entry[int32, string]]
-	goMap := matrixOfType("map<int,text>/map", mustMatrixType(cql.MapType(intType, textType)), cql.GoMapCodec(cql.Int32Codec, cql.StringCodec), mustMatrixType(cql.ListType(intType)), map[int32]string{1: "a", 2: "b"})
+	goMap := matrixOfType("map<int,text>/map", mustMatrixType(cql.MapType(intType, textType)), cql.MapCodec(cql.Int32Codec, cql.StringCodec), mustMatrixType(cql.ListType(intType)), map[int32]string{1: "a", 2: "b"})
 	goMap.noEmptyCodec, goMap.nullDecodes = true, true
 	goMap.equal = func(a, b map[int32]string) bool { return len(a) == 0 && len(b) == 0 || reflect.DeepEqual(a, b) }
 	tupleType := mustMatrixType(cql.TupleType(intType, textType))

@@ -87,7 +87,7 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 	if !r.matches(p.typ) {
 		return r.fail(typeValidation("type", "compiled sequence metadata changed"))
 	}
-	if r.state == Null && p.typ.Kind() != KindVector {
+	if r.state == CellNull && p.typ.Kind() != KindVector {
 		p.Reset(dst)
 		return r.RequireEnd()
 	}
@@ -125,7 +125,7 @@ func (p streamSequencePlan[T]) DecodeInto(r *StreamValueReader, dst *[]T) error 
 				size, err = r.vectorLength()
 			}
 			if err == nil {
-				err = r.childBody(p.element, Present, size, p.validation, decode)
+				err = r.childBody(p.element, CellPresent, size, p.validation, decode)
 			}
 		} else {
 			err = r.child(p.element, p.validation, false, decode)
@@ -148,9 +148,9 @@ type streamMapPlan[K, V any] struct {
 	keyValidation, valueValidation *streamValidationPlan
 }
 
-// StreamMap decodes a map into seeded entry slots using key and value decoders.
+// StreamMapEntries decodes a map into seeded entry slots using key and value decoders.
 // NULL decodes as an empty slice while preserving capacity; StreamNullable preserves NULL.
-func StreamMap[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
+func StreamMapEntries[K, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[[]Entry[K, V]] {
 	return streamMapCodec[K, V]{key, value}
 }
 func (c streamMapCodec[K, V]) Compile(t DataType) (CompiledStreamValue[[]Entry[K, V]], error) {
@@ -194,7 +194,7 @@ func (p streamMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *[]Entry[K, V]
 	if !r.matches(p.typ) {
 		return r.fail(typeValidation("type", "compiled map metadata changed"))
 	}
-	if r.state == Null {
+	if r.state == CellNull {
 		p.Reset(dst)
 		return r.RequireEnd()
 	}

@@ -170,7 +170,7 @@ func reflectParams(t *testing.T, opts ...cql.StructOption) cql.ParamEncoder[Fixt
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cql.ConvertParams(params, func(v Fixture) reflectedFixture { return reflectedFixture(v) })
+	return cql.ConvertParams(params, func(v Fixture) (reflectedFixture, error) { return reflectedFixture(v), nil })
 }
 
 // reflectRows is Fixture's row mapping built by reflection.
@@ -180,7 +180,7 @@ func reflectRows(t *testing.T, opts ...cql.StructOption) cql.RowDecoder[Fixture]
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cql.ConvertRows(rows, func(v reflectedFixture) Fixture { return Fixture(v) },
+	return cql.ConvertRows(rows, func(v reflectedFixture) (Fixture, error) { return Fixture(v), nil },
 		func(v Fixture) Fixture { return Fixture(rows.Clone(reflectedFixture(v))) })
 }
 

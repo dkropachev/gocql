@@ -188,7 +188,7 @@ func TestTypes(t *testing.T) {
 									if !bytes.Equal(vc.Data, ownedBytesForTest(encoded.Bytes())) {
 										t.Fatalf("binary fixture: expected %x, got %x", vc.Data, ownedBytesForTest(encoded.Bytes()))
 									}
-									if (vc.Data == nil) != (encoded.State() == cql.Null) {
+									if (vc.Data == nil) != (encoded.State() == cql.CellNull) {
 										t.Fatalf("null/present distinction lost: %s", vc.Name)
 									}
 								}
@@ -208,9 +208,9 @@ func TestTypes(t *testing.T) {
 								if err != nil {
 									t.Fatal(err)
 								}
-								state := cql.Present
+								state := cql.CellPresent
 								if vc.Data == nil {
-									state = cql.Null
+									state = cql.CellNull
 								}
 								encoded, err := cql.NewEncodedValue(typ, state, vc.Data)
 								if err != nil {
@@ -269,7 +269,7 @@ func TestTypes(t *testing.T) {
 								if !bytes.Equal(vc.Data, ownedBytesForTest(raw.Bytes())) {
 									t.Fatalf("database binary fixture: expected %x, got %x", vc.Data, ownedBytesForTest(raw.Bytes()))
 								}
-								if (vc.Data == nil) != (raw.State() == cql.Null) {
+								if (vc.Data == nil) != (raw.State() == cql.CellNull) {
 									t.Fatal("database null/present distinction lost")
 								}
 							})

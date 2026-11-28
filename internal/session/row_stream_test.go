@@ -100,7 +100,7 @@ func (d *gatedDecoder) Reset(dst *[]byte) {
 	*dst = (*dst)[:0]
 }
 func (d *gatedDecoder) DecodeInto(r *cql.StreamRowReader, dst *[]byte) error {
-	plan, err := cql.StreamBlob.Compile(cql.BlobType)
+	plan, err := cql.StreamByteSlice.Compile(cql.BlobType)
 	if err != nil {
 		return err
 	}
@@ -125,7 +125,7 @@ type countStreamDecoder struct{ compiles atomic.Int32 }
 
 func (d *countStreamDecoder) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	d.compiles.Add(1)
-	return cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
+	return cql.StreamOneColumn(cql.StreamByteSlice).Compile(columns)
 }
 func errorExtensions(frame []byte) []byte {
 	extension := make([]byte, 16)

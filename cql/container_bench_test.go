@@ -20,9 +20,9 @@ func BenchmarkContainer(b *testing.B) {
 			b.Run(fmt.Sprintf("%s/%d", kind, n), func(b *testing.B) {
 				if kind == "map" {
 					typ := CodecTestMust(MapType(integer, integer))
-					encoded := CodecTestMust(encodeValueBorrowed(typ, MapEncoder(Int32Codec, Int32Codec), make([]Entry[int32, int32], n)))
-					dec := CodecTestMust(compileValueDecoder(MapDecoder(Int32Codec, Int32Codec), typ))
-					reader := valueReaderFromLease(typ, Present, bytesChain(encoded.body), nil)
+					encoded := CodecTestMust(encodeValueBorrowed(typ, MapEntriesEncoder(Int32Codec, Int32Codec), make([]Entry[int32, int32], n)))
+					dec := CodecTestMust(compileValueDecoder(MapEntriesDecoder(Int32Codec, Int32Codec), typ))
+					reader := valueReaderFromLease(typ, CellPresent, bytesChain(encoded.body), nil)
 					b.ReportAllocs()
 					b.SetBytes(reader.body.Len())
 					b.ResetTimer()
@@ -67,7 +67,7 @@ func BenchmarkContainer(b *testing.B) {
 							}
 							chain = CodecTestMust(wire.NewChain(spans...))
 						}
-						reader := valueReaderFromLease(typ, Present, chain, nil)
+						reader := valueReaderFromLease(typ, CellPresent, chain, nil)
 						b.ReportAllocs()
 						b.SetBytes(chain.Len())
 						b.ResetTimer()

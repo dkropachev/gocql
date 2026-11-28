@@ -46,7 +46,7 @@ func TestDetachRowBuiltinPlans(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	converted, err := cql.ConvertRows(cql.OneColumn(cql.TextViewCodec), func(v cql.Text) string { return fmt.Sprint(v) }, func(s string) string { return s }).Compile(one)
+	converted, err := cql.ConvertRows(cql.OneColumn(cql.TextViewCodec), func(v cql.Text) (string, error) { return fmt.Sprint(v), nil }, func(s string) string { return s }).Compile(one)
 	if err != nil {
 		t.Fatal(err)
 	}

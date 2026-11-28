@@ -18,11 +18,11 @@ import (
 func TestErrNull(t *testing.T) {
 	null := []byte{0xff, 0xff, 0xff, 0xff}
 	t.Run("Decoder", func(t *testing.T) {
-		_, err := DecodeValue(Int64Codec, CodecTestMust(newEncodedValue(BigIntType, Null, Bytes{})))
+		_, err := DecodeValue(Int64Codec, CodecTestMust(newEncodedValue(BigIntType, CellNull, Bytes{})))
 		if !errors.Is(err, ErrNull) || err.Error() != "gocql: nonnullable bigint cannot decode cell state null" {
 			t.Fatalf("got %v", err)
 		}
-		if _, err := DecodeValue(NullableDecoder(Int64Codec), CodecTestMust(newEncodedValue(BigIntType, Null, Bytes{}))); err != nil {
+		if _, err := DecodeValue(NullableDecoder(Int64Codec), CodecTestMust(newEncodedValue(BigIntType, CellNull, Bytes{}))); err != nil {
 			t.Fatal(err)
 		}
 	})
@@ -68,8 +68,12 @@ func TestCounterIsInt64(t *testing.T) {
 	if _, err := StreamInt64.Compile(CounterType); err != nil {
 		t.Fatal("StreamInt64 rejects counter:", err)
 	}
-	if _, err := EncodeValue(IntType, DynamicCodec, BigIntValue(1)); err == nil {
-		t.Fatal("BigIntValue bound an int")
+	// A bigint binds an int as Int64Codec does, checking the range.
+	if _, err := EncodeValue(IntType, DynamicCodec, BigIntValue(1)); err != nil {
+		t.Fatal("BigIntValue does not bind an int:", err)
+	}
+	if _, err := EncodeValue(IntType, DynamicCodec, BigIntValue(1<<40)); err == nil {
+		t.Fatal("an out-of-range BigIntValue bound an int")
 	}
 }
 
@@ -112,18 +116,18 @@ func TestScalarString(t *testing.T) {
 			t.Errorf("%#v: got %q, want %q", test.got, s, test.want)
 		}
 	}
-	t.Run("Released", func(t *testing.T) {
+	// A decoded Varint owns its bytes, so it outlives the response.
+	t.Run("Owned", func(t *testing.T) {
 		lease := wire.NewLease(CodecTestMust(wire.NewChain(wire.Borrow([]byte{1}))), nil)
-		v := varintView(bytesView(CodecTestMust(wire.NewChain(wire.Borrow([]byte{1}))), wire.RefOf(lease)))
+		v := CodecTestMust(varintFromCanonical(bytesView(CodecTestMust(wire.NewChain(wire.Borrow([]byte{1}))), wire.RefOf(lease))))
 		lease.Release()
-		if v.String() != "<released>" || (Decimal{Unscaled: v}).String() != "<released>" {
+		if v.String() != "1" || (Decimal{Unscaled: v}).String() != "1" {
 			t.Fatal(v.String())
 		}
 	})
 }
 
 func TestValueString(t *testing.T) {
-	mapping := CodecTestMust(MapType(TextType, IntType))
 	tuple := CodecTestMust(TupleType(IntType, TextType))
 	udt := CodecTestMust(UDTType("ks", "point", ColumnSpec{Name: "x", Type: IntType}, ColumnSpec{Name: "label", Type: TextType}))
 	uuid := CodecTestMust(ParseUUID("00112233-4455-6677-8899-aabbccddeeff"))
@@ -150,15 +154,15 @@ func TestValueString(t *testing.T) {
 		{DecimalValue(Decimal{Unscaled: VarintFromBigInt(big.NewInt(15)), Scale: 1}), "1.5"},
 		{CodecTestMust(ListValue(IntType, IntValue(1), IntValue(2))), "[1, 2]"},
 		{CodecTestMust(SetValue(TextType, TextValue("a"))), "{'a'}"},
-		{CodecTestMust(MapValue(mapping, []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}})), "{'k': 1}"},
-		{CodecTestMust(TupleValue(tuple, []Value{IntValue(1), NullValue()})), "(1, null)"},
-		{CodecTestMust(UDTValue(udt, []ValueField{{Name: "x", Value: IntValue(3)}, {Name: "label", Value: TextValue("p")}})), "{x: 3, label: 'p'}"},
+		{CodecTestMust(MapValue(TextType, IntType, ValueEntry{Key: TextValue("k"), Value: IntValue(1)})), "{'k': 1}"},
+		{CodecTestMust(TupleValue(tuple, IntValue(1), NullValue())), "(1, null)"},
+		{CodecTestMust(UDTValue(udt, ValueField{Name: "x", Value: IntValue(3)}, ValueField{Name: "label", Value: TextValue("p")})), "{x: 3, label: 'p'}"},
 		{CodecTestMust(VectorValue(FloatType, FloatValue(1), FloatValue(-2))), "[1, -2]"},
 	} {
 		if got := test.value.String(); got != test.want {
 			t.Errorf("got %q, want %q", got, test.want)
 		}
-		if test.value.State() != Present || test.value.Type().Kind() < KindList {
+		if test.value.State() != CellPresent || test.value.Type().Kind() < KindList {
 			continue
 		}
 		// A decoded aggregate prints as the one it was encoded from.
@@ -174,8 +178,8 @@ func TestValueMembers(t *testing.T) {
 	tuple := CodecTestMust(TupleType(IntType, TextType))
 	built := map[string]Value{
 		"list":  CodecTestMust(ListValue(IntType, IntValue(10), IntValue(20), IntValue(30))),
-		"udt":   CodecTestMust(UDTValue(udt, []ValueField{{Name: "label", Value: TextValue("p")}, {Name: "x", Value: IntValue(3)}})),
-		"tuple": CodecTestMust(TupleValue(tuple, []Value{IntValue(1), TextValue("a")})),
+		"udt":   CodecTestMust(UDTValue(udt, ValueField{Name: "label", Value: TextValue("p")}, ValueField{Name: "x", Value: IntValue(3)})),
+		"tuple": CodecTestMust(TupleValue(tuple, IntValue(1), TextValue("a"))),
 	}
 	for name, v := range built {
 		decoded := CodecTestMust(DecodeValue(DynamicCodec, CodecTestMust(EncodeValue(v.Type(), DynamicCodec, v))))
@@ -313,17 +317,17 @@ func TestValueTimeAccessors(t *testing.T) {
 func TestDecodeValueEmptyShape(t *testing.T) {
 	var seen ValueReader
 	calls := 0
-	empty := CodecTestMust(newEncodedValue(IntType, EmptyCell, Bytes{}))
+	empty := CodecTestMust(newEncodedValue(IntType, CellEmpty, Bytes{}))
 	if _, err := DecodeValue(Decoder[int32](capturedRowInt{Decoder: Int32Codec, seen: &seen, calls: &calls}), empty); err == nil {
 		t.Fatal("Int32Codec decoded an empty int")
 	}
-	if calls != 1 || seen.State() != Present || seen.Bytes().Len() != 0 {
+	if calls != 1 || seen.State() != CellPresent || seen.Bytes().Len() != 0 {
 		t.Fatalf("decoder saw %v with %d bytes", seen.State(), seen.Bytes().Len())
 	}
-	if v, err := DecodeValue(EmptyCodec(Int32Codec), empty); err != nil || !v.Empty {
+	if v, err := DecodeValue(MaybeEmptyCodec(Int32Codec), empty); err != nil || !v.Empty {
 		t.Fatal(v, err)
 	}
-	if v, err := DecodeValue(DynamicCodec, empty); err != nil || v.State() != EmptyCell {
+	if v, err := DecodeValue(DynamicCodec, empty); err != nil || v.State() != CellEmpty {
 		t.Fatal(v, err)
 	}
 }
@@ -378,7 +382,7 @@ func valueAt(v Value, index int) (Value, error) {
 // Elements, Entries and Fields range over members, ending with one error
 // for a value of another kind; Str copies text.
 func TestValueRanges(t *testing.T) {
-	m := CodecTestMust(MapValue(CodecTestMust(MapType(TextType, IntType)), []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}}))
+	m := CodecTestMust(MapValue(TextType, IntType, ValueEntry{Key: TextValue("k"), Value: IntValue(1)}))
 	encoded := CodecTestMust(EncodeValue(m.Type(), DynamicCodec, m))
 	decoded := CodecTestMust(DecodeValue(DynamicCodec, encoded))
 	n := 0

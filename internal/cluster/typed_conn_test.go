@@ -145,7 +145,7 @@ func TestTypedConn(t *testing.T) {
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 16)
 			done := make(chan error)
 			go func() { _, err := transport.InternalDecodeStreamRow(response, plan, &dst); done <- err }()
@@ -180,7 +180,7 @@ func TestTypedConn(t *testing.T) {
 				t.Fatal(err)
 			}
 			dst := make([]byte, 0, 150000)
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 			if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
 				t.Fatal(ok, err)
 			}
@@ -364,7 +364,7 @@ func TestTypedConn(t *testing.T) {
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 32)
 			if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || string(dst) != "first" {
 				t.Fatal(ok, err, string(dst))
@@ -404,7 +404,7 @@ func TestTypedConn(t *testing.T) {
 					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 						t.Fatal(err)
 					}
-					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 					dst := make([]byte, 0, len(payload))
 					backing := &dst[:cap(dst)][0]
 					ok, err := transport.InternalDecodeStreamRow(response, plan, &dst)
@@ -473,7 +473,7 @@ func TestTypedConn(t *testing.T) {
 					if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 						t.Fatal(err)
 					}
-					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 					dst := make([]byte, 0, len(payload))
 					if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil || !bytes.Equal(dst, payload) {
 						t.Fatal("TLS stream", ok, err)
@@ -514,7 +514,7 @@ func TestTypedConn(t *testing.T) {
 						t.Fatal(err)
 					}
 					dst := make([]byte, 0, 8)
-					plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+					plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 					if ok, err := transport.InternalDecodeStreamRow(response, plan, &dst); !ok || err != nil {
 						t.Fatal(ok, err)
 					}
@@ -642,7 +642,7 @@ func TestTypedConn(t *testing.T) {
 			if err = first.InternalInstallColumns(first.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(first.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(first.InternalColumns))
 			dst := make([]byte, 0, 16)
 			if ok, err := transport.InternalDecodeStreamRow(first, plan, &dst); !ok || err != nil {
 				t.Fatal(ok, err)
@@ -701,7 +701,7 @@ func TestTypedConn(t *testing.T) {
 			if err = response.InternalInstallColumns(response.InternalColumns); err != nil {
 				t.Fatal(err)
 			}
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 			dst := make([]byte, 0, 16)
 			done := make(chan error, 1)
 			go func() { _, err := transport.InternalDecodeStreamRow(response, plan, &dst); done <- err }()

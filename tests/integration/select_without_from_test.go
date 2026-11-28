@@ -41,7 +41,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if noFromColumn(t, row.Columns(), 0).Type.Kind() != cql.KindBlob {
 				t.Fatal("blob type expected")
 			}
-			blob, err := noFromValue(t, row, 0).Bytes()
+			blob, err := noFromValue(t, row, 0).BytesView()
 			if err != nil || !bytes.Equal(ownedBytesForTest(blob), []byte{0, 0, 0, 42}) {
 				t.Fatalf("blob=%v err=%v", blob, err)
 			}

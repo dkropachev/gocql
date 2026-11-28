@@ -17,6 +17,16 @@ func TimeUUIDFromUUID(u UUID) (TimeUUID, error) {
 	return TimeUUID(u), nil
 }
 
+// TimeUUIDFromBytes converts 16 bytes to a TimeUUID and checks that it has
+// version 1, as UUIDFromBytes and TimeUUIDFromUUID do.
+func TimeUUIDFromBytes(b []byte) (TimeUUID, error) {
+	u, err := UUIDFromBytes(b)
+	if err != nil {
+		return TimeUUID{}, err
+	}
+	return TimeUUIDFromUUID(u)
+}
+
 // ParseTimeUUID parses a UUID and checks that it has version 1.
 func ParseTimeUUID(input string) (TimeUUID, error) {
 	u, err := ParseUUID(input)

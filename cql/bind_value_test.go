@@ -9,15 +9,23 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// BindValue documents EmptyCell as rejected; EmptyCodec is the way to bind
-// an empty value.
-func TestBindValueRejectsEmptyCell(t *testing.T) {
+// The zero BindValue binds UNSET; MaybeEmptyCodec is the way to bind an empty
+// value.
+func TestBindValueZeroUnset(t *testing.T) {
 	encoder := cql.BindEncoder(cql.Encoder[int32](cql.Int32Codec))
-	if _, err := cql.EncodeValue(cql.IntType, encoder, cql.BindValue[int32]{State: cql.EmptyCell}); err == nil {
-		t.Fatal("EmptyCell bound")
+	if v, err := cql.EncodeValue(cql.IntType, encoder, cql.BindValue[int32]{}); err != nil || v.State() != cql.CellUnset {
+		t.Fatalf("zero BindValue encoded as %v, %v; want UNSET", v.State(), err)
 	}
-	empty, err := cql.EncodeValue(cql.IntType, cql.EmptyCodec(cql.Int32Codec), cql.MaybeEmpty[int32]{Empty: true})
-	if err != nil || empty.State() != cql.EmptyCell {
-		t.Fatalf("EmptyCodec: %v, %v", empty.State(), err)
+	type update struct {
+		ID   int32
+		Name cql.BindValue[string]
+	}
+	plan, err := cql.MustParamsOf[update]().Compile(cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}, cql.ColumnSpec{Name: "name", Type: cql.TextType}))
+	if err != nil || plan == nil {
+		t.Fatal(err)
+	}
+	empty, err := cql.EncodeValue(cql.IntType, cql.MaybeEmptyCodec(cql.Int32Codec), cql.MaybeEmpty[int32]{Empty: true})
+	if err != nil || empty.State() != cql.CellEmpty {
+		t.Fatalf("MaybeEmptyCodec: %v, %v", empty.State(), err)
 	}
 }

@@ -12,7 +12,7 @@ import (
 
 func TestGoMapCodec(t *testing.T) {
 	typ := CodecTestMust(MapType(TextType, BigIntType))
-	codec := GoMapCodec(StringCodec, Int64Codec)
+	codec := MapCodec(StringCodec, Int64Codec)
 	reader := func(v EncodedValue) ValueReader {
 		return newValueReader(v.Type(), v.State(), bytesChain(v.Bytes()), bytesLease(v.Bytes()))
 	}
@@ -24,7 +24,7 @@ func TestGoMapCodec(t *testing.T) {
 			t.Fatalf("got %v, want %v", got, want)
 		}
 		// The bytes are a CQL map, whichever entry order Go chose.
-		entries := CodecTestMust(DecodeValue(MapCodec(StringCodec, Int64Codec), encoded))
+		entries := CodecTestMust(DecodeValue(MapEntriesCodec(StringCodec, Int64Codec), encoded))
 		if len(entries) != len(want) {
 			t.Fatalf("entries %v", entries)
 		}
@@ -35,7 +35,7 @@ func TestGoMapCodec(t *testing.T) {
 		}
 	})
 	t.Run("DuplicateKey", func(t *testing.T) {
-		encoded := CodecTestMust(EncodeValue(typ, MapCodec(StringCodec, Int64Codec), []Entry[string, int64]{{"a", 1}, {"a", 2}}))
+		encoded := CodecTestMust(EncodeValue(typ, MapEntriesCodec(StringCodec, Int64Codec), []Entry[string, int64]{{"a", 1}, {"a", 2}}))
 		if _, err := DecodeValue(codec, encoded); err == nil || !strings.Contains(err.Error(), "repeats an earlier key") {
 			t.Fatalf("duplicate key: %v", err)
 		}
@@ -52,7 +52,7 @@ func TestGoMapCodec(t *testing.T) {
 		if !reflect.DeepEqual(dst, map[string]int64{"fresh": 1}) || reflect.ValueOf(dst).UnsafePointer() != before {
 			t.Fatalf("dst %v was not cleared and reused", dst)
 		}
-		null := CodecTestMust(newEncodedValue(typ, Null, Bytes{}))
+		null := CodecTestMust(newEncodedValue(typ, CellNull, Bytes{}))
 		if err := codec.(interface {
 			DecodeInto(ValueReader, *map[string]int64) error
 		}).DecodeInto(reader(null), &dst); err != nil || len(dst) != 0 || reflect.ValueOf(dst).UnsafePointer() != before {

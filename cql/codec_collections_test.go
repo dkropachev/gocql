@@ -12,7 +12,7 @@ import (
 
 func containerValue(t testing.TB, typ DataType, body []byte) EncodedValue {
 	t.Helper()
-	v, err := newEncodedValue(typ, Present, BorrowBytes(body))
+	v, err := newEncodedValue(typ, CellPresent, BorrowBytes(body))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -13,7 +13,7 @@ import (
 // do, instead of writing into storage the caller seeded: they never reuse a
 // buffer between rows, so a value they decode stays valid after the next
 // row. They suit fields an application keeps; the seeded decoders, such as
-// StreamText and StreamMap, suit a scan that copies or aggregates as it
+// StreamTextBytes and StreamMapEntries, suit a scan that copies or aggregates as it
 // goes.
 
 // StreamString decodes text and ascii into a newly allocated string,
@@ -24,7 +24,7 @@ type streamStringCodec struct{}
 type streamStringPlan struct{ bytes streamBytesPlan }
 
 func (streamStringCodec) Compile(t DataType) (CompiledStreamValue[string], error) {
-	p, err := StreamText.Compile(t)
+	p, err := StreamTextBytes.Compile(t)
 	if err != nil {
 		return nil, err
 	}
@@ -130,15 +130,15 @@ func (p streamTimeDurationPlan) DecodeInto(r *StreamValueReader, dst *time.Durat
 	return nil
 }
 
-// StreamDecimalValue decodes decimal into a Decimal whose unscaled integer
-// is newly allocated, as DecimalCodec decodes one and Clone detaches it.
-var StreamDecimalValue StreamDecoder[Decimal] = streamDecimalValueCodec{}
+// StreamDecimal decodes decimal into a Decimal whose unscaled integer
+// is newly allocated, as DecimalCodec decodes one.
+var StreamDecimal StreamDecoder[Decimal] = streamDecimalValueCodec{}
 
 type streamDecimalValueCodec struct{}
 type streamDecimalValuePlan struct{ parts streamDecimalPlan }
 
 func (streamDecimalValueCodec) Compile(t DataType) (CompiledStreamValue[Decimal], error) {
-	p, err := StreamDecimal.Compile(t)
+	p, err := StreamDecimalParts.Compile(t)
 	if err != nil {
 		return nil, err
 	}
@@ -215,7 +215,7 @@ func (p streamPointerPlan[T]) DecodeInto(r *StreamValueReader, dst **T) error {
 		return r.fail(typeValidation("type", "compiled pointer metadata changed"))
 	}
 	*dst = nil
-	if r.state == Null {
+	if r.state == CellNull {
 		return r.RequireEnd()
 	}
 	v := new(T)
@@ -227,13 +227,13 @@ func (p streamPointerPlan[T]) DecodeInto(r *StreamValueReader, dst **T) error {
 	return nil
 }
 
-// StreamGoMap decodes a map into a Go map, as GoMapCodec does: a newly
+// StreamMap decodes a map into a Go map, as MapCodec does: a newly
 // allocated one, or the destination's, cleared, when it has one. NULL, how
 // CQL stores an empty map, decodes as an empty map, and a response that
 // repeats a key fails. key and value decode into fresh, reset values, so
 // they must not need seeded capacity: use scalar or allocating decoders,
 // such as StreamString.
-func StreamGoMap[K comparable, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[map[K]V] {
+func StreamMap[K comparable, V any](key StreamDecoder[K], value StreamDecoder[V]) StreamDecoder[map[K]V] {
 	return streamGoMapCodec[K, V]{key: key, value: value}
 }
 
@@ -273,7 +273,7 @@ func (p streamGoMapPlan[K, V]) DecodeInto(r *StreamValueReader, dst *map[K]V) er
 		return r.fail(typeValidation("type", "compiled map metadata changed"))
 	}
 	clear(*dst)
-	if r.state == Null {
+	if r.state == CellNull {
 		return r.RequireEnd()
 	}
 	if err := r.present(); err != nil {

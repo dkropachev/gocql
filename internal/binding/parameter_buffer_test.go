@@ -46,7 +46,7 @@ func TestParameterBuffer(t *testing.T) {
 		t.Run("EmptyHasPresentWireState", func(t *testing.T) {
 			typ := cql.IntType
 			columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
-			plan, err := cql.OneParam(cql.EmptyCodec(cql.Int32Codec)).Compile(columns)
+			plan, err := cql.OneParam(cql.MaybeEmptyCodec(cql.Int32Codec)).Compile(columns)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -60,7 +60,7 @@ func TestParameterBuffer(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got.Cells[0].State != want.Cells[0].State || got.Cells[0].State != cql.Present {
+			if got.Cells[0].State != want.Cells[0].State || got.Cells[0].State != cql.CellPresent {
 				t.Fatal(got.Cells[0].State, want.Cells[0].State)
 			}
 		})
@@ -73,9 +73,15 @@ func TestParameterBuffer(t *testing.T) {
 				t.Fatal(err)
 			}
 			var storage ParameterBuffer
-			for _, state := range []cql.CellState{cql.Present, cql.Null, cql.Unset} {
+			for _, state := range []cql.CellState{cql.CellPresent, cql.CellNull, cql.CellUnset} {
 				for _, size := range []int{0, 1, 257, 128 << 10} {
-					input := cql.BindValue[[]byte]{State: state, Value: bytes.Repeat([]byte{41}, size)}
+					input := cql.Bind(bytes.Repeat([]byte{41}, size))
+					switch state {
+					case cql.CellNull:
+						input = cql.BindNull[[]byte]()
+					case cql.CellUnset:
+						input = cql.BindUnset[[]byte]()
+					}
 					got, err := storage.Encode(plan, columns, input, true)
 					if err != nil {
 						t.Fatal(err)
@@ -90,8 +96,8 @@ func TestParameterBuffer(t *testing.T) {
 					if !bytes.Equal(g, w) || got.Cells[0].State != want.Cells[0].State {
 						t.Fatal(state, size, "encoding differs")
 					}
-					if size > 0 {
-						input.Value[0] = 99
+					if value, _ := input.Get(); len(value) > 0 {
+						value[0] = 99
 					}
 					owned := make([]byte, got.Framed.Len())
 					_, _ = got.Framed.CopyTo(owned)

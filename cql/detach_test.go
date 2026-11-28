@@ -109,7 +109,7 @@ func TestDetachRow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blob, err := value.Bytes()
+		blob, err := value.BytesView()
 		if err != nil || string(blob.ownedBytes()) != "dynamic" {
 			t.Fatal(blob, err)
 		}
@@ -139,13 +139,13 @@ func TestDetachNestedValues(t *testing.T) {
 	params := Params(
 		Param("name", NullableEncoder(TextViewCodec), func(r row) Nullable[Text] { return r.Name }),
 		Param("amount", DecimalCodec, func(r row) Decimal { return r.Amount }),
-		Param("mapping", MapEncoder(TextViewCodec, BytesViewCodec), func(r row) []Entry[Text, Bytes] { return r.Mapping }),
+		Param("mapping", MapEntriesEncoder(TextViewCodec, BytesViewCodec), func(r row) []Entry[Text, Bytes] { return r.Mapping }),
 		Param("record", TupleEncoder(pairParams), func(r row) Pair[Text, Bytes] { return r.Record }),
 	)
 	decoder := Row(
 		Column("name", NullableCodec(TextViewCodec), func(r *row) *Nullable[Text] { return &r.Name }),
 		Column("amount", DecimalCodec, func(r *row) *Decimal { return &r.Amount }),
-		Column("mapping", MapCodec(TextViewCodec, BytesViewCodec), func(r *row) *[]Entry[Text, Bytes] { return &r.Mapping }),
+		Column("mapping", MapEntriesCodec(TextViewCodec, BytesViewCodec), func(r *row) *[]Entry[Text, Bytes] { return &r.Mapping }),
 		Column("record", TupleDecoder(pairRows), func(r *row) *Pair[Text, Bytes] { return &r.Record }),
 	)
 	body := encodeTestParams(t, columns, params, input)

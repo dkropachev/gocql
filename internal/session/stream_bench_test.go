@@ -67,7 +67,7 @@ func BenchmarkStream(b *testing.B) {
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
 						if mode == "stream" {
-							cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+							cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -147,7 +147,7 @@ func BenchmarkStream(b *testing.B) {
 					b.SetBytes(int64(shape.rows * shape.cell))
 					b.ResetTimer()
 					for i := 0; i < b.N; i++ {
-						cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+						cursor, err := RunStream(context.Background(), s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 						if err != nil {
 							b.Fatal(err)
 						}

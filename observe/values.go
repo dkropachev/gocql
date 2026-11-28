@@ -80,11 +80,11 @@ func (v BoundValues) Format(w io.Writer, redact func(cql.ColumnSpec) bool) error
 		switch {
 		case redact != nil && redact(column):
 			buf = append(buf, "<redacted>"...)
-		case reader.State() == cql.Null:
+		case reader.State() == cql.CellNull:
 			buf = append(buf, "null"...)
-		case reader.State() == cql.Unset:
+		case reader.State() == cql.CellUnset:
 			buf = append(buf, "unset"...)
-		case reader.State() == cql.EmptyCell:
+		case reader.State() == cql.CellEmpty:
 			buf = append(buf, "empty"...)
 		default:
 			value, err := cql.DynamicCodec.Decode(reader)

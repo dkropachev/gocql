@@ -307,7 +307,7 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		}
 	}
 	if w.capture != nil {
-		w.capture[w.index] = paramCell{Start: start + 4, End: w.builder.Len(), State: Present}
+		w.capture[w.index] = paramCell{Start: start + 4, End: w.builder.Len(), State: CellPresent}
 	}
 	w.index++
 	return nil

@@ -48,14 +48,14 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	defer a.mu.Unlock()
 	ctx := context.Background()
 	if a.lwt == nil {
-		p, err := a.s.Prepare(ctx, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, execopt.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[lwtArgs, cql.CASResult[int32]]{CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, execopt.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
 		a.lwt = p
 	}
 	if a.lwtRead == nil {
-		p, err := a.s.Prepare(ctx, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, execopt.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[int32, int32]{CQL: lwtRead, Params: keyParams, Rows: lwtValue}, execopt.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -197,7 +197,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, page.Err(), page.Close()))
 		}, nil
 	case "A7":
-		statement := cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: pointRead, Params: keyParams, Rows: bufferedDecoder, BindMarkers: keyColumns}
+		statement := cql.Statement[int32, row]{CQL: pointRead, Params: keyParams, Rows: bufferedDecoder, BindMarkers: keyColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			c.check.reset(false, k, 0)
@@ -256,7 +256,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return err
 		}, nil
 	case "D4":
-		statement := cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: pointWrite, Params: rowParams, BindMarkers: rowColumns}
+		statement := cql.Statement[row, cql.EmptyRow]{CQL: pointWrite, Params: rowParams, BindMarkers: rowColumns}
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
 			_, err := a.s.UnpreparedExec(ctx, statement, row{K: k, P: payload(false, k, 0)}, a.boundMetadata)
