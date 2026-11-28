@@ -26,7 +26,7 @@ func TestOptions(t *testing.T) {
 			attempts int32
 		}{
 			{"Inherit", nil, 2},
-			{"Never", retry.Never{}, 1},
+			{"Never", retry.NeverRetry{}, 1},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				s, _, peers := runtimeTestSession(t, 2)

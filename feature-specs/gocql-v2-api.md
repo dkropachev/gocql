@@ -521,8 +521,8 @@ func (b Bytes) At(int64) (byte, error)
 func (b Bytes) Slice(offset, length int64) (Bytes, error)
 func (b Bytes) WriteTo(io.Writer) (int64, error)
 func (b Bytes) CopyTo([]byte) (int, error)
-func (b Bytes) Clone() Bytes          // panics with cqlerr.ErrReleased on an expired view
-func (b Bytes) Copy() ([]byte, error) // checked form: returns cqlerr.ErrReleased
+func (b Bytes) Clone() Bytes          // panics with cql.ErrReleased on an expired view
+func (b Bytes) Copy() ([]byte, error) // checked form: returns cql.ErrReleased
 func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
 func (t Text) Format(fmt.State, rune) // prints the text, or <released>; no String method
@@ -1009,8 +1009,8 @@ current physical page before advancing; its owner has stable identity independen
 of pooled parsers.
 All views from that page remain valid until that lease closes. Clone detaches
 the row the last NextInto decoded, using RowDecoder.Clone. Copying a Go row struct does not detach it.
-Access through a released view reports cqlerr.ErrReleased where a method returns error;
-methods without error results panic with cqlerr.ErrReleased rather than reading
+Access through a released view reports cql.ErrReleased where a method returns error;
+methods without error results panic with cql.ErrReleased rather than reading
 recycled storage. Len/type metadata remain inspectable. Do not concurrently use
 a view while closing its last lease. Retained leases are independent of
 Session.Close.
@@ -1445,7 +1445,7 @@ type Options struct {
     HostID cql.Option[cql.UUID]
     ShardID cql.Option[uint32]                    // strict unless AnyShardFallback
     AnyShardFallback bool                         // requires ShardID: may use another shard of HostID
-    Retry retry.Policy                            // nil inherits; retry.Never{} disables
+    Retry retry.Policy                            // nil inherits; retry.NeverRetry{} disables
     Speculation retry.SpeculationPolicy           // nil inherits; retry.NoSpeculation{} disables
     Observer observe.Hooks                        // joined after the session's hooks
     NoSessionObserver bool                        // leave the session's observer out
@@ -1475,7 +1475,7 @@ func (*ProfileBuilder) Build() (Profile, error)
 // WithSpeculation, WithIdempotent; zero turns WithTimeout off, WithPrefetch(false) turns prefetch off, and
 // NoSerialConsistency clears the serial consistency. A nil WithRetry or
 // WithRouting, or a nil Retry or Routing field, is the default policy;
-// retry.Never{} disables retries.
+// retry.NeverRetry{} disables retries.
 
 // package cql
 type BatchKind byte
@@ -1637,7 +1637,7 @@ type AttemptStart struct {
 type SpeculationPolicy interface { Delay(Speculation) (time.Duration, bool) }
 type SpeculationPolicyFunc func(Speculation) (time.Duration, bool)
 type NoSpeculation struct{} // for execopt.Options.Speculation: disables it
-type FixedSpeculation struct { After time.Duration; Max int } // Max attempts, the first included
+type FixedSpeculation struct { After time.Duration; MaxAttempts int } // attempts, the first included; 0 = 2
 // A negative delay fails the execution with a cql.ValidationError.
 type Speculation struct {
     Context context.Context // the execution's; carries the caller's values and deadline
@@ -1700,6 +1700,8 @@ type Attempt struct {
     Target metadata.Target // the failed attempt's host and shard
     Elapsed time.Duration // since the page's first attempt started
 }
+// Transient Err, and NotExecuted or Idempotent and OrdinaryStatement.
+func (a Attempt) Retryable() bool
 type Decision struct { // an invalid decision fails with a ValidationError wrapping Err
     Action Action
     Consistency cql.Option[cql.Consistency]
@@ -1708,7 +1710,7 @@ type Decision struct { // an invalid decision fails with a ValidationError wrapp
 type Policy interface { Decide(Attempt) Decision }
 type PolicyFunc func(Attempt) Decision
 type Safe struct { MaxAttempts int }
-type Never struct{}                          // stops after the first failed attempt
+type NeverRetry struct{}                     // stops after the first failed attempt
 ```
 
 Built-in routing has a concrete configuration surface. The default profile selects a
@@ -2080,7 +2082,7 @@ separate `No*` twin; the one exception clears a setting zero cannot
 (`ProfileBuilder.NoSerialConsistency`). A nil provider or policy restores the
 driver's default in every setter (`WithReconnect(nil)`, `WithRetry(nil)`,
 `WithRouting(nil)`, `WithTLS(nil)`, `WithDialer(nil)`); "off" is an explicit
-value (`retry.Never{}`, a reconnect policy that declines). The exception is
+value (`retry.NeverRetry{}`, a reconnect policy that declines). The exception is
 `WithTimestampGenerator(nil)`, which sends no client timestamp. Settings not
 chosen keep the driver's behavior, and when a setting is chosen again the last
 call wins. Setters store the latest value without validation or call history.
@@ -2214,26 +2216,34 @@ reports an `ExecutionStatus` (`NotExecuted`, `MaybeExecuted`,
 numeric order is not the severity order). `NewExecutionError(err, status,
 attempts...)` builds one for tests; `ExecutionError.StatementKind` records
 the request's resolved statement kind. `AttemptAs[T](err)` finds an error of
-type `T` in `err`, then in the attempts, newest first. `ConditionalUnknown(err)`
-reports a conditional request that may have applied; `IsCASWriteUnknown(err)`
-is its server-reported case. The driver's own timeout ends a request
+type `T` in `err`, then in the attempts, newest first, and `AttemptIs(err,
+target)` is its `errors.Is` counterpart. `ConditionalUnknown(err)` reports a
+conditional request that may have applied, whatever ended it; a SERIAL read
+reports `OrdinaryStatement` and is not one. The driver's own timeout ends a request
 with `ErrRequestTimeout`, which matches `context.DeadlineExceeded` and is
 `KindTimeout`; the caller's own deadline, like its cancellation, is
 `KindCanceled`. `KindOf(err)`
 groups any error by `Kind` (`KindTimeout`, `KindUnavailable`, `KindOverloaded`,
 ...), and `Kind.Transient` reports whether trying again can help;
-`Retryable(err)` adds the execution status and the request's resolved
-idempotence (`ExecutionError.Idempotent`). Driver
+`Retryable(err)` adds the execution status, the request's resolved
+idempotence (`ExecutionError.Idempotent`) and `ConditionalUnknown`, for the
+error a call returns; a retry policy reads `retry.Attempt.Retryable()`.
+Schema agreement, explicit or after a schema change statement, fails with
+`SchemaAgreementError{Applied, Versions, Unreachable, Err}`: `Applied` for a
+schema change the server applied (the request is `PartiallyExecuted`), the
+last check's version per host and unreachable hosts, and the cause, which is
+`ErrRequestTimeout` when the agreement timeout ran out. Driver
 conditions are sentinels tested with `errors.Is`: among them `ErrBusy`,
-`ErrClosed`, `ErrReleased`, `ErrStaleRows`, `ErrNoKeyspace`,
+`ErrClosed`, `ErrStaleRows`, `ErrNoKeyspace`,
 `ErrNoTable`, `ErrNoCurrentRow`, `ErrRequestTimeout`, `ErrNoConnections`,
 `ErrConditionalExec`, `ErrPagingNoProgress`, `ErrPagingComplete` and
-`ErrPagingStateLimit`. Typed driver errors include `ValidationError`,
+`ErrPagingStateLimit`; a released borrowed view reports `cql.ErrReleased`,
+which package `cql` defines. Typed driver errors include `ValidationError`,
 `UnsupportedSettingError`, `CodecError` (column/index/nested path and stage),
 `ProtocolError` (offset/stage; one type for frame violations, which have stage
 "frame" and offset -1, and for data that does not decode),
 `SchemaChangedError`, `ServerMismatchError`, `ConnectError`, `HostError`,
-`PartialRefreshError`, `NoHostsError`, `StreamCapabilityError` and
+`PartialRefreshError`, `NoHostsError`, `SchemaAgreementError`, `StreamCapabilityError` and
 `StreamCapacityError`. `cqlerr` exports only sentinels the driver returns.
 
 Every server error implements the sealed `ServerError` (`Code() ErrorCode`,

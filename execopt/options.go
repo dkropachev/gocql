@@ -136,7 +136,7 @@ type Options struct { //nolint:govet // field order is the reading order of the 
 	// consistency, stays on ShardID regardless.
 	AnyShardFallback bool
 	// Retry replaces the profile's retry policy; nil keeps it. Use
-	// retry.Never{} to disable retries.
+	// retry.NeverRetry{} to disable retries.
 	Retry retry.Policy
 	// Speculation replaces the profile's speculation policy; nil keeps it.
 	// Use retry.NoSpeculation{} to disable speculation. Set it on a

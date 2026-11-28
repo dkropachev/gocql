@@ -168,8 +168,10 @@ type ExecutionError struct {
 	Idempotent bool
 	// StatementKind classifies the request's statement, or a batch's
 	// statements together, as retry.Attempt.StatementKind does:
-	// cql.ConditionalStatement when it is a lightweight transaction or a
-	// SERIAL read. ConditionalUnknown reads it.
+	// cql.ConditionalStatement when it is a lightweight transaction. A
+	// SERIAL or LOCAL_SERIAL read reports its own kind, OrdinaryStatement,
+	// though the driver routes it as a conditional statement.
+	// ConditionalUnknown reads it.
 	StatementKind cql.StatementKind
 	status        ExecutionStatus
 }
@@ -246,52 +248,18 @@ func (e *ExecutionError) Unwrap() error { return e.Err }
 // ExecutionStatus reports the most severe status among all attempts.
 func (e *ExecutionError) ExecutionStatus() ExecutionStatus { return e.status }
 
-// IsCASWriteUnknown reports whether err says that a conditional (LWT) write
-// timed out without knowing whether it applied. Cassandra reports this as
-// CAS_WRITE_UNKNOWN on protocol 5 and as a write timeout of write type CAS on
-// protocol 4; ScyllaDB reports the write timeout. ExecutionStatusOf reports
-// MaybeExecuted for all of them. For an ExecutionError it checks every
-// attempt, so a request the caller canceled after such a timeout is
-// reported too. Read the row back before retrying a write that is not
-// idempotent.
-//
-// It is the server-reported case only, and has false negatives: an LWT
-// whose attempt timed out in the driver (ErrRequestTimeout or
-// ErrTimeoutNoResponse), lost its connection, or was abandoned by the
-// caller's cancellation has an unknown outcome too, without the server
-// saying so. ConditionalUnknown covers them all.
-func IsCASWriteUnknown(err error) bool {
-	if casWriteUnknown(err) {
-		return true
-	}
-	if request, ok := errors.AsType[*ExecutionError](err); ok {
-		for _, a := range request.Attempts {
-			if casWriteUnknown(a.Err) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
 // ConditionalUnknown reports whether err is the failure of a conditional
 // request (ExecutionError.StatementKind is cql.ConditionalStatement) that may
 // have applied: its ExecutionStatus is not NotExecuted. The outcome of such
 // an LWT is unknown whatever the cause, a server's CAS timeout
-// (IsCASWriteUnknown), the driver's timeout, a lost connection or the
+// (CASWriteUnknownError on Cassandra's protocol 5, a WriteTimeoutError of
+// WriteTypeCAS otherwise), the driver's timeout, a lost connection or the
 // caller's cancellation; read the row back, with a SERIAL read, before
-// sending it again. An error that holds no ExecutionError reports false.
+// sending it again. A SERIAL or LOCAL_SERIAL read is OrdinaryStatement and
+// reports false. An error that holds no ExecutionError reports false. To
+// tell which of those causes ended the request, use AttemptAs: the server's
+// CAS timeout may be an earlier attempt's.
 func ConditionalUnknown(err error) bool {
 	request, ok := errors.AsType[*ExecutionError](err)
 	return ok && request.StatementKind == cql.ConditionalStatement && request.status != NotExecuted
-}
-
-// casWriteUnknown reports whether err wraps a conditional write's unknown
-// outcome.
-func casWriteUnknown(err error) bool {
-	if _, ok := errors.AsType[*CASWriteUnknownError](err); ok {
-		return true
-	}
-	timeout, ok := errors.AsType[*WriteTimeoutError](err)
-	return ok && timeout.WriteType == WriteTypeCAS
 }

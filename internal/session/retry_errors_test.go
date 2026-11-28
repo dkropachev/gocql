@@ -137,3 +137,40 @@ func TestRetryAttemptDescribesFailure(t *testing.T) {
 		})
 	}
 }
+
+// TestSerialReadReportsOrdinaryKind checks that a SERIAL or LOCAL_SERIAL
+// read, routed as a conditional statement, reports its own kind to the
+// retry policy and in its ExecutionError, so ConditionalUnknown does not
+// call a failed read an LWT that may have applied.
+func TestSerialReadReportsOrdinaryKind(t *testing.T) {
+	for _, consistency := range []cql.Consistency{cql.Serial, cql.LocalSerial} {
+		t.Run(consistency.String(), func(t *testing.T) {
+			var mu sync.Mutex
+			var seen []retry.Attempt
+			profile := settings.InternalDefaultProfile()
+			profile.Consistency = consistency
+			profile.Retry = retry.PolicyFunc(func(a retry.Attempt) retry.Decision {
+				mu.Lock()
+				seen = append(seen, a)
+				mu.Unlock()
+				return retry.Decision{}
+			})
+			err := runUnavailable(t, profile, 0)
+			if _, ok := errors.AsType[*cqlerr.UnavailableError](err); !ok {
+				t.Fatalf("err = %v", err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			if len(seen) != 1 || seen[0].StatementKind != cql.OrdinaryStatement {
+				t.Fatalf("attempts = %+v; want one of an ordinary statement", seen)
+			}
+			failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
+			if !ok || failure.StatementKind != cql.OrdinaryStatement {
+				t.Fatalf("err = %#v; want an ordinary statement", err)
+			}
+			if cqlerr.ConditionalUnknown(err) {
+				t.Fatal("ConditionalUnknown reports a SERIAL read")
+			}
+		})
+	}
+}

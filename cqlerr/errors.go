@@ -554,8 +554,10 @@ func (e *FunctionFailureError) Is(target error) bool { return target == CodeFunc
 func (e *FunctionFailureError) Kind() Kind { return KindServer }
 
 // CASWriteUnknownError reports that a conditional write timed out with an
-// unknown outcome. Cassandra sends it on protocol 5; see IsCASWriteUnknown
-// for the check that also covers protocol 4 and ScyllaDB.
+// unknown outcome. Cassandra sends it on protocol 5; on protocol 4, and on
+// ScyllaDB, the same outcome is a WriteTimeoutError of WriteTypeCAS.
+// ConditionalUnknown covers both, and every other way an LWT's outcome is
+// left unknown.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type CASWriteUnknownError struct {

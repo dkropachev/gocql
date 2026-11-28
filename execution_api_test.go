@@ -372,7 +372,7 @@ func TestPreparedWith(t *testing.T) {
 
 	// A view that speculates a statement that is not idempotent fails every
 	// call, and its Worker, before sending.
-	speculate := execopt.Options{Speculation: retry.FixedSpeculation{After: time.Hour, Max: 2}}
+	speculate := execopt.Options{Speculation: retry.FixedSpeculation{After: time.Hour, MaxAttempts: 2}}
 	futile := f.p.With(f.s.MustCompileOptions(speculate))
 	before = len(f.srv.sent())
 	if _, _, err := futile.One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) || len(f.srv.sent()) != before {

@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 func TestRetryable(t *testing.T) {
@@ -16,6 +18,12 @@ func TestRetryable(t *testing.T) {
 	failed := func(err error, status ExecutionStatus, idempotent bool) error {
 		e := NewExecutionError(err, status)
 		e.Idempotent = idempotent
+		return e
+	}
+	conditional := func(status ExecutionStatus) error {
+		e := NewExecutionError(writeTimeout, status)
+		e.Idempotent = true
+		e.StatementKind = cql.ConditionalStatement
 		return e
 	}
 	cases := []struct {
@@ -41,6 +49,8 @@ func TestRetryable(t *testing.T) {
 		{"caller cancel", failed(context.Canceled, NotExecuted, true), false},
 		{"canceled with timeout", errors.Join(context.Canceled, ErrRequestTimeout), false},
 		{"closed", ErrClosed, false},
+		{"conditional idempotent maybe applied", conditional(MaybeExecuted), false},
+		{"conditional idempotent not executed", conditional(NotExecuted), true},
 	}
 	for _, c := range cases {
 		if got := Retryable(c.err); got != c.want {

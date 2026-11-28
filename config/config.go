@@ -934,7 +934,7 @@ func (p *ProfileBuilder) WithPrefetch(on bool) *ProfileBuilder {
 }
 
 // WithRetry sets the retry policy. A nil policy restores the default;
-// retry.Never{} disables retries. Default retry.Safe{MaxAttempts: 3}.
+// retry.NeverRetry{} disables retries. Default retry.Safe{MaxAttempts: 3}.
 func (p *ProfileBuilder) WithRetry(policy retry.Policy) *ProfileBuilder {
 	if policy == nil {
 		policy = implSettings.InternalDefaultProfile().Retry

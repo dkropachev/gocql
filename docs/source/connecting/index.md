@@ -80,7 +80,7 @@ Zero optional timeouts disable their budget. A nil provider or policy restores
 the driver's default: `WithTLS(nil)` is plaintext, `WithReconnect(nil)` the
 default backoff, `ProfileBuilder.WithRetry(nil)` `retry.Safe{MaxAttempts: 3}`
 and `WithRouting(nil)` the default routing policy. Turning a policy off takes
-an explicit value: `retry.Never{}`, or a reconnect policy (`endpoint.ReconnectFunc` adapts a function) whose `Delay` returns
+an explicit value: `retry.NeverRetry{}`, or a reconnect policy (`endpoint.ReconnectFunc` adapts a function) whose `Delay` returns
 false. The one exception is `WithTimestampGenerator(nil)`, which sends no
 client timestamp so the server assigns one. `WithDefaultProfile(builder)`
 copies a `ProfileBuilder` and replaces the complete profile with it; the

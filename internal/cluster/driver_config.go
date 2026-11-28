@@ -881,14 +881,14 @@ func buildQueryRetryReport(cfg *InternalClusterSettings) queryRetryReport {
 	return queryRetryReport{Policy: InternalBuildRetryPolicyReport(policy)}
 }
 
-// InternalBuildRetryPolicyReport describes policy. No policy and retry.Never
+// InternalBuildRetryPolicyReport describes policy. No policy and retry.NeverRetry
 // both stop at the first failure, which the schema calls fallthrough.
 func InternalBuildRetryPolicyReport(policy retry.Policy) any {
 	if policy == nil {
 		return InternalRetryPolicyFallthroughReport{Type: "fallthrough"}
 	}
 	switch p := policy.(type) {
-	case retry.Never, *retry.Never:
+	case retry.NeverRetry, *retry.NeverRetry:
 		return InternalRetryPolicyFallthroughReport{Type: "fallthrough"}
 	case retry.Safe:
 		attempts := p.MaxAttempts

@@ -67,16 +67,16 @@ func TestConfigReadBack(t *testing.T) {
 		return ctx, func(observe.RequestEvent) {}
 	}}
 	cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithObserver(observer).
-		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.Never{})))
+		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.NeverRetry{})))
 	if cfg.Observer().Request == nil {
 		t.Fatal("Observer() = nil, want the configured observer")
 	}
 	p := cfg.DefaultProfile()
-	if p.Consistency != cql.Quorum || p.PageSize != 7 || p.Retry != (retry.Never{}) || p.Routing == nil {
+	if p.Consistency != cql.Quorum || p.PageSize != 7 || p.Retry != (retry.NeverRetry{}) || p.Routing == nil {
 		t.Fatalf("DefaultProfile() = %+v", p)
 	}
 	derived := p.Builder().WithConsistency(cql.One).MustBuild()
-	if derived.Consistency != cql.One || derived.PageSize != 7 || derived.Retry != (retry.Never{}) || p.Consistency != cql.Quorum {
+	if derived.Consistency != cql.One || derived.PageSize != 7 || derived.Retry != (retry.NeverRetry{}) || p.Consistency != cql.Quorum {
 		t.Fatalf("derived %+v from %+v", derived, p)
 	}
 	if again := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(derived.Builder())).DefaultProfile(); again.Consistency != cql.One || again.PageSize != 7 {
@@ -838,7 +838,7 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(declineReconnect{}).WithReconnect(nil).
 			WithConviction(endpoint.SimpleConvictionPolicy{}).WithConviction(nil).
 			WithDialer(secretDialer{}).WithDialer(nil).
-			WithDefaultProfile(NewProfile().WithRetry(retry.Never{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil))).settings
+			WithDefaultProfile(NewProfile().WithRetry(retry.NeverRetry{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil))).settings
 		if !implSettings.IsDefaultReconnect(c.Reconnect) || c.Conviction != nil || c.Dialer != nil {
 			t.Fatalf("nil did not restore the default: reconnect %T, conviction %T, dialer %T", c.Reconnect, c.Conviction, c.Dialer)
 		}
@@ -849,7 +849,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Fatal("WithRouting(nil) built a profile without a routing policy")
 		}
 		// A built profile copied with nil policies converts to the defaults.
-		edited := codecTestMust(NewProfile().WithRetry(retry.Never{}).Build())
+		edited := codecTestMust(NewProfile().WithRetry(retry.NeverRetry{}).Build())
 		edited.Retry, edited.Routing = nil, nil
 		if p := internalProfile(edited); p.Retry != (retry.Safe{MaxAttempts: 3}) || p.Routing == nil {
 			t.Fatalf("a nil Profile policy did not convert to the default: retry %v, routing %v", p.Retry, p.Routing)

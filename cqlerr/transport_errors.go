@@ -7,7 +7,7 @@ import "errors"
 
 var (
 	// ErrReadHeaderTimeout reports that a frame header did not arrive in time.
-	ErrReadHeaderTimeout = errors.New("gocql: unable to read frame header")
+	ErrReadHeaderTimeout = errors.New("gocql: timeout reading frame header")
 	// ErrFrameTooBig reports a frame longer than the configured maximum.
 	ErrFrameTooBig = errors.New("gocql: frame length is bigger than the maximum allowed")
 	// ErrScyllaSourcePortAlreadyInUse reports that the source port a

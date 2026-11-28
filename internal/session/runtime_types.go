@@ -220,6 +220,22 @@ type InternalExecutionRequest struct {
 	// idempotent is the statement's cql.Statement.Idempotent, or for a
 	// batch whether every member is; Options.Idempotent overrides it.
 	idempotent bool
+	// serialRead reports a SERIAL or LOCAL_SERIAL read: admission sets
+	// routing.Kind to ConditionalStatement for its routing and keeps the
+	// statement's own kind in ownKind for what the caller sees.
+	serialRead bool
+	ownKind    cql.StatementKind
+}
+
+// statementKind returns the kind of r's statement the caller sees, in
+// ExecutionError.StatementKind and retry.Attempt.StatementKind: its
+// routing kind, except for a SERIAL or LOCAL_SERIAL read, which is routed
+// as a conditional statement but reports its own kind.
+func (r *InternalExecutionRequest) statementKind() cql.StatementKind {
+	if r.serialRead {
+		return r.ownKind
+	}
+	return r.routing.Kind
 }
 
 // isIdempotent reports whether r may run more than once: its options'

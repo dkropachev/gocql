@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/scylladb/gocql/v2/cql"
 )
 
 // PartialRefreshError reports keyspaces whose previous valid schema was kept.
@@ -66,7 +68,15 @@ func (e *PartialRefreshError) Unwrap() []error {
 	return out
 }
 
-// NoHostsError distinguishes an empty eligible peer scope from agreement.
+// Kind returns KindConnection: the refresh did not complete, and refreshing
+// again can. A cause of a more specific kind, such as a server error or a
+// timeout, decides KindOf.
+func (e *PartialRefreshError) Kind() Kind { return KindConnection }
+
+// NoHostsError reports that an operation found no host to run on. Schema
+// agreement returns it, inside a SchemaAgreementError, when no host the
+// host filter accepts is known, so that an empty set of hosts is not
+// mistaken for hosts that agree.
 //
 // The driver returns it filled in; its zero value is an error without detail.
 type NoHostsError struct {
@@ -85,3 +95,56 @@ func (e *NoHostsError) Unwrap() []error { return append([]error(nil), e.Causes..
 // Kind returns KindConnection: no host could serve the operation. A cause
 // of a more specific kind, such as a server error, decides KindOf.
 func (e *NoHostsError) Kind() Kind { return KindConnection }
+
+// SchemaAgreementError reports that waiting for the nodes' schema versions
+// to agree, or the metadata refresh that follows a schema change, failed.
+// Session.AwaitSchemaAgreement returns it, and so does a schema change
+// statement whose automatic agreement or refresh failed after the server
+// applied it; that request's ExecutionStatus is PartiallyExecuted.
+//
+// The driver returns it filled in; its zero value is an error without detail.
+type SchemaAgreementError struct {
+	// Err is why it failed: ErrRequestTimeout when the agreement timeout
+	// ran out with the versions apart or hosts unreachable, the caller's
+	// context error, a NoHostsError, or the error of a check or of the
+	// refresh.
+	Err error
+	// Versions holds the schema version each host reported in the last
+	// check, by host ID. It is empty when the failure came before a check
+	// completed, or after agreement, in the refresh.
+	Versions map[cql.UUID]cql.UUID
+	// Unreachable holds the hosts, by ID, that the last check could not
+	// read: a host the host filter accepts that is down or has no open
+	// connection blocks agreement until the agreement timeout ends.
+	Unreachable []cql.UUID
+	// Applied reports that a schema change statement applied before the
+	// agreement or refresh failed, so it must not be sent again as if it
+	// had not.
+	Applied bool
+}
+
+// Error says what failed, how many versions and unreachable hosts the last
+// check saw, and why.
+func (e *SchemaAgreementError) Error() string {
+	var b strings.Builder
+	if e.Applied {
+		b.WriteString("gocql: schema change applied, but schema agreement or metadata refresh failed")
+	} else {
+		b.WriteString("gocql: schema agreement failed")
+	}
+	if len(e.Versions) > 0 || len(e.Unreachable) > 0 {
+		distinct := make(map[cql.UUID]struct{}, len(e.Versions))
+		for _, v := range e.Versions {
+			distinct[v] = struct{}{}
+		}
+		fmt.Fprintf(&b, " (%d schema versions, %d unreachable hosts)", len(distinct), len(e.Unreachable))
+	}
+	if e.Err != nil {
+		b.WriteString(": ")
+		b.WriteString(e.Err.Error())
+	}
+	return b.String()
+}
+
+// Unwrap returns Err; KindOf and ExecutionStatusOf classify it.
+func (e *SchemaAgreementError) Unwrap() error { return e.Err }

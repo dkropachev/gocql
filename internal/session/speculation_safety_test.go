@@ -70,7 +70,7 @@ func TestSpeculationSafety(t *testing.T) {
 			}
 			_, _ = peers[1].Write(typedTestResponse(t, 4, stream, runtimeRowsBody(nil, "row")))
 		}()
-		if err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)}); err != nil {
+		if err := run(&Options{Profile: profileFor(routes, retry.NeverRetry{}), Idempotent: cql.Some(true)}); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(5 * time.Second)
@@ -121,7 +121,7 @@ func TestSpeculationSafety(t *testing.T) {
 			_, _ = peers[1].Write(serverError(t, stream, cqlerr.CodeOverloaded, nil))
 			close(release)
 		}()
-		err := run(&Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)})
+		err := run(&Options{Profile: profileFor(routes, retry.NeverRetry{}), Idempotent: cql.Some(true)})
 		failure, ok := errors.AsType[*cqlerr.ExecutionError](err)
 		if !ok {
 			t.Fatalf("not an ExecutionError: %v", err)
@@ -160,7 +160,7 @@ func TestSpeculationSafety(t *testing.T) {
 		ctx, cancel := context.WithCancel(bounded)
 		defer cancel()
 		go func() { wg.Wait(); cancel() }()
-		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: profileFor(routes, retry.Never{}), Idempotent: cql.Some(true)}))
+		page, err := RunPage(ctx, s, bound, cql.StartPage(), 0, testOptions(Options{Profile: profileFor(routes, retry.NeverRetry{}), Idempotent: cql.Some(true)}))
 		if page != nil {
 			page.Close()
 		}

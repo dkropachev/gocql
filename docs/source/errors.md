@@ -11,8 +11,8 @@ safe:
 | Status | Meaning |
 | --- | --- |
 | `NotExecuted` | Nothing was applied: the request never left the driver, or the server rejected it first (Unavailable, Overloaded, Syntax, Invalid, Unauthorized, ...). Retrying cannot duplicate it. An unlogged or counter batch rejected as Unavailable or Overloaded is the exception: the server may have written some of its partitions, so its attempt reports `MaybeExecuted`. |
-| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.ConditionalUnknown(err)` identifies it, whatever ended it; `cqlerr.IsCASWriteUnknown(err)` is the case the server reports. See [server differences](server-differences.md). |
-| `PartiallyExecuted` | Some replicas applied a write without reaching the requested consistency, an unlogged or counter batch applied some of its statements, or a schema change succeeded but its follow-up failed. Treat it as executed for work that is not idempotent: read back what it changed before sending it again. A logged batch that failed after its batch log was written reports `MaybeExecuted` instead: the server replays the batch log until every statement is applied. |
+| `MaybeExecuted` | Unknown: a timeout, a lost connection, or a response that failed to decode. Retry only idempotent requests. An LWT whose outcome is unknown reports this on both Cassandra and ScyllaDB, and `cqlerr.ConditionalUnknown(err)` identifies it, whatever ended it. A SERIAL read is not an LWT and is not reported. See [server differences](server-differences.md). |
+| `PartiallyExecuted` | Some replicas applied a write without reaching the requested consistency, an unlogged or counter batch applied some of its statements, or a schema change succeeded but its follow-up failed (a `*cqlerr.SchemaAgreementError` whose `Applied` is set; see below). Treat it as executed for work that is not idempotent: read back what it changed before sending it again. A logged batch that failed after its batch log was written reports `MaybeExecuted` instead: the server replays the batch log until every statement is applied. |
 | `Executed` | The request succeeded: `ExecutionStatusOf(nil)` returns it. |
 
 A request that ran several attempts reports the most severe status of all of
@@ -48,11 +48,14 @@ rest.
 
 `cqlerr.Retryable(err)` puts the two questions together: the error is
 transient, which rules out the caller's own cancellation or deadline, and the
-request was not executed or is idempotent. The idempotence is the one the
-driver resolved for the request (`execopt.Options.Idempotent`, else the
+request was not executed, or is idempotent and not an LWT that may have
+applied (`ConditionalUnknown`). The idempotence is the one the driver
+resolved for the request (`execopt.Options.Idempotent`, else the
 statement's or the profile's), kept in `ExecutionError.Idempotent`, so the
-caller does not restate it. A retry loop needs nothing else, but note that
-the profile's retry policy has already retried each request:
+caller does not restate it. It reads the error a call returns; a retry
+policy's `retry.Attempt.Err` holds no `ExecutionError`, so a policy calls
+`Attempt.Retryable()` instead. A retry loop needs nothing else, but note
+that the profile's retry policy has already retried each request:
 
 <!-- snippet
 var insert *gocql.Prepared[int32, cql.EmptyRow]
@@ -116,16 +119,20 @@ stopped, the error `KindOf` classifies; read an earlier attempt's error from
 and then the attempts, newest first: a request that failed Unavailable and
 then ran out of its `Timeout` stops with `ErrRequestTimeout`, and
 `cqlerr.AttemptAs[*cqlerr.UnavailableError](err)` still finds the
-Unavailable. A retry decision the driver cannot carry out fails the request
+Unavailable. `cqlerr.AttemptIs(err, target)` is its `errors.Is` counterpart:
+`cqlerr.AttemptIs(err, cqlerr.CodeUnavailable)` holds too. A retry decision the driver cannot carry out fails the request
 with a `*cql.ValidationError` that wraps the attempt's error the same way.
 
 `failure.StatementKind` is the request's statement kind as the driver
-resolved it. `cqlerr.ConditionalUnknown(err)` reports a conditional request
-whose status is not `NotExecuted`: an LWT that may have applied, whatever
-ended it. `cqlerr.IsCASWriteUnknown` reports only the server's CAS timeout
-and misses the rest, such as the driver's timeout or a lost connection; it
-checks every attempt, so it still reports an LWT timeout that the caller's
-cancellation ended.
+resolved it; a SERIAL or LOCAL_SERIAL read is `OrdinaryStatement`, though
+the driver routes it as it routes an LWT. `cqlerr.ConditionalUnknown(err)`
+reports a conditional request whose status is not `NotExecuted`: an LWT
+that may have applied, whatever ended it, the server's CAS timeout, the
+driver's timeout, a lost connection or the caller's cancellation. To tell
+which, look for the server's report in every attempt with
+`cqlerr.AttemptAs[*cqlerr.CASWriteUnknownError](err)` (Cassandra, protocol
+5) or `cqlerr.AttemptAs[*cqlerr.WriteTimeoutError](err)` with `WriteType`
+`cqlerr.WriteTypeCAS` (protocol 4 and ScyllaDB).
 
 <!-- snippet
 var insert *gocql.Prepared[int32, cql.EmptyRow]
@@ -170,6 +177,21 @@ every mode; only literals written into the CQL text itself appear.
 its attempt count and latency. Its `Warnings` are the authoritative copy of
 the server's warnings: they gather every attempt's and page's, while
 `ServerError.Warnings()` holds only those sent with that one error response.
+
+## Schema agreement
+
+`Session.AwaitSchemaAgreement`, and a schema change statement that waits for
+agreement (the default; see `config.ConfigBuilder.WithSchemaChangeWait`),
+fail with a `*cqlerr.SchemaAgreementError`. `Versions` holds the schema
+version each host reported in the last check and `Unreachable` the hosts it
+could not read; `Err` is why: `cqlerr.ErrRequestTimeout` (`KindTimeout`)
+when the agreement timeout of `WithSchemaAgreement` ran out, the caller's
+context error, a `*cqlerr.NoHostsError`, or a check's or the metadata
+refresh's error. A host the host filter accepts counts while it is down, so
+one that does not come back holds agreement until the timeout. For a schema
+change statement `Applied` is set and the request reports
+`PartiallyExecuted`: the server applied the change, so do not send it again
+as if it had not.
 
 To test code that handles these errors, such as a `retry.Policy` or a
 fallback path, build one with `cqlerr.NewExecutionError(err, status,

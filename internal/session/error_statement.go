@@ -19,7 +19,7 @@ func (rt *InternalSessionRuntime) describeStatement(err error, request *Internal
 		return
 	}
 	if failure, ok := errors.AsType[*ExecutionError](err); ok {
-		failure.StatementKind = request.routing.Kind
+		failure.StatementKind = request.statementKind()
 		if request.options != nil {
 			// A request refused before its options were resolved keeps
 			// what the resolved request recorded, if anything.

@@ -5,7 +5,6 @@ package session
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -161,7 +160,7 @@ func (s *InternalSessionRuntime) executePageDirect(ctx context.Context, request 
 				}
 				log.fail(err, conn, attempt, consistency, trace, request.partialBatch())
 				log.raise(cqlerr.PartiallyExecuted)
-				return failure(fmt.Errorf("gocql: DDL succeeded; automatic agreement/refresh failed: %w", err))
+				return failure(schemaChangeFailure(err))
 			}
 		}
 		if log == nil {
