@@ -23,7 +23,7 @@ func staleTabletSnapshot(signal *atomic.Uint64) *MetadataSnapshot {
 		{HostID: cql.UUID{15: 2}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
 		{HostID: cql.UUID{15: 3}, Datacenter: "dc1", Enabled: true, Up: true, Connected: true},
 	}
-	span := metadata.TokenRange{Start: 0, End: 100, Replicas: []Target{
+	span := Span{Start: 0, End: 100, Replicas: []Target{
 		{HostID: cql.UUID{15: 1}, ShardID: cql.Some[uint32](2)},
 		{HostID: cql.UUID{15: 2}, ShardID: cql.Some[uint32](3)},
 	}}
@@ -36,7 +36,7 @@ func staleTabletSnapshot(signal *atomic.Uint64) *MetadataSnapshot {
 		InternalHosts:           hosts,
 		InternalHostIndex:       InternalBuildRoutingHostIndex(hosts),
 		InternalKeyspaces:       map[string]*metadata.Keyspace{"ks": {Name: "ks", TabletBased: true, Tables: map[string]*metadata.Table{"t": {Name: "t"}}}},
-		InternalTablets:         map[InternalMetadataTable][]metadata.TokenRange{k: nil},
+		InternalTablets:         map[InternalMetadataTable][]Span{k: nil},
 		InternalPlacements:      placements,
 		InternalPlacementEpoch:  signal.Load(),
 		InternalPlacementSignal: signal,
@@ -57,7 +57,7 @@ func TestStalePlacementPublicLookups(t *testing.T) {
 	check := func(when string) {
 		t.Helper()
 		replicas, err := m.Public().Replicas("ks", "t", 50)
-		if err != nil || len(replicas) != 2 || replicas[0].HostID != (cql.UUID{15: 1}) || replicas[0].ShardID != cql.Some[uint32](2) {
+		if err != nil || len(replicas) != 2 || replicas[0].Host.HostID != (cql.UUID{15: 1}) || replicas[0].ShardID != cql.Some[uint32](2) {
 			t.Fatalf("%s: Replicas = %v, %v", when, replicas, err)
 		}
 		if routes := routing.ReplicaRoutes(m.Public(), info); len(routes) != 2 || routes[1].ShardID() != cql.Some[uint32](3) {
@@ -111,19 +111,19 @@ func firstHost(plan QueryPlan) byte {
 func TestTokenRangesComplete(t *testing.T) {
 	for _, c := range []struct {
 		name    string
-		tablets []metadata.TokenRange
+		tablets []Span
 		want    bool
 	}{
 		{"none", nil, false},
-		{"one", []metadata.TokenRange{{Start: math.MinInt64, End: math.MaxInt64}}, true},
-		{"two", []metadata.TokenRange{{Start: math.MinInt64, End: 0}, {Start: 0, End: math.MaxInt64}}, true},
-		{"gap", []metadata.TokenRange{{Start: math.MinInt64, End: 0}, {Start: 10, End: math.MaxInt64}}, false},
-		{"head", []metadata.TokenRange{{Start: 0, End: math.MaxInt64}}, false},
-		{"tail", []metadata.TokenRange{{Start: math.MinInt64, End: 0}}, false},
+		{"one", []Span{{Start: math.MinInt64, End: math.MaxInt64}}, true},
+		{"two", []Span{{Start: math.MinInt64, End: 0}, {Start: 0, End: math.MaxInt64}}, true},
+		{"gap", []Span{{Start: math.MinInt64, End: 0}, {Start: 10, End: math.MaxInt64}}, false},
+		{"head", []Span{{Start: 0, End: math.MaxInt64}}, false},
+		{"tail", []Span{{Start: math.MinInt64, End: 0}}, false},
 	} {
 		m := NewMetadataSnapshot(SnapshotState{
 			InternalKeyspaces: map[string]*metadata.Keyspace{"ks": {Name: "ks", TabletBased: true, Tables: map[string]*metadata.Table{"t": {Name: "t"}}}},
-			InternalTablets:   map[InternalMetadataTable][]metadata.TokenRange{{InternalKeyspace: "ks", InternalTable: "t"}: c.tablets},
+			InternalTablets:   map[InternalMetadataTable][]Span{{InternalKeyspace: "ks", InternalTable: "t"}: c.tablets},
 		})
 		if _, complete, err := m.TokenRanges("ks", "t"); err != nil || complete != c.want {
 			t.Errorf("%s: complete %v, %v; want %v", c.name, complete, err, c.want)

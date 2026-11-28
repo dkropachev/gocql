@@ -20,8 +20,17 @@ func TestEmptySnapshot(t *testing.T) {
 		if _, ok := s.Keyspace("ks"); ok {
 			t.Errorf("%s: Keyspace found a keyspace", name)
 		}
-		if s.Keyspaces() != nil {
-			t.Errorf("%s: Keyspaces lists keyspaces", name)
+		if s.KeyspaceNames() != nil {
+			t.Errorf("%s: KeyspaceNames lists keyspaces", name)
+		}
+		if _, ok := s.Replication("ks"); ok {
+			t.Errorf("%s: Replication found a keyspace", name)
+		}
+		if _, ok := s.Index("ks", "ix"); ok {
+			t.Errorf("%s: Index found an index", name)
+		}
+		if _, ok := s.HostTokens(cql.UUID{1}); ok {
+			t.Errorf("%s: HostTokens found a host", name)
 		}
 		if _, ok := s.Table("ks", "t"); ok {
 			t.Errorf("%s: Table found a table", name)
@@ -47,19 +56,22 @@ func TestEmptySnapshot(t *testing.T) {
 	}
 }
 
-// TestSnapshotLookups checks Keyspaces, Table, View, Type and Host, and that
-// what they return is a copy.
+// TestSnapshotLookups checks KeyspaceNames, Table, View, Type, Index,
+// Replication and Host, and that what they return is a copy.
 func TestSnapshotLookups(t *testing.T) {
 	column := &metadata.Column{Name: "id", Kind: metadata.ColumnKindPartitionKey, Type: "int"}
 	table := &metadata.Table{Name: "t", Columns: map[string]*metadata.Column{"id": column}, PartitionKey: []*metadata.Column{column}}
-	hosts := []metadata.HostSnapshot{{HostID: cql.UUID{1}, Tokens: []int64{1}}, {HostID: cql.UUID{2}, Tokens: []int64{2}}}
+	hosts := []metadata.HostSnapshot{{HostID: cql.UUID{1}}, {HostID: cql.UUID{2}, Datacenter: "dc"}}
 	s, err := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts: hosts,
 		Keyspaces: map[string]*metadata.Keyspace{
 			"b": {
 				Name: "b", Tables: map[string]*metadata.Table{"t": table},
-				Views: map[string]*metadata.View{"v": {Name: "v", OrderedColumns: []*metadata.Column{{Name: "id"}}}},
-				Types: map[string]*metadata.Type{"u": {Name: "u", FieldNames: []string{"f"}, FieldTypes: []string{"int"}}},
+				Views:           map[string]*metadata.View{"v": {Name: "v", OrderedColumns: []*metadata.Column{{Name: "id"}}}},
+				Types:           map[string]*metadata.Type{"u": {Name: "u", FieldNames: []string{"f"}, FieldTypes: []string{"int"}}},
+				Indexes:         map[string]*metadata.Index{"ix": {Name: "ix", Table: "t", Target: "id", TargetKind: metadata.IndexTargetColumn, Options: map[string]string{"target": "id"}}},
+				StrategyClass:   "org.apache.cassandra.locator.NetworkTopologyStrategy",
+				StrategyOptions: map[string]string{"dc": "3"},
 			},
 			"a": {Name: "a"},
 		},
@@ -67,8 +79,27 @@ func TestSnapshotLookups(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := s.Keyspaces(); !slices.Equal(got, []string{"a", "b"}) {
-		t.Errorf("Keyspaces() = %v", got)
+	if got := s.KeyspaceNames(); !slices.Equal(got, []string{"a", "b"}) {
+		t.Errorf("KeyspaceNames() = %v", got)
+	}
+	r, ok := s.Replication("b")
+	if n, known := r.Factor("dc"); !ok || !known || n != 3 || r.Class == "" {
+		t.Fatalf("Replication(b) = %+v, %v; Factor(dc) = %d, %v", r, ok, n, known)
+	}
+	r.Options["dc"] = "1"
+	if again, _ := s.Replication("b"); again.Options["dc"] != "3" {
+		t.Error("Replication returned the snapshot's options, not a copy")
+	}
+	ix, ok := s.Index("b", "ix")
+	if !ok || ix.Table != "t" || ix.Target != "id" || ix.TargetKind != metadata.IndexTargetColumn {
+		t.Fatalf("Index(b, ix) = %+v, %v", ix, ok)
+	}
+	ix.Options["target"] = "changed"
+	if again, _ := s.Index("b", "ix"); again.Options["target"] != "id" {
+		t.Error("Index returned the snapshot's index, not a copy")
+	}
+	if _, ok := s.Index("a", "ix"); ok {
+		t.Error("Index found an index of another keyspace")
 	}
 	got, ok := s.Table("b", "t")
 	if !ok || got.Name != "t" || got.PartitionKey[0].Name != "id" {
@@ -112,12 +143,8 @@ func TestSnapshotLookups(t *testing.T) {
 		}
 	}
 	h, ok := s.Host(cql.UUID{2})
-	if !ok || h.HostID != (cql.UUID{2}) || !slices.Equal(h.Tokens, []int64{2}) {
+	if !ok || h != hosts[1] {
 		t.Fatalf("Host(2) = %+v, %v", h, ok)
-	}
-	h.Tokens[0] = 9
-	if again, _ := s.Host(cql.UUID{2}); again.Tokens[0] != 2 {
-		t.Error("Host returned the snapshot's tokens, not a copy")
 	}
 	if _, ok := s.Host(cql.UUID{3}); ok {
 		t.Error("Host found an unknown host")

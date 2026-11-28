@@ -44,11 +44,7 @@ func (m *MetadataSnapshot) Hosts() []HostSnapshot {
 	if m == nil {
 		return nil
 	}
-	out := append([]HostSnapshot(nil), SnapshotData(m).InternalHosts...)
-	for i := range out {
-		out[i].Tokens = append([]int64(nil), out[i].Tokens...)
-	}
-	return out
+	return append([]HostSnapshot(nil), SnapshotData(m).InternalHosts...)
 }
 func (m *MetadataSnapshot) Keyspace(name string) (*metadata.Keyspace, bool) {
 	if m == nil {
@@ -61,8 +57,32 @@ func (m *MetadataSnapshot) Keyspace(name string) (*metadata.Keyspace, bool) {
 	return implMetadata.InternalCloneV2Keyspace(ks), true
 }
 
-// Keyspaces returns the names of the keyspaces the snapshot holds, sorted.
-func (m *MetadataSnapshot) Keyspaces() []string {
+// Replication returns the replication of keyspace name, without its schema.
+func (m *MetadataSnapshot) Replication(name string) (metadata.Replication, bool) {
+	if m == nil {
+		return metadata.Replication{}, false
+	}
+	ks := SnapshotData(m).InternalKeyspaces[name]
+	if ks == nil {
+		return metadata.Replication{}, false
+	}
+	return metadata.Replication{Class: ks.StrategyClass, Options: maps.Clone(ks.StrategyOptions), TabletBased: ks.TabletBased}, true
+}
+
+// Index returns a copy of the secondary index keyspace.name.
+func (m *MetadataSnapshot) Index(keyspace, name string) (*metadata.Index, bool) {
+	if m == nil {
+		return nil, false
+	}
+	ks := SnapshotData(m).InternalKeyspaces[keyspace]
+	if ks == nil || ks.Indexes[name] == nil {
+		return nil, false
+	}
+	return implMetadata.InternalCloneV2Index(ks.Indexes[name]), true
+}
+
+// KeyspaceNames returns the names of the keyspaces the snapshot holds, sorted.
+func (m *MetadataSnapshot) KeyspaceNames() []string {
 	if m == nil {
 		return nil
 	}
@@ -109,8 +129,8 @@ func (m *MetadataSnapshot) Type(keyspace, name string) (*metadata.Type, bool) {
 	return implMetadata.InternalCloneV2Type(ks.Types[name]), true
 }
 
-// Tables returns the names of the tables of keyspace, sorted.
-func (m *MetadataSnapshot) Tables(keyspace string) []string {
+// TableNames returns the names of the tables of keyspace, sorted.
+func (m *MetadataSnapshot) TableNames(keyspace string) []string {
 	if m == nil {
 		return nil
 	}
@@ -127,20 +147,15 @@ func (m *MetadataSnapshot) Host(id cql.UUID) (HostSnapshot, bool) {
 	if i < 0 {
 		return HostSnapshot{}, false
 	}
-	h := SnapshotData(m).InternalHosts[i]
-	h.Tokens = append([]int64(nil), h.Tokens...)
-	return h, true
+	return SnapshotData(m).InternalHosts[i], true
 }
 
-// HostInfo returns a copy of the host with id without its tokens.
-func (m *MetadataSnapshot) HostInfo(id cql.UUID) (HostSnapshot, bool) {
-	i := m.hostPosition(id)
-	if i < 0 {
-		return HostSnapshot{}, false
+// HostTokens returns a copy of the tokens of the host with id.
+func (m *MetadataSnapshot) HostTokens(id cql.UUID) ([]int64, bool) {
+	if m.hostPosition(id) < 0 {
+		return nil, false
 	}
-	h := SnapshotData(m).InternalHosts[i]
-	h.Tokens = nil
-	return h, true
+	return slices.Clone(SnapshotData(m).InternalHostTokens[id]), true
 }
 
 // hostPosition returns the position of the host with id, or -1.
@@ -165,7 +180,7 @@ func (m *MetadataSnapshot) hostPosition(id cql.UUID) int {
 // replica's shard is the one owning token on its host when the host's
 // sharding is known. A token of a tablet table that no tablet the snapshot
 // holds covers is metadata.ErrPlacementUnknown.
-func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Target, error) {
+func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]metadata.Replica, error) {
 	if m == nil {
 		return nil, cqlerr.ErrNoKeyspace
 	}
@@ -176,18 +191,30 @@ func (m *MetadataSnapshot) Replicas(keyspace, table string, token int64) ([]Targ
 	if len(r) == 0 && tablet {
 		return nil, fmt.Errorf("%s.%s token %d: %w", keyspace, table, token, metadata.ErrPlacementUnknown)
 	}
-	out := append([]Target(nil), r...)
-	x := m.routingIndex()
-	hosts := SnapshotData(m).InternalHosts
+	out := m.replicas(r)
 	for i := range out {
-		if out[i].ShardID.Set {
-			continue
-		}
-		if j, ok := x.host(out[i].HostID); ok && j < len(hosts) && hosts[j].Shards > 0 {
-			out[i].ShardID = cql.Option[uint32]{Value: uint32(shardOf(token, hosts[j].Shards, hosts[j].ShardingIgnoreMSB)), Set: true}
+		if h := &out[i].Host; !out[i].ShardID.Set && h.Shards > 0 {
+			out[i].ShardID = cql.Option[uint32]{Value: uint32(shardOf(token, h.Shards, h.ShardingIgnoreMSB)), Set: true}
 		}
 	}
 	return out, nil
+}
+
+// replicas returns targets as replicas, each with its host as the snapshot
+// holds it, or only its HostID for a host the snapshot does not hold.
+func (m *MetadataSnapshot) replicas(targets []Target) []metadata.Replica {
+	if len(targets) == 0 {
+		return nil
+	}
+	out := make([]metadata.Replica, len(targets))
+	hosts := SnapshotData(m).InternalHosts
+	for i, t := range targets {
+		out[i] = metadata.Replica{Host: HostSnapshot{HostID: t.HostID}, ShardID: t.ShardID}
+		if j := m.hostPosition(t.HostID); j >= 0 {
+			out[i].Host = hosts[j]
+		}
+	}
+	return out
 }
 
 // Token returns the token of the partition whose partition-key columns hold
@@ -270,13 +297,13 @@ func (m *MetadataSnapshot) TokenRanges(keyspace, table string) ([]metadata.Token
 	if root, ok := snapshotTabletRoot(m, InternalMetadataTable{InternalKeyspace: keyspace, InternalTable: table}); ok {
 		tablet = true
 		for _, r := range root.All() {
-			out = append(out, r.InternalSpan)
+			out = append(out, metadata.TokenRange{Start: r.InternalSpan.Start, End: r.InternalSpan.End, Replicas: m.replicas(r.InternalSpan.Replicas)})
 		}
 	} else {
-		out = append([]metadata.TokenRange(nil), r...)
-	}
-	for i := range out {
-		out[i].Replicas = append([]Target(nil), out[i].Replicas...)
+		out = make([]metadata.TokenRange, len(r))
+		for i, span := range r {
+			out[i] = metadata.TokenRange{Start: span.Start, End: span.End, Replicas: m.replicas(span.Replicas)}
+		}
 	}
 	if !tablet {
 		return out, len(out) > 0, nil
@@ -296,7 +323,7 @@ func tabletsComplete(tablets []metadata.TokenRange) bool {
 	}
 	return len(tablets) > 0 && next == math.MaxInt64
 }
-func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
+func InternalMetadataSnapshotLookupRanges(m *MetadataSnapshot, keyspace, table string) ([]Span, bool, error) {
 	if m == nil {
 		return nil, false, cqlerr.ErrNoKeyspace
 	}
@@ -344,8 +371,10 @@ type SnapshotState struct {
 	InternalPlacementSignal *atomic.Uint64
 	InternalKeyspaces       map[string]*metadata.Keyspace
 	InternalSchemaSources   map[string]*metadata.Keyspace
-	InternalRanges          map[string][]metadata.TokenRange
-	InternalTablets         map[InternalMetadataTable][]metadata.TokenRange
+	InternalRanges          map[string][]Span
+	InternalTablets         map[InternalMetadataTable][]Span
+	// InternalHostTokens holds the vnode tokens of InternalHosts by HostID.
+	InternalHostTokens map[cql.UUID][]int64
 	// InternalPartitioners is the session's partitioner registry, by name,
 	// for Token. It is shared and never mutated.
 	InternalPartitioners   map[string]routing.TokenPartitioner
@@ -357,3 +386,12 @@ type SnapshotState struct {
 }
 
 type HostSnapshot = metadata.HostSnapshot
+
+// Span is a range of the token ring, (Start, End], with its replicas'
+// targets in placement order, as a snapshot stores its token ring and
+// tablets. MetadataSnapshot.TokenRanges and Replicas turn the targets into
+// metadata.Replica, with their hosts.
+type Span struct {
+	Replicas   []Target
+	Start, End int64
+}

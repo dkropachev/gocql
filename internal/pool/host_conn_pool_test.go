@@ -49,10 +49,9 @@ func TestHostConnPool(t *testing.T) {
 						if !errors.Is(err, cause) {
 							t.Fatal("failure replaced", err)
 						}
-						if snapshot.HostID != id || snapshot.Address.String() != "127.0.0.7:9042" || snapshot.Datacenter != "dc1" || snapshot.Rack != "r2" || !reflect.DeepEqual(snapshot.Tokens, []int64{-12, 64}) || !snapshot.Up || snapshot.Shards != 4 || !snapshot.Enabled || snapshot.Connected {
+						if snapshot.HostID != id || snapshot.Address.String() != "127.0.0.7:9042" || snapshot.Datacenter != "dc1" || snapshot.Rack != "r2" || !snapshot.Up || snapshot.Shards != 4 || !snapshot.Enabled || snapshot.Connected {
 							t.Fatalf("lost host context: %+v", snapshot)
 						}
-						snapshot.Tokens[0] = 999 // Detached callback storage cannot mutate HostInfo.
 						return convict
 					}}
 					p.InternalServices = InternalPoolServices{Config: &connectivity.Config{}, Conviction: policy, Down: func(down *endpoint.HostInfo) {
@@ -69,8 +68,8 @@ func TestHostConnPool(t *testing.T) {
 					if calls != 1 || downs != map[bool]int{false: 0, true: 1}[convict] {
 						t.Fatal("conviction decision changed", calls, downs)
 					}
-					fresh, err := endpoint.SnapshotHost(&host)
-					if err != nil || fresh.Tokens[0] != -12 {
+					fresh, tokens, err := endpoint.SnapshotHostTokens(&host)
+					if err != nil || !reflect.DeepEqual(tokens, []int64{-12, 64}) {
 						t.Fatal("callback mutated host storage", fresh, err)
 					}
 					var hook endpoint2.ConvictionPolicy = policy

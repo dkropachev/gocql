@@ -536,7 +536,7 @@ func TestRouting(t *testing.T) {
 						if target.HostID != info.HostID {
 							t.Fatalf("attempt/coordinator mismatch: %v, %v", target, info.HostID)
 						}
-						if !slices.Contains(replicas, target) || !target.ShardID.Set {
+						if !slices.ContainsFunc(replicas, func(r metadata.Replica) bool { return r.Target() == target }) || !target.ShardID.Set {
 							t.Fatalf("tablet execution target %v is not a shard-specific replica in %v", target, replicas)
 						}
 						success = true
@@ -560,7 +560,7 @@ func TestRouting(t *testing.T) {
 			}
 			for _, tokenRange := range ranges {
 				for _, token := range []int64{tokenRange.End, tokenRange.Start, math.MinInt64, math.MaxInt64} {
-					var expected []metadata.Target
+					var expected []metadata.Replica
 					for _, candidate := range ranges {
 						if token > candidate.Start && token <= candidate.End || candidate.Start >= candidate.End && (token > candidate.Start || token <= candidate.End) {
 							expected = candidate.Replicas
@@ -577,7 +577,7 @@ func TestRouting(t *testing.T) {
 				}
 			}
 			firstRange := ranges[0]
-			expectedReplicas := append([]metadata.Target(nil), firstRange.Replicas...)
+			expectedReplicas := append([]metadata.Replica(nil), firstRange.Replicas...)
 			ranges[0].Replicas[0].ShardID.Value++
 			actual, err := snapshot.Replicas(prepared.Info().Keyspace, table, firstRange.End)
 			if err != nil || !slices.Equal(actual, expectedReplicas) {
@@ -659,7 +659,7 @@ func TestRouting(t *testing.T) {
 					}
 					host := codecTestMust(tuple[0].UUID())
 					shard := codecTestMust(tuple[1].Int64())
-					r.Replicas = append(r.Replicas, metadata.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
+					r.Replicas = append(r.Replicas, metadata.Replica{Host: metadata.HostSnapshot{HostID: host}, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
 				}
 				authoritative = append(authoritative, r)
 			}
@@ -685,7 +685,7 @@ func TestRouting(t *testing.T) {
 				if !token.Set {
 					t.Fatal("prepared partition key did not produce token")
 				}
-				var expected []metadata.Target
+				var expected []metadata.Replica
 				for _, r := range authoritative {
 					if token.Value > r.Start && token.Value <= r.End {
 						expected = r.Replicas
@@ -744,7 +744,7 @@ func TestRouting(t *testing.T) {
 						t.Fatal(err)
 					}
 					stable := before.stable && after.stable && before.last == after.last && sameReplicaSet(before.replicas, after.replicas)
-					cacheMatches := len(after.replicas) == 2 && sameReplicaSet(replicas, after.replicas)
+					cacheMatches := len(after.replicas) == 2 && sameReplicaSet(replicaTargets(replicas), after.replicas)
 					coordinatorMatches := false
 					for _, replica := range after.replicas {
 						coordinatorMatches = coordinatorMatches || replica.HostID == result.HostID

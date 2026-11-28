@@ -183,10 +183,18 @@ func assertIndicesMetadata(t *testing.T, keyspaceName string, actual, expected m
 			if et.Name != at.Name {
 				t.Errorf("Expected %s.Indexes[%s].Name to be %v but was %v", keyspaceName, key, et.Name, at.Name)
 			}
-			assertPartitionKey(t, keyspaceName, viewName, at.PartitionKey, et.PartitionKey)
-			assertClusteringColumns(t, keyspaceName, viewName, at.ClusteringColumns, et.ClusteringColumns)
-			assertColumns(t, keyspaceName, viewName, at.Columns, et.Columns)
-			assertOrderedColumns(t, keyspaceName, viewName, at.OrderedColumns, et.OrderedColumns)
+			if (et.BackingView == nil) != (at.BackingView == nil) {
+				t.Errorf("Expected %s.Indexes[%s].BackingView to be %v but was %v", keyspaceName, key, et.BackingView, at.BackingView)
+				continue
+			}
+			if et.BackingView == nil {
+				continue
+			}
+			ev, av := et.BackingView, at.BackingView
+			assertPartitionKey(t, keyspaceName, viewName, av.PartitionKey, ev.PartitionKey)
+			assertClusteringColumns(t, keyspaceName, viewName, av.ClusteringColumns, ev.ClusteringColumns)
+			assertColumns(t, keyspaceName, viewName, av.Columns, ev.Columns)
+			assertOrderedColumns(t, keyspaceName, viewName, av.OrderedColumns, ev.OrderedColumns)
 		}
 	}
 }

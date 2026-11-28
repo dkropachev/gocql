@@ -158,14 +158,16 @@ func compileMetadata(
 	}
 	keyspace.Indexes = make(map[string]*metadata2.Index, len(indexes))
 	for i := range indexes {
-		indexes[i].Columns = make(map[string]*metadata2.Column)
+		indexes[i].Target, indexes[i].TargetKind = InternalParseIndexTarget(indexes[i].Options["target"])
 		keyspace.Indexes[indexes[i].Name] = &indexes[i]
 
 	}
 	keyspace.Views = make(map[string]*metadata2.View, len(views))
 	for i := range views {
 		v := &views[i]
-		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.Name, "_index")]; ok {
+		if ix := backedIndex(keyspace, v); ix != nil {
+			v.Columns = make(map[string]*metadata2.Column)
+			ix.BackingView = v
 			continue
 		}
 
@@ -181,9 +183,9 @@ func compileMetadata(
 
 			if indexName, found := strings.CutSuffix(col.Table, "_index"); found {
 				ix, ok := keyspace.Indexes[indexName]
-				if ok {
-					ix.Columns[col.Name] = col
-					ix.OrderedColumns = append(ix.OrderedColumns, col)
+				if ok && ix.BackingView != nil {
+					ix.BackingView.Columns[col.Name] = col
+					ix.BackingView.OrderedColumns = append(ix.BackingView.OrderedColumns, col)
 					continue
 				}
 			}
@@ -210,10 +212,6 @@ func compileMetadata(
 	for i := range views {
 		v := &views[i]
 		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = compileColumns(v.Columns, v.OrderedColumns)
-	}
-	for i := range indexes {
-		ix := &indexes[i]
-		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = compileColumns(ix.Columns, ix.OrderedColumns)
 	}
 
 	KeyspaceData(keyspace).ServerCQL = string(createStmts)
@@ -245,7 +243,7 @@ func InternalCompileTableMetadata(
 		}
 	}
 	for i := range indexes {
-		indexes[i].Columns = make(map[string]*metadata2.Column)
+		indexes[i].Target, indexes[i].TargetKind = InternalParseIndexTarget(indexes[i].Options["target"])
 		keyspace.Indexes[indexes[i].Name] = &indexes[i]
 	}
 
@@ -261,7 +259,9 @@ func InternalCompileTableMetadata(
 	}
 	for i := range views {
 		v := &views[i]
-		if _, ok := keyspace.Indexes[strings.TrimSuffix(v.Name, "_index")]; ok {
+		if ix := backedIndex(keyspace, v); ix != nil {
+			v.Columns = make(map[string]*metadata2.Column)
+			ix.BackingView = v
 			continue
 		}
 		v.Columns = make(map[string]*metadata2.Column)
@@ -275,9 +275,9 @@ func InternalCompileTableMetadata(
 		if !ok {
 			if indexName, found := strings.CutSuffix(col.Table, "_index"); found {
 				ix, ok := keyspace.Indexes[indexName]
-				if ok {
-					ix.Columns[col.Name] = col
-					ix.OrderedColumns = append(ix.OrderedColumns, col)
+				if ok && ix.BackingView != nil {
+					ix.BackingView.Columns[col.Name] = col
+					ix.BackingView.OrderedColumns = append(ix.BackingView.OrderedColumns, col)
 					continue
 				}
 			}
@@ -303,10 +303,6 @@ func InternalCompileTableMetadata(
 	for i := range views {
 		v := &views[i]
 		v.PartitionKey, v.ClusteringColumns, v.OrderedColumns = compileColumns(v.Columns, v.OrderedColumns)
-	}
-	for i := range indexes {
-		ix := &indexes[i]
-		ix.PartitionKey, ix.ClusteringColumns, ix.OrderedColumns = compileColumns(ix.Columns, ix.OrderedColumns)
 	}
 }
 
@@ -348,3 +344,16 @@ func componentColumnCountOfType(columns map[string]*metadata2.Column, kind metad
 }
 
 const InternalColumnMetadataColumns = `table_name, column_name, clustering_order, type, kind, position`
+
+// backedIndex returns the index of keyspace that v backs, a ScyllaDB view
+// named after the index with an "_index" suffix, or nil.
+func backedIndex(keyspace *metadata2.Keyspace, v *metadata2.View) *metadata2.Index {
+	name, found := strings.CutSuffix(v.Name, "_index")
+	if !found {
+		return nil
+	}
+	if ix := keyspace.Indexes[name]; ix != nil && ix.Table == v.BaseTable {
+		return ix
+	}
+	return nil
+}

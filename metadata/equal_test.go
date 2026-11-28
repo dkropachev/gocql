@@ -32,11 +32,10 @@ func populatedView() *metadata.View {
 }
 
 func populatedIndex() *metadata.Index {
-	t := populatedTableMetadata()
 	return &metadata.Index{
 		Name: "ix", Keyspace: "ks", Table: "tbl", Kind: metadata.IndexKindComposites,
-		Options: map[string]string{"target": "ck"}, Columns: t.Columns, OrderedColumns: t.OrderedColumns,
-		PartitionKey: t.PartitionKey, ClusteringColumns: t.ClusteringColumns,
+		Options: map[string]string{"target": "ck"}, Target: "ck", TargetKind: metadata.IndexTargetColumn,
+		BackingView: populatedView(),
 	}
 }
 

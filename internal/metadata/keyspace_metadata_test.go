@@ -261,33 +261,34 @@ func TestKeyspaceMetadata(t *testing.T) {
 				},
 				Indexes: map[string]*metadata.Index{
 					"buckets_by_owner": {
-						Name:  "buckets_by_owner",
-						Table: "buckets_by_owner_index",
-						PartitionKey: []*metadata.Column{
-							{Name: "owner", Type: "text"},
-						},
-						ClusteringColumns: []*metadata.Column{
-							{Name: "idx_token", Type: "bigint", ClusteringOrder: metadata.ColumnOrderAsc},
-							{Name: "name", Type: "text", ClusteringOrder: metadata.ColumnOrderAsc},
-						},
-						OrderedColumns: []*metadata.Column{{Name: "owner"}, {Name: "idx_token"}, {Name: "name"}},
-						Columns: map[string]*metadata.Column{
-							"owner": {
-								Name: "owner",
-								Type: "text",
-								Kind: metadata.ColumnKindPartitionKey,
+						Name: "buckets_by_owner",
+						BackingView: &metadata.View{
+							PartitionKey: []*metadata.Column{
+								{Name: "owner", Type: "text"},
 							},
-							"idx_token": {
-								Name:            "idx_token",
-								Type:            "bigint",
-								ClusteringOrder: metadata.ColumnOrderAsc,
-								Kind:            metadata.ColumnKindClusteringKey,
+							ClusteringColumns: []*metadata.Column{
+								{Name: "idx_token", Type: "bigint", ClusteringOrder: metadata.ColumnOrderAsc},
+								{Name: "name", Type: "text", ClusteringOrder: metadata.ColumnOrderAsc},
 							},
-							"name": {
-								Name:            "name",
-								Type:            "text",
-								ClusteringOrder: metadata.ColumnOrderAsc,
-								Kind:            metadata.ColumnKindClusteringKey,
+							OrderedColumns: []*metadata.Column{{Name: "owner"}, {Name: "idx_token"}, {Name: "name"}},
+							Columns: map[string]*metadata.Column{
+								"owner": {
+									Name: "owner",
+									Type: "text",
+									Kind: metadata.ColumnKindPartitionKey,
+								},
+								"idx_token": {
+									Name:            "idx_token",
+									Type:            "bigint",
+									ClusteringOrder: metadata.ColumnOrderAsc,
+									Kind:            metadata.ColumnKindClusteringKey,
+								},
+								"name": {
+									Name:            "name",
+									Type:            "text",
+									ClusteringOrder: metadata.ColumnOrderAsc,
+									Kind:            metadata.ColumnKindClusteringKey,
+								},
 							},
 						},
 					},

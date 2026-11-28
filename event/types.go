@@ -6,6 +6,8 @@ package event
 import (
 	"fmt"
 	"net/netip"
+	"strconv"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/cql"
 )
@@ -21,9 +23,15 @@ const (
 	// KindTopology reports a node joining or leaving the cluster.
 	KindTopology
 	// KindStatus reports a node going up or down, as the server reports it.
-	// The session's own view of whether it can reach a host is KindPool.
-	// The session debounces status events: of several changes of one node
-	// that arrive together, it applies, and delivers, only the latest.
+	// The session acts on it, unless config.WithIgnoreEvents takes status
+	// events: on DOWN it marks the host down and drops its pool, which it
+	// reports first, as a KindPool event with ChangePoolDown; on UP it
+	// reconnects the pool, and reports ChangePoolUp once a connection opens.
+	// The session also marks a host down, or up, on its own, from its
+	// connections, with no Status event: KindPool is how to watch whether
+	// the session can reach a host. The session debounces status events: of
+	// several changes of one node that arrive together, it applies, and
+	// delivers, only the latest.
 	KindStatus
 	// KindSchema reports a keyspace, table, view, type, function or aggregate
 	// change.
@@ -34,11 +42,11 @@ const (
 	// KindClientRoute reports a change of the cluster's client routes.
 	KindClientRoute
 	// KindPool reports the session's connection pool to a host connecting
-	// (ChangePoolUp) or the session marking the host down (ChangePoolDown).
-	// It is how to watch whether the session can reach a host: a Status
-	// event is only the server's report, which the session may not act on.
-	// The driver raises it, not the server, so config.WithIgnoreEvents does
-	// not take it.
+	// (ChangePoolUp) or the session marking the host down (ChangePoolDown),
+	// whether a Status event or the host's own connections made it do so.
+	// It is how to watch whether the session can reach a host. The driver
+	// raises it, not the server, so config.WithIgnoreEvents does not take
+	// it.
 	KindPool
 	// KindOverflow reports that events were lost: the subscription's queue
 	// overflowed, the session dropped events it could not process in time,
@@ -191,6 +199,56 @@ type Event struct {
 	// retries the refresh in the background and, once it publishes the
 	// schema, delivers an Overflow event with ChangePublicationResync.
 	Incomplete bool
+}
+
+// String describes the event on one line: its kind and change, then what
+// it concerns, its generation and whether it is Incomplete, such as
+// "schema UPDATED TABLE app.events gen=42" or
+// "pool POOL_DOWN 10.0.0.1:9042 host=7a1d... gen=7".
+func (e Event) String() string {
+	var b strings.Builder
+	b.WriteString(e.Kind.String())
+	add := func(s string) {
+		b.WriteByte(' ')
+		b.WriteString(s)
+	}
+	if e.Change != "" {
+		add(string(e.Change))
+	}
+	if e.ObjectKind != "" {
+		add(string(e.ObjectKind))
+	}
+	if e.Keyspace != "" {
+		name := e.Keyspace
+		if e.Object != "" {
+			name += "." + e.Object
+		}
+		if e.ObjectKind == ObjectFunction || e.ObjectKind == ObjectAggregate || e.ArgumentTypes != nil {
+			name += "(" + strings.Join(e.ArgumentTypes, ",") + ")"
+		}
+		add(name)
+	}
+	if e.Address.IsValid() {
+		add(e.Address.String())
+	}
+	if e.HostID != (cql.UUID{}) {
+		add("host=" + e.HostID.String())
+	}
+	if len(e.HostIDs) > 0 {
+		ids := make([]string, len(e.HostIDs))
+		for i, id := range e.HostIDs {
+			ids[i] = id.String()
+		}
+		add("hosts=" + strings.Join(ids, ","))
+	}
+	if len(e.ConnectionIDs) > 0 {
+		add("connections=" + strings.Join(e.ConnectionIDs, ","))
+	}
+	add("gen=" + strconv.FormatUint(e.Generation, 10))
+	if e.Incomplete {
+		add("incomplete")
+	}
+	return b.String()
 }
 
 // Filter selects the kinds of events a Subscription receives and its queue

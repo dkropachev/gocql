@@ -170,7 +170,7 @@ func comparePlacementName(a, b string) int {
 var tabletObservationID atomic.Uint64
 
 type InternalTabletRange struct {
-	InternalSpan    metadata.TokenRange
+	InternalSpan    Span
 	InternalVersion cql.Option[uint64]
 	observation     uint64
 }
@@ -237,7 +237,7 @@ func InternalUpdateTabletRange(root *InternalTabletRangeTree, h tablets.TabletIn
 		root = root.Delete(n.key)
 		n = InternalTabletRangeAfter(root, first)
 	}
-	r := &InternalTabletRange{observation: tabletObservationID.Add(1), InternalSpan: metadata.TokenRange{Start: first, End: last, Replicas: make([]Target, len(h.ReplicasUnsafe()))}}
+	r := &InternalTabletRange{observation: tabletObservationID.Add(1), InternalSpan: Span{Start: first, End: last, Replicas: make([]Target, len(h.ReplicasUnsafe()))}}
 	for i, replica := range h.ReplicasUnsafe() {
 		r.InternalSpan.Replicas[i] = Target{HostID: cql.UUID(replica.HostUUIDValue()), ShardID: cql.Option[uint32]{Value: uint32(replica.ShardID()), Set: true}}
 	}
@@ -375,7 +375,7 @@ type placementCacheEntry struct {
 	// placement, as InternalMetadataSnapshotLookupRanges finds them, or nil
 	// when the snapshot has no ranges for it; tablet reports that they are
 	// the table's tablets.
-	ranges []metadata.TokenRange
+	ranges []Span
 	// snapshot is the id of the snapshot the entry was found in.
 	snapshot uint64
 	tablet   bool
@@ -424,7 +424,7 @@ func newPlacementCacheEntry(m *MetadataSnapshot, keyspace, table string) *placem
 // snapshot does not hold, under metadata.ModeKeyspaces or before a schema
 // refresh, still routes by the keyspace's ring. A tablet keyspace's tables
 // need their own placement.
-func routingRanges(m *MetadataSnapshot, keyspace, table string) ([]metadata.TokenRange, bool, error) {
+func routingRanges(m *MetadataSnapshot, keyspace, table string) ([]Span, bool, error) {
 	ranges, tablet, err := InternalMetadataSnapshotLookupRanges(m, keyspace, table)
 	if err == nil || !errors.Is(err, cqlerr.ErrNoTable) {
 		return ranges, tablet, err
@@ -496,7 +496,7 @@ func (m *MetadataSnapshot) lookupReplicas(l *InternalTabletLookup, keyspace, tab
 	}
 	return m.legacyPlacementReplicas(ranges, tablet, token), nil
 }
-func (m *MetadataSnapshot) legacyPlacementReplicas(ranges []metadata.TokenRange, tablet bool, token int64) []Target {
+func (m *MetadataSnapshot) legacyPlacementReplicas(ranges []Span, tablet bool, token int64) []Target {
 	lo, hi := 0, len(ranges)
 	for lo < hi {
 		mid := (lo + hi) / 2
@@ -538,7 +538,7 @@ type InternalTabletFeedbackStamp struct {
 }
 
 func InternalClonePlacementSnapshot(m *MetadataSnapshot) *MetadataSnapshot {
-	return NewMetadataSnapshot(SnapshotState{InternalGeneration: SnapshotData(m).InternalGeneration + 1, InternalHosts: SnapshotData(m).InternalHosts, InternalHostIndex: SnapshotData(m).InternalHostIndex, InternalKeyspaces: SnapshotData(m).InternalKeyspaces, InternalSchemaSources: SnapshotData(m).InternalSchemaSources, InternalRanges: SnapshotData(m).InternalRanges, InternalTablets: SnapshotData(m).InternalTablets, InternalPartitioner: SnapshotData(m).InternalPartitioner, InternalPartitioners: SnapshotData(m).InternalPartitioners, InternalDiagnostics: SnapshotData(m).InternalDiagnostics, InternalPlacements: SnapshotData(m).InternalPlacements, InternalPlacementEpoch: SnapshotData(m).InternalPlacementEpoch, InternalPlacementSignal: SnapshotData(m).InternalPlacementSignal})
+	return NewMetadataSnapshot(SnapshotState{InternalGeneration: SnapshotData(m).InternalGeneration + 1, InternalHosts: SnapshotData(m).InternalHosts, InternalHostTokens: SnapshotData(m).InternalHostTokens, InternalHostIndex: SnapshotData(m).InternalHostIndex, InternalKeyspaces: SnapshotData(m).InternalKeyspaces, InternalSchemaSources: SnapshotData(m).InternalSchemaSources, InternalRanges: SnapshotData(m).InternalRanges, InternalTablets: SnapshotData(m).InternalTablets, InternalPartitioner: SnapshotData(m).InternalPartitioner, InternalPartitioners: SnapshotData(m).InternalPartitioners, InternalDiagnostics: SnapshotData(m).InternalDiagnostics, InternalPlacements: SnapshotData(m).InternalPlacements, InternalPlacementEpoch: SnapshotData(m).InternalPlacementEpoch, InternalPlacementSignal: SnapshotData(m).InternalPlacementSignal})
 }
 
 // Schema/topology refresh is a cold path. It reconciles object identities and

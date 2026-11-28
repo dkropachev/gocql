@@ -13,6 +13,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
+	"github.com/scylladb/gocql/v2/internal/routing"
 	metadata2 "github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -100,7 +101,7 @@ func TestVnodeRangeCache(t *testing.T) {
 	nts := func(name, rf string) *metadata2.Keyspace {
 		return &metadata2.Keyspace{Name: name, StrategyClass: "NetworkTopologyStrategy", StrategyOptions: map[string]string{"dc0": rf, "dc1": rf}}
 	}
-	same := func(a, b []metadata2.TokenRange) bool { return len(a) > 0 && &a[0] == &b[0] }
+	same := func(a, b []routing.Span) bool { return len(a) > 0 && &a[0] == &b[0] }
 	var c vnodeRangeCache
 	first, errs := c.build(ring, map[string]*metadata2.Keyspace{"a": nts("a", "2"), "b": nts("b", "2"), "c": nts("c", "1"), "nil": nil})
 	if len(errs) != 0 || len(first) != 3 {
@@ -137,7 +138,7 @@ func TestVnodeRangeCache(t *testing.T) {
 
 // referenceVnodeRanges is the builder as it was before its walk stopped at
 // the replication factor.
-func referenceVnodeRanges(ring *InternalTokenRing, ks *metadata2.Keyspace) ([]metadata2.TokenRange, error) {
+func referenceVnodeRanges(ring *InternalTokenRing, ks *metadata2.Keyspace) ([]routing.Span, error) {
 	hosts := make(map[cql.UUID]*implEndpoint.HostInfo)
 	dcHosts := make(map[string]int)
 	dcRacks := make(map[string]map[string]bool)
@@ -188,7 +189,7 @@ func referenceVnodeRanges(ring *InternalTokenRing, ks *metadata2.Keyspace) ([]me
 	case strings.HasSuffix(ks.StrategyClass, "EverywhereStrategy"):
 		rf = len(hosts)
 	}
-	out := make([]metadata2.TokenRange, len(ring.InternalTokens))
+	out := make([]routing.Span, len(ring.InternalTokens))
 	for i, entry := range ring.InternalTokens {
 		token, ok := entry.InternalToken.(implEndpoint.InternalInt64Token)
 		if !ok {

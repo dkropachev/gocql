@@ -52,7 +52,7 @@ func (v *View) Equal(other *View) bool {
 }
 
 // Equal reports whether i and other describe the same secondary index:
-// names, kind, options and the backing view's columns. Two nil indexes are
+// names, kind, target, options and backing view. Two nil indexes are
 // equal, and nil never equals non-nil.
 func (i *Index) Equal(other *Index) bool {
 	if i == nil || other == nil {
@@ -62,8 +62,10 @@ func (i *Index) Equal(other *Index) bool {
 		i.Keyspace == other.Keyspace &&
 		i.Table == other.Table &&
 		i.Kind == other.Kind &&
+		i.Target == other.Target &&
+		i.TargetKind == other.TargetKind &&
 		compareStringMaps(i.Options, other.Options) &&
-		columnsEqual(i.Columns, other.Columns, i.PartitionKey, other.PartitionKey, i.ClusteringColumns, other.ClusteringColumns, i.OrderedColumns, other.OrderedColumns)
+		i.BackingView.Equal(other.BackingView)
 }
 
 // Equal reports whether t and other describe the same user-defined type:
@@ -112,7 +114,7 @@ func aggregateEqual(a, b *Aggregate) bool {
 		a.privateStorage == b.privateStorage
 }
 
-// columnsEqual compares the columns of two views or indexes: the map and the
+// columnsEqual compares the columns of two views: the map and the
 // three lists.
 func columnsEqual(a, b map[string]*Column, aPK, bPK, aCK, bCK, aAll, bAll []*Column) bool {
 	return maps.EqualFunc(a, b, (*Column).Equal) &&

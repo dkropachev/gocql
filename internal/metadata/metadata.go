@@ -136,6 +136,17 @@ func InternalCloneV2Type(t *metadata.Type) *metadata.Type {
 	return &r
 }
 
+// InternalCloneV2Index returns a deep copy of ix.
+func InternalCloneV2Index(ix *metadata.Index) *metadata.Index {
+	if ix == nil {
+		return nil
+	}
+	r := *ix
+	r.Options = maps.Clone(ix.Options)
+	r.BackingView = InternalCloneV2View(ix.BackingView)
+	return &r
+}
+
 // shallowCloneKeyspace copies k and its maps, but not the values in them, so
 // that adding or removing entries does not race with readers of k.
 func shallowCloneKeyspace(k *metadata.Keyspace) *metadata.Keyspace {
@@ -197,18 +208,7 @@ func InternalCloneV2Keyspace(k *metadata.Keyspace) *metadata.Keyspace {
 	}
 	r.Indexes = make(map[string]*metadata.Index, len(k.Indexes))
 	for n, t := range k.Indexes {
-		if t == nil {
-			r.Indexes[n] = nil
-			continue
-		}
-		v := *t
-		v.Options = maps.Clone(t.Options)
-		columns := make(v2ColumnCloner, len(t.Columns))
-		v.Columns = columns.columns(t.Columns)
-		v.PartitionKey = columns.list(t.PartitionKey)
-		v.ClusteringColumns = columns.list(t.ClusteringColumns)
-		v.OrderedColumns = columns.list(t.OrderedColumns)
-		r.Indexes[n] = &v
+		r.Indexes[n] = InternalCloneV2Index(t)
 	}
 	return &r
 }

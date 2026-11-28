@@ -7,7 +7,9 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-// Target names a host, and optionally a shard of it, a request goes to.
+// Target pins a request to a host, and optionally to a shard of it, through
+// routing.SingleTarget. Placement lookups describe replicas as Replica, whose
+// Target method makes one.
 //
 // The zero Target names no host; a request that routing.SingleTarget sends to
 // it fails with a cql.ValidationError.

@@ -58,7 +58,7 @@ func InternalReadV2ScyllaKeyspaces(ctx context.Context, s Source, keyspaces map[
 			ks.InitialTablets = max(int(r.initial), 0)
 			// The server stores the option as written in CREATE KEYSPACE.
 			if settings.TabletsV2 && strings.EqualFold(r.consistency, "global") {
-				ks.ConsistencyMode = "global"
+				ks.ConsistencyMode = metadata.ConsistencyGlobal
 			}
 		}
 	}

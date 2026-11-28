@@ -13,7 +13,7 @@ func v2TestHost(id byte, dc, rack string) metadata2.HostSnapshot {
 }
 func v2TestMetadata() *MetadataSnapshot {
 	hosts := []metadata2.HostSnapshot{v2TestHost(1, "a", "r1"), v2TestHost(2, "a", "r2"), v2TestHost(3, "b", "r3"), v2TestHost(4, "a", "r1")}
-	return NewMetadataSnapshot(SnapshotState{InternalHostIndex: InternalBuildRoutingHostIndex(hosts), InternalHosts: hosts, InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": {Tables: map[string]*metadata2.Table{"table": {Name: "table"}}}}, InternalRanges: map[string][]metadata2.TokenRange{"ks": {{Start: 0, End: 0, Replicas: []metadata2.Target{{HostID: hosts[2].HostID}, {HostID: hosts[1].HostID}, {HostID: hosts[0].HostID}}}}}, InternalTablets: map[InternalMetadataTable][]metadata2.TokenRange{}})
+	return NewMetadataSnapshot(SnapshotState{InternalHostIndex: InternalBuildRoutingHostIndex(hosts), InternalHosts: hosts, InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": {Tables: map[string]*metadata2.Table{"table": {Name: "table"}}}}, InternalRanges: map[string][]Span{"ks": {{Start: 0, End: 0, Replicas: []metadata2.Target{{HostID: hosts[2].HostID}, {HostID: hosts[1].HostID}, {HostID: hosts[0].HostID}}}}}, InternalTablets: map[InternalMetadataTable][]Span{}})
 }
 
 // nextTarget is the target of a plan's next route, without the route to any

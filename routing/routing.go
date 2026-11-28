@@ -148,7 +148,7 @@ func RouteTo(snapshot *metadata.Snapshot, target metadata.Target) (metadata.Rout
 	}
 	shard := target.ShardID
 	if target.AnyShardFallback && shard.Set {
-		if h, ok := snapshot.HostInfo(target.HostID); !ok || h.Shards == 0 || shard.Value >= h.Shards {
+		if h, ok := snapshot.Host(target.HostID); !ok || h.Shards == 0 || shard.Value >= h.Shards {
 			shard = cql.Option[uint32]{}
 		}
 	}

@@ -48,7 +48,8 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	}
 	tokens := 0
 	for _, host := range hosts {
-		tokens += len(host.Tokens)
+		hostTokens, _ := metadata.HostTokens(host.HostID)
+		tokens += len(hostTokens)
 	}
 	if tokens == 0 {
 		t.Fatal("token-aware metadata has no tokens")
@@ -139,7 +140,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		}
 		found := false
 		for _, replica := range replicas {
-			found = found || replica.HostID == coordinator
+			found = found || replica.Host.HostID == coordinator
 		}
 		if !found {
 			t.Fatalf("coordinator %s is not a token replica: %v", coordinator, replicas)

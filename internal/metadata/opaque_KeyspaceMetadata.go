@@ -30,7 +30,7 @@ type keyspaceRep struct {
 	Types           map[string]*metadata.Type
 	Indexes         map[string]*metadata.Index
 	Views           map[string]*metadata.View
-	ConsistencyMode string
+	ConsistencyMode metadata.ConsistencyMode
 	Name            string
 	StrategyClass   string
 	state           KeyspaceState

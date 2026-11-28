@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 	"github.com/scylladb/gocql/v2/internal/metadata"
@@ -1522,7 +1523,7 @@ func TestSchemaMetadata(t *testing.T) {
 	t.Run("Snapshot", func(t *testing.T) {
 		column := &metadata2.Column{Name: "id", Type: "int"}
 		ks := &metadata2.Keyspace{Name: "ks", StrategyOptions: map[string]string{"replication_factor": "1"}, Tables: map[string]*metadata2.Table{"t": {Columns: map[string]*metadata2.Column{"id": column}, PartitionKey: []*metadata2.Column{column}, Extensions: map[string][]byte{"bytes": {2}}, Options: metadata2.TableOptions{CDC: map[string]string{"enabled": "true"}}}}, Types: map[string]*metadata2.Type{"u": {FieldNames: []string{"a"}, FieldTypes: []string{"int"}}}, Functions: map[string]*metadata2.Function{"f": {ArgumentNames: []string{"a"}, ArgumentTypes: []string{"int"}}}}
-		m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 8, InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": metadata.InternalCloneV2Keyspace(ks)}, InternalHosts: []metadata2.HostSnapshot{{Tokens: []int64{1}}}})
+		m := routing.NewMetadataSnapshot(routing.SnapshotState{InternalGeneration: 8, InternalKeyspaces: map[string]*metadata2.Keyspace{"ks": metadata.InternalCloneV2Keyspace(ks)}, InternalHosts: []metadata2.HostSnapshot{{HostID: cql.UUID{1}}}, InternalHostTokens: map[cql.UUID][]int64{{1}: {1}}})
 		ks.Tables["t"].Columns["id"].Name = "mutated"
 		ks.Tables["t"].Extensions["bytes"][0] = 9
 		first, _ := m.Keyspace("ks")
@@ -1536,9 +1537,12 @@ func TestSchemaMetadata(t *testing.T) {
 		if second.Types["u"].FieldNames[0] != "a" || second.Functions["f"].ArgumentNames[0] != "a" || second.Tables["t"].PartitionKey[0].Name != "id" {
 			t.Fatal("getter leaked mutable snapshot")
 		}
-		hosts := m.Hosts()
-		hosts[0].Tokens[0] = 9
-		if m.Hosts()[0].Tokens[0] != 1 {
+		tokens, ok := m.HostTokens(cql.UUID{1})
+		if !ok || len(tokens) != 1 {
+			t.Fatal("HostTokens", tokens, ok)
+		}
+		tokens[0] = 9
+		if again, _ := m.HostTokens(cql.UUID{1}); again[0] != 1 {
 			t.Fatal("host tokens alias")
 		}
 	})

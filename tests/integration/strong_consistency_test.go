@@ -15,6 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
+	"github.com/scylladb/gocql/v2/metadata"
 )
 
 // TestStrongConsistency checks leader-aware routing for ScyllaDB strongly
@@ -53,7 +54,7 @@ func TestStrongConsistency(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	for ks, want := range map[string]string{global: "global", eventual: ""} {
+	for ks, want := range map[string]metadata.ConsistencyMode{global: metadata.ConsistencyGlobal, eventual: ""} {
 		meta, ok := s.Metadata().Keyspace(ks)
 		if !ok || !meta.TabletBased || meta.ConsistencyMode != want {
 			t.Fatalf("keyspace %s: %+v; want a tablet keyspace with ConsistencyMode %q", ks, meta, want)
@@ -116,7 +117,7 @@ func TestStrongConsistency(t *testing.T) {
 			// block is not mistaken for one routed by it.
 			for deadline := time.Now().Add(10 * time.Second); ; {
 				replicas, err := s.Metadata().Replicas(ks, "records", hint.LastToken())
-				if err == nil && len(replicas) == 3 && replicas[0].HostID == leader {
+				if err == nil && len(replicas) == 3 && replicas[0].Host.HostID == leader {
 					break
 				}
 				if time.Now().After(deadline) {

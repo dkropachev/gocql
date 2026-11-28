@@ -21,8 +21,8 @@ func ExampleNewSnapshot() {
 	m, err := routingtest.NewSnapshot(routingtest.Cluster{
 		Hosts:  hosts,
 		Tables: []routingtest.Table{{Keyspace: "ks", Name: "t"}},
-		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Target{
-			{HostID: hosts[0].HostID}, {HostID: hosts[1].HostID}, {HostID: hosts[2].HostID},
+		TokenRanges: map[string][]metadata.TokenRange{"ks": {{Replicas: []metadata.Replica{
+			{Host: hosts[0]}, {Host: hosts[1]}, {Host: hosts[2]},
 		}}}},
 		LocalDatacenter: "dc1",
 	})
