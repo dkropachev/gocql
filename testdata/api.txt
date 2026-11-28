@@ -1319,6 +1319,7 @@ package event
 		event.Event field HostID cql.UUID
 		event.Event field Kind event.Kind
 		event.Event field Incomplete bool
+		event.Event method (T) String() string
 	type event.Filter struct
 		event.Filter field Keyspace string
 		event.Filter field Kinds []event.Kind
@@ -1413,6 +1414,8 @@ package metadata
 	const metadata.ColumnOrderAsc metadata.ColumnOrder = 1
 	const metadata.ColumnOrderDesc metadata.ColumnOrder = 2
 	const metadata.ColumnOrderNone metadata.ColumnOrder = 0
+	const metadata.ConsistencyGlobal metadata.ConsistencyMode = "global"
+	type metadata.ConsistencyMode string
 	var metadata.ErrPlacementUnknown error
 	type metadata.Function struct
 		metadata.Function field Keyspace string
@@ -1428,7 +1431,6 @@ package metadata
 		metadata.HostSnapshot field Address net/netip.AddrPort
 		metadata.HostSnapshot field Datacenter string
 		metadata.HostSnapshot field Rack string
-		metadata.HostSnapshot field Tokens []int64
 		metadata.HostSnapshot field Shards uint32
 		metadata.HostSnapshot field ShardingIgnoreMSB uint8
 		metadata.HostSnapshot field HostID cql.UUID
@@ -1436,20 +1438,27 @@ package metadata
 		metadata.HostSnapshot field Connected bool
 		metadata.HostSnapshot field Up bool
 	type metadata.Index struct
+		metadata.Index field Options map[string]string
+		metadata.Index field BackingView *metadata.View
 		metadata.Index field Name string
 		metadata.Index field Keyspace string
 		metadata.Index field Table string
 		metadata.Index field Kind metadata.IndexKind
-		metadata.Index field Options map[string]string
-		metadata.Index field Columns map[string]*metadata.Column
-		metadata.Index field OrderedColumns []*metadata.Column
-		metadata.Index field PartitionKey []*metadata.Column
-		metadata.Index field ClusteringColumns []*metadata.Column
+		metadata.Index field Target string
+		metadata.Index field TargetKind metadata.IndexTargetKind
 		metadata.Index method (*T) Equal(other *metadata.Index) bool
 	type metadata.IndexKind string
 	const metadata.IndexKindComposites metadata.IndexKind = "COMPOSITES"
 	const metadata.IndexKindCustom metadata.IndexKind = "CUSTOM"
 	const metadata.IndexKindKeys metadata.IndexKind = "KEYS"
+	const metadata.IndexTargetColumn metadata.IndexTargetKind = 1
+	const metadata.IndexTargetEntries metadata.IndexTargetKind = 4
+	const metadata.IndexTargetFull metadata.IndexTargetKind = 5
+	const metadata.IndexTargetKeys metadata.IndexTargetKind = 2
+	type metadata.IndexTargetKind uint8
+		metadata.IndexTargetKind method (T) String() string
+	const metadata.IndexTargetUnknown metadata.IndexTargetKind = 0
+	const metadata.IndexTargetValues metadata.IndexTargetKind = 3
 	type metadata.Keyspace struct
 		metadata.Keyspace field StrategyOptions map[string]string
 		metadata.Keyspace field Tables map[string]*metadata.Table
@@ -1458,7 +1467,7 @@ package metadata
 		metadata.Keyspace field Types map[string]*metadata.Type
 		metadata.Keyspace field Indexes map[string]*metadata.Index
 		metadata.Keyspace field Views map[string]*metadata.View
-		metadata.Keyspace field ConsistencyMode string
+		metadata.Keyspace field ConsistencyMode metadata.ConsistencyMode
 		metadata.Keyspace field Name string
 		metadata.Keyspace field StrategyClass string
 		metadata.Keyspace field InitialTablets int
@@ -1469,6 +1478,7 @@ package metadata
 		metadata.Keyspace method (*T) Equal(other *metadata.Keyspace) bool
 		metadata.Keyspace method (*T) Function(name string, args ...string) (*metadata.Function, bool)
 		metadata.Keyspace method (*T) FunctionsNamed(name string) []*metadata.Function
+		metadata.Keyspace method (*T) ReplicationFactor(dc string) (int, bool)
 		metadata.Keyspace method (*T) ServerCQL() string
 		metadata.Keyspace method (*T) ToCQL() (string, error)
 	type metadata.Mode uint8
@@ -1477,6 +1487,15 @@ package metadata
 	const metadata.ModeKeyspaces metadata.Mode = 1
 	const metadata.ModeNone metadata.Mode = 0
 	func metadata.Name(cqlIdent string) string
+	type metadata.Replica struct
+		metadata.Replica field Host metadata.HostSnapshot
+		metadata.Replica field ShardID cql.Option[uint32]
+		metadata.Replica method (T) Target() metadata.Target
+	type metadata.Replication struct
+		metadata.Replication field Options map[string]string
+		metadata.Replication field Class string
+		metadata.Replication field TabletBased bool
+		metadata.Replication method (T) Factor(dc string) (int, bool)
 	type metadata.Route struct
 		metadata.Route method (T) Datacenter() string
 		metadata.Route method (T) Enabled() bool
@@ -1491,14 +1510,16 @@ package metadata
 		metadata.Snapshot method (*T) Diagnostics() []error
 		metadata.Snapshot method (*T) Generation() uint64
 		metadata.Snapshot method (*T) Host(id cql.UUID) (metadata.HostSnapshot, bool)
-		metadata.Snapshot method (*T) HostInfo(id cql.UUID) (metadata.HostSnapshot, bool)
+		metadata.Snapshot method (*T) HostTokens(id cql.UUID) ([]int64, bool)
 		metadata.Snapshot method (*T) Hosts() []metadata.HostSnapshot
+		metadata.Snapshot method (*T) Index(keyspace string, name string) (*metadata.Index, bool)
 		metadata.Snapshot method (*T) Keyspace(name string) (*metadata.Keyspace, bool)
-		metadata.Snapshot method (*T) Keyspaces() []string
-		metadata.Snapshot method (*T) PartitionReplicas(keyspace string, table string, key ...cql.Value) ([]metadata.HostSnapshot, error)
-		metadata.Snapshot method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Target, error)
+		metadata.Snapshot method (*T) KeyspaceNames() []string
+		metadata.Snapshot method (*T) PartitionReplicas(keyspace string, table string, key ...cql.Value) ([]metadata.Replica, error)
+		metadata.Snapshot method (*T) Replicas(keyspace string, table string, token int64) ([]metadata.Replica, error)
+		metadata.Snapshot method (*T) Replication(keyspace string) (metadata.Replication, bool)
 		metadata.Snapshot method (*T) Table(keyspace string, name string) (*metadata.Table, bool)
-		metadata.Snapshot method (*T) Tables(keyspace string) []string
+		metadata.Snapshot method (*T) TableNames(keyspace string) []string
 		metadata.Snapshot method (*T) Token(keyspace string, table string, key ...cql.Value) (int64, error)
 		metadata.Snapshot method (*T) TokenRanges(keyspace string, table string) (ranges []metadata.TokenRange, complete bool, err error)
 		metadata.Snapshot method (*T) Type(keyspace string, name string) (*metadata.Type, bool)
@@ -1540,7 +1561,7 @@ package metadata
 		metadata.Target field ShardID cql.Option[uint32]
 		metadata.Target field AnyShardFallback bool
 	type metadata.TokenRange struct
-		metadata.TokenRange field Replicas []metadata.Target
+		metadata.TokenRange field Replicas []metadata.Replica
 		metadata.TokenRange field Start int64
 		metadata.TokenRange field End int64
 	type metadata.Type struct
