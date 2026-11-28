@@ -252,7 +252,7 @@ func TestSession(t *testing.T) {
 			created := false
 			runDDL := func(stmt string) {
 				t.Helper()
-				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{}); e != nil {
+				if _, e := s.UnpreparedExec(ctx, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: stmt, Params: cql.NoParams}, cql.EmptyParams{}); e != nil {
 					t.Fatal(e)
 				}
 			}
@@ -270,13 +270,13 @@ func TestSession(t *testing.T) {
 					return
 				}
 				defer cleanupSession.Close()
-				_, e = cleanupSession.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Kind: cql.OrdinaryStatement, Params: cql.NoParams}, cql.EmptyParams{})
+				_, e = cleanupSession.UnpreparedExec(cleanup, cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "DROP KEYSPACE " + ks, Params: cql.NoParams}, cql.EmptyParams{})
 				if e != nil {
 					t.Error(e)
 				}
 			}()
 			runDDL("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec)}, execopt.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Params: cql.OneParam(cql.ByteSliceCodec)}, execopt.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -285,7 +285,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, execopt.PrepareOptions{}))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, execopt.PrepareOptions{}))
 			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, execopt.Options{Prefetch: cql.Some(false)})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
@@ -1026,13 +1026,13 @@ func TestSession(t *testing.T) {
 		keyspace := fmt.Sprintf("v2_runtime_%x", time.Now().UnixNano())
 		runDDL := func(stmt string) {
 			t.Helper()
-			if _, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{}); err != nil {
+			if _, err := session.UnpreparedExec(ctx, cql.Write(stmt, cql.NoParams), cql.EmptyParams{}); err != nil {
 				t.Fatal(err)
 			}
 		}
 		runDDL("CREATE KEYSPACE " + keyspace + " WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':1}")
 		defer func() {
-			if _, err := session.UnpreparedExec(context.Background(), cql.Command("DROP KEYSPACE "+keyspace), cql.EmptyParams{}); err != nil {
+			if _, err := session.UnpreparedExec(context.Background(), cql.Write("DROP KEYSPACE "+keyspace, cql.NoParams), cql.EmptyParams{}); err != nil {
 				t.Error(err)
 			}
 		}()

@@ -4,6 +4,7 @@
 package cql
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -58,9 +59,9 @@ func TestInterfaceOnlyMethods(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		StreamDecimalValue.Reset(&dec)
+		StreamDecimal.Reset(&dec)
 		if dec.String() != (Decimal{}).String() {
-			t.Fatalf("StreamDecimalValue.Reset: %v", dec)
+			t.Fatalf("StreamDecimal.Reset: %v", dec)
 		}
 		n := new(int32)
 		StreamPointer(StreamInt32).Reset(&n)
@@ -68,9 +69,9 @@ func TestInterfaceOnlyMethods(t *testing.T) {
 			t.Fatalf("StreamPointer.Reset: %v", n)
 		}
 		m := map[string]int32{"k": 1}
-		StreamGoMap(StreamString, StreamInt32).Reset(&m)
+		StreamMap(StreamString, StreamInt32).Reset(&m)
 		if len(m) != 0 {
-			t.Fatalf("StreamGoMap.Reset: %v", m)
+			t.Fatalf("StreamMap.Reset: %v", m)
 		}
 
 		// The compiled plans clear the same way.
@@ -92,7 +93,7 @@ func TestInterfaceOnlyMethods(t *testing.T) {
 		}
 		d = time.Second
 		cd.Reset(&d)
-		cdec, err := StreamDecimalValue.Compile(rowTestType(t, KindDecimal))
+		cdec, err := StreamDecimal.Compile(rowTestType(t, KindDecimal))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +111,7 @@ func TestInterfaceOnlyMethods(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		cm, err := StreamGoMap(StreamString, StreamInt32).Compile(mt)
+		cm, err := StreamMap(StreamString, StreamInt32).Compile(mt)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -138,8 +139,27 @@ func TestInterfaceOnlyMethods(t *testing.T) {
 		decType := rowTestType(t, KindDecimal)
 		var dec Decimal
 		// scale 2, unscaled 123: 1.23
-		if err := StreamDecodeFixture(t, decType, StreamDecimalValue, streamCellBytes([]byte{0, 0, 0, 2, 123}), &dec, 1); err != nil || dec.String() != "1.23" {
-			t.Fatalf("StreamDecimalValue: %v, %v", dec, err)
+		if err := StreamDecodeFixture(t, decType, StreamDecimal, streamCellBytes([]byte{0, 0, 0, 2, 123}), &dec, 1); err != nil || dec.String() != "1.23" {
+			t.Fatalf("StreamDecimal: %v, %v", dec, err)
 		}
 	})
+}
+
+// TestFailedCodec runs the codec CodecOf returns for a type it cannot map:
+// every method reports the derivation error, and Clone returns its input.
+func TestFailedCodec(t *testing.T) {
+	want := errors.New("cannot map")
+	c := failedCodec[int]{err: want}
+	if err := c.CheckType(rowTestType(t, KindInt)); !errors.Is(err, want) {
+		t.Fatalf("CheckType: %v", err)
+	}
+	if err := c.Encode(nil, 1); !errors.Is(err, want) {
+		t.Fatalf("Encode: %v", err)
+	}
+	if v, err := c.Decode(ValueReader{}); !errors.Is(err, want) || v != 0 {
+		t.Fatalf("Decode: %v, %v", v, err)
+	}
+	if v := c.Clone(7); v != 7 {
+		t.Fatalf("Clone: %v", v)
+	}
 }

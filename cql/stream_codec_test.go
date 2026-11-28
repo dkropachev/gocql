@@ -60,7 +60,7 @@ func streamEncodedFixture[T any](t testing.TB, typ DataType, encoder Encoder[T],
 	if err != nil {
 		t.Fatal(err)
 	}
-	if v.state == Null {
+	if v.state == CellNull {
 		return []byte{255, 255, 255, 255}
 	}
 	return streamCellBytes(v.Bytes().ownedBytes())

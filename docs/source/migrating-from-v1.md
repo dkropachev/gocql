@@ -185,7 +185,7 @@ if !found {
 
 | v1 | v2 |
 | --- | --- |
-| `session.Query(stmt, values...)` | `session.Prepare(ctx, cql.Statement[P, R]{...})` once, then calls on the `*Prepared` |
+| `session.Query(stmt, values...)` | `session.Prepare(ctx, cql.Select(text, params, rows))` (or `cql.Write`, `cql.NewStatement`) once, then calls on the `*Prepared` |
 | `query.Exec()` | `prepared.Exec(ctx, params)`; `session.UnpreparedExec(ctx, statement, params)` for one-off text, or `session.UnpreparedCommand(ctx, text)` for text without bind markers such as DDL |
 | `query.Scan(&a, &b)` | `prepared.One(ctx, params, &row)`; `found` is false instead of `gocql.ErrNotFound` |
 | `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &dst, fn)`, `for row, err := range prepared.All(ctx, params, &dst)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
@@ -195,7 +195,7 @@ if !found {
 | `query.SerialConsistency(gocql.LocalSerial)` | `execopt.Options{SerialConsistency: cql.Some(cql.LocalSerial)}` |
 | `query.PageSize(n)` | `execopt.Options{PageSize: n}`, or the page size argument of `RunPage` |
 | `query.Prefetch(threshold)` | `execopt.Options{Prefetch: cql.Some(on)}`: prefetch is on or off, and when on `Rows` request the next page as soon as a page arrives; the profile's `WithPrefetch(on)` sets the default, true |
-| `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `execopt.Options{Idempotent: cql.Some(true)}` for one execution |
+| `query.Idempotent(true)` | `statement.WithIdempotent(true)` on the `cql.Statement`, or `execopt.Options{Idempotent: cql.Some(true)}` for one execution |
 | a time limit for one query other than the default | `execopt.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `execopt.Options{Retry: p}` |
 | `query.WithTimestamp(ts)` | a `USING TIMESTAMP ?` marker bound like any parameter; for an occasional request, `execopt.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`, passed per call: `Prepared.With` defaults and a `Worker` reject it |
@@ -210,14 +210,13 @@ if !found {
 | `query.Release()` | nothing to release; a reusable `prepared.Worker()` is closed with `Close` |
 
 v1 sent a client timestamp with every request. v2 stamps only ordinary
-statements. A statement left `cql.UnknownStatement`, as a ported v1
-statement is, is conditional when its rows decode through `cql.CASRows` or
-its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` condition, and
-ordinary otherwise, on every server; v1's `Query.IsLWT` knew it only from
-ScyllaDB's prepared metadata. Declaring `Kind: cql.OrdinaryStatement` on a
-statement the driver finds conditional fails before it is sent, as does
-reading a SELECT through `cql.CASRows` or declaring it
-`cql.ConditionalStatement`.
+statements. A statement is conditional when its rows decode through
+`cql.CASRows` or its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF`
+condition, and ordinary otherwise, on every server; v1's `Query.IsLWT` knew
+it only from ScyllaDB's prepared metadata. A statement has no kind to
+declare: the driver infers it, and reports it as `PreparedInfo.Kind` and
+`retry.Attempt.StatementKind`. Reading a SELECT through `cql.CASRows` fails
+before it is sent.
 
 One-shot calls take `execopt.CompiledOptions`, from `session.CompileOptions`,
 and `prepared.With(options)` makes them a statement's defaults; compile them
@@ -259,7 +258,7 @@ column named in one word (`createdat`).
 | a UDT value written before `ALTER TYPE ADD` | the same: a missing or NULL UDT field decodes as the zero value |
 | `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :low AND ck < :high`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
 | a tuple scanned into a struct | `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, by field position |
-| `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraFields())`; without it every result column needs a field |
+| `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreUnknownFields())`; without it every result column needs a field |
 
 `cql.Params(cql.Param(...))` and `cql.Row(cql.Column(...))` map fields
 explicitly. See [data types](data-types.md).
@@ -304,9 +303,9 @@ it to an untrusted client. See [paging](statements/paging.md).
 | `query.ScanCAS(dest...)`, `MapScanCAS` | a statement whose `Rows` is `cql.CASRows(decoder)`, read with `One`; `CASResult.Applied` reports the outcome |
 
 `Exec` and `ExecBatch` reject a statement or batch known to be conditional,
-since only the rows say whether it applied. Cassandra does not mark
-conditional statements in prepared metadata: set
-`Kind: cql.ConditionalStatement` there. See [batches](statements/batches.md) and
+since only the rows say whether it applied. The driver finds a conditional
+statement from its CQL on Cassandra too, which does not mark one in
+prepared metadata. See [batches](statements/batches.md) and
 [lightweight transactions](statements/lightweight-transactions.md).
 
 ## Types
@@ -319,6 +318,8 @@ conditional statements in prepared metadata: set
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.ConvertCodec` for a type that converts to a built-in one; otherwise `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
 | `gocql.UnsetValue` | `cql.BindUnset[T]()`, a `nilunset` field tag, `cql.NilAsUnset()`, or `cql.UnsetValue()` for dynamic values; see [data types](data-types.md) |
+| `gocql.Marshal(info, v)`, `gocql.Unmarshal(info, data, &v)` | `cql.EncodeValue(typ, cql.MustCodecOf[T](), v)` and `cql.DecodeValue(cql.MustCodecOf[T](), encoded)`: `CodecOf` derives the codec a struct field of type T maps with |
+| `gocql.UUIDFromBytes` for a timeuuid | `cql.TimeUUIDFromBytes`, which checks it is version 1 |
 | `*T` or `gocql.NullX` for NULL | `cql.NullableCodec` or `cql.Nullable[T]`, and `cql.PointerCodec` for a `*T`, which struct mappings also use; `cql.NonNull(v)` builds a present `Nullable` |
 | NULL scanned into a non-pointer, read as the zero value | an error matching `cql.ErrNull`: a column that may be NULL needs a `cql.Nullable[T]` or `*T` field, a `nullzero` tag or `cql.NullAsZero()`; UDT fields still read NULL as the zero value |
 | `int64` for a counter column | `int64`, with `cql.Int64Codec`; `cql.BigIntValue` binds a counter increment |

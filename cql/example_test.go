@@ -11,13 +11,13 @@ import (
 )
 
 // A map<text, bigint> column round-trips through a Go map. Struct mappings
-// pick GoMapCodec for a map[string]int64 field without configuration.
-func ExampleGoMapCodec() {
+// pick MapCodec for a map[string]int64 field without configuration.
+func ExampleMapCodec() {
 	typ, err := cql.MapType(cql.TextType, cql.BigIntType)
 	if err != nil {
 		log.Fatal(err)
 	}
-	counts := cql.GoMapCodec(cql.StringCodec, cql.Int64Codec)
+	counts := cql.MapCodec(cql.StringCodec, cql.Int64Codec)
 	encoded, err := cql.EncodeValue(typ, counts, map[string]int64{"views": 10, "likes": 3})
 	if err != nil {
 		log.Fatal(err)

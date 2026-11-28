@@ -100,13 +100,13 @@ func TestFixedWidthSplitBodies(t *testing.T) {
 	for _, tc := range cases {
 		decode := tc.decode
 		for _, c := range tc.cases {
-			got, err := decode(ScalarReader(t, tc.kind, Present, c.body))
+			got, err := decode(ScalarReader(t, tc.kind, CellPresent, c.body))
 			check(t, tc.kind.String()+" contiguous", got, err, c)
 			// A one-byte body is always one span, so the cursor read of a
 			// one-byte codec is unreachable; its wrong widths stop at
 			// fixedCursor's width check.
 			for cut := 1; cut < len(c.body); cut++ {
-				got, err := decode(ScalarReader(t, tc.kind, Present, c.body[:cut], c.body[cut:]))
+				got, err := decode(ScalarReader(t, tc.kind, CellPresent, c.body[:cut], c.body[cut:]))
 				check(t, tc.kind.String()+" split", got, err, c)
 			}
 		}
@@ -116,7 +116,7 @@ func TestFixedWidthSplitBodies(t *testing.T) {
 // TestFixedWidthNullCell checks that a null cell still fails before the fast
 // path, with requirePresent's error.
 func TestFixedWidthNullCell(t *testing.T) {
-	_, err := Int32Codec.Decode(ScalarReader(t, KindInt, Null))
+	_, err := Int32Codec.Decode(ScalarReader(t, KindInt, CellNull))
 	if err == nil || err.Error() != "gocql: nonnullable int cannot decode cell state null" {
 		t.Fatalf("Decode null: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestFixedWidthNullCell(t *testing.T) {
 func TestFixedWidthReleasedLease(t *testing.T) {
 	body := []byte{0, 0, 0, 0, 0, 0, 0, 1}
 	lease := wire.NewLease(wire.ChainOf(body), nil)
-	r := valueReaderFromLease(scalarType(t, KindBigInt), Present, wire.ChainOf(body), lease)
+	r := valueReaderFromLease(scalarType(t, KindBigInt), CellPresent, wire.ChainOf(body), lease)
 	if v, err := Int64Codec.Decode(r); err != nil || v != 1 {
 		t.Fatalf("Decode before release: (%v, %v), want 1", v, err)
 	}

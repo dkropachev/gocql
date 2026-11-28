@@ -37,7 +37,7 @@ func validatePartitionKey(cells []model.EncodedCell, indexes []int) error {
 			return cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State != cql.Null && c.State != cql.Unset && c.State != cql.Present {
+		if c.State != cql.CellNull && c.State != cql.CellUnset && c.State != cql.CellPresent {
 			return cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
@@ -57,9 +57,9 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (routing2
 			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State == cql.Null || c.State == cql.Unset {
+		if c.State == cql.CellNull || c.State == cql.CellUnset {
 			missing = true
-		} else if c.State != cql.Present {
+		} else if c.State != cql.CellPresent {
 			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 && c.Body.Len() > 65535 {
@@ -75,10 +75,10 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (routing2
 			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid column index")
 		}
 		c := cells[idx]
-		if c.State == cql.Null || c.State == cql.Unset {
+		if c.State == cql.CellNull || c.State == cql.CellUnset {
 			return *NewPartitionKey(PartitionKeyState{}), false, nil
 		}
-		if c.State != cql.Present {
+		if c.State != cql.CellPresent {
 			return *NewPartitionKey(PartitionKeyState{}), false, cqltype.TypeValidation("partition key", "invalid cell state")
 		}
 		if len(indexes) > 1 {
@@ -104,7 +104,7 @@ func InternalNewPartitionKey(cells []model.EncodedCell, indexes []int) (routing2
 func InternalComputeRoutingToken(cells []model.EncodedCell, indexes []int, p routing2.TokenPartitioner) (cql.Option[int64], error) {
 	if isMurmur3Partitioner(p) {
 		for _, index := range indexes {
-			if index >= 0 && index < len(cells) && cells[index].State != cql.Present && cells[index].State != cql.Null && cells[index].State != cql.Unset {
+			if index >= 0 && index < len(cells) && cells[index].State != cql.CellPresent && cells[index].State != cql.CellNull && cells[index].State != cql.CellUnset {
 				return cql.Option[int64]{}, cqltype.TypeValidation("partition key", "invalid cell state")
 			}
 		}

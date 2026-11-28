@@ -45,15 +45,14 @@ captured parameters through drain. `worker.Close()` stops a worker at once, and
 
 `execopt.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
-custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies
-ordinary and conditional statements; conditional requests send no client
-timestamp, keep a fixed replica order and cannot speculate. A statement left
-`cql.UnknownStatement` is conditional when its rows decode through
-`cql.CASRows` or its CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF`
-condition, and ordinary otherwise; one declared `cql.OrdinaryStatement` that
-is conditional by that test is rejected before it is sent, as is a SELECT
-or other statement that cannot be conditional declared
-`cql.ConditionalStatement` or decoded with `cql.CASRows`.
+custom payload, idempotence and host/shard targeting. The driver classifies
+each statement as ordinary or conditional; conditional requests send no
+client timestamp, keep a fixed replica order and cannot speculate. A
+statement is conditional when its rows decode through `cql.CASRows` or its
+CQL is an INSERT, UPDATE, DELETE or BATCH with an `IF` condition, and
+ordinary otherwise; a SELECT or other statement that cannot be conditional
+decoded with `cql.CASRows` is rejected before it is sent. The kind is an
+output, reported as `PreparedInfo.Kind` and `retry.Attempt.StatementKind`.
 Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
 marks a statement safe to run more than once, for speculation and
 `retry.Safe`; prepared statements, their workers and batch members carry it,

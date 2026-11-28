@@ -79,7 +79,7 @@ func checkDynamicTuple(t *testing.T, mode string) {
 		t.Fatal(err)
 	}
 	if mode == "absent" {
-		if v.State() != cql.Null {
+		if v.State() != cql.CellNull {
 			t.Fatal("unset tuple is not null")
 		}
 		return
@@ -93,7 +93,7 @@ func checkDynamicTuple(t *testing.T, mode string) {
 	}
 	for i, m := range members {
 		if mode == "members" {
-			if m.State() != cql.Null {
+			if m.State() != cql.CellNull {
 				t.Errorf("member %d not null", i)
 			}
 		} else {

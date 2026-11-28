@@ -60,7 +60,7 @@ func TestPartitionKey(t *testing.T) {
 		second := []byte{3}
 		a, _ := wire.NewChain(wire.Borrow(first))
 		b, _ := wire.NewChain(wire.Borrow(second))
-		cells := []model.EncodedCell{{State: cql.Present, Body: a}, {State: cql.Present, Body: b}}
+		cells := []model.EncodedCell{{State: cql.CellPresent, Body: a}, {State: cql.CellPresent, Body: b}}
 		key, complete, err := InternalNewPartitionKey(cells, []int{1, 0})
 		if err != nil || !complete {
 			t.Fatal(complete, err)
@@ -87,7 +87,7 @@ func TestPartitionKey(t *testing.T) {
 		if output.Bytes()[6] != 9 {
 			t.Fatal("partition payload copied")
 		}
-		cells[0].State = cql.Null
+		cells[0].State = cql.CellNull
 		if _, ok, err := InternalNewPartitionKey(cells, []int{0, 1}); err != nil || ok {
 			t.Fatal("null key must disable token routing")
 		}
@@ -95,7 +95,7 @@ func TestPartitionKey(t *testing.T) {
 			t.Fatal("invalid key index accepted")
 		}
 		large, _ := wire.NewChain(wire.Borrow(make([]byte, 65536)))
-		cells[0] = model.EncodedCell{State: cql.Present, Body: large}
+		cells[0] = model.EncodedCell{State: cql.CellPresent, Body: large}
 		if _, _, err := InternalNewPartitionKey(cells, []int{0, 1}); err == nil {
 			t.Fatal("oversized composite accepted")
 		}

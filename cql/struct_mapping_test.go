@@ -151,7 +151,7 @@ func TestStructMapping(t *testing.T) {
 				Param("names", NullableEncoder(ListEncoder(StringCodec)), func(collectionRow) Nullable[[]string] { return Nullable[[]string]{} }),
 				Param("scores", SetEncoder(Int32Codec), func(collectionRow) []int32 { return nil }),
 				Param("blobs", NullableEncoder(ListEncoder(ByteSliceCodec)), func(collectionRow) Nullable[[][]byte] { return Nullable[[][]byte]{} }),
-				Param("attrs", NullableEncoder(MapEncoder(StringCodec, Int64Codec)), func(collectionRow) Nullable[[]Entry[string, int64]] {
+				Param("attrs", NullableEncoder(MapEntriesEncoder(StringCodec, Int64Codec)), func(collectionRow) Nullable[[]Entry[string, int64]] {
 					return Nullable[[]Entry[string, int64]]{}
 				}),
 			)
@@ -209,7 +209,7 @@ func TestStructMapping(t *testing.T) {
 				Param("names", ListEncoder(StringCodec), func(v collectionRow) []string { return v.Names }),
 				Param("scores", SetEncoder(Int32Codec), func(v collectionRow) []int32 { return v.Scores }),
 				Param("blobs", ListEncoder(ByteSliceCodec), func(v collectionRow) [][]byte { return v.Blobs }),
-				Param("attrs", MapEncoder(StringCodec, Int64Codec), func(v collectionRow) []Entry[string, int64] { return v.Attrs }),
+				Param("attrs", MapEntriesEncoder(StringCodec, Int64Codec), func(v collectionRow) []Entry[string, int64] { return v.Attrs }),
 			)
 			if got, want := chainBytes(t, chain), chainBytes(t, encodeTestParams(t, columns, hand, value)); !reflect.DeepEqual(got, want) {
 				t.Fatalf("collection encoding:\ngot  %x\nwant %x", got, want)
@@ -533,9 +533,9 @@ func TestStructMapping(t *testing.T) {
 			hand := StreamRowInto(func(*streamFixture) {},
 				StreamColumn("id", StreamInt32, func(v *streamFixture) *int32 { return &v.ID }),
 				StreamColumn("key", StreamUUID, func(v *streamFixture) *UUID { return &v.Key }),
-				StreamColumn("payload", StreamBlob, func(v *streamFixture) *[]byte { return &v.Payload }),
-				StreamColumn("name", StreamText, func(v *streamFixture) *[]byte { return &v.Name }),
-				StreamColumn("pieces", StreamList(StreamBlob), func(v *streamFixture) *[][]byte { return &v.Pieces }),
+				StreamColumn("payload", StreamByteSlice, func(v *streamFixture) *[]byte { return &v.Payload }),
+				StreamColumn("name", StreamTextBytes, func(v *streamFixture) *[]byte { return &v.Name }),
+				StreamColumn("pieces", StreamList(StreamByteSlice), func(v *streamFixture) *[][]byte { return &v.Pieces }),
 				StreamColumn("tags", StreamSet(StreamInt32), func(v *streamFixture) *[]int32 { return &v.Tags }),
 				StreamColumn("maybe", StreamNullable(StreamInt64), func(v *streamFixture) *Nullable[int64] { return &v.Maybe }),
 				StreamColumn("at", StreamTimestamp, func(v *streamFixture) *Timestamp { return &v.At }),

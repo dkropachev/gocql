@@ -200,7 +200,7 @@ func TestUDT(t *testing.T) {
 			if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(strict), col{"test"}); err == nil {
 				t.Fatal("strict UDT accepted an unaccounted database field")
 			}
-			codec := serializationUDT(p, r, cql.UDTName(fixtureKeyspace(""), typ), cql.IgnoreExtraFields())
+			codec := serializationUDT(p, r, cql.UDTName(fixtureKeyspace(""), typ), cql.IgnoreUnknownFields())
 			want := col{"test"}
 			got := serializationRoundTrip(t, s, table, "udt_col", 1, codec, want)
 			if got != want {

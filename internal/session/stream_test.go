@@ -71,7 +71,7 @@ func TestStream(t *testing.T) {
 				}()
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 				bound := runtimeQuery(t)
-				cursor, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+				cursor, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 				if err != nil {
 					t.Fatal("configured envelope rejected", declared, err)
 				}
@@ -98,14 +98,14 @@ func TestStream(t *testing.T) {
 			defer b.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			_, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			_, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if _, ok := errors.AsType[*cql.StreamCapabilityError](err); !ok {
 				t.Fatal(err)
 			}
 			if c.InternalStreams.InUse() != 0 {
 				t.Fatal("capability leaked stream")
 			}
-			_, err = RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Prefetch: cql.Option[int]{Set: true, Value: 1}}})
+			_, err = RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{Prefetch: cql.Option[int]{Set: true, Value: 1}}})
 			if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
 				t.Fatal(err)
 			}
@@ -152,7 +152,7 @@ func TestStream(t *testing.T) {
 						defer cancel()
 						b := runtimeQuery(t)
 						defer b.Close()
-						cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+						cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -171,7 +171,7 @@ func TestStream(t *testing.T) {
 						if !tc.keep {
 							return
 						}
-						next, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+						next, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -314,13 +314,13 @@ func TestStream(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
 			b := runtimeQuery(t)
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if err != nil {
 				t.Fatal(err)
 			}
 			short, stop := context.WithTimeout(ctx, 10*time.Millisecond)
 			defer stop()
-			if second, err := RunStream(short, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true}); second != nil || !errors.Is(err, context.DeadlineExceeded) {
+			if second, err := RunStream(short, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true}); second != nil || !errors.Is(err, context.DeadlineExceeded) {
 				t.Fatal(second, err)
 			}
 			b.Close()
@@ -432,7 +432,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: incremental})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: incremental})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -495,7 +495,7 @@ func TestStream(t *testing.T) {
 			}()
 			b := runtimeQuery(t)
 			defer b.Close()
-			cursor, err := RunStream(context.Background(), s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}}})
+			cursor, err := RunStream(context.Background(), s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{PageTimeout: cql.Option[time.Duration]{Set: true, Value: 20 * time.Millisecond}}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -565,7 +565,7 @@ func TestStream(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 					defer cancel()
 					b := runtimeQuery(t)
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -622,7 +622,7 @@ func TestStream(t *testing.T) {
 			defer cancel()
 			b := runtimeQuery(t)
 			defer b.Close()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -678,7 +678,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -713,7 +713,7 @@ func TestStream(t *testing.T) {
 			defer b.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{Idempotent: cql.Some(true)}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -745,7 +745,7 @@ func TestStream(t *testing.T) {
 			defer b.Close()
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if err == nil || cursor != nil {
 				t.Fatal("invalid checksum exposed cursor", cursor, err)
 			}
@@ -784,7 +784,7 @@ func TestStream(t *testing.T) {
 							}()
 							b := runtimeQuery(t)
 							ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-							cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+							cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 							if err == nil {
 								dst := make([]byte, 0, 20)
 								if cursor.NextInto(&dst) {
@@ -837,7 +837,7 @@ func TestStream(t *testing.T) {
 								}()
 								b := runtimeQuery(t)
 								ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-								cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+								cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 								if err == nil {
 									dst := make([]byte, 0, 10)
 									var rows [][]byte
@@ -898,7 +898,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -940,7 +940,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: incremental})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: incremental})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -984,7 +984,7 @@ func TestStream(t *testing.T) {
 					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 					defer cancel()
 					b := runtimeQuery(t)
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1048,7 +1048,7 @@ func TestStream(t *testing.T) {
 					defer cancel()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: incremental})
+					cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: incremental})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1096,7 +1096,7 @@ func TestStream(t *testing.T) {
 				}, nilPreparedStreamPlan{}},
 				{"CQLTraceOfServerErrorIsFailed", func(stream int, id cql.UUID) []byte {
 					return tracedServerError(t, stream, cqlerr.CodeInvalid, nil, id)
-				}, cql.StreamOneColumn(cql.StreamBlob)},
+				}, cql.StreamOneColumn(cql.StreamByteSlice)},
 			} {
 				t.Run(tc.name+"/"+mode, func(t *testing.T) {
 					s, c, peer := rowStreamSession(t, 4, nil)
@@ -1302,7 +1302,7 @@ func TestStream(t *testing.T) {
 			}()
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			cursor, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			cursor, err := RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1352,7 +1352,7 @@ func TestStream(t *testing.T) {
 			defer cancel()
 			b := runtimeQuery(t)
 			defer b.Close()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1392,7 +1392,7 @@ func TestStream(t *testing.T) {
 					}()
 					b := runtimeQuery(t)
 					defer b.Close()
-					cursor, err := RunStream(context.Background(), s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true})
+					cursor, err := RunStream(context.Background(), s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true})
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -1446,7 +1446,7 @@ func TestStream(t *testing.T) {
 			defer cancel()
 			bound := runtimeQuery(t)
 			defer bound.Close()
-			cursor := codecTestMust(RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Limits: transport.StreamLimits{ReadAheadBytes: 1}}))
+			cursor := codecTestMust(RunStream(ctx, s, bound, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Limits: transport.StreamLimits{ReadAheadBytes: 1}}))
 			spy.mu.Lock()
 			for _, target := range spy.targets {
 				if len(target) > 16 {
@@ -1507,7 +1507,7 @@ func TestStream(t *testing.T) {
 			defer cancel()
 			b := runtimeQuery(t)
 			defer b.Close()
-			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Profile: handle}, Limits: transport.StreamLimits{MaxMetadataBytes: 20000}})
+			cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{Profile: handle}, Limits: transport.StreamLimits{MaxMetadataBytes: 20000}})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1618,7 +1618,7 @@ func TestStream(t *testing.T) {
 									t.Fatal(ok, err)
 								}
 							} else {
-								plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns))
+								plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns))
 								dst := make([]byte, 0, work.size)
 								backing := unsafe.SliceData(dst[:cap(dst)])
 								for i := 0; i < work.rows; i++ {
@@ -1743,7 +1743,7 @@ func TestStream(t *testing.T) {
 		t.Run("IncrementalScalarParity", func(t *testing.T) {
 			scalarParity(t, cql.KindBoolean, cql.BoolCodec, cql.StreamBool, []byte{0}, []byte{1}, []byte{2})
 			scalarParity(t, cql.KindDate, cql.DateCodec, cql.StreamDate, []byte{0, 0, 0, 0}, []byte{255, 255, 255, 255})
-			scalarParity(t, cql.KindTime, cql.TimeOfDayCodec, cql.StreamTime, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
+			scalarParity(t, cql.KindTime, cql.TimeOfDayCodec, cql.StreamTimeOfDay, []byte{255, 255, 255, 255, 255, 255, 255, 255}, []byte{0, 0, 78, 148, 145, 79, 0, 0})
 			scalarParity(t, cql.KindTimeUUID, cql.TimeUUIDCodec, cql.StreamTimeUUID, make([]byte, 16), []byte{0, 0, 0, 0, 0, 0, 16, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 			scalarParity(t, cql.KindInet, cql.InetCodec, cql.StreamInet, []byte{127, 0, 0, 1}, make([]byte, 16))
 			scalarParity(t, cql.KindDuration, cql.DurationCodec, cql.StreamDuration,
@@ -1784,7 +1784,7 @@ func TestStream(t *testing.T) {
 			if prior.InternalReader != nil || budget.Bytes() != 100 {
 				t.Fatal("old reader/budget not released", budget.Bytes())
 			}
-			plan := codecTestMust(cql.StreamOneColumn(cql.StreamBlob).Compile(columns))
+			plan := codecTestMust(cql.StreamOneColumn(cql.StreamByteSlice).Compile(columns))
 			dst := make([]byte, 0, 3)
 			plan.Reset(&dst)
 			if err := plan.DecodeInto(next.InternalReader, &dst); err != nil || string(dst) != "abc" {
@@ -1812,7 +1812,7 @@ func TestStream(t *testing.T) {
 						b := runtimeQuery(t)
 						ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 						defer cancel()
-						cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Incremental: true, Options: Options{Retry: retry.Safe{MaxAttempts: 1}}})
+						cursor, err := RunStream(ctx, s, b, cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Incremental: true, Options: Options{Retry: retry.Safe{MaxAttempts: 1}}})
 						if cursor != nil {
 							cursor.Close()
 						}

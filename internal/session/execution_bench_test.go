@@ -42,7 +42,7 @@ import (
 
 func BenchmarkExecution(b *testing.B) {
 	b.Run("DurationDecode", func(b *testing.B) {
-		reader := scalarReader(b, cql.KindDuration, cql.Present, []byte{2, 4, 6})
+		reader := scalarReader(b, cql.KindDuration, cql.CellPresent, []byte{2, 4, 6})
 		b.ReportAllocs()
 		for b.Loop() {
 			if _, err := cql.DurationCodec.Decode(reader); err != nil {

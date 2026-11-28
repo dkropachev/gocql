@@ -39,7 +39,7 @@ func (p compiledPairedRow[A, B]) detachRow(dst *Pair[A, B]) {
 }
 
 func (c scalarCodec[T]) detachValue(dst *T) {
-	// Blob, varint and decimal retain page views and provide clone callbacks.
+	// Blob and varint views retain page views and provide clone callbacks.
 	// The other scalar decoders materialize their result directly.
 	if c.clone != nil {
 		*dst = c.Clone(*dst)

@@ -392,7 +392,7 @@ func sessionStatement(scylla bool) cql.Statement[cql.UUID, sessionRow] {
 		cql.Column("duration", cql.NullableCodec(cql.Int32Codec), func(r *sessionRow) *cql.Nullable[int32] { return &r.Duration }),
 		cql.Column("command", cql.NullableCodec(cql.StringCodec), func(r *sessionRow) *cql.Nullable[string] { return &r.Command }),
 		cql.Column("request", cql.NullableCodec(cql.StringCodec), func(r *sessionRow) *cql.Nullable[string] { return &r.Request }),
-		cql.Column("parameters", cql.NullableCodec(cql.GoMapCodec(cql.StringCodec, cql.StringCodec)), func(r *sessionRow) *cql.Nullable[map[string]string] { return &r.Parameters }),
+		cql.Column("parameters", cql.NullableCodec(cql.MapCodec(cql.StringCodec, cql.StringCodec)), func(r *sessionRow) *cql.Nullable[map[string]string] { return &r.Parameters }),
 	}
 	columns := "coordinator, client, started_at, duration, command, request, parameters"
 	if scylla {

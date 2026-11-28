@@ -139,7 +139,7 @@ func TestColumnErrorPaths(t *testing.T) {
 		columns := NewColumns(ColumnSpec{Name: "a", Type: textType})
 		_, err := StreamOneColumn(StreamInt32).Compile(columns)
 		wantColumnError(t, err, "stream compile", 0, "a")
-		plan, err := StreamOneColumn(StreamText).Compile(columns)
+		plan, err := StreamOneColumn(StreamTextBytes).Compile(columns)
 		if err != nil {
 			t.Fatal(err)
 		}

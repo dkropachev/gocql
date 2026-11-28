@@ -75,7 +75,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 			}
 			replicas = append(replicas, metadata.Target{HostID: id, ShardID: cql.Option[uint32]{Set: true, Value: uint32(shard)}})
 		}
-		if codecTestMust(row.Get("new_replicas")).State() != cql.Null || codecTestMust(row.Get("stage")).State() != cql.Null {
+		if codecTestMust(row.Get("new_replicas")).State() != cql.CellNull || codecTestMust(row.Get("stage")).State() != cql.CellNull {
 			observation.stable = false
 		}
 		if len(rows) != 1 {

@@ -77,7 +77,7 @@ func TestQuery(t *testing.T) {
 			(*implSession.Session)(session).Data().InternalLogger = logging.Nop()
 			defer session.Close()
 			for _, tc := range testCases {
-				err := session.UnpreparedAddToBatch(&gocql.Batch{}, cql.Command(tc.input), cql.EmptyParams{})
+				err := session.UnpreparedAddToBatch(&gocql.Batch{}, cql.Write(tc.input, cql.NoParams), cql.EmptyParams{})
 				v := errors.Is(err, cqlerr.ErrUseStmt)
 				if v != tc.exp {
 					t.Fatalf("expected %v but got %v for statement %q", tc.exp, v, tc.input)
@@ -107,7 +107,7 @@ func TestQuery(t *testing.T) {
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(1), cql.NullValue())
 			row := cassandraRead(t, session, "SELECT id,count FROM "+table)
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
-			require.Equal(t, cql.Null, cassandraField(t, row, "count").State())
+			require.Equal(t, cql.CellNull, cassandraField(t, row, "count").State())
 		})
 		// Tests to make sure the library correctly handles the application level bug
 		// whereby not enough query arguments are passed to a query
@@ -276,7 +276,7 @@ func TestQuery(t *testing.T) {
 			}
 
 			// Unprepared INSERT retains the QUERY custom-payload path.
-			insert := cql.Command(fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table))
+			insert := cql.Write(fmt.Sprintf("INSERT INTO %s(id,value) VALUES(1, 1)", table), cql.NoParams)
 			result, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, bindOptions(session, options))
 			if err != nil {
 				t.Fatal(err)
@@ -605,7 +605,7 @@ func TestQuery(t *testing.T) {
 			}{{"with retry", true, 6}, {"without retry", false, 1}} {
 				t.Run(tc.name, func(t *testing.T) {
 					observer := &cassandraObserver{}
-					insert := cql.Command("INSERT INTO " + fixtureKeyspace("") + ".not_existing_table(event_id,time,args) VALUES(4,now(),'test')")
+					insert := cql.Write("INSERT INTO "+fixtureKeyspace("")+".not_existing_table(event_id,time,args) VALUES(4,now(),'test')", cql.NoParams)
 					_, err := session.UnpreparedExec(context.Background(), insert, cql.EmptyParams{}, bindOptions(session, execopt.Options{Idempotent: cql.Some(tc.idempotent), Retry: cassandraRetry{}, Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, Observer: hooksOf(observer)}))
 					require.Error(t, err)
 					events, attempts := observer.snapshot()
@@ -621,7 +621,7 @@ func TestQuery(t *testing.T) {
 			session := createV2Session(t)
 			defer session.Close()
 			ctx := context.Background()
-			insert := cql.Command("INSERT INTO " + fixtureKeyspace("") + ".invalid_table(value) VALUES(1)")
+			insert := cql.Write("INSERT INTO "+fixtureKeyspace("")+".invalid_table(value) VALUES(1)", cql.NoParams)
 			for _, mode := range []string{"Ignore", "Rethrow"} {
 				for _, retries := range []int{0, 1} {
 					t.Run(fmt.Sprintf("%s/%d", mode, retries), func(t *testing.T) {
@@ -654,7 +654,7 @@ func TestQuery(t *testing.T) {
 		defer session.Close()
 		namespace := fmt.Sprintf("gocql_query_%x", time.Now().UnixNano())
 		runDDL := func(ctx context.Context, stmt string) error {
-			_, err := session.UnpreparedExec(ctx, cql.Command(stmt), cql.EmptyParams{})
+			_, err := session.UnpreparedExec(ctx, cql.Write(stmt, cql.NoParams), cql.EmptyParams{})
 			return err
 		}
 		if err := runDDL(ctx, fmt.Sprintf("CREATE KEYSPACE %s WITH replication = {'class':'NetworkTopologyStrategy','replication_factor':%d}", namespace, *flagRF)); err != nil {
@@ -674,7 +674,7 @@ func TestQuery(t *testing.T) {
 			}
 			typ := cql.TextType
 			var keyspaceName string
-			found, _, err := session.UnpreparedOne(verify, cql.Statement[string, string]{Kind: cql.OrdinaryStatement, CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.StringCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, namespace, &keyspaceName)
+			found, _, err := session.UnpreparedOne(verify, cql.Statement[string, string]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name=?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.StringCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "keyspace_name", Type: typ})}, namespace, &keyspaceName)
 			if err != nil {
 				t.Error(err)
 				return
@@ -713,7 +713,7 @@ func TestQuery(t *testing.T) {
 			K, C int32
 			P    []byte
 		}
-		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P }))}, execopt.PrepareOptions{}))
+		write := codecTestMust(session.Prepare(ctx, cql.Statement[record, cql.EmptyRow]{CQL: "INSERT INTO " + table + "(k,c,p)VALUES(?,?,?)", Params: cql.Params(cql.Param("k", cql.Int32Codec, func(r record) int32 { return r.K }), cql.Param("c", cql.Int32Codec, func(r record) int32 { return r.C }), cql.Param("p", cql.ByteSliceCodec, func(r record) []byte { return r.P }))}, execopt.PrepareOptions{}))
 		w := codecTestMust(write.Worker())
 		defer w.Close()
 		payload := bytes.Repeat([]byte{42}, 4096)
@@ -723,7 +723,7 @@ func TestQuery(t *testing.T) {
 			}
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
-		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, execopt.PrepareOptions{}))
+		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, execopt.PrepareOptions{}))
 		q := codecTestMust(read.With(bindOptions(session, execopt.Options{PageSize: 2, Prefetch: cql.Some(false)})).Worker())
 		defer q.Close()
 		var previous gocql.Rows[record]
@@ -793,8 +793,8 @@ func TestQuery(t *testing.T) {
 			t.Fatal("unpaged", err, n)
 		}
 		for _, incremental := range []bool{false, true} {
-			streamDecoder := cql.StreamRowInto(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamBlob, func(r *record) *[]byte { return &r.P }))
-			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
+			streamDecoder := cql.StreamRowInto(func(*record) {}, cql.StreamColumn("c", cql.StreamInt32, func(r *record) *int32 { return &r.C }), cql.StreamColumn("p", cql.StreamByteSlice, func(r *record) *[]byte { return &r.P }))
+			readStream := codecTestMust(session.PrepareStream(ctx, cql.StreamStatement[int32, record]{CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: streamDecoder}))
 			streamQuery := codecTestMust(readStream.With(bindOptions(session, execopt.Options{PageSize: 2})).Worker(execopt.StreamOptions{Incremental: incremental}))
 			cursor, err := streamQuery.Run(ctx, int32(1))
 			if incremental && *flagProto < 5 && fixtureCompressed() {
@@ -874,7 +874,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			for _, stmt := range append(toPrepare, cantPrepare...) {
 				t.Run(stmt, func(t *testing.T) {
-					statement := cql.Command(stmt)
+					statement := cql.Write(stmt, cql.NoParams)
 					err := session.UnpreparedAddToBatch(&gocql.Batch{}, statement, cql.EmptyParams{})
 					if firstCQLWord(stmt) == "USE" {
 						require.ErrorIs(t, err, cqlerr.ErrUseStmt)
@@ -927,7 +927,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			for _, test := range shouldPrepareTests {
 				t.Run(fmt.Sprintf("formerly_prepared_%t_%s", test.Result, firstCQLWord(test.Stmt)), func(t *testing.T) {
-					statement := cql.Command(test.Stmt)
+					statement := cql.Write(test.Stmt, cql.NoParams)
 					if err := session.UnpreparedAddToBatch(&gocql.Batch{}, statement, cql.EmptyParams{}); err != nil {
 						t.Fatal(err)
 					}

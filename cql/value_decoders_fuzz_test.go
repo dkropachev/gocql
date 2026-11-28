@@ -68,8 +68,8 @@ func fuzzDecoders(t *testing.T) []func(ColumnSpec, wire.Chain, *wire.Lease) {
 		fuzzDecoder(CodecTestMust(ListType(intType)), ListCodec(Int32Codec)),
 		fuzzDecoder(CodecTestMust(SetType(textType)), SetCodec(StringCodec)),
 		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BytesViewCodec))),
-		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, TextViewCodec)),
-		fuzzDecoder(CodecTestMust(MapType(intType, textType)), GoMapCodec(Int32Codec, StringCodec)),
+		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapEntriesCodec(Int32Codec, TextViewCodec)),
+		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, StringCodec)),
 		fuzzDecoder(CodecTestMust(VectorType(floatType, 3)), VectorCodec(Float32Codec)),
 		fuzzDecoder(CodecTestMust(VectorType(textType, 2)), VectorCodec(StringCodec)),
 		fuzzDecoder(CodecTestMust(TupleType(intType, textType)), TupleDecoder(pair)),
@@ -209,14 +209,14 @@ func TestHostileCollectionFraming(t *testing.T) {
 	listType := CodecTestMust(ListType(IntType))
 	mapType := CodecTestMust(MapType(IntType, IntType))
 	decoders := map[string]func(wire.Chain) error{
-		"ListCodec":      oneColumnError(listType, ListCodec(Int32Codec)),
-		"SetCodec":       oneColumnError(CodecTestMust(SetType(IntType)), SetCodec(Int32Codec)),
-		"MapCodec":       oneColumnError(mapType, MapCodec(Int32Codec, Int32Codec)),
-		"GoMapCodec":     oneColumnError(mapType, GoMapCodec(Int32Codec, Int32Codec)),
-		"VectorCodec":    oneColumnError(CodecTestMust(VectorType(TextType, 2)), VectorCodec(StringCodec)),
-		"Dynamic list":   oneColumnError(listType, DynamicCodec),
-		"Dynamic map":    oneColumnError(mapType, DynamicCodec),
-		"Dynamic vector": oneColumnError(CodecTestMust(VectorType(TextType, 2)), DynamicCodec),
+		"ListCodec":       oneColumnError(listType, ListCodec(Int32Codec)),
+		"SetCodec":        oneColumnError(CodecTestMust(SetType(IntType)), SetCodec(Int32Codec)),
+		"MapEntriesCodec": oneColumnError(mapType, MapEntriesCodec(Int32Codec, Int32Codec)),
+		"MapCodec":        oneColumnError(mapType, MapCodec(Int32Codec, Int32Codec)),
+		"VectorCodec":     oneColumnError(CodecTestMust(VectorType(TextType, 2)), VectorCodec(StringCodec)),
+		"Dynamic list":    oneColumnError(listType, DynamicCodec),
+		"Dynamic map":     oneColumnError(mapType, DynamicCodec),
+		"Dynamic vector":  oneColumnError(CodecTestMust(VectorType(TextType, 2)), DynamicCodec),
 	}
 	for name, body := range bodies {
 		for decoderName, decode := range decoders {

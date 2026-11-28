@@ -127,7 +127,7 @@ type streamRowsCodec[R any] struct {
 	// structMapping maps like buffered struct rows: every column needs a
 	// field, and fields without a column are allowed.
 	structMapping bool
-	// ignoreExtra skips columns without a field (IgnoreExtraFields).
+	// ignoreExtra skips columns without a field (IgnoreUnknownFields).
 	ignoreExtra bool
 	// nullZero resets a field for a NULL cell instead of failing
 	// (NullAsZero).
@@ -167,7 +167,7 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options udtOpt
 		locations[i] = f.loc
 	}
 	// Rows are exact, as RowInto's are; struct mappings allow fields without
-	// a column, and IgnoreExtraFields columns without a field. Records use
+	// a column, and IgnoreUnknownFields columns without a field. Records use
 	// the same exact/missing/extra mapping policy as buffered records.
 	extra, missing := strict && options.allowExtra, strict && options.allowMissing
 	if c.structMapping && !strict {
@@ -289,7 +289,7 @@ func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 }
 
 // StreamUDT decodes UDT fields into caller storage with decoder, matched by
-// name as UDTDecoder matches them, with UDTName, IgnoreExtraFields and
+// name as UDTDecoder matches them, with UDTName, IgnoreUnknownFields and
 // AllowMissingFields; it rejects other options when it is compiled. With a
 // StreamRowInto or StreamRowOf decoder, a NULL or missing trailing field
 // resets its field, as UDTDecoder decodes it as zero.

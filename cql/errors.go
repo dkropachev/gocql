@@ -82,13 +82,22 @@ type CodecError struct {
 	Stage CodecStage
 	// Index is the zero-based position of the column, or of the parameter.
 	// DynamicRow.At reports the position in the DynamicRow, which is the
-	// right-hand part of the row when it is decoded by PairRows.
+	// right-hand part of the row when it is decoded by PairRows. It is -1,
+	// with Column empty, for a failure of the whole row or parameter set,
+	// such as a ConvertRows or ConvertParams mapping.
 	Index int
 }
 
-// Error names the stage, the column's index and name, the member's path and
-// the failure.
+// Error names the stage, the column's index and name, or the row or
+// parameters for an Index of -1, the member's path and the failure.
 func (e *CodecError) Error() string {
+	if e.Index < 0 && e.Column == "" {
+		what := "row"
+		if e.Stage == CodecStageEncode {
+			what = "parameters"
+		}
+		return fmt.Sprintf("gocql: %s %s%s: %v", e.Stage, what, e.Path, e.Err)
+	}
 	return fmt.Sprintf("gocql: %s column %d (%s)%s: %v", e.Stage, e.Index, e.Column, e.Path, e.Err)
 }
 

@@ -26,15 +26,16 @@ package gocql_test
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/scylladb/gocql/v2/cql"
-
-	"log"
 )
 
 func Example_nulls() {
-	codec := cql.NullableCodec(cql.TextViewCodec)
-	null, err := cql.NewEncodedValue(cql.TextType, cql.Null, nil)
+	// A Nullable[string] tells NULL from an empty string, as a struct field
+	// of that type does; a string field would fail on NULL with cql.ErrNull.
+	codec := cql.MustCodecOf[cql.Nullable[string]]()
+	null, err := cql.NewEncodedValue(cql.TextType, cql.CellNull, nil)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +44,7 @@ func Example_nulls() {
 		log.Fatal(err)
 	}
 	fmt.Println(value.Valid)
-	empty, err := cql.NewEncodedValue(cql.TextType, cql.Present, []byte{})
+	empty, err := cql.NewEncodedValue(cql.TextType, cql.CellPresent, []byte{})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -51,11 +52,7 @@ func Example_nulls() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	text, err := value.Value.Copy()
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(value.Valid, text == "")
+	fmt.Println(value.Valid, value.Value == "")
 	// Output:
 	// false
 	// true true

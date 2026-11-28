@@ -66,7 +66,7 @@ func (c pointerCodec[T]) Decode(r ValueReader) (*T, error) {
 	if r.err != nil {
 		return nil, r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		return nil, checkBytesAlive(r.Bytes())
 	}
 	decoder := c.decoder

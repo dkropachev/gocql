@@ -37,13 +37,13 @@ func FuzzV2StreamingValues(f *testing.F) {
 			_ = StreamDecodeFixture(t, boolean, StreamBool, data, &value, int(chunk)+1)
 		case 1:
 			value := make([]byte, 0, 64)
-			_ = StreamDecodeFixture(t, text, StreamText, data, &value, int(chunk)+1)
+			_ = StreamDecodeFixture(t, text, StreamTextBytes, data, &value, int(chunk)+1)
 		case 2:
 			value := make([][]byte, 8)
 			for i := range value {
 				value[i] = make([]byte, 0, 16)
 			}
-			_ = StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &value, int(chunk)+1)
+			_ = StreamDecodeFixture(t, list, StreamList(StreamByteSlice), data, &value, int(chunk)+1)
 		case 3:
 			value := StreamCell{Bytes: make([]byte, 0, 128)}
 			_ = StreamDecodeFixture(t, list, StreamEncoded, data, &value, int(chunk)+1)

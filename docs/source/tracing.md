@@ -22,11 +22,8 @@ the `cql.CQLTraceRef` `cqltrace.Fetch` takes. Package `cqltrace` reads a
 session:
 
 ```go
-insert := cql.Statement[int32, cql.EmptyRow]{
-	CQL:         "INSERT INTO app.items (id) VALUES (?)",
-	Params:      cql.OneParam(cql.Int32Codec),
-	BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
-}
+insert := cql.Write("INSERT INTO app.items (id) VALUES (?)", cql.ParamOf[int32]()).
+	WithBindMarkers(cql.ColumnSpec{Name: "id", Type: cql.IntType})
 traced, err := session.CompileOptions(execopt.Options{CQLTrace: true})
 if err != nil {
 	return err

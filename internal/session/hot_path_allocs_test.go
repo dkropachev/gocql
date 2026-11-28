@@ -263,7 +263,7 @@ func TestHotPathAllocs(t *testing.T) {
 		}{{false, 25, 14}, {true, 55, 27}} {
 			t.Run(fmt.Sprintf("incremental=%t", tc.incremental), func(t *testing.T) {
 				run := func(tag string, rows int) func() {
-					p, err := PrepareStream(ctx, session.Core(), StreamStatement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ? -- " + tag, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamBlob)}, PrepareOptions{})
+					p, err := PrepareStream(ctx, session.Core(), StreamStatement[int32, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl WHERE k = ? -- " + tag, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamByteSlice)}, PrepareOptions{})
 					if err != nil {
 						t.Fatal(err)
 					}

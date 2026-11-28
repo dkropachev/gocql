@@ -52,7 +52,7 @@ func dynamicTestType(kind Kind) DataType {
 func dynamicTestHex(s string) []byte { return dynamicTestMust(hex.DecodeString(s)) }
 func dynamicTestDecode(t *testing.T, typ DataType, body []byte) Value {
 	t.Helper()
-	encoded := dynamicTestMust(newEncodedValue(typ, Present, BorrowBytes(body)))
+	encoded := dynamicTestMust(newEncodedValue(typ, CellPresent, BorrowBytes(body)))
 	v, err := DecodeValue(DynamicCodec, encoded)
 	if err != nil {
 		t.Fatal(err)
@@ -122,7 +122,7 @@ func TestDynamic(t *testing.T) {
 				{"duplicate", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "a", Value: IntValue(2)}, {Name: "b", Value: TextValue("x")}}, "duplicate"},
 				{"missing", []ValueField{{Name: "a", Value: IntValue(1)}}, "missing"},
 				{"unused", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: TextValue("x")}, {Name: "c", Value: IntValue(2)}}, "unused"},
-				{"wrong type after first write", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: IntValue(2)}}, "type"},
+				{"wrong type after first write", []ValueField{{Name: "a", Value: IntValue(1)}, {Name: "b", Value: IntValue(2)}}, "does not bind"},
 			}
 			for _, test := range tests {
 				t.Run(test.name, func(t *testing.T) {
@@ -172,10 +172,10 @@ func TestDynamic(t *testing.T) {
 		t.Run("ComposeWithTypedRecords", func(t *testing.T) {
 			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			tuple := dynamicTestMust(TupleType(integer, text))
-			encoded := dynamicTestMust(newEncodedValue(tuple, Present, BorrowBytes(dynamicTestHex("0000000400000001"))))
+			encoded := dynamicTestMust(newEncodedValue(tuple, CellPresent, BorrowBytes(dynamicTestHex("0000000400000001"))))
 			tupleRow := dynamicTestMust(DecodeValue(TupleDecoder(DynamicRows), encoded))
 			trailing := dynamicTestMust(tupleRow.At(1))
-			if trailing.State() != Null || !trailing.Type().Equal(text) {
+			if trailing.State() != CellNull || !trailing.Type().Equal(text) {
 				t.Fatal("dynamic tuple row lost omitted trailing null")
 			}
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "s", Type: text}))
@@ -289,7 +289,7 @@ func TestDynamic(t *testing.T) {
 							t.Error(e)
 							return
 						}
-						b, e := value.Bytes()
+						b, e := value.BytesView()
 						if e != nil {
 							t.Error(e)
 							return
@@ -318,7 +318,7 @@ func TestDynamic(t *testing.T) {
 				t.Fatal("copy cached index bypassed lease", e)
 			}
 			value := CodecTestMust(clone.Get("v127"))
-			owned := CodecTestMust(value.Bytes())
+			owned := CodecTestMust(value.BytesView())
 			if got := CodecTestMust(owned.At(0)); got != 127 {
 				t.Fatal(got)
 			}
@@ -327,7 +327,7 @@ func TestDynamic(t *testing.T) {
 			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
 			tuple := dynamicTestMust(TupleType(integer, text))
 			cols := NewColumns(ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: integer}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "same", Type: text}, ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "pair", Type: tuple})
-			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), TextValue("hello"), dynamicTestMust(TupleValue(tuple, []Value{IntValue(8), TextValue("nested")}))})
+			source := dynamicTestRowBody(t, cols, []Value{IntValue(7), TextValue("hello"), dynamicTestMust(TupleValue(tuple, IntValue(8), TextValue("nested")))})
 			data := (bytesView(source, wire.Ref{})).ownedBytes()
 			spans := make([]wire.Span, len(data))
 			for i := range data {
@@ -425,7 +425,6 @@ func TestDynamic(t *testing.T) {
 	t.Run("Value", func(t *testing.T) {
 		t.Run("AggregateWireAndMetadata", func(t *testing.T) {
 			integer, text := dynamicTestType(KindInt), dynamicTestType(KindText)
-			mapping := dynamicTestMust(MapType(text, integer))
 			tuple := dynamicTestMust(TupleType(text, integer))
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "number", Type: integer}))
 			fixed := dynamicTestMust(VectorType(integer, 2))
@@ -437,9 +436,9 @@ func TestDynamic(t *testing.T) {
 			}{
 				{"list", dynamicTestMust(ListValue(integer, IntValue(1), IntValue(2))), "0000000200000004000000010000000400000002"},
 				{"set", dynamicTestMust(SetValue(text, TextValue("a"), TextValue(""))), "00000002000000016100000000"},
-				{"map", dynamicTestMust(MapValue(mapping, []ValueEntry{{Key: TextValue("k"), Value: IntValue(1)}})), "00000001000000016b0000000400000001"},
-				{"tuple", dynamicTestMust(TupleValue(tuple, []Value{TextValue("a"), IntValue(1)})), "00000001610000000400000001"},
-				{"UDT", dynamicTestMust(UDTValue(udt, []ValueField{{Name: "number", Value: IntValue(1)}, {Name: "name", Value: TextValue("a")}})), "00000001610000000400000001"},
+				{"map", dynamicTestMust(MapValue(text, integer, ValueEntry{Key: TextValue("k"), Value: IntValue(1)})), "00000001000000016b0000000400000001"},
+				{"tuple", dynamicTestMust(TupleValue(tuple, TextValue("a"), IntValue(1))), "00000001610000000400000001"},
+				{"UDT", dynamicTestMust(UDTValue(udt, ValueField{Name: "number", Value: IntValue(1)}, ValueField{Name: "name", Value: TextValue("a")})), "00000001610000000400000001"},
 				{"fixed vector", pair, "0000000100000002"},
 				{"variable vector", dynamicTestMust(VectorValue(text, TextValue("a"), TextValue(""))), "016100"},
 				{"nested vector", dynamicTestMust(VectorValue(fixed, pair, pair)), "00000001000000020000000100000002"},
@@ -474,7 +473,7 @@ func TestDynamic(t *testing.T) {
 			if _, err := ListValue(integer, TextValue("x")); err == nil {
 				t.Fatal("wrong list child type accepted")
 			}
-			if _, err := TupleValue(tuple, []Value{TextValue("x")}); err == nil {
+			if _, err := TupleValue(tuple, TextValue("x")); err == nil {
 				t.Fatal("short tuple accepted")
 			}
 			if _, err := VectorValue(integer); err == nil {
@@ -483,10 +482,10 @@ func TestDynamic(t *testing.T) {
 			if v := dynamicTestMust(VectorValue(integer, IntValue(1))); !v.Type().Equal(dynamicTestMust(VectorType(integer, 1))) {
 				t.Fatal("vector dimension is not the value count")
 			}
-			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: TextValue("a")}, {Name: "name", Value: TextValue("b")}}); err == nil {
+			if _, err := UDTValue(udt, ValueField{Name: "name", Value: TextValue("a")}, ValueField{Name: "name", Value: TextValue("b")}); err == nil {
 				t.Fatal("duplicate UDT input name accepted")
 			}
-			if _, err := UDTValue(udt, []ValueField{{Name: "name", Value: TextValue("a")}, {Name: "unknown", Value: IntValue(1)}}); err == nil {
+			if _, err := UDTValue(udt, ValueField{Name: "name", Value: TextValue("a")}, ValueField{Name: "unknown", Value: IntValue(1)}); err == nil {
 				t.Fatal("unknown UDT field accepted")
 			}
 			other := dynamicTestMust(UDTType("ks", "other", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "number", Type: integer}))
@@ -508,7 +507,7 @@ func TestDynamic(t *testing.T) {
 			}
 			chain := dynamicTestMust(wire.NewChain(parts...))
 			lease := wire.NewLease(chain, nil)
-			value, err := DynamicCodec.Decode(valueReaderFromLease(list, Present, chain, lease))
+			value, err := DynamicCodec.Decode(valueReaderFromLease(list, CellPresent, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -567,16 +566,16 @@ func TestDynamic(t *testing.T) {
 			payload[0] = 'X'
 			descriptors[0] = BlobValue([]byte("replaced"))
 			clonedInputValues := dynamicTestDetach(inputClone.Elements(), cloneValue)
-			cloneBytes := dynamicTestMust(clonedInputValues[0].Bytes())
+			cloneBytes := dynamicTestMust(clonedInputValues[0].BytesView())
 			if string(cloneBytes.ownedBytes()) != "payload" {
 				t.Fatal("input Clone kept borrowed descriptors or payload")
 			}
 			ownedValues := dynamicTestDetach(dynamicTestMust(DecodeValue(DynamicCodec, owned)).Elements(), cloneValue)
-			if b, _ := ownedValues[0].Bytes(); string(b.ownedBytes()) != "payload" {
+			if b, _ := ownedValues[0].BytesView(); string(b.ownedBytes()) != "payload" {
 				t.Fatal("owned encoding retained caller payload")
 			}
 			borrowedValues := dynamicTestDetach(dynamicTestMust(DecodeValue(DynamicCodec, borrowed)).Elements(), cloneValue)
-			if b, _ := borrowedValues[0].Bytes(); string(b.ownedBytes()) != "Xayload" {
+			if b, _ := borrowedValues[0].BytesView(); string(b.ownedBytes()) != "Xayload" {
 				t.Fatal("borrowed encoding did not retain source payload")
 			}
 		})
@@ -625,7 +624,7 @@ func TestDynamic(t *testing.T) {
 			}
 			for _, test := range tests {
 				t.Run(test.typ.String()+"/"+test.body, func(t *testing.T) {
-					encoded := dynamicTestMust(newEncodedValue(test.typ, Present, BorrowBytes(dynamicTestHex(test.body))))
+					encoded := dynamicTestMust(newEncodedValue(test.typ, CellPresent, BorrowBytes(dynamicTestHex(test.body))))
 					if v, err := DecodeValue(DynamicCodec, encoded); err == nil {
 						t.Fatalf("malformed body published a value: %s state %d", v.Type(), v.State())
 					}
@@ -713,7 +712,7 @@ func TestDynamic(t *testing.T) {
 							t.Fatalf("Text: %v", e)
 						}
 					case KindBlob:
-						a, e := got.Bytes()
+						a, e := got.BytesView()
 						if e != nil || !bytes.Equal(a.ownedBytes(), []byte{0, 1}) {
 							t.Fatalf("Bytes: %v", e)
 						}
@@ -790,11 +789,11 @@ func TestDynamic(t *testing.T) {
 					t.Fatal(err)
 				}
 				decoded, err := DecodeValue(DynamicCodec, encoded)
-				if err != nil || decoded.State() != Null {
+				if err != nil || decoded.State() != CellNull {
 					t.Fatal("null state lost", err)
 				}
 				unset, err := encodeValueBorrowed(typ, DynamicCodec, UnsetValue())
-				if err != nil || unset.State() != Unset {
+				if err != nil || unset.State() != CellUnset {
 					t.Fatal("standalone unset failed", err)
 				}
 				if _, err := DecodeValue(DynamicCodec, unset); err == nil {
@@ -806,7 +805,7 @@ func TestDynamic(t *testing.T) {
 				empty := dynamicTestMust(EmptyValue(typ))
 				dynamicTestRoundTrip(t, empty, "")
 				got := dynamicTestDecode(t, typ, nil)
-				if got.State() != EmptyCell {
+				if got.State() != CellEmpty {
 					t.Fatalf("%s wire empty lost", typ)
 				}
 			}
@@ -828,16 +827,16 @@ func TestDynamic(t *testing.T) {
 			tuple := dynamicTestMust(TupleType(integer, text))
 			truncated := dynamicTestDecode(t, tuple, dynamicTestHex("0000000400000001"))
 			values, err := dynamicTestCollect(truncated.Elements(), cloneValue)
-			if err != nil || len(values) != 2 || values[1].State() != Null || !values[1].Type().Equal(text) {
+			if err != nil || len(values) != 2 || values[1].State() != CellNull || !values[1].Type().Equal(text) {
 				t.Fatal("missing trailing tuple member did not retain typed null", err)
 			}
 			udt := dynamicTestMust(UDTType("ks", "record", ColumnSpec{Name: "x", Type: integer}, ColumnSpec{Name: "y", Type: text}))
 			omitted := dynamicTestDecode(t, udt, nil)
 			fields, err := dynamicTestCollect(omitted.Fields(), cloneField)
-			if err != nil || len(fields) != 2 || fields[0].Value.State() != Null || fields[1].Value.State() != Null {
+			if err != nil || len(fields) != 2 || fields[0].Value.State() != CellNull || fields[1].Value.State() != CellNull {
 				t.Fatal("omitted UDT trailing fields", err)
 			}
-			if _, err := TupleValue(tuple, []Value{IntValue(1), UnsetValue()}); err == nil {
+			if _, err := TupleValue(tuple, IntValue(1), UnsetValue()); err == nil {
 				t.Fatal("unset tuple member accepted")
 			}
 		})
@@ -875,11 +874,11 @@ func TestDynamicCodecContracts(t *testing.T) {
 		decoder := dynamicTestMust(compileValueDecoder(DynamicCodec, blob))
 		compiledClone := decoder.Clone(value)
 		body[0] = 'P'
-		if got := dynamicTestMust(value.Bytes()).ownedBytes(); string(got) != "Payload" {
+		if got := dynamicTestMust(value.BytesView()).ownedBytes(); string(got) != "Payload" {
 			t.Fatalf("decoded value %q does not borrow the body", got)
 		}
 		for name, v := range map[string]Value{"Codec": cloned, "Compiled": compiledClone} {
-			if got := dynamicTestMust(v.Bytes()).ownedBytes(); string(got) != "payload" {
+			if got := dynamicTestMust(v.BytesView()).ownedBytes(); string(got) != "payload" {
 				t.Errorf("%s Clone = %q, want a copy taken before the body changed", name, got)
 			}
 		}

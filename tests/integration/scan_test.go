@@ -56,11 +56,10 @@ func TestScan(t *testing.T) {
 				t.Fatal(err)
 			}
 			tx, in := cql.TextType, cql.IntType
-			mp := serializationMustType(cql.MapType(tx, in))
 			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{
 				{"list", "['a','b','c']", serializationMustValue(cql.ListValue(tx, cql.TextValue("a"), cql.TextValue("b"), cql.TextValue("c")))},
 				{"set", "{1,2,3}", serializationMustValue(cql.SetValue(in, cql.IntValue(1), cql.IntValue(2), cql.IntValue(3)))},
-				{"map", "{'key1':1,'key2':2}", serializationMustValue(cql.MapValue(mp, []cql.ValueEntry{{Key: cql.TextValue("key1"), Value: cql.IntValue(1)}, {Key: cql.TextValue("key2"), Value: cql.IntValue(2)}}))},
+				{"map", "{'key1':1,'key2':2}", serializationMustValue(cql.MapValue(tx, in, cql.ValueEntry{Key: cql.TextValue("key1"), Value: cql.IntValue(1)}, cql.ValueEntry{Key: cql.TextValue("key2"), Value: cql.IntValue(2)}))},
 			})
 		})
 		t.Run("Counter", func(t *testing.T) {
@@ -90,10 +89,10 @@ func TestScan(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id text PRIMARY KEY,val list<frozen<map<text,text>>>)", table))
 			type nested = []cql.Entry[string, string]
 			want := []nested{{{Key: "key1", Value: "val1"}}, {{Key: "key2", Value: "val2"}}}
-			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringCodec, cql.StringCodec)))}, execopt.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEntriesEncoder(cql.StringCodec, cql.StringCodec)))}, execopt.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), want)
 			require.NoError(t, err)
-			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextViewCodec, cql.TextViewCodec))), execopt.Options{})
+			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapEntriesDecoder(cql.TextViewCodec, cql.TextViewCodec))), execopt.Options{})
 			var got []nested
 			for _, mapping := range row {
 				var entries nested
@@ -145,7 +144,7 @@ func TestScan(t *testing.T) {
 				t.Fatal(err)
 			}
 			typ := serializationMustType(cql.TupleType(cql.IntType, cql.TextType))
-			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(cql.TupleValue(typ, []cql.Value{cql.IntValue(42), cql.TextValue("hello")}))}})
+			checkDynamicSerializationCases(t, s, table, []serializationDynamicCase{{"tuple", "(42,'hello')", serializationMustValue(cql.TupleValue(typ, cql.IntValue(42), cql.TextValue("hello")))}})
 		})
 		t.Run("Vector", func(t *testing.T) {
 			t.Parallel()
@@ -216,11 +215,11 @@ func TestScan(t *testing.T) {
 				require.Equal(t, want.address, ip.String())
 				data := cassandraField(t, row, "data")
 				if i == 0 {
-					b, e := data.Bytes()
+					b, e := data.BytesView()
 					require.NoError(t, e)
 					require.Equal(t, []byte(`{"foo": "bar"}`), ownedBytesForTest(b))
 				} else {
-					require.Equal(t, cql.Null, data.State())
+					require.Equal(t, cql.CellNull, data.State())
 				}
 			}
 		})
@@ -276,11 +275,9 @@ func TestScan(t *testing.T) {
 		textType := cql.TextType
 		intType := cql.IntType
 		varcharType := cql.TextType
-		mapType, err := cql.MapType(varcharType, varcharType)
-		require.NoError(t, err)
 		bigInt, ok := new(big.Int).SetString("830169365738487321165427203929228", 10)
 		require.True(t, ok)
-		expected := []cql.ValueField{{Name: "testuuid", Value: cql.TimeUUIDValue(cql.TimeUUID(cql.NewTimeUUID()))}, {Name: "testtimestamp", Value: cql.TimestampValue(cql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: cql.TextValue("Test VarChar")}, {Name: "testbigint", Value: cql.BigIntValue(time.Now().Unix())}, {Name: "testblob", Value: cql.BlobValue([]byte("test blob"))}, {Name: "testbool", Value: cql.BooleanValue(true)}, {Name: "testfloat", Value: cql.FloatValue(4.564)}, {Name: "testdouble", Value: cql.DoubleValue(4.815162342)}, {Name: "testint", Value: cql.IntValue(2343)}, {Name: "testdecimal", Value: cql.DecimalValue(cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(cql.ListValue(textType, cql.TextValue("quux"), cql.TextValue("foo"), cql.TextValue("bar"), cql.TextValue("baz"), cql.TextValue("quux")))}, {Name: "testset", Value: cassandraValue(cql.SetValue(intType, cql.IntValue(1), cql.IntValue(2), cql.IntValue(3), cql.IntValue(4), cql.IntValue(5), cql.IntValue(6), cql.IntValue(7), cql.IntValue(8), cql.IntValue(9)))}, {Name: "testmap", Value: cassandraValue(cql.MapValue(mapType, []cql.ValueEntry{{Key: cql.TextValue("field1"), Value: cql.TextValue("val1")}, {Key: cql.TextValue("field2"), Value: cql.TextValue("val2")}, {Key: cql.TextValue("field3"), Value: cql.TextValue("val3")}}))}, {Name: "testvarint", Value: cql.VarintValue(cql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cql.InetValue(netip.MustParseAddr("213.212.2.19"))}}
+		expected := []cql.ValueField{{Name: "testuuid", Value: cql.TimeUUIDValue(cql.TimeUUID(cql.NewTimeUUID()))}, {Name: "testtimestamp", Value: cql.TimestampValue(cql.Timestamp(time.Now().UnixMilli()))}, {Name: "testvarchar", Value: cql.TextValue("Test VarChar")}, {Name: "testbigint", Value: cql.BigIntValue(time.Now().Unix())}, {Name: "testblob", Value: cql.BlobValue([]byte("test blob"))}, {Name: "testbool", Value: cql.BooleanValue(true)}, {Name: "testfloat", Value: cql.FloatValue(4.564)}, {Name: "testdouble", Value: cql.DoubleValue(4.815162342)}, {Name: "testint", Value: cql.IntValue(2343)}, {Name: "testdecimal", Value: cql.DecimalValue(cql.Decimal{Unscaled: cql.VarintFromBigInt(big.NewInt(100))})}, {Name: "testlist", Value: cassandraValue(cql.ListValue(textType, cql.TextValue("quux"), cql.TextValue("foo"), cql.TextValue("bar"), cql.TextValue("baz"), cql.TextValue("quux")))}, {Name: "testset", Value: cassandraValue(cql.SetValue(intType, cql.IntValue(1), cql.IntValue(2), cql.IntValue(3), cql.IntValue(4), cql.IntValue(5), cql.IntValue(6), cql.IntValue(7), cql.IntValue(8), cql.IntValue(9)))}, {Name: "testmap", Value: cassandraValue(cql.MapValue(varcharType, varcharType, cql.ValueEntry{Key: cql.TextValue("field1"), Value: cql.TextValue("val1")}, cql.ValueEntry{Key: cql.TextValue("field2"), Value: cql.TextValue("val2")}, cql.ValueEntry{Key: cql.TextValue("field3"), Value: cql.TextValue("val3")}))}, {Name: "testvarint", Value: cql.VarintValue(cql.VarintFromBigInt(bigInt))}, {Name: "testinet", Value: cql.InetValue(netip.MustParseAddr("213.212.2.19"))}}
 		var values []cql.Value
 		for _, field := range expected {
 			values = append(values, field.Value)

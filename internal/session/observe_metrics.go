@@ -127,7 +127,7 @@ func batchValueAt(src any, i int) cql.ValueReader {
 	column, _ = v.columns.At(i)
 	for k := 0; ; k++ {
 		if len(b) < 4 {
-			return codec.NewValueReader(column.Type, cql.Null, wire.Chain{}, nil)
+			return codec.NewValueReader(column.Type, cql.CellNull, wire.Chain{}, nil)
 		}
 		n := int32(binary.BigEndian.Uint32(b))
 		b = b[4:]
@@ -141,10 +141,10 @@ func batchValueAt(src any, i int) cql.ValueReader {
 		}
 		switch n {
 		case -1:
-			return codec.NewValueReader(column.Type, cql.Null, wire.Chain{}, nil)
+			return codec.NewValueReader(column.Type, cql.CellNull, wire.Chain{}, nil)
 		case -2:
-			return codec.NewValueReader(column.Type, cql.Unset, wire.Chain{}, nil)
+			return codec.NewValueReader(column.Type, cql.CellUnset, wire.Chain{}, nil)
 		}
-		return codec.NewValueReader(column.Type, cql.Present, wire.ChainOf(b[:size]), nil)
+		return codec.NewValueReader(column.Type, cql.CellPresent, wire.ChainOf(b[:size]), nil)
 	}
 }

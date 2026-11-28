@@ -67,7 +67,7 @@ func prepareFixture[P, R any, O fixturePrepareOptions](ctx context.Context, sess
 }
 
 func fixtureStatement[P, R any](s cql.Statement[P, R]) binding.Statement[P, R] {
-	return binding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, BindMarkers: s.BindMarkers}
+	return binding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers}
 }
 
 // preparedData exposes a prepared statement's per-host cache to the protocol

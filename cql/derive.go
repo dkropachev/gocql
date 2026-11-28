@@ -4,7 +4,6 @@
 package cql
 
 import (
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -644,7 +643,7 @@ func (c sequenceR) decode(r ValueReader, p unsafe.Pointer) error {
 	kind := c.ctyp.Kind()
 	count := 0
 	var body Bytes
-	if kind != KindVector && r.err == nil && r.State() == Null {
+	if kind != KindVector && r.err == nil && r.State() == CellNull {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}
@@ -745,7 +744,7 @@ func (c pointerR) decode(r ValueReader, p unsafe.Pointer) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		*(*unsafe.Pointer)(p) = nil
 		return checkBytesAlive(r.Bytes())
 	}
@@ -798,7 +797,7 @@ func (c nullableR) decode(r ValueReader, p unsafe.Pointer) error {
 	if r.err != nil {
 		return r.err
 	}
-	if r.State() == Null {
+	if r.State() == CellNull {
 		reflect.NewAt(c.typ, p).Elem().SetZero()
 		return checkBytesAlive(r.Bytes())
 	}
@@ -822,7 +821,7 @@ func (c nullableR) detach(p unsafe.Pointer) {
 	}
 }
 
-// bindR codes a BindValue[T], whose Value is at offset 0 and State at state;
+// bindR codes a BindValue[T], whose value is at offset 0 and state at state;
 // it only encodes.
 type bindR struct {
 	elem  rcodec
@@ -841,15 +840,13 @@ func (c bindR) compile(t DataType, dir rdir) (rcodec, error) {
 	return c, nil
 }
 func (c bindR) encode(w *ValueWriter, p unsafe.Pointer) error {
-	switch *(*CellState)(unsafe.Add(p, c.state)) {
-	case Present:
+	switch *(*bindState)(unsafe.Add(p, c.state)) {
+	case bindPresent:
 		return c.elem.encode(w, p)
-	case Null:
+	case bindNull:
 		return w.Null()
-	case Unset:
-		return w.Unset()
 	default:
-		return errors.New("gocql: invalid bind state")
+		return w.Unset()
 	}
 }
 func (c bindR) decode(ValueReader, unsafe.Pointer) error {
@@ -858,7 +855,7 @@ func (c bindR) decode(ValueReader, unsafe.Pointer) error {
 func (c bindR) clone(dst, src unsafe.Pointer) {}
 func (c bindR) detach(unsafe.Pointer)         {}
 
-// mapR codes a Go map, as GoMapCodec does.
+// mapR codes a Go map, as MapCodec does.
 type mapR struct {
 	key, value       rcodec
 	keyEnc, valueEnc Encoder[unsafe.Pointer] // set by compile
@@ -915,7 +912,7 @@ func (c mapR) decode(r ValueReader, p unsafe.Pointer) error {
 		return typeValidation("type", "map metadata changed after compilation")
 	}
 	m := reflect.NewAt(c.typ, p).Elem()
-	if r.err == nil && r.State() == Null {
+	if r.err == nil && r.State() == CellNull {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

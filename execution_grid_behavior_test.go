@@ -362,16 +362,20 @@ func gridSelect() cql.Statement[int32, []byte] {
 		Params:      cql.OneParam(cql.Int32Codec),
 		Rows:        cql.RowInto(func(*[]byte) {}, cql.Column("value", cql.ByteSliceCodec, func(dst *[]byte) *[]byte { return dst })),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType}),
-		Kind:        cql.OrdinaryStatement,
 	}
 }
 
+// gridUpdate returns an update of kind, which the driver infers from its CQL:
+// a conditional one has an IF.
 func gridUpdate(kind cql.StatementKind) cql.Statement[int32, cql.EmptyRow] {
+	text := "UPDATE ks.tbl SET value = 0x00 WHERE k = ?"
+	if kind == cql.ConditionalStatement {
+		text += " IF value = 0x01"
+	}
 	return cql.Statement[int32, cql.EmptyRow]{
-		CQL:         "UPDATE ks.tbl SET value = 0x00 WHERE k = ?",
+		CQL:         text,
 		Params:      cql.OneParam(cql.Int32Codec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.IntType}),
-		Kind:        kind,
 	}
 }
 

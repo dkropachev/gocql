@@ -43,7 +43,7 @@ func (c customStreamDecoder) Compile(t DataType) (CompiledStreamValue[customStre
 	if err != nil {
 		return nil, err
 	}
-	blob, err := StreamBlob.Compile(b.Type)
+	blob, err := StreamByteSlice.Compile(b.Type)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (streamWordsDecoder) Compile(t DataType) (CompiledStreamValue[streamWords],
 func (streamWordsDecoder) Reset(dst *streamWords) { *dst = streamWords{} }
 func (streamWordsDecoder) DecodeInto(r *StreamValueReader, dst *streamWords) error {
 	dst.Type, dst.State = r.Type(), r.State()
-	if dst.State != Present {
+	if dst.State != CellPresent {
 		return nil
 	}
 	var err error

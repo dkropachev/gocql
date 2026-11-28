@@ -31,7 +31,7 @@ func TestEnumStrings(t *testing.T) {
 		{cql.BatchKind(9), "BatchKind(9)"},
 		{cql.ConditionalStatement, "conditional"},
 		{cql.StatementKind(9), "StatementKind(9)"},
-		{cql.EmptyCell, "empty"},
+		{cql.CellEmpty, "empty"},
 		{cql.CellState(9), "CellState(9)"},
 		{event.Kind(0), "unknown"},
 		{event.KindClientRoute, "client route"},

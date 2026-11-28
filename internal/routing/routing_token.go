@@ -26,7 +26,7 @@ func InternalRoutingToken(cells []model.EncodedCell, indexes []int) (cql.Option[
 			return cql.Option[int64]{}, fmt.Errorf("gocql: partition key index %d outside %d bound values", index, len(cells))
 		}
 		cell := cells[index]
-		if cell.State == cql.Null || cell.State == cql.Unset {
+		if cell.State == cql.CellNull || cell.State == cql.CellUnset {
 			missing = true
 		}
 		if len(indexes) > 1 && cell.Body.Len() > math.MaxUint16 {

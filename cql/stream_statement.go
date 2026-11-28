@@ -10,7 +10,8 @@ package cql
 // Its fields are ordered for memory layout, not as Statement's are.
 //
 // The zero StreamStatement has no CQL or decoder, which preparation rejects
-// with a ValidationError.
+// with a ValidationError. NewStreamStatement builds one with its type
+// arguments inferred.
 type StreamStatement[P, R any] struct {
 	// Params encodes P. It may be nil when P is cql.EmptyParams.
 	Params ParamEncoder[P]
@@ -18,13 +19,22 @@ type StreamStatement[P, R any] struct {
 	Rows StreamRowDecoder[R]
 	// CQL is the statement's text.
 	CQL string
-	// Kind classifies ordinary and conditional statements for safe execution.
-	// The driver infers an UnknownStatement's kind from the CQL, as
-	// Statement.Kind describes.
-	Kind StatementKind
 	// Idempotent marks the statement safe to run more than once, as
 	// Statement.Idempotent does.
 	Idempotent bool
+}
+
+// NewStreamStatement returns a streaming statement of text with params and
+// rows, its type arguments inferred from them. It is not Idempotent; use
+// WithIdempotent.
+func NewStreamStatement[P, R any](text string, params ParamEncoder[P], rows StreamRowDecoder[R]) StreamStatement[P, R] {
+	return StreamStatement[P, R]{CQL: text, Params: params, Rows: rows}
+}
+
+// WithIdempotent returns a copy of s with Idempotent set to idempotent.
+func (s StreamStatement[P, R]) WithIdempotent(idempotent bool) StreamStatement[P, R] {
+	s.Idempotent = idempotent
+	return s
 }
 
 // StreamRowOf decodes streamed rows into struct R by column name, mapped like
@@ -38,15 +48,15 @@ type StreamStatement[P, R any] struct {
 // `stream=Varint` one of those. Storage of []byte and
 // slice fields is reused across rows. A string, time.Time, time.Duration,
 // Decimal or pointer field decodes with an allocating decoder (StreamString,
-// StreamTimestampTime, StreamTimeDuration, StreamDecimalValue, StreamPointer),
+// StreamTimestampTime, StreamTimeDuration, StreamDecimal, StreamPointer),
 // a new value for each row; a map field needs WithStreamDecoder, as of
-// StreamGoMap. Every column needs a field, unless IgnoreExtraFields is given.
+// StreamMap. Every column needs a field, unless IgnoreUnknownFields is given.
 // A NULL cell fails a field that cannot hold it, with an error matching
 // ErrNull, unless the field's tag has nullzero or NullAsZero is given.
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
 // mapping is used; otherwise R is reflected once, here. StreamRowOf applies
-// WithStreamDecoder, IgnoreExtraFields and NullAsZero, and rejects other
+// WithStreamDecoder, IgnoreUnknownFields and NullAsZero, and rejects other
 // options.
 func StreamRowOf[R any](opts ...StructOption) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]

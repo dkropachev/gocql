@@ -11,7 +11,10 @@ has that kind.
 `UDTNameOf` derives the `UDTName` option of a UDT `DataType`.
 `Encoder[T]`/`Decoder[T]` compile typed value plans; `ParamEncoder[P]` and
 `RowDecoder[R]` compose statement plans. `Params(Param(...))` and
-`Row(Column(...))` map struct fields explicitly.
+`Row(Column(...))` map struct fields explicitly. `CodecOf[T]()` returns the
+codec a struct field of type T derives, such as `[]int32` or
+`map[string]Address`, and `ParamOf[T]()` and `ColumnOf[T]()` bind or decode
+one value with it, as `OneParam` and `OneColumn` do with an explicit codec.
 
 Native scalars have explicit codecs such as Int32Codec, Int64Codec, BoolCodec, UUIDCodec,
 TimestampCodec and DurationCodec. `Int64Codec` also reads and writes a counter
@@ -26,7 +29,7 @@ use `Nullable[T]` (or `cql.NonNull(v)` to build a present one) for a column
 that may be NULL, or `cql.NullAsZero()` or a `nullzero` tag to read NULL as
 the zero value. `StringCodec` and `ByteSliceCodec` encode a Go string and []byte and decode
 an owned copy; TextViewCodec and BytesViewCodec decode a borrowed Text and Bytes
-without copying. The text codecs, `StreamText` included, map both text and
+without copying. The text codecs, `StreamTextBytes` included, map both text and
 ascii, and check a value is valid UTF-8 for text and ASCII for ascii.
 `UUIDCodec` maps uuid and timeuuid; it rejects encoding a UUID that is not
 version 1 into a timeuuid. Collection decoders eagerly produce slices whose payload elements may borrow pages;
@@ -46,28 +49,42 @@ text into a string and `TextView` borrows it; `Len` and
 `Entries` and `Fields` return an `iter.Seq2` that ranges over every member,
 ending with an error for a malformed member or a value of another kind.
 `ListValue`, `SetValue` and `VectorValue` take the element type and the
-values: `cql.ListValue(cql.TextType, cql.TextValue("a"))`. `String` prints a `Value`,
+values: `cql.ListValue(cql.TextType, cql.TextValue("a"))`; `MapValue` takes
+the key and value types and the entries, and `TupleValue` and `UDTValue` the
+type and the members. `UDTValue` may name some of the fields, in any order;
+the others bind NULL. A dynamic value binds a marker or member by the rules
+of the typed codecs: an integer binds any integer type and a float either
+float type, checking the range when it is encoded; text and ascii bind each
+other, validated for the marker's kind; and a UDT value binds its UDT after
+`ALTER TYPE ADD`, the added fields as NULL. `Bytes` copies a blob and
+`BytesView` borrows it. `String` prints a `Value`,
 and `Varint`, `Decimal`, `Date`, `TimeOfDay`, `Timestamp` and `Duration`
-print, in a CQL literal form. `VarintFromInt64` and `Varint.Int64` convert
-a varint that fits an `int64`, `VarintFromBigInt` and `BigInt` any other;
-`ParseDecimal` reads a decimal as `Decimal.String` prints it, and
-`Decimal.Rat` returns its exact value. A vector type has kind `KindVector`, the
+print, in a CQL literal form; their `MarshalText` and `UnmarshalText` use
+that form, so `encoding/json` writes a date as `"2026-01-02"`. `VarintFromInt64`
+and `Varint.Int64` convert a varint that fits an `int64`, `VarintFromBigInt`
+and `BigInt` any other, and `Cmp` orders varints and decimals. A `Varint`, and
+so a `Decimal`, owns its bytes: a decoded one outlives its response, and two
+of one integer are `==`; `VarintViewCodec` reads a varint's bytes without
+copying them. `ParseDecimal` reads a decimal as `Decimal.String` prints it, and
+`Decimal.Rat` returns its exact value. `Duration.TimeDuration` and
+`DurationFromTime` convert a duration without months or days to and from
+`time.Duration`. A vector type has kind `KindVector`, the
 driver's own kind: the protocol sends a vector as a custom type. Standalone
 `EncodeValue`, which copies caller payloads, and `DecodeValue` use the same
 codec implementation as execution; `NewEncodedValue` wraps an encoded body,
 borrowing it. A decoder sees an empty value as a response holds
-it, Present with an empty body, including one `DecodeValue` reads from an
-`EncodedValue` in `EmptyCell`. Explicit owned
+it, CellPresent with an empty body, including one `DecodeValue` reads from an
+`EncodedValue` in `CellEmpty`. Explicit owned
 conversion/Clone detaches payloads. Custom codecs use checked reader/writer
 interfaces and preserve metadata validation and lifetime rules.
 
 Streaming has separate `cql.StreamDecoder` and `cql.StreamRowDecoder` plans; these
 incremental readers cannot call buffered decoders. See [streaming](statements/streaming.md).
 
-`MapCodec` decodes a map into `[]Entry[K, V]` in server order and accepts keys
-that Go cannot compare; `GoMapCodec` decodes into a Go `map[K]V`, rejects a
+`MapEntriesCodec` decodes a map into `[]Entry[K, V]` in server order and accepts keys
+that Go cannot compare; `MapCodec` decodes into a Go `map[K]V`, rejects a
 repeated key, and is what struct mappings use for `map[K]V` fields of built-in
-key and value types. `ListCodec`, `SetCodec`, `MapCodec` and `GoMapCodec`, and
+key and value types. `ListCodec`, `SetCodec`, `MapEntriesCodec` and `MapCodec`, and
 the streaming counterparts, accept NULL as an empty collection. Use `NullableCodec` or `cql.StreamNullable` to
 preserve NULL independently of a present empty collection. Vectors retain their
 declared dimension and reject NULL without a nullable wrapper.
@@ -102,14 +119,15 @@ timeuuid like `UUID`. A type with a `CQLCodec() cql.Codec[T]` method, as
 (`cql.SliceCodec`; an array needs exactly N elements), and `codec=ListCodec`,
 `codec=SetCodec` or `codec=VectorCodec` requires one; `*V` maps `V` with
 NULL as nil, `Nullable[V]` with NULL as invalid, `map[K]V` a map
-(`GoMapCodec`), `cql.Pair[A, B]` a two-member tuple (`PairCodec`), and the
+(`MapCodec`), `cql.Pair[A, B]` a two-member tuple (`PairCodec`), and the
 forms nest: `[][]int32`, `map[string][]Status` or `*Nullable[[]string]`. A
 `codec=` tag naming a leaf codec, such as `codec=ASCIIStringCodec`, applies
-to the leaves it maps. A `BindValue[V]` field binds Present, Null or Unset
-for a `V`; it only binds parameters, so `RowOf` rejects it, and it is only
-ever a field's own type. `cql.Bind(v)`, `cql.BindNull[T]()` and
-`cql.BindUnset[T]()` build one. Binding fails for `EmptyCell`, so bind a
-`MaybeEmpty` through `EmptyCodec` for an empty value. A nil pointer, slice or
+to the leaves it maps. A `BindValue[V]` field binds a `V`, NULL or UNSET;
+it only binds parameters, so `RowOf` rejects it, and it is only ever a
+field's own type. `cql.Bind(v)`, `cql.BindNull[T]()` and `cql.BindUnset[T]()`
+build one and `Get` reads it; its zero value binds UNSET, so a struct of
+`BindValue` fields writes only the fields the application set. Bind a
+`MaybeEmpty` through `MaybeEmptyCodec` for an empty value. A nil pointer, slice or
 map field binds NULL, or an empty collection, unless its tag has `nilunset`
 (`cql:"name,nilunset"`) or the mapping has `cql.NilAsUnset()`: then it binds
 UNSET, which leaves the column unchanged.
@@ -133,7 +151,7 @@ with `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTName("", "address")))`.
 `UDTCodecOf` maps the UDT's fields to the struct's as `RowOf` maps columns;
 `UDTName(keyspace, name)` names the UDT it expects, an empty keyspace
 matching the UDT in any keyspace and an empty name a UDT of any name.
-`cql.IgnoreExtraFields()` accepts UDT fields the struct lacks, and
+`cql.IgnoreUnknownFields()` accepts UDT fields the struct lacks, and
 `cql.AllowMissingFields()` struct fields the UDT lacks. Either way the codec
 also maps `[]Address`, `*Address` and map values of `Address`. A tuple field maps with
 `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, which maps the tuple's
@@ -148,11 +166,11 @@ custom-expression default. Other generated expressions keep their codecs.
 Each call constructs an independent mapping; options never mutate generated
 defaults. Each option applies to some constructors, and the others reject it
 with a `ValidationError`: `WithCodec` applies to `ParamsOf`, `RowOf`,
-`UDTCodecOf` and `TupleCodecOf`; `WithEncoder` and `NilAsUnset` to
+`UDTCodecOf`, `TupleCodecOf` and `CodecOf`; `WithEncoder` and `NilAsUnset` to
 `ParamsOf`; `ReuseBuffers` to `RowOf`, keeping slice field storage between
 rows (`cql.StreamRowOf` always reuses that storage); `NullAsZero` to
 `RowOf`, `cql.StreamRowOf`, `UDTCodecOf` and `TupleCodecOf`;
-`IgnoreExtraFields` to `RowOf`, `cql.StreamRowOf`, `UDTCodecOf` and the UDT
+`IgnoreUnknownFields` to `RowOf`, `cql.StreamRowOf`, `UDTCodecOf` and the UDT
 encoder and decoders, which otherwise require a field for every result
 column or UDT field, so `SELECT *` keeps working after `ALTER TABLE ADD`;
 `UDTName` and `AllowMissingFields` to `UDTCodecOf`, `UDTEncoder`,

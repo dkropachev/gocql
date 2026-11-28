@@ -123,7 +123,7 @@ func BenchmarkReusableQuery(b *testing.B) {
 					var query *Query[cql.EmptyRow, []byte]
 					var streaming *StreamQuery[cql.EmptyRow, []byte]
 					if stream {
-						streaming = codecTestMust(unpreparedStreamQuery(s, StreamStatement[cql.EmptyRow, []byte]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: cql.StreamOneColumn(cql.StreamBlob)}, StreamOptions{Options: options.Values()}))
+						streaming = codecTestMust(unpreparedStreamQuery(s, StreamStatement[cql.EmptyRow, []byte]{Kind: statement.Kind, CQL: statement.CQL, Params: statement.Params, Rows: cql.StreamOneColumn(cql.StreamByteSlice)}, StreamOptions{Options: options.Values()}))
 						defer streaming.Close()
 					} else {
 						query = codecTestMust(unpreparedQuery(s, statement, options.Values()))

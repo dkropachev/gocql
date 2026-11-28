@@ -127,7 +127,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 	if !r.matches(p.typ) {
 		return r.fail(typeValidation("type", "validation metadata changed"))
 	}
-	if r.state == Null && allowNull {
+	if r.state == CellNull && allowNull {
 		return r.RequireEnd()
 	}
 	if err := r.present(); err != nil {
@@ -200,7 +200,7 @@ func (p *streamValidationPlan) skip(r *StreamValueReader, allowNull bool) error 
 					return err
 				}
 			}
-			if err := r.childBody(p.element.typ, Present, size, p.element, func(c *StreamValueReader) error { return p.element.skip(c, false) }); err != nil {
+			if err := r.childBody(p.element.typ, CellPresent, size, p.element, func(c *StreamValueReader) error { return p.element.skip(c, false) }); err != nil {
 				return fmt.Errorf("gocql: vector element %d: %w", i, err)
 			}
 		}
@@ -252,7 +252,7 @@ func (streamEncodedCodec) Compile(t DataType) (CompiledStreamValue[StreamCell], 
 func (streamEncodedPlan) Reset(dst *StreamCell) {
 	if dst != nil {
 		dst.Type = DataType{}
-		dst.State = Present
+		dst.State = CellPresent
 		dst.Bytes = dst.Bytes[:0]
 	}
 }
@@ -278,8 +278,8 @@ func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamCell) err
 		return err
 	}
 	dst.Type, dst.State = r.typ, r.state
-	if r.state == Present && len(dst.Bytes) == 0 && emptySupported(r.typ) {
-		dst.State = EmptyCell
+	if r.state == CellPresent && len(dst.Bytes) == 0 && emptySupported(r.typ) {
+		dst.State = CellEmpty
 	}
 	return nil
 }
@@ -287,7 +287,7 @@ func (p streamEncodedPlan) DecodeInto(r *StreamValueReader, dst *StreamCell) err
 func (streamEncodedCodec) Reset(dst *StreamCell) {
 	if dst != nil {
 		dst.Type = DataType{}
-		dst.State = Present
+		dst.State = CellPresent
 		dst.Bytes = dst.Bytes[:0]
 	}
 }
@@ -322,7 +322,7 @@ func compileStreamScalarValidation(t DataType) (func(*StreamValueReader) error, 
 	case KindDate:
 		return streamScalarValidation(t, StreamDate)
 	case KindTime:
-		return streamScalarValidation(t, StreamTime)
+		return streamScalarValidation(t, StreamTimeOfDay)
 	case KindTimestamp:
 		return streamScalarValidation(t, StreamTimestamp)
 	case KindDuration:

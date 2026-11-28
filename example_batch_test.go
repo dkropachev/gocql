@@ -48,20 +48,15 @@ func ExampleSession_ExecBatch() {
 	}
 	defer session.Close()
 	type item struct {
-		PK, CK      int32
-		Description string
+		PK          int32  `cql:"pk"`
+		CK          int32  `cql:"ck"`
+		Description string `cql:"description"`
 	}
-	queryPrepared, err := session.Prepare(ctx, cql.Statement[item, cql.EmptyRow]{
-		CQL: "INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
-		Params: cql.Params(
-			cql.Param("pk", cql.Int32Codec, func(v item) int32 { return v.PK }),
-			cql.Param("ck", cql.Int32Codec, func(v item) int32 { return v.CK }),
-			cql.Param("description", cql.StringCodec, func(v item) string { return v.Description }),
-		),
-		// Writing the same values again is harmless, so the batch, all of
-		// whose members are idempotent, may be retried and speculated.
-		Idempotent: true,
-	})
+	// Writing the same values again is harmless, so the batch, all of whose
+	// members are idempotent, may be retried and speculated.
+	insert := cql.Write("INSERT INTO example.batches (pk, ck, description) VALUES (?, ?, ?)",
+		cql.MustParamsOf[item]()).WithIdempotent(true)
+	queryPrepared, err := session.Prepare(ctx, insert)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -81,14 +76,8 @@ func ExampleSession_ExecBatch() {
 		log.Fatal(err)
 	}
 	var row item
-	_, err = session.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, item]{
-		CQL: "SELECT pk, ck, description FROM example.batches",
-		Rows: cql.Row(
-			cql.Column("pk", cql.Int32Codec, func(v *item) *int32 { return &v.PK }),
-			cql.Column("ck", cql.Int32Codec, func(v *item) *int32 { return &v.CK }),
-			cql.Column("description", cql.StringCodec, func(v *item) *string { return &v.Description }),
-		),
-	}, cql.EmptyParams{}, &row, func(v *item) error {
+	selectAll := cql.Select("SELECT pk, ck, description FROM example.batches", cql.NoParams, cql.MustRowOf[item]())
+	_, err = session.UnpreparedEach(ctx, selectAll, cql.EmptyParams{}, &row, func(v *item) error {
 		fmt.Println(v.PK, v.CK, v.Description)
 		return nil
 	})

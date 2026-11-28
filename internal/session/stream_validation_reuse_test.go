@@ -15,7 +15,7 @@ type pageValidationPlan struct {
 
 func (d *pageValidationDecoder) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
 	d.compiles++
-	plan, err := cql.StreamOneColumn(cql.StreamBlob).Compile(columns)
+	plan, err := cql.StreamOneColumn(cql.StreamByteSlice).Compile(columns)
 	return pageValidationPlan{decoder: d, plan: plan}, err
 }
 func (p pageValidationPlan) Reset(dst *[]byte) {

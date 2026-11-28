@@ -54,7 +54,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	}
 	// Compare against reflection with the custom-expression types supplied explicitly.
 	reflected := reflectParams(t, cql.WithCodec(codecFor("first/")), cql.WithCodec(PointCodec),
-		cql.WithCodec(cql.MapCodec(cql.StringCodec, cql.Int64Codec)))
+		cql.WithCodec(cql.MapEntriesCodec(cql.StringCodec, cql.Int64Codec)))
 	_, ref := encode(t, cols, reflected, input)
 	if !bytes.Equal(again, ref) {
 		t.Fatal("generated and reflected option precedence differ")

@@ -175,7 +175,7 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("EmptyCodecClone", func(t *testing.T) {
-			codec := EmptyCodec(TextViewCodec)
+			codec := MaybeEmptyCodec(TextViewCodec)
 			payload := []byte("value")
 			value := MaybeEmpty[Text]{Value: Text{bytes: BorrowBytes(payload)}}
 			cloned := codec.Clone(value)
@@ -252,7 +252,7 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := newEncodedValue(typ, Present, bytesView(chain, wire.Ref{})); err == nil {
+			if _, err := newEncodedValue(typ, CellPresent, bytesView(chain, wire.Ref{})); err == nil {
 				t.Fatal("oversized standalone cell accepted")
 			}
 			builder := wire.NewBuilder(0)
@@ -276,23 +276,23 @@ func TestValue(t *testing.T) {
 				state CellState
 				body  []byte
 				typ   DataType
-			}{{Null, []byte{1}, blob}, {Unset, []byte{1}, blob}, {EmptyCell, []byte{1}, integer}, {CellState(42), nil, blob}, {EmptyCell, nil, blob}} {
+			}{{CellNull, []byte{1}, blob}, {CellUnset, []byte{1}, blob}, {CellEmpty, []byte{1}, integer}, {CellState(42), nil, blob}, {CellEmpty, nil, blob}} {
 				if _, err := newEncodedValue(test.typ, test.state, BorrowBytes(test.body)); err == nil {
 					t.Fatalf("invalid state/body accepted: %+v", test)
 				}
 			}
-			empty, err := encodeValueBorrowed(integer, EmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
+			empty, err := encodeValueBorrowed(integer, MaybeEmptyCodec(Int32Codec), MaybeEmpty[int32]{Empty: true})
 			if err != nil {
 				t.Fatal(err)
 			}
-			if empty.State() != EmptyCell || empty.Bytes().Len() != 0 {
+			if empty.State() != CellEmpty || empty.Bytes().Len() != 0 {
 				t.Fatal("explicit empty state lost")
 			}
-			decoded, err := DecodeValue(EmptyCodec(Int32Codec), empty)
+			decoded, err := DecodeValue(MaybeEmptyCodec(Int32Codec), empty)
 			if err != nil || !decoded.Empty {
 				t.Fatalf("empty decode: %+v %v", decoded, err)
 			}
-			unset, err := newEncodedValue(blob, Unset, BorrowBytes(nil))
+			unset, err := newEncodedValue(blob, CellUnset, BorrowBytes(nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -301,7 +301,7 @@ func TestValue(t *testing.T) {
 			}
 			chain := FoundationChain(t, []byte("leased"))
 			lease := wire.NewLease(chain, nil)
-			leased, err := newEncodedValue(blob, Present, bytesView(chain, wire.RefOf(lease)))
+			leased, err := newEncodedValue(blob, CellPresent, bytesView(chain, wire.RefOf(lease)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -310,7 +310,7 @@ func TestValue(t *testing.T) {
 			if _, err := DecodeValue(BytesViewCodec, leased); !errors.Is(err, ErrReleased) {
 				t.Fatalf("decode released: %v", err)
 			}
-			if _, err := newEncodedValue(blob, Present, leased.Bytes()); !errors.Is(err, ErrReleased) {
+			if _, err := newEncodedValue(blob, CellPresent, leased.Bytes()); !errors.Is(err, ErrReleased) {
 				t.Fatalf("construct released: %v", err)
 			}
 			foundationPanicReleased(t, func() { leased.Clone() })
@@ -372,7 +372,7 @@ func TestValue(t *testing.T) {
 					t.Fatalf("%x: failed framing advanced cursor", data)
 				}
 			}
-			reader := valueReaderFromLease(typ, Present, foundationChain(t, []byte{1, 2, 3}), nil)
+			reader := valueReaderFromLease(typ, CellPresent, foundationChain(t, []byte{1, 2, 3}), nil)
 			c := reader.Cursor()
 			if _, err := c.Uint32(); err == nil {
 				t.Fatal("truncated scalar accepted")
@@ -409,7 +409,7 @@ func TestValue(t *testing.T) {
 			}
 			chain, _ := builder.Freeze()
 			c := wire.NewCursor(chain)
-			for i, want := range []CellState{Present, Present, Null, Unset} {
+			for i, want := range []CellState{CellPresent, CellPresent, CellNull, CellUnset} {
 				reader, err := readValue(c, typ, nil, true)
 				if err != nil || reader.State() != want || reader.Bytes().Len() != 0 {
 					t.Fatalf("cell %d state=%d err=%v", i, reader.State(), err)

@@ -37,7 +37,7 @@ func newLifetimeFixture(t *testing.T) *lifetimeFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ps, err := s.PrepareStream(ctx, cql.StreamStatement[int32, []byte]{CQL: gridSelect().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamBlob)})
+	ps, err := s.PrepareStream(ctx, cql.StreamStatement[int32, []byte]{CQL: gridSelect().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: cql.StreamOneColumn(cql.StreamByteSlice)})
 	if err != nil {
 		t.Fatal(err)
 	}

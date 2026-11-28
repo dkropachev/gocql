@@ -44,7 +44,7 @@ type smRecord struct {
 	Maybe  cql.Nullable[int32]
 	Tags   []string
 	Scores []int32                    `cql:"scores,codec=SetCodec"`
-	Attrs  []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapCodec(cql.StringCodec, cql.Int64Codec)"`
+	Attrs  []cql.Entry[string, int64] `cql:"attrs,codec=cql.MapEntriesCodec(cql.StringCodec, cql.Int64Codec)"`
 	smAudit
 	Note string `cql:"-"`
 }
@@ -57,7 +57,7 @@ type smKey struct {
 
 const smColumns = "bucket, id, name, ascii_name, flag, tiny, small, big, float, double, blob, addr, time_id, day, clock, span, maybe, tags, scores, attrs, created_at, updated_at"
 
-var smAttrs = cql.WithCodec(cql.MapCodec(cql.StringCodec, cql.Int64Codec))
+var smAttrs = cql.WithCodec(cql.MapEntriesCodec(cql.StringCodec, cql.Int64Codec))
 
 type smFixture struct {
 	session *gocql.Session
@@ -123,7 +123,6 @@ func requireRecord(t *testing.T, got, want smRecord) {
 func (f smFixture) insert(t *testing.T, ctx context.Context) *gocql.Prepared[smRecord, cql.EmptyRow] {
 	t.Helper()
 	insert, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.EmptyRow]{
-		Kind:   cql.OrdinaryStatement,
 		CQL:    "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 		Params: cql.MustParamsOf[smRecord](smAttrs),
 	})
@@ -136,7 +135,6 @@ func (f smFixture) insert(t *testing.T, ctx context.Context) *gocql.Prepared[smR
 func (f smFixture) selectBucket(t *testing.T, ctx context.Context, rows cql.RowDecoder[smRecord]) *gocql.Prepared[int32, smRecord] {
 	t.Helper()
 	read, err := f.session.Prepare(ctx, cql.Statement[int32, smRecord]{
-		Kind:   cql.OrdinaryStatement,
 		CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ?",
 		Params: cql.OneParam(cql.Int32Codec),
 		Rows:   rows,

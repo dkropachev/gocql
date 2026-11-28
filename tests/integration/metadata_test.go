@@ -951,7 +951,7 @@ func TestMetadata(t *testing.T) {
 // prepared because only prepared execution accepts the fixture's internal
 // connection seam.
 func metadataExecOnConn(ctx context.Context, s *gocql.Session, stmt string, options implSession.Options) (cql.Result, error) {
-	prepared, err := s.Prepare(ctx, cql.Command(stmt), execopt.PrepareOptions{})
+	prepared, err := s.Prepare(ctx, cql.Write(stmt, cql.NoParams), execopt.PrepareOptions{})
 	if err != nil {
 		return cql.Result{}, err
 	}

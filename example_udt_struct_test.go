@@ -26,43 +26,53 @@ package gocql_test
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/scylladb/gocql/v2/cql"
-
-	"log"
 )
 
+// address is the Go type of the example.address UDT. Its CQLCodec method
+// maps it in every struct mapping with an address field, and in CodecOf.
+type address struct {
+	Street string `cql:"street"`
+	Number int32  `cql:"number"`
+}
+
+var addressCodec = cql.MustUDTCodecOf[address](cql.UDTName("example", "address"))
+
+func (address) CQLCodec() cql.Codec[address] { return addressCodec }
+
 func Example_userDefinedTypes() {
-	type address struct {
-		Street string
-		Number int32
-	}
 	typ, err := cql.UDTType("example", "address", cql.ColumnSpec{Name: "street", Type: cql.TextType}, cql.ColumnSpec{Name: "number", Type: cql.IntType})
 	if err != nil {
 		log.Fatal(err)
 	}
-	name, err := cql.UDTNameOf(typ)
+	encoded, err := cql.EncodeValue(typ, addressCodec, address{"Main Street", 42})
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoder := cql.UDTEncoder(cql.Params(cql.Param("street", cql.StringCodec, func(v address) string { return v.Street }), cql.Param("number", cql.Int32Codec, func(v address) int32 { return v.Number })), name)
-	encoded, err := cql.EncodeValue(typ, encoder, address{"Main Street", 42})
+	// CodecOf derives the codec of a type built from address, as a struct
+	// field of that type is mapped.
+	list, err := cql.ListType(typ)
 	if err != nil {
 		log.Fatal(err)
 	}
-	type view struct {
-		Street cql.Text
-		Number int32
-	}
-	decoder := cql.UDTDecoder(cql.Row(cql.Column("street", cql.TextViewCodec, func(v *view) *cql.Text { return &v.Street }), cql.Column("number", cql.Int32Codec, func(v *view) *int32 { return &v.Number })), name)
-	value, err := cql.DecodeValue(decoder, encoded)
+	listCodec := cql.MustCodecOf[[]address]()
+	encodedList, err := cql.EncodeValue(list, listCodec, []address{{"High Street", 7}})
 	if err != nil {
 		log.Fatal(err)
 	}
-	street, err := value.Street.Copy()
+	value, err := cql.DecodeValue(addressCodec, encoded)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(street, value.Number)
-	// Output: Main Street 42
+	values, err := cql.DecodeValue(listCodec, encodedList)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println(value.Street, value.Number)
+	fmt.Println(values[0].Street, values[0].Number)
+	// Output:
+	// Main Street 42
+	// High Street 7
 }

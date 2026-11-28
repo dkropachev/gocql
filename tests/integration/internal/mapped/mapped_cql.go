@@ -72,8 +72,8 @@ func (StreamEvent) CQLStreamColumns() []cql.StreamOutputField[StreamEvent] {
 	return []cql.StreamOutputField[StreamEvent]{
 		cql.StreamColumn("bucket", cql.StreamInt32, func(v *StreamEvent) *int32 { return &v.Bucket }),
 		cql.StreamColumn("id", cql.StreamUUID, func(v *StreamEvent) *cql.UUID { return &v.ID }),
-		cql.StreamColumn("name", cql.StreamText, func(v *StreamEvent) *[]byte { return &v.Name }),
-		cql.StreamColumn("blob", cql.StreamBlob, func(v *StreamEvent) *[]byte { return &v.Blob }),
+		cql.StreamColumn("name", cql.StreamTextBytes, func(v *StreamEvent) *[]byte { return &v.Name }),
+		cql.StreamColumn("blob", cql.StreamByteSlice, func(v *StreamEvent) *[]byte { return &v.Blob }),
 		cql.StreamColumn("big", cql.StreamInt64, func(v *StreamEvent) *int64 { return &v.Big }),
 		cql.StreamColumn("maybe", cql.StreamNullable(cql.StreamInt32), func(v *StreamEvent) *cql.Nullable[int32] { return &v.Maybe }),
 		cql.StreamColumn("scores", cql.StreamSet(cql.StreamInt32), func(v *StreamEvent) *[]int32 { return &v.Scores }),

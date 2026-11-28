@@ -76,7 +76,7 @@ func (w *ValueWriter) payload() error {
 	if err := w.ready(); err != nil {
 		return err
 	}
-	if w.state != Present {
+	if w.state != CellPresent {
 		return w.fail(typeValidation("value", "payload cannot be combined with null or unset"))
 	}
 	w.wrote = true
@@ -86,10 +86,10 @@ func (w *ValueWriter) setState(state CellState) error {
 	if err := w.ready(); err != nil {
 		return err
 	}
-	if w.wrote || w.state != Present {
+	if w.wrote || w.state != CellPresent {
 		return w.fail(typeValidation("value", "cell state was already written"))
 	}
-	if state == Unset && !w.allowUnset {
+	if state == CellUnset && !w.allowUnset {
 		return w.fail(typeValidation("value", "unset is not permitted in this cell"))
 	}
 	w.state = state
@@ -103,17 +103,34 @@ func (w *ValueWriter) Empty() error { return w.emptyValue() }
 
 // Null marks the cell as null. It fails after a state or payload was
 // written.
-func (w *ValueWriter) Null() error { return w.setState(Null) }
+func (w *ValueWriter) Null() error { return w.setState(CellNull) }
 
 // Unset marks the cell as unset, so the server leaves the parameter's column
 // unchanged. It fails where unset is not permitted, such as in a nested value,
 // and after a state or payload was written.
-func (w *ValueWriter) Unset() error { return w.setState(Unset) }
+func (w *ValueWriter) Unset() error { return w.setState(CellUnset) }
 func (w *ValueWriter) emptyValue() error {
 	if !emptySupported(w.typ) {
 		return w.fail(typeValidation("type", "%s does not support empty values", w.typ))
 	}
-	return w.setState(EmptyCell)
+	return w.setState(CellEmpty)
+}
+
+// Write appends a copy of p to the cell's body, so the caller may change p
+// as soon as Write returns, and returns len(p). It makes ValueWriter an
+// io.Writer, for an encoder that formats its body with a function writing to
+// one. BorrowBytes appends without copying.
+func (w *ValueWriter) Write(p []byte) (int, error) {
+	if err := w.payload(); err != nil {
+		return 0, err
+	}
+	if len(p) == 0 {
+		return 0, nil
+	}
+	if err := w.fail(w.builder.Borrow(wire.Borrow(append([]byte(nil), p...)))); err != nil {
+		return 0, err
+	}
+	return len(p), nil
 }
 
 // BorrowBytes appends b to the cell's body without copying it, unless the
@@ -239,18 +256,18 @@ func finishValueWriter(w *ValueWriter) error {
 	}
 	var prefix uint32
 	switch w.state {
-	case Present:
+	case CellPresent:
 		prefix = uint32(length)
-	case EmptyCell:
+	case CellEmpty:
 		prefix = 0
-	case Null:
+	case CellNull:
 		prefix = math.MaxUint32
-	case Unset:
+	case CellUnset:
 		prefix = math.MaxUint32 - 1
 	default:
 		w.fail(typeValidation("value", "invalid cell state %v", w.state))
 	}
-	if w.state != Present && length != 0 {
+	if w.state != CellPresent && length != 0 {
 		w.fail(typeValidation("value", "null or unset cell contains a payload"))
 	}
 	if w.err == nil {
@@ -286,7 +303,7 @@ func valueReaderFromLease(typ DataType, state CellState, body wire.Chain, lease 
 func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.Ref) ValueReader {
 	r := ValueReader{typ: typ, state: state, body: body, lease: lease}
 	r.err = validateDataType(typ)
-	if state > EmptyCell || (state != Present && body.Len() != 0) {
+	if state > CellEmpty || (state != CellPresent && body.Len() != 0) {
 		r.err = &ProtocolError{Stage: "cell", Err: fmt.Errorf("invalid state %v for %d bytes", state, body.Len())}
 	}
 	return r
@@ -295,9 +312,9 @@ func newValueReader(typ DataType, state CellState, body wire.Chain, lease wire.R
 // Type returns the cell's type.
 func (r ValueReader) Type() DataType { return r.typ }
 
-// State returns the cell's state: Present or Null. An empty value is
-// Present with an empty body, as the response holds it; a decoder never sees
-// EmptyCell.
+// State returns the cell's state: CellPresent or CellNull. An empty value is
+// CellPresent with an empty body, as the response holds it; a decoder never sees
+// CellEmpty.
 func (r ValueReader) State() CellState { return r.state }
 
 // Bytes returns the cell's body, a view with the lifetime of the response it
@@ -434,7 +451,7 @@ func (c *ValueCursor) RequireEnd() error {
 }
 
 // readValue validates a full framed cell before advancing the caller's cursor.
-// Zero-length cells remain Present; EmptyCodec interprets scalar empty values.
+// Zero-length cells remain CellPresent; MaybeEmptyCodec interprets scalar empty values.
 func readValue(cursor *wire.Cursor, typ DataType, lease *wire.Lease, allowUnset bool) (ValueReader, error) {
 	return readFramedValue(cursor, typ, wire.RefOf(lease), allowUnset, false)
 }
@@ -459,10 +476,10 @@ func readFramedValue(cursor *wire.Cursor, typ DataType, lease wire.Ref, allowUns
 	}
 	length := int32(prefix)
 	if length == -1 {
-		return newValueReader(typ, Null, wire.Chain{}, lease), nil
+		return newValueReader(typ, CellNull, wire.Chain{}, lease), nil
 	}
 	if length == -2 && allowUnset {
-		return newValueReader(typ, Unset, wire.Chain{}, lease), nil
+		return newValueReader(typ, CellUnset, wire.Chain{}, lease), nil
 	}
 	if length < 0 {
 		return fail(fmt.Errorf("invalid cell length %d", length))
@@ -476,5 +493,5 @@ func readFramedValue(cursor *wire.Cursor, typ DataType, lease wire.Ref, allowUns
 	if err != nil {
 		return fail(err)
 	}
-	return newValueReader(typ, Present, body, lease), nil
+	return newValueReader(typ, CellPresent, body, lease), nil
 }

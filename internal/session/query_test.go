@@ -1113,7 +1113,7 @@ func TestQuery(t *testing.T) {
 			for _, mode := range modes {
 				t.Run(mode.name, func(t *testing.T) {
 					s, c, peer := fixtureStreamSession(t, mode)
-					query := codecTestMust(unpreparedStreamQuery(s, StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.StreamOneColumn(cql.StreamBlob)}, StreamOptions{}))
+					query := codecTestMust(unpreparedStreamQuery(s, StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.StreamOneColumn(cql.StreamByteSlice)}, StreamOptions{}))
 					defer query.Close()
 					served := make(chan struct{})
 					go func() {
@@ -1152,7 +1152,7 @@ func TestQuery(t *testing.T) {
 
 		t.Run("MultiplexAndReuseSeededStorage", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			statement := StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.StreamOneColumn(cql.StreamBlob)}
+			statement := StreamStatement[cql.EmptyRow, []byte]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.StreamOneColumn(cql.StreamByteSlice)}
 			q := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
 			other := codecTestMust(unpreparedStreamQuery(s, statement, StreamOptions{}))
 			defer q.Close()

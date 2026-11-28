@@ -101,7 +101,10 @@ func validateScalarKind(kind Kind) error {
 	return nil
 }
 
-// ListType constructs a CQL list type with the supplied element type.
+// ListType constructs a CQL list type with the supplied element type. It,
+// SetType, MapType and VectorType fail only for a zero DataType (and
+// VectorType for a zero dimension); MustParseDataType builds a type from its
+// CQL text, such as "list<int>", for a package-level variable.
 func ListType(element DataType) (DataType, error) { return collectionDataType(KindList, element) }
 
 // SetType constructs a CQL set type with the supplied element type.
@@ -436,38 +439,38 @@ func typeValidation(field, format string, args ...any) error {
 }
 
 // CellState is the state of a cell: present, NULL, UNSET or empty. The zero
-// CellState is Present. Later releases may add values, so a switch over them
+// CellState is CellPresent. Later releases may add values, so a switch over them
 // needs a default case.
 type CellState uint8
 
 // Cell states.
 const (
-	// Present is a cell holding a value.
-	Present CellState = iota
+	// CellPresent is a cell holding a value.
+	CellPresent CellState = iota
 
-	// Null is a CQL NULL.
-	Null
+	// CellNull is a CQL NULL.
+	CellNull
 
-	// Unset is a bound parameter left unset: the server leaves its column
+	// CellUnset is a bound parameter left unset: the server leaves its column
 	// unchanged.
-	Unset
+	CellUnset
 
-	// EmptyCell is an empty value: present, with a zero-length body. Only some
-	// types support it; see EmptyCodec.
-	EmptyCell
+	// CellEmpty is an empty value: present, with a zero-length body. Only some
+	// types support it; see MaybeEmptyCodec.
+	CellEmpty
 )
 
 // String returns the cell state name, or CellState(n) for a value it does
 // not define.
 func (s CellState) String() string {
 	switch s {
-	case Present:
+	case CellPresent:
 		return "present"
-	case Null:
+	case CellNull:
 		return "null"
-	case Unset:
+	case CellUnset:
 		return "unset"
-	case EmptyCell:
+	case CellEmpty:
 		return "empty"
 	default:
 		return fmt.Sprintf("CellState(%d)", uint8(s))
@@ -487,26 +490,48 @@ type Nullable[T any] struct {
 // NonNull returns a Nullable holding v.
 func NonNull[T any](v T) Nullable[T] { return Nullable[T]{Value: v, Valid: true} }
 
-// BindValue controls parameters using Present, Null, or Unset.
-// Its zero value binds the ordinary zero value of T. Binding fails for any
-// other State, EmptyCell included; to bind an empty value, wrap the base
-// codec with EmptyCodec and bind a MaybeEmpty.
+// BindValue binds a parameter as a value, NULL or UNSET. Bind, BindNull and
+// BindUnset build one, and Get reads it. Its zero value binds UNSET, which
+// leaves the column unchanged, so a struct of BindValue fields writes only
+// the fields the application set. To bind an empty value, wrap the base
+// codec with MaybeEmptyCodec and bind a MaybeEmpty.
 type BindValue[T any] struct {
-	// Value is the value bound when State is Present.
-	Value T
-	// State is Present, Null or Unset.
-	State CellState
+	value T
+	state bindState
+}
+
+// bindState is a BindValue's state, laid out so that the zero value is
+// UNSET.
+type bindState uint8
+
+const (
+	bindUnset bindState = iota
+	bindPresent
+	bindNull
+)
+
+// Get returns the bound value and its state: CellPresent with the value,
+// CellNull or CellUnset with the zero value of T.
+func (b BindValue[T]) Get() (T, CellState) {
+	switch b.state {
+	case bindPresent:
+		return b.value, CellPresent
+	case bindNull:
+		return b.value, CellNull
+	default:
+		return b.value, CellUnset
+	}
 }
 
 // Bind returns a BindValue that binds v.
-func Bind[T any](v T) BindValue[T] { return BindValue[T]{Value: v, State: Present} }
+func Bind[T any](v T) BindValue[T] { return BindValue[T]{value: v, state: bindPresent} }
 
 // BindNull returns a BindValue that binds NULL.
-func BindNull[T any]() BindValue[T] { return BindValue[T]{State: Null} }
+func BindNull[T any]() BindValue[T] { return BindValue[T]{state: bindNull} }
 
 // BindUnset returns a BindValue that binds UNSET, which leaves the column
 // unchanged; UNSET needs protocol v4 or later and is a parameter only.
-func BindUnset[T any]() BindValue[T] { return BindValue[T]{State: Unset} }
+func BindUnset[T any]() BindValue[T] { return BindValue[T]{} }
 
 // MaybeEmpty distinguishes an empty CQL value from an ordinary value. Its zero
 // value encodes the ordinary zero value of T; Empty=true selects empty.

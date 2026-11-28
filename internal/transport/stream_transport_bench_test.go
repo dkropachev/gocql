@@ -276,7 +276,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 							b.Fatal(err)
 						}
 						if plan == nil {
-							plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
+							plan, err = cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns)
 							if err != nil {
 								b.Fatal(err)
 							}
@@ -332,7 +332,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 						b.Fatal(err)
 					}
 					if plan == nil {
-						plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
+						plan, err = cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns)
 						if err != nil {
 							b.Fatal(err)
 						}
@@ -416,7 +416,7 @@ func BenchmarkStreamTransport(b *testing.B) {
 						b.Fatal(err)
 					}
 					if plan == nil {
-						plan, err = cql.StreamOneColumn(cql.StreamBlob).Compile(response.InternalColumns)
+						plan, err = cql.StreamOneColumn(cql.StreamByteSlice).Compile(response.InternalColumns)
 						if err != nil {
 							b.Fatal(err)
 						}

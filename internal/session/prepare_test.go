@@ -154,7 +154,7 @@ func streamReconcile(t *testing.T, failContinuation bool) {
 type valueStreamRows struct{ reset func(*[]byte) }
 
 func (d valueStreamRows) Compile(columns cql.Columns) (cql.CompiledStreamRow[[]byte], error) {
-	fields := []cql.StreamOutputField[[]byte]{cql.StreamColumn("value", cql.StreamBlob, func(v *[]byte) *[]byte { return v })}
+	fields := []cql.StreamOutputField[[]byte]{cql.StreamColumn("value", cql.StreamByteSlice, func(v *[]byte) *[]byte { return v })}
 	for i := range columns.Len() {
 		if column, _ := columns.At(i); column.Name != "value" {
 			fields = append(fields, cql.StreamIgnoreColumn[[]byte](column.Name))

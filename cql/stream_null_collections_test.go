@@ -21,8 +21,8 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 		encoder Encoder[[][]byte]
 		decoder StreamDecoder[[][]byte]
 	}{
-		{"list", CodecTestMust(ListType(BlobType)), ListEncoder(ByteSliceCodec), StreamList(StreamBlob)},
-		{"set", CodecTestMust(SetType(BlobType)), SetEncoder(ByteSliceCodec), StreamSet(StreamBlob)},
+		{"list", CodecTestMust(ListType(BlobType)), ListEncoder(ByteSliceCodec), StreamList(StreamByteSlice)},
+		{"set", CodecTestMust(SetType(BlobType)), SetEncoder(ByteSliceCodec), StreamSet(StreamByteSlice)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			data := streamEncodedFixture(t, tc.typ, tc.encoder, [][]byte{[]byte("one"), []byte("two")})
@@ -66,8 +66,8 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 	t.Run("map", func(t *testing.T) {
 		list := CodecTestMust(ListType(BlobType))
 		typ := CodecTestMust(MapType(BlobType, list))
-		decoder := StreamMap(StreamBlob, StreamList(StreamBlob))
-		data := streamEncodedFixture(t, typ, MapEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}})
+		decoder := StreamMapEntries(StreamByteSlice, StreamList(StreamByteSlice))
+		data := streamEncodedFixture(t, typ, MapEntriesEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}})
 		key, value := make([]byte, 0, 8), make([]byte, 0, 8)
 		children := [][]byte{value}
 		dst := []Entry[[]byte, [][]byte]{{Key: key, Value: children}}
@@ -113,11 +113,11 @@ func TestStreamNullCollectionsPreserveStorage(t *testing.T) {
 
 func TestStreamNullCollectionNoAllocation(t *testing.T) {
 	list := CodecTestMust(ListType(BlobType))
-	assertNullCollectionNoAllocation(t, list, StreamList(StreamBlob), [][]byte{make([]byte, 8)})
+	assertNullCollectionNoAllocation(t, list, StreamList(StreamByteSlice), [][]byte{make([]byte, 8)})
 	set := CodecTestMust(SetType(BlobType))
-	assertNullCollectionNoAllocation(t, set, StreamSet(StreamBlob), [][]byte{make([]byte, 8)})
+	assertNullCollectionNoAllocation(t, set, StreamSet(StreamByteSlice), [][]byte{make([]byte, 8)})
 	mapped := CodecTestMust(MapType(BlobType, list))
-	assertNullCollectionNoAllocation(t, mapped, StreamMap(StreamBlob, StreamList(StreamBlob)), []Entry[[]byte, [][]byte]{{Key: make([]byte, 8), Value: [][]byte{make([]byte, 8)}}})
+	assertNullCollectionNoAllocation(t, mapped, StreamMapEntries(StreamByteSlice, StreamList(StreamByteSlice)), []Entry[[]byte, [][]byte]{{Key: make([]byte, 8), Value: [][]byte{make([]byte, 8)}}})
 }
 
 func assertNullCollectionNoAllocation[T any](t *testing.T, typ DataType, decoder StreamDecoder[[]T], dst []T) {
@@ -130,7 +130,7 @@ func assertNullCollectionNoAllocation[T any](t *testing.T, typ DataType, decoder
 	if err != nil {
 		t.Fatal(err)
 	}
-	reader := StreamValueReader{scope: scope, typ: typ, state: Null, shared: &streamDecodeState{}, active: true}
+	reader := StreamValueReader{scope: scope, typ: typ, state: CellNull, shared: &streamDecodeState{}, active: true}
 	if allocs := testing.AllocsPerRun(100, func() {
 		dst = dst[:1]
 		if err := plan.DecodeInto(&reader, &dst); err != nil {

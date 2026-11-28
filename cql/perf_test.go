@@ -23,7 +23,7 @@ func sequenceWork[T any](t *testing.T, typ DataType, encoder Encoder[[]T], decod
 	compiled := CodecTestMust(compileValueDecoder(decoder, typ))
 	ResetPerfCounters()
 	wire.ResetPerfCounters()
-	seq := CodecTestMust(compiled.Decode(valueReaderFromLease(typ, Present, chain, nil)))
+	seq := CodecTestMust(compiled.Decode(valueReaderFromLease(typ, CellPresent, chain, nil)))
 	n := len(seq)
 	if n != len(input) {
 		t.Fatal(n)

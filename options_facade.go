@@ -128,11 +128,11 @@ func tooManyOptionsFound() (bool, cql.Result, error) {
 }
 
 func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P, R] {
-	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Kind: s.Kind, Idempotent: s.Idempotent}
+	return implBinding.Statement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, BindMarkers: s.BindMarkers, Idempotent: s.Idempotent}
 }
 
 func internalStreamStatement[P, R any](s cql.StreamStatement[P, R]) implSession.StreamStatement[P, R] {
-	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, Idempotent: s.Idempotent}
+	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Idempotent: s.Idempotent}
 }
 
 // prefetchPages is the internal prefetch depth of a public override.

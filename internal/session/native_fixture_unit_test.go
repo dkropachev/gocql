@@ -88,7 +88,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		for k, x := range v {
 			entries = append(entries, implCql.Entry[string, implCql.Bytes]{Key: k, Value: implCql.BorrowBytes(x)})
 		}
-		return fixtureBody(typ, implCql.MapEncoder(implCql.StringCodec, implCql.BytesViewCodec), entries)
+		return fixtureBody(typ, implCql.MapEntriesEncoder(implCql.StringCodec, implCql.BytesViewCodec), entries)
 	case bool:
 		return fixtureBody(typ, implCql.BoolCodec, v)
 	case int:
@@ -109,7 +109,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		for k, x := range v {
 			entries = append(entries, implCql.Entry[string, string]{Key: k, Value: x})
 		}
-		return fixtureBody(typ, implCql.MapEncoder(implCql.StringCodec, implCql.StringCodec), entries)
+		return fixtureBody(typ, implCql.MapEntriesEncoder(implCql.StringCodec, implCql.StringCodec), entries)
 	default:
 		return nil, fmt.Errorf("unsupported explicit fixture value %T", value)
 	}

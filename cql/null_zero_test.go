@@ -66,7 +66,7 @@ func TestUDTAddedField(t *testing.T) {
 	}
 	written := CodecTestMust(EncodeValue(old, MustUDTCodecOf[before](), before{Name: "ann"}))
 	// The server sends the value as written, under the grown type.
-	value := CodecTestMust(newEncodedValue(grown, Present, written.Bytes()))
+	value := CodecTestMust(newEncodedValue(grown, CellPresent, written.Bytes()))
 	got, err := DecodeValue(MustUDTCodecOf[person](UDTName("ks", "person")), value)
 	if err != nil || got != (person{Name: "ann"}) {
 		t.Fatalf("value predating ALTER TYPE ADD: %+v, %v", got, err)
@@ -102,7 +102,7 @@ func TestUDTAddedField(t *testing.T) {
 		}
 		grown2 := CodecTestMust(UDTType("ks", "person", ColumnSpec{Name: "name", Type: text}, ColumnSpec{Name: "age", Type: integer}))
 		row := StreamRowInto(nil,
-			StreamColumn("name", StreamText, func(v *streamed) *[]byte { return &v.Name }),
+			StreamColumn("name", StreamTextBytes, func(v *streamed) *[]byte { return &v.Name }),
 			StreamColumn("age", StreamInt32, func(v *streamed) *int32 { return &v.Age }))
 		dst := streamed{Name: make([]byte, 0, 8), Age: 99}
 		body := streamCellBytes([]byte("ann"))

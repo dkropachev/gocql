@@ -34,14 +34,14 @@ func TestUnsetBinding(t *testing.T) {
 		return out
 	}
 	value := unsetRow{ID: 1}
-	if got := states(t, MustParamsOf[unsetRow](), value); got[1] != Null || got[2] != Present {
+	if got := states(t, MustParamsOf[unsetRow](), value); got[1] != CellNull || got[2] != CellPresent {
 		t.Fatalf("nil fields without options: %v", got)
 	}
-	if got := states(t, MustParamsOf[unsetRow](NilAsUnset()), value); got[1] != Unset || got[2] != Unset {
+	if got := states(t, MustParamsOf[unsetRow](NilAsUnset()), value); got[1] != CellUnset || got[2] != CellUnset {
 		t.Fatalf("NilAsUnset: %v", got)
 	}
 	name := "n"
-	if got := states(t, MustParamsOf[unsetRow](NilAsUnset()), unsetRow{ID: 1, Name: &name, Tags: []string{}}); got[1] != Present || got[2] != Present {
+	if got := states(t, MustParamsOf[unsetRow](NilAsUnset()), unsetRow{ID: 1, Name: &name, Tags: []string{}}); got[1] != CellPresent || got[2] != CellPresent {
 		t.Fatalf("NilAsUnset with set fields: %v", got)
 	}
 	type tagged struct {
@@ -53,7 +53,7 @@ func TestUnsetBinding(t *testing.T) {
 	capture := make([]paramCell, columns.Len())
 	w := newParamWriter(wire.NewBuilder(8), columns, true)
 	captureParamCells(w, capture)
-	if err := plan.Encode(w, tagged{ID: 1}); err != nil || capture[1].State != Unset || capture[2].State != Present {
+	if err := plan.Encode(w, tagged{ID: 1}); err != nil || capture[1].State != CellUnset || capture[2].State != CellPresent {
 		t.Fatalf("nilunset tag: %v %v", capture, err)
 	}
 	type bad struct {
@@ -67,8 +67,17 @@ func TestUnsetBinding(t *testing.T) {
 	}
 
 	// Bind, BindNull and BindUnset build the three states.
-	if Bind(int32(3)) != (BindValue[int32]{Value: 3, State: Present}) || BindNull[int32]().State != Null || BindUnset[int32]().State != Unset {
-		t.Fatal("Bind helpers")
+	if v, s := Bind(int32(3)).Get(); v != 3 || s != CellPresent {
+		t.Fatalf("Bind(3).Get() = %d, %v", v, s)
+	}
+	if _, s := BindNull[int32]().Get(); s != CellNull {
+		t.Fatalf("BindNull().Get() state = %v", s)
+	}
+	if _, s := BindUnset[int32]().Get(); s != CellUnset {
+		t.Fatalf("BindUnset().Get() state = %v", s)
+	}
+	if _, s := (BindValue[int32]{}).Get(); s != CellUnset || BindUnset[int32]() != (BindValue[int32]{}) {
+		t.Fatalf("zero BindValue state = %v, want CellUnset", s)
 	}
 }
 
@@ -148,7 +157,7 @@ func TestTimeValues(t *testing.T) {
 		t.Fatalf("zero time.Time: %v", err)
 	}
 	var unset Nullable[time.Time]
-	if v, err := EncodeValue(timestamp, NullableEncoder(TimestampTimeCodec), unset); err != nil || v.State() != Null {
+	if v, err := EncodeValue(timestamp, NullableEncoder(TimestampTimeCodec), unset); err != nil || v.State() != CellNull {
 		t.Fatalf("invalid Nullable[time.Time]: %v", err)
 	}
 	// DateFromTime takes the date in the time's own location.
@@ -252,12 +261,12 @@ func TestUntypedNullValue(t *testing.T) {
 	for _, kind := range []Kind{KindInt, KindText, KindBlob} {
 		typ := rowTestType(t, kind)
 		v, err := EncodeValue(typ, DynamicCodec, NullValue())
-		if err != nil || v.State() != Null {
+		if err != nil || v.State() != CellNull {
 			t.Fatalf("NullValue as %s: %v", typ, err)
 		}
 	}
 	tuple := CodecTestMust(TupleType(rowTestType(t, KindInt), rowTestType(t, KindText)))
-	if _, err := TupleValue(tuple, []Value{IntValue(1), NullValue()}); err != nil {
+	if _, err := TupleValue(tuple, IntValue(1), NullValue()); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := NullValue().Int64(); !errors.Is(err, ErrNull) {
@@ -289,8 +298,8 @@ func TestStreamAllocatingDecoders(t *testing.T) {
 	body := append([]byte{0, 0, 0, 1}, streamCellBytes([]byte("k"))...)
 	body = append(body, streamCellBytes([]byte{0, 0, 0, 5})...)
 	var got map[string]int32
-	if err := StreamDecodeFixture(t, m, StreamGoMap(StreamString, StreamInt32), streamCellBytes(body), &got, 1); err != nil || len(got) != 1 || got["k"] != 5 {
-		t.Fatalf("StreamGoMap: %v, %v", got, err)
+	if err := StreamDecodeFixture(t, m, StreamMap(StreamString, StreamInt32), streamCellBytes(body), &got, 1); err != nil || len(got) != 1 || got["k"] != 5 {
+		t.Fatalf("StreamMap: %v, %v", got, err)
 	}
 	type row struct {
 		Name string

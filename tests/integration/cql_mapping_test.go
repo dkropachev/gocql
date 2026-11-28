@@ -42,8 +42,8 @@ func TestUDTAlterTypeAdd(t *testing.T) {
 	if got.Name != "ann" || got.Age != 0 || got.Nick != nil {
 		t.Fatalf("value predating ALTER TYPE ADD: %+v", got)
 	}
-	// A struct that predates the change still decodes with IgnoreExtraFields.
-	old, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(cql.MustUDTCodecOf[before](cql.IgnoreExtraFields())))
+	// A struct that predates the change still decodes with IgnoreUnknownFields.
+	old, err := serializationOne(s, fmt.Sprintf("SELECT udt_col FROM %s WHERE id=1", table), cql.OneColumn(cql.MustUDTCodecOf[before](cql.IgnoreUnknownFields())))
 	if err != nil || old.Name != "ann" {
 		t.Fatalf("struct predating ALTER TYPE ADD: %+v, %v", old, err)
 	}

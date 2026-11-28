@@ -98,7 +98,7 @@ func TestFailureIdempotence(t *testing.T) {
 			s, _, peer := rowStreamSession(t, 4, nil)
 			defer s.Close()
 			go refuse(peer)
-			_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamBlob), StreamOptions{Options: options(idempotent), Incremental: true})
+			_, err := RunStream(ctx, s, secretQuery(t, cql.OrdinaryStatement), cql.StreamOneColumn(cql.StreamByteSlice), StreamOptions{Options: options(idempotent), Incremental: true})
 			return err
 		},
 	}

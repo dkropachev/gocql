@@ -78,7 +78,7 @@ func TestGenerator(t *testing.T) {
 				`func (Addr) CQLFields() cql.StructFields[Addr]`,
 				`cql.Param("home", new(Addr).CQLCodec(), func(v T) Addr { return v.Home })`,
 				`cql.Column("all", cql.SliceCodec(new(Addr).CQLCodec()), func(v *T) *[]Addr { return &v.All })`,
-				`cql.Column("by_name", cql.GoMapCodec(cql.StringCodec, cql.PointerCodec(new(Addr).CQLCodec())), func(v *T) *map[string]*Addr { return &v.ByName })`,
+				`cql.Column("by_name", cql.MapCodec(cql.StringCodec, cql.PointerCodec(new(Addr).CQLCodec())), func(v *T) *map[string]*Addr { return &v.ByName })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -92,8 +92,8 @@ func TestGenerator(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, want := range []string{
-				`cql.Param("attrs", cql.GoMapCodec(cql.StringCodec, cql.Int64Codec), func(v T) map[string]int64 { return v.Attrs }),`,
-				`cql.Column("blobs", cql.GoMapCodec(cql.UUIDCodec, cql.ByteSliceCodec), func(v *T) *map[cql.UUID][]byte { return &v.Blobs }),`,
+				`cql.Param("attrs", cql.MapCodec(cql.StringCodec, cql.Int64Codec), func(v T) map[string]int64 { return v.Attrs }),`,
+				`cql.Column("blobs", cql.MapCodec(cql.UUIDCodec, cql.ByteSliceCodec), func(v *T) *map[cql.UUID][]byte { return &v.Blobs }),`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -237,7 +237,7 @@ type T struct {
 			}
 			for _, want := range []string{
 				`cql.StreamColumn("a", cql.StreamUUID, func(v *T) *ID { return &v.A })`,
-				`cql.StreamColumn("b", cql.StreamSlice(cql.StreamBlob), func(v *T) *Blobs { return &v.B })`,
+				`cql.StreamColumn("b", cql.StreamSlice(cql.StreamByteSlice), func(v *T) *Blobs { return &v.B })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -285,7 +285,7 @@ type T struct {
 				`cql.Column("l", cql.SliceCodec(cql.StringCodec), func(v *T) *[]string { return (*[]string)(unsafe.Pointer(&v.L)) })`,
 				`cql.Column("p", cql.PointerCodec(cql.StringCodec), func(v *T) **string { return (**string)(unsafe.Pointer(&v.P)) })`,
 				`cql.Column("n", cql.NullableDecoder(cql.StringCodec), func(v *T) *cql.Nullable[string] { return (*cql.Nullable[string])(unsafe.Pointer(&v.N)) })`,
-				`cql.Column("m", cql.GoMapCodec(cql.StringCodec, cql.IntCodec), func(v *T) *map[string]int { return (*map[string]int)(unsafe.Pointer(&v.M)) })`,
+				`cql.Column("m", cql.MapCodec(cql.StringCodec, cql.IntCodec), func(v *T) *map[string]int { return (*map[string]int)(unsafe.Pointer(&v.M)) })`,
 				`cql.Column("b", cql.ByteSliceCodec, func(v *T) *[]byte { return (*[]byte)(&v.B) })`,
 			} {
 				if !strings.Contains(out, want) {
@@ -305,7 +305,7 @@ type T struct{ D cql.DecimalParts }
 			if err != nil {
 				t.Fatal(err)
 			}
-			if strings.Contains(out, "CQLFields") || !strings.Contains(out, "cql.StreamDecimal,") {
+			if strings.Contains(out, "CQLFields") || !strings.Contains(out, "cql.StreamDecimalParts,") {
 				t.Errorf("expected only a stream mapping:\n%s", out)
 			}
 		})

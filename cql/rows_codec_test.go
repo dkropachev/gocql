@@ -86,14 +86,14 @@ func TestRowsCodec(t *testing.T) {
 		})
 		t.Run("ConvertRows", func(t *testing.T) {
 			clones := 0
-			mapped := ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, func(s string) string { clones++; return "clone of " + s })
+			mapped := ConvertRows(OneColumn(StringCodec), func(s string) (string, error) { return s, nil }, func(s string) string { clones++; return "clone of " + s })
 			if got := mapped.Clone("x"); got != "clone of x" || clones != 1 {
 				t.Fatalf("Clone = %q after %d calls, want the caller's clone function", got, clones)
 			}
 		})
 		t.Run("CASRows", func(t *testing.T) {
 			clones := 0
-			cas := CASRows(ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, func(s string) string { clones++; return "clone of " + s }))
+			cas := CASRows(ConvertRows(OneColumn(StringCodec), func(s string) (string, error) { return s, nil }, func(s string) string { clones++; return "clone of " + s }))
 			previous := CASResult[string]{Previous: Some("x")}
 			if got := cas.Clone(previous); !got.Previous.Set || got.Previous.Value != "clone of x" || got.Applied || clones != 1 {
 				t.Fatalf("Clone = %+v after %d calls, want the previous row cloned", got, clones)
@@ -617,7 +617,7 @@ func TestRowsCodec(t *testing.T) {
 }
 
 // TestInvalidRowDecoderClone checks that Clone on a decoder Compile rejects
-// returns instead of panicking: a nil field or a nil clone function is an
+// returns instead of panicking: a nil field or a nil mapping function is an
 // argument error Compile reports, not a reason to crash a caller of Clone.
 func TestInvalidRowDecoderClone(t *testing.T) {
 	type row struct{ A string }
@@ -628,9 +628,9 @@ func TestInvalidRowDecoderClone(t *testing.T) {
 	if got := fields.Clone(row{A: "x"}); got.A != "x" {
 		t.Fatalf("Clone = %+v", got)
 	}
-	mapped := ConvertRows(OneColumn(StringCodec), func(s string) string { return s }, nil)
+	mapped := ConvertRows[string, string](OneColumn(StringCodec), nil, nil)
 	if _, err := mapped.Compile(NewColumns(ColumnSpec{Name: "a", Type: TextType})); err == nil {
-		t.Fatal("Compile accepted a nil clone function")
+		t.Fatal("Compile accepted a nil mapping function")
 	}
 	if got := mapped.Clone("x"); got != "x" {
 		t.Fatalf("Clone = %q", got)

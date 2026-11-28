@@ -62,7 +62,6 @@ func TestStructMapping(t *testing.T) {
 			Hits int64
 		}
 		addPrepared, err := f.session.Prepare(ctx, cql.Statement[hit, cql.EmptyRow]{
-			Kind:   cql.OrdinaryStatement,
 			CQL:    "UPDATE " + counters + " SET hits = hits + ? WHERE k = ?",
 			Params: cql.MustParamsOf[hit](),
 		})
@@ -88,7 +87,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, hit]{
-			Kind: cql.OrdinaryStatement, CQL: "SELECT k, hits FROM " + counters + " WHERE k = ?",
+			CQL:    "SELECT k, hits FROM " + counters + " WHERE k = ?",
 			Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustRowOf[hit](),
 		})
 		if err != nil {
@@ -110,7 +109,6 @@ func TestStructMapping(t *testing.T) {
 	t.Run("Conditional", func(t *testing.T) {
 		ctx, f := newSMFixture(t)
 		insertPrepared, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.CASResult[smRecord]]{
-			Kind:   cql.ConditionalStatement,
 			CQL:    "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ") IF NOT EXISTS",
 			Params: cql.MustParamsOf[smRecord](smAttrs),
 			Rows:   cql.CASRows(cql.MustRowOf[smRecord](smAttrs)),
@@ -144,7 +142,6 @@ func TestStructMapping(t *testing.T) {
 		}
 		updateRows := cql.CASRows(cql.MustRowOf[smRecord](smAttrs))
 		updatePrepared, err := f.session.Prepare(ctx, cql.Statement[guard, cql.CASResult[smRecord]]{
-			Kind:   cql.ConditionalStatement,
 			CQL:    "UPDATE " + f.table + " SET name = ? WHERE bucket = ? AND id = ? IF big = ?",
 			Params: cql.MustParamsOf[guard](),
 			Rows:   updateRows,
@@ -188,9 +185,9 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal("no generated StreamEvent stream mapping")
 		}
 		const columns = "bucket, id, name, blob, big, maybe, tags, scores, created_at, updated_at"
-		reflectedParams := cql.ConvertParams(cql.MustParamsOf[reflectedEvent](), func(v mapped.Event) reflectedEvent { return reflectedEvent(v) })
+		reflectedParams := cql.ConvertParams(cql.MustParamsOf[reflectedEvent](), func(v mapped.Event) (reflectedEvent, error) { return reflectedEvent(v), nil })
 		reflectedEventRows := cql.MustRowOf[reflectedEvent]()
-		reflectedRows := cql.ConvertRows(reflectedEventRows, func(v reflectedEvent) mapped.Event { return mapped.Event(v) },
+		reflectedRows := cql.ConvertRows(reflectedEventRows, func(v reflectedEvent) (mapped.Event, error) { return mapped.Event(v), nil },
 			func(v mapped.Event) mapped.Event { return mapped.Event(reflectedEventRows.Clone(reflectedEvent(v))) })
 		events := make([]mapped.Event, 2)
 		for i := range events {
@@ -201,7 +198,7 @@ func TestStructMapping(t *testing.T) {
 		event := func(i int) mapped.Event { return events[i] }
 		for i, params := range []cql.ParamEncoder[mapped.Event]{cql.MustParamsOf[mapped.Event](), reflectedParams} {
 			insertPrepared, err := f.session.Prepare(ctx, cql.Statement[mapped.Event, cql.EmptyRow]{
-				Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + f.table + " (" + columns + ") VALUES (?" + repeatMarkers(9) + ")", Params: params,
+				CQL: "INSERT INTO " + f.table + " (" + columns + ") VALUES (?" + repeatMarkers(9) + ")", Params: params,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -220,7 +217,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		for _, rows := range []cql.RowDecoder[mapped.Event]{cql.MustRowOf[mapped.Event](), reflectedRows} {
 			readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, mapped.Event]{
-				Kind: cql.OrdinaryStatement, CQL: "SELECT " + columns + " FROM " + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: rows,
+				CQL: "SELECT " + columns + " FROM " + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: rows,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -247,7 +244,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		for _, decoder := range []cql.StreamRowDecoder[mapped.StreamEvent]{cql.MustStreamRowOf[mapped.StreamEvent](), reflectedStreamRows{cql.MustStreamRowOf[reflectedStreamEvent]()}} {
 			prepared, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, mapped.StreamEvent]{
-				Kind: cql.OrdinaryStatement, CQL: "SELECT bucket, id, name, blob, big, maybe, scores, created_at, updated_at FROM " + f.table + " WHERE bucket = ?",
+				CQL:    "SELECT bucket, id, name, blob, big, maybe, scores, created_at, updated_at FROM " + f.table + " WHERE bucket = ?",
 				Params: cql.OneParam(cql.Int32Codec), Rows: decoder,
 			})
 			if err != nil {
@@ -312,7 +309,7 @@ func TestStructMapping(t *testing.T) {
 			D cql.Decimal
 		}
 		insertPrepared, err := f.session.Prepare(ctx, cql.Statement[numeric, cql.EmptyRow]{
-			Kind: cql.OrdinaryStatement, CQL: "INSERT INTO " + table + " (k, v, d) VALUES (?, ?, ?)", Params: cql.MustParamsOf[numeric](),
+			CQL: "INSERT INTO " + table + " (k, v, d) VALUES (?, ?, ?)", Params: cql.MustParamsOf[numeric](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -328,7 +325,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[int32, numeric]{
-			Kind: cql.OrdinaryStatement, CQL: "SELECT k, v, d FROM " + table + " WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustRowOf[numeric](),
+			CQL: "SELECT k, v, d FROM " + table + " WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustRowOf[numeric](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -338,8 +335,7 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer read.Close()
-		// Varint and Decimal borrow the response page: read them while the row is
-		// current, or Clone the row to keep it.
+		// Varint and Decimal own their values, so a cloned row keeps them.
 		rows, err := read.Run(ctx, 1)
 		if err != nil {
 			t.Fatal(err)
@@ -377,7 +373,6 @@ func TestStructMapping(t *testing.T) {
 			}
 		}
 		one, err := f.session.Prepare(ctx, cql.Statement[smKey, smRecord]{
-			Kind:   cql.OrdinaryStatement,
 			CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params: cql.MustParamsOf[smKey](),
 			Rows:   cql.MustRowOf[smRecord](smAttrs),
@@ -601,7 +596,7 @@ func TestStructMapping(t *testing.T) {
 		}
 		const query = "SELECT bucket, id, name, blob, big, maybe, scores, span, created_at, updated_at FROM "
 		read, err := f.session.PrepareStream(ctx, cql.StreamStatement[int32, smStream]{
-			Kind: cql.OrdinaryStatement, CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustStreamRowOf[smStream](),
+			CQL: query + f.table + " WHERE bucket = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.MustStreamRowOf[smStream](),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -663,7 +658,6 @@ func TestStructMapping(t *testing.T) {
 			t.Fatal(err)
 		}
 		updatePrepared, err := f.session.Prepare(ctx, cql.Statement[smRecord, cql.EmptyRow]{
-			Kind:   cql.OrdinaryStatement,
 			CQL:    "UPDATE " + f.table + " SET name = ?, tags = ?, maybe = ? WHERE bucket = ? AND id = ?",
 			Params: cql.MustParamsOf[smRecord](smAttrs),
 		})
@@ -687,7 +681,6 @@ func TestStructMapping(t *testing.T) {
 			Note string
 		}
 		readPrepared, err := f.session.Prepare(ctx, cql.Statement[smKey, partial]{
-			Kind:   cql.OrdinaryStatement,
 			CQL:    "SELECT id, name, tags FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params: cql.MustParamsOf[smKey](),
 			Rows:   cql.MustRowOf[partial](),
@@ -710,7 +703,7 @@ func TestStructMapping(t *testing.T) {
 		// The update nulled maybe; Big and the rest are unchanged.
 		var full smRecord
 		one, err := f.session.Prepare(ctx, cql.Statement[smKey, smRecord]{
-			Kind: cql.OrdinaryStatement, CQL: "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
+			CQL:    "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params: cql.MustParamsOf[smKey](), Rows: cql.MustRowOf[smRecord](smAttrs),
 		})
 		if err != nil {
@@ -730,7 +723,6 @@ func TestStructMapping(t *testing.T) {
 		prepared := f.insert(t, ctx) // for the bind marker metadata
 		r := smRecordAt(8, 0)
 		if _, err := f.session.UnpreparedExec(ctx, cql.Statement[smRecord, cql.EmptyRow]{
-			Kind:        cql.OrdinaryStatement,
 			CQL:         "INSERT INTO " + f.table + " (" + smColumns + ") VALUES (?" + repeatMarkers(21) + ")",
 			Params:      cql.MustParamsOf[smRecord](smAttrs),
 			BindMarkers: prepared.BindMarkers(),
@@ -743,7 +735,6 @@ func TestStructMapping(t *testing.T) {
 		)
 		var got smRecord
 		if ok, _, err := f.session.UnpreparedOne(ctx, cql.Statement[smKey, smRecord]{
-			Kind:        cql.OrdinaryStatement,
 			CQL:         "SELECT " + smColumns + " FROM " + f.table + " WHERE bucket = ? AND id = ?",
 			Params:      cql.MustParamsOf[smKey](),
 			Rows:        cql.MustRowOf[smRecord](smAttrs),

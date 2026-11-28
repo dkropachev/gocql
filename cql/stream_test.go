@@ -71,37 +71,37 @@ func TestStream(t *testing.T) {
 			data := streamEncodedFixture(t, list, ListEncoder(ByteSliceCodec), [][]byte{[]byte("one"), []byte("two")})
 			first, second := make([]byte, 8), make([]byte, 8)
 			out := [][]byte{first[:0], second[:0]}
-			if err := StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &out, 1); err != nil || len(out) != 2 || string(out[0]) != "one" || &out[0][0] != &first[0] || &out[1][0] != &second[0] {
+			if err := StreamDecodeFixture(t, list, StreamList(StreamByteSlice), data, &out, 1); err != nil || len(out) != 2 || string(out[0]) != "one" || &out[0][0] != &first[0] || &out[1][0] != &second[0] {
 				t.Fatal("nested storage", out, err)
 			}
 			// Decode reslices seeded slots beyond len, preserving their child backing.
 			out = out[:0]
-			if err := StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &out, 3); err != nil || &out[0][0] != &first[0] {
+			if err := StreamDecodeFixture(t, list, StreamList(StreamByteSlice), data, &out, 3); err != nil || &out[0][0] != &first[0] {
 				t.Fatal("reused nested storage", err)
 			}
 			source := &streamChunkSource{data: data}
 			cols := NewColumns(ColumnSpec{Name: "v", Type: list})
 			r, _ := streamReaderFixture(t, cols, source, len(data))
-			plan := CodecTestMust(StreamOneColumn(StreamList(StreamBlob)).Compile(cols))
+			plan := CodecTestMust(StreamOneColumn(StreamList(StreamByteSlice)).Compile(cols))
 			small := make([][]byte, 0, 1)
 			if err := plan.DecodeInto(r, &small); err == nil || source.offset != 8 {
 				t.Fatalf("outer count capacity %v offset %d", err, source.offset)
 			}
 			missingChild := [][]byte{make([]byte, 0, 2), make([]byte, 0, 8)}
-			if err := StreamDecodeFixture(t, list, StreamList(StreamBlob), data, &missingChild, 1); err == nil {
+			if err := StreamDecodeFixture(t, list, StreamList(StreamByteSlice), data, &missingChild, 1); err == nil {
 				t.Fatal("child capacity grew")
 			}
 			m := CodecTestMust(MapType(blob, list))
 			input := []Entry[[]byte, [][]byte]{{Key: []byte("k"), Value: [][]byte{[]byte("one"), []byte("two")}}}
-			mdata := streamEncodedFixture(t, m, MapEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), input)
+			mdata := streamEncodedFixture(t, m, MapEntriesEncoder(ByteSliceCodec, ListEncoder(ByteSliceCodec)), input)
 			mapped := []Entry[[]byte, [][]byte]{{Key: make([]byte, 0, 4), Value: [][]byte{first[:0], second[:0]}}}
-			if err := StreamDecodeFixture(t, m, StreamMap(StreamBlob, StreamList(StreamBlob)), mdata, &mapped, 1); err != nil || string(mapped[0].Key) != "k" || string(mapped[0].Value[1]) != "two" {
+			if err := StreamDecodeFixture(t, m, StreamMapEntries(StreamByteSlice, StreamList(StreamByteSlice)), mdata, &mapped, 1); err != nil || string(mapped[0].Key) != "k" || string(mapped[0].Value[1]) != "two" {
 				t.Fatal("map", mapped, err)
 			}
 			set := CodecTestMust(SetType(blob))
 			setData := streamEncodedFixture(t, set, SetEncoder(ByteSliceCodec), [][]byte{[]byte("x")})
 			out = out[:0]
-			if err := StreamDecodeFixture(t, set, StreamSet(StreamBlob), setData, &out, 1); err != nil || string(out[0]) != "x" {
+			if err := StreamDecodeFixture(t, set, StreamSet(StreamByteSlice), setData, &out, 1); err != nil || string(out[0]) != "x" {
 				t.Fatal("set", err)
 			}
 			if _, err := StreamList(StreamInt32).Compile(list); err == nil {
@@ -123,7 +123,7 @@ func TestStream(t *testing.T) {
 			variable := CodecTestMust(VectorType(text, 2))
 			vdata := streamEncodedFixture(t, variable, VectorEncoder(StringCodec), []string{"€", ""})
 			vout := [][]byte{make([]byte, 0, 4), make([]byte, 0, 1)}
-			if err := StreamDecodeFixture(t, variable, StreamVector(StreamText), vdata, &vout, 1); err != nil || string(vout[0]) != "€" || len(vout[1]) != 0 {
+			if err := StreamDecodeFixture(t, variable, StreamVector(StreamTextBytes), vdata, &vout, 1); err != nil || string(vout[0]) != "€" || len(vout[1]) != 0 {
 				t.Fatal("variable vector", vout, err)
 			}
 			nested := CodecTestMust(VectorType(fixed, 2))
@@ -196,9 +196,9 @@ func TestStream(t *testing.T) {
 					return e
 				},
 				func() error { _, e := StreamList(nilStreamValue{}).Compile(list); return e },
-				func() error { _, e := StreamMap(nilStreamValue{}, StreamInt32).Compile(m); return e },
+				func() error { _, e := StreamMapEntries(nilStreamValue{}, StreamInt32).Compile(m); return e },
 				func() error { _, e := StreamNullable(nilStreamValue{}).Compile(integer); return e },
-				func() error { _, e := StreamEmpty(nilStreamValue{}).Compile(integer); return e },
+				func() error { _, e := StreamMaybeEmpty(nilStreamValue{}).Compile(integer); return e },
 				func() error { _, e := StreamTuple(nilStreamRows{}).Compile(tuple); return e },
 				func() error { return TupleDecoder(nilBufferedRows{}).CheckType(tuple) },
 				func() error { return TupleEncoder(nilBufferedParams{}).CheckType(tuple) },
@@ -405,7 +405,7 @@ func TestStream(t *testing.T) {
 		t.Run("AbsentCustomResetterSucceeds", func(t *testing.T) {
 			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
-			options := []StructOption{UDTName("ks", "one"), IgnoreExtraFields(), AllowMissingFields()}
+			options := []StructOption{UDTName("ks", "one"), IgnoreUnknownFields(), AllowMissingFields()}
 			row := StreamRowInto(func(*int32) {}, StreamColumn("missing", customStreamResettable{}, func(value *int32) *int32 { return value }))
 			value := int32(42)
 			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options...), streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7})), &value, 1); err != nil || value != 0 {
@@ -423,7 +423,7 @@ func TestStream(t *testing.T) {
 			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
 			options := []StructOption{UDTName("ks", "one"), AllowMissingFields()}
-			row := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamBlob, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamBlob), func(d *destination) *[][]byte { return &d.Nested }))
+			row := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamByteSlice, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamByteSlice), func(d *destination) *[][]byte { return &d.Nested }))
 			backing, child := make([]byte, 16), make([]byte, 32)
 			out := destination{Payload: backing[:10], Nested: [][]byte{child[:12]}}
 			nestedStart := &out.Nested[0]
@@ -473,7 +473,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("missing application field reset", out, err)
 			}
 			extra := CodecTestMust(UDTType("ks", "entry", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "extra", Type: integer}))
-			options = append(options, IgnoreExtraFields())
+			options = append(options, IgnoreUnknownFields())
 			var single int32
 			if err := StreamDecodeFixture(t, extra, StreamUDT(StreamOneColumn(StreamInt32), options...), streamCellBytes(data), &single, 1); err != nil || single != 1 {
 				t.Fatal("single-column UDT policy", single, err)
@@ -491,7 +491,7 @@ func TestStream(t *testing.T) {
 			_ = encoder // Text uses a typed string input fixture below.
 			params := TupleEncoder(PairParams(OneParam(Int32Codec), OneParam(NullableEncoder(StringCodec))))
 			data := streamEncodedFixture(t, tuple, params, Pair[int32, Nullable[string]]{First: 7, Second: Nullable[string]{Value: "name", Valid: true}})
-			row := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumnAt(0, StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumnAt(1, StreamNullable(StreamText), func(r *record) *Nullable[[]byte] { return &r.Name }))
+			row := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumnAt(0, StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumnAt(1, StreamNullable(StreamTextBytes), func(r *record) *Nullable[[]byte] { return &r.Name }))
 			backing := make([]byte, 10)
 			out := record{Name: Nullable[[]byte]{Value: backing[:0]}, Unmapped: 9}
 			if err := StreamDecodeFixture(t, tuple, StreamTuple(row), data, &out, 1); err != nil || out.ID != 7 || string(out.Name.Value) != "name" || out.Unmapped != 0 || &out.Name.Value[0] != &backing[0] {
@@ -503,7 +503,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("omitted suffix", out, err)
 			}
 			udt := CodecTestMust(UDTType("ks", "entry", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "name", Type: text}))
-			named := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumn("name", StreamNullable(StreamText), func(r *record) *Nullable[[]byte] { return &r.Name }))
+			named := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumn("name", StreamNullable(StreamTextBytes), func(r *record) *Nullable[[]byte] { return &r.Name }))
 			decoder := StreamUDT(named, UDTName("ks", "entry"))
 			if err := StreamDecodeFixture(t, udt, decoder, data, &out, 1); err != nil || out.ID != 7 {
 				t.Fatal("UDT", err)
@@ -518,7 +518,7 @@ func TestStream(t *testing.T) {
 			if _, err := StreamUDT(strict, UDTName("ks", "entry")).Compile(udt); err == nil {
 				t.Fatal("extra UDT field accepted without policy")
 			}
-			relaxed := StreamUDT(strict, UDTName("ks", "entry"), IgnoreExtraFields())
+			relaxed := StreamUDT(strict, UDTName("ks", "entry"), IgnoreUnknownFields())
 			if err := StreamDecodeFixture(t, udt, relaxed, data, &out, 1); err != nil {
 				t.Fatal("checked UDT skip", err)
 			}
@@ -542,7 +542,7 @@ func TestStream(t *testing.T) {
 				t.Fatal("zero tuple", err)
 			}
 			wrapped := MaybeEmpty[EmptyRow]{}
-			if err := StreamDecodeFixture(t, zero, StreamEmpty(StreamTuple(StreamRowInto(func(*EmptyRow) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
+			if err := StreamDecodeFixture(t, zero, StreamMaybeEmpty(StreamTuple(StreamRowInto(func(*EmptyRow) {}))), empty, &wrapped, 1); err != nil || !wrapped.Empty {
 				t.Fatal("zero tuple Empty", err)
 			}
 		})
@@ -587,7 +587,7 @@ func TestStream(t *testing.T) {
 			for _, step := range []int{1, 2, 3, 7, 32, 1024} {
 				backing := make([]byte, len(payload))
 				dst := backing[:0]
-				if err := StreamDecodeFixture(t, typ, StreamText, data, &dst, step); err != nil {
+				if err := StreamDecodeFixture(t, typ, StreamTextBytes, data, &dst, step); err != nil {
 					t.Fatal(err)
 				}
 				if &dst[0] != &backing[0] || !bytes.Equal(dst, payload) {
@@ -598,36 +598,36 @@ func TestStream(t *testing.T) {
 			source := &streamChunkSource{data: data}
 			cols := NewColumns(ColumnSpec{Name: "text", Type: typ})
 			r, _ := streamReaderFixture(t, cols, source, len(data))
-			plan := CodecTestMust(StreamOneColumn(StreamText).Compile(cols))
+			plan := CodecTestMust(StreamOneColumn(StreamTextBytes).Compile(cols))
 			err := plan.DecodeInto(r, &dst)
 			if _, ok := errors.AsType[*StreamCapacityError](err); !ok || source.offset != 4 {
 				t.Fatalf("capacity consumed body: %v read %d", err, source.offset)
 			}
 			var invalid []byte = make([]byte, 0, 10)
 			for _, bad := range [][]byte{{0xff}, {0xe0, 0x80, 0x80}, {0xed, 0xa0, 0x80}, {0xf4, 0x90, 0x80, 0x80}, {0xe2, 0x82}} {
-				if err := StreamDecodeFixture(t, typ, StreamText, streamCellBytes(bad), &invalid, 1); err == nil {
+				if err := StreamDecodeFixture(t, typ, StreamTextBytes, streamCellBytes(bad), &invalid, 1); err == nil {
 					t.Fatalf("invalid text %x", bad)
 				}
 			}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, KindASCII), StreamText, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindASCII), StreamTextBytes, streamCellBytes([]byte{0x80}), &invalid, 1); err == nil {
 				t.Fatal("invalid ASCII accepted")
 			}
 			backing := make([]byte, 12)
 			nullable := Nullable[[]byte]{Value: backing[:6], Valid: true}
-			if err := StreamDecodeFixture(t, typ, StreamNullable(StreamText), []byte{255, 255, 255, 255}, &nullable, 1); err != nil || nullable.Valid || len(nullable.Value) != 0 || cap(nullable.Value) != 12 {
+			if err := StreamDecodeFixture(t, typ, StreamNullable(StreamTextBytes), []byte{255, 255, 255, 255}, &nullable, 1); err != nil || nullable.Valid || len(nullable.Value) != 0 || cap(nullable.Value) != 12 {
 				t.Fatalf("nullable reset: %+v %v", nullable, err)
 			}
-			if err := StreamDecodeFixture(t, typ, StreamNullable(StreamText), streamCellBytes(nil), &nullable, 1); err != nil || !nullable.Valid || len(nullable.Value) != 0 || cap(nullable.Value) != 12 {
+			if err := StreamDecodeFixture(t, typ, StreamNullable(StreamTextBytes), streamCellBytes(nil), &nullable, 1); err != nil || !nullable.Valid || len(nullable.Value) != 0 || cap(nullable.Value) != 12 {
 				t.Fatal("present empty lost null distinction", err)
 			}
-			if err := StreamDecodeFixture(t, typ, StreamText, []byte{255, 255, 255, 254}, &invalid, 1); err == nil {
+			if err := StreamDecodeFixture(t, typ, StreamTextBytes, []byte{255, 255, 255, 254}, &invalid, 1); err == nil {
 				t.Fatal("unset result accepted")
 			}
 			empty := MaybeEmpty[int32]{Value: 1}
-			if err := StreamDecodeFixture(t, FoundationScalar(t, KindInt), StreamEmpty(StreamInt32), streamCellBytes(nil), &empty, 1); err != nil || !empty.Empty {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindInt), StreamMaybeEmpty(StreamInt32), streamCellBytes(nil), &empty, 1); err != nil || !empty.Empty {
 				t.Fatal("logical Empty", err)
 			}
-			if _, err := StreamEmpty(StreamText).Compile(typ); err == nil {
+			if _, err := StreamMaybeEmpty(StreamTextBytes).Compile(typ); err == nil {
 				t.Fatal("text Empty accepted")
 			}
 		})
@@ -651,7 +651,7 @@ func TestStream(t *testing.T) {
 			typ := FoundationScalar(t, KindBlob)
 			cols := NewColumns(ColumnSpec{Name: "v", Type: typ})
 			r, scope := streamReaderFixture(t, cols, source, len(data))
-			p := CodecTestMust(StreamOneColumn(StreamBlob).Compile(cols))
+			p := CodecTestMust(StreamOneColumn(StreamByteSlice).Compile(cols))
 			if err := p.DecodeInto(r, &dst); err != nil {
 				t.Fatal(err)
 			}
@@ -669,7 +669,7 @@ func TestStream(t *testing.T) {
 			streamScalarCase(t, KindDouble, Float64Codec, StreamFloat64, math.Inf(-1))
 			streamScalarCase(t, KindCounter, Int64Codec, StreamInt64, int64(-1))
 			streamScalarCase(t, KindDate, DateCodec, StreamDate, Date(math.MinInt32))
-			streamScalarCase(t, KindTime, TimeOfDayCodec, StreamTime, TimeOfDay(nanosecondsPerDay-1))
+			streamScalarCase(t, KindTime, TimeOfDayCodec, StreamTimeOfDay, TimeOfDay(nanosecondsPerDay-1))
 			streamScalarCase(t, KindTimestamp, TimestampCodec, StreamTimestamp, Timestamp(math.MinInt64))
 			streamScalarCase(t, KindDuration, DurationCodec, StreamDuration, Duration{Months: math.MinInt32, Days: math.MinInt32, Nanoseconds: math.MinInt64})
 			streamScalarCase(t, KindUUID, UUIDCodec, StreamUUID, UUID{1, 2, 3, 4, 5})
@@ -683,7 +683,7 @@ func TestStream(t *testing.T) {
 			var badTime TimeOfDay
 			bad := make([]byte, 8)
 			binary.BigEndian.PutUint64(bad, uint64(nanosecondsPerDay))
-			if err := StreamDecodeFixture(t, FoundationScalar(t, KindTime), StreamTime, streamCellBytes(bad), &badTime, 1); err == nil {
+			if err := StreamDecodeFixture(t, FoundationScalar(t, KindTime), StreamTimeOfDay, streamCellBytes(bad), &badTime, 1); err == nil {
 				t.Fatal("invalid time accepted")
 			}
 			var id TimeUUID
@@ -699,23 +699,23 @@ func TestStream(t *testing.T) {
 			varint := FoundationScalar(t, KindVarint)
 			dst := make([]byte, 0, 6)
 			want := []byte{0xff, 0xff, 0x80}
-			if err := StreamDecodeFixture(t, varint, StreamVarint, streamCellBytes(want), &dst, 1); err != nil || !bytes.Equal(dst, want) {
+			if err := StreamDecodeFixture(t, varint, StreamVarintBytes, streamCellBytes(want), &dst, 1); err != nil || !bytes.Equal(dst, want) {
 				t.Fatal("signed varint bytes", err)
 			}
-			if err := StreamDecodeFixture(t, varint, StreamVarint, streamCellBytes(nil), &dst, 1); err == nil {
+			if err := StreamDecodeFixture(t, varint, StreamVarintBytes, streamCellBytes(nil), &dst, 1); err == nil {
 				t.Fatal("empty varint accepted")
 			}
 			decimal := FoundationScalar(t, KindDecimal)
 			value := Decimal{Scale: -7, Unscaled: CodecTestMust(VarintFromBytes([]byte{0x80, 0}))}
 			data := streamEncodedFixture(t, decimal, DecimalCodec, value)
 			out := DecimalParts{Unscaled: make([]byte, 0, 2)}
-			if err := StreamDecodeFixture(t, decimal, StreamDecimal, data, &out, 1); err != nil || out.Scale != -7 || !bytes.Equal(out.Unscaled, []byte{0x80, 0}) {
+			if err := StreamDecodeFixture(t, decimal, StreamDecimalParts, data, &out, 1); err != nil || out.Scale != -7 || !bytes.Equal(out.Unscaled, []byte{0x80, 0}) {
 				t.Fatal("decimal", out, err)
 			}
 			source := &streamChunkSource{data: data}
 			cols := NewColumns(ColumnSpec{Name: "d", Type: decimal})
 			reader, _ := streamReaderFixture(t, cols, source, len(data))
-			plan := CodecTestMust(StreamOneColumn(StreamDecimal).Compile(cols))
+			plan := CodecTestMust(StreamOneColumn(StreamDecimalParts).Compile(cols))
 			short := DecimalParts{Unscaled: make([]byte, 0, 1)}
 			if err := plan.DecodeInto(reader, &short); err == nil || source.offset != 4 {
 				t.Fatalf("decimal capacity preflight: %v offset %d", err, source.offset)
@@ -755,11 +755,11 @@ func TestStreamValueReaderAccessors(t *testing.T) {
 		if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, streamCellBytes(body), &got, step); err != nil {
 			t.Fatalf("step %d: %v", step, err)
 		}
-		if want := (streamWords{Type: blob, State: Present, Short: 0x1234, Long: 0x0123456789abcdef}); !got.Type.Equal(want.Type) || got.State != want.State || got.Short != want.Short || got.Long != want.Long {
+		if want := (streamWords{Type: blob, State: CellPresent, Short: 0x1234, Long: 0x0123456789abcdef}); !got.Type.Equal(want.Type) || got.State != want.State || got.Short != want.Short || got.Long != want.Long {
 			t.Fatalf("step %d: decoded %+v, want %+v", step, got, want)
 		}
 	}
-	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, []byte{0xff, 0xff, 0xff, 0xff}, &got, 1); err != nil || got.State != Null || !got.Type.Equal(blob) {
+	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, []byte{0xff, 0xff, 0xff, 0xff}, &got, 1); err != nil || got.State != CellNull || !got.Type.Equal(blob) {
 		t.Fatalf("null cell: %+v %v", got, err)
 	}
 	if err := StreamDecodeFixture(t, blob, streamWordsDecoder{}, streamCellBytes(body[:9]), &got, 1); err == nil {
@@ -776,7 +776,7 @@ func TestStreamResetters(t *testing.T) {
 	t.Run("Map", func(t *testing.T) {
 		dst := []Entry[[]byte, [][]byte]{{Key: []byte("key"), Value: [][]byte{[]byte("value")}}}
 		key := dst[0].Key
-		StreamMap(StreamBlob, StreamList(StreamBlob)).Reset(&dst)
+		StreamMapEntries(StreamByteSlice, StreamList(StreamByteSlice)).Reset(&dst)
 		if len(dst) != 0 || cap(dst) != 1 {
 			t.Fatalf("map len %d cap %d", len(dst), cap(dst))
 		}
@@ -787,35 +787,35 @@ func TestStreamResetters(t *testing.T) {
 	})
 	t.Run("Decimal", func(t *testing.T) {
 		dst := DecimalParts{Unscaled: []byte{1, 2}, Scale: 3}
-		StreamDecimal.Reset(&dst)
+		StreamDecimalParts.Reset(&dst)
 		if dst.Scale != 0 || len(dst.Unscaled) != 0 || cap(dst.Unscaled) != 2 {
 			t.Fatalf("decimal %+v cap %d", dst, cap(dst.Unscaled))
 		}
 	})
 	t.Run("Nullable", func(t *testing.T) {
 		dst := Nullable[[]byte]{Valid: true, Value: []byte("text")}
-		StreamNullable(StreamText).Reset(&dst)
+		StreamNullable(StreamTextBytes).Reset(&dst)
 		if dst.Valid || len(dst.Value) != 0 || cap(dst.Value) != 4 {
 			t.Fatalf("nullable %+v", dst)
 		}
 	})
 	t.Run("Empty", func(t *testing.T) {
 		dst := MaybeEmpty[[]byte]{Empty: true, Value: []byte("text")}
-		StreamEmpty(StreamText).Reset(&dst)
+		StreamMaybeEmpty(StreamTextBytes).Reset(&dst)
 		if dst.Empty || len(dst.Value) != 0 || cap(dst.Value) != 4 {
 			t.Fatalf("maybe-empty %+v", dst)
 		}
 	})
 	t.Run("Encoded", func(t *testing.T) {
-		dst := StreamCell{Type: FoundationScalar(t, KindInt), State: Null, Bytes: []byte{1, 2}}
+		dst := StreamCell{Type: FoundationScalar(t, KindInt), State: CellNull, Bytes: []byte{1, 2}}
 		StreamEncoded.Reset(&dst)
-		if !dst.Type.Equal(DataType{}) || dst.State != Present || len(dst.Bytes) != 0 || cap(dst.Bytes) != 2 {
+		if !dst.Type.Equal(DataType{}) || dst.State != CellPresent || len(dst.Bytes) != 0 || cap(dst.Bytes) != 2 {
 			t.Fatalf("cell %+v", dst)
 		}
 	})
 	t.Run("OneColumn", func(t *testing.T) {
 		dst := []byte("text")
-		StreamOneColumn(StreamText).(interface{ Reset(*[]byte) }).Reset(&dst)
+		StreamOneColumn(StreamTextBytes).(interface{ Reset(*[]byte) }).Reset(&dst)
 		if len(dst) != 0 || cap(dst) != 4 {
 			t.Fatalf("column len %d cap %d", len(dst), cap(dst))
 		}
@@ -837,12 +837,12 @@ func TestStreamResetters(t *testing.T) {
 		}
 	})
 	t.Run("NilDestination", func(t *testing.T) {
-		StreamMap(StreamBlob, StreamList(StreamBlob)).Reset(nil)
-		StreamDecimal.Reset(nil)
-		StreamNullable(StreamText).Reset(nil)
-		StreamEmpty(StreamText).Reset(nil)
+		StreamMapEntries(StreamByteSlice, StreamList(StreamByteSlice)).Reset(nil)
+		StreamDecimalParts.Reset(nil)
+		StreamNullable(StreamTextBytes).Reset(nil)
+		StreamMaybeEmpty(StreamTextBytes).Reset(nil)
 		StreamEncoded.Reset(nil)
-		StreamOneColumn(StreamText).(interface{ Reset(*[]byte) }).Reset(nil)
+		StreamOneColumn(StreamTextBytes).(interface{ Reset(*[]byte) }).Reset(nil)
 		row := StreamRowInto(func(*Pair[int32, int32]) { t.Fatal("reset callback ran for a nil destination") })
 		row.(interface{ Reset(*Pair[int32, int32]) }).Reset(nil)
 		StreamTuple(row).Reset(nil)

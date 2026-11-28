@@ -109,10 +109,10 @@ func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
 func (v2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
 
 func (v2MetadataStringMap) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).CheckType(t)
+	return cql.MapEntriesDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).CheckType(t)
 }
 func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).Decode(r)
+	v, err := cql.MapEntriesDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
@@ -134,10 +134,10 @@ func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) 
 func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
 func (v2MetadataExtensions) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).CheckType(t)
+	return cql.MapEntriesDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).CheckType(t)
 }
 func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).Decode(r)
+	v, err := cql.MapEntriesDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}

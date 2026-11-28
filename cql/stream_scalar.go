@@ -172,8 +172,15 @@ func streamReadDuration(r *StreamValueReader) (Duration, error) {
 	return durationFromComponents(months, days, nanos)
 }
 
-// Stream decoders of the scalar CQL types. Each accepts only the CQL types it
-// names and decodes into caller storage without borrowing response bytes.
+// Stream decoders of the scalar CQL types. Each accepts the CQL types it
+// names, and the integer and float decoders the narrower ones they widen
+// from, and decodes into caller storage without borrowing response bytes.
+//
+// Names follow one rule across the package: Kind values, the *Type
+// variables and the *Value constructors use CQL type names (KindInt,
+// IntType, IntValue), while codecs and stream decoders use the Go type they
+// produce (Int32Codec, StreamInt32, StreamTextBytes for []byte text). IntCodec
+// is Go int, which maps bigint.
 var (
 	// StreamBool decodes boolean into bool.
 	StreamBool StreamDecoder[bool] = streamFixed(KindBoolean, 1, func(b []byte) (bool, error) {
@@ -220,8 +227,8 @@ var (
 	// StreamDate decodes date into Date.
 	StreamDate = streamFixed(KindDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })
 
-	// StreamTime decodes time into TimeOfDay, rejecting a value outside one day.
-	StreamTime = streamFixed(KindTime, 8, func(b []byte) (TimeOfDay, error) {
+	// StreamTimeOfDay decodes time into TimeOfDay, rejecting a value outside one day.
+	StreamTimeOfDay = streamFixed(KindTime, 8, func(b []byte) (TimeOfDay, error) {
 		v := binary.BigEndian.Uint64(b)
 		if v >= uint64(nanosecondsPerDay) {
 			return 0, typeValidation("time", "outside one day")
@@ -260,20 +267,20 @@ var (
 		return v, nil
 	}}
 
-	// StreamText decodes text and ascii into a []byte, validating UTF-8 for
+	// StreamTextBytes decodes text and ascii into a []byte, validating UTF-8 for
 	// text and ASCII for ascii. The value is written into the destination's
 	// existing capacity; a value that does not fit fails with a
 	// StreamCapacityError.
-	StreamText StreamDecoder[[]byte] = streamBytesCodec{kind: KindText}
+	StreamTextBytes StreamDecoder[[]byte] = streamBytesCodec{kind: KindText}
 
-	// StreamBlob decodes blob into a []byte, within the destination's capacity
-	// as for StreamText.
-	StreamBlob StreamDecoder[[]byte] = streamBytesCodec{kind: KindBlob}
+	// StreamByteSlice decodes blob into a []byte, within the destination's capacity
+	// as for StreamTextBytes.
+	StreamByteSlice StreamDecoder[[]byte] = streamBytesCodec{kind: KindBlob}
 
-	// StreamVarint decodes varint into a []byte holding the big-endian
+	// StreamVarintBytes decodes varint into a []byte holding the big-endian
 	// two's-complement integer, within the destination's capacity as for
-	// StreamText.
-	StreamVarint StreamDecoder[[]byte] = streamBytesCodec{kind: KindVarint}
+	// StreamTextBytes.
+	StreamVarintBytes StreamDecoder[[]byte] = streamBytesCodec{kind: KindVarint}
 )
 
 type streamBytesCodec struct{ kind Kind }
@@ -355,9 +362,9 @@ type DecimalParts struct {
 type streamDecimalCodec struct{}
 type streamDecimalPlan struct{ typ DataType }
 
-// StreamDecimal decodes decimal into DecimalParts. Unscaled is written into
-// its existing capacity, as for StreamText.
-var StreamDecimal StreamDecoder[DecimalParts] = streamDecimalCodec{}
+// StreamDecimalParts decodes decimal into DecimalParts. Unscaled is written into
+// its existing capacity, as for StreamTextBytes.
+var StreamDecimalParts StreamDecoder[DecimalParts] = streamDecimalCodec{}
 
 func (streamDecimalCodec) Compile(t DataType) (CompiledStreamValue[DecimalParts], error) {
 	if err := DecimalCodec.CheckType(t); err != nil {
@@ -435,7 +442,7 @@ func (p streamNullablePlan[T]) DecodeInto(r *StreamValueReader, dst *Nullable[T]
 		return r.fail(typeValidation("type", "compiled nullable metadata changed"))
 	}
 	p.Reset(dst)
-	if r.state == Null {
+	if r.state == CellNull {
 		return r.RequireEnd()
 	}
 	if err := p.base.DecodeInto(r, &dst.Value); err != nil {
@@ -451,8 +458,8 @@ type streamEmptyPlan[T any] struct {
 	typ  DataType
 }
 
-// StreamEmpty adds empty-cell decoding to base while preserving caller buffer capacity.
-func StreamEmpty[T any](base StreamDecoder[T]) StreamDecoder[MaybeEmpty[T]] {
+// StreamMaybeEmpty adds empty-cell decoding to base while preserving caller buffer capacity.
+func StreamMaybeEmpty[T any](base StreamDecoder[T]) StreamDecoder[MaybeEmpty[T]] {
 	return streamEmptyCodec[T]{base}
 }
 func (c streamEmptyCodec[T]) Compile(t DataType) (CompiledStreamValue[MaybeEmpty[T]], error) {

@@ -26,10 +26,9 @@ package gocql_test
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/scylladb/gocql/v2/cql"
-
-	"log"
 )
 
 func Example_set() {
@@ -37,21 +36,18 @@ func Example_set() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	encoded, err := cql.EncodeValue(typ, cql.SetEncoder(cql.StringCodec), []string{"alpha", "beta"})
+	// A set maps to a slice, here of owned strings.
+	codec := cql.SetCodec(cql.StringCodec)
+	encoded, err := cql.EncodeValue(typ, codec, []string{"alpha", "beta"})
 	if err != nil {
 		log.Fatal(err)
 	}
-	values, err := cql.DecodeValue(cql.SetDecoder(cql.TextViewCodec), encoded)
+	values, err := cql.DecodeValue(codec, encoded)
 	if err != nil {
 		log.Fatal(err)
 	}
 	for _, value := range values {
-		// A decoded Text borrows the response; Copy returns an owned string.
-		text, err := value.Copy()
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(text)
+		fmt.Println(value)
 	}
 	// Output:
 	// alpha

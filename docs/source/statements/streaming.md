@@ -1,7 +1,7 @@
 # Streaming into caller storage
 
-`session.PrepareStream(ctx, cql.StreamStatement[P,R]{CQL: text, Params: params,
-Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
+`session.PrepareStream(ctx, cql.NewStreamStatement(text, params, decoder))`
+prepares directly for caller-storage decoding. Its immutable
 `PreparedStream` handle can be shared; `prepared.Worker()` creates
 a `StreamWorker` for one goroutine. Streaming is always prepared; `Rows` supplies the
 streaming decoder. The worker's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
@@ -24,17 +24,15 @@ type Download struct {
 }
 decoder := cql.StreamRowInto(func(r *Download) { r.ApplicationState = "" },
     cql.StreamColumn("id", cql.StreamInt32, func(r *Download) *int32 { return &r.ID }),
-    cql.StreamColumn("payload", cql.StreamBlob, func(r *Download) *[]byte { return &r.Payload }),
-    cql.StreamColumn("pieces", cql.StreamList(cql.StreamBlob), func(r *Download) *[][]byte { return &r.Pieces }),
+    cql.StreamColumn("payload", cql.StreamByteSlice, func(r *Download) *[]byte { return &r.Payload }),
+    cql.StreamColumn("pieces", cql.StreamList(cql.StreamByteSlice), func(r *Download) *[][]byte { return &r.Pieces }),
 )
 row := Download{
     Payload: make([]byte, 0, 1<<20),
     Pieces: [][]byte{make([]byte, 0, 1024), make([]byte, 0, 1024)},
 }
-prepared, err := session.PrepareStream(ctx, cql.StreamStatement[cql.EmptyParams, Download]{
-    CQL: "SELECT id,payload,pieces FROM app.downloads",
-    Rows: decoder,
-})
+prepared, err := session.PrepareStream(ctx, cql.NewStreamStatement(
+    "SELECT id,payload,pieces FROM app.downloads", cql.NoParams, decoder))
 if err != nil { return err }
 worker, err := prepared.Worker()
 if err != nil { return err }
@@ -134,13 +132,13 @@ A scalar field fails on NULL with an error matching `cql.ErrNull` unless its
 tag has `nullzero` or `cql.StreamRowOf` is given `cql.NullAsZero()`; a UDT's
 fields decode NULL, and a field the value predates, as zero.
 
-The seeded decoders, such as `cql.StreamText`, never grow the caller's
-buffers. `cql.StreamString`, `cql.StreamPointer`, `cql.StreamGoMap`,
+The seeded decoders, such as `cql.StreamTextBytes`, never grow the caller's
+buffers. `cql.StreamString`, `cql.StreamPointer`, `cql.StreamMap`,
 `cql.StreamTimestampTime`, `cql.StreamTimeDuration` and
-`cql.StreamDecimalValue` allocate each value instead, as the buffered codecs
+`cql.StreamDecimal` allocate each value instead, as the buffered codecs
 do, and never reuse a buffer between rows; `cql.StreamRowOf` maps `string`,
 `time.Time`, `time.Duration`, `cql.Decimal` and pointer fields with them,
-and a map field with `cql.WithStreamDecoder(cql.StreamGoMap(...))`. The
+and a map field with `cql.WithStreamDecoder(cql.StreamMap(...))`. The
 integer and float decoders widen as the buffered codecs do: `cql.StreamInt64`
 also decodes int, smallint and tinyint.
 Preparation validates the streaming decoder against available result metadata;

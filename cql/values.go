@@ -13,8 +13,10 @@ type Codec[T any] interface {
 	Decoder[T]
 }
 
-// Decoder decodes one checked CQL value. Clone recursively detaches borrowed storage.
-// Custom decoders must implement this contract even when used only through One.
+// Decoder decodes one checked CQL value. Clone recursively detaches borrowed
+// storage; the driver calls it to detach a row a caller keeps, so a custom
+// decoder must implement it even when its values never borrow, by returning
+// the value as it is.
 type Decoder[T any] interface {
 	// CheckType returns an error unless the decoder can decode values of the
 	// type. The driver calls it when it compiles a plan, before any Decode.

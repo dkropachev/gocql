@@ -19,13 +19,13 @@ type goMapCodec[K comparable, V any] struct {
 	typ          DataType
 }
 
-// GoMapCodec encodes and decodes a map as a Go map[K]V, the form struct
+// MapCodec encodes and decodes a map as a Go map[K]V, the form struct
 // mappings use for map fields of built-in key and value types. Encoding
 // writes the entries in Go's map iteration order; the server keeps a map in
 // key order. A response that repeats a key fails to decode, and a null cell,
 // how CQL stores an empty map, decodes as an empty one. DecodeInto clears the
 // destination map and reuses it.
-func GoMapCodec[K comparable, V any](key Codec[K], value Codec[V]) Codec[map[K]V] {
+func MapCodec[K comparable, V any](key Codec[K], value Codec[V]) Codec[map[K]V] {
 	return goMapCodec[K, V]{key: key, value: value}
 }
 
@@ -118,7 +118,7 @@ func (c goMapCodec[K, V]) DecodeInto(r ValueReader, dst *map[K]V) error {
 	if err != nil {
 		return err
 	}
-	if r.err == nil && r.State() == Null {
+	if r.err == nil && r.State() == CellNull {
 		if err := checkBytesAlive(r.Bytes()); err != nil {
 			return err
 		}

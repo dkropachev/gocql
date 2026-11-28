@@ -35,11 +35,9 @@ session, err := gocql.Connect(ctx, cfg)
 if err != nil { return err }
 defer session.Close()
 
-statement := cql.Statement[int32, string]{
-    CQL: "SELECT name FROM app.users WHERE id = ?",
-    Params: cql.OneParam(cql.Int32Codec),
-    Rows: cql.OneColumn(cql.StringCodec),
-}
+// ParamOf and ColumnOf derive the codec from the Go type.
+statement := cql.Select("SELECT name FROM app.users WHERE id = ?",
+    cql.ParamOf[int32](), cql.ColumnOf[string]())
 prepared, err := session.Prepare(ctx, statement)
 if err != nil { return err }
 var name string
@@ -131,7 +129,7 @@ Close unless a retained `PageLease` pins the page. `Clone` explicitly detaches
 values. `NextInto` writes typed fields into caller structs while payloads still
 borrow their pages.
 
-`session.PrepareStream(ctx, cql.StreamStatement[P, R]{CQL: text, Params: params, Rows: decoder})`
+`session.PrepareStream(ctx, cql.NewStreamStatement(text, params, decoder))`
 prepares directly for caller-storage decoding. Share its immutable handle and
 create a `StreamWorker` per goroutine with `prepared.Worker(streamOptions)`. It decodes into
 seeded caller storage. It buffers each page on

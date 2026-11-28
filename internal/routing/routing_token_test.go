@@ -22,7 +22,7 @@ func TestRoutingTokenAPI(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				cells[i] = encodedCell{State: cql.Present, Body: c}
+				cells[i] = encodedCell{State: cql.CellPresent, Body: c}
 			}
 			for _, indexes := range [][]int{{0}, {2}, {2, 0, 1}, {1, 2}} {
 				var materialized []byte
@@ -45,7 +45,7 @@ func TestRoutingTokenAPI(t *testing.T) {
 
 	t.Run("Validate", func(t *testing.T) {
 		t.Run("RejectsInvalidIndexWithNullKey", func(t *testing.T) {
-			cells := []encodedCell{{State: cql.Null}, {State: cql.Present}}
+			cells := []encodedCell{{State: cql.CellNull}, {State: cql.CellPresent}}
 			if _, err := routingToken(cells, []int{0, 9}); err == nil {
 				t.Fatal("null key hid invalid partition index")
 			}
@@ -54,7 +54,7 @@ func TestRoutingTokenAPI(t *testing.T) {
 				t.Fatalf("nullable key token=%+v err=%v", got, err)
 			}
 			big, _ := wire.NewChain(wire.Borrow(make([]byte, 65536)))
-			cells[0] = encodedCell{State: cql.Present, Body: big}
+			cells[0] = encodedCell{State: cql.CellPresent, Body: big}
 			if _, err := routingToken(cells, []int{0, 1}); err == nil {
 				t.Fatal("oversized composite component accepted")
 			}

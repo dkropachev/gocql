@@ -191,7 +191,7 @@ func TestStructNamedElementTypes(t *testing.T) {
 	if _, err := cql.ParamsOf[bound](); err != nil {
 		t.Fatal(err)
 	}
-	ruleEncode(t, one, cql.MustParamsOf[bound](), bound{V: cql.BindValue[fieldStatus]{Value: "v", State: cql.Present}})
+	ruleEncode(t, one, cql.MustParamsOf[bound](), bound{V: cql.Bind[fieldStatus]("v")})
 
 	// WithCodec for the named type replaces its slices, as it does the type.
 	upper := cql.WithCodec(cql.ConvertCodec(cql.StringCodec,

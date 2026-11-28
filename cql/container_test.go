@@ -55,7 +55,7 @@ func TestContainer(t *testing.T) {
 			}
 			chain, _ := wire.NewChain(spans...)
 			lease := wire.NewLease(chain, nil)
-			leased, _ := newEncodedValue(list, Present, bytesView(chain, wire.RefOf(lease)))
+			leased, _ := newEncodedValue(list, CellPresent, bytesView(chain, wire.RefOf(lease)))
 			sequence, err := DecodeValue(ListDecoder(BytesViewCodec), leased)
 			if err != nil {
 				t.Fatal(err)
@@ -96,11 +96,11 @@ func TestContainer(t *testing.T) {
 		encoder := ListEncoder(TupleEncoder(PairParams(OneParam(StringCodec), OneParam(ByteSliceCodec))))
 		encoded := CodecTestMust(encodeValueBorrowed(list, encoder, []Pair[string, []byte]{{"one", []byte("blob")}, {"two", []byte("more")}}))
 		lease := wire.NewLease(bytesChain(encoded.body), nil)
-		borrowed := EncodedValue{typ: list, state: Present, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
+		borrowed := EncodedValue{typ: list, state: CellPresent, body: bytesView(bytesChain(encoded.body), wire.RefOf(lease))}
 		decoder := ListDecoder(TupleDecoder(PairRows(OneColumn(TextViewCodec), OneColumn(BytesViewCodec))))
 		seq := CodecTestMust(DecodeValue(decoder, borrowed))
 		values := decoder.Clone(seq)
-		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, Present, bytesChain(encoded.body), lease)))
+		dynamic := CodecTestMust(DynamicCodec.Decode(valueReaderFromLease(list, CellPresent, bytesChain(encoded.body), lease)))
 		dynamicValues := dynamicTestDetach(dynamic.Elements(), cloneValue)
 		lease.Release()
 		if values[0].First.string() != "one" || !bytes.Equal(values[1].Second.ownedBytes(), []byte("more")) {
@@ -116,7 +116,7 @@ func TestContainer(t *testing.T) {
 		value := CodecTestMust(ListValue(blob, BlobValue(payload)))
 		input := dynamicTestDetach(value.Elements(), cloneValue)
 		payload[0] = 'X'
-		b := CodecTestMust(input[0].Bytes())
+		b := CodecTestMust(input[0].BytesView())
 		if string(b.ownedBytes()) != "input" {
 			t.Fatal("input-side Clone did not detach")
 		}
@@ -178,7 +178,10 @@ func TestContainer(t *testing.T) {
 			}{
 				{list, func(v EncodedValue) error { _, e := DecodeValue(ListDecoder(Int32Codec), v); return e }},
 				{set, func(v EncodedValue) error { _, e := DecodeValue(SetDecoder(Int32Codec), v); return e }},
-				{mapType, func(v EncodedValue) error { _, e := DecodeValue(MapDecoder(Int32Codec, Int32Codec), v); return e }},
+				{mapType, func(v EncodedValue) error {
+					_, e := DecodeValue(MapEntriesDecoder(Int32Codec, Int32Codec), v)
+					return e
+				}},
 			} {
 				for _, bad := range []string{"", "000000", "ffffffff", "7fffffff", "000000010000000401", "00000001ffffffff", "00000001fffffffe", "00000001fffffffd", "0000000000"} {
 					body, _ := hex.DecodeString(bad)
@@ -186,7 +189,7 @@ func TestContainer(t *testing.T) {
 						t.Fatalf("%s accepted %s", test.typ, bad)
 					}
 				}
-				null, _ := newEncodedValue(test.typ, Null, Bytes{})
+				null, _ := newEncodedValue(test.typ, CellNull, Bytes{})
 				if err := test.validate(null); err != nil {
 					t.Fatalf("%s rejected null collection: %v", test.typ, err)
 				}
@@ -201,7 +204,7 @@ func TestContainer(t *testing.T) {
 			if _, err := encodeValueBorrowed(list, ListEncoder(NullableEncoder(Int32Codec)), []Nullable[int32]{{}}); err == nil {
 				t.Fatal("null collection member accepted")
 			}
-			if _, err := encodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{{State: Unset}}); err == nil {
+			if _, err := encodeValueBorrowed(list, ListEncoder(BindEncoder(Int32Codec)), []BindValue[int32]{BindUnset[int32]()}); err == nil {
 				t.Fatal("unset collection member accepted")
 			}
 		})
@@ -234,8 +237,8 @@ func TestContainer(t *testing.T) {
 		text := rowTestType(t, KindText)
 		blob := rowTestType(t, KindBlob)
 		mapType, _ := MapType(text, blob)
-		encoded := containerGolden(t, mapType, MapEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
-		mapping, err := DecodeValue(MapDecoder(TextViewCodec, BytesViewCodec), encoded)
+		encoded := containerGolden(t, mapType, MapEntriesEncoder(StringCodec, ByteSliceCodec), []Entry[string, []byte]{{"x", []byte("y")}}, "0000000100000001780000000179")
+		mapping, err := DecodeValue(MapEntriesDecoder(TextViewCodec, BytesViewCodec), encoded)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -342,7 +345,7 @@ func TestContainer(t *testing.T) {
 				spans[index] = wire.Borrow(data[index : index+1])
 			}
 			chain, _ := wire.NewChain(spans...)
-			sequence, err := VectorDecoder(BytesViewCodec).Decode(valueReaderFromLease(vector, Present, chain, nil))
+			sequence, err := VectorDecoder(BytesViewCodec).Decode(valueReaderFromLease(vector, CellPresent, chain, nil))
 			if err != nil {
 				t.Fatal(err)
 			}
