@@ -14,7 +14,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
@@ -119,7 +119,7 @@ func cassandraReadOne[P, R any, O fixtureOptions](t testing.TB, s *gocql.Session
 
 // cassandraUnpreparedOne runs stmt without preparing it and returns its only
 // row, detached from the response.
-func cassandraUnpreparedOne[R any](t testing.TB, s *gocql.Session, stmt string, decoder cql.RowDecoder[R], options exec.Options) R {
+func cassandraUnpreparedOne[R any](t testing.TB, s *gocql.Session, stmt string, decoder cql.RowDecoder[R], options execopt.Options) R {
 	t.Helper()
 	rows := cassandraUnpreparedAll(t, s, stmt, decoder, options)
 	if len(rows) != 1 {
@@ -130,7 +130,7 @@ func cassandraUnpreparedOne[R any](t testing.TB, s *gocql.Session, stmt string, 
 
 // cassandraUnpreparedAll runs stmt without preparing it and returns every
 // row across all pages, detached from the responses.
-func cassandraUnpreparedAll[R any](t testing.TB, s *gocql.Session, stmt string, decoder cql.RowDecoder[R], options exec.Options) []R {
+func cassandraUnpreparedAll[R any](t testing.TB, s *gocql.Session, stmt string, decoder cql.RowDecoder[R], options execopt.Options) []R {
 	t.Helper()
 	var result []R
 	var cur R
@@ -336,7 +336,7 @@ func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
 func (fullNameCodec) Clone(n FullName) FullName { return n }
 func cassandraCASPrepared[R any](t testing.TB, s *gocql.Session, stmt string, decoder cql.RowDecoder[R]) *gocql.Prepared[[]cql.Value, cql.CASResult[R]] {
 	t.Helper()
-	return cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.CASResult[R]]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.CASRows(decoder)}, exec.PrepareOptions{})
+	return cassandraPrepared(t, s, cql.Statement[[]cql.Value, cql.CASResult[R]]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.CASRows(decoder)}, execopt.PrepareOptions{})
 }
 
 func cassandraUUID(text string) cql.UUID {

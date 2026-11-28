@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implBinding "github.com/scylladb/gocql/v2/internal/binding"
 	"github.com/scylladb/gocql/v2/internal/link"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
@@ -18,20 +18,20 @@ func init() { link.Set(link.CompileUntracked, compileUntracked) }
 
 // compileUntracked is Session.CompileOptions for executions that the
 // session's metrics leave out, such as package cqltrace's reads.
-func compileUntracked(s *Session, options exec.Options) (exec.CompiledOptions, error) {
+func compileUntracked(s *Session, options execopt.Options) (execopt.CompiledOptions, error) {
 	o := internalOptions(options)
 	implSession.OptionsData(&o).InternalUntracked = true
 	compiled, err := s.internal().CompileOptions(o)
-	return exec.CompiledOptions(compiled), err
+	return execopt.CompiledOptions(compiled), err
 }
 
-func internalOptions(o exec.Options) implSession.Options {
+func internalOptions(o execopt.Options) implSession.Options {
 	v := implSession.Options{
 		Retry: o.Retry, Speculation: o.Speculation, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: prefetchPages(o.Prefetch), PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
-		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
+		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
 		NoSessionObserver: o.NoSessionObserver, AnyShardFallback: o.AnyShardFallback,
@@ -80,17 +80,17 @@ func tooManyStreamWorkerOptions() error {
 }
 
 // fixedWorkerTimestamp is the error of a worker given a fixed
-// exec.Options.Timestamp, which would stamp each of its writes alike.
+// execopt.Options.Timestamp, which would stamp each of its writes alike.
 //
 //go:noinline
 func fixedWorkerTimestamp() error {
 	return &cql.ValidationError{Field: "Timestamp", Err: errors.New("a worker would give every write the same timestamp; pass it per call through Session.CompileOptions")}
 }
 
-// internalOptionList converts the optional exec.CompiledOptions of a
+// internalOptionList converts the optional execopt.CompiledOptions of a
 // throwaway call to the values it resolves for the session; the internal
 // call rejects more than one.
-func internalOptionList(options []exec.CompiledOptions) []implSession.Options {
+func internalOptionList(options []execopt.CompiledOptions) []implSession.Options {
 	if len(options) == 0 {
 		return nil
 	}

@@ -322,7 +322,8 @@ type PreparedStorage[P, R any] struct {
 	// defaults are the options of a view's calls made without options.
 	defaults CompiledOptions
 	// defaultsErr is why defaults cannot run the statement, which fails
-	// every call of the view; see viewSpeculationError.
+	// every call of the view; see viewTimestampError and
+	// viewSpeculationError.
 	defaultsErr error
 	poolOnce    sync.Once
 	// kind is the kind executions run as, resolved at Prepare.
@@ -345,10 +346,21 @@ func (p *Prepared[P, R]) With(defaults CompiledOptions) *Prepared[P, R] {
 	s := &p.privateStorage
 	v := new(Prepared[P, R])
 	v.privateStorage = PreparedStorage[P, R]{params: s.params, rows: s.rows, InternalState: s.InternalState, plans: s.plans, kind: s.kind, idempotent: s.idempotent, root: root, defaults: defaults}
-	if s.InternalState != nil {
+	if defaults.p != nil && defaults.values().Timestamp.Set {
+		v.privateStorage.defaultsErr = viewTimestampError()
+	} else if s.InternalState != nil {
 		v.privateStorage.defaultsErr = viewSpeculationError(s.InternalState.InternalSession, defaults, s.kind, s.idempotent)
 	}
 	return v
+}
+
+// viewTimestampError is the cql.ValidationError of defaults with a
+// Timestamp: every write of the view, and of its workers, would carry the
+// same one.
+//
+//go:noinline
+func viewTimestampError() error {
+	return cqltype.TypeValidation("Timestamp", "a Prepared.With view would give every write the same timestamp; pass it per call through Session.CompileOptions")
 }
 
 // DefaultsError returns why the defaults given to With cannot run the
@@ -361,7 +373,7 @@ func (p *Prepared[P, R]) DefaultsError() error {
 }
 
 // viewSpeculationError returns the cql.ValidationError of defaults whose
-// exec.Options.Speculation names a policy for a statement of kind that cannot
+// execopt.Options.Speculation names a policy for a statement of kind that cannot
 // speculate: a conditional statement, or one not idempotent by the defaults'
 // Idempotent, else the statement's, else the profile's. Speculation that
 // comes from a profile is not checked: a profile serves many statements, and

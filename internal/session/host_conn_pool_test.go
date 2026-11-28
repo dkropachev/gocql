@@ -361,7 +361,7 @@ func TestHostConnPool(t *testing.T) {
 				t.Fatal("invalid strict target relaxed")
 			}
 			// A request pinned to a shard stays on it unless it allows the
-			// fallback, as exec.Options.AnyShardFallback does.
+			// fallback, as execopt.Options.AnyShardFallback does.
 			pinned := routing2.Info{Kind: implCql.OrdinaryStatement, ShardID: implCql.Option[uint32]{Value: 9, Set: true}}
 			if got := p.InternalPickTarget(metadata.Target{}, pinned); got != nil {
 				t.Fatal("a pin to a missing shard fell back")

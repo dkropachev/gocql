@@ -19,7 +19,7 @@ var sentinels = map[string]struct {
 }{
 	"ErrBusy":                         {ErrBusy, "gocql: worker is busy"},
 	"ErrClosed":                       {ErrClosed, "gocql: closed"},
-	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use One, Each, All or Run, or ApplyBatch or RunConditionalBatch for a batch"},
+	"ErrConditionalExec":              {ErrConditionalExec, "gocql: conditional statements return rows: use Apply, or One, Each, All or Run to read them; for a batch, ApplyBatch or RunConditionalBatch"},
 	"ErrConnectionClosed":             {ErrConnectionClosed, "gocql: connection closed waiting for response"},
 	"ErrFrameTooBig":                  {ErrFrameTooBig, "gocql: frame length is bigger than the maximum allowed"},
 	"ErrNoConnections":                {ErrNoConnections, "gocql: no connections available"},

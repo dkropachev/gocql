@@ -18,10 +18,10 @@ dialects, before anything is sent to the cluster:
 |---|---|---|
 | `config.ConfigBuilder.WithClientRoutes` | `ScyllaV4` | `config.ConfigBuilder.Build` fails |
 | `config.ConfigBuilder.WithMetadataServerTimeout` with a positive duration | `ScyllaV4` | `config.ConfigBuilder.Build` fails |
-| `exec.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
-| `exec.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
+| `execopt.Options.ShardID` | `ScyllaV4` | `Session.CompileOptions` and the execution fail |
+| `execopt.Options.NowInSeconds` | `CassandraV5` | `Session.CompileOptions` and the execution fail |
 
-`exec.Options.Keyspace` or `exec.PrepareOptions.Keyspace` naming a keyspace
+`execopt.Options.Keyspace` or `execopt.PrepareOptions.Keyspace` naming a keyspace
 other than the session's also needs `CassandraV5`, unless the statement names
 its keyspace itself; on protocol 4 the execution or the preparation fails with
 a `*cql.ValidationError` before it is sent. A custom routing policy that routes

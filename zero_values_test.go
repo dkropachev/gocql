@@ -21,7 +21,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -156,7 +156,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	}
 	_, err = session.Subscribe(event.Filter{})
 	requireValidation(t, "zero Session.Subscribe", err)
-	_, err = session.CompileOptions(exec.Options{})
+	_, err = session.CompileOptions(execopt.Options{})
 	requireValidation(t, "zero Session.CompileOptions", err)
 	stmt := cql.Statement[cql.EmptyParams, cql.EmptyRow]{CQL: "SELECT now() FROM system.local"}
 	_, err = session.UnpreparedExec(ctx, stmt, cql.EmptyParams{})
@@ -179,7 +179,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	_, err = prepared.Worker()
 	requireValidation(t, "zero Prepared.Worker", err)
 	requireValidation(t, "zero Prepared.AddToBatch", prepared.AddToBatch(new(gocql.Batch), cql.EmptyParams{}))
-	_, err = new(gocql.PreparedStream[cql.EmptyParams, cql.EmptyRow]).Worker(exec.StreamOptions{})
+	_, err = new(gocql.PreparedStream[cql.EmptyParams, cql.EmptyRow]).Worker(execopt.StreamOptions{})
 	requireValidation(t, "zero PreparedStream.Worker", err)
 	var query gocql.Worker[cql.EmptyParams, cql.EmptyRow]
 	_, err = query.Exec(ctx, cql.EmptyParams{})

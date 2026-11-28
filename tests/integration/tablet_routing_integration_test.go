@@ -13,7 +13,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
@@ -45,7 +45,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 		info, err := s.UnpreparedEach(ctx, statement, parameters{table, token}, &cur, func(r *cql.DynamicRow) error {
 			rows = append(rows, r.Clone())
 			return nil
-		}, bindOptions(s, exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.HostID}, PageSize: cql.Unpaged}))
+		}, bindOptions(s, execopt.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: host.HostID}, PageSize: cql.Unpaged}))
 		if err != nil {
 			t.Fatal(err)
 		}

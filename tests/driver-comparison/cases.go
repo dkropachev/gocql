@@ -10,7 +10,7 @@ import (
 
 	g "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // The v2 query-execution cases. cases.tsv matches each to a master case of
@@ -48,14 +48,14 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	defer a.mu.Unlock()
 	ctx := context.Background()
 	if a.lwt == nil {
-		p, err := a.s.Prepare(ctx, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, exec.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[lwtArgs, cql.CASResult[int32]]{Kind: cql.ConditionalStatement, CQL: lwtUpdate, Params: lwtParams, Rows: lwtRows}, execopt.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
 		a.lwt = p
 	}
 	if a.lwtRead == nil {
-		p, err := a.s.Prepare(ctx, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, exec.PrepareOptions{})
+		p, err := a.s.Prepare(ctx, cql.Statement[int32, int32]{Kind: cql.OrdinaryStatement, CQL: lwtRead, Params: keyParams, Rows: lwtValue}, execopt.PrepareOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -64,7 +64,7 @@ func (a *v2Adapter) lwtPrepared() (*g.Prepared[lwtArgs, cql.CASResult[int32]], *
 	return a.lwt, a.lwtRead, nil
 }
 
-func (a *v2Adapter) options(v exec.Options) (exec.CompiledOptions, error) {
+func (a *v2Adapter) options(v execopt.Options) (execopt.CompiledOptions, error) {
 	return a.s.CompileOptions(v)
 }
 
@@ -90,12 +90,12 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 
 	switch name {
 	case "A1", "B5", "B7", "A3", "B1":
-		opts := exec.Options{}
+		opts := execopt.Options{}
 		switch name {
 		case "B5":
-			opts = exec.Options{Prefetch: cql.Some(true)}
+			opts = execopt.Options{Prefetch: cql.Some(true)}
 		case "B7":
-			opts = exec.Options{PageSize: 5000}
+			opts = execopt.Options{PageSize: 5000}
 		}
 		o, err := a.options(opts)
 		if err != nil {
@@ -152,7 +152,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		if err != nil {
 			return nil, err
 		}
-		sq, err := readStream.Worker(exec.StreamOptions{Incremental: name == "B4" || name == "B9"})
+		sq, err := readStream.Worker(execopt.StreamOptions{Incremental: name == "B4" || name == "B9"})
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +174,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 			return c.check.done(want, errors.Join(err, rs.Err(), rs.Close()))
 		}, nil
 	case "A6", "B6":
-		o, err := a.options(exec.Options{PageSize: cql.Unpaged})
+		o, err := a.options(execopt.Options{PageSize: cql.Unpaged})
 		if err != nil {
 			return nil, err
 		}
@@ -248,7 +248,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 	case "D3":
 		return func(ctx context.Context, seq uint64) error {
 			k := pointKey(seq)
-			opts, err := a.options(exec.Options{IncludeMetadata: true, Idempotent: cql.Some(true), Timestamp: cql.Some(time.Now())})
+			opts, err := a.options(execopt.Options{IncludeMetadata: true, Idempotent: cql.Some(true), Timestamp: cql.Some(time.Now())})
 			if err != nil {
 				return err
 			}
@@ -362,7 +362,7 @@ func execOp(q *g.Worker[row, cql.EmptyRow]) op {
 	}
 }
 
-func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts exec.CompiledOptions) op {
+func preparedExec(p *g.Prepared[row, cql.EmptyRow], opts execopt.CompiledOptions) op {
 	return func(ctx context.Context, seq uint64) error {
 		k := pointKey(seq)
 		_, err := p.Exec(ctx, row{K: k, P: payload(false, k, 0)}, opts)
@@ -392,7 +392,7 @@ func (c *v2Case) lwt(id, n int) (op, error) {
 			return nil, fmt.Errorf("lwt key %d missing; run -mode prepare -scenario lwt", keys[j])
 		}
 	}
-	o, err := c.a.options(exec.Options{SerialConsistency: exec.SerialLocal})
+	o, err := c.a.options(execopt.Options{SerialConsistency: cql.Some(cql.LocalSerial)})
 	if err != nil {
 		return nil, err
 	}

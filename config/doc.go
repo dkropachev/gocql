@@ -16,7 +16,7 @@
 //
 // NewProfile starts a ProfileBuilder for execution defaults: the session's
 // default profile (ConfigBuilder.WithDefaultProfile) or a per-request one
-// (exec.Options.Profile). WithTLS encrypts connections with a fixed
+// (execopt.Options.Profile). WithTLS encrypts connections with a fixed
 // tls.Config; WithTLSSource takes an endpoint.TLSSource such as NewTLSFileSource,
 // which reloads certificates while the session runs. WithObserver installs
 // observe.Hooks; observe.Join combines several.
@@ -28,22 +28,23 @@
 //
 //  1. The session's default profile: the one ConfigBuilder.WithDefaultProfile
 //     chose, or the driver's defaults; Config.DefaultProfile returns it.
-//  2. exec.Options.Profile, when set, replaces that profile whole. A field the
-//     profile did not choose keeps the driver's default, not the session's.
-//  3. Each exec.Options field that is set overrides the matching field of the
-//     profile: a cql.Option whose Set is true, a non-nil Retry, a non-zero
-//     PageSize, and a SerialConsistency other than exec.SerialInherit. The
-//     options a call passes to a view made by gocql.Prepared.With are laid
-//     over the view's own, field by field, first; see package exec.
+//  2. execopt.Options.Profile, when set, replaces that profile whole. A
+//     field the profile did not choose keeps the driver's default, not the
+//     session's.
+//  3. Each execopt.Options field that is set overrides the matching field of
+//     the profile: a cql.Option whose Set is true, such as SerialConsistency,
+//     a non-nil Retry, and a non-zero PageSize. The options a call passes to
+//     a view made by gocql.Prepared.With are laid over the view's own, field
+//     by field, first; see package execopt.
 //
-// A set exec.Options.Timeout replaces the profile's Timeout, longer or
+// A set execopt.Options.Timeout replaces the profile's Timeout, longer or
 // shorter, and a set zero removes it. The resulting limit and the context
 // passed to the call both bound the whole execution, retries and every page
 // Rows fetches included, and whichever expires first ends it.
-// exec.Options.PageTimeout replaces the profile's PageTimeout the same way;
+// execopt.Options.PageTimeout replaces the profile's PageTimeout the same way;
 // it bounds each page fetch on its own, within the execution's deadline.
 //
-// Preparation takes no exec.Options. Session.Prepare and
+// Preparation takes no execopt.Options. Session.Prepare and
 // Session.PrepareStream are bounded by their context and the session's
 // default profile Timeout, whichever expires first. A statement the driver
 // prepares again during an execution, after an UNPREPARED error or on a host

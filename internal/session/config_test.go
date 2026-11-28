@@ -122,7 +122,7 @@ func TestConfig(t *testing.T) {
 			}()
 
 			InternalRuntimeFor(s).InternalSetProfile(c.DefaultProfile)
-			options := testOptions(Options{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, SerialConsistency: SerialLocal, Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
+			options := testOptions(Options{Timeout: implCql.Option[time.Duration]{Set: true}, PageTimeout: implCql.Option[time.Duration]{Set: true}, SerialConsistency: implCql.Some(implCql.LocalSerial), Prefetch: implCql.Option[int]{Set: true}, Timestamp: implCql.Option[int64]{Set: true}, NowInSeconds: implCql.Option[int32]{Set: true}})
 			resolved, err := resolveOptions(s, options)
 			if err != nil {
 				t.Fatal(err)

@@ -28,6 +28,6 @@ func ExampleConfigBuilder_WithLocalDatacenter() {
 	if err != nil {
 		panic(err)
 	}
-	// Connect with cfg; run analytics reads with exec.Options{Profile: &profile}.
+	// Connect with cfg; run analytics reads with execopt.Options{Profile: &profile}.
 	_, _ = cfg, profile
 }

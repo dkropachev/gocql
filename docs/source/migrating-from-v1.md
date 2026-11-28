@@ -31,7 +31,7 @@ packages are named `gocql`.
   builder; `Build` validates every setting and returns an immutable
   `config.Config`. Per-request defaults (consistency, timeouts, paging, retry,
   routing, speculation) live in a `config.Profile`, and per-call overrides in
-  `exec.Options`.
+  `execopt.Options`.
 - **Errors live in `cqlerr`.** Server errors are typed
   (`*cqlerr.WriteTimeoutError`, `*cqlerr.UnavailableError`, ...), and
   `cqlerr.ExecutionStatusOf` reports whether a failed request may have
@@ -91,7 +91,7 @@ defer session.Close()
 | `cluster.ProtoVersion` | the dialect passed to `config.New` |
 | `cluster.Keyspace` | `WithKeyspace(name)` |
 | `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `WithDefaultProfile` with a profile from `config.NewProfile()` and `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
-| `cluster.DefaultIdempotence` | `WithIdempotent(true)` on the default profile's `config.NewProfile()` builder: every statement the profile runs is idempotent unless `exec.Options.Idempotent` says otherwise |
+| `cluster.DefaultIdempotence` | `WithIdempotent(true)` on the default profile's `config.NewProfile()` builder: every statement the profile runs is idempotent unless `execopt.Options.Idempotent` says otherwise |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
 | `cluster.WriteTimeout`, `cluster.ReadTimeout` | `WithWriteStallTimeout(d)` and `WithReadStallTimeout(d)`, which drop a connection whose socket accepts or delivers no bytes for d. They are not request timeouts: v1's `Timeout` is the profile's `WithTimeout` |
 | limits on frame sizes, metadata depth and paging state (none in v1) | `WithLimits(config.Limits{...})`; a zero field keeps its default |
@@ -149,7 +149,7 @@ if err != nil {
 }
 // Prepare once and keep selectName; compile options once too, and keep
 // them with the session.
-one, err := session.CompileOptions(exec.Options{Consistency: cql.Some(cql.One)})
+one, err := session.CompileOptions(execopt.Options{Consistency: cql.Some(cql.One)})
 if err != nil {
 	return err
 }
@@ -171,22 +171,22 @@ if !found {
 | `iter := query.Iter(); for iter.Scan(&a) {...}; iter.Close()` | `prepared.Each(ctx, params, &dst, fn)`, `for row, err := range prepared.All(ctx, params, &dst)`, or `rows, err := prepared.Run(ctx, params)` with `rows.NextInto(&row)`, `rows.Err()` and `rows.Close()` |
 | `iter.MapScan(m)`, `iter.SliceMap()` | rows decoded with `cql.DynamicRows`; `row.Get(name)` returns a `cql.Value` |
 | `query.WithContext(ctx)` | `ctx` is the first argument |
-| `query.Consistency(c)` | `exec.Options{Consistency: cql.Some(c)}` |
-| `query.SerialConsistency(gocql.LocalSerial)` | `exec.Options{SerialConsistency: exec.SerialLocal}` |
-| `query.PageSize(n)` | `exec.Options{PageSize: n}`, or the page size argument of `RunPage` |
-| `query.Prefetch(threshold)` | `exec.Options{Prefetch: cql.Some(on)}`: prefetch is on or off, and when on `Rows` request the next page as soon as a page arrives; the profile's `WithPrefetch(on)` sets the default, true |
-| `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
-| a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
-| `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |
-| `query.WithTimestamp(ts)` | a `USING TIMESTAMP ?` marker bound like any parameter; for an occasional request, `exec.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`, which a `Worker` rejects |
+| `query.Consistency(c)` | `execopt.Options{Consistency: cql.Some(c)}` |
+| `query.SerialConsistency(gocql.LocalSerial)` | `execopt.Options{SerialConsistency: cql.Some(cql.LocalSerial)}` |
+| `query.PageSize(n)` | `execopt.Options{PageSize: n}`, or the page size argument of `RunPage` |
+| `query.Prefetch(threshold)` | `execopt.Options{Prefetch: cql.Some(on)}`: prefetch is on or off, and when on `Rows` request the next page as soon as a page arrives; the profile's `WithPrefetch(on)` sets the default, true |
+| `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `execopt.Options{Idempotent: cql.Some(true)}` for one execution |
+| a time limit for one query other than the default | `execopt.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
+| `query.RetryPolicy(p)` | `execopt.Options{Retry: p}` |
+| `query.WithTimestamp(ts)` | a `USING TIMESTAMP ?` marker bound like any parameter; for an occasional request, `execopt.Options{Timestamp: cql.Some(time.UnixMicro(ts))}` through `Session.CompileOptions`, passed per call: `Prepared.With` defaults and a `Worker` reject it |
 | `query.MapScanCAS(m)`, `query.ScanCAS(...)` for whether a write applied | `prepared.Apply(ctx, params)`, which returns `(applied, result, err)`; `prepared.One` with a `cql.CASRows` decoder reads the previous values too |
 | `query.Attempts()`, `query.Latency()` | the returned `cql.Result`'s `Attempts` and `AttemptLatency`, the sum of the completed attempts' latencies |
 | `iter.NumRows()` | `Result.FetchedRows`, the rows fetched over every page; `rows.Result().FetchedRows` on an open `Rows` |
-| `query.Observer(o)` | `exec.Options{Observer: o}`, which v2 joins after the session's observer; add `NoSessionObserver: true` for v1's replacement |
+| `query.Observer(o)` | `execopt.Options{Observer: o}`, which v2 joins after the session's observer; add `NoSessionObserver: true` for v1's replacement |
 | `iter.Host()` | `Result.HostID`; `rows.Result().HostID` on an open `Rows` |
 | `query.GetRoutingKey()` | `prepared.Routing(params)`, whose `Token` is the partition's token |
-| `query.Trace(tracer)` | `exec.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
-| a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `exec.Options{Keyspace: name}` or `exec.PrepareOptions{Keyspace: name}` |
+| `query.Trace(tracer)` | `execopt.Options{CQLTrace: true}`, then `cqltrace.Fetch`; see [tracing](tracing.md) |
+| a keyspace other than the session's | a qualified table name; on `CassandraV5`, also `execopt.Options{Keyspace: name}` or `execopt.PrepareOptions{Keyspace: name}` |
 | `query.Release()` | nothing to release; a reusable `prepared.Worker()` is closed with `Close` |
 
 v1 sent a client timestamp with every request. v2 stamps only ordinary
@@ -199,8 +199,9 @@ statement the driver finds conditional fails before it is sent, as does
 reading a SELECT through `cql.CASRows` or declaring it
 `cql.ConditionalStatement`.
 
-Every execution entry point takes `exec.CompiledOptions`, from
-`session.CompileOptions`; compile them once and reuse them. A goroutine that runs a statement in a loop can own a `*gocql.Worker`
+One-shot calls take `execopt.CompiledOptions`, from `session.CompileOptions`,
+and `prepared.With(options)` makes them a statement's defaults; compile them
+once and reuse them. A goroutine that runs a statement in a loop can own a `*gocql.Worker`
 from `prepared.Worker()`, or `prepared.With(options).Worker()` with options of its own. See [statements](statements/index.md).
 
 ### Struct mapping
@@ -236,7 +237,7 @@ column named in one word (`createdat`).
 | a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
 | a UDT struct implementing `gocqlx.UDT` | a `CQLCodec` method, which `cqlgen -udt=Address` generates, or `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTName("", "address")))`; either maps `[]Address`, `*Address`, map values and the other derived forms too |
 | a UDT value written before `ALTER TYPE ADD` | the same: a missing or NULL UDT field decodes as the zero value |
-| `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :from AND ck < :to`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
+| `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :low AND ck < :high`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
 | a tuple scanned into a struct | `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, by field position |
 | `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraFields())`; without it every result column needs a field |
 

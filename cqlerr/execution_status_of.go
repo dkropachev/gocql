@@ -163,7 +163,7 @@ type ExecutionError struct {
 	// statement Statement holds, and zero otherwise.
 	BatchSize int
 	// Idempotent reports that the request was idempotent as the driver
-	// resolved it: exec.Options.Idempotent when set, else the statement's
+	// resolved it: execopt.Options.Idempotent when set, else the statement's
 	// or the profile's. Retryable reads it.
 	Idempotent bool
 	// StatementKind classifies the request's statement, or a batch's

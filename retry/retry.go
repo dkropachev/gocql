@@ -101,7 +101,7 @@ type Policy interface {
 	Decide(Attempt) Decision
 }
 
-// Never stops after the first failed attempt. Set exec.Options.Retry to Never{}
+// Never stops after the first failed attempt. Set execopt.Options.Retry to Never{}
 // to disable retries for an execution while nil inherits the profile's policy.
 //
 // It has no fields; its zero value is ready to use.

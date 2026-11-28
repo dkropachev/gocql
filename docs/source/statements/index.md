@@ -8,7 +8,7 @@ once from any goroutine, call `prepared.Exec(ctx, input)`,
 `prepared.All(ctx, input, &dst)`. `Exec` and `Each` return `(Result, error)`,
 `One` returns `(bool, Result, error)`, and `All` returns an iterator for a
 range loop that yields each row and, once, any error. They run on queries the statement keeps, and take at
-most one `exec.CompiledOptions` for that call: compile `exec.Options` once
+most one `execopt.CompiledOptions` for that call: compile `execopt.Options` once
 with `session.CompileOptions(options)`, which runs the session's dialect
 checks up front and picks the compiled form its protocol uses; reuse the
 result, or pass none for the session default. They return once the execution has finished. `One` detaches borrowed fields
@@ -37,13 +37,13 @@ no markers, the markers take the types of the values. To decode into caller stor
 use `session.PrepareStream` with a `cql.StreamStatement[P,R]` and call
 `prepared.Worker(streamOptions)`; this checks the streaming decoder directly
 without requiring a buffered row mapping. It buffers pages by default; set
-`exec.StreamOptions.Incremental` for bounded incremental receive.
+`execopt.StreamOptions.Incremental` for bounded incremental receive.
 Workers reject overlap (an open handle, or another goroutine's call) with
 `cqlerr.ErrBusy`, wait for an execution that already returned to drain, and own
 captured parameters through drain. `worker.Close()` stops a worker at once, and
 `worker.Wait(ctx)` waits for its drain.
 
-`exec.Options` overlays the selected profile using explicit `Option[T]` values for
+`execopt.Options` overlays the selected profile using explicit `Option[T]` values for
 settings where zero is meaningful. It carries consistency, paging, tracing,
 custom payload, idempotence and host/shard targeting. `Statement.Kind` classifies
 ordinary and conditional statements; conditional requests send no client
@@ -57,7 +57,7 @@ or other statement that cannot be conditional declared
 Server-confirmed conditional metadata takes precedence. `Statement.Idempotent`
 marks a statement safe to run more than once, for speculation and
 `retry.Safe`; prepared statements, their workers and batch members carry it,
-and a set `exec.Options.Idempotent` overrides it for one execution.
+and a set `execopt.Options.Idempotent` overrides it for one execution.
 
 ```{toctree}
 :maxdepth: 1
@@ -74,7 +74,7 @@ For occasional statements, `Session.UnpreparedExec`, `UnpreparedOne`, and
 be described by `Statement.BindMarkers`: a statement with parameters and no
 markers fails before it is sent, unless it binds `cql.DynamicParams`.
 `Session.UnpreparedCommand(ctx, text)` runs text with nothing to bind and
-no result, such as DDL, without a statement value. They take at most one `exec.CompiledOptions`,
+no result, such as DDL, without a statement value. They take at most one `execopt.CompiledOptions`,
 as the prepared calls do. Frequent statements should be prepared
 once and shared. Create workers once per goroutine, rather than once per
 HTTP request, and close each one. A worker dropped without `Close` is closed
@@ -88,7 +88,7 @@ For execution options:
   returns a view of the statement whose calls use them; the view shares the
   preparation, and options passed to a call are laid over its defaults field
   by field: a view that speculates and a call that sets `CQLTrace` do both.
-  The order, lowest first, is the session's profile, `exec.Options.Profile`,
+  The order, lowest first, is the session's profile, `execopt.Options.Profile`,
   the view's other fields, then the call's.
 - Use a request context deadline for a per-request time limit.
 
@@ -104,7 +104,7 @@ than rebuilding them per call. A worker's options remain fixed for its lifetime.
 Normal default timestamps already vary per execution. A statement whose
 timestamp comes from application data binds it with a `USING TIMESTAMP ?`
 marker, a parameter like any other, which works with every call, a worker
-included, and costs no compile per request. `exec.Options.Timestamp` is for an
+included, and costs no compile per request. `execopt.Options.Timestamp` is for an
 occasional request: compile a fresh options value and pass it to a one-shot
 call; a worker rejects it. The same goes for a request-specific payload. Context deadlines
 provide request-specific time limits independently of compiled options.

@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // TestUnpreparedCompiledOptions checks that the Unprepared calls take
-// exec.CompiledOptions and apply them, and that invalid values never reach a
+// execopt.CompiledOptions and apply them, and that invalid values never reach a
 // call: Session.CompileOptions rejects them. The dialect checks options
 // compiled for another session get on each execution are
 // TestDialectOnlyOptions's, in internal/session.
@@ -23,7 +23,7 @@ func TestUnpreparedCompiledOptions(t *testing.T) {
 	srv := newGridServer(t, peers[0], gridPages(t))
 	defer srv.stop(t, peers[0])
 	defer func() { _ = s.Close() }()
-	if _, err := s.CompileOptions(exec.Options{Timeout: cql.Some(-time.Second)}); !hasValidation(err) {
+	if _, err := s.CompileOptions(execopt.Options{Timeout: cql.Some(-time.Second)}); !hasValidation(err) {
 		t.Fatalf("CompileOptions of a negative timeout = %v, want a ValidationError", err)
 	}
 	options, err := s.CompileOptions(gridOptions)

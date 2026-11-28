@@ -4,7 +4,7 @@
 The default profile uses `retry.Safe{MaxAttempts: 3}`; set another with
 `ProfileBuilder.WithRetry`. `retry.Attempt` carries the failed attempt's error
 (`Err`), its 1-based number (`Attempt`), idempotence (`Idempotent`: the
-statement's or the profile's, or `exec.Options.Idempotent` when set), its
+statement's or the profile's, or `execopt.Options.Idempotent` when set), its
 `Consistency`, its `StatementKind` (`cql.ConditionalStatement` when it or a
 batch member is conditional), the kind of batch it sends (`Batch`, unset for a
 single statement), `ExecutionStatus`, which reports whether the attempt
@@ -20,8 +20,8 @@ decision the driver cannot carry out, an unknown `Action`, an invalid
 `cql.ValidationError` that wraps the attempt's error, so `errors.Is` and
 `errors.As` still find why the attempt failed.
 
-`exec.Options.Retry == nil` inherits the selected profile's retry policy. Use
-`exec.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
+`execopt.Options.Retry == nil` inherits the selected profile's retry policy. Use
+`execopt.Options{Retry: retry.Never{}}` to stop after the first failed attempt without
 replacing other profile settings. In a profile, `ProfileBuilder.WithRetry(nil)`
 and a nil `Profile.Retry` mean the default, `retry.Safe{MaxAttempts: 3}`;
 `WithRetry(retry.Never{})` disables retries.
@@ -68,7 +68,7 @@ to ScyllaDB as well: the driver does not rely on the order in which a server
 checks a batch's partitions, and it covers conditional batches too. A
 logged batch is checked whole before its batch log is written, so it is
 retried as other requests are. A batch is idempotent when every member's
-statement is (`Statement.Idempotent`) or its profile is; `exec.Options.Idempotent` overrides
+statement is (`Statement.Idempotent`) or its profile is; `execopt.Options.Idempotent` overrides
 that for one execution when replaying all of it is safe.
 
 Retries reuse encoded binding inputs and compiled result plans. They do not

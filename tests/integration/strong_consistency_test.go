@@ -13,7 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
 
@@ -64,13 +64,13 @@ func TestStrongConsistency(t *testing.T) {
 		write func(ks string, c cql.Consistency) (cql.Result, error)
 		read  func(ks string, c cql.Consistency) (cql.Result, error)
 	}
-	consistency := func(c cql.Consistency) exec.CompiledOptions {
-		return bindOptions(s, exec.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}})
+	consistency := func(c cql.Consistency) execopt.CompiledOptions {
+		return bindOptions(s, execopt.Options{Consistency: cql.Option[cql.Consistency]{Value: c, Set: true}})
 	}
 	prepared := map[string]statement{}
 	for _, ks := range []string{global, eventual} {
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(pk, v) VALUES(?, 7)", Params: cql.OneParam(cql.Int32Codec)}, exec.PrepareOptions{}))
-		selectV := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, exec.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(pk, v) VALUES(?, 7)", Params: cql.OneParam(cql.Int32Codec)}, execopt.PrepareOptions{}))
+		selectV := codecTestMust(s.Prepare(ctx, cql.Statement[int32, cql.DynamicRow]{CQL: "SELECT v FROM " + ks + ".records WHERE pk = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.DynamicRows}, execopt.PrepareOptions{}))
 		prepared[ks] = statement{
 			write: func(_ string, c cql.Consistency) (cql.Result, error) { return insert.Exec(ctx, 1, consistency(c)) },
 			read: func(_ string, c cql.Consistency) (cql.Result, error) {

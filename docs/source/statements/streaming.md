@@ -6,7 +6,7 @@ Rows: decoder})` prepares directly for caller-storage decoding. Its immutable
 a `StreamWorker` for one goroutine. Streaming is always prepared; `Rows` supplies the
 streaming decoder. The worker's `Run(ctx, parameters)` method returns a cursor; `NextInto(&row)` decodes
 into seeded caller storage. By default it buffers a complete response page on
-normal multiplexed connections. `exec.StreamOptions{Incremental: true}` selects
+normal multiplexed connections. `execopt.StreamOptions{Incremental: true}` selects
 bounded incremental receive through an exclusive connection reservation. The standalone
 [`examples/streaming/main.go`](../../../examples/streaming/main.go) program
 creates its schema, checks exact results and backing identity, and runs through
@@ -118,7 +118,9 @@ supported. Raw eligible payload reads target caller arrays directly; TLS,
 segment integrity and LZ4 use bounded staging/transform units. Protocol 4 LZ4
 or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
-Set exec.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
+Set execopt.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets.
+Only DiscardBytes applies to a buffered stream; the others require Incremental,
+and setting them without it is rejected with a `cql.ValidationError`.
 The `MaxFrameBytes`, `MaxDecompressedBytes` and `MaxMetadataDepth` fields of
 `config.Limits`, which the configuration builder's `WithLimits` sets, bound
 response sizes and nesting. A limit error is terminal. `stream.Result()` reports the delivered rows and

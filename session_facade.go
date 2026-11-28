@@ -10,7 +10,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implSettings "github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -41,13 +41,13 @@ func (s *Session) Dialect() config.Dialect {
 }
 
 // Prepare prepares statement for repeated execution. The returned handle is
-// immutable and safe to share between goroutines. At most one exec.PrepareOptions
+// immutable and safe to share between goroutines. At most one execopt.PrepareOptions
 // may be passed; omitting it uses the session keyspace and any eligible host.
 // Prepare is bounded by ctx and the session's default profile Timeout,
 // whichever expires first. Concurrent calls for the same statement and
 // keyspace share one PREPARE; a call never fails because another caller's
 // context ended.
-func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*Prepared[P, R], error) {
+func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...execopt.PrepareOptions) (*Prepared[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
 	case 0:
@@ -64,8 +64,8 @@ func (s *Session) Prepare[P, R any](ctx context.Context, statement cql.Statement
 // The immutable handle can be shared between workers. It validates the streaming
 // decoder against server metadata when available; conditional result metadata
 // unavailable during preparation is checked on execution. At most one
-// exec.PrepareOptions may be supplied. Its time limits are those of Prepare.
-func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*PreparedStream[P, R], error) {
+// execopt.PrepareOptions may be supplied. Its time limits are those of Prepare.
+func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...execopt.PrepareOptions) (*PreparedStream[P, R], error) {
 	var o implSession.PrepareOptions
 	switch len(options) {
 	case 0:
@@ -82,24 +82,24 @@ func (s *Session) PrepareStream[P, R any](ctx context.Context, statement cql.Str
 // runs the checks that depend on the session's dialect now, rather than at
 // each execution, resolves the overrides against the session's defaults once,
 // and picks the compiled form the session's protocol uses. It is the only way
-// to make an exec.CompiledOptions other than the zero value, which uses the
-// session defaults. An exec.CompiledOptions used on another session applies
+// to make an execopt.CompiledOptions other than the zero value, which uses the
+// session defaults. An execopt.CompiledOptions used on another session applies
 // its original overrides to that session's defaults and is resolved again on
 // each call. Use context deadlines for per-request time limits. Policy and
 // observer objects remain shared and must be safe for concurrent use. An
 // invalid value is rejected with a cql.ValidationError, and a setting the
 // dialect lacks with a cqlerr.UnsupportedSettingError.
-func (s *Session) CompileOptions(options exec.Options) (exec.CompiledOptions, error) {
+func (s *Session) CompileOptions(options execopt.Options) (execopt.CompiledOptions, error) {
 	o, err := s.internal().CompileOptions(internalOptions(options))
-	return exec.CompiledOptions(o), err
+	return execopt.CompiledOptions(o), err
 }
 
 // MustCompileOptions is CompileOptions that panics on error, for options
 // written from constants and compiled once at setup, such as the defaults
 // of a Prepared.With view:
 //
-//	quorum := session.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.Quorum)})
-func (s *Session) MustCompileOptions(options exec.Options) exec.CompiledOptions {
+//	quorum := session.MustCompileOptions(execopt.Options{Consistency: cql.Some(cql.Quorum)})
+func (s *Session) MustCompileOptions(options execopt.Options) execopt.CompiledOptions {
 	o, err := s.CompileOptions(options)
 	if err != nil {
 		panic(err)
@@ -113,8 +113,8 @@ func (s *Session) MustCompileOptions(options exec.Options) exec.CompiledOptions 
 // other than cql.EmptyParams) must set: without them the call fails with a
 // cql.ValidationError before anything is sent. With cql.DynamicParams and no
 // BindMarkers, the markers take the types of the values. At most one
-// exec.CompiledOptions may be passed; omitting it uses the session defaults.
-func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.CompiledOptions) (cql.Result, error) {
+// execopt.CompiledOptions may be passed; omitting it uses the session defaults.
+func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...execopt.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(statement), value, internalOptionList(options)...)
 }
 
@@ -123,9 +123,9 @@ func (s *Session) UnpreparedExec[P any](ctx context.Context, statement cql.State
 // UnpreparedExec(ctx, cql.Command(statement), cql.EmptyParams{}, options...)
 // without the statement and parameter values to spell out, and so a
 // documented exception to the execution grid: the none cell of the throwaway
-// row for a statement with nothing to bind. At most one exec.CompiledOptions may
+// row for a statement with nothing to bind. At most one execopt.CompiledOptions may
 // be passed, as for UnpreparedExec.
-func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...exec.CompiledOptions) (cql.Result, error) {
+func (s *Session) UnpreparedCommand(ctx context.Context, statement string, options ...execopt.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedExec(ctx, internalStatement(cql.Command(statement)), cql.EmptyParams{}, internalOptionList(options)...)
 }
 
@@ -133,9 +133,9 @@ func (s *Session) UnpreparedCommand(ctx context.Context, statement string, optio
 // It reports whether a row exists, clearing dst if none exists. Borrowed fields
 // are detached before return; there is no worker or cursor to close. Parameters
 // are described by statement.BindMarkers, as for UnpreparedExec. With a nil
-// dst it only reports whether a row exists. At most one exec.CompiledOptions may be
+// dst it only reports whether a row exists. At most one execopt.CompiledOptions may be
 // passed; omitting it uses the session defaults.
-func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error) {
+func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...execopt.CompiledOptions) (bool, cql.Result, error) {
 	return s.internal().UnpreparedOne(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
@@ -143,9 +143,9 @@ func (s *Session) UnpreparedOne[P, R any](ctx context.Context, statement cql.Sta
 // across all pages. Borrowed fields are valid only during fn. Returning StopIteration
 // from fn stops successfully; other callback errors are returned. There is no worker or cursor to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
-// exec.CompiledOptions may be passed; omitting it uses the session defaults. dst is decoded into as for Worker.Each: the
+// execopt.CompiledOptions may be passed; omitting it uses the session defaults. dst is decoded into as for Worker.Each: the
 // same pointer for every row, or a new R for each row when dst is nil.
-func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error) {
+func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...execopt.CompiledOptions) (cql.Result, error) {
 	return s.internal().UnpreparedEach(ctx, internalStatement(statement), value, dst, fn, internalOptionList(options)...)
 }
 
@@ -153,20 +153,20 @@ func (s *Session) UnpreparedEach[P, R any](ctx context.Context, statement cql.St
 // across all pages, decoding each into dst, as Worker.All does. The statement's
 // execution is closed when the loop ends; there is nothing to close. Parameters are
 // described by statement.BindMarkers, as for UnpreparedExec. At most one
-// exec.CompiledOptions may be passed; omitting it uses the session defaults.
-func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error] {
+// execopt.CompiledOptions may be passed; omitting it uses the session defaults.
+func (s *Session) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...execopt.CompiledOptions) iter.Seq2[*R, error] {
 	return s.internal().UnpreparedAll(ctx, internalStatement(statement), value, dst, internalOptionList(options)...)
 }
 
 // ExecBatch sends batch as one CQL BATCH request of batch.Kind. A batch known to be
 // conditional is rejected with cqlerr.ErrConditionalExec before it is sent;
 // send it with ApplyBatch, or with RunConditionalBatch to read its rows. At
-// most one exec.CompiledOptions
+// most one execopt.CompiledOptions
 // may be passed; paging options are ignored, because a BATCH response is a
 // single page. Options are compiled once with CompileOptions and reused, for a
 // one-off batch too, so that sending resolves nothing. Do not modify batch
 // until the call returns. A reused batch sends without allocating.
-func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (cql.Result, error) {
+func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...execopt.CompiledOptions) (cql.Result, error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -182,17 +182,19 @@ func (s *Session) ExecBatch(ctx context.Context, batch *Batch, options ...exec.C
 // batch.Kind and returns its rows as CASBatchRows, whose Applied reports
 // whether the batch applied. decoder is a cql.CASRows decoder, typically the
 // Rows of a member's statement; it maps the previous values of the columns it
-// names and skips the rest. A nil decoder reads [applied] alone, as
-// cql.CASRows[X](nil) does; ApplyBatch does that with nothing to close. Which rows the server returns differs between
+// names and skips the rest. To read [applied] alone, pass cql.CASApplied
+// (X is then cql.EmptyRow); ApplyBatch does that with nothing to close. A nil
+// decoder does the same, but Go cannot infer X from it, so it needs an
+// explicit type argument. Which rows the server returns differs between
 // Cassandra and ScyllaDB: on ScyllaDB row i belongs to statement i, on
 // Cassandra rows belong to rows of the partition. A batch without a
 // conditional member, declared or inferred (see cql.UnknownStatement), is
 // rejected before it is sent: it has no [applied] to report, so send it with
-// ExecBatch. exec.CompiledOptions and batch ownership are as for ExecBatch.
+// ExecBatch. execopt.CompiledOptions and batch ownership are as for ExecBatch.
 // The rows hold a pooled query until they are closed, as
 // Prepared.Run's do. Once they are closed, a batch sent again with the same X
 // and decoder reuses their storage and allocates nothing.
-func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (CASBatchRows[X], error) {
+func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...execopt.CompiledOptions) (CASBatchRows[X], error) {
 	var o implSession.CompiledOptions
 	switch len(options) {
 	case 0:
@@ -212,9 +214,9 @@ func (s *Session) RunConditionalBatch[X any](ctx context.Context, batch *Batch, 
 // it returns. The Result is that of the execution, and with an error that
 // of the failed execution, as for ExecBatch. A batch whose members are all
 // known not to be conditional is rejected before it is sent, as by
-// RunConditionalBatch. exec.CompiledOptions and batch ownership are as for
+// RunConditionalBatch. execopt.CompiledOptions and batch ownership are as for
 // ExecBatch.
-func (s *Session) ApplyBatch(ctx context.Context, batch *Batch, options ...exec.CompiledOptions) (bool, cql.Result, error) {
+func (s *Session) ApplyBatch(ctx context.Context, batch *Batch, options ...execopt.CompiledOptions) (bool, cql.Result, error) {
 	rows, err := s.RunConditionalBatch(ctx, batch, cql.CASApplied, options...)
 	if err != nil {
 		return false, implSession.InternalExecutionErrorResult(err), err
@@ -274,7 +276,7 @@ func (s *Session) Metadata() *metadata.Snapshot { return s.internal().Metadata()
 
 // Observer returns the hooks the session was configured with
 // (config.ConfigBuilder.WithObserver), the zero Hooks without them or for a
-// zero Session. Every execution calls them unless its exec.Options set
+// zero Session. Every execution calls them unless its execopt.Options set
 // NoSessionObserver.
 func (s *Session) Observer() observe.Hooks { return s.internal().Observer() }
 

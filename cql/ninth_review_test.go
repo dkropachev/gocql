@@ -96,7 +96,7 @@ func TestRepeatedPositionalMarkers(t *testing.T) {
 			t.Fatal(err)
 		}
 		var ce *CodecError
-		if err := check(params); !errors.As(err, &ce) || !strings.Contains(err.Error(), ":from and :to") {
+		if err := check(params); !errors.As(err, &ce) || !strings.Contains(err.Error(), ":low and :high") {
 			t.Fatalf("%s: repeated ? marker names: %v", name, err)
 		}
 	}

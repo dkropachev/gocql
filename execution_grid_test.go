@@ -21,12 +21,12 @@ type gridRow struct {
 }
 
 var gridRows = map[string]gridRow{
-	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...exec.CompiledOptions"},
+	"Throwaway":    {typ: "Session", prefix: "Unprepared", options: "options ...execopt.CompiledOptions"},
 	"Worker-owned": {typ: "Worker"},
-	"Shared":       {typ: "Prepared", options: "options ...exec.CompiledOptions"},
+	"Shared":       {typ: "Prepared", options: "options ...execopt.CompiledOptions"},
 	// A batch's one row is whether it applied, and its rows are those of a
 	// conditional batch, so the batch row names those verbs.
-	"Batch": {typ: "Session", suffix: "Batch", options: "options ...exec.CompiledOptions", verbs: map[string][]string{
+	"Batch": {typ: "Session", suffix: "Batch", options: "options ...execopt.CompiledOptions", verbs: map[string][]string{
 		"None": {"Exec"}, "One row": {"Apply"}, "Many rows": {"RunConditional"},
 	}},
 }
@@ -57,10 +57,10 @@ var gridNonExecution = map[string][]string{
 // must end in.
 var gridExceptions = map[string]string{
 	// The throwaway none cell for a statement with nothing to bind.
-	"Session.UnpreparedCommand": "options ...exec.CompiledOptions",
+	"Session.UnpreparedCommand": "options ...execopt.CompiledOptions",
 	// The one-row shape of a conditional statement, as ApplyBatch is of a
 	// conditional batch.
-	"Prepared.Apply": "options ...exec.CompiledOptions",
+	"Prepared.Apply": "options ...execopt.CompiledOptions",
 	"Worker.Apply":   "",
 }
 
@@ -203,7 +203,7 @@ func parameterList(rest string) (string, bool) {
 // with options "", takes no options at all.
 func optionsForm(params, options string) bool {
 	if options == "" {
-		return !strings.Contains(params, "exec.Options") && !strings.Contains(params, "exec.CompiledOptions")
+		return !strings.Contains(params, "execopt.Options") && !strings.Contains(params, "execopt.CompiledOptions")
 	}
 	return strings.HasSuffix(params, ", "+options)
 }

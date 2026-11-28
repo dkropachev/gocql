@@ -125,7 +125,7 @@ type grows.
 field. The server names a `?` marker after its column, so the two markers of
 `WHERE ck > ? AND ck < ?` are both `ck`; `ParamsOf` rejects them when the
 statement is prepared rather than bind one field to both. Name them, as in
-`WHERE ck > :from AND ck < :to`, or bind them by position with `ParamAt`.
+`WHERE ck > :low AND ck < :high`, or bind them by position with `ParamAt`.
 
 A UDT field maps with its type's `CQLCodec` method, which
 `go run github.com/scylladb/gocql/v2/cmd/cqlgen -udt=Address` generates, or

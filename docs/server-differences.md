@@ -69,9 +69,9 @@ when the server reports it, is a documented no-op on the other dialect.
 |---|---|---|---|
 | `config.ConfigBuilder.WithClientRoutes` | ScyllaV4 | `ConfigBuilder.Build` fails | `settings.Config.Validate` |
 | `config.ConfigBuilder.WithMetadataServerTimeout`, positive (`USING TIMEOUT`) | ScyllaV4 | `ConfigBuilder.Build` fails; zero is accepted | `settings.Config.Validate`; `internal/transport/metadata_execution.go` still rejects it per query for a `ServerAny` session |
-| `exec.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
-| `exec.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
-| `exec.Options.Keyspace` / `exec.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
+| `execopt.Options.ShardID` | ScyllaV4 | `Session.CompileOptions` fails; options compiled for another session fail on execution | `checkDialectOptions` in `NewCompiledOptions` and `admit` (`internal/session`) |
+| `execopt.Options.NowInSeconds` | CassandraV5 | As `ShardID` | As `ShardID` |
+| `execopt.Options.Keyspace` / `execopt.PrepareOptions.Keyspace` other than the session's | CassandraV5 | Fails each attempt or the PREPARE before it is sent, unless the statement names its keyspace (`ValidationError`) | `newAttempt` and `prepareTyped` (`internal/session/execute.go`) |
 | Shard awareness: `WithConnectionsPerShard`, `WithMaxExcessPerShard` | ScyllaV4 | Apply per node: a Cassandra node counts as one shard | Pool |
 | Shard-aware port: `WithAdvancedShardAwareness`, `WithShardAwareSourcePorts` | ScyllaV4 | No-op: Cassandra has no shard-aware port | Pool |
 | Tablet routing, `routing.Options.NoLeaderAware`, `metadata.Keyspace.TabletBased`, `InitialTablets` and `ConsistencyMode` | ScyllaV4 | No-op: Cassandra sends no tablet hints and has no tablet keyspaces | `internal/tablets` |

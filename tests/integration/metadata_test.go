@@ -42,7 +42,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tests"
 	"github.com/scylladb/gocql/v2/routing"
@@ -951,7 +951,7 @@ func TestMetadata(t *testing.T) {
 // prepared because only prepared execution accepts the fixture's internal
 // connection seam.
 func metadataExecOnConn(ctx context.Context, s *gocql.Session, stmt string, options implSession.Options) (cql.Result, error) {
-	prepared, err := s.Prepare(ctx, cql.Command(stmt), exec.PrepareOptions{})
+	prepared, err := s.Prepare(ctx, cql.Command(stmt), execopt.PrepareOptions{})
 	if err != nil {
 		return cql.Result{}, err
 	}

@@ -53,7 +53,7 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
@@ -276,7 +276,7 @@ func TestSession(t *testing.T) {
 				}
 			}()
 			runDDL("CREATE TABLE " + ks + ".records(id int PRIMARY KEY,value blob)")
-			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec)}, exec.PrepareOptions{}))
+			insert := codecTestMust(s.Prepare(ctx, cql.Statement[[]byte, cql.EmptyRow]{CQL: "INSERT INTO " + ks + ".records(id,value)VALUES(1,?)", Kind: cql.OrdinaryStatement, Params: cql.OneParam(cql.ByteSliceCodec)}, execopt.PrepareOptions{}))
 			write := func(value byte) {
 				t.Helper()
 				payload := bytes.Repeat([]byte{value}, 1<<20)
@@ -285,8 +285,8 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, exec.PrepareOptions{}))
-			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)})))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, execopt.PrepareOptions{}))
+			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, execopt.Options{Prefetch: cql.Some(false)})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
 				t.Fatal(rows.Err())
@@ -307,7 +307,7 @@ func TestSession(t *testing.T) {
 			})
 			for generation := 0; generation < 8; generation++ {
 				write(byte(0x72 + generation))
-				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)})))
+				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, execopt.Options{Prefetch: cql.Some(false)})))
 				var view cql.Bytes
 				if !freshRows.NextInto(&view) {
 					t.Fatal(freshRows.Err())
@@ -368,11 +368,11 @@ func TestSession(t *testing.T) {
 				(*implSession.Session)(opaqueStorageValue).Data().InternalLogger = logging.Nop()
 				return opaqueStorageValue
 			}()
-			profileOptions, err := resolveOptions(session, exec.Options{Profile: &profile})
+			profileOptions, err := resolveOptions(session, execopt.Options{Profile: &profile})
 			require.NoError(t, err)
 			runtimeFor(session).InternalSetProfile(&profileOptions.InternalProfile)
 			defer session.Close()
-			resolved, err := resolveOptions(session, exec.Options{CQLTrace: true})
+			resolved, err := resolveOptions(session, execopt.Options{CQLTrace: true})
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
 			require.Equal(t, int32(100), resolved.InternalProfile.PageSize)
@@ -1047,7 +1047,7 @@ func TestSession(t *testing.T) {
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
 		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BytesViewCodec, func(v *output) *cql.Bytes { return &v.Value }))
-		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs}, exec.PrepareOptions{})
+		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs}, execopt.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1073,11 +1073,11 @@ func TestSession(t *testing.T) {
 			t.Fatal(err)
 		}
 		// Only prepared statements return a cursor that can be retained.
-		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.NoParams, Rows: rows}, exec.PrepareOptions{})
+		selectPrepared, err := session.Prepare(ctx, cql.Statement[cql.EmptyParams, output]{CQL: "SELECT id,value FROM " + keyspace + ".values", Params: cql.NoParams, Rows: rows}, execopt.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
-		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, exec.Options{PageSize: 1}))
+		result, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(session, execopt.Options{PageSize: 1}))
 		if err != nil {
 			t.Fatal(err)
 		}

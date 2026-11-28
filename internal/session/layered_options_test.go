@@ -91,12 +91,12 @@ func TestLayeredOptionsCache(t *testing.T) {
 func TestOverlayOptions(t *testing.T) {
 	hostA, hostB := cql.UUID{1}, cql.UUID{2}
 	base := Options{
-		Keyspace: "a", PageSize: 10, Consistency: cql.Some(cql.Quorum), SerialConsistency: SerialLocal,
+		Keyspace: "a", PageSize: 10, Consistency: cql.Some(cql.Quorum), SerialConsistency: cql.Some(cql.LocalSerial),
 		HostID: cql.Some(hostA), ShardID: cql.Some(uint32(1)), AnyShardFallback: true,
 		CQLTrace: true, Idempotent: cql.Some(true), CustomPayload: []cql.PayloadEntry{{Key: "a"}},
 	}
 	out := overlayOptions(base, Options{Keyspace: "b", Consistency: cql.Some(cql.One), HostID: cql.Some(hostB), IncludeMetadata: true})
-	if out.Keyspace != "b" || out.Consistency.Value != cql.One || out.PageSize != 10 || out.SerialConsistency != SerialLocal {
+	if out.Keyspace != "b" || out.Consistency.Value != cql.One || out.PageSize != 10 || out.SerialConsistency != cql.Some(cql.LocalSerial) {
 		t.Fatalf("overlay = %+v", out)
 	}
 	if out.HostID.Value != hostB || out.ShardID.Set || out.AnyShardFallback {

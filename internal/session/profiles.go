@@ -33,8 +33,9 @@ type Options struct {
 	ShardID              cql.Option[uint32]
 	Consistency          cql.Option[cql.Consistency]
 	HostID               cql.Option[cql.UUID]
-	// SerialConsistency overrides the profile's serial consistency.
-	SerialConsistency SerialOverride
+	// SerialConsistency, when set, replaces the profile's serial
+	// consistency; it must be SERIAL or LOCAL_SERIAL.
+	SerialConsistency cql.Option[cql.Consistency]
 	IncludeMetadata   bool
 	Idempotent        cql.Option[bool]
 	CQLTrace          bool
@@ -45,19 +46,6 @@ type Options struct {
 	// execution, so Observer alone, or nothing, observes it.
 	NoSessionObserver bool
 }
-
-// SerialOverride chooses the serial consistency of an execution relative to
-// its profile.
-type SerialOverride uint8
-
-const (
-	// SerialInherit keeps the profile's serial consistency.
-	SerialInherit SerialOverride = iota
-	// SerialSerial sends SERIAL.
-	SerialSerial
-	// SerialLocal sends LOCAL_SERIAL.
-	SerialLocal
-)
 
 type InternalResolvedOptions struct {
 	// templates holds the options' parameters blocks, encoded when they were
@@ -88,14 +76,11 @@ func resolveOptionValues(base *settings.Profile, options Options) (InternalResol
 	if options.Consistency.Set {
 		p.Consistency = options.Consistency.Value
 	}
-	switch options.SerialConsistency {
-	case SerialInherit:
-	case SerialSerial:
-		p.SerialConsistency = cql.Some(cql.Serial)
-	case SerialLocal:
-		p.SerialConsistency = cql.Some(cql.LocalSerial)
-	default:
-		return InternalResolvedOptions{}, cqltype.TypeValidation("serial consistency", "unknown override %d", options.SerialConsistency)
+	if options.SerialConsistency.Set {
+		if !options.SerialConsistency.Value.IsSerial() {
+			return InternalResolvedOptions{}, cqltype.TypeValidation("SerialConsistency", "must be SERIAL or LOCAL_SERIAL, got %v", options.SerialConsistency.Value)
+		}
+		p.SerialConsistency = options.SerialConsistency
 	}
 	// A set timeout replaces the profile's, and a set zero removes it.
 	if options.Timeout.Set {

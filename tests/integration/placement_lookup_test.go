@@ -16,7 +16,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/internal/tablets"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -43,7 +43,7 @@ func TestPlacementLookups(t *testing.T) {
 	if err := v2CreateTable(ctx, session, fmt.Sprintf(`CREATE TABLE %s (pk int PRIMARY KEY, v int)`, table)); err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf(`INSERT INTO %s (pk, v) VALUES (?, 1)`, table), Params: cql.DynamicParams}, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: fmt.Sprintf(`INSERT INTO %s (pk, v) VALUES (?, 1)`, table), Params: cql.DynamicParams}, execopt.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,7 +136,7 @@ func learnTablets(ctx context.Context, t *testing.T, session *gocql.Session, pre
 	t.Helper()
 	deadline := time.Now().Add(time.Minute)
 	for i := int32(0); time.Now().Before(deadline); i++ {
-		options := exec.Options{Consistency: cql.Some(cql.One)}
+		options := execopt.Options{Consistency: cql.Some(cql.One)}
 		if hosts := session.Metadata().Hosts(); len(hosts) > 0 {
 			h := hosts[int(i)%len(hosts)]
 			options.HostID = cql.Some(h.HostID)

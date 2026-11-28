@@ -58,7 +58,7 @@ func (o *orderObserver) StartAttempt(context.Context, observe.AttemptStart) func
 	return func(routing2.AttemptEvent) { o.log.add(o.name + " attempt end") }
 }
 
-// TestObserverJoin checks that exec.Options.Observer is joined after the
+// TestObserverJoin checks that execopt.Options.Observer is joined after the
 // session's observer, each hook calling the session's first and the
 // per-call observer getting the session's request context, for options
 // compiled for the session, for another session, and for a reusable query;

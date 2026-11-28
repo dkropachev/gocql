@@ -15,7 +15,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/cqltrace"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 func ExampleFetch() {
@@ -34,7 +34,7 @@ func ExampleFetch() {
 		Params:      cql.OneParam(cql.Int32Codec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 	}
-	traced, err := session.CompileOptions(exec.Options{CQLTrace: true})
+	traced, err := session.CompileOptions(execopt.Options{CQLTrace: true})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func ExampleFetchAll() {
 		Params:      cql.OneParam(cql.Int32Codec),
 		BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 	}
-	traced, err := session.CompileOptions(exec.Options{CQLTrace: true, Consistency: cql.Some(cql.All)})
+	traced, err := session.CompileOptions(execopt.Options{CQLTrace: true, Consistency: cql.Some(cql.All)})
 	if err != nil {
 		log.Fatal(err)
 	}

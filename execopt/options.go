@@ -1,7 +1,7 @@
 // Copyright 2026 The Gocql Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license.
 
-// Package exec holds the per-execution settings of gocql statements: Options
+// Package execopt holds the per-execution settings of gocql statements: Options
 // and its compiled form, the options of preparation and of streaming queries.
 //
 // # Which setting wins
@@ -11,9 +11,9 @@
 // replaces that profile whole, and then each Options field that is set
 // overrides the matching field of the profile: a cql.Option whose Set is
 // true, a non-nil Retry or Speculation, a non-empty Keyspace or
-// CustomPayload, a non-zero PageSize, a SerialConsistency other than
-// SerialInherit, and a true flag. Idempotent, when set, overrides the
-// statement's cql.Statement.Idempotent and the profile's Idempotent.
+// CustomPayload, a non-zero PageSize, and a true flag. Idempotent, when set,
+// overrides the statement's cql.Statement.Idempotent and the profile's
+// Idempotent.
 //
 // The options of a call to a view made by gocql.Prepared.With are laid over
 // the view's defaults by the same rule, field by field, before they are laid
@@ -35,10 +35,9 @@
 // whichever expires first. A statement the driver prepares again during an
 // execution, after an UNPREPARED error or on a host that has not seen it, is
 // bounded by that execution's deadline.
-package exec
+package execopt
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/scylladb/gocql/v2/config"
@@ -50,10 +49,92 @@ import (
 )
 
 // Options overrides execution settings. Its zero value uses session defaults.
-// Worker constructors validate and snapshot Options once. Compile recurring
-// overrides with gocql.Session.CompileOptions for concurrent one-shot calls.
-// Use context deadlines for request time limits without rebuilding options.
-type Options struct {
+// Session.CompileOptions validates and freezes Options into CompiledOptions
+// once; compile recurring overrides once and pass them to concurrent calls,
+// or give them to a statement with Prepared.With. Use context deadlines for
+// request time limits without rebuilding options.
+type Options struct { //nolint:govet // field order is the reading order of the API spec, not memory layout
+	// Profile replaces the session's default profile before other overrides.
+	// It must come from config.ProfileBuilder.Build; a config.Profile literal
+	// is rejected.
+	Profile *config.Profile
+	// Consistency replaces the profile's consistency level when set.
+	Consistency cql.Option[cql.Consistency]
+	// SerialConsistency, when set, replaces the profile's
+	// config.Profile.SerialConsistency, the serial consistency of conditional
+	// statements; unset keeps it. It must be cql.Serial or cql.LocalSerial:
+	// another level is rejected with a cql.ValidationError.
+	SerialConsistency cql.Option[cql.Consistency]
+	// Timeout, when set, replaces the profile's Timeout: it bounds the whole
+	// execution, retries and pages included. A set zero means no limit.
+	Timeout cql.Option[time.Duration]
+	// PageTimeout, when set, replaces the profile's PageTimeout: it bounds
+	// each page fetch. A set zero means no limit.
+	PageTimeout cql.Option[time.Duration]
+	// PageSize is the rows per page; zero keeps the profile's, and
+	// cql.Unpaged requests the whole result in one response. A negative
+	// value, or one above cql.Unpaged, the largest the protocol carries, is
+	// rejected with a cql.ValidationError.
+	PageSize int
+	// Prefetch replaces the profile's prefetch, config.ProfileBuilder.WithPrefetch,
+	// when set.
+	Prefetch cql.Option[bool]
+	// Idempotent, when set, replaces the statement's cql.Statement.Idempotent
+	// and the profile's Idempotent for the execution: cql.Some(true) marks it
+	// safe to run more than once, cql.Some(false) marks it unsafe. Unset, an
+	// execution is idempotent when its statement or its profile is, and a
+	// batch when every member is or its profile is.
+	Idempotent cql.Option[bool]
+	// Timestamp, when set, is the write timestamp of the execution, sent in
+	// microseconds since the Unix epoch, the unit of CQL's USING TIMESTAMP;
+	// finer precision is dropped. It replaces the session's client
+	// timestamp. Defaults given to Prepared.With, and so a worker from
+	// Prepared.Worker or PreparedStream.Worker, would stamp every write with
+	// the same time, so a Timestamp there fails the view's calls and the
+	// worker with a cql.ValidationError: pass it per call, through
+	// Session.CompileOptions.
+	Timestamp cql.Option[time.Time]
+	// NowInSeconds sets the server's current time, in seconds since the Unix
+	// epoch, for TTL and expiry. Only native protocol 5 carries it: on a
+	// session of another dialect, Session.CompileOptions and every execution
+	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
+	NowInSeconds cql.Option[int32]
+	// Keyspace replaces the session's keyspace for the execution; empty keeps
+	// it. Only native protocol 5 (CassandraV5) carries a request's keyspace:
+	// on a ScyllaV4 or CassandraV4 session, a keyspace other than the
+	// session's fails Session.CompileOptions and every execution with a
+	// cqlerr.UnsupportedSettingError. Qualify the table names instead.
+	Keyspace string
+	// CQLTrace asks the cluster to record a CQL trace session of every
+	// attempt in system_traces. cql.Result.CQLTraces names the sessions,
+	// failed attempts' included; package cqltrace reads them. This is
+	// server-side tracing, unrelated to client-side instrumentation such as
+	// OpenTelemetry, which uses observe.Hooks.
+	CQLTrace bool
+	// CustomPayload is copied, including borrowed payload bytes, when compiled.
+	CustomPayload []cql.PayloadEntry
+	// IncludeMetadata asks the server for full result metadata even when the
+	// driver has validated metadata cached.
+	IncludeMetadata bool
+	// HostID sends the request to the host with this host ID when set,
+	// without consulting the profile's routing policy: a pin here takes
+	// precedence over a routing.SingleTarget policy, whose target and
+	// AnyShardFallback then do not apply.
+	HostID cql.Option[cql.UUID]
+	// ShardID sends the request on a connection of this shard of the node
+	// HostID names; it requires HostID. The request stays on the shard,
+	// failing when it has no connection, unless AnyShardFallback is set.
+	// Only ScyllaDB has shards: on a session of another dialect,
+	// Session.CompileOptions and every execution fail with a
+	// cqlerr.UnsupportedSettingError, and nothing is sent.
+	ShardID cql.Option[uint32]
+	// AnyShardFallback lets a request pinned to ShardID use another shard of
+	// HostID when ShardID has no connection or the host has no such shard,
+	// as metadata.Target.AnyShardFallback does for a routing.SingleTarget
+	// policy. It requires ShardID. The zero value keeps the request on
+	// ShardID. A conditional request, or one with SERIAL or LOCAL_SERIAL
+	// consistency, stays on ShardID regardless.
+	AnyShardFallback bool
 	// Retry replaces the profile's retry policy; nil keeps it. Use
 	// retry.Never{} to disable retries.
 	Retry retry.Policy
@@ -71,121 +152,17 @@ type Options struct {
 	// returned. The zero Hooks adds nothing. To observe an execution with
 	// Observer alone, set NoSessionObserver too.
 	Observer observe.Hooks
-	// Profile replaces the session's default profile before other overrides.
-	// It must come from config.ProfileBuilder.Build; a config.Profile literal
-	// is rejected.
-	Profile *config.Profile
-	// Keyspace replaces the session's keyspace for the execution; empty keeps
-	// it. Only native protocol 5 (CassandraV5) carries a request's keyspace:
-	// on a ScyllaV4 or CassandraV4 session, a keyspace other than the
-	// session's fails Session.CompileOptions and every execution with a
-	// cqlerr.UnsupportedSettingError. Qualify the table names instead.
-	Keyspace string
-	// Timestamp, when set, is the write timestamp of the execution, sent in
-	// microseconds since the Unix epoch, the unit of CQL's USING TIMESTAMP;
-	// finer precision is dropped. It replaces the session's client
-	// timestamp. A worker from Prepared.Worker or PreparedStream.Worker
-	// would stamp every write it runs with the same time, so they reject
-	// it with a cql.ValidationError: pass it per call, through
-	// Session.CompileOptions.
-	Timestamp cql.Option[time.Time]
-	// CustomPayload is copied, including borrowed payload bytes, when compiled.
-	CustomPayload []cql.PayloadEntry
-	// Timeout and PageTimeout, when set, replace the profile's limits:
-	// Timeout bounds the whole execution, retries and pages included, and
-	// PageTimeout each page fetch. A set zero means no limit.
-	Timeout, PageTimeout cql.Option[time.Duration]
-	// PageSize is the rows per page; zero keeps the profile's, and
-	// cql.Unpaged requests the whole result in one response. A negative
-	// value, or one above cql.Unpaged, the largest the protocol carries, is
-	// rejected with a cql.ValidationError.
-	PageSize int
-	// NowInSeconds sets the server's current time, in seconds since the Unix
-	// epoch, for TTL and expiry. Only native protocol 5 carries it: on a
-	// session of another dialect, Session.CompileOptions and every execution
-	// fail with a cqlerr.UnsupportedSettingError, and nothing is sent.
-	NowInSeconds cql.Option[int32]
-	// ShardID sends the request on a connection of this shard of the node
-	// HostID names; it requires HostID. The request stays on the shard,
-	// failing when it has no connection, unless AnyShardFallback is set.
-	// Only ScyllaDB has shards: on a session of another dialect,
-	// Session.CompileOptions and every execution fail with a
-	// cqlerr.UnsupportedSettingError, and nothing is sent.
-	ShardID cql.Option[uint32]
-	// Consistency replaces the profile's consistency level when set.
-	Consistency cql.Option[cql.Consistency]
-	// HostID sends the request to the host with this host ID when set,
-	// without consulting the profile's routing policy: a pin here takes
-	// precedence over a routing.SingleTarget policy, whose target and
-	// AnyShardFallback then do not apply.
-	HostID cql.Option[cql.UUID]
-	// SerialConsistency overrides the profile's serial consistency of
-	// conditional statements. The zero value, SerialInherit, keeps it.
-	SerialConsistency SerialOverride
-	// IncludeMetadata asks the server for full result metadata even when the
-	// driver has validated metadata cached.
-	IncludeMetadata bool
-	// Idempotent, when set, replaces the statement's cql.Statement.Idempotent
-	// and the profile's Idempotent for the execution: cql.Some(true) marks it
-	// safe to run more than once, cql.Some(false) marks it unsafe. Unset, an
-	// execution is idempotent when its statement or its profile is, and a
-	// batch when every member is or its profile is.
-	Idempotent cql.Option[bool]
-	// Prefetch replaces the profile's prefetch, config.ProfileBuilder.WithPrefetch,
-	// when set.
-	Prefetch cql.Option[bool]
-	// CQLTrace asks the cluster to record a CQL trace session of every
-	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
-	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
-	// instrumentation such as OpenTelemetry, which uses observe.Hooks.
-	CQLTrace bool
-	// AnyShardFallback lets a request pinned to ShardID use another shard of
-	// HostID when ShardID has no connection or the host has no such shard,
-	// as metadata.Target.AnyShardFallback does for a routing.SingleTarget
-	// policy. It requires ShardID. The zero value keeps the request on
-	// ShardID. A conditional request, or one with SERIAL or LOCAL_SERIAL
-	// consistency, stays on ShardID regardless.
-	AnyShardFallback bool
 	// NoSessionObserver leaves the session's hooks out of the execution, so
 	// Observer alone observes it, or nothing does when Observer is the zero
 	// Hooks.
 	NoSessionObserver bool
 }
 
-// SerialOverride chooses the serial consistency an execution sends, relative to
-// its profile's config.Profile.SerialConsistency. The zero value,
-// SerialInherit, inherits it. Later releases may add values, so a switch over
-// them needs a default case.
-type SerialOverride uint8
-
-const (
-	// SerialInherit keeps the profile's serial consistency.
-	SerialInherit = SerialOverride(implSession.SerialInherit)
-	// SerialSerial sends SERIAL.
-	SerialSerial = SerialOverride(implSession.SerialSerial)
-	// SerialLocal sends LOCAL_SERIAL.
-	SerialLocal = SerialOverride(implSession.SerialLocal)
-)
-
-// String returns the serial override name, or SerialOverride(n) for a value
-// it does not define.
-func (s SerialOverride) String() string {
-	switch s {
-	case SerialInherit:
-		return "inherit"
-	case SerialSerial:
-		return "serial"
-	case SerialLocal:
-		return "local serial"
-	default:
-		return fmt.Sprintf("SerialOverride(%d)", uint8(s))
-	}
-}
-
 // CompiledOptions is an immutable snapshot of execution overrides, made by
 // gocql.Session.CompileOptions; the session chooses its compiled form, which
-// may depend on its dialect and protocol. Every execution entry point takes
-// it. Reuse it for recurring execution settings; the zero value uses session
+// may depend on its dialect and protocol. One-shot calls take it per call,
+// and Prepared.With and PreparedStream.With take it as the defaults of a view
+// and of its workers. Reuse it for recurring execution settings; the zero value uses session
 // defaults. Compiling validates overrides, copies payloads and precomputes
 // request settings. Options compiled for another session resolve their
 // overrides against the executing session's defaults, and that session's
@@ -234,7 +211,10 @@ type PrepareOptions struct {
 // Execution overrides come from the CompiledOptions of
 // gocql.PreparedStream.With, as for a prepared statement.
 type StreamOptions struct {
-	// Limits bounds an incremental stream's receive scratch.
+	// Limits bounds the receive scratch of the stream. Only DiscardBytes
+	// applies to a buffered stream: a non-zero MaxMetadataBytes,
+	// ReadAheadBytes or MaxTransformBytes without Incremental is rejected
+	// with a cql.ValidationError.
 	Limits StreamLimits
 	// Incremental decodes the response as it arrives on a reserved
 	// connection, instead of buffering one page.
@@ -244,8 +224,8 @@ type StreamOptions struct {
 // StreamLimits bounds the receive scratch of an incremental stream, which
 // holds no response page: its memory is these budgets, whatever the size of
 // the result. A buffered stream instead holds one response page at a time,
-// bounded by the session's frame and decompression limits. Streams never
-// prefetch.
+// bounded by the session's frame and decompression limits; of these fields
+// only DiscardBytes applies to it. Streams never prefetch.
 //
 // Zero fields take defaults, so the zero StreamLimits is ready to use. A
 // negative field, or a MaxTransformBytes below 16, is rejected with a
@@ -256,7 +236,8 @@ type StreamLimits struct {
 	// ReadAheadBytes is how much the stream reads ahead of the decoder.
 	// Default 32 KiB.
 	ReadAheadBytes int
-	// DiscardBytes is the scratch used to skip unread data. Default 32 KiB.
+	// DiscardBytes is the scratch used to skip unread data, by a buffered
+	// stream as well as an incremental one. Default 32 KiB.
 	DiscardBytes int
 	// MaxTransformBytes caps the scratch a decompressing stream holds.
 	// Default two maximum protocol v5 segment payloads, about 256 KiB.
@@ -269,7 +250,7 @@ func publicOptions(o implSession.Options) Options {
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
 		Prefetch: prefetchFlag(o.Prefetch), PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
-		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
+		SerialConsistency: o.SerialConsistency, Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
 		Idempotent: o.Idempotent, CQLTrace: o.CQLTrace,
 		NoSessionObserver: o.NoSessionObserver, AnyShardFallback: o.AnyShardFallback,

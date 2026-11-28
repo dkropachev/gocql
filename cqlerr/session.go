@@ -46,7 +46,7 @@ var (
 )
 
 // ErrRequestTimeout reports that a request used up the time its profile or
-// exec.Options gave it (Timeout, or PageTimeout for one page). It matches
+// execopt.Options gave it (Timeout, or PageTimeout for one page). It matches
 // context.DeadlineExceeded, so errors.Is(err, context.DeadlineExceeded)
 // holds for the driver's budget and for the caller's own deadline alike;
 // errors.Is(err, ErrRequestTimeout) holds only for the driver's. KindOf

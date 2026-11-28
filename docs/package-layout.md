@@ -25,7 +25,7 @@ Packages fall into four layers. A package imports only from its own layer
 | 0. Primitives (internal) | `internal/wire`, `internal/frame`, `internal/segment`, `internal/wirecompress`, `internal/crc`, `internal/murmur`, `internal/syncx`, `internal/logging`, `internal/link`, `internal/structmap`, `internal/cqlproto`, `internal/debounce`, `internal/eventbus`, `internal/streams`, `internal/cqlperf` | Byte views, framing, hashing, sync wrappers, logging adapters, struct-mapping helpers, the link registry, and measurement-build counters. Knows nothing about CQL types or the public API. |
 | 1. Vocabulary (public) | `cql`, `cqlerr`, `retry`, `metadata`, `routing`, `endpoint`, `auth`, `event`, `observe`, `metrics` | Types, interfaces, constructors and pure logic that users name and call. |
 | 2. Engine (internal) | every other `internal/` package, such as `internal/protocol`, `internal/transport`, `internal/pool`, `internal/cluster`, `internal/routing`, `internal/metadata` and `internal/session` | I/O, goroutines, pools, caches, protocol encoding, execution. Implements layer-1 interfaces and produces layer-1 values. |
-| 3. Surface (public) | `gocql` (root), `config`, `exec`, `cqltrace`, `routing/routingtest`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
+| 3. Surface (public) | `gocql` (root), `config`, `execopt`, `cqltrace`, `routing/routingtest`, future dialect packages | `Connect`, `Session` and its execution handles, configuration and per-execution options that the engine consumes, and dialect-only functions. Connects layer 1 to layer 2. |
 
 Layer-1 packages depend on each other in this order, lowest first: `cql`;
 `cqlerr`; `retry`; `metadata`; `routing`;
@@ -131,7 +131,7 @@ documented methods.
   values, so users must not rely on exhaustive switches. Only
   `cql.Consistency` has a parser.
 - **Zero values.** Every exported struct documents its zero value: usable,
-  and what it means (`gocql.Batch`, `exec.Options`, `cql.PageState`), or
+  and what it means (`gocql.Batch`, `execopt.Options`, `cql.PageState`), or
   rejected with a `cql.ValidationError` (`config.Config`, `cql.DataType`;
   likewise the zero `config.Dialect`). `TestStructZeroValueDocs` checks that
   the docs mention the zero value.
@@ -192,10 +192,10 @@ documented methods.
   protocol). Loading configuration from files or a cloud
   connection bundle lives in a `contrib/` module that drives the builder.
 
-### `exec` (layer 3)
+### `execopt` (layer 3)
 
 - **Contains:** per-execution settings: `Options`, `PrepareOptions`,
-  `StreamOptions`, `StreamLimits`, `SerialOverride`, and `CompiledOptions`,
+  `StreamOptions`, `StreamLimits`, and `CompiledOptions`,
   the frozen form `Session.CompileOptions` returns. It is layer 3 because
   `CompiledOptions` wraps an engine object.
 - **Must not contain:** aliases, or settings that belong to the whole

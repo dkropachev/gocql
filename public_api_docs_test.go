@@ -24,7 +24,7 @@ import (
 func TestPublicMethodDocumentation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Worker", "Prepared.One", "Worker.Close", "StreamWorker.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "exec.CompiledOptions.Values", "config.ConfigBuilder.WithDefaultProfile", "config.Profile.Builder", "cql.PageState.MarshalText"} {
+	for _, symbol := range []string{"Session.Prepare", "Session.PrepareStream", "Session.UnpreparedEach", "PreparedStream.Worker", "Prepared.One", "Worker.Close", "StreamWorker.Run", "Rows.NextInto", "Page.Retain", "RowStream.Close", "Batch.Reset", "execopt.CompiledOptions.Values", "config.ConfigBuilder.WithDefaultProfile", "config.Profile.Builder", "cql.PageState.MarshalText"} {
 		t.Run(symbol, func(t *testing.T) {
 			path := "github.com/scylladb/gocql/v2." + symbol
 			if pkg, rest, ok := strings.Cut(symbol, "."); ok && pkg == strings.ToLower(pkg) {
@@ -44,14 +44,14 @@ func TestPublicMethodDocumentation(t *testing.T) {
 		t.Fatalf("public field mapping documentation: %v\n%s", err, out)
 	}
 	for _, check := range []struct{ symbol, want string }{
-		{"github.com/scylladb/gocql/v2/exec.Options.PageSize", "PageSize"},
+		{"github.com/scylladb/gocql/v2/execopt.Options.PageSize", "PageSize"},
 		{"github.com/scylladb/gocql/v2/config.Profile.Consistency", "Consistency"},
-		{"github.com/scylladb/gocql/v2/exec.PrepareOptions.HostID", "HostID"},
-		{"github.com/scylladb/gocql/v2/exec.StreamOptions.Incremental", "Incremental"},
+		{"github.com/scylladb/gocql/v2/execopt.PrepareOptions.HostID", "HostID"},
+		{"github.com/scylladb/gocql/v2/execopt.StreamOptions.Incremental", "Incremental"},
 		{"github.com/scylladb/gocql/v2/observe.Hooks", "Request"},
 		{"github.com/scylladb/gocql/v2/observe.Hooks.Attempt", "Attempt"},
 		{"github.com/scylladb/gocql/v2/cqltrace.Fetcher", "Settle"},
-		{"github.com/scylladb/gocql/v2/exec.Options.CQLTrace", "server-side"},
+		{"github.com/scylladb/gocql/v2/execopt.Options.CQLTrace", "server-side"},
 		{"github.com/scylladb/gocql/v2/metrics.Snapshot", "Requests"},
 		{"github.com/scylladb/gocql/v2/cql.Statement.Rows", "Rows"},
 		{"github.com/scylladb/gocql/v2/cql.StreamStatement.Rows", "Rows"},

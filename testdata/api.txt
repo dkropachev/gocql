@@ -30,18 +30,18 @@ package gocql
 		gocql.PageLease method (*T) Close() error
 	type gocql.Prepared[P any, R any] struct
 		gocql.Prepared method (*T) AddToBatch(batch *gocql.Batch, value P) error
-		gocql.Prepared method (*T) All(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
-		gocql.Prepared method (*T) Apply(ctx context.Context, value P, options ...exec.CompiledOptions) (bool, cql.Result, error)
+		gocql.Prepared method (*T) All(ctx context.Context, value P, dst *R, options ...execopt.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Prepared method (*T) Apply(ctx context.Context, value P, options ...execopt.CompiledOptions) (bool, cql.Result, error)
 		gocql.Prepared method (*T) BindMarkers() cql.Columns
 		gocql.Prepared method (*T) Columns() cql.Columns
-		gocql.Prepared method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
-		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Prepared method (*T) Each(ctx context.Context, value P, dst *R, fn func(*R) error, options ...execopt.CompiledOptions) (cql.Result, error)
+		gocql.Prepared method (*T) Exec(ctx context.Context, value P, options ...execopt.CompiledOptions) (cql.Result, error)
 		gocql.Prepared method (*T) Info() gocql.PreparedInfo
-		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
-		gocql.Prepared method (*T) Routing(value P, options ...exec.CompiledOptions) (routing.Info, error)
-		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...exec.CompiledOptions) (gocql.Rows[R], error)
-		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int, options ...exec.CompiledOptions) (*gocql.Page[R], error)
-		gocql.Prepared method (*T) With(defaults exec.CompiledOptions) *gocql.Prepared[P, R]
+		gocql.Prepared method (*T) One(ctx context.Context, value P, dst *R, options ...execopt.CompiledOptions) (bool, cql.Result, error)
+		gocql.Prepared method (*T) Routing(value P, options ...execopt.CompiledOptions) (routing.Info, error)
+		gocql.Prepared method (*T) Run(ctx context.Context, value P, options ...execopt.CompiledOptions) (gocql.Rows[R], error)
+		gocql.Prepared method (*T) RunPage(ctx context.Context, value P, state cql.PageState, pageSize int, options ...execopt.CompiledOptions) (*gocql.Page[R], error)
+		gocql.Prepared method (*T) With(defaults execopt.CompiledOptions) *gocql.Prepared[P, R]
 		gocql.Prepared method (*T) Worker() (*gocql.Worker[P, R], error)
 	type gocql.PreparedInfo struct
 		gocql.PreparedInfo field Keyspace string
@@ -53,8 +53,8 @@ package gocql
 		gocql.PreparedStream method (*T) BindMarkers() cql.Columns
 		gocql.PreparedStream method (*T) Columns() cql.Columns
 		gocql.PreparedStream method (*T) Info() gocql.PreparedInfo
-		gocql.PreparedStream method (*T) With(defaults exec.CompiledOptions) *gocql.PreparedStream[P, R]
-		gocql.PreparedStream method (*T) Worker(options ...exec.StreamOptions) (*gocql.StreamWorker[P, R], error)
+		gocql.PreparedStream method (*T) With(defaults execopt.CompiledOptions) *gocql.PreparedStream[P, R]
+		gocql.PreparedStream method (*T) Worker(options ...execopt.StreamOptions) (*gocql.StreamWorker[P, R], error)
 	type gocql.RowStream[R any] struct
 		gocql.RowStream method (*T) All(dst *R) iter.Seq2[*R, error]
 		gocql.RowStream method (*T) Close() error
@@ -73,31 +73,31 @@ package gocql
 		gocql.Rows method (T) Result() cql.Result
 		gocql.Rows method (T) Retain() (*gocql.PageLease, error)
 	type gocql.Session struct
-		gocql.Session method (*T) ApplyBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (bool, cql.Result, error)
+		gocql.Session method (*T) ApplyBatch(ctx context.Context, batch *gocql.Batch, options ...execopt.CompiledOptions) (bool, cql.Result, error)
 		gocql.Session method (*T) AwaitSchemaAgreement(ctx context.Context) error
 		gocql.Session method (*T) Close() error
 		gocql.Session method (*T) Closed() bool
-		gocql.Session method (*T) CompileOptions(options exec.Options) (exec.CompiledOptions, error)
+		gocql.Session method (*T) CompileOptions(options execopt.Options) (execopt.CompiledOptions, error)
 		gocql.Session method (*T) DefaultProfile() config.Profile
 		gocql.Session method (*T) Dialect() config.Dialect
-		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...exec.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) ExecBatch(ctx context.Context, batch *gocql.Batch, options ...execopt.CompiledOptions) (cql.Result, error)
 		gocql.Session method (*T) HostMetrics(dst []metrics.Host) []metrics.Host
 		gocql.Session method (*T) ID() cql.UUID
 		gocql.Session method (*T) Metadata() *metadata.Snapshot
 		gocql.Session method (*T) Metrics() metrics.Snapshot
-		gocql.Session method (*T) MustCompileOptions(options exec.Options) exec.CompiledOptions
+		gocql.Session method (*T) MustCompileOptions(options execopt.Options) execopt.CompiledOptions
 		gocql.Session method (*T) Observer() observe.Hooks
-		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...exec.PrepareOptions) (*gocql.Prepared[P, R], error)
-		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...exec.PrepareOptions) (*gocql.PreparedStream[P, R], error)
+		gocql.Session method (*T) Prepare[P, R any](ctx context.Context, statement cql.Statement[P, R], options ...execopt.PrepareOptions) (*gocql.Prepared[P, R], error)
+		gocql.Session method (*T) PrepareStream[P, R any](ctx context.Context, statement cql.StreamStatement[P, R], options ...execopt.PrepareOptions) (*gocql.PreparedStream[P, R], error)
 		gocql.Session method (*T) RefreshMetadata(ctx context.Context) (*metadata.Snapshot, error)
-		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...exec.CompiledOptions) (gocql.CASBatchRows[X], error)
+		gocql.Session method (*T) RunConditionalBatch[X any](ctx context.Context, batch *gocql.Batch, decoder cql.RowDecoder[cql.CASResult[X]], options ...execopt.CompiledOptions) (gocql.CASBatchRows[X], error)
 		gocql.Session method (*T) Subscribe(filter event.Filter) (*event.Subscription, error)
 		gocql.Session method (*T) UnpreparedAddToBatch[P, R any](batch *gocql.Batch, statement cql.Statement[P, R], value P) error
-		gocql.Session method (*T) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) iter.Seq2[*R, error]
-		gocql.Session method (*T) UnpreparedCommand(ctx context.Context, statement string, options ...exec.CompiledOptions) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...exec.CompiledOptions) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...exec.CompiledOptions) (cql.Result, error)
-		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...exec.CompiledOptions) (bool, cql.Result, error)
+		gocql.Session method (*T) UnpreparedAll[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...execopt.CompiledOptions) iter.Seq2[*R, error]
+		gocql.Session method (*T) UnpreparedCommand(ctx context.Context, statement string, options ...execopt.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedEach[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, fn func(*R) error, options ...execopt.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedExec[P any](ctx context.Context, statement cql.Statement[P, cql.EmptyRow], value P, options ...execopt.CompiledOptions) (cql.Result, error)
+		gocql.Session method (*T) UnpreparedOne[P, R any](ctx context.Context, statement cql.Statement[P, R], value P, dst *R, options ...execopt.CompiledOptions) (bool, cql.Result, error)
 	var gocql.StopIteration error
 	type gocql.StreamProgress struct
 		gocql.StreamProgress field Pages int64
@@ -1319,47 +1319,42 @@ package event
 		event.Subscription method (*T) Close()
 		event.Subscription method (*T) Events() <-chan event.Event
 
-package exec
-	type exec.CompiledOptions struct
-		exec.CompiledOptions method (T) Values() exec.Options
-	type exec.Options struct
-		exec.Options field Retry retry.Policy
-		exec.Options field Speculation retry.SpeculationPolicy
-		exec.Options field Observer observe.Hooks
-		exec.Options field Profile *config.Profile
-		exec.Options field Keyspace string
-		exec.Options field Timestamp cql.Option[time.Time]
-		exec.Options field CustomPayload []cql.PayloadEntry
-		exec.Options field Timeout cql.Option[time.Duration]
-		exec.Options field PageTimeout cql.Option[time.Duration]
-		exec.Options field PageSize int
-		exec.Options field NowInSeconds cql.Option[int32]
-		exec.Options field ShardID cql.Option[uint32]
-		exec.Options field Consistency cql.Option[cql.Consistency]
-		exec.Options field HostID cql.Option[cql.UUID]
-		exec.Options field SerialConsistency exec.SerialOverride
-		exec.Options field IncludeMetadata bool
-		exec.Options field Idempotent cql.Option[bool]
-		exec.Options field Prefetch cql.Option[bool]
-		exec.Options field CQLTrace bool
-		exec.Options field AnyShardFallback bool
-		exec.Options field NoSessionObserver bool
-	type exec.PrepareOptions struct
-		exec.PrepareOptions field Keyspace string
-		exec.PrepareOptions field HostID cql.Option[cql.UUID]
-	const exec.SerialInherit exec.SerialOverride = 0
-	const exec.SerialLocal exec.SerialOverride = 2
-	type exec.SerialOverride uint8
-		exec.SerialOverride method (T) String() string
-	const exec.SerialSerial exec.SerialOverride = 1
-	type exec.StreamLimits struct
-		exec.StreamLimits field MaxMetadataBytes int64
-		exec.StreamLimits field ReadAheadBytes int
-		exec.StreamLimits field DiscardBytes int
-		exec.StreamLimits field MaxTransformBytes int64
-	type exec.StreamOptions struct
-		exec.StreamOptions field Limits exec.StreamLimits
-		exec.StreamOptions field Incremental bool
+package execopt
+	type execopt.CompiledOptions struct
+		execopt.CompiledOptions method (T) Values() execopt.Options
+	type execopt.Options struct
+		execopt.Options field Profile *config.Profile
+		execopt.Options field Consistency cql.Option[cql.Consistency]
+		execopt.Options field SerialConsistency cql.Option[cql.Consistency]
+		execopt.Options field Timeout cql.Option[time.Duration]
+		execopt.Options field PageTimeout cql.Option[time.Duration]
+		execopt.Options field PageSize int
+		execopt.Options field Prefetch cql.Option[bool]
+		execopt.Options field Idempotent cql.Option[bool]
+		execopt.Options field Timestamp cql.Option[time.Time]
+		execopt.Options field NowInSeconds cql.Option[int32]
+		execopt.Options field Keyspace string
+		execopt.Options field CQLTrace bool
+		execopt.Options field CustomPayload []cql.PayloadEntry
+		execopt.Options field IncludeMetadata bool
+		execopt.Options field HostID cql.Option[cql.UUID]
+		execopt.Options field ShardID cql.Option[uint32]
+		execopt.Options field AnyShardFallback bool
+		execopt.Options field Retry retry.Policy
+		execopt.Options field Speculation retry.SpeculationPolicy
+		execopt.Options field Observer observe.Hooks
+		execopt.Options field NoSessionObserver bool
+	type execopt.PrepareOptions struct
+		execopt.PrepareOptions field Keyspace string
+		execopt.PrepareOptions field HostID cql.Option[cql.UUID]
+	type execopt.StreamLimits struct
+		execopt.StreamLimits field MaxMetadataBytes int64
+		execopt.StreamLimits field ReadAheadBytes int
+		execopt.StreamLimits field DiscardBytes int
+		execopt.StreamLimits field MaxTransformBytes int64
+	type execopt.StreamOptions struct
+		execopt.StreamOptions field Limits execopt.StreamLimits
+		execopt.StreamOptions field Incremental bool
 
 package metadata
 	type metadata.Aggregate struct

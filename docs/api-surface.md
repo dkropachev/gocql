@@ -70,10 +70,10 @@ consistency, page size, value and page state of the requests they send.
 
 ## Options
 
-Every entry point takes the one overrides type, `exec.CompiledOptions`, made
+Every entry point takes the one overrides type, `execopt.CompiledOptions`, made
 once by `Session.CompileOptions`, which runs the dialect checks up front and
 chooses the compiled form the session's protocol uses. Two small types configure other
-things: `exec.PrepareOptions` the PREPARE request, and `exec.StreamOptions`
+things: `execopt.PrepareOptions` the PREPARE request, and `execopt.StreamOptions`
 a stream's receive mode.
 
 - Worker-owned: options are fixed when the worker is created, as the
@@ -81,24 +81,24 @@ a stream's receive mode.
   (`p.With(options).Worker()`), or the session defaults; `Worker` takes no
   arguments and its methods take no options. A stream worker's overrides
   are the defaults of `PreparedStream.With`.
-- Shared: each call ends in `options ...exec.CompiledOptions`. The variadic is Go's form of an optional
+- Shared: each call ends in `options ...execopt.CompiledOptions`. The variadic is Go's form of an optional
   parameter, so the common call carries no options at all (`p.Exec(ctx, v)`)
   and uses the session defaults. At most one value is accepted; a second
   fails the call at once with a validation error. The type is
-  `exec.CompiledOptions`, not `exec.Options`, because the shared form is the hot path:
+  `execopt.CompiledOptions`, not `execopt.Options`, because the shared form is the hot path:
   validation, payload copying and default resolution happen once at setup,
   and each call passes a pointer to the frozen result. `Prepared.With`
   returns a view whose calls use given defaults instead of the session's;
   options passed to a call are laid over them field by field, so the order,
-  lowest first, is the session's profile, `exec.Options.Profile`, the view's
+  lowest first, is the session's profile, `execopt.Options.Profile`, the view's
   other fields, then the call's. The combination is compiled once and cached
   on the call's options for the view it was last passed to, so a warm call
   allocates nothing. The view shares the preparation and its pool, so it is
-  not a new row. A view whose `exec.Options.Speculation` names a policy for
+  not a new row. A view whose `execopt.Options.Speculation` names a policy for
   a statement that cannot speculate (conditional, or not idempotent) fails
   every call, its `Worker` included, with a `cql.ValidationError` before
   sending, so `With` keeps its one-result form.
-- Throwaway: each call ends in `options ...exec.CompiledOptions`, the same
+- Throwaway: each call ends in `options ...execopt.CompiledOptions`, the same
   optional parameter with at most one value, resolved against the session
   on the call.
 
@@ -139,7 +139,7 @@ page state. Explicit paging is the pages column only.
   from each request, and an option would mean compiling options per request.
   Zero uses the resolved page size. Unpaged execution is the page size
   `cql.Unpaged`, as an option, as that argument or as a profile's `PageSize`;
-  all three are `int`. Prefetch, in `config.Profile` and `exec.Options`, is an
+  all three are `int`. Prefetch, in `config.Profile` and `execopt.Options`, is an
   on/off `bool`.
 - The none column (`Exec`, `UnpreparedExec`, `ExecBatch`) rejects a statement
   or batch the driver knows to be conditional with `cqlerr.ErrConditionalExec`
@@ -217,7 +217,7 @@ and no options.
     statements: on ScyllaDB the row counter is the statement index, and on
     Cassandra rows are partition rows, so the mapping is documented, not
     computed.
-- **Options.** As for the shared form: an optional `exec.CompiledOptions`, so the
+- **Options.** As for the shared form: an optional `execopt.CompiledOptions`, so the
   send resolves nothing per call. Paging options are ignored, so options
   compiled for statements serve batches too.
 - **Performance contract.** Once a reused batch has reached its working size,
@@ -253,7 +253,7 @@ removes boilerplate from a common call without adding a way to execute.
   bind markers and no result columns, such as DDL. It is the
   throwaway none cell, `UnpreparedExec`, with `cql.Command(statement)` and
   `cql.EmptyParams{}` filled in, so it takes the throwaway row's
-  `...exec.CompiledOptions`. Schema setup and occasional commands are most of the
+  `...execopt.CompiledOptions`. Schema setup and occasional commands are most of the
   throwaway calls, and spelling the statement type and the empty parameters
   out in each one hid the CQL.
 - `Prepared.Apply` and `Worker.Apply` run a conditional statement and return

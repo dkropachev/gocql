@@ -14,7 +14,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/tests/integration/internal/mapped"
 )
 
@@ -253,7 +253,7 @@ func TestStructMapping(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			q, err := prepared.Worker(exec.StreamOptions{})
+			q, err := prepared.Worker(execopt.StreamOptions{})
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -430,7 +430,7 @@ func TestStructMapping(t *testing.T) {
 		if _, err := insertPrepared.Routing(want[0]); err != nil {
 			t.Fatal(err)
 		}
-		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, exec.Options{PageSize: 2})).Worker()
+		read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, execopt.Options{PageSize: 2})).Worker()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -502,7 +502,7 @@ func TestStructMapping(t *testing.T) {
 		})
 		t.Run("Unpaged", func(t *testing.T) {
 			// The cql.Unpaged page size returns the whole result as one page.
-			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, exec.Options{PageSize: cql.Unpaged})).Worker()
+			read, err := f.selectBucket(t, ctx, cql.MustRowOf[smRecord](smAttrs)).With(bindOptions(f.session, execopt.Options{PageSize: cql.Unpaged})).Worker()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -628,7 +628,7 @@ func TestStructMapping(t *testing.T) {
 		// incremental stream is rejected before the query is sent.
 		frameCompressed := *flagProto < 5 && fixtureCompressed()
 		for _, incremental := range []bool{false, true} {
-			q, err := read.With(bindOptions(f.session, exec.Options{PageSize: 2})).Worker(exec.StreamOptions{Incremental: incremental})
+			q, err := read.With(bindOptions(f.session, execopt.Options{PageSize: 2})).Worker(execopt.StreamOptions{Incremental: incremental})
 			if err != nil {
 				t.Fatal(err)
 			}
