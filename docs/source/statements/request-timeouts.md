@@ -2,7 +2,7 @@
 
 Pass a bounded context to Connect, Prepare and every execution. Profile.Timeout
 and per-call options bound request execution separately from connect, read,
-write, keepalive and schema-agreement budgets. A set `exec.Options.Timeout`
+write, keepalive and schema-agreement budgets. A set `execopt.Options.Timeout`
 replaces the profile's Timeout for that execution, longer or shorter, and
 `cql.Some(time.Duration(0))` removes it, so a long scan can outlast the
 default 30s; `PageTimeout` works the same way for each page fetch. The

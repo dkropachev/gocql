@@ -37,7 +37,7 @@ type Profile struct {
 	Speculation retry.SpeculationPolicy
 	// CQLTraceSampler, when not nil, is asked once per request, as it is
 	// admitted, whether to record a CQL trace session of its attempts, as
-	// exec.Options.CQLTrace does for every request it is set on; see
+	// execopt.Options.CQLTrace does for every request it is set on; see
 	// ProfileBuilder.WithCQLTraceSampler.
 	CQLTraceSampler func(routing.Info) bool
 	// Timeout bounds one execution, retries included, and PageTimeout the
@@ -56,7 +56,7 @@ type Profile struct {
 	// leaves each statement's own. It does not mark a conditional
 	// statement, a SERIAL or LOCAL_SERIAL read, or a counter write, which
 	// replaying could apply twice: only the statement's own Idempotent or
-	// exec.Options.Idempotent marks those. exec.Options.Idempotent
+	// execopt.Options.Idempotent marks those. execopt.Options.Idempotent
 	// overrides it for one execution.
 	Idempotent bool
 	// Prefetch makes Rows request the next page as soon as a page arrives,

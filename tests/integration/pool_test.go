@@ -42,7 +42,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/endpoint"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/metadata"
@@ -161,7 +161,7 @@ func TestPool(t *testing.T) {
 				t.Errorf("cleanup unique stream table: %v", err)
 			}
 		}()
-		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec))}, exec.PrepareOptions{}))
+		insert := codecTestMust(s.Prepare(ctx, cql.Statement[cql.Pair[int32, []byte], cql.EmptyRow]{CQL: "INSERT INTO " + qualified + "(id,value) VALUES(?,?)", Params: cql.PairParams(cql.OneParam(cql.Int32Codec), cql.OneParam(cql.ByteSliceCodec))}, execopt.PrepareOptions{}))
 		size := 400 << 10
 		for i := 0; i < 4; i++ {
 			payload := bytes.Repeat([]byte{byte(i + 1)}, size)

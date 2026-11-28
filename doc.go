@@ -32,7 +32,7 @@
 // Prepared.Exec, One and Each execute a prepared statement once. They are safe
 // for concurrent use and run on queries the statement keeps for them, so they
 // allocate no per-call execution state. Every call takes at most one
-// exec.CompiledOptions, made once by Session.CompileOptions; none uses the
+// execopt.CompiledOptions, made once by Session.CompileOptions; none uses the
 // session's default profile, or the defaults of a view made by Prepared.With,
 // over which a call's options are laid field by field. Prepared.Apply runs a
 // conditional statement and reports whether it applied.
@@ -74,7 +74,7 @@
 // Session.PrepareStream prepares a cql.StreamStatement directly for caller
 // storage; its shareable PreparedStream creates a StreamWorker per goroutine.
 // A StreamWorker decodes into seeded caller storage and buffers one response page
-// on normal multiplexed connections by default. exec.StreamOptions.Incremental opts into bounded
+// on normal multiplexed connections by default. execopt.StreamOptions.Incremental opts into bounded
 // incremental receive through an exclusive connection reservation.
 // Page-buffered memory scales with concurrent response pages and is bounded by
 // configured frame and decompression limits. Borrowed result views expire on

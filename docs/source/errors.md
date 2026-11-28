@@ -31,7 +31,7 @@ not say whether a retry is safe; combine it with the execution status.
 `KindTimeout` means the server or the driver gave up waiting. The errors of
 that kind a caller sees are:
 
-- `cqlerr.ErrRequestTimeout`: the profile's `Timeout` or `exec.Options.Timeout`
+- `cqlerr.ErrRequestTimeout`: the profile's `Timeout` or `execopt.Options.Timeout`
   (or `PageTimeout`) ran out. It also matches `context.DeadlineExceeded`.
 - `cqlerr.ErrTimeoutNoResponse`: an attempt got no response from its
   connection in time.
@@ -49,7 +49,7 @@ rest.
 `cqlerr.Retryable(err)` puts the two questions together: the error is
 transient, which rules out the caller's own cancellation or deadline, and the
 request was not executed or is idempotent. The idempotence is the one the
-driver resolved for the request (`exec.Options.Idempotent`, else the
+driver resolved for the request (`execopt.Options.Idempotent`, else the
 statement's or the profile's), kept in `ExecutionError.Idempotent`, so the
 caller does not restate it. A retry loop needs nothing else, but note that
 the profile's retry policy has already retried each request:
@@ -109,7 +109,7 @@ A failed request returns `*cqlerr.ExecutionError`. `Err` is why it stopped: the
 last attempt's error, the caller's cancellation, or a failure before any
 attempt. `Attempts` lists every failed attempt with its host address, shard,
 consistency, execution status, error and, when the request ran with
-`exec.Options.CQLTrace`, the `CQLTraceID` of the server's trace session. The
+`execopt.Options.CQLTrace`, the `CQLTraceID` of the server's trace session. The
 error wraps `Err` only, so `errors.Is` and `errors.As` see why the request
 stopped, the error `KindOf` classifies; read an earlier attempt's error from
 `Attempts`, or find one by type with `cqlerr.AttemptAs`, which searches `err`

@@ -39,7 +39,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqltrace"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 func TestObserver(t *testing.T) {
@@ -57,9 +57,9 @@ func TestObserver(t *testing.T) {
 		for i := int32(0); i < 100; i++ {
 			stmt := fmt.Sprintf("INSERT INTO %s(id,other) VALUES(?,%d)", table, i)
 			cqls = append(cqls, stmt)
-			cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), []cql.Value{cql.IntValue(i)})
+			cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, execopt.PrepareOptions{}), []cql.Value{cql.IntValue(i)})
 		}
-		cassandraBatch(t, session, batch, exec.Options{Observer: hooksOf(observer)})
+		cassandraBatch(t, session, batch, execopt.Options{Observer: hooksOf(observer)})
 		events, _ := observer.snapshot()
 		require.Len(t, events, 1)
 		require.NoError(t, events[0].Err)
@@ -76,7 +76,7 @@ func TestObserver(t *testing.T) {
 		// valid.
 		require.True(t, strings.HasPrefix(values[0], "id=0; id=1; id=2; "), values[0])
 		// Verify each bound value by reading the resulting rows.
-		rows := cassandraUnpreparedAll(t, session, "SELECT id,other FROM "+table, cql.DynamicRows, exec.Options{})
+		rows := cassandraUnpreparedAll(t, session, "SELECT id,other FROM "+table, cql.DynamicRows, execopt.Options{})
 		require.Len(t, rows, 100)
 		for _, row := range rows {
 			require.Equal(t, cassandraInt(t, row, "id"), cassandraInt(t, row, "other"))
@@ -103,7 +103,7 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, i/10+1, len(attempts), "row %d", i)
 			i++
 			return nil
-		}, bindOptions(session, exec.Options{PageSize: 10, Prefetch: cql.Some(false), Observer: hooksOf(observer)}))
+		}, bindOptions(session, execopt.Options{PageSize: 10, Prefetch: cql.Some(false), Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		require.Equal(t, 50, i)
 		events, attempts := observer.snapshot()
@@ -142,8 +142,8 @@ func TestObserver(t *testing.T) {
 			require.Equal(t, wantErr, events[0].Err != nil)
 		}
 		selectCQL := fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table)
-		read := cassandraDynamicPrepared(t, session, selectCQL, exec.PrepareOptions{})
-		rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(43)}, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
+		read := cassandraDynamicPrepared(t, session, selectCQL, execopt.PrepareOptions{})
+		rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(43)}, bindOptions(session, execopt.Options{Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		defer rows.Close()
 		var row cql.DynamicRow
@@ -152,24 +152,24 @@ func TestObserver(t *testing.T) {
 		check(selectCQL, false)
 		observer.reset()
 		insertCQL := fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table)
-		write := cassandraWritePrepared(t, session, insertCQL, exec.PrepareOptions{})
-		_, err = write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
+		write := cassandraWritePrepared(t, session, insertCQL, execopt.PrepareOptions{})
+		_, err = write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, execopt.Options{Observer: hooksOf(observer)}))
 		require.NoError(t, err)
 		check(insertCQL, false)
 		observer.reset()
-		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []cql.Value{cql.IntValue(42)}, exec.Options{Observer: hooksOf(observer)}), "id"))
+		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, session, read, []cql.Value{cql.IntValue(42)}, execopt.Options{Observer: hooksOf(observer)}), "id"))
 		check(selectCQL, false)
 		observer.reset()
 		other := createV2Session(t, func(c *config.ConfigBuilder) { c.WithObserver(hooksOf(observer)) })
 		defer other.Close()
 		observer.reset()
-		read = cassandraDynamicPrepared(t, other, selectCQL, exec.PrepareOptions{})
-		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, other, read, []cql.Value{cql.IntValue(42)}, exec.Options{}), "id"))
+		read = cassandraDynamicPrepared(t, other, selectCQL, execopt.PrepareOptions{})
+		require.Equal(t, int64(42), cassandraInt(t, cassandraReadOne(t, other, read, []cql.Value{cql.IntValue(42)}, execopt.Options{}), "id"))
 		check(selectCQL, false)
 		observer.reset()
 		bad := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id FROM unknown_table WHERE id = 42", Rows: cql.DynamicRows}
 		var badRow cql.DynamicRow
-		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, bindOptions(session, exec.Options{Observer: hooksOf(observer)}))
+		_, err = session.UnpreparedEach(context.Background(), bad, cql.EmptyParams{}, &badRow, func(*cql.DynamicRow) error { return nil }, bindOptions(session, execopt.Options{Observer: hooksOf(observer)}))
 		require.Error(t, err)
 		check("SELECT id FROM unknown_table WHERE id = 42", true)
 	})
@@ -183,8 +183,8 @@ func TestObserver(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
-			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), exec.PrepareOptions{})
-			result, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
+			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), execopt.PrepareOptions{})
+			result, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, execopt.Options{CQLTrace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, result.CQLTraces())
 			checkTrace := func(refs []cql.CQLTraceRef) {
@@ -204,10 +204,10 @@ func TestObserver(t *testing.T) {
 				}
 			}
 			checkTrace(result.CQLTraces())
-			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), exec.PrepareOptions{})
+			read := cassandraDynamicPrepared(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id = ?", table), execopt.PrepareOptions{})
 			// Options are explicit per execution; the same statement can be traced repeatedly.
 			for i := 0; i < 2; i++ {
-				rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
+				rows, err := read.Run(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, execopt.Options{CQLTrace: true}))
 				require.NoError(t, err)
 				defer rows.Close()
 				var row cql.DynamicRow
@@ -227,8 +227,8 @@ func TestObserver(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s (id int PRIMARY KEY)", table))
-			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), exec.PrepareOptions{})
-			result, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
+			write := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s (id) VALUES (?)", table), execopt.PrepareOptions{})
+			result, err := write.Exec(context.Background(), []cql.Value{cql.IntValue(42)}, bindOptions(session, execopt.Options{CQLTrace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, result.CQLTraces())
 			observer.reset()
@@ -264,13 +264,13 @@ func TestObserver(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			require.NoError(t, v2CreateTable(ctx, session, fmt.Sprintf((`CREATE TABLE `+fixtureKeyspace("")+`.%s (id int primary key)`), table)))
-			write := cassandraWritePrepared(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), exec.PrepareOptions{})
-			inserted, err := write.Exec(ctx, []cql.Value{cql.IntValue(42)}, bindOptions(session, exec.Options{CQLTrace: true}))
+			write := cassandraWritePrepared(t, session, fmt.Sprintf(`INSERT INTO %s (id) VALUES (?)`, table), execopt.PrepareOptions{})
+			inserted, err := write.Exec(ctx, []cql.Value{cql.IntValue(42)}, bindOptions(session, execopt.Options{CQLTrace: true}))
 			require.NoError(t, err)
 			require.NotEmpty(t, inserted.CQLTraces())
-			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.Int32Codec)}, exec.PrepareOptions{})
+			prepared, err := session.Prepare(ctx, cql.Statement[int32, int32]{CQL: fmt.Sprintf(`SELECT id FROM %s WHERE id = ?`, table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.Int32Codec)}, execopt.PrepareOptions{})
 			require.NoError(t, err)
-			rows, err := prepared.Run(ctx, int32(42), bindOptions(session, exec.Options{CQLTrace: true}))
+			rows, err := prepared.Run(ctx, int32(42), bindOptions(session, execopt.Options{CQLTrace: true}))
 			require.NoError(t, err)
 			defer rows.Close()
 			var value int32

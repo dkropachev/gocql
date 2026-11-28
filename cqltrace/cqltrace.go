@@ -3,7 +3,7 @@
 
 // Package cqltrace reads CQL trace sessions: the server-side query traces a
 // cluster records in system_traces for executions run with
-// exec.Options.CQLTrace. cql.Result.CQLTraces names the sessions to read, with the
+// execopt.Options.CQLTrace. cql.Result.CQLTraces names the sessions to read, with the
 // attempt each one records; a failed execution's Result lists its failed
 // attempts' sessions too.
 //
@@ -28,7 +28,7 @@ import (
 	"github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/internal/link"
 )
 
@@ -176,7 +176,7 @@ func fetchAll(ctx context.Context, refs []cql.CQLTraceRef, fetch func(context.Co
 
 // compileUntracked is gocql.Session.CompileOptions for reads the session's
 // metrics leave out.
-var compileUntracked = link.Get[func(*gocql.Session, exec.Options) (exec.CompiledOptions, error)](link.CompileUntracked)
+var compileUntracked = link.Get[func(*gocql.Session, execopt.Options) (execopt.CompiledOptions, error)](link.CompileUntracked)
 
 // Fetch reads the trace session ref names, polling until it is ready or ctx
 // ends.
@@ -204,7 +204,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRe
 	if consistency == cql.Any {
 		consistency = cql.One
 	}
-	base := exec.Options{Consistency: cql.Some(consistency), Idempotent: cql.Some(true), NoSessionObserver: true}
+	base := execopt.Options{Consistency: cql.Some(consistency), Idempotent: cql.Some(true), NoSessionObserver: true}
 	anywhere, err := compileUntracked(s, base)
 	if err != nil {
 		return Info{ID: id}, err
@@ -219,7 +219,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRe
 	}
 	// read runs one read with options and, when a read pinned to the
 	// coordinator fails, unpins the rest and runs it again.
-	read := func(ctx context.Context, run func(exec.CompiledOptions) error) error {
+	read := func(ctx context.Context, run func(execopt.CompiledOptions) error) error {
 		err := run(options)
 		if err != nil && pinned && ctx.Err() == nil {
 			pinned, options = false, anywhere
@@ -231,7 +231,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRe
 	return f.fetch(ctx, id, func(ctx context.Context) (sessionRow, bool, error) {
 		var row sessionRow
 		var found bool
-		err := read(ctx, func(options exec.CompiledOptions) error {
+		err := read(ctx, func(options execopt.CompiledOptions) error {
 			var err error
 			row = sessionRow{}
 			found, _, err = s.UnpreparedOne(ctx, statement, id, &row, options)
@@ -240,7 +240,7 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRe
 		return row, found, err
 	}, func(ctx context.Context) ([]Event, error) {
 		var events []Event
-		err := read(ctx, func(options exec.CompiledOptions) error {
+		err := read(ctx, func(options execopt.CompiledOptions) error {
 			var err error
 			events, err = readEvents(ctx, s, id, options)
 			return err
@@ -412,7 +412,7 @@ var eventStatement = cql.Statement[cql.UUID, eventRow]{
 	BindMarkers: sessionIDMarker,
 }
 
-func readEvents(ctx context.Context, s *gocql.Session, id cql.UUID, options exec.CompiledOptions) ([]Event, error) {
+func readEvents(ctx context.Context, s *gocql.Session, id cql.UUID, options execopt.CompiledOptions) ([]Event, error) {
 	var events []Event
 	var row eventRow
 	_, err := s.UnpreparedEach(ctx, eventStatement, id, &row, func(r *eventRow) error {

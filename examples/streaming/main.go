@@ -23,7 +23,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 type record struct {
@@ -190,11 +190,11 @@ func streamTable(ctx context.Context, cfg config.Config, incremental, segments b
 	if len(hostsSnapshot) == 0 {
 		return fmt.Errorf("missing discovered hosts")
 	}
-	pinned, err := s.CompileOptions(exec.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)})
+	pinned, err := s.CompileOptions(execopt.Options{PageSize: 2, HostID: cql.Some(hostsSnapshot[0].HostID)})
 	if err != nil {
 		return err
 	}
-	worker, err := prepared.With(pinned).Worker(exec.StreamOptions{Incremental: incremental})
+	worker, err := prepared.With(pinned).Worker(execopt.StreamOptions{Incremental: incremental})
 	if err != nil {
 		return err
 	}

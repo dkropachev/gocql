@@ -6,7 +6,7 @@ OpenTelemetry, records what the driver did, in your own tracing system.
 
 ## CQL tracing
 
-Set `exec.Options.CQLTrace` and the cluster records a trace session of every
+Set `execopt.Options.CQLTrace` and the cluster records a trace session of every
 attempt in `system_traces`. To trace a sample of the traffic instead, give
 the profile a sampler with `config.ProfileBuilder.WithCQLTraceSampler`: the
 driver asks it once per request, with the request's `routing.Info`, and
@@ -25,7 +25,7 @@ insert := cql.Statement[int32, cql.EmptyRow]{
 	Params:      cql.OneParam(cql.Int32Codec),
 	BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "id", Type: cql.IntType}),
 }
-traced, err := session.CompileOptions(exec.Options{CQLTrace: true})
+traced, err := session.CompileOptions(execopt.Options{CQLTrace: true})
 if err != nil {
 	return err
 }
@@ -62,7 +62,7 @@ reference, and the errors of the sessions it could not read joined:
 
 <!-- snippet
 var insert cql.Statement[int32, cql.EmptyRow]
-var traced exec.CompiledOptions
+var traced execopt.CompiledOptions
 -->
 ```go
 _, err := session.UnpreparedExec(ctx, insert, 42, traced)
@@ -118,12 +118,12 @@ calls the same hook of every argument in order, passes each `Request` the
 context the one before returned, and keeps a panic in one from skipping the
 others.
 
-`exec.Options.Observer` adds hooks to one execution: they are joined after
+`execopt.Options.Observer` adds hooks to one execution: they are joined after
 the session's, as `observe.Join(session, extra)` would join them, so each
 hook calls the session's first and the added one gets the context the
-session's `Request` returned. Set `exec.Options.NoSessionObserver` to leave
+session's `Request` returned. Set `execopt.Options.NoSessionObserver` to leave
 the session's hooks out of the execution, so that only
-`exec.Options.Observer`, or nothing, observes it.
+`execopt.Options.Observer`, or nothing, observes it.
 
 Attempt hooks usually run on the goroutine that called the execution, the
 start hook before each attempt and its end function after it, so a hook

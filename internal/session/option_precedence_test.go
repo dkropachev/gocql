@@ -12,7 +12,7 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 )
 
-// TestOptionPrecedence pins the order the config and exec package docs
+// TestOptionPrecedence pins the order the config and execopt package docs
 // describe: the session's default profile, then Options.Profile replacing it
 // whole, then each set Options field.
 func TestOptionPrecedence(t *testing.T) {

@@ -94,10 +94,9 @@ func (o CompiledOptions) layer(defaults CompiledOptions) (CompiledOptions, error
 // overlayOptions returns over laid on base field by field: each field over
 // sets replaces base's, as resolveOptionValues lays options over a profile.
 // A cql.Option is set when its Set is true, a policy or keyspace when it is
-// not nil or empty, a page size when it is not zero, a serial consistency
-// when it is not SerialInherit and a payload when it has entries. Observers
-// join, base's first, and the flags IncludeMetadata, CQLTrace and
-// NoSessionObserver are set when either sets them. A HostID pin brings its
+// not nil or empty, a page size when it is not zero, and a payload when it
+// has entries. Observers join, base's first, and the flags IncludeMetadata,
+// CQLTrace and NoSessionObserver are set when either sets them. A HostID pin brings its
 // ShardID and AnyShardFallback with it, so a pin to another host does not
 // keep base's shard.
 func overlayOptions(base, over Options) Options {
@@ -130,15 +129,13 @@ func overlayOptions(base, over Options) Options {
 	overlayOption(&out.Timestamp, over.Timestamp)
 	overlayOption(&out.NowInSeconds, over.NowInSeconds)
 	overlayOption(&out.Consistency, over.Consistency)
+	overlayOption(&out.SerialConsistency, over.SerialConsistency)
 	overlayOption(&out.Idempotent, over.Idempotent)
 	if over.PageSize != 0 {
 		out.PageSize = over.PageSize
 	}
 	if over.HostID.Set {
 		out.HostID, out.ShardID, out.AnyShardFallback = over.HostID, over.ShardID, over.AnyShardFallback
-	}
-	if over.SerialConsistency != SerialInherit {
-		out.SerialConsistency = over.SerialConsistency
 	}
 	out.IncludeMetadata = base.IncludeMetadata || over.IncludeMetadata
 	out.CQLTrace = base.CQLTrace || over.CQLTrace

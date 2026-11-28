@@ -36,7 +36,7 @@ type Plan interface {
 // happy path where the first route serves it: Pick returns the first route
 // cheaply, and Fallback every route the request may take. The session
 // combines them into the plan a request follows. A request pinned to a host
-// (exec.Options.HostID) goes there without consulting the policy. Methods
+// (execopt.Options.HostID) goes there without consulting the policy. Methods
 // may be called concurrently.
 //
 // A Policy may also implement Validator and Learner.
@@ -84,8 +84,8 @@ func NewPolicy(options Options) (*Builtin, error) {
 // SingleTarget routes every request to target: to target's shard only when
 // it names one, unless target.AnyShardFallback lets a request use another
 // shard of the host. Its Validate checks that target is an eligible host. A
-// request pinned with exec.Options.HostID goes to that host instead, without
-// consulting the policy, and with exec.Options.AnyShardFallback, not
+// request pinned with execopt.Options.HostID goes to that host instead, without
+// consulting the policy, and with execopt.Options.AnyShardFallback, not
 // target's, deciding whether it may leave its shard.
 func SingleTarget(target metadata.Target) *Builtin {
 	return &Builtin{single: true, target: target}

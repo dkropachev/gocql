@@ -35,7 +35,7 @@ type Statement[P, R any] struct {
 	// their queries and batch members carry it; a batch is idempotent when
 	// every member is. A profile with Idempotent set
 	// (config.ProfileBuilder.WithIdempotent) marks every statement it runs
-	// idempotent, and exec.Options.Idempotent overrides both for one
+	// idempotent, and execopt.Options.Idempotent overrides both for one
 	// execution.
 	Idempotent bool
 }

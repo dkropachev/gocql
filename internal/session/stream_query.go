@@ -53,6 +53,9 @@ func newStreamQuery[P, B, R any](prepared *Prepared[P, B], decoder cql.StreamRow
 	if _, err := transport.InternalCheckedStreamLimits(options.Limits); err != nil {
 		return nil, err
 	}
+	if l := options.Limits; !options.Incremental && (l.MaxMetadataBytes != 0 || l.ReadAheadBytes != 0 || l.MaxTransformBytes != 0) {
+		return nil, cqltype.TypeValidation("stream limits", "MaxMetadataBytes, ReadAheadBytes and MaxTransformBytes bound only an incremental stream")
+	}
 	if v := options.Options; v.Prefetch.Set && v.Prefetch.Value != 0 {
 		return nil, cqltype.TypeValidation("stream prefetch", "must be zero")
 	}

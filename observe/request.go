@@ -121,7 +121,7 @@ type RequestStart struct {
 	// resolved it; cql.Unpaged asks for the whole result in one page.
 	PageSize int
 	// CQLTrace reports that the request's attempts ask the cluster to record
-	// CQL trace sessions, by exec.Options.CQLTrace or by the profile's
+	// CQL trace sessions, by execopt.Options.CQLTrace or by the profile's
 	// config.Profile.CQLTraceSampler.
 	CQLTrace bool
 }

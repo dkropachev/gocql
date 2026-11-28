@@ -41,7 +41,7 @@ type Result struct {
 	AchievedConsistency Consistency
 	// SpeculationSkipped reports why an execution whose options name a
 	// speculation policy (config.Profile.Speculation or
-	// exec.Options.Speculation) started no speculative attempt because the
+	// execopt.Options.Speculation) started no speculative attempt because the
 	// request is not eligible, and is SpeculationNotSkipped otherwise.
 	// Streams never speculate and do not report it.
 	SpeculationSkipped SpeculationSkip
@@ -61,7 +61,7 @@ const (
 	// conditional statement twice could apply it twice.
 	SpeculationSkippedConditional
 	// SpeculationSkippedNotIdempotent: the request is not idempotent, as
-	// the driver resolved it (exec.Options.Idempotent, else the statement's
+	// the driver resolved it (execopt.Options.Idempotent, else the statement's
 	// or the profile's).
 	SpeculationSkippedNotIdempotent
 )

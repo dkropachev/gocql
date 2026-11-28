@@ -16,7 +16,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // TestLWTDialect pins what each server returns for conditional statements and
@@ -53,7 +53,7 @@ func TestLWTDialect(t *testing.T) {
 		CQL:    updateCQL,
 		Params: updateParams,
 		Rows:   decoder,
-	}, exec.PrepareOptions{})
+	}, execopt.PrepareOptions{})
 	insert := cassandraPrepared(t, session, cql.Statement[row, cql.EmptyRow]{
 		CQL: fmt.Sprintf("INSERT INTO %s(k, c, v, w) VALUES(?, ?, ?, ?)", table),
 		Params: cql.Params(
@@ -62,7 +62,7 @@ func TestLWTDialect(t *testing.T) {
 			cql.Param("v", cql.Int32Codec, func(r row) int32 { return r.V }),
 			cql.Param("w", cql.StringCodec, func(r row) string { return r.W }),
 		),
-	}, exec.PrepareOptions{})
+	}, execopt.PrepareOptions{})
 	_, err := insert.Exec(ctx, row{K: 1, C: 1, V: 10, W: "x"})
 	require.NoError(t, err)
 	_, err = insert.Exec(ctx, row{K: 1, C: 2, V: 20, W: "y"})
@@ -72,7 +72,7 @@ func TestLWTDialect(t *testing.T) {
 		// Declared conditional: rejected before anything is sent.
 		conditional := cassandraPrepared(t, session, cql.Statement[update, cql.EmptyRow]{
 			Kind: cql.ConditionalStatement, CQL: updateCQL, Params: updateParams,
-		}, exec.PrepareOptions{})
+		}, execopt.PrepareOptions{})
 		_, err := conditional.Exec(ctx, update{K: 1, C: 1, V: 11, Expect: 10})
 		require.True(t, errors.Is(err, cqlerr.ErrConditionalExec), "%v", err)
 		require.Equal(t, cqlerr.NotExecuted, cqlerr.ExecutionStatusOf(err))

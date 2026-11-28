@@ -13,7 +13,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -32,7 +32,7 @@ func TestPreparedRouting(t *testing.T) {
 		t.Fatalf("Routing = %+v, want ks.tbl, ordinary, no host pin", info)
 	}
 	host := cql.UUID{15: 1}
-	options, err := f.s.CompileOptions(exec.Options{Consistency: cql.Some(cql.LocalOne), HostID: cql.Some(host)})
+	options, err := f.s.CompileOptions(execopt.Options{Consistency: cql.Some(cql.LocalOne), HostID: cql.Some(host)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestPreparedRouting(t *testing.T) {
 	if info.Consistency != cql.LocalOne || info.HostID != cql.Some(host) {
 		t.Fatalf("Routing with options = %+v, want LOCAL_ONE pinned to %s", info, host)
 	}
-	serial, err := f.s.CompileOptions(exec.Options{Consistency: cql.Some(cql.Serial)})
+	serial, err := f.s.CompileOptions(execopt.Options{Consistency: cql.Some(cql.Serial)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +52,7 @@ func TestPreparedRouting(t *testing.T) {
 	}
 	// An execution rejects a keyspace override that differs from the
 	// statement's, so Routing does too.
-	other, err := f.s.CompileOptions(exec.Options{Keyspace: "other"})
+	other, err := f.s.CompileOptions(execopt.Options{Keyspace: "other"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,7 +62,7 @@ func TestPreparedRouting(t *testing.T) {
 	if _, _, err := f.p.One(f.ctx, gridKey, nil, other); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("One with another keyspace = %v, want the cql.ValidationError Routing matches", err)
 	}
-	same, err := f.s.CompileOptions(exec.Options{Keyspace: "ks"})
+	same, err := f.s.CompileOptions(execopt.Options{Keyspace: "ks"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,7 +179,7 @@ func TestApplyBatch(t *testing.T) {
 		t.Fatalf("ApplyBatch with a cancelled context = %v, %v; want context.Canceled", applied, err)
 	}
 	waitPooledIdle(t, s, "cancelled")
-	if _, _, err := s.ApplyBatch(ctx, &batch, exec.CompiledOptions{}, exec.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
+	if _, _, err := s.ApplyBatch(ctx, &batch, execopt.CompiledOptions{}, execopt.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("ApplyBatch with two options = %v, want a cql.ValidationError", err)
 	}
 
@@ -290,8 +290,8 @@ func TestRowStreamAll(t *testing.T) {
 // share p's preparation and pool, and a Worker of a view takes its defaults.
 func TestPreparedWith(t *testing.T) {
 	f := newLifetimeFixture(t)
-	quorum := f.s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.Quorum), PageSize: 7})
-	one := f.s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.One)})
+	quorum := f.s.MustCompileOptions(execopt.Options{Consistency: cql.Some(cql.Quorum), PageSize: 7})
+	one := f.s.MustCompileOptions(execopt.Options{Consistency: cql.Some(cql.One)})
 	view := f.p.With(quorum)
 	var dst []byte
 	sent := func(what string, want cql.Consistency, wantPageSize int32, call func() error) {
@@ -310,11 +310,11 @@ func TestPreparedWith(t *testing.T) {
 	sent("view.One with options", cql.One, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
 	sent("view.One with options again", cql.One, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, one); return err })
 	sent("view.One with zero options", cql.Quorum, 7, func() error {
-		_, _, err := view.One(f.ctx, gridKey, &dst, exec.CompiledOptions{})
+		_, _, err := view.One(f.ctx, gridKey, &dst, execopt.CompiledOptions{})
 		return err
 	})
 	// Options that set neither field keep both of the view's.
-	timeout := f.s.MustCompileOptions(exec.Options{Timeout: cql.Some(time.Minute)})
+	timeout := f.s.MustCompileOptions(execopt.Options{Timeout: cql.Some(time.Minute)})
 	sent("view.One with a timeout", cql.Quorum, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, timeout); return err })
 	sent("p.One", cql.LocalQuorum, 5000, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst); return err })
 	sent("p.One with options", cql.One, 5000, func() error { _, _, err := f.p.One(f.ctx, gridKey, &dst, one); return err })
@@ -340,8 +340,8 @@ func TestPreparedWith(t *testing.T) {
 		t.Fatal("the view does not share p's preparation")
 	}
 	// A combination the options do not allow fails before sending.
-	unpaged := f.p.With(f.s.MustCompileOptions(exec.Options{PageSize: cql.Unpaged}))
-	prefetch := f.s.MustCompileOptions(exec.Options{Prefetch: cql.Some(true)})
+	unpaged := f.p.With(f.s.MustCompileOptions(execopt.Options{PageSize: cql.Unpaged}))
+	prefetch := f.s.MustCompileOptions(execopt.Options{Prefetch: cql.Some(true)})
 	before := len(f.srv.sent())
 	if _, _, err := unpaged.One(f.ctx, gridKey, &dst, prefetch); !errors.As(err, new(*cqlerr.UnsupportedSettingError)) || len(f.srv.sent()) != before {
 		t.Fatalf("unpaged view with a prefetch = %v, sent %d; want an UnsupportedSettingError before sending", err, len(f.srv.sent())-before)
@@ -353,17 +353,26 @@ func TestPreparedWith(t *testing.T) {
 	defer w.Close()
 	sent("view.Worker().One", cql.Quorum, 7, func() error { _, _, err := w.One(f.ctx, gridKey, &dst); return err })
 
-	stamped := f.p.With(f.s.MustCompileOptions(exec.Options{Timestamp: cql.Some(time.Unix(1, 0))}))
+	// Defaults with a Timestamp would stamp every write of the view alike:
+	// the view's calls and its Worker fail before sending, while a
+	// Timestamp passed per call to a view is allowed.
+	stampOptions := f.s.MustCompileOptions(execopt.Options{Timestamp: cql.Some(time.Unix(1, 0))})
+	stamped := f.p.With(stampOptions)
 	if _, err := stamped.Worker(); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("Worker of a view with a Timestamp = %v, want a cql.ValidationError", err)
 	}
+	before = len(f.srv.sent())
+	if _, _, err := stamped.One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) || len(f.srv.sent()) != before {
+		t.Fatalf("One on a view with a Timestamp = %v, sent %d; want a cql.ValidationError before sending", err, len(f.srv.sent())-before)
+	}
+	sent("view.One with a per-call Timestamp", cql.Quorum, 7, func() error { _, _, err := view.One(f.ctx, gridKey, &dst, stampOptions); return err })
 	if _, _, err := new(Prepared[int32, []byte]).With(quorum).One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("One on a view of a zero Prepared = %v, want a cql.ValidationError", err)
 	}
 
 	// A view that speculates a statement that is not idempotent fails every
 	// call, and its Worker, before sending.
-	speculate := exec.Options{Speculation: retry.FixedSpeculation{After: time.Hour, Max: 2}}
+	speculate := execopt.Options{Speculation: retry.FixedSpeculation{After: time.Hour, Max: 2}}
 	futile := f.p.With(f.s.MustCompileOptions(speculate))
 	before = len(f.srv.sent())
 	if _, _, err := futile.One(f.ctx, gridKey, &dst); !errors.As(err, new(*cql.ValidationError)) || len(f.srv.sent()) != before {
@@ -383,7 +392,7 @@ func TestPreparedWith(t *testing.T) {
 		return err
 	})
 	sent("NoSpeculation view.One", cql.LocalQuorum, 5000, func() error {
-		_, _, err := f.p.With(f.s.MustCompileOptions(exec.Options{Speculation: retry.NoSpeculation{}})).One(f.ctx, gridKey, &dst)
+		_, _, err := f.p.With(f.s.MustCompileOptions(execopt.Options{Speculation: retry.NoSpeculation{}})).One(f.ctx, gridKey, &dst)
 		return err
 	})
 }
@@ -401,7 +410,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	defer func() { _ = s.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", s.MustCompileOptions(exec.Options{Consistency: cql.Some(cql.All)}))
+	result, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", s.MustCompileOptions(execopt.Options{Consistency: cql.Some(cql.All)}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,7 +420,7 @@ func TestUnpreparedCommand(t *testing.T) {
 	if sent := srv.sent(); len(sent) != 1 || sent[0].consistency != cql.All || sent[0].batch {
 		t.Fatalf("sent %+v, want one QUERY at ALL", sent)
 	}
-	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", exec.CompiledOptions{}, exec.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
+	if _, err := s.UnpreparedCommand(ctx, "TRUNCATE ks.tbl", execopt.CompiledOptions{}, execopt.CompiledOptions{}); !errors.As(err, new(*cql.ValidationError)) {
 		t.Fatalf("UnpreparedCommand with two options = %v, want a cql.ValidationError", err)
 	}
 	if len(srv.sent()) != 1 {

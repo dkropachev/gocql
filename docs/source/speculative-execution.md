@@ -35,7 +35,7 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 	Build()
 ```
 
-`exec.Options.Speculation` replaces the profile's policy for the executions
+`execopt.Options.Speculation` replaces the profile's policy for the executions
 that carry it, nil keeps the profile's, and `retry.NoSpeculation{}` turns
 speculation off. To speculate only some statements, leave the profile without
 a policy and set one on those statements; to exempt a few, do the opposite:
@@ -45,13 +45,13 @@ var speculation retry.SpeculationPolicy
 var lookups, reports *gocql.Prepared[int32, string]
 -->
 ```go
-speculative, err := session.CompileOptions(exec.Options{Speculation: speculation})
+speculative, err := session.CompileOptions(execopt.Options{Speculation: speculation})
 if err != nil {
 	return err
 }
 lookups = lookups.With(speculative) // every execution of lookups speculates
 
-quiet, err := session.CompileOptions(exec.Options{Speculation: retry.NoSpeculation{}})
+quiet, err := session.CompileOptions(execopt.Options{Speculation: retry.NoSpeculation{}})
 if err != nil {
 	return err
 }
@@ -65,7 +65,7 @@ it is absent.
 A request speculates only when it is idempotent and known to be ordinary.
 Mark a statement idempotent with `Statement.Idempotent`, which its prepared
 statement, workers and batch members carry, or every statement a profile runs
-with `ProfileBuilder.WithIdempotent(true)`; `exec.Options.Idempotent`, when
+with `ProfileBuilder.WithIdempotent(true)`; `execopt.Options.Idempotent`, when
 set, overrides both for one execution. A statement left
 `cql.UnknownStatement` is classified when it is prepared or bound: one read
 with `cql.CASRows`, or an INSERT, UPDATE, DELETE or BATCH with `IF` in its
@@ -80,7 +80,7 @@ speculate or prefetch, whatever their profile says.
 A request whose policy is set but that cannot speculate says why in
 `cql.Result.SpeculationSkipped`, on success and in `ExecutionError.Result`:
 `cql.SpeculationSkippedConditional` or `cql.SpeculationSkippedNotIdempotent`.
-A `Prepared.With` view whose `exec.Options.Speculation` names a policy for a
+A `Prepared.With` view whose `execopt.Options.Speculation` names a policy for a
 statement that cannot speculate, by the view's own options, the statement and
 the profile, is a mistake found once: every call of the view, and its
 `Worker`, fails with a `cql.ValidationError` before sending. Speculation that

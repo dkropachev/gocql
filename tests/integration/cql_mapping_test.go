@@ -12,7 +12,7 @@ import (
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // TestUDTAlterTypeAdd decodes a UDT value written before ALTER TYPE ADD
@@ -66,12 +66,12 @@ func TestRepeatedPositionalMarkers(t *testing.T) {
 	}
 	type key struct{ PK, CK int32 }
 	positional := cql.Select(fmt.Sprintf("SELECT ck FROM %s WHERE pk = ? AND ck > ? AND ck < ?", table), cql.MustParamsOf[key](), cql.OneColumn(cql.Int32Codec))
-	if _, err := s.Prepare(ctx, positional, exec.PrepareOptions{}); err == nil || !strings.Contains(err.Error(), ":from and :to") {
+	if _, err := s.Prepare(ctx, positional, execopt.PrepareOptions{}); err == nil || !strings.Contains(err.Error(), ":from and :to") {
 		t.Fatalf("repeated ? markers: %v", err)
 	}
 	type bounds struct{ PK, From, To int32 }
 	named := cql.Select(fmt.Sprintf("SELECT ck FROM %s WHERE pk = :pk AND ck > :from AND ck < :to", table), cql.MustParamsOf[bounds](), cql.OneColumn(cql.Int32Codec))
-	p, err := s.Prepare(ctx, named, exec.PrepareOptions{})
+	p, err := s.Prepare(ctx, named, execopt.PrepareOptions{})
 	if err != nil {
 		t.Fatal(err)
 	}

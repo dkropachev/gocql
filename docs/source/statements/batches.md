@@ -32,7 +32,7 @@ the batch no routing token: the batch routes by its first prepared member,
 and takes that member's keyspace and table for routing.
 
 A batch is idempotent, for speculation and `retry.Safe`, when every member's
-statement sets `Statement.Idempotent`; a set `exec.Options.Idempotent`
+statement sets `Statement.Idempotent`; a set `execopt.Options.Idempotent`
 overrides that for one execution. A member's kind is resolved as it is
 alone: an unclassified member with an `IF` condition is conditional, which
 makes the batch conditional.
@@ -41,7 +41,7 @@ makes the batch conditional.
 later input mutation cannot change the batch. It uses none of the worker's
 execution state: `Worker.AddToBatch` works while the worker runs or has an open
 `Rows`, and `Prepared.AddToBatch` takes no pooled query. `ExecBatch` and `RunConditionalBatch` take at most one
-`exec.CompiledOptions` from `session.CompileOptions`. A batch response is a single
+`execopt.CompiledOptions` from `session.CompileOptions`. A batch response is a single
 page, so paging options are ignored and the options you compiled for
 statements work for batches too. Compile them once and reuse them, for a
 one-off batch as well:
@@ -50,7 +50,7 @@ one-off batch as well:
 var batch gocql.Batch
 -->
 ```go
-idempotent, err := session.CompileOptions(exec.Options{Idempotent: cql.Some(true)})
+idempotent, err := session.CompileOptions(execopt.Options{Idempotent: cql.Some(true)})
 // ...
 _, err = session.ExecBatch(ctx, &batch, idempotent)
 ```

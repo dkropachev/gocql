@@ -33,7 +33,7 @@ const modulePath = "github.com/scylladb/gocql/v2"
 var surfacePackages = map[string]bool{
 	"":         true, // the root package, gocql
 	"config":   true,
-	"exec":     true,
+	"execopt":  true,
 	"cqltrace": true,
 	// routingtest builds the engine's snapshots for policy tests.
 	"routing/routingtest": true,

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/internal/transport"
 )
 
 func TestPreparedStream(t *testing.T) {
@@ -224,6 +225,38 @@ func TestPreparedStream(t *testing.T) {
 		if got := decoder.compiles.Load(); got != 1 {
 			t.Fatalf("unchanged metadata compiled %d times", got)
 		}
+	})
+
+	t.Run("RejectsIncrementalLimitsWhenBuffered", func(t *testing.T) {
+		s := loopbackTestSession(t, "pone")
+		defer s.Close()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		p, err := PrepareStream(ctx, s, StreamStatement[int32, []byte]{CQL: oneShotStatement().CQL, Params: cql.OneParam(cql.Int32Codec), Rows: new(countStreamDecoder)}, PrepareOptions{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for name, limits := range map[string]transport.StreamLimits{
+			"MaxMetadataBytes":  {MaxMetadataBytes: 1024},
+			"ReadAheadBytes":    {ReadAheadBytes: 1024},
+			"MaxTransformBytes": {MaxTransformBytes: 1024},
+		} {
+			if _, err := p.Query(StreamOptions{Limits: limits}); !errors.As(err, new(*cql.ValidationError)) {
+				t.Errorf("buffered stream with %s = %v, want a cql.ValidationError", name, err)
+			}
+			q, err := p.Query(StreamOptions{Limits: limits, Incremental: true})
+			if err != nil {
+				t.Errorf("incremental stream with %s = %v", name, err)
+				continue
+			}
+			q.Close()
+		}
+		// DiscardBytes also bounds a buffered stream's skipping.
+		q, err := p.Query(StreamOptions{Limits: transport.StreamLimits{DiscardBytes: 1024}})
+		if err != nil {
+			t.Fatalf("buffered stream with DiscardBytes = %v", err)
+		}
+		q.Close()
 	})
 
 	t.Run("RevalidatesChangedMetadata", func(t *testing.T) {

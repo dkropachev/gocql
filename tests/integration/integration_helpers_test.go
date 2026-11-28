@@ -18,7 +18,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/retry"
 )
 
@@ -317,7 +317,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 	if len(values) == 0 {
 		return session.UnpreparedExec(ctx, statement, values)
 	}
-	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, statement, execopt.PrepareOptions{})
 	if err != nil {
 		return cql.Result{}, err
 	}
@@ -327,7 +327,7 @@ func v2Exec(ctx context.Context, session *gocql.Session, stmt string, values ...
 // v2Query prepares stmt, because only prepared statements return a cursor.
 func v2Query(ctx context.Context, session *gocql.Session, stmt string, values ...cql.Value) (gocql.Rows[cql.DynamicRow], error) {
 	statement := cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}
-	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, statement, execopt.PrepareOptions{})
 	if err != nil {
 		return gocql.Rows[cql.DynamicRow]{}, err
 	}
@@ -380,7 +380,7 @@ func v2ReadOne(ctx context.Context, session *gocql.Session, stmt string, values 
 }
 
 func v2CreateTable(ctx context.Context, session *gocql.Session, stmt string) error {
-	options, err := session.CompileOptions(exec.Options{Idempotent: cql.Some(true), Retry: retry.Safe{MaxAttempts: 4}})
+	options, err := session.CompileOptions(execopt.Options{Idempotent: cql.Some(true), Retry: retry.Safe{MaxAttempts: 4}})
 	if err != nil {
 		return err
 	}

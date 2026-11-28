@@ -11,7 +11,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -46,9 +46,9 @@ func v2CreateRoutingKeyspace(t testing.TB, session *gocql.Session, keyspace stri
 	}
 }
 
-func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session, stmt string, options exec.Options, values ...cql.Value) (cql.Result, error) {
+func v2SchemaRoutingExec(ctx context.Context, session *gocql.Session, stmt string, options execopt.Options, values ...cql.Value) (cql.Result, error) {
 	statement := cql.Statement[[]cql.Value, cql.EmptyRow]{CQL: stmt, Params: cql.DynamicParams}
-	prepared, err := session.Prepare(ctx, statement, exec.PrepareOptions{})
+	prepared, err := session.Prepare(ctx, statement, execopt.PrepareOptions{})
 	if err != nil {
 		return cql.Result{}, err
 	}

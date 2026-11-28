@@ -5,7 +5,7 @@ package gocql
 
 import (
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 	implTransport "github.com/scylladb/gocql/v2/internal/transport"
 )
@@ -21,13 +21,13 @@ type PreparedStream[P, R any] implSession.PreparedStream[P, R]
 
 // Worker creates a reusable stream execution with fixed options. Close the
 // worker when its goroutine finishes, and close each execution cursor before
-// reusing it. At most one exec.StreamOptions may be passed; omitting it
+// reusing it. At most one execopt.StreamOptions may be passed; omitting it
 // buffers one page. Execution overrides are the defaults of a view made by
 // With, or else the session defaults. Overrides with a Timestamp are
 // rejected with a cql.ValidationError, since every write of the worker would
 // carry it.
-func (p *PreparedStream[P, R]) Worker(options ...exec.StreamOptions) (*StreamWorker[P, R], error) {
-	var o exec.StreamOptions
+func (p *PreparedStream[P, R]) Worker(options ...execopt.StreamOptions) (*StreamWorker[P, R], error) {
+	var o execopt.StreamOptions
 	switch len(options) {
 	case 0:
 	case 1:
@@ -48,7 +48,7 @@ func (p *PreparedStream[P, R]) Worker(options ...exec.StreamOptions) (*StreamWor
 // defaults, as Prepared.With does. The view shares p's preparation; making
 // one costs one small allocation, and neither needs closing. With on a view
 // replaces its defaults.
-func (p *PreparedStream[P, R]) With(defaults exec.CompiledOptions) *PreparedStream[P, R] {
+func (p *PreparedStream[P, R]) With(defaults execopt.CompiledOptions) *PreparedStream[P, R] {
 	return (*PreparedStream[P, R])((*implSession.PreparedStream[P, R])(p).With(implSession.CompiledOptions(defaults)))
 }
 

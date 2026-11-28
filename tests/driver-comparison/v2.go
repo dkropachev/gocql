@@ -12,7 +12,7 @@ import (
 	g "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -31,7 +31,7 @@ type v2Adapter struct {
 	streams       [2]*g.PreparedStream[int32, row]
 	lwt           *g.Prepared[lwtArgs, cql.CASResult[int32]]
 	lwtRead       *g.Prepared[int32, int32]
-	boundMetadata exec.CompiledOptions // includes result metadata, as master's writes request
+	boundMetadata execopt.CompiledOptions // includes result metadata, as master's writes request
 }
 type v2Worker struct {
 	a           *v2Adapter
@@ -79,7 +79,7 @@ func connect(hosts []string) (adapter, error) {
 		s.Close()
 		return nil, e
 	}
-	boundMetadata, e := s.CompileOptions(exec.Options{IncludeMetadata: true})
+	boundMetadata, e := s.CompileOptions(execopt.Options{IncludeMetadata: true})
 	if e != nil {
 		s.Close()
 		return nil, e
@@ -120,7 +120,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 	}
 	ctx := context.Background()
 	if a.reads[idx] == nil {
-		p, e := a.s.Prepare(ctx, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, exec.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: bufferedDecoder}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -134,7 +134,7 @@ func (a *v2Adapter) prepared(paged bool) (*g.Prepared[int32, row], *g.Prepared[r
 		a.reads[idx] = p
 	}
 	if a.writes[idx] == nil {
-		p, e := a.s.Prepare(ctx, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams}, exec.PrepareOptions{})
+		p, e := a.s.Prepare(ctx, cql.Statement[row, cql.EmptyRow]{Kind: cql.OrdinaryStatement, CQL: wr, Params: rowParams}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, nil, e
 		}
@@ -152,7 +152,7 @@ func (a *v2Adapter) preparedStream(paged bool) (*g.PreparedStream[int32, row], e
 		idx, rd = 1, pageRead
 	}
 	if a.streams[idx] == nil {
-		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, exec.PrepareOptions{})
+		p, e := a.s.PrepareStream(context.Background(), cql.StreamStatement[int32, row]{Kind: cql.OrdinaryStatement, CQL: rd, Params: keyParams, Rows: streamDecoder}, execopt.PrepareOptions{})
 		if e != nil {
 			return nil, e
 		}
@@ -185,7 +185,7 @@ func (a *v2Adapter) Worker(paged, stream bool) (worker, error) {
 		writeQuery.Close()
 		return nil, e
 	}
-	streamQuery, e := readStream.Worker(exec.StreamOptions{Incremental: *incremental})
+	streamQuery, e := readStream.Worker(execopt.StreamOptions{Incremental: *incremental})
 	if e != nil {
 		readQuery.Close()
 		writeQuery.Close()

@@ -3,7 +3,7 @@
 Set `Profile.Routing` to a typed `routing.Policy` with
 `ProfileBuilder.WithRouting`, in the session's default profile
 (`config.ConfigBuilder.WithDefaultProfile`) or in
-the `exec.Options.Profile` of an execution, which you derive from the
+the `execopt.Options.Profile` of an execution, which you derive from the
 session's with `session.DefaultProfile().Builder().WithRouting(policy)` so
 that its other settings stay the session's. The default is token-aware and
 leader-aware with shuffled replicas, and `WithRouting(nil)` restores it.
@@ -37,10 +37,10 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
 
 A custom `routing.Policy` implements Pick and Fallback against
 immutable `metadata.Snapshot` and `routing.Info` values. A request pinned to a
-host with `exec.Options.HostID` goes there, to `ShardID` when set, without
+host with `execopt.Options.HostID` goes there, to `ShardID` when set, without
 consulting the policy; it takes precedence over a `routing.SingleTarget`
 policy too. A pinned shard is strict: the request fails rather than use
-another shard of the host, unless `exec.Options.AnyShardFallback` is set,
+another shard of the host, unless `execopt.Options.AnyShardFallback` is set,
 just as for `SingleTarget` and `metadata.Target.AnyShardFallback`. The split
 serves the happy
 path, where the first route serves the request:

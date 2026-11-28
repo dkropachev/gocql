@@ -19,7 +19,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	frm "github.com/scylladb/gocql/v2/internal/frame"
 )
 
@@ -185,18 +185,18 @@ func gridError(t *testing.T, stream int, code cqlerr.ErrorCode) []byte {
 // cell the row leaves empty by design.
 type gridMode struct {
 	name    string
-	exec    func(context.Context, *Session, cql.Statement[int32, cql.EmptyRow], exec.Options) (cql.Result, error)
-	one     func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, exec.Options) (bool, cql.Result, error)
-	each    func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, func(*[]byte) error, exec.Options) (cql.Result, error)
-	all     func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, exec.Options) iter.Seq2[*[]byte, error]
-	run     func(context.Context, *Session, cql.Statement[int32, []byte], exec.Options) (Rows[[]byte], func(), error)
-	runPage func(context.Context, *Session, cql.Statement[int32, []byte], cql.PageState, exec.Options) (*Page[[]byte], func(), error)
+	exec    func(context.Context, *Session, cql.Statement[int32, cql.EmptyRow], execopt.Options) (cql.Result, error)
+	one     func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, execopt.Options) (bool, cql.Result, error)
+	each    func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, func(*[]byte) error, execopt.Options) (cql.Result, error)
+	all     func(context.Context, *Session, cql.Statement[int32, []byte], *[]byte, execopt.Options) iter.Seq2[*[]byte, error]
+	run     func(context.Context, *Session, cql.Statement[int32, []byte], execopt.Options) (Rows[[]byte], func(), error)
+	runPage func(context.Context, *Session, cql.Statement[int32, []byte], cql.PageState, execopt.Options) (*Page[[]byte], func(), error)
 }
 
 const gridKey int32 = 7
 
 // gridQuery prepares statement and makes a worker-owned query with options.
-func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options exec.Options) (*Worker[int32, R], error) {
+func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options execopt.Options) (*Worker[int32, R], error) {
 	p, err := s.Prepare(ctx, statement)
 	if err != nil {
 		return nil, err
@@ -209,10 +209,10 @@ func gridQuery[R any](ctx context.Context, s *Session, statement cql.Statement[i
 }
 
 // gridShared prepares statement and compiles options for it.
-func gridShared[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options exec.Options) (*Prepared[int32, R], exec.CompiledOptions, error) {
+func gridShared[R any](ctx context.Context, s *Session, statement cql.Statement[int32, R], options execopt.Options) (*Prepared[int32, R], execopt.CompiledOptions, error) {
 	p, err := s.Prepare(ctx, statement)
 	if err != nil {
-		return nil, exec.CompiledOptions{}, err
+		return nil, execopt.CompiledOptions{}, err
 	}
 	o, err := s.CompileOptions(options)
 	return p, o, err
@@ -225,28 +225,28 @@ func gridSeqError[R any](err error) iter.Seq2[*R, error] {
 var gridModes = []gridMode{
 	{
 		name: "Throwaway",
-		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o exec.Options) (cql.Result, error) {
+		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o execopt.Options) (cql.Result, error) {
 			c, err := s.CompileOptions(o)
 			if err != nil {
 				return cql.Result{}, err
 			}
 			return s.UnpreparedExec(ctx, st, gridKey, c)
 		},
-		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) (bool, cql.Result, error) {
+		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) (bool, cql.Result, error) {
 			c, err := s.CompileOptions(o)
 			if err != nil {
 				return false, cql.Result{}, err
 			}
 			return s.UnpreparedOne(ctx, st, gridKey, dst, c)
 		},
-		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o exec.Options) (cql.Result, error) {
+		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o execopt.Options) (cql.Result, error) {
 			c, err := s.CompileOptions(o)
 			if err != nil {
 				return cql.Result{}, err
 			}
 			return s.UnpreparedEach(ctx, st, gridKey, dst, fn, c)
 		},
-		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) iter.Seq2[*[]byte, error] {
+		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) iter.Seq2[*[]byte, error] {
 			c, err := s.CompileOptions(o)
 			if err != nil {
 				return gridSeqError[[]byte](err)
@@ -256,7 +256,7 @@ var gridModes = []gridMode{
 	},
 	{
 		name: "Worker-owned",
-		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o exec.Options) (cql.Result, error) {
+		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o execopt.Options) (cql.Result, error) {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return cql.Result{}, err
@@ -264,7 +264,7 @@ var gridModes = []gridMode{
 			defer q.Close()
 			return q.Exec(ctx, gridKey)
 		},
-		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) (bool, cql.Result, error) {
+		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) (bool, cql.Result, error) {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return false, cql.Result{}, err
@@ -272,7 +272,7 @@ var gridModes = []gridMode{
 			defer q.Close()
 			return q.One(ctx, gridKey, dst)
 		},
-		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o exec.Options) (cql.Result, error) {
+		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o execopt.Options) (cql.Result, error) {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return cql.Result{}, err
@@ -280,7 +280,7 @@ var gridModes = []gridMode{
 			defer q.Close()
 			return q.Each(ctx, gridKey, dst, fn)
 		},
-		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) iter.Seq2[*[]byte, error] {
+		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) iter.Seq2[*[]byte, error] {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return gridSeqError[[]byte](err)
@@ -290,7 +290,7 @@ var gridModes = []gridMode{
 				q.All(ctx, gridKey, dst)(yield)
 			}
 		},
-		run: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], o exec.Options) (Rows[[]byte], func(), error) {
+		run: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], o execopt.Options) (Rows[[]byte], func(), error) {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return Rows[[]byte]{}, func() {}, err
@@ -298,7 +298,7 @@ var gridModes = []gridMode{
 			rows, err := q.Run(ctx, gridKey)
 			return rows, func() { _ = q.Close() }, err
 		},
-		runPage: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], state cql.PageState, o exec.Options) (*Page[[]byte], func(), error) {
+		runPage: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], state cql.PageState, o execopt.Options) (*Page[[]byte], func(), error) {
 			q, err := gridQuery(ctx, s, st, o)
 			if err != nil {
 				return nil, func() {}, err
@@ -309,35 +309,35 @@ var gridModes = []gridMode{
 	},
 	{
 		name: "Shared",
-		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o exec.Options) (cql.Result, error) {
+		exec: func(ctx context.Context, s *Session, st cql.Statement[int32, cql.EmptyRow], o execopt.Options) (cql.Result, error) {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return cql.Result{}, err
 			}
 			return p.Exec(ctx, gridKey, co)
 		},
-		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) (bool, cql.Result, error) {
+		one: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) (bool, cql.Result, error) {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return false, cql.Result{}, err
 			}
 			return p.One(ctx, gridKey, dst, co)
 		},
-		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o exec.Options) (cql.Result, error) {
+		each: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, fn func(*[]byte) error, o execopt.Options) (cql.Result, error) {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return cql.Result{}, err
 			}
 			return p.Each(ctx, gridKey, dst, fn, co)
 		},
-		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o exec.Options) iter.Seq2[*[]byte, error] {
+		all: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], dst *[]byte, o execopt.Options) iter.Seq2[*[]byte, error] {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return gridSeqError[[]byte](err)
 			}
 			return p.All(ctx, gridKey, dst, co)
 		},
-		run: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], o exec.Options) (Rows[[]byte], func(), error) {
+		run: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], o execopt.Options) (Rows[[]byte], func(), error) {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return Rows[[]byte]{}, func() {}, err
@@ -345,7 +345,7 @@ var gridModes = []gridMode{
 			rows, err := p.Run(ctx, gridKey, co)
 			return rows, func() {}, err
 		},
-		runPage: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], state cql.PageState, o exec.Options) (*Page[[]byte], func(), error) {
+		runPage: func(ctx context.Context, s *Session, st cql.Statement[int32, []byte], state cql.PageState, o execopt.Options) (*Page[[]byte], func(), error) {
 			p, co, err := gridShared(ctx, s, st, o)
 			if err != nil {
 				return nil, func() {}, err
@@ -378,7 +378,7 @@ func gridUpdate(kind cql.StatementKind) cql.Statement[int32, cql.EmptyRow] {
 // gridOptions are the options every grid call runs with, so the requests
 // show whether each row applies them the same way. Prefetch is off so that
 // the requests a call sends do not depend on timing.
-var gridOptions = exec.Options{Consistency: cql.Some(cql.Three), PageSize: 2, Prefetch: cql.Some(false)}
+var gridOptions = execopt.Options{Consistency: cql.Some(cql.Three), PageSize: 2, Prefetch: cql.Some(false)}
 
 // gridPages answers the first page with a and b and a page state, and the
 // page resumed from that state with c.
@@ -804,7 +804,7 @@ func TestExecutionGridTooManyOptions(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c := exec.CompiledOptions{}
+	c := execopt.CompiledOptions{}
 	var dst []byte
 	nop := func(*[]byte) error { return nil }
 	firstErr := func(seq iter.Seq2[*[]byte, error]) error {

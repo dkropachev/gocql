@@ -20,7 +20,7 @@ type Target struct {
 	// AnyShardFallback lets a request for ShardID use another shard of the
 	// host when ShardID has no connection or the host has no such shard. It
 	// requires ShardID. The zero value keeps the request on ShardID, as
-	// exec.Options.AnyShardFallback does for a pinned request. A
+	// execopt.Options.AnyShardFallback does for a pinned request. A
 	// conditional request, or one with SERIAL or LOCAL_SERIAL consistency,
 	// stays on ShardID regardless.
 	AnyShardFallback bool

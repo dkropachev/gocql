@@ -4,7 +4,7 @@
 package cql
 
 // Option is a value that may be absent: Set reports whether Value holds one.
-// In a setting, such as an exec.Options field, it tells an explicit zero
+// In a setting, such as an execopt.Options field, it tells an explicit zero
 // apart from the inherited default: the zero Option inherits, Some(v)
 // applies v. In a result, such as cqlerr.AttemptFailure.ShardID, an unset Option means
 // the value is not known. Nullable is the type for a CQL NULL.

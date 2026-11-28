@@ -19,7 +19,7 @@ type Profile struct {
 	Routing     routing.RoutingPolicy
 	Speculation retry.SpeculationPolicy
 	// CQLTraceSampler chooses, per request, whether to ask for a CQL trace
-	// session; nil traces only what exec.Options.CQLTrace asks for.
+	// session; nil traces only what execopt.Options.CQLTrace asks for.
 	CQLTraceSampler      func(routing2.Info) bool
 	Timeout, PageTimeout time.Duration
 	Prefetch             int

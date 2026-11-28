@@ -19,7 +19,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implCluster "github.com/scylladb/gocql/v2/internal/cluster"
 	"github.com/scylladb/gocql/v2/internal/cqlperf"
 	"github.com/scylladb/gocql/v2/internal/cqltype"
@@ -153,9 +153,9 @@ func TestWorkCountsPerf(t *testing.T) {
 						profile.Speculation = speculation{}
 					}
 					handle := new(profile)
-					options := exec.Options{Profile: handle, Idempotent: cql.Some(true)}
+					options := execopt.Options{Profile: handle, Idempotent: cql.Some(true)}
 					if mode == "default" {
-						options = exec.Options{}
+						options = execopt.Options{}
 					}
 					if enabled {
 						options.Observer = observe.Hooks{Request: observer.StartRequest, Attempt: observer.StartAttempt}
@@ -329,7 +329,7 @@ func TestWorkCountsPerf(t *testing.T) {
 									defer bound.Close()
 									profile := defaultProfile()
 									profile.Prefetch = prefetch
-									options := exec.Options{Profile: new(profile)}
+									options := execopt.Options{Profile: new(profile)}
 									values := make([]string, cells)
 									for i := range values {
 										values[i] = "q"
@@ -443,6 +443,6 @@ func runtimeQuery(t testing.TB) *implSession.Bound[cql.Bytes] {
 	return b
 }
 
-func runtimeRun(s *testSession, bound *implSession.Bound[cql.Bytes], options exec.CompiledOptions) (implSession.Rows[cql.Bytes], error) {
+func runtimeRun(s *testSession, bound *implSession.Bound[cql.Bytes], options execopt.CompiledOptions) (implSession.Rows[cql.Bytes], error) {
 	return implSession.Run(context.Background(), (*implSession.Session)(s).Core(), bound, implSession.CompiledOptions(options))
 }

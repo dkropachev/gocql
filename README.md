@@ -68,8 +68,9 @@ from arbitrary Go values. See [custom codec contracts](docs/source/custom-codecs
 `prepared.Exec(ctx, input)`, `prepared.One(ctx, input, &dst)` and
 `prepared.Each(ctx, input, &dst, fn)` run the statement once. They are safe for
 concurrent use and run on queries the statement keeps for them, so they
-allocate no per-call execution state. Each takes at most one `exec.CompiledOptions`
-from `session.CompileOptions(options)`; none uses the session default. They return
+allocate no per-call execution state. Every one of them takes at most one
+`execopt.CompiledOptions` from `session.CompileOptions(options)`; none uses the
+session default. They return
 only when the execution has finished. `One` detaches borrowed fields before
 returning, so its result remains valid.
 `Each` lends borrowed fields only until `fn` returns; clone any values retained
@@ -104,13 +105,11 @@ collected.
 the statement's options or, through `prepared.With(options).Worker()`, others;
 any number of workers can share one preparation. It resolves its options once and
 skips the one-shot calls' pool hand-off, which saves about 2 to 4 percent of
-client CPU at high concurrency, and it adds the executions whose handles
-outlive the call: `Run` returns `Rows`, iterated with `NextInto` and closed by
-the caller; and `RunPage` resumes from a saved `cql.PageState` for explicit paging.
-It also has `All`. `RunPage` takes the page size as an argument, so a size
-that changes per request needs no new options; zero uses the resolved page
-size. The page size `cql.Unpaged`, as that argument or as
-`exec.Options{PageSize: cql.Unpaged}`, requests the whole result in one
+client CPU at high concurrency. It has the statement's `Exec`, `Apply`, `One`,
+`Each`, `All`, `Run` and `RunPage`, without the per-call options. `RunPage` takes the
+page size as an argument, so a size that changes per request needs no new
+options; zero uses the resolved page size. The page size `cql.Unpaged`, as that argument or as
+`execopt.Options{PageSize: cql.Unpaged}`, requests the whole result in one
 response.
 
 `session.UnpreparedExec`, `session.UnpreparedOne`, `session.UnpreparedEach` and
@@ -136,7 +135,7 @@ borrow their pages.
 prepares directly for caller-storage decoding. Share its immutable handle and
 create a `StreamWorker` per goroutine with `prepared.Worker(streamOptions)`. It decodes into
 seeded caller storage. It buffers each page on
-normal multiplexed connections by default. `exec.StreamOptions{Incremental: true}`
+normal multiplexed connections by default. `execopt.StreamOptions{Incremental: true}`
 selects bounded incremental receive with an exclusive connection reservation. Read the
 [streaming guide](docs/source/statements/streaming.md) and run the complete
 [standalone example](examples/streaming/main.go):
@@ -181,9 +180,9 @@ TLS with `crypto/tls`, authentication with `auth.Password` or an `auth.Provider`
 routing/retry/speculation through `WithDefaultProfile` or a per-execution
 `*config.Profile`, built with `config.NewProfile` (a `config.Profile` literal is
 rejected).
-Per-execution settings are written as plain `exec.Options` values (package
-`github.com/scylladb/gocql/v2/exec`), for example
-`exec.Options{PageSize: 100}`, and compiled once into `exec.CompiledOptions`,
+Per-execution settings are written as plain `execopt.Options` values (package
+`github.com/scylladb/gocql/v2/execopt`), for example
+`execopt.Options{PageSize: 100}`, and compiled once into `execopt.CompiledOptions`,
 which every execution entry point takes. `session.CompileOptions` makes them,
 running the session's dialect checks up front and choosing the compiled form
 its protocol uses. Passing none uses the session default. Options compiled for

@@ -19,7 +19,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -317,11 +317,11 @@ func TestSelectWithoutFrom(t *testing.T) {
 					}
 					columns = result[0].Columns()
 				} else {
-					prepared, e := session.Prepare(context.Background(), statement, exec.PrepareOptions{})
+					prepared, e := session.Prepare(context.Background(), statement, execopt.PrepareOptions{})
 					if e != nil {
 						t.Fatal(e)
 					}
-					rows, err := prepared.Run(context.Background(), cql.EmptyParams{}, bindOptions(session, exec.Options{IncludeMetadata: mode == "prepared with metadata"}))
+					rows, err := prepared.Run(context.Background(), cql.EmptyParams{}, bindOptions(session, execopt.Options{IncludeMetadata: mode == "prepared with metadata"}))
 					if err != nil {
 						t.Fatal(err)
 					}
@@ -436,7 +436,7 @@ func TestSelectWithoutFrom(t *testing.T) {
 					session = createSessionWithoutKeyspace(t)
 				}
 				defer session.Close()
-				p, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, exec.PrepareOptions{})
+				p, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.DynamicRow]{CQL: tc.stmt, Params: cql.DynamicParams, Rows: cql.DynamicRows}, execopt.PrepareOptions{})
 				if err != nil {
 					t.Fatal(err)
 				}

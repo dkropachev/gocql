@@ -12,7 +12,6 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/event"
-	"github.com/scylladb/gocql/v2/exec"
 	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/retry"
 )
@@ -41,8 +40,6 @@ func TestEnumStrings(t *testing.T) {
 		{metadata.Mode(9), "Mode(9)"},
 		{retry.Next, "next"},
 		{retry.Action(9), "Action(9)"},
-		{exec.SerialLocal, "local serial"},
-		{exec.SerialOverride(9), "SerialOverride(9)"},
 		{endpoint.ConvictionControl, "control"},
 		{endpoint.ConvictionSource(9), "ConvictionSource(9)"},
 		{cqlerr.OpTypeWrite, "write"},

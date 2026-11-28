@@ -103,7 +103,7 @@ func TestOptions(t *testing.T) {
 		t.Run("RejectsInvalidValues", func(t *testing.T) {
 			invalid := map[string]Options{
 				"consistency":  {Consistency: cql.Option[cql.Consistency]{Set: true, Value: cql.Consistency(0xff)}},
-				"serial":       {SerialConsistency: SerialLocal + 1},
+				"serial":       {SerialConsistency: cql.Some(cql.Quorum)},
 				"timeout":      {Timeout: cql.Option[time.Duration]{Set: true, Value: -1}},
 				"page size":    {PageSize: -1},
 				"prefetch":     {Prefetch: cql.Option[int]{Set: true, Value: 2}},
@@ -120,8 +120,8 @@ func TestOptions(t *testing.T) {
 		})
 
 		t.Run("SerialConsistencyOverrides", func(t *testing.T) {
-			for override, want := range map[SerialOverride]cql.Consistency{SerialSerial: cql.Serial, SerialLocal: cql.LocalSerial} {
-				set, err := resolveOptionValues(nil, Options{SerialConsistency: override})
+			for _, want := range []cql.Consistency{cql.Serial, cql.LocalSerial} {
+				set, err := resolveOptionValues(nil, Options{SerialConsistency: cql.Some(want)})
 				if err != nil {
 					t.Fatal(err)
 				}

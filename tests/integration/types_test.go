@@ -41,7 +41,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	valcases "github.com/scylladb/gocql/v2/internal/tests/valuecases"
 )
 
@@ -78,7 +78,7 @@ func TestTypes(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id double PRIMARY KEY,test double)", table))
 			testNum := 7500.0
 			params := cql.Params(cql.Param("id", cql.Float64Codec, func(v *float64) float64 { return *v }), cql.Param("test", cql.Float64Codec, func(v *float64) float64 { return *v }))
-			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params}, exec.PrepareOptions{})
+			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params}, execopt.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), &testNum)
 			require.NoError(t, err)
 			got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float64()
@@ -131,7 +131,7 @@ func TestTypes(t *testing.T) {
 				require.Equal(t, want, got.BigInt().Int64())
 			}
 			cassandraWrite(t, session, insert, cql.TextValue("id"), cql.NullValue())
-			null := cassandraUnpreparedOne(t, session, selectCQL, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)), exec.Options{})
+			null := cassandraUnpreparedOne(t, session, selectCQL, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)), execopt.Options{})
 			require.False(t, null.Valid)
 			require.Zero(t, null.Value.BigInt().Sign())
 			biggie, ok := new(big.Int).SetString("36893488147419103232", 10)
@@ -148,7 +148,7 @@ func TestTypes(t *testing.T) {
 			})
 			require.False(t, decoded)
 			require.ErrorContains(t, err, "int64 range")
-			absent := cassandraUnpreparedOne(t, session, "SELECT test2 FROM "+table, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)), exec.Options{})
+			absent := cassandraUnpreparedOne(t, session, "SELECT test2 FROM "+table, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)), execopt.Options{})
 			require.False(t, absent.Valid)
 			require.Zero(t, absent.Value.BigInt().Sign())
 		})

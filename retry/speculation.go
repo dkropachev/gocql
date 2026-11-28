@@ -13,7 +13,7 @@ import (
 // SpeculationPolicy schedules additional attempts of eligible executions.
 //
 // An execution is eligible when it is idempotent (cql.Statement.Idempotent,
-// or exec.Options.Idempotent when set) and its statement is
+// or execopt.Options.Idempotent when set) and its statement is
 // cql.OrdinaryStatement: for a batch, every member's. Conditional and
 // unknown statements, SERIAL and LOCAL_SERIAL consistency, and streams never
 // speculate, whatever the profile says.
@@ -32,7 +32,7 @@ type SpeculationPolicyFunc func(Speculation) (time.Duration, bool)
 // Delay calls f.
 func (f SpeculationPolicyFunc) Delay(s Speculation) (time.Duration, bool) { return f(s) }
 
-// NoSpeculation starts no additional attempts. Set exec.Options.Speculation
+// NoSpeculation starts no additional attempts. Set execopt.Options.Speculation
 // to NoSpeculation{} to disable speculation for an execution while nil
 // inherits the profile's policy.
 //

@@ -9,7 +9,7 @@ package cqlerr
 type UnsupportedSettingError struct {
 	// Setting names what to change: the config.ConfigBuilder or
 	// config.ProfileBuilder setter that chose the setting, such as
-	// "WithCompression" ("New" for the dialect), or the exec.Options or
+	// "WithCompression" ("New" for the dialect), or the execopt.Options or
 	// gocql.PrepareOptions field, such as "Keyspace".
 	Setting string
 	// Reason says why it cannot be honored.

@@ -15,7 +15,7 @@ import (
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	implSession "github.com/scylladb/gocql/v2/internal/session"
 )
@@ -65,10 +65,10 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 	if target.IsZero() {
 		t.Fatal("no host for", node.IP())
 	}
-	pinned := exec.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
+	pinned := execopt.Options{HostID: cql.Option[cql.UUID]{Set: true, Value: target}}
 
 	statement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT id,value FROM " + keyspace + ".records", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.DynamicRows}
-	prepared := codecTestMust(s.Prepare(ctx, statement, exec.PrepareOptions{}))
+	prepared := codecTestMust(s.Prepare(ctx, statement, execopt.PrepareOptions{}))
 	type output struct {
 		ID    int32
 		Value []byte

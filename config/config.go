@@ -763,7 +763,7 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 // driver stamps each request with the time it was admitted, strictly
 // increasing per session. Only ordinary statements, and batches of them, are
 // stamped: a conditional one, declared or inferred (cql.UnknownStatement), a
-// counter write and a request with exec.Options.Timestamp set take no
+// counter write and a request with execopt.Options.Timestamp set take no
 // generated timestamp.
 func (b *ConfigBuilder) WithTimestampGenerator(next func() time.Time) *ConfigBuilder {
 	if next == nil {
@@ -909,7 +909,7 @@ type ProfileBuilder struct {
 
 // NewProfile starts a profile from the driver's defaults, which
 // ProfileBuilder lists, not from any session's: to change a few settings of
-// the profile a session runs with, for exec.Options.Profile, start from
+// the profile a session runs with, for execopt.Options.Profile, start from
 // gocql.Session.DefaultProfile().Builder() or Config.DefaultProfile().Builder()
 // instead.
 func NewProfile() *ProfileBuilder {
@@ -959,7 +959,7 @@ func (p *ProfileBuilder) NoSerialConsistency() *ProfileBuilder {
 }
 
 // WithTimeout bounds one execution, including retries and every page Rows
-// fetches. A set exec.Options.Timeout replaces it for one execution, and the
+// fetches. A set execopt.Options.Timeout replaces it for one execution, and the
 // call's context can end the execution sooner. Zero leaves executions bounded
 // only by their context. Default 30s.
 func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
@@ -967,7 +967,7 @@ func (p *ProfileBuilder) WithTimeout(d time.Duration) *ProfileBuilder {
 	return p
 }
 
-// WithPageTimeout bounds fetching one page; a set exec.Options.PageTimeout
+// WithPageTimeout bounds fetching one page; a set execopt.Options.PageTimeout
 // replaces it for one execution. Default none.
 func (p *ProfileBuilder) WithPageTimeout(d time.Duration) *ProfileBuilder {
 	p.profile.PageTimeout = d
@@ -1017,7 +1017,7 @@ func (p *ProfileBuilder) WithRouting(policy routing.Policy) *ProfileBuilder {
 // WithIdempotent chooses whether every statement the profile runs is safe to
 // run more than once, as cql.Statement.Idempotent marks one statement: with
 // true, retry.Safe retries and speculation applies to all of them. With
-// false, each statement's own Idempotent decides. exec.Options.Idempotent
+// false, each statement's own Idempotent decides. execopt.Options.Idempotent
 // overrides both for one execution. It is v1's ClusterConfig
 // DefaultIdempotence. Default false.
 func (p *ProfileBuilder) WithIdempotent(on bool) *ProfileBuilder {
@@ -1028,7 +1028,7 @@ func (p *ProfileBuilder) WithIdempotent(on bool) *ProfileBuilder {
 // WithCQLTraceSampler sets a function the driver asks, once per request as
 // it is admitted, whether to record a server-side CQL trace session of the
 // request's attempts, so that a sample of production traffic can be traced
-// without setting exec.Options.CQLTrace on chosen calls. It receives the
+// without setting execopt.Options.CQLTrace on chosen calls. It receives the
 // request's routing.Info: its keyspace, table, token, consistency and kind.
 // A request whose options set CQLTrace is traced without asking. The
 // function is shared by every request of the profile and must be safe for

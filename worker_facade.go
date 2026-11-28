@@ -138,7 +138,7 @@ func (w *Worker[P, R]) Wait(ctx context.Context) error { return w.internal().Wai
 
 // StreamWorker owns reusable state for streaming into seeded caller storage.
 // Close it when done and close each Run cursor before starting another run.
-// Page buffering is the default; exec.StreamOptions.Incremental reserves a connection
+// Page buffering is the default; execopt.StreamOptions.Incremental reserves a connection
 // for bounded incremental receive. It must not be copied or used concurrently.
 //
 // PreparedStream.Worker makes a StreamWorker. A zero StreamWorker's Run returns a

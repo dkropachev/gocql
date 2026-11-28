@@ -42,7 +42,7 @@ partition, and fails on its result columns.
 
 A profile's `Idempotent` does not mark a conditional statement, a SERIAL
 read or a counter write: replaying one could apply it twice. The statement's
-own `Idempotent` or `exec.Options.Idempotent` still does.
+own `Idempotent` or `execopt.Options.Idempotent` still does.
 
 Use `CASRows(decoder)` to decode the applied flag and the returned row through a
 typed `CASResult[R]`. `cql.CASApplied`, which is `CASRows[cql.EmptyRow](nil)`,
@@ -52,10 +52,11 @@ and leaves nothing to close, or, to read its rows, with
 `session.RunConditionalBatch`, whose rows iterate like `Rows` and whose
 `Applied` reports whether the batch applied. Both reject a batch whose
 members are all known not to be conditional.
-The ordinary `exec.Options` carries regular and serial consistency; profile defaults
-apply when an explicit override is absent. `exec.Options.SerialConsistency` is an
-`exec.SerialOverride`: `exec.SerialInherit` (the zero value) keeps the profile's,
-and `exec.SerialSerial` and `exec.SerialLocal` send SERIAL or LOCAL_SERIAL. A profile whose
+The ordinary `execopt.Options` carries regular and serial consistency; profile defaults
+apply when an explicit override is absent. `execopt.Options.SerialConsistency` is a
+`cql.Option[cql.Consistency]`: unset keeps the profile's, and `cql.Some(cql.Serial)` or
+`cql.Some(cql.LocalSerial)` sends SERIAL or LOCAL_SERIAL; another level is rejected
+with a `cql.ValidationError` when the options are compiled. A profile whose
 `SerialConsistency` is unset sends none, and the server applies its default. Inspect every returned row and close
 the result rows even when the condition was not applied.
 

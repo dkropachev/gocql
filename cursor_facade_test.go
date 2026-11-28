@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // wantColumns fails t unless columns are exactly the named columns of
@@ -60,7 +60,7 @@ func TestCursorColumns(t *testing.T) {
 		wantColumns(t, "Page.Columns", page.Columns(), gridValueColumn)
 	})
 	t.Run("RowStream", func(t *testing.T) {
-		q, err := f.ps.Worker(exec.StreamOptions{})
+		q, err := f.ps.Worker(execopt.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}

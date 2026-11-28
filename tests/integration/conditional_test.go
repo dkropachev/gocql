@@ -36,7 +36,7 @@ import (
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 func TestConditional(t *testing.T) {
@@ -55,9 +55,9 @@ func TestConditional(t *testing.T) {
 		insertCQL := fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?) IF NOT EXISTS", table)
 		values := []cql.Value{cql.TextValue(title), revValue, cql.TimestampValue(modified)}
 		insert := cassandraCASPrepared(t, session, insertCQL, cql.DynamicRows)
-		first := cassandraReadOne(t, session, insert, values, exec.Options{})
+		first := cassandraReadOne(t, session, insert, values, execopt.Options{})
 		require.True(t, first.Applied)
-		second := cassandraReadOne(t, session, insert, values, exec.Options{})
+		second := cassandraReadOne(t, session, insert, values, execopt.Options{})
 		require.False(t, second.Applied)
 		require.True(t, second.Previous.Set)
 		require.Equal(t, title, cassandraText(t, second.Previous.Value, "title"))
@@ -66,7 +66,7 @@ func TestConditional(t *testing.T) {
 		require.Equal(t, cql.UUID(rev), gotRev)
 		deleteCQL := fmt.Sprintf("DELETE FROM %s WHERE title=? AND revid=? IF last_modified=?", table)
 		failedDelete := cassandraCASPrepared(t, session, deleteCQL, cql.DynamicRows)
-		deleted := cassandraReadOne(t, session, failedDelete, []cql.Value{cql.TextValue(title), revValue, cql.TimestampValue(modified + 10000)}, exec.Options{})
+		deleted := cassandraReadOne(t, session, failedDelete, []cql.Value{cql.TextValue(title), revValue, cql.TimestampValue(modified + 10000)}, execopt.Options{})
 		require.False(t, deleted.Applied)
 		require.Equal(t, int64(modified), cassandraInt(t, deleted.Previous.Value, "last_modified"))
 		// A previous-value decoder whose field type does not match its column
@@ -74,14 +74,14 @@ func TestConditional(t *testing.T) {
 		// type mismatch can fail.
 		type modifiedAsInt struct{ Modified int32 }
 		incompatible := cql.Row(cql.Column("last_modified", cql.Int32Codec, func(r *modifiedAsInt) *int32 { return &r.Modified }))
-		invalid, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[modifiedAsInt]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(incompatible)}, exec.PrepareOptions{})
+		invalid, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[modifiedAsInt]]{CQL: deleteCQL, Params: cql.DynamicParams, Rows: cql.CASRows(incompatible)}, execopt.PrepareOptions{})
 		if err == nil {
 			rows, e := invalid.Run(context.Background(), []cql.Value{cql.TextValue(title), revValue, cql.TimestampValue(modified + 10000)})
 			defer rows.Close()
 			err = e
 		}
 		require.Error(t, err)
-		require.True(t, cassandraReadOne(t, session, failedDelete, values, exec.Options{}).Applied)
+		require.True(t, cassandraReadOne(t, session, failedDelete, values, execopt.Options{}).Applied)
 		if err := truncateTable(t, session, table); err != nil {
 			t.Fatal(err)
 		}
@@ -113,7 +113,7 @@ func TestConditional(t *testing.T) {
 		runCASBatch(casBatch(insert, otherValues), false, 1)
 		seed := &gocql.Batch{Kind: cql.LoggedBatch}
 		conditional := &gocql.Batch{Kind: cql.LoggedBatch}
-		seedInsert := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), exec.PrepareOptions{})
+		seedInsert := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified) VALUES (?,?,?)", table), execopt.PrepareOptions{})
 		conditionalUpdate := cassandraCASPrepared(t, session, fmt.Sprintf("UPDATE %s SET last_modified=? WHERE title=? AND revid=? IF last_modified=?", table), cql.DynamicRows)
 		for _, id := range []string{"2c3af400-73a4-11e5-9381-29463d90c3f0", "3e4ad2f1-73a4-11e5-9381-29463d90c3f0"} {
 			r, e := cql.ParseUUID(id)
@@ -122,11 +122,11 @@ func TestConditional(t *testing.T) {
 			cassandraAdd(t, seed, seedInsert, []cql.Value{cql.TextValue("_foo"), rv, cql.TimestampValue(modified)})
 			cassandraAdd(t, conditional, conditionalUpdate, []cql.Value{cql.TimestampValue(modified + 10000), cql.TextValue("_foo"), rv, cql.TimestampValue(modified + 20000)})
 		}
-		cassandraBatch(t, session, seed, exec.Options{})
+		cassandraBatch(t, session, seed, execopt.Options{})
 		runCASBatch(conditional, false, 2)
 		// CASRows rejects ordinary SELECTs and unconditional batches; the former
 		// MapScanCAS silent false result is replaced by validated result metadata.
-		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, exec.PrepareOptions{})
+		_, err = session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[cql.DynamicRow]]{CQL: fmt.Sprintf("SELECT revid FROM %s WHERE title=?", table), Params: cql.DynamicParams, Rows: cql.CASRows(cql.DynamicRows)}, execopt.PrepareOptions{})
 		require.Error(t, err)
 		for i := 0; i < 2; i++ {
 			rows, err := session.RunConditionalBatch(context.Background(), seed, cql.CASRows(cql.DynamicRows))
@@ -139,14 +139,14 @@ func TestConditional(t *testing.T) {
 		for _, batch := range []bool{false, true} {
 			if batch {
 				b := &gocql.Batch{Kind: cql.LoggedBatch}
-				cassandraAdd(t, b, cassandraDynamicPrepared(t, session, updateCQL, exec.PrepareOptions{}), updateValues)
+				cassandraAdd(t, b, cassandraDynamicPrepared(t, session, updateCQL, execopt.PrepareOptions{}), updateValues)
 				rows, e := session.RunConditionalBatch(context.Background(), b, badDecoder)
 				rows.Close()
 				require.Error(t, e)
 			} else {
 				// CAS result columns are known only at execution, so preparing with
 				// a mismatched previous-value decoder succeeds and Run fails.
-				bad, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[bool]]{CQL: updateCQL, Params: cql.DynamicParams, Rows: badDecoder}, exec.PrepareOptions{})
+				bad, err := session.Prepare(context.Background(), cql.Statement[[]cql.Value, cql.CASResult[bool]]{CQL: updateCQL, Params: cql.DynamicParams, Rows: badDecoder}, execopt.PrepareOptions{})
 				require.NoError(t, err)
 				rows, e := bad.Run(context.Background(), updateValues)
 				rows.Close()
@@ -165,8 +165,8 @@ func TestConditional(t *testing.T) {
 		modified := cql.Timestamp(time.Now().UnixMilli())
 		insert := cassandraCASPrepared(t, session, fmt.Sprintf("INSERT INTO %s(title,revid,last_modified,deleted) VALUES(?,?,?,?) IF NOT EXISTS", table), cql.DynamicRows)
 		values := []cql.Value{cql.TextValue("baz"), cql.TimeUUIDValue(cql.TimeUUID(rev)), cql.TimestampValue(modified), cql.BooleanValue(false)}
-		require.True(t, cassandraReadOne(t, session, insert, values, exec.Options{}).Applied)
-		result := cassandraReadOne(t, session, insert, values, exec.Options{})
+		require.True(t, cassandraReadOne(t, session, insert, values, execopt.Options{}).Applied)
+		result := cassandraReadOne(t, session, insert, values, execopt.Options{})
 		require.False(t, result.Applied)
 		require.True(t, result.Previous.Set)
 		row := result.Previous.Value
@@ -187,7 +187,7 @@ func TestConditional(t *testing.T) {
 		stmt := fmt.Sprintf("INSERT INTO %s(foo,bar) VALUES(?,?) IF NOT EXISTS", table)
 		values := []cql.Value{cql.TextValue("baz"), cql.TextValue("baz")}
 		ignored := cql.Row(cql.IgnoreColumn[cql.EmptyRow]("foo"), cql.IgnoreColumn[cql.EmptyRow]("bar"))
-		require.True(t, cassandraReadOne(t, session, cassandraCASPrepared(t, session, stmt, ignored), values, exec.Options{}).Applied)
+		require.True(t, cassandraReadOne(t, session, cassandraCASPrepared(t, session, stmt, ignored), values, execopt.Options{}).Applied)
 		type result struct{ Text cql.Text }
 		for _, selected := range []string{"foo", "bar"} {
 			other := "foo"
@@ -195,7 +195,7 @@ func TestConditional(t *testing.T) {
 				other = "bar"
 			}
 			decoder := cql.Row(cql.Column(selected, cql.TextViewCodec, func(v *result) *cql.Text { return &v.Text }), cql.IgnoreColumn[result](other))
-			got := cassandraReadOne(t, session, cassandraCASPrepared(t, session, stmt, decoder), values, exec.Options{})
+			got := cassandraReadOne(t, session, cassandraCASPrepared(t, session, stmt, decoder), values, execopt.Options{})
 			require.False(t, got.Applied)
 			require.True(t, got.Previous.Set)
 			require.Equal(t, "baz", fmt.Sprint(got.Previous.Value.Text))
@@ -210,21 +210,22 @@ func TestConditional(t *testing.T) {
 		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY)", table))
 		for i, tc := range []struct {
 			name     string
-			override exec.SerialOverride
-		}{{"Inherit", exec.SerialInherit}, {"Serial", exec.SerialSerial}, {"Local", exec.SerialLocal}, {"Unknown", exec.SerialLocal + 1}} {
+			override cql.Option[cql.Consistency]
+			valid    bool
+		}{{"Inherit", cql.Option[cql.Consistency]{}, true}, {"Serial", cql.Some(cql.Serial), true}, {"Local", cql.Some(cql.LocalSerial), true}, {"NotSerial", cql.Some(cql.Quorum), false}} {
 			t.Run(tc.name, func(t *testing.T) {
-				insert := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), exec.PrepareOptions{})
+				insert := cassandraWritePrepared(t, session, fmt.Sprintf("INSERT INTO %s(id) VALUES (?)", table), execopt.PrepareOptions{})
 				// Serial consistency is checked when the options are built.
-				options, err := session.CompileOptions(exec.Options{SerialConsistency: tc.override})
+				options, err := session.CompileOptions(execopt.Options{SerialConsistency: tc.override})
 				if err == nil {
 					_, err = insert.Exec(context.Background(), []cql.Value{cql.IntValue(int32(i + 1))}, options)
 				}
-				if tc.override <= exec.SerialLocal {
+				if tc.valid {
 					require.NoError(t, err)
 					require.Equal(t, int64(i+1), cassandraInt(t, cassandraRead(t, session, fmt.Sprintf("SELECT id FROM %s WHERE id=?", table), cql.IntValue(int32(i+1))), "id"))
 				} else {
 					require.Error(t, err)
-					require.Contains(t, err.Error(), "serial consistency")
+					require.Contains(t, err.Error(), "SerialConsistency")
 				}
 			})
 		}

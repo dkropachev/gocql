@@ -11,7 +11,7 @@ import (
 
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
-	"github.com/scylladb/gocql/v2/exec"
+	"github.com/scylladb/gocql/v2/execopt"
 )
 
 // lifetimeFixture is a session with one fake node answering gridPages, a
@@ -22,7 +22,7 @@ type lifetimeFixture struct {
 	ctx     context.Context
 	p       *Prepared[int32, []byte]
 	ps      *PreparedStream[int32, []byte]
-	options exec.CompiledOptions
+	options execopt.CompiledOptions
 }
 
 func newLifetimeFixture(t *testing.T) *lifetimeFixture {
@@ -108,7 +108,7 @@ func TestHandleLifetimes(t *testing.T) {
 			t.Errorf("Worker.Exec after Close returned %v, want cqlerr.ErrClosed", err)
 		}
 
-		sq, err := f.ps.Worker(exec.StreamOptions{})
+		sq, err := f.ps.Worker(execopt.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -153,7 +153,7 @@ func TestHandleLifetimes(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		sq, err := f.ps.Worker(exec.StreamOptions{})
+		sq, err := f.ps.Worker(execopt.StreamOptions{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -297,7 +297,7 @@ func TestHandleLifetimes(t *testing.T) {
 				closeQuery := q.Close
 				switch kind {
 				case "RowStream":
-					sq, err := f.ps.Worker(exec.StreamOptions{})
+					sq, err := f.ps.Worker(execopt.StreamOptions{})
 					if err != nil {
 						t.Fatal(err)
 					}

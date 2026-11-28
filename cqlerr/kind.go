@@ -16,7 +16,7 @@ const (
 	KindUnknown Kind = iota
 	// KindTimeout: the server or the driver gave up waiting. The driver's
 	// errors of this kind that reach a caller are ErrRequestTimeout (the
-	// profile's or exec.Options' Timeout or PageTimeout ran out) and
+	// profile's or execopt.Options' Timeout or PageTimeout ran out) and
 	// ErrTimeoutNoResponse (an attempt got no response from its connection
 	// in time); the server's are ReadTimeoutError, WriteTimeoutError and
 	// CASWriteUnknownError; a network error that reports Timeout, such as a
