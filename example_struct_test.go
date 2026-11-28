@@ -46,10 +46,7 @@ func ExampleParamsOf() {
 
 	// A prepared statement is shared by every goroutine; Exec, One and Each run
 	// it once with nothing to close.
-	insert, err := session.Prepare(ctx, cql.Statement[Tweet, cql.EmptyRow]{
-		CQL:    "INSERT INTO tweet (timeline, id, text) VALUES (?, ?, ?)",
-		Params: tweetParams,
-	})
+	insert, err := session.Prepare(ctx, cql.Write("INSERT INTO tweet (timeline, id, text) VALUES (?, ?, ?)", tweetParams))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -57,11 +54,7 @@ func ExampleParamsOf() {
 		log.Fatal(err)
 	}
 
-	selectTweets, err := session.Prepare(ctx, cql.Statement[string, Tweet]{
-		CQL:    "SELECT id, timeline, text FROM tweet WHERE timeline = ?",
-		Params: cql.OneParam(cql.StringCodec),
-		Rows:   tweetRow,
-	})
+	selectTweets, err := session.Prepare(ctx, cql.Select("SELECT id, timeline, text FROM tweet WHERE timeline = ?", cql.OneParam(cql.StringCodec), tweetRow))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,10 +86,7 @@ func ExamplePrepared_Worker() {
 	defer session.Close()
 
 	// The same struct binds a statement that uses a subset of its columns.
-	edit, err := session.Prepare(ctx, cql.Statement[Tweet, cql.EmptyRow]{
-		CQL:    "UPDATE tweet SET text = ? WHERE timeline = ? AND id = ?",
-		Params: tweetParams,
-	})
+	edit, err := session.Prepare(ctx, cql.Write("UPDATE tweet SET text = ? WHERE timeline = ? AND id = ?", tweetParams))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -192,7 +192,7 @@ func TestZeroValuesRejected(t *testing.T) {
 	_, err = gocql.CASBatchRows[cql.EmptyRow]{}.Applied()
 	requireValidation(t, "zero CASBatchRows.Applied", err)
 
-	_, err = cql.Value{}.Signed()
+	_, err = cql.Value{}.Int64()
 	requireValidation(t, "zero Value.Signed", err)
 	_, err = cql.DecodeValue(cql.Int32Codec, cql.EncodedValue{})
 	requireValidation(t, "DecodeValue(zero EncodedValue)", err)

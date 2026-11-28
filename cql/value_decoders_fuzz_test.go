@@ -61,20 +61,19 @@ func fuzzDecoders(t *testing.T) []func(ColumnSpec, wire.Chain, *wire.Lease) {
 	pair := Row(ColumnAt(0, Int32Codec, func(p *Pair[int32, string]) *int32 { return &p.First }),
 		ColumnAt(1, StringCodec, func(p *Pair[int32, string]) *string { return &p.Second }))
 	udtType := CodecTestMust(UDTType("ks", "u", ColumnSpec{Name: "a", Type: intType}, ColumnSpec{Name: "b", Type: textType}))
-	udtOptions := CodecTestMust(UDTOptionsFor(udtType))
-	udtOptions.AllowMissingFields = true
+	udtName := CodecTestMust(UDTNameOf(udtType))
 	udt := Row(Column("a", Int32Codec, func(p *Pair[int32, string]) *int32 { return &p.First }),
 		Column("b", StringCodec, func(p *Pair[int32, string]) *string { return &p.Second }))
 	return []func(ColumnSpec, wire.Chain, *wire.Lease){
 		fuzzDecoder(CodecTestMust(ListType(intType)), ListCodec(Int32Codec)),
 		fuzzDecoder(CodecTestMust(SetType(textType)), SetCodec(StringCodec)),
-		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BytesCodec))),
-		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, TextCodec)),
+		fuzzDecoder(CodecTestMust(ListType(CodecTestMust(ListType(BlobType)))), ListCodec(ListCodec(BytesViewCodec))),
+		fuzzDecoder(CodecTestMust(MapType(intType, textType)), MapCodec(Int32Codec, TextViewCodec)),
 		fuzzDecoder(CodecTestMust(MapType(intType, textType)), GoMapCodec(Int32Codec, StringCodec)),
 		fuzzDecoder(CodecTestMust(VectorType(floatType, 3)), VectorCodec(Float32Codec)),
 		fuzzDecoder(CodecTestMust(VectorType(textType, 2)), VectorCodec(StringCodec)),
 		fuzzDecoder(CodecTestMust(TupleType(intType, textType)), TupleDecoder(pair)),
-		fuzzDecoder(udtType, UDTDecoder(udt, udtOptions)),
+		fuzzDecoder(udtType, UDTDecoder(udt, udtName, AllowMissingFields())),
 		fuzzDecoder(CodecTestMust(ScalarType(KindVarint)), VarintCodec),
 		fuzzDecoder(CodecTestMust(ScalarType(KindDecimal)), DecimalCodec),
 		fuzzDecoder(CodecTestMust(ScalarType(KindDuration)), DurationCodec),
@@ -101,9 +100,9 @@ func fuzzDecoder[T any](typ DataType, decoder Decoder[T]) func(ColumnSpec, wire.
 // walkValue reads every part of a dynamic value.
 func walkValue(v Value, depth int) {
 	_, _ = v.Bool()
-	_, _ = v.Signed()
-	_, _ = v.Float()
-	_, _ = v.Text()
+	_, _ = v.Int64()
+	_, _ = v.Float64()
+	_, _ = v.TextView()
 	_, _ = v.Bytes()
 	_, _ = v.Varint()
 	_, _ = v.Decimal()

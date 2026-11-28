@@ -72,13 +72,13 @@ func dropLeftoverKeyspaces() error {
 			rows.Close()
 			return err
 		}
-		name, err := value.Text()
+		name, err := value.TextView()
 		if err != nil {
 			rows.Close()
 			return err
 		}
-		if leftover(name.String()) {
-			names = append(names, name.String())
+		if leftover(fmt.Sprint(name)) {
+			names = append(names, fmt.Sprint(name))
 		}
 	}
 	if err := rows.Close(); err != nil {

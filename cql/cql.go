@@ -8,7 +8,9 @@
 // A Statement pairs CQL text with a ParamEncoder and a RowDecoder. Params,
 // Param and ParamAt map parameters; Row, RowInto, Column, ColumnAt and
 // OneColumn map buffered result rows; ParamsOf and RowOf map the fields of a
-// struct.
+// struct, deriving each field's codec from its Go type: built-in codecs for
+// the scalar types, a type's own CQLCodec method, and slices, arrays,
+// pointers, maps, Nullable and Pair built from those.
 //
 // ListCodec, SetCodec and VectorCodec encode and eagerly decode []T. MapCodec
 // uses []Entry[K, V], preserving server order and supporting non-comparable
@@ -61,7 +63,9 @@
 // decoding, and a decoder reports StreamCapacityError instead of growing
 // them. Text, ascii, blob and varint values decode into []byte, so
 // applications choose separate row structs when buffered and streaming field
-// types differ.
+// types differ. StreamString, StreamPointer, StreamGoMap,
+// StreamTimestampTime, StreamTimeDuration and StreamDecimalValue allocate
+// each value instead, for fields an application keeps.
 //
 // StreamList, StreamSet, StreamVector and StreamMap decode into the same Go
 // containers as ListCodec, SetCodec, VectorCodec and MapCodec, with streaming

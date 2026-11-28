@@ -29,7 +29,10 @@ import (
 // into final caller storage. The largest fixed scalar scratch is 16 bytes.
 
 type streamScalarCodec[T any] struct {
-	decode            func(*StreamValueReader) (T, error)
+	decode func(*StreamValueReader) (T, error)
+	// narrow returns the decoder of a narrower kind the decoder widens
+	// from, as the buffered codecs do, or false.
+	narrow            func(Kind) (streamScalarCodec[T], bool)
 	kind, alternative Kind
 	minimum, maximum  int64
 }
@@ -41,7 +44,14 @@ type streamScalarPlan[T any] struct {
 
 func (c streamScalarCodec[T]) Compile(t DataType) (CompiledStreamValue[T], error) {
 	if err := checkScalarType(t, c.kind, c.alternative); err != nil {
-		return nil, err
+		if c.narrow == nil {
+			return nil, err
+		}
+		n, ok := c.narrow(t.Kind())
+		if !ok {
+			return nil, err
+		}
+		c = n
 	}
 	return streamScalarPlan[T]{decode: c.decode, typ: t, minimum: c.minimum, maximum: c.maximum}, nil
 }
@@ -99,7 +109,24 @@ func streamCounter() StreamDecoder[int64] {
 	c.alternative = KindCounter
 	return c
 }
+
+// streamInteger decodes the kind of size bytes into T and, for an integer
+// kind, widens the narrower integer kinds.
 func streamInteger[T ~int8 | ~int16 | ~int32 | ~int64](kind Kind, size int64) StreamDecoder[T] {
+	c := exactStreamInteger[T](kind, size).(streamScalarCodec[T])
+	if integerKindWidth(kind) != 0 {
+		c.narrow = func(k Kind) (streamScalarCodec[T], bool) {
+			w := integerKindWidth(k)
+			if w == 0 || w >= size || k == KindCounter {
+				return streamScalarCodec[T]{}, false
+			}
+			return exactStreamInteger[T](k, w).(streamScalarCodec[T]), true
+		}
+	}
+	return c
+}
+
+func exactStreamInteger[T ~int8 | ~int16 | ~int32 | ~int64](kind Kind, size int64) StreamDecoder[T] {
 	return streamFixed(kind, size, func(b []byte) (T, error) {
 		switch len(b) {
 		case 1:
@@ -159,7 +186,9 @@ var (
 	// StreamInt8 decodes tinyint into int8.
 	StreamInt8 = streamInteger[int8](KindTinyInt, 1)
 
-	// StreamInt16 decodes smallint into int16.
+	// StreamInt16 decodes smallint into int16. It widens tinyint, and
+	// StreamInt32 and StreamInt64 widen every narrower integer, as the
+	// buffered integer codecs do.
 	StreamInt16 = streamInteger[int16](KindSmallInt, 2)
 
 	// StreamInt32 decodes int into int32.
@@ -174,8 +203,19 @@ var (
 	// StreamFloat32 decodes float into float32.
 	StreamFloat32 = streamFixed(KindFloat, 4, func(b []byte) (float32, error) { return math.Float32frombits(binary.BigEndian.Uint32(b)), nil })
 
-	// StreamFloat64 decodes double into float64.
-	StreamFloat64 = streamFixed(KindDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil })
+	// StreamFloat64 decodes double into float64, and widens float.
+	StreamFloat64 StreamDecoder[float64] = func() streamScalarCodec[float64] {
+		c := streamFixed(KindDouble, 8, func(b []byte) (float64, error) { return math.Float64frombits(binary.BigEndian.Uint64(b)), nil }).(streamScalarCodec[float64])
+		c.narrow = func(k Kind) (streamScalarCodec[float64], bool) {
+			if k != KindFloat {
+				return streamScalarCodec[float64]{}, false
+			}
+			return streamFixed(KindFloat, 4, func(b []byte) (float64, error) {
+				return float64(math.Float32frombits(binary.BigEndian.Uint32(b))), nil
+			}).(streamScalarCodec[float64]), true
+		}
+		return c
+	}()
 
 	// StreamDate decodes date into Date.
 	StreamDate = streamFixed(KindDate, 4, func(b []byte) (Date, error) { return Date(int64(binary.BigEndian.Uint32(b)) - (1 << 31)), nil })

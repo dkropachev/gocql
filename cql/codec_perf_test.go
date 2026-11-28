@@ -44,13 +44,13 @@ func TestCodecPerf(t *testing.T) {
 						}
 						var view Bytes
 						if text {
-							v, e := DecodeValue(TextCodec, encoded)
+							v, e := DecodeValue(TextViewCodec, encoded)
 							if e != nil {
 								t.Fatal(e)
 							}
 							view = v.Bytes()
 						} else {
-							view, err = DecodeValue(BytesCodec, encoded)
+							view, err = DecodeValue(BytesViewCodec, encoded)
 							if err != nil {
 								t.Fatal(err)
 							}
@@ -115,7 +115,7 @@ func TestCodecPerf(t *testing.T) {
 		}
 		cols := NewColumns(ColumnSpec{Name: "n", Type: integer}, ColumnSpec{Name: "text", Type: text}, ColumnSpec{Name: "blob", Type: blob}, ColumnSpec{Name: "list", Type: list}, ColumnSpec{Name: "nullable", Type: integer}, ColumnSpec{Name: "empty", Type: integer}, ColumnSpec{Name: "dynamic", Type: integer})
 		body := encodeTestParams(t, cols, DynamicParams, []Value{IntValue(3), TextValue("safe-🙂"), BlobValue([]byte("borrowed")), CodecTestMust(ListValue(integer, IntValue(7))), IntValue(4), IntValue(5), IntValue(6)})
-		decoder := Row(Column("n", Int32Codec, func(r *result) *int32 { return &r.N }), Column("text", TextCodec, func(r *result) *Text { return &r.Text }), Column("blob", BytesCodec, func(r *result) *Bytes { return &r.Blob }), Column("list", ListDecoder(Int32Codec), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32Codec), func(r *result) *Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32Codec), func(r *result) *MaybeEmpty[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
+		decoder := Row(Column("n", Int32Codec, func(r *result) *int32 { return &r.N }), Column("text", TextViewCodec, func(r *result) *Text { return &r.Text }), Column("blob", BytesViewCodec, func(r *result) *Bytes { return &r.Blob }), Column("list", ListDecoder(Int32Codec), func(r *result) *[]int32 { return &r.List }), Column("nullable", NullableDecoder(Int32Codec), func(r *result) *Nullable[int32] { return &r.Nullable }), Column("empty", EmptyCodec(Int32Codec), func(r *result) *MaybeEmpty[int32] { return &r.Empty }), Column("dynamic", DynamicCodec, func(r *result) *Value { return &r.Dynamic }))
 		plan := CodecTestMust(decoder.Compile(cols))
 		lease := wire.NewLease(body, nil)
 		var dst result
@@ -241,7 +241,7 @@ func TestCodecPerf(t *testing.T) {
 			})
 			t.Run(fmt.Sprintf("udt%d", n), func(t *testing.T) {
 				udt := CodecTestMust(UDTType("ks", "record", ColumnSpec{Name: "n", Type: integer}))
-				o := UDTOptions{Keyspace: "ks", Name: "record"}
+				o := UDTName("ks", "record")
 				sequenceWork(t, CodecTestMust(ListType(udt)), ListEncoder(UDTEncoder(OneParam(Int32Codec), o)), ListDecoder(UDTDecoder(OneColumn(Int32Codec), o)), make([]int32, n))
 			})
 			t.Run(fmt.Sprintf("map%d", n), func(t *testing.T) {

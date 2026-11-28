@@ -12,8 +12,8 @@ import (
 type point struct{ X, Y int32 }
 
 var pointCodec = cql.ConvertCodec(cql.Int64Codec,
-	func(p point) int64 { return int64(p.X)<<32 | int64(uint32(p.Y)) },
-	func(v int64) point { return point{X: int32(v >> 32), Y: int32(v)} })
+	func(p point) (int64, error) { return int64(p.X)<<32 | int64(uint32(p.Y)), nil },
+	func(v int64) (point, error) { return point{X: int32(v >> 32), Y: int32(v)}, nil })
 
 // valueMapped and pointerMapped have a field reflection cannot map, so only
 // their CQLFields methods make ParamsOf and RowOf succeed.

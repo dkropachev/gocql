@@ -66,28 +66,30 @@ func serializationVectorGate(t *testing.T, allTypes bool) {
 	}
 }
 
-var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return ownedBytesForTest(v) })
-var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+var serializationBlob = cql.ConvertCodec(cql.BytesViewCodec, func(v []byte) (cql.Bytes, error) { return cql.BorrowBytes(v), nil }, func(v cql.Bytes) ([]byte, error) { return ownedBytesForTest(v), nil })
+var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) (cql.Timestamp, error) {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
 	}
-	return n
-}, func(v cql.Timestamp) time.Time {
-	return v.Time()
+	return n, nil
+}, func(v cql.Timestamp) (time.Time, error) {
+	return v.Time(), nil
 })
-var serializationDate = cql.ConvertCodec(cql.DateCodec, func(v time.Time) cql.Date {
+var serializationDate = cql.ConvertCodec(cql.DateCodec, func(v time.Time) (cql.Date, error) {
 	n, e := cql.DateFromTime(v)
 	if e != nil {
 		panic(e)
 	}
-	return n
-}, func(v cql.Date) time.Time {
-	return v.Time()
+	return n, nil
+}, func(v cql.Date) (time.Time, error) {
+	return v.Time(), nil
 })
-var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
-	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
-}, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
+var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) (cql.Decimal, error) {
+	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}, nil
+}, func(v cql.Decimal) (inf.Dec, error) {
+	return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)), nil
+})
 
 type serializationVectorCase struct {
 	name, stmt string
@@ -279,8 +281,8 @@ func TestVector(t *testing.T) {
 			times := []time.Time{parse("15:04:05", "01:00:00"), parse("15:04:05", "15:23:59"), parse("15:04:05.000", "10:31:45.987")}
 			// The historical time subcase stores timestamp values anchored at year zero.
 			// Preserve that wire coverage alongside the scalar time fixtures above.
-			ascii := cql.ConvertCodec(cql.TextCodec, func(s string) cql.Text { return codecTestMust(cql.BorrowText(s)) }, func(t cql.Text) string { return t.String() })
-			uintVarint := cql.ConvertCodec(cql.VarintCodec, func(n uint64) cql.Varint { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)) }, func(n cql.Varint) uint64 { return n.BigInt().Uint64() })
+			ascii := cql.ConvertCodec(cql.TextViewCodec, func(s string) (cql.Text, error) { return codecTestMust(cql.BorrowText(s)), nil }, func(t cql.Text) (string, error) { return fmt.Sprint(t), nil })
+			uintVarint := cql.ConvertCodec(cql.VarintCodec, func(n uint64) (cql.Varint, error) { return cql.VarintFromBigInt(new(big.Int).SetUint64(n)), nil }, func(n cql.Varint) (uint64, error) { return n.BigInt().Uint64(), nil })
 			type triple struct {
 				Text  string
 				Int   int32

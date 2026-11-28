@@ -47,6 +47,12 @@ func init() {
 		_, ok := plan.(rowDestinationManager)
 		return ok
 	})
+	link.Set(link.RepeatedMarkers, func(encoder any, markers Columns) error {
+		if c, ok := encoder.(interface{ repeatedMarkers(Columns) error }); ok {
+			return c.repeatedMarkers(markers)
+		}
+		return nil
+	})
 	link.Set(link.ConditionalRows, func(decoder any) bool {
 		_, ok := decoder.(interface{ conditionalRows() })
 		return ok

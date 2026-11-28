@@ -39,7 +39,7 @@ func cassandraField(t testing.TB, row cql.DynamicRow, name string) cql.Value {
 }
 func cassandraInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	t.Helper()
-	v, err := cassandraField(t, row, name).Signed()
+	v, err := cassandraField(t, row, name).Int64()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,11 +47,11 @@ func cassandraInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 }
 func cassandraText(t testing.TB, row cql.DynamicRow, name string) string {
 	t.Helper()
-	v, err := cassandraField(t, row, name).Text()
+	v, err := cassandraField(t, row, name).TextView()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return v.String()
+	return fmt.Sprint(v)
 }
 func cassandraBool(t testing.TB, row cql.DynamicRow, name string) bool {
 	t.Helper()
@@ -318,16 +318,16 @@ func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
 // Custom values use explicit codecs; field discovery and reflection are absent.
 type fullNameCodec struct{}
 
-func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextCodec.CheckType(t) }
+func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextViewCodec.CheckType(t) }
 func (fullNameCodec) Encode(w *cql.ValueWriter, n FullName) error {
 	return cql.StringCodec.Encode(w, n.FirstName+" "+n.LastName)
 }
 func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
-	text, err := cql.TextCodec.Decode(r)
+	text, err := cql.TextViewCodec.Decode(r)
 	if err != nil {
 		return FullName{}, err
 	}
-	names := strings.SplitN(text.String(), " ", 2)
+	names := strings.SplitN(fmt.Sprint(text), " ", 2)
 	if len(names) != 2 {
 		return FullName{}, errors.New("full name requires two components")
 	}

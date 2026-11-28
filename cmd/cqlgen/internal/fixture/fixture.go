@@ -11,7 +11,7 @@ import (
 	"github.com/scylladb/gocql/v2/cql"
 )
 
-//go:generate go run github.com/scylladb/gocql/v2/cmd/cqlgen -type=Fixture,Point,StreamFixture
+//go:generate go run github.com/scylladb/gocql/v2/cmd/cqlgen -type=Fixture,Point,StreamFixture,Customer -udt=Address
 
 type Fixture struct { //nolint:govet // field order mirrors the column list, not memory layout
 	Bool      bool
@@ -55,8 +55,8 @@ type Fixture struct { //nolint:govet // field order mirrors the column list, not
 type Point struct{ X, Y int32 }
 
 var PointCodec cql.Codec[Point] = cql.ConvertCodec(cql.Int64Codec,
-	func(p Point) int64 { return int64(p.X)<<32 | int64(uint32(p.Y)) },
-	func(v int64) Point { return Point{X: int32(v >> 32), Y: int32(v)} })
+	func(p Point) (int64, error) { return int64(p.X)<<32 | int64(uint32(p.Y)), nil },
+	func(v int64) (Point, error) { return Point{X: int32(v >> 32), Y: int32(v)}, nil })
 
 // Label is defined from string, so it maps like string.
 type Label string
@@ -82,4 +82,21 @@ type StreamFixture struct { //nolint:govet // field order mirrors the column lis
 type Audit struct {
 	CreatedAt cql.Timestamp
 	ID        cql.UUID
+}
+
+// Address maps a UDT: cqlgen -udt gives it a CQLCodec method, so a field of
+// type Address, or of a type derived from it, maps without an option, in
+// generated and reflected mappings alike.
+type Address struct {
+	Street string
+	Zip    int32
+}
+
+// Customer has UDT fields of Address and of types derived from it.
+type Customer struct { //nolint:govet // field order mirrors the column list, not memory layout
+	ID       int32
+	Home     Address
+	Previous []Address
+	ByName   map[string]Address
+	Billing  *Address
 }

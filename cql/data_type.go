@@ -232,7 +232,9 @@ func (t DataType) KeyValue() (DataType, DataType, bool) {
 }
 
 // Fields returns the fields of a tuple or UDT. A tuple's fields have only
-// types; a UDT's also have names. It is empty for any other type.
+// types: their names are empty, so a tuple member is found by its position,
+// as TupleCodecOf and ParamAt find it, never by name. A UDT's fields also
+// have names. It is empty for any other type.
 func (t DataType) Fields() Columns {
 	if t.descriptor == nil {
 		return Columns{}
@@ -495,6 +497,16 @@ type BindValue[T any] struct {
 	// State is Present, Null or Unset.
 	State CellState
 }
+
+// Bind returns a BindValue that binds v.
+func Bind[T any](v T) BindValue[T] { return BindValue[T]{Value: v, State: Present} }
+
+// BindNull returns a BindValue that binds NULL.
+func BindNull[T any]() BindValue[T] { return BindValue[T]{State: Null} }
+
+// BindUnset returns a BindValue that binds UNSET, which leaves the column
+// unchanged; UNSET needs protocol v4 or later and is a parameter only.
+func BindUnset[T any]() BindValue[T] { return BindValue[T]{State: Unset} }
 
 // MaybeEmpty distinguishes an empty CQL value from an ordinary value. Its zero
 // value encodes the ordinary zero value of T; Empty=true selects empty.

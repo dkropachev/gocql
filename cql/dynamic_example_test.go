@@ -29,7 +29,7 @@ func ExampleListValue() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		text, err := element.Str()
+		text, err := element.Text()
 		if err != nil {
 			log.Fatal(err)
 		}

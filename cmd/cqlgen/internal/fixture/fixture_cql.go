@@ -4,6 +4,7 @@ package fixture
 
 import (
 	"net/netip"
+	"sync"
 	"unsafe"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -24,7 +25,7 @@ func (Fixture) CQLFields() cql.StructFields[Fixture] {
 			cql.Param("text", cql.StringCodec, func(v Fixture) string { return v.Text }),
 			cql.Param("ascii", cql.StringCodec, func(v Fixture) string { return v.ASCII }),
 			cql.Param("blob", cql.ByteSliceCodec, func(v Fixture) []byte { return v.Blob }),
-			cql.Param("bytes", cql.BytesCodec, func(v Fixture) cql.Bytes { return v.Bytes }),
+			cql.Param("bytes", cql.BytesViewCodec, func(v Fixture) cql.Bytes { return v.Bytes }),
 			cql.Param("id", cql.UUIDCodec, func(v Fixture) Key { return v.ID }),
 			cql.Param("time_id", cql.TimeUUIDCodec, func(v Fixture) cql.TimeUUID { return v.TimeID }),
 			cql.Param("addr", cql.InetCodec, func(v Fixture) netip.Addr { return v.Addr }),
@@ -59,7 +60,7 @@ func (Fixture) CQLFields() cql.StructFields[Fixture] {
 			cql.Column("text", cql.StringCodec, func(v *Fixture) *string { return &v.Text }),
 			cql.Column("ascii", cql.StringCodec, func(v *Fixture) *string { return &v.ASCII }),
 			cql.Column("blob", cql.ByteSliceCodec, func(v *Fixture) *[]byte { return &v.Blob }),
-			cql.Column("bytes", cql.BytesCodec, func(v *Fixture) *cql.Bytes { return &v.Bytes }),
+			cql.Column("bytes", cql.BytesViewCodec, func(v *Fixture) *cql.Bytes { return &v.Bytes }),
 			cql.Column("id", cql.UUIDCodec, func(v *Fixture) *Key { return &v.ID }),
 			cql.Column("time_id", cql.TimeUUIDCodec, func(v *Fixture) *cql.TimeUUID { return &v.TimeID }),
 			cql.Column("addr", cql.InetCodec, func(v *Fixture) *netip.Addr { return &v.Addr }),
@@ -154,3 +155,56 @@ func (StreamFixture) CQLStreamColumns() []cql.StreamOutputField[StreamFixture] {
 		cql.StreamColumn("addr", cql.StreamInet, func(v *StreamFixture) *netip.Addr { return &v.Addr }),
 	}
 }
+
+// CQLFields returns the generated mapping of Customer's fields, which
+// cql.ParamsOf and cql.RowOf use instead of reflection.
+func (Customer) CQLFields() cql.StructFields[Customer] {
+	return cql.StructFields[Customer]{
+		Params: []cql.InputField[Customer]{
+			cql.Param("id", cql.Int32Codec, func(v Customer) int32 { return v.ID }),
+			cql.Param("home", new(Address).CQLCodec(), func(v Customer) Address { return v.Home }),
+			cql.Param("previous", cql.SliceCodec(new(Address).CQLCodec()), func(v Customer) []Address { return v.Previous }),
+			cql.Param("by_name", cql.GoMapCodec(cql.StringCodec, new(Address).CQLCodec()), func(v Customer) map[string]Address { return v.ByName }),
+			cql.Param("billing", cql.PointerCodec(new(Address).CQLCodec()), func(v Customer) *Address { return v.Billing }),
+		},
+		Columns: []cql.OutputField[Customer]{
+			cql.Column("id", cql.Int32Codec, func(v *Customer) *int32 { return &v.ID }),
+			cql.Column("home", new(Address).CQLCodec(), func(v *Customer) *Address { return &v.Home }),
+			cql.Column("previous", cql.SliceCodec(new(Address).CQLCodec()), func(v *Customer) *[]Address { return &v.Previous }),
+			cql.Column("by_name", cql.GoMapCodec(cql.StringCodec, new(Address).CQLCodec()), func(v *Customer) *map[string]Address { return &v.ByName }),
+			cql.Column("billing", cql.PointerCodec(new(Address).CQLCodec()), func(v *Customer) **Address { return &v.Billing }),
+		},
+	}
+}
+
+// CQLFields returns the generated mapping of Address's fields, which
+// cql.ParamsOf and cql.RowOf use instead of reflection.
+func (Address) CQLFields() cql.StructFields[Address] {
+	return cql.StructFields[Address]{
+		Params: []cql.InputField[Address]{
+			cql.Param("street", cql.StringCodec, func(v Address) string { return v.Street }),
+			cql.Param("zip", cql.Int32Codec, func(v Address) int32 { return v.Zip }),
+		},
+		Columns: []cql.OutputField[Address]{
+			cql.Column("street", cql.StringCodec, func(v *Address) *string { return &v.Street }),
+			cql.Column("zip", cql.Int32Codec, func(v *Address) *int32 { return &v.Zip }),
+		},
+	}
+}
+
+// CQLStreamColumns returns the generated stream mapping of Address's
+// fields, which cql.StreamRowOf uses instead of reflection.
+func (Address) CQLStreamColumns() []cql.StreamOutputField[Address] {
+	return []cql.StreamOutputField[Address]{
+		cql.StreamColumn("street", cql.StreamString, func(v *Address) *string { return &v.Street }),
+		cql.StreamColumn("zip", cql.StreamInt32, func(v *Address) *int32 { return &v.Zip }),
+	}
+}
+
+// CQLCodec returns the codec that maps Address as a UDT, matched by field
+// names, which struct mappings use for fields of type Address, *Address, []Address
+// and map values of Address. Pass cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTName(keyspace, name)))
+// to a mapping to check the UDT's name too.
+func (Address) CQLCodec() cql.Codec[Address] { return cqlgenUDTAddress() }
+
+var cqlgenUDTAddress = sync.OnceValue(func() cql.Codec[Address] { return cql.MustUDTCodecOf[Address]() })

@@ -13,14 +13,14 @@ import (
 )
 
 func (InternalV2MetadataText) CheckType(t cql.DataType) error {
-	return cql.TextCodec.CheckType(t)
+	return cql.TextViewCodec.CheckType(t)
 }
 func (InternalV2MetadataText) Decode(r cql.ValueReader) (string, error) {
-	text, err := cql.TextCodec.Decode(r)
+	text, err := cql.TextViewCodec.Decode(r)
 	if err != nil {
 		return "", err
 	}
-	return text.String(), nil
+	return text.Copy()
 }
 func (InternalV2MetadataText) Clone(v string) string { return v }
 
@@ -83,14 +83,14 @@ func columnOrderFromSchema(order string) metadata.ColumnOrder {
 
 func (v2MetadataStrings) CheckType(t cql.DataType) error {
 	if t.Kind() == cql.KindSet {
-		return cql.SetDecoder[cql.Text](cql.TextCodec).CheckType(t)
+		return cql.SetDecoder[cql.Text](cql.TextViewCodec).CheckType(t)
 	}
-	return cql.ListDecoder[cql.Text](cql.TextCodec).CheckType(t)
+	return cql.ListDecoder[cql.Text](cql.TextViewCodec).CheckType(t)
 }
 func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
-	decoder := cql.ListDecoder[cql.Text](cql.TextCodec)
+	decoder := cql.ListDecoder[cql.Text](cql.TextViewCodec)
 	if r.Type().Kind() == cql.KindSet {
-		decoder = cql.SetDecoder[cql.Text](cql.TextCodec)
+		decoder = cql.SetDecoder[cql.Text](cql.TextViewCodec)
 	}
 	v, err := decoder.Decode(r)
 	if err != nil {
@@ -98,37 +98,46 @@ func (v2MetadataStrings) Decode(r cql.ValueReader) ([]string, error) {
 	}
 	out := make([]string, 0, len(v))
 	for _, value := range v {
-		out = append(out, value.String())
+		s, err := value.Copy()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
 	}
 	return out, nil
 }
 func (v2MetadataStrings) Clone(v []string) []string { return append([]string(nil), v...) }
 
 func (v2MetadataStringMap) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Text](cql.TextCodec, cql.TextCodec).CheckType(t)
+	return cql.MapDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).CheckType(t)
 }
 func (v2MetadataStringMap) Decode(r cql.ValueReader) (map[string]string, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Text](cql.TextCodec, cql.TextCodec).Decode(r)
+	v, err := cql.MapDecoder[cql.Text, cql.Text](cql.TextViewCodec, cql.TextViewCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}
 	out := make(map[string]string, len(v))
 	for _, entry := range v {
-		key := entry.Key.String()
+		key, err := entry.Key.Copy()
+		if err != nil {
+			return nil, err
+		}
 		if _, ok := out[key]; ok {
 			return nil, cqltype.TypeValidation("schema map", "duplicate key %q", key)
 		}
-		out[key] = entry.Value.String()
+		if out[key], err = entry.Value.Copy(); err != nil {
+			return nil, err
+		}
 	}
 	return out, nil
 }
 func (v2MetadataStringMap) Clone(v map[string]string) map[string]string { return maps.Clone(v) }
 
 func (v2MetadataExtensions) CheckType(t cql.DataType) error {
-	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).CheckType(t)
+	return cql.MapDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).CheckType(t)
 }
 func (v2MetadataExtensions) Decode(r cql.ValueReader) (map[string][]byte, error) {
-	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextCodec, cql.BytesCodec).Decode(r)
+	v, err := cql.MapDecoder[cql.Text, cql.Bytes](cql.TextViewCodec, cql.BytesViewCodec).Decode(r)
 	if err != nil {
 		return nil, err
 	}

@@ -128,6 +128,19 @@ Lists, sets, and maps decode NULL as empty, matching buffered decoding, while
 preserving the destination's seeded capacity. `cql.StreamNullable` preserves the
 NULL/present distinction. Vectors remain strict about their dimension and need
 `cql.StreamNullable` for NULL. This policy does not permit NULL collection elements.
+A scalar field fails on NULL with an error matching `cql.ErrNull` unless its
+tag has `nullzero` or `cql.StreamRowOf` is given `cql.NullAsZero()`; a UDT's
+fields decode NULL, and a field the value predates, as zero.
+
+The seeded decoders, such as `cql.StreamText`, never grow the caller's
+buffers. `cql.StreamString`, `cql.StreamPointer`, `cql.StreamGoMap`,
+`cql.StreamTimestampTime`, `cql.StreamTimeDuration` and
+`cql.StreamDecimalValue` allocate each value instead, as the buffered codecs
+do, and never reuse a buffer between rows; `cql.StreamRowOf` maps `string`,
+`time.Time`, `time.Duration`, `cql.Decimal` and pointer fields with them,
+and a map field with `cql.WithStreamDecoder(cql.StreamGoMap(...))`. The
+integer and float decoders widen as the buffered codecs do: `cql.StreamInt64`
+also decodes int, smallint and tinyint.
 Preparation validates the streaming decoder against available result metadata;
 conditional statements whose PREPARE response omits result metadata are checked
 on execution. Actual changed metadata always triggers plan revalidation.

@@ -57,7 +57,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 			t.Fatal("authoritative tablet absent")
 		}
 		row := rows[0]
-		last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
+		last := codecTestMust(codecTestMust(row.Get("last_token")).Int64())
 		list := codecTestMust(collectSeq(codecTestMust(row.Get("replicas")).Elements()))
 		var replicas []metadata.Target
 		for _, replica := range list {
@@ -66,7 +66,7 @@ func tabletAuthority(t *testing.T, ctx context.Context, s *gocql.Session, table 
 				t.Fatal("authoritative replica missing host or shard")
 			}
 			id := codecTestMust(tuple[0].UUID())
-			shard := codecTestMust(tuple[1].Signed())
+			shard := codecTestMust(tuple[1].Int64())
 			if shard < 0 || shard > math.MaxUint32 {
 				t.Fatal("invalid authoritative shard", shard)
 			}

@@ -36,13 +36,18 @@ type StreamStatement[P, R any] struct {
 // also inside a slice or a Nullable.
 // A [][]byte field decodes a sequence of blobs, or with `stream=Text` or
 // `stream=Varint` one of those. Storage of []byte and
-// slice fields is reused across rows. Every column needs a field, unless
-// IgnoreExtraColumns is given. A time.Time field has no streaming decoder;
-// use cql.Timestamp.
+// slice fields is reused across rows. A string, time.Time, time.Duration,
+// Decimal or pointer field decodes with an allocating decoder (StreamString,
+// StreamTimestampTime, StreamTimeDuration, StreamDecimalValue, StreamPointer),
+// a new value for each row; a map field needs WithStreamDecoder, as of
+// StreamGoMap. Every column needs a field, unless IgnoreExtraFields is given.
+// A NULL cell fails a field that cannot hold it, with an error matching
+// ErrNull, unless the field's tag has nullzero or NullAsZero is given.
 //
 // When R or *R has a CQLStreamColumns method, as cmd/cqlgen generates, its
 // mapping is used; otherwise R is reflected once, here. StreamRowOf applies
-// WithStreamDecoder and IgnoreExtraColumns, and rejects other options.
+// WithStreamDecoder, IgnoreExtraFields and NullAsZero, and rejects other
+// options.
 func StreamRowOf[R any](opts ...StructOption) (StreamRowDecoder[R], error) {
 	var columns []StreamOutputField[R]
 	if g, ok := any(new(R)).(interface{ CQLStreamColumns() []StreamOutputField[R] }); ok {

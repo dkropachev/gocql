@@ -5,6 +5,7 @@ package cql_test
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"net/netip"
@@ -265,7 +266,7 @@ func TestCodecMatrix(t *testing.T) {
 	intType := matrixType(cql.KindInt)
 	textType := matrixType(cql.KindText)
 	bigVarint := cql.VarintFromBigInt(new(big.Int).Lsh(big.NewInt(-3), 100))
-	textEq := func(a, b cql.Text) bool { return a.String() == b.String() }
+	textEq := func(a, b cql.Text) bool { return fmt.Sprint(a) == fmt.Sprint(b) }
 	bytesEq := func(a, b cql.Bytes) bool {
 		return string(cql.CodecTestMust(a.Copy())) == string(cql.CodecTestMust(b.Copy()))
 	}
@@ -278,9 +279,9 @@ func TestCodecMatrix(t *testing.T) {
 		c.equal = eq
 		return c
 	}
-	text := withEq(matrixOf("text/Text", cql.KindText, cql.TextCodec, cql.KindInt, cql.Text{}, mustText("héllo")), textEq)
+	text := withEq(matrixOf("text/Text", cql.KindText, cql.TextViewCodec, cql.KindInt, cql.Text{}, mustText("héllo")), textEq)
 	text.emptyDecodes, text.noEmptyCodec = true, true
-	ascii := withEq(matrixOf("ascii/Text", cql.KindASCII, cql.TextCodec, cql.KindInt, mustText("plain")), textEq)
+	ascii := withEq(matrixOf("ascii/Text", cql.KindASCII, cql.TextViewCodec, cql.KindInt, mustText("plain")), textEq)
 	ascii.emptyDecodes, ascii.noEmptyCodec = true, true
 	str := matrixOf("text/string", cql.KindText, cql.StringCodec, cql.KindBlob, "", "héllo")
 	str.emptyDecodes, str.noEmptyCodec, str.badValues = true, true, []string{"\xff"}
@@ -289,7 +290,7 @@ func TestCodecMatrix(t *testing.T) {
 	asciiStr.emptyDecodes, asciiStr.noEmptyCodec, asciiStr.badValues = true, true, []string{"é"}
 	varcharStr := matrixOf("legacy-text/string", cql.Kind(0x000A), cql.StringCodec, cql.KindBlob, "v")
 	varcharStr.emptyDecodes, varcharStr.noEmptyCodec = true, true
-	blob := matrixOf("blob/Bytes", cql.KindBlob, cql.BytesCodec, cql.KindText, cql.BorrowBytes([]byte{1, 2, 3}))
+	blob := matrixOf("blob/Bytes", cql.KindBlob, cql.BytesViewCodec, cql.KindText, cql.BorrowBytes([]byte{1, 2, 3}))
 	blob.emptyDecodes, blob.noEmptyCodec, blob.equal = true, true, bytesEq
 	byteSlice := matrixOf("blob/[]byte", cql.KindBlob, cql.ByteSliceCodec, cql.KindText, []byte{1, 2, 3})
 	byteSlice.emptyDecodes, byteSlice.noEmptyCodec = true, true
@@ -300,7 +301,7 @@ func TestCodecMatrix(t *testing.T) {
 	decimal.equal = decimalEq
 	f32 := matrixOf("float/float32", cql.KindFloat, cql.Float32Codec, cql.KindDouble, 0, float32(math.Inf(-1)), float32(math.NaN()), math.MaxFloat32, math.SmallestNonzeroFloat32)
 	f32.equal = floatEq32
-	f64 := matrixOf("double/float64", cql.KindDouble, cql.Float64Codec, cql.KindFloat, 0, math.Inf(1), math.NaN(), math.MaxFloat64, -math.SmallestNonzeroFloat64)
+	f64 := matrixOf("double/float64", cql.KindDouble, cql.Float64Codec, cql.KindInt, 0, math.Inf(1), math.NaN(), math.MaxFloat64, -math.SmallestNonzeroFloat64)
 	f64.equal = floatEq64
 	timeOfDay := matrixOf("time/TimeOfDay", cql.KindTime, cql.TimeOfDayCodec, cql.KindBigInt, 0, cql.TimeOfDay(24*3600*1e9-1))
 	timeOfDay.badValues = []cql.TimeOfDay{-1, cql.TimeOfDay(24 * 3600 * 1e9)}
@@ -318,7 +319,7 @@ func TestCodecMatrix(t *testing.T) {
 	// the other mappings are checked through Column.
 	i32 := matrixOf("int/int32", cql.KindInt, cql.Int32Codec, cql.KindBigInt, math.MinInt32, 0, math.MaxInt32)
 	i32.paths = matrixDecoders[int32]
-	counter := matrixOf("counter/int64", cql.KindCounter, cql.Int64Codec, cql.KindInt, int64(math.MinInt64), 0, math.MaxInt64)
+	counter := matrixOf("counter/int64", cql.KindCounter, cql.Int64Codec, cql.KindDouble, int64(math.MinInt64), 0, math.MaxInt64)
 	counter.noEmptyCodec = true
 	list := matrixOfType("list<int>/[]int32", mustMatrixType(cql.ListType(intType)), cql.ListCodec(cql.Int32Codec), mustMatrixType(cql.SetType(intType)), []int32{}, []int32{1, math.MinInt32})
 	list.noEmptyCodec, list.nullDecodes, list.equal = true, true, nilAsEmptyEqual[int32]
@@ -346,7 +347,7 @@ func TestCodecMatrix(t *testing.T) {
 	}
 
 	udtType := mustMatrixType(cql.UDTType("ks", "pair", cql.ColumnSpec{Name: "first", Type: intType}, cql.ColumnSpec{Name: "second", Type: textType}))
-	udtOpts, err := cql.UDTOptionsFor(udtType)
+	udtOpts, err := cql.UDTNameOf(udtType)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -359,6 +360,9 @@ func TestCodecMatrix(t *testing.T) {
 			cql.Column("second", cql.StringCodec, func(p *cql.Pair[int32, string]) *string { return &p.Second })), udtOpts),
 		values:       []cql.Pair[int32, string]{{First: 1, Second: "a"}, {}},
 		noEmptyCodec: true,
+		// An empty UDT value has every field missing, which decodes as zero
+		// as for a value written before ALTER TYPE ADD.
+		emptyDecodes: true,
 	}
 
 	cases := []matrixCase{
@@ -366,7 +370,7 @@ func TestCodecMatrix(t *testing.T) {
 		matrixOf("tinyint/int8", cql.KindTinyInt, cql.Int8Codec, cql.KindSmallInt, math.MinInt8, 0, math.MaxInt8),
 		matrixOf("smallint/int16", cql.KindSmallInt, cql.Int16Codec, cql.KindInt, math.MinInt16, 0, math.MaxInt16),
 		i32,
-		matrixOf("bigint/int64", cql.KindBigInt, cql.Int64Codec, cql.KindInt, math.MinInt64, 0, math.MaxInt64),
+		matrixOf("bigint/int64", cql.KindBigInt, cql.Int64Codec, cql.KindDouble, math.MinInt64, 0, math.MaxInt64),
 		counter,
 		f32, f64, str, asciiStr, varcharStr, text, ascii, blob, byteSlice, varint, decimal,
 		matrixOf("date/Date", cql.KindDate, cql.DateCodec, cql.KindInt, math.MinInt32, 0, math.MaxInt32),

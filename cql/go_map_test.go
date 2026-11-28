@@ -106,19 +106,10 @@ func TestGoMapStructMapping(t *testing.T) {
 	if !reflect.DeepEqual(detached, want) {
 		t.Fatalf("detached %+v", detached)
 	}
-	// A map with no built-in pair, such as one of borrowed views, still needs
-	// a codec.
+	// A map's codec is derived from its key and value, so a map of borrowed
+	// views maps too, and detaching it copies the views.
 	type viewRow struct{ Views map[string]Text }
-	if _, err := RowOf[viewRow](); err == nil {
-		t.Fatal("reflection mapped a map of views")
-	}
-	found := false
-	for _, b := range builtinFieldTypes() {
-		if b.Type == reflect.TypeFor[map[string]int64]() {
-			found = b.Default && b.EncoderSrc == "cql.GoMapCodec(cql.StringCodec, cql.Int64Codec)" && b.TypeSrc == "map[string]int64"
-		}
-	}
-	if !found {
-		t.Fatal("map[string]int64 is not a default built-in field type")
+	if _, err := RowOf[viewRow](); err != nil {
+		t.Fatal("reflection did not map a map of views:", err)
 	}
 }

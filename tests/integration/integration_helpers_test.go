@@ -295,11 +295,11 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 		if value.State() == cql.Null {
 			return false, nil
 		}
-		features, err := value.Text()
+		features, err := value.TextView()
 		if err != nil {
 			return false, err
 		}
-		for _, feature := range strings.Split(features.String(), ",") {
+		for _, feature := range strings.Split(fmt.Sprint(features), ",") {
 			if feature == "TABLETS" {
 				return true, nil
 			}

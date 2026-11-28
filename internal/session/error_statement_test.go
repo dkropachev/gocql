@@ -68,7 +68,7 @@ func TestErrorStatementPrepared(t *testing.T) {
 	storage := PreparedData(handle)
 	storage.InternalState = state
 	storage.params = codecTestMust(cql.NoParams.Compile(cql.NewColumns()))
-	storage.rows = cql.OneColumn(cql.BytesCodec)
+	storage.rows = cql.OneColumn(cql.BytesViewCodec)
 	bound := codecTestMust(BindBorrowed(handle, cql.EmptyRow{}))
 	defer bound.Close()
 	err := newExecutionError(cqlerr.ErrNoConnections, cql.Result{}, cqlerr.NotExecuted, nil)
@@ -126,7 +126,7 @@ func secretQuery(t *testing.T, kind cql.StatementKind) *Bound[cql.Bytes] {
 		Kind:   kind,
 		CQL:    "UPDATE ks.tbl SET value = 0x01 WHERE k = ?",
 		Params: cql.OneParam(cql.StringCodec),
-		Rows:   cql.OneColumn(cql.BytesCodec),
+		Rows:   cql.OneColumn(cql.BytesViewCodec),
 	}, cql.NewColumns(cql.ColumnSpec{Keyspace: "ks", Table: "tbl", Name: "k", Type: cql.TextType}), redactionSecret)
 	if err != nil {
 		t.Fatal(err)

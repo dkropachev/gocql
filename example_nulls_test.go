@@ -33,7 +33,7 @@ import (
 )
 
 func Example_nulls() {
-	codec := cql.NullableCodec(cql.TextCodec)
+	codec := cql.NullableCodec(cql.TextViewCodec)
 	null, err := cql.NewEncodedValue(cql.TextType, cql.Null, nil)
 	if err != nil {
 		log.Fatal(err)

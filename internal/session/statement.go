@@ -135,6 +135,13 @@ func prepareStatement[P, R any](ctx context.Context, s *implCluster.Core, statem
 	if err != nil {
 		return empty, err
 	}
+	// The server names a ? marker after its column, so a named mapping
+	// would bind one field to two markers the statement never named alike.
+	if !binding.InternalNamedMarkers(statement.CQL) {
+		if err := codec.CheckRepeatedMarkers(statement.Params, parameters); err != nil {
+			return empty, err
+		}
+	}
 	// ValidateStatement resolved statement.Kind; a server that flags a
 	// lightweight transaction, as ScyllaDB does, overrides an ordinary one.
 	kind := statement.Kind

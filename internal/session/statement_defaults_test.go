@@ -235,18 +235,19 @@ func TestUnpreparedMarkers(t *testing.T) {
 	}
 
 	named := binding.Statement[[]cql.ValueField, cql.EmptyRow]{CQL: "INSERT INTO ks.t(v) VALUES(:v)", Params: cql.NamedDynamicParams}
-	if err := unpreparedMarkers(&named, []cql.ValueField{{Name: "v", Value: cql.NullValue(cql.BigIntType)}}); !hasErrorType[*cql.ValidationError](err) {
+	if err := unpreparedMarkers(&named, []cql.ValueField{{Name: "v", Value: cql.NullValue()}}); !hasErrorType[*cql.ValidationError](err) {
 		t.Errorf("NamedDynamicParams without BindMarkers: %v, want a ValidationError", err)
 	}
 
 	dynamic := binding.Statement[[]cql.Value, cql.EmptyRow]{CQL: "INSERT INTO ks.t(k, v) VALUES(?, ?)", Params: cql.DynamicParams}
-	values := []cql.Value{cql.NullValue(cql.BigIntType), cql.NullValue(cql.TextType)}
+	// An untyped NULL takes blob, which writes NULL as any type does.
+	values := []cql.Value{cql.BigIntValue(1), cql.NullValue()}
 	if err := unpreparedMarkers(&dynamic, values); err != nil {
 		t.Fatal(err)
 	}
 	first, _ := dynamic.BindMarkers.At(0)
 	second, _ := dynamic.BindMarkers.At(1)
-	if dynamic.BindMarkers.Len() != 2 || !first.Type.Equal(cql.BigIntType) || !second.Type.Equal(cql.TextType) {
+	if dynamic.BindMarkers.Len() != 2 || !first.Type.Equal(cql.BigIntType) || !second.Type.Equal(cql.BlobType) {
 		t.Errorf("derived markers %v", dynamic.BindMarkers)
 	}
 	if err := session.UnpreparedAddToBatch(&batch, binding.Statement[[]cql.Value, cql.EmptyRow]{CQL: dynamic.CQL, Params: cql.DynamicParams}, values); err != nil || batch.Len() != 1 {

@@ -37,6 +37,7 @@ var (
 	managesRowDestination   = link.Get[func(any) bool](link.ManagesRowDestination)
 	preservesRowDestination = link.Get[func(any) bool](link.PreservesRowDestination)
 	conditionalRows         = link.Get[func(any) bool](link.ConditionalRows)
+	repeatedMarkers         = link.Get[func(any, cql.Columns) error](link.RepeatedMarkers)
 	cloneResult             = link.Get[func(cql.Result) cql.Result](link.CloneResult)
 	mergeResult             = link.Get[func(cql.Result, cql.Result) cql.Result](link.MergeResult)
 	addWarnings             = link.Get[func(cql.Result, []string) cql.Result](link.ResultAddWarnings)
@@ -117,6 +118,13 @@ func NewStreamRowReaderReusingValidation(columns cql.Columns, scope *wire.Stream
 
 // StreamReaderWorkingStorageBytes reports the working storage r holds.
 func StreamReaderWorkingStorageBytes(r *cql.StreamRowReader) int64 { return streamReaderBytes(r) }
+
+// CheckRepeatedMarkers rejects encoder, when it is a built-in mapping by
+// name, such as ParamsOf, binding one field to two of markers that share a
+// name, as the server names a statement's ? markers after their columns.
+func CheckRepeatedMarkers[P any](encoder cql.ParamEncoder[P], markers cql.Columns) error {
+	return repeatedMarkers(encoder, markers)
+}
 
 // CompileParams compiles encoder's plan for columns.
 func CompileParams[P any](encoder cql.ParamEncoder[P], columns cql.Columns) (cql.CompiledParams[P], error) {

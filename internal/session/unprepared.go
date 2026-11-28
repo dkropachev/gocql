@@ -98,7 +98,14 @@ func unpreparedMarkers[P, R any](statement *binding.Statement[P, R], value P) er
 		if any(statement.Params) == any(cql.DynamicParams) {
 			specs := make([]cql.ColumnSpec, len(v))
 			for i := range v {
-				specs[i] = cql.ColumnSpec{Type: v[i].Type()}
+				typ := v[i].Type()
+				if typ.Equal(cql.DataType{}) {
+					// cql.NullValue and cql.UnsetValue have no type; a
+					// QUERY sends no marker types, and either is written
+					// the same for any type, so blob stands in.
+					typ = cql.BlobType
+				}
+				specs[i] = cql.ColumnSpec{Type: typ}
 			}
 			statement.BindMarkers = cql.NewColumns(specs...)
 			return nil

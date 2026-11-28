@@ -16,10 +16,11 @@ import (
 
 // Value is an explicitly typed CQL value: a type, a cell state (present,
 // NULL, UNSET or empty) and the payload that type selects. Type and State
-// report the first two. The accessors Bool, Signed, Float, Text, Bytes, UUID,
-// TimeUUID, Inet, Time, TimeOfDay, Duration, Varint and Decimal return the
-// payload of a present scalar of a matching type, and an error otherwise,
-// which matches ErrNull for a NULL; Str copies text into a string. Elements,
+// report the first two. The accessors Bool, Int64, Float64, Text, TextView,
+// Bytes, UUID, TimeUUID, Inet, Time, TimeOfDay, Duration, Varint and Decimal
+// return the payload of a present scalar of a matching type, and an error
+// otherwise, which matches ErrNull for a NULL; Text copies text into a
+// string and TextView borrows it. Elements,
 // Entries and Fields range over a collection, map, tuple or UDT; Len counts
 // its members and Field reads one UDT field. String prints the value as a
 // CQL literal. Clone detaches a decoded value from its
@@ -84,11 +85,22 @@ var dynamicScalarTypes = func() [KindDuration + 1]DataType {
 
 func dynamicScalar(kind Kind) Value { return Value{typ: dynamicScalarTypes[kind]} }
 
-// NullValue constructs a NULL cell of t.
-func NullValue(t DataType) Value { return Value{typ: t, state: Null} }
+// NullValue constructs a NULL cell. It has no type: it binds a NULL of
+// whatever type the bind marker, collection element or tuple or UDT member
+// has, so Type returns the zero DataType. A decoded NULL keeps its column's
+// type.
+func NullValue() Value { return Value{state: Null} }
 
-// UnsetValue constructs an UNSET parameter of t; UNSET is not a valid result or nested value.
-func UnsetValue(t DataType) Value { return Value{typ: t, state: Unset} }
+// UnsetValue constructs an UNSET parameter, which leaves the bind marker's
+// column unchanged. Like NullValue it has no type; UNSET is not a valid
+// result or nested value.
+func UnsetValue() Value { return Value{state: Unset} }
+
+// untypedMarker reports whether v is a NullValue or UnsetValue, which match
+// any type.
+func untypedMarker(v Value) bool {
+	return (v.state == Null || v.state == Unset) && descriptorOf(v.typ) == nil
+}
 
 // EmptyValue constructs an empty cell of t, rejecting types that cannot represent it.
 func EmptyValue(t DataType) (Value, error) {
@@ -230,6 +242,9 @@ func DecimalValue(n Decimal) Value {
 }
 
 func (v Value) require(kinds ...Kind) error {
+	if untypedMarker(v) && v.state == Null {
+		return typeValidation("value", "value is %w", ErrNull)
+	}
 	if err := validateDataType(v.typ); err != nil {
 		return err
 	}
@@ -250,15 +265,15 @@ func (v Value) require(kinds ...Kind) error {
 // Bool returns a present boolean.
 func (v Value) Bool() (bool, error) { err := v.require(KindBoolean); return v.bits != 0, err }
 
-// Signed returns a present tinyint, smallint, int, bigint, counter, date,
+// Int64 returns a present tinyint, smallint, int, bigint, counter, date,
 // time or timestamp as an int64.
-func (v Value) Signed() (int64, error) {
+func (v Value) Int64() (int64, error) {
 	err := v.require(KindTinyInt, KindSmallInt, KindInt, KindBigInt, KindCounter, KindDate, KindTime, KindTimestamp)
 	return int64(v.bits), err
 }
 
-// Float returns a present float or double as a float64.
-func (v Value) Float() (float64, error) {
+// Float64 returns a present float or double as a float64.
+func (v Value) Float64() (float64, error) {
 	if err := v.require(KindFloat, KindDouble); err != nil {
 		return 0, err
 	}
@@ -268,10 +283,10 @@ func (v Value) Float() (float64, error) {
 	return math.Float64frombits(v.bits), nil
 }
 
-// Text returns a present text or ascii value. A decoded Text borrows the
-// response; see Clone, or Str for a string that does not. It fails for a
-// TextValue or ASCIIValue that is not valid for its type.
-func (v Value) Text() (Text, error) {
+// TextView returns a present text or ascii value as a view. A decoded Text
+// borrows the response; see Clone, or Text for a string that does not. It
+// fails for a TextValue or ASCIIValue that is not valid for its type.
+func (v Value) TextView() (Text, error) {
 	if err := v.require(KindText, KindASCII); err != nil {
 		return Text{}, err
 	}
@@ -283,11 +298,11 @@ func (v Value) Text() (Text, error) {
 	return textView(v.bytes), nil
 }
 
-// Str returns a present text or ascii value as a newly allocated string,
-// which stays valid after the response is released. It fails as Text does,
+// Text returns a present text or ascii value as a newly allocated string,
+// which stays valid after the response is released. It fails as TextView does,
 // and with ErrReleased for a decoded value whose response was released.
-func (v Value) Str() (string, error) {
-	text, err := v.Text()
+func (v Value) Text() (string, error) {
+	text, err := v.TextView()
 	if err != nil {
 		return "", err
 	}
@@ -493,6 +508,12 @@ func dynamicCompatible(actual, wanted DataType) bool {
 	return (a == KindBigInt || a == KindCounter) && (w == KindBigInt || w == KindCounter)
 }
 func checkDynamicValue(t DataType, v Value, nested bool) error {
+	if untypedMarker(v) {
+		if v.state == Unset && nested {
+			return typeValidation("value", "unset is not permitted in nested values")
+		}
+		return nil
+	}
 	if err := validateDataType(v.typ); err != nil {
 		return err
 	}
@@ -709,7 +730,7 @@ func encodeDynamicChecked(w *ValueWriter, v Value) error {
 		}
 		return w.borrowView(v.bytes)
 	case KindBlob:
-		return encodeDynamicScalar(w, BytesCodec, v.bytes)
+		return encodeDynamicScalar(w, BytesViewCodec, v.bytes)
 	case KindUUID:
 		return encodeDynamicScalar(w, UUIDCodec, v.uuid)
 	case KindTimeUUID:
@@ -763,7 +784,7 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	}
 	switch r.State() {
 	case Null:
-		return NullValue(r.Type()), nil
+		return Value{typ: r.Type(), state: Null}, nil
 	case Unset:
 		return Value{}, typeValidation("state", "unset cannot be decoded as a result")
 	case Present:
@@ -789,9 +810,9 @@ func decodeDynamicWithPlan(r ValueReader, shape *streamValidationPlan) (Value, e
 	case KindDouble:
 		return decodeDynamicScalar(r, Float64Codec, DoubleValue)
 	case KindText, KindASCII:
-		return decodeDynamicScalar(r, TextCodec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
+		return decodeDynamicScalar(r, TextViewCodec, func(t Text) Value { return Value{bytes: t.Bytes(), encoded: true} })
 	case KindBlob:
-		return decodeDynamicScalar(r, BytesCodec, func(b Bytes) Value { return Value{bytes: b} })
+		return decodeDynamicScalar(r, BytesViewCodec, func(b Bytes) Value { return Value{bytes: b} })
 	case KindUUID:
 		return decodeDynamicScalar(r, UUIDCodec, UUIDValue)
 	case KindTimeUUID:
@@ -856,7 +877,7 @@ func dynamicField(c *ValueCursor, t DataType, shape *streamValidationPlan) (Valu
 		return Value{}, err
 	}
 	if c.Remaining() == 0 {
-		return NullValue(t), nil
+		return Value{typ: t, state: Null}, nil
 	}
 	r, err := c.Child(t)
 	if err != nil {

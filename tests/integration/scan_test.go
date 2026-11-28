@@ -76,7 +76,7 @@ func TestScan(t *testing.T) {
 			for _, method := range []string{"SliceMap", "MapScan"} {
 				t.Run(method, func(t *testing.T) {
 					got := dynamicSerializationResult(t, s, fmt.Sprintf("SELECT counter_col FROM %s WHERE id=?", table), method, cql.IntValue(1))
-					if n, err := got.Signed(); err != nil || n != 42 || got.Type().Kind() != cql.KindCounter {
+					if n, err := got.Int64(); err != nil || n != 42 || got.Type().Kind() != cql.KindCounter {
 						t.Fatalf("got %v (%s), %v; want counter 42", got, got.Type(), err)
 					}
 				})
@@ -93,12 +93,12 @@ func TestScan(t *testing.T) {
 			prepared := cassandraPrepared(t, session, cql.Statement[[]nested, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,val) VALUES('key',?)", table), Params: cql.OneParam(cql.ListEncoder(cql.MapEncoder(cql.StringCodec, cql.StringCodec)))}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), want)
 			require.NoError(t, err)
-			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextCodec, cql.TextCodec))), exec.Options{})
+			row := cassandraUnpreparedOne(t, session, fmt.Sprintf("SELECT val FROM %s WHERE id='key'", table), cql.OneColumn(cql.ListDecoder(cql.MapDecoder(cql.TextViewCodec, cql.TextViewCodec))), exec.Options{})
 			var got []nested
 			for _, mapping := range row {
 				var entries nested
 				for _, entry := range mapping {
-					entries = append(entries, cql.Entry[string, string]{Key: entry.Key.String(), Value: entry.Value.String()})
+					entries = append(entries, cql.Entry[string, string]{Key: fmt.Sprint(entry.Key), Value: fmt.Sprint(entry.Value)})
 				}
 				got = append(got, entries)
 			}
@@ -184,12 +184,12 @@ func TestScan(t *testing.T) {
 				Name   FullName
 				Number int32
 			}
-			decoder := cql.Row(cql.Column("testtext", cql.TextCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32Codec, func(v *output) *int32 { return &v.Number }))
+			decoder := cql.Row(cql.Column("testtext", cql.TextViewCodec, func(v *output) *cql.Text { return &v.Text }), cql.Column("testfullname", fullNameCodec{}, func(v *output) *FullName { return &v.Name }), cql.Column("testint", cql.Int32Codec, func(v *output) *int32 { return &v.Number }))
 			got := cassandraUnpreparedOne(t, session, "SELECT * FROM "+table, decoder, exec.Options{})
-			require.Equal(t, "testtext", got.Text.String())
+			require.Equal(t, "testtext", fmt.Sprint(got.Text))
 			require.Equal(t, FullName{"John", "Doe"}, got.Name)
 			require.Equal(t, int32(100), got.Number)
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), cql.TextValue("null-int"), cql.NullValue(cql.IntValue(0).Type()))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(testtext,testint) VALUES(?,?)", table), cql.TextValue("null-int"), cql.NullValue())
 			nullable := cassandraPrepared(t, session, cql.Statement[string, cql.Nullable[int32]]{CQL: fmt.Sprintf("SELECT testint FROM %s WHERE testtext=?", table), Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.NullableCodec(cql.Int32Codec))}, exec.PrepareOptions{})
 			require.False(t, cassandraReadOne(t, session, nullable, "null-int", exec.Options{}).Valid)
 		})

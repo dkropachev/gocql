@@ -83,7 +83,7 @@ func value() Fixture {
 	}
 }
 
-func encode(t *testing.T, cols cql.Columns, params cql.ParamEncoder[Fixture], v Fixture) (wire.Chain, []byte) {
+func encode[P any](t *testing.T, cols cql.Columns, params cql.ParamEncoder[P], v P) (wire.Chain, []byte) {
 	t.Helper()
 	plan, err := params.Compile(cols)
 	if err != nil {
@@ -108,14 +108,14 @@ func encode(t *testing.T, cols cql.Columns, params cql.ParamEncoder[Fixture], v 
 	return chain, raw
 }
 
-func decode(t *testing.T, cols cql.Columns, rows cql.RowDecoder[Fixture], chain wire.Chain) Fixture {
+func decode[R any](t *testing.T, cols cql.Columns, rows cql.RowDecoder[R], chain wire.Chain) R {
 	t.Helper()
 	plan, err := rows.Compile(cols)
 	if err != nil {
 		t.Fatal(err)
 	}
 	reader := codec.NewRowReader(cols, chain, wire.NewLease(chain, nil))
-	var row Fixture
+	var row R
 	if err := plan.DecodeInto(reader, &row); err != nil {
 		t.Fatal(err)
 	}

@@ -41,7 +41,7 @@ func Example_set() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	values, err := cql.DecodeValue(cql.SetDecoder(cql.TextCodec), encoded)
+	values, err := cql.DecodeValue(cql.SetDecoder(cql.TextViewCodec), encoded)
 	if err != nil {
 		log.Fatal(err)
 	}

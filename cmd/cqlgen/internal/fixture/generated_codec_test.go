@@ -66,6 +66,43 @@ func TestGeneratedCodec(t *testing.T) {
 		}
 	})
 
+	// Address's generated CQLCodec maps it as a UDT wherever it appears,
+	// in the generated mapping and the reflected one alike.
+	t.Run("UDT", func(t *testing.T) {
+		if _, ok := any(Address{}).(interface{ CQLCodec() cql.Codec[Address] }); !ok {
+			t.Fatal("no generated CQLCodec method for Address")
+		}
+		text, _ := cql.ScalarType(cql.KindText)
+		integer, _ := cql.ScalarType(cql.KindInt)
+		udt, err := cql.UDTType("ks", "address", cql.ColumnSpec{Name: "street", Type: text}, cql.ColumnSpec{Name: "zip", Type: integer})
+		if err != nil {
+			t.Fatal(err)
+		}
+		list, _ := cql.ListType(udt)
+		byName, _ := cql.MapType(text, udt)
+		cols := cql.NewColumns(
+			cql.ColumnSpec{Name: "id", Type: integer},
+			cql.ColumnSpec{Name: "home", Type: udt},
+			cql.ColumnSpec{Name: "previous", Type: list},
+			cql.ColumnSpec{Name: "by_name", Type: byName},
+			cql.ColumnSpec{Name: "billing", Type: udt},
+		)
+		want := Customer{ID: 1, Home: Address{"Main", 10}, Previous: []Address{{"Old", 20}},
+			ByName: map[string]Address{"work": {"Office", 30}}, Billing: &Address{"Bank", 40}}
+		chain, gen := encode(t, cols, cql.MustParamsOf[Customer](), want)
+		type reflectedCustomer Customer
+		_, ref := encode(t, cols, cql.MustParamsOf[reflectedCustomer](), reflectedCustomer(want))
+		if !bytes.Equal(gen, ref) {
+			t.Fatalf("encodings differ:\ngenerated %x\nreflected %x", gen, ref)
+		}
+		if got := decode(t, cols, cql.MustRowOf[Customer](), chain); !reflect.DeepEqual(got, want) {
+			t.Fatalf("generated round trip: %+v", got)
+		}
+		if got := decode(t, cols, cql.MustRowOf[reflectedCustomer](), chain); !reflect.DeepEqual(Customer(got), want) {
+			t.Fatalf("reflected round trip: %+v", got)
+		}
+	})
+
 	// The generated streaming mapping and the reflected one decode alike.
 	t.Run("StreamFixture", func(t *testing.T) {
 		if (StreamFixture{}).CQLStreamColumns() == nil {

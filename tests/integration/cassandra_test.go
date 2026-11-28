@@ -253,7 +253,7 @@ func runMetadataChangedFlow(t *testing.T, session *gocql.Session, conn *driverCo
 		require.NoError(t, rows.Close())
 		require.Len(t, found, 2)
 		require.Equal(t, cql.Null, found[1].State())
-		value, err := found[2].Signed()
+		value, err := found[2].Int64()
 		require.NoError(t, err)
 		require.Equal(t, int64(10), value)
 	}

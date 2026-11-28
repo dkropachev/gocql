@@ -32,7 +32,7 @@ func TestViewCopyLive(t *testing.T) {
 	if err != nil || s != "hello" {
 		t.Fatalf("Text.Copy = %q, %v", s, err)
 	}
-	if s := textView(b).String(); s != "hello" {
+	if s := textView(b).string(); s != "hello" {
 		t.Fatalf("Text.String = %q", s)
 	}
 }
@@ -53,7 +53,7 @@ func TestViewCopyExpired(t *testing.T) {
 	if s, err := textView(b).Copy(); !errors.Is(err, ErrReleased) || s != "" {
 		t.Fatalf("Text.Copy = %q, %v; want ErrReleased", s, err)
 	}
-	if s := textView(b).String(); s != "<released>" {
+	if s := textView(b).string(); s != "<released>" {
 		t.Fatalf("Text.String = %q; want <released>", s)
 	}
 	for name, f := range map[string]func(){

@@ -140,7 +140,7 @@ func TestPage(t *testing.T) {
 			}
 			cols := cql.NewColumns(cql.ColumnSpec{Name: "n", Type: integer}, cql.ColumnSpec{Name: "v", Type: blob})
 			body := typedTestChain(t, []byte{0, 0, 0, 4, 0, 0, 0, 7, 0, 0, 0, 5, 1})
-			decoder := cql.Row(cql.Column("n", cql.Int32Codec, func(r *row) *int32 { return &r.Number }), cql.Column("v", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.Value }))
+			decoder := cql.Row(cql.Column("n", cql.Int32Codec, func(r *row) *int32 { return &r.Number }), cql.Column("v", cql.BytesViewCodec, func(r *row) *cql.Bytes { return &r.Value }))
 			p := codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: cols, Rows: body, RowCount: 1, Owner: wire.NewLease(body, nil)}}, decoder, nil))
 			defer p.Close()
 			dst := row{Unused: 8}

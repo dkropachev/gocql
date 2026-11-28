@@ -142,3 +142,18 @@ func TestResolveKind(t *testing.T) {
 		t.Errorf("ValidateStatement: kind %v, %v", s.Kind, err)
 	}
 }
+
+func TestInternalNamedMarkers(t *testing.T) {
+	for text, want := range map[string]bool{
+		"SELECT * FROM t WHERE a > ? AND a < ?":            false,
+		"SELECT * FROM t WHERE a > :from AND a < :to":      true,
+		`SELECT * FROM t WHERE a = :"Quoted"`:              true,
+		"INSERT INTO t (m) VALUES ({'k': ?})":              false,
+		"SELECT * FROM t WHERE a = ':x' -- :y\n AND b = ?": false,
+		"SELECT * FROM t WHERE a = ? /* :y */":             false,
+	} {
+		if got := InternalNamedMarkers(text); got != want {
+			t.Errorf("InternalNamedMarkers(%q) = %v", text, got)
+		}
+	}
+}

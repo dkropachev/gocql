@@ -69,6 +69,14 @@ func (v Value) String() string {
 }
 
 func (v Value) format(b *strings.Builder) {
+	if untypedMarker(v) {
+		if v.state == Null {
+			b.WriteString("null")
+		} else {
+			b.WriteString("unset")
+		}
+		return
+	}
 	if descriptorOf(v.typ) == nil {
 		b.WriteString("<invalid>")
 		return
@@ -112,7 +120,7 @@ func (v Value) format(b *strings.Builder) {
 	case KindDouble:
 		b.WriteString(strconv.FormatFloat(math.Float64frombits(v.bits), 'g', -1, 64))
 	case KindText, KindASCII:
-		quoted(textView(v.bytes).String())
+		quoted(textView(v.bytes).string())
 	case KindBlob:
 		b.WriteString("0x")
 		b.WriteString(hex.EncodeToString(v.bytes.ownedBytes()))

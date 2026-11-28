@@ -107,7 +107,7 @@ func TestSnapshotToken(t *testing.T) {
 		for name, call := range map[string]func() error{
 			"arity":       func() error { _, err := m.Token("ks", "composite", cql.IntValue(1)); return err },
 			"type":        func() error { _, err := m.Token("ks", "single", text); return err },
-			"null":        func() error { _, err := m.Token("ks", "single", cql.NullValue(intType)); return err },
+			"null":        func() error { _, err := m.Token("ks", "single", cql.NullValue()); return err },
 			"partitioner": func() error { _, err := m.Token("ks", "custom", cql.IntValue(1)); return err },
 			"no key":      func() error { _, err := m.Token("ks", "nokey"); return err },
 		} {

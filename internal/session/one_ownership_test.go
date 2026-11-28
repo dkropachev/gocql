@@ -16,7 +16,7 @@ func TestOneOwnsBorrowedResult(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			s := loopbackTestSession(t, "pone")
 			session := InternalWrapSession(s)
-			statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BytesCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
+			statement := binding.Statement[int32, cql.Bytes]{CQL: "SELECT value FROM ks.tbl WHERE k = ?", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.BytesViewCodec), BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "k", Type: cql.IntType})}
 			p := codecTestMust(Prepare(context.Background(), s, statement, PrepareOptions{}))
 			q := codecTestMust(p.Query(Options{}))
 			defer q.Close()

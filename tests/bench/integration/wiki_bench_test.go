@@ -104,22 +104,26 @@ func (w *WikiTest) CreatePages(n int) {
 	}
 }
 
-var wikiRatingCodec = cql.ConvertCodec(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) cql.Nullable[inf.Dec] {
+var wikiRatingCodec = cql.ConvertCodec(cql.NullableCodec(serializationDecimal), func(v *inf.Dec) (cql.Nullable[inf.Dec], error) {
 	if v == nil {
-		return cql.Nullable[inf.Dec]{}
+		return cql.Nullable[inf.Dec]{}, nil
 	}
-	return cql.Nullable[inf.Dec]{Value: *v, Valid: true}
-}, func(v cql.Nullable[inf.Dec]) *inf.Dec {
+	return cql.Nullable[inf.Dec]{Value: *v, Valid: true}, nil
+}, func(v cql.Nullable[inf.Dec]) (*inf.Dec, error) {
 	if !v.Valid {
-		return nil
+		return nil, nil
 	}
-	return &v.Value
+	return &v.Value, nil
 })
-var wikiTagsCodec = cql.ConvertCodec(cql.NullableCodec(serializationSet(serializationString)), func(v []string) cql.Nullable[[]string] { return cql.Nullable[[]string]{Value: v, Valid: v != nil} }, func(v cql.Nullable[[]string]) []string { return v.Value })
-var wikiAttachmentCodec = cql.ConvertCodec(serializationBlob, func(v WikiAttachment) []byte { return []byte(v) }, func(v []byte) WikiAttachment { return WikiAttachment(v) })
-var wikiAttachmentsCodec = cql.ConvertCodec(cql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) cql.Nullable[map[string]WikiAttachment] {
-	return cql.Nullable[map[string]WikiAttachment]{Value: v, Valid: v != nil}
-}, func(v cql.Nullable[map[string]WikiAttachment]) map[string]WikiAttachment { return v.Value })
+var wikiTagsCodec = cql.ConvertCodec(cql.NullableCodec(serializationSet(serializationString)), func(v []string) (cql.Nullable[[]string], error) {
+	return cql.Nullable[[]string]{Value: v, Valid: v != nil}, nil
+}, func(v cql.Nullable[[]string]) ([]string, error) { return v.Value, nil })
+var wikiAttachmentCodec = cql.ConvertCodec(serializationBlob, func(v WikiAttachment) ([]byte, error) { return []byte(v), nil }, func(v []byte) (WikiAttachment, error) { return WikiAttachment(v), nil })
+var wikiAttachmentsCodec = cql.ConvertCodec(cql.NullableCodec(serializationMap(serializationString, wikiAttachmentCodec)), func(v map[string]WikiAttachment) (cql.Nullable[map[string]WikiAttachment], error) {
+	return cql.Nullable[map[string]WikiAttachment]{Value: v, Valid: v != nil}, nil
+}, func(v cql.Nullable[map[string]WikiAttachment]) (map[string]WikiAttachment, error) {
+	return v.Value, nil
+})
 var wikiParams = cql.Params(
 	cql.Param("title", serializationString, func(v WikiPage) string { return v.Title }),
 	cql.Param("revid", cql.TimeUUIDCodec, func(v WikiPage) cql.TimeUUID { return v.RevId }),

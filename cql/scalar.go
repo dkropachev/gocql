@@ -16,13 +16,44 @@ import (
 
 // scalarCodec contains immutable operations shared by all calls to a codec.
 type scalarCodec[T any] struct {
-	encode      func(*ValueWriter, T) error
-	decode      func(ValueReader) (T, error)
-	decodeRow   func(*RowReader, Kind, Kind, bool) (T, error)
-	clone       func(T) T
+	encode    func(*ValueWriter, T) error
+	decode    func(ValueReader) (T, error)
+	decodeRow func(*RowReader, Kind, Kind, bool) (T, error)
+	clone     func(T) T
+	// narrow returns the codec for a narrower column kind the codec widens
+	// from, such as Int64Codec for an int column, or false. It is nil for
+	// a codec that accepts only its own kinds.
+	narrow      func(Kind) (scalarCodec[T], bool)
 	kind        Kind
 	alternative Kind
 	compiled    bool
+}
+
+// integerKindWidth returns the width in bytes of an integer kind, or 0.
+func integerKindWidth(kind Kind) int64 {
+	switch kind {
+	case KindTinyInt:
+		return 1
+	case KindSmallInt:
+		return 2
+	case KindInt:
+		return 4
+	case KindBigInt, KindCounter:
+		return 8
+	}
+	return 0
+}
+
+// narrowed returns the codec for t when t is a narrower kind c widens from.
+func (c scalarCodec[T]) narrowed(t DataType) (scalarCodec[T], bool) {
+	if c.narrow == nil {
+		return scalarCodec[T]{}, false
+	}
+	k := t.Kind()
+	if k == c.kind || c.alternative != 0 && k == c.alternative {
+		return scalarCodec[T]{}, false
+	}
+	return c.narrow(k)
 }
 
 func checkScalarType(t DataType, kind, alternative Kind) error {
@@ -40,12 +71,21 @@ func scalarTypeError(kind, got Kind) error {
 func (c scalarCodec[T]) CheckType(t DataType) error {
 	perfCheckType()
 
-	return checkScalarType(t, c.kind, c.alternative)
+	err := checkScalarType(t, c.kind, c.alternative)
+	if err != nil {
+		if _, ok := c.narrowed(t); ok {
+			return nil
+		}
+	}
+	return err
 }
 
 func (c scalarCodec[T]) Encode(w *ValueWriter, v T) error {
 	if err := c.typeGuard(w.Type()); err != nil {
 		return err
+	}
+	if n, ok := c.narrowed(w.Type()); ok {
+		return n.Encode(w, v)
 	}
 	return c.encode(w, v)
 }
@@ -53,6 +93,9 @@ func (c scalarCodec[T]) Decode(r ValueReader) (T, error) {
 	var zero T
 	if err := c.typeGuard(r.Type()); err != nil {
 		return zero, err
+	}
+	if n, ok := c.narrowed(r.Type()); ok {
+		return n.Decode(r)
 	}
 	if err := requirePresent(r); err != nil {
 		return zero, err
@@ -202,8 +245,13 @@ func counterCodec() Codec[int64] {
 
 // intCodec is IntCodec: Int64Codec with a range check on decode.
 func intCodec() Codec[int] {
-	base := counterCodec().(scalarCodec[int64])
-	return scalarCodec[int]{kind: base.kind, alternative: base.alternative,
+	return intFrom(counterCodec().(scalarCodec[int64]), true)
+}
+
+// intFrom adapts the int64 codec base to int, with base's kinds and, when
+// widen is set, the narrower integer kinds.
+func intFrom(base scalarCodec[int64], widen bool) scalarCodec[int] {
+	c := scalarCodec[int]{kind: base.kind, alternative: base.alternative,
 		encode: func(w *ValueWriter, v int) error { return base.encode(w, int64(v)) },
 		decode: func(r ValueReader) (int, error) {
 			v, err := base.decode(r)
@@ -216,9 +264,61 @@ func intCodec() Codec[int] {
 			return int(v), nil
 		},
 	}
+	if widen {
+		c.narrow = func(k Kind) (scalarCodec[int], bool) {
+			n, ok := base.narrow(k)
+			if !ok {
+				return scalarCodec[int]{}, false
+			}
+			return intFrom(n, false), true
+		}
+	}
+	return c
 }
 
+// integerCodec maps the kind of width bytes to T and, for an integer kind,
+// widens the narrower integer kinds: decoding one is lossless, and encoding into one
+// fails for a value outside its range.
 func integerCodec[T signedScalar](kind Kind, width int64) Codec[T] {
+	c := exactIntegerCodec[T](kind, width)
+	if integerKindWidth(kind) == 0 {
+		// A timestamp is an integer on the wire but not a wider integer.
+		return c
+	}
+	c.narrow = func(k Kind) (scalarCodec[T], bool) {
+		w := integerKindWidth(k)
+		if w == 0 || w >= width || k == KindCounter {
+			return scalarCodec[T]{}, false
+		}
+		n := exactIntegerCodec[T](k, w)
+		encode := n.encode
+		n.encode = func(wr *ValueWriter, v T) error {
+			if !integerFits(int64(v), w) {
+				return integerRangeError(int64(v), k)
+			}
+			return encode(wr, v)
+		}
+		return n, true
+	}
+	return c
+}
+
+// integerFits reports whether v fits a signed integer of width bytes.
+func integerFits(v int64, width int64) bool {
+	if width >= 8 {
+		return true
+	}
+	limit := int64(1) << (8*width - 1)
+	return v >= -limit && v < limit
+}
+
+//go:noinline
+func integerRangeError(v int64, kind Kind) error {
+	return fmt.Errorf("gocql: %d is out of range for %s", v, kind)
+}
+
+// exactIntegerCodec maps only the integer kind of width bytes to T.
+func exactIntegerCodec[T signedScalar](kind Kind, width int64) scalarCodec[T] {
 	return scalarCodec[T]{kind: kind,
 		decodeRow: func(r *RowReader, kind, alternative Kind, compiled bool) (T, error) {
 			v, err := integerColumn(r, kind, alternative, compiled, width)
@@ -311,8 +411,10 @@ var (
 		},
 	}
 
-	// Float64Codec maps double to float64.
-	Float64Codec Codec[float64] = scalarCodec[float64]{kind: KindDouble,
+	// Float64Codec maps double to float64, and widens float: decoding a
+	// float is lossless, and encoding into one rounds to the nearest float32
+	// and fails for a finite value beyond float32's range.
+	Float64Codec Codec[float64] = scalarCodec[float64]{kind: KindDouble, narrow: narrowFloat,
 		encode: func(w *ValueWriter, v float64) error { return w.Uint64(math.Float64bits(v)) },
 		decode: func(r ValueReader) (float64, error) {
 			if v, ok := fixedValue(r, 8); ok {
@@ -341,19 +443,19 @@ var (
 
 	// StringCodec maps text and ascii to string. It decodes into a newly
 	// allocated string that stays valid after the row is released; use
-	// TextCodec to decode without copying. A value must be valid UTF-8 for
+	// TextViewCodec to decode without copying. A value must be valid UTF-8 for
 	// text and ASCII for ascii, both when it is encoded and decoded.
 	StringCodec Codec[string] = stringCodec{}
 
-	// TextCodec maps text and ascii to Text, validating UTF-8 for text and
+	// TextViewCodec maps text and ascii to Text, validating UTF-8 for text and
 	// ASCII for ascii. A decoded Text borrows the response; Clone or
 	// StringCodec detach it.
-	TextCodec Codec[Text] = textCodec{}
+	TextViewCodec Codec[Text] = textCodec{}
 
-	// BytesCodec maps blob to Bytes. A decoded Bytes borrows the response, and
+	// BytesViewCodec maps blob to Bytes. A decoded Bytes borrows the response, and
 	// encoding borrows the Bytes as ValueWriter.BorrowBytes does; Clone
 	// detaches it.
-	BytesCodec Codec[Bytes] = scalarCodec[Bytes]{kind: KindBlob,
+	BytesViewCodec Codec[Bytes] = scalarCodec[Bytes]{kind: KindBlob,
 		decodeRow: blobColumn,
 		encode:    func(w *ValueWriter, v Bytes) error { return w.borrowView(v) },
 		decode:    func(r ValueReader) (Bytes, error) { return r.Bytes(), nil },
@@ -519,7 +621,7 @@ func (c stringCodec) Decode(r ValueReader) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return t.String(), nil
+	return t.Copy()
 }
 func (stringCodec) Clone(v string) string { return v }
 func (c stringCodec) compileValueDecoder(t DataType) (Decoder[string], error) {
@@ -642,64 +744,6 @@ func validateText(b Bytes, ascii bool) error {
 	}
 	return v.finish()
 }
-
-// ConvertCodec maps A through base, which maps B: to converts a value
-// before base encodes it, and from converts what base decodes. Use it for an
-// application type with no built-in codec, such as one that wraps or packs
-// a built-in type. Clone clones through base.
-func ConvertCodec[A, B any](base Codec[B], to func(A) B, from func(B) A) Codec[A] {
-	return convertCodec[A, B]{base: base, to: to, from: from}
-}
-
-type convertCodec[A, B any] struct {
-	base    Codec[B]
-	to      func(A) B
-	from    func(B) A
-	encoder Encoder[B]
-	decoder Decoder[B]
-	typ     DataType
-}
-
-func (c convertCodec[A, B]) CheckType(t DataType) error {
-	perfCheckType()
-
-	if descriptorOf(c.typ) != nil {
-		if c.typ.Equal(t) {
-			return nil
-		}
-		return typeValidation("type", "compiled mapped scalar metadata changed")
-	}
-	if c.base == nil || c.to == nil || c.from == nil {
-		return errors.New("gocql: incomplete named scalar adapter")
-	}
-	return c.base.CheckType(t)
-}
-func (c convertCodec[A, B]) Encode(w *ValueWriter, v A) error {
-	if e := c.typeGuard(w.Type()); e != nil {
-		return e
-	}
-	encoder := c.encoder
-	if encoder == nil {
-		encoder = c.base
-	}
-	return encoder.Encode(w, c.to(v))
-}
-func (c convertCodec[A, B]) Decode(r ValueReader) (A, error) {
-	var zero A
-	if e := c.typeGuard(r.Type()); e != nil {
-		return zero, e
-	}
-	decoder := c.decoder
-	if decoder == nil {
-		decoder = c.base
-	}
-	v, e := decoder.Decode(r)
-	if e != nil {
-		return zero, e
-	}
-	return c.from(v), nil
-}
-func (c convertCodec[A, B]) Clone(v A) A { return c.from(c.base.Clone(c.to(v))) }
 
 // NullableCodec adds NULL encoding and decoding to base.
 func NullableCodec[T any](base Codec[T]) Codec[Nullable[T]] {
@@ -1014,29 +1058,6 @@ func (c emptyCodec[T]) DecodeInto(r ValueReader, dst *MaybeEmpty[T]) error {
 	return decodeValueInto(decoder, r, &dst.Value)
 }
 
-func (c convertCodec[A, B]) compileValueEncoder(t DataType) (Encoder[A], error) {
-	if c.to == nil || c.from == nil {
-		return nil, typeValidation("codec", "nil scalar mapping")
-	}
-	base, err := compileValueEncoder(c.base, t)
-	if err != nil {
-		return nil, err
-	}
-	c.encoder, c.typ = base, t
-	return c, nil
-}
-func (c convertCodec[A, B]) compileValueDecoder(t DataType) (Decoder[A], error) {
-	if c.to == nil || c.from == nil {
-		return nil, typeValidation("codec", "nil scalar mapping")
-	}
-	base, err := compileValueDecoder(c.base, t)
-	if err != nil {
-		return nil, err
-	}
-	c.decoder, c.typ = base, t
-	return c, nil
-}
-
 // Compiled scalar codecs retain constant metadata safety guards while moving
 // the CheckType contract to compilation. They still check state/lease/width and
 // content exactly as the standalone public codecs do.
@@ -1050,6 +1071,9 @@ func (c scalarCodec[T]) compileValueDecoder(t DataType) (Decoder[T], error) {
 	if e := c.CheckType(t); e != nil {
 		return nil, e
 	}
+	if n, ok := c.narrowed(t); ok {
+		c = n
+	}
 	c.compiled = true
 	return c, nil
 }
@@ -1057,8 +1081,31 @@ func (c scalarCodec[T]) compileValueEncoder(t DataType) (Encoder[T], error) {
 	if e := c.CheckType(t); e != nil {
 		return nil, e
 	}
+	if n, ok := c.narrowed(t); ok {
+		c = n
+	}
 	c.compiled = true
 	return c, nil
+}
+
+// narrowFloat is Float64Codec for a float column.
+func narrowFloat(k Kind) (scalarCodec[float64], bool) {
+	if k != KindFloat {
+		return scalarCodec[float64]{}, false
+	}
+	base := Float32Codec.(scalarCodec[float32])
+	return scalarCodec[float64]{kind: KindFloat,
+		encode: func(w *ValueWriter, v float64) error {
+			if !math.IsInf(v, 0) && !math.IsNaN(v) && math.Abs(v) > math.MaxFloat32 {
+				return fmt.Errorf("gocql: %g is out of range for float", v)
+			}
+			return base.encode(w, float32(v))
+		},
+		decode: func(r ValueReader) (float64, error) {
+			v, err := base.decode(r)
+			return float64(v), err
+		},
+	}, true
 }
 func (c textCodec) typeGuard(t DataType) error {
 	if c.compiled {
@@ -1092,16 +1139,6 @@ func (c stringCodec) compileValueEncoder(t DataType) (Encoder[string], error) {
 	}
 	c.compiled = true
 	return c, nil
-}
-
-func (c convertCodec[A, B]) typeGuard(t DataType) error {
-	if descriptorOf(c.typ) == nil {
-		return c.CheckType(t)
-	}
-	if !c.typ.Equal(t) {
-		return typeValidation("type", "compiled wrapper metadata changed")
-	}
-	return nil
 }
 
 func (c nullableEncoder[T]) typeGuard(t DataType) error {

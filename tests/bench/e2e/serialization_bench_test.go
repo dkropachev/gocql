@@ -30,10 +30,10 @@ func BenchmarkSerialization(b *testing.B) {
 		for _, size := range []int{100, 1024, 1024 * 1024} {
 			body := bytes.Repeat([]byte("x"), size)
 			b.Run(fmt.Sprintf("Blob/%d", size), func(b *testing.B) {
-				benchmarkValue(b, scalar(cql.KindBlob), cql.BytesCodec, cql.BytesCodec, cql.BorrowBytes(body))
+				benchmarkValue(b, scalar(cql.KindBlob), cql.BytesViewCodec, cql.BytesViewCodec, cql.BorrowBytes(body))
 			})
 			b.Run(fmt.Sprintf("Text/%d", size), func(b *testing.B) {
-				benchmarkValue(b, scalar(cql.KindText), cql.StringCodec, cql.TextCodec, string(body))
+				benchmarkValue(b, scalar(cql.KindText), cql.StringCodec, cql.TextViewCodec, string(body))
 			})
 		}
 		b.Run("UUID", func(b *testing.B) {
@@ -50,13 +50,13 @@ func BenchmarkSerialization(b *testing.B) {
 		set, _ := cql.SetType(text)
 		mapping, _ := cql.MapType(text, integer)
 		b.Run("List", func(b *testing.B) {
-			benchmarkValue(b, list, cql.ListEncoder(cql.StringCodec), cql.ListDecoder(cql.TextCodec), []string{"foo", "bar", "baz"})
+			benchmarkValue(b, list, cql.ListEncoder(cql.StringCodec), cql.ListDecoder(cql.TextViewCodec), []string{"foo", "bar", "baz"})
 		})
 		b.Run("Set", func(b *testing.B) {
-			benchmarkValue(b, set, cql.SetEncoder(cql.StringCodec), cql.SetDecoder(cql.TextCodec), []string{"foo", "bar", "baz"})
+			benchmarkValue(b, set, cql.SetEncoder(cql.StringCodec), cql.SetDecoder(cql.TextViewCodec), []string{"foo", "bar", "baz"})
 		})
 		b.Run("Map", func(b *testing.B) {
-			benchmarkValue(b, mapping, cql.MapEncoder(cql.StringCodec, cql.Int32Codec), cql.MapDecoder(cql.TextCodec, cql.Int32Codec), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
+			benchmarkValue(b, mapping, cql.MapEncoder(cql.StringCodec, cql.Int32Codec), cql.MapDecoder(cql.TextViewCodec, cql.Int32Codec), []cql.Entry[string, int32]{{Key: "a", Value: 1}, {Key: "b", Value: 2}})
 		})
 		type record struct {
 			ID    cql.UUID
@@ -69,13 +69,13 @@ func BenchmarkSerialization(b *testing.B) {
 			Value int32
 		}
 		params := cql.Params(cql.ParamAt(0, cql.UUIDCodec, func(v record) cql.UUID { return v.ID }), cql.ParamAt(1, cql.StringCodec, func(v record) string { return v.Name }), cql.ParamAt(2, cql.Int32Codec, func(v record) int32 { return v.Value }))
-		rows := cql.Row(cql.ColumnAt(0, cql.UUIDCodec, func(v *view) *cql.UUID { return &v.ID }), cql.ColumnAt(1, cql.TextCodec, func(v *view) *cql.Text { return &v.Name }), cql.ColumnAt(2, cql.Int32Codec, func(v *view) *int32 { return &v.Value }))
+		rows := cql.Row(cql.ColumnAt(0, cql.UUIDCodec, func(v *view) *cql.UUID { return &v.ID }), cql.ColumnAt(1, cql.TextViewCodec, func(v *view) *cql.Text { return &v.Name }), cql.ColumnAt(2, cql.Int32Codec, func(v *view) *int32 { return &v.Value }))
 		tuple, _ := cql.TupleType(scalar(cql.KindUUID), text, integer)
 		b.Run("Tuple", func(b *testing.B) {
 			benchmarkValue(b, tuple, cql.TupleEncoder(params), cql.TupleDecoder(rows), record{Name: "test tuple", Value: 123})
 		})
 		udt, _ := cql.UDTType("myks", "myudt", cql.ColumnSpec{Name: "id", Type: scalar(cql.KindUUID)}, cql.ColumnSpec{Name: "name", Type: text}, cql.ColumnSpec{Name: "value", Type: integer})
-		opts := cql.UDTOptions{Keyspace: "myks", Name: "myudt"}
+		opts := cql.UDTName("myks", "myudt")
 		udtEnc := cql.UDTEncoder(params, opts)
 		udtDec := cql.UDTDecoder(rows, opts)
 		b.Run("UDT", func(b *testing.B) { benchmarkValue(b, udt, udtEnc, udtDec, record{Name: "test udt", Value: 123}) })
@@ -83,7 +83,7 @@ func BenchmarkSerialization(b *testing.B) {
 		nested, _ := cql.ListType(nestedMap)
 		nestedValue := [][]cql.Entry[string, record]{{{Key: "key1", Value: record{Name: "name1", Value: 123}}, {Key: "key2", Value: record{Name: "name2", Value: 456}}}, {{Key: "key3", Value: record{Name: "name3", Value: 789}}}}
 		b.Run("Nested/3-lvl", func(b *testing.B) {
-			benchmarkValue(b, nested, cql.ListEncoder(cql.MapEncoder(cql.StringCodec, udtEnc)), cql.ListDecoder(cql.MapDecoder(cql.TextCodec, udtDec)), nestedValue)
+			benchmarkValue(b, nested, cql.ListEncoder(cql.MapEncoder(cql.StringCodec, udtEnc)), cql.ListDecoder(cql.MapDecoder(cql.TextViewCodec, udtDec)), nestedValue)
 		})
 	})
 

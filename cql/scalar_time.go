@@ -5,6 +5,7 @@ package cql
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/bits"
 	"time"
@@ -60,10 +61,14 @@ var TimestampCodec Codec[Timestamp] = integerCodec[Timestamp](KindTimestamp, 8)
 // TimestampTimeCodec maps timestamp to time.Time, the default codec of
 // time.Time struct fields. It decodes a UTC time and encodes the time's
 // instant truncated to the millisecond, rejecting one outside the int64
-// millisecond range. The zero time.Time is an instant like any other, the
-// year 1; bind a Nullable[time.Time] for NULL.
+// millisecond range. It rejects the zero time.Time, which is almost always
+// a field the application forgot to set rather than the year 1: bind a
+// Nullable[time.Time] or a nil *time.Time for NULL.
 var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: KindTimestamp,
 	encode: func(w *ValueWriter, v time.Time) error {
+		if v.IsZero() {
+			return errZeroTime
+		}
 		ts, err := TimestampFromTime(v)
 		if err != nil {
 			return err
@@ -82,6 +87,30 @@ var TimestampTimeCodec Codec[time.Time] = scalarCodec[time.Time]{kind: KindTimes
 			}
 		}
 		return time.UnixMilli(int64(v)).UTC(), nil
+	},
+}
+
+// errZeroTime is TimestampTimeCodec's error for the zero time.Time.
+var errZeroTime = errors.New("gocql: zero time.Time; bind a cql.Nullable[time.Time] or a nil *time.Time for NULL")
+
+// TimeDurationCodec maps duration to time.Duration, the default codec of
+// time.Duration struct fields, which therefore map a CQL duration and not a
+// bigint. It encodes the nanoseconds with zero months and days, and rejects
+// decoding a duration with months or days, whose length in time depends on
+// the calendar; decode those into Duration.
+var TimeDurationCodec Codec[time.Duration] = scalarCodec[time.Duration]{kind: KindDuration,
+	encode: func(w *ValueWriter, v time.Duration) error {
+		return encodeDuration(w, Duration{Nanoseconds: int64(v)})
+	},
+	decode: func(r ValueReader) (time.Duration, error) {
+		d, err := decodeDuration(r)
+		if err != nil {
+			return 0, err
+		}
+		if d.Months != 0 || d.Days != 0 {
+			return 0, fmt.Errorf("gocql: duration %s has months or days, which time.Duration cannot hold; decode it into cql.Duration", d)
+		}
+		return time.Duration(d.Nanoseconds), nil
 	},
 }
 

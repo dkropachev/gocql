@@ -61,6 +61,10 @@ var (
 	// ConditionalRows holds func(decoder any) bool: it reports whether
 	// decoder is a cql.CASRows decoder.
 	ConditionalRows = NewSlot("cql.conditionalRows")
+	// RepeatedMarkers holds func(encoder any, markers cql.Columns) error: it
+	// rejects a built-in parameter mapping that binds one named field to two
+	// markers of one name.
+	RepeatedMarkers = NewSlot("cql.repeatedMarkers")
 )
 
 // Package cql's Result, which the engine fills in. The functions take and

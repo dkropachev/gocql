@@ -98,7 +98,7 @@ func TestBindValueFields(t *testing.T) {
 			}
 		})
 	}
-	if _, err := ParamsOf[bindRow](); err == nil || !strings.Contains(err.Error(), "no codec for type cql.BindValue[") {
+	if _, err := ParamsOf[bindRow](); err == nil || !strings.Contains(err.Error(), "no codec for type cql.structPoint") {
 		t.Fatalf("ParamsOf without a codec for the point: %v", err)
 	}
 	if _, err := RowOf[bindRow](WithCodec(Codec[structPoint](pointCodec{}))); err == nil || !strings.Contains(err.Error(), "only binds parameters") {
@@ -116,14 +116,14 @@ func TestStructOptionTargets(t *testing.T) {
 		build        func() error
 	}{
 		{"ParamsOf ReuseBuffers", "ReuseBuffers", func() error { _, err := ParamsOf[row](ReuseBuffers()); return err }},
-		{"ParamsOf IgnoreExtraColumns", "IgnoreExtraColumns", func() error { _, err := ParamsOf[row](IgnoreExtraColumns()); return err }},
+		{"ParamsOf IgnoreExtraFields", "IgnoreExtraFields", func() error { _, err := ParamsOf[row](IgnoreExtraFields()); return err }},
 		{"ParamsOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := ParamsOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"RowOf WithEncoder", "WithEncoder", func() error { _, err := RowOf[row](WithEncoder(Int32Codec)); return err }},
 		{"RowOf WithStreamDecoder", "WithStreamDecoder", func() error { _, err := RowOf[row](WithStreamDecoder(StreamInt32)); return err }},
 		{"StreamRowOf WithCodec", "WithCodec", func() error { _, err := StreamRowOf[row](codec); return err }},
 		{"StreamRowOf ReuseBuffers", "ReuseBuffers", func() error { _, err := StreamRowOf[row](ReuseBuffers()); return err }},
-		{"UDTCodecOf ReuseBuffers", "ReuseBuffers", func() error { _, err := UDTCodecOf[row](UDTOptions{Name: "u"}, ReuseBuffers()); return err }},
-		{"TupleCodecOf IgnoreExtraColumns", "IgnoreExtraColumns", func() error { _, err := TupleCodecOf[row](IgnoreExtraColumns()); return err }},
+		{"UDTCodecOf ReuseBuffers", "ReuseBuffers", func() error { _, err := UDTCodecOf[row](UDTName("", "u"), ReuseBuffers()); return err }},
+		{"TupleCodecOf IgnoreExtraFields", "IgnoreExtraFields", func() error { _, err := TupleCodecOf[row](IgnoreExtraFields()); return err }},
 		{"nil", "StructOption", func() error { _, err := RowOf[row](nil); return err }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -138,13 +138,13 @@ func TestStructOptionTargets(t *testing.T) {
 	if _, err := ParamsOf[row](codec, WithEncoder(Int32Codec)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := RowOf[row](codec, ReuseBuffers(), IgnoreExtraColumns()); err != nil {
+	if _, err := RowOf[row](codec, ReuseBuffers(), IgnoreExtraFields()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := StreamRowOf[row](WithStreamDecoder(StreamInt32), IgnoreExtraColumns()); err != nil {
+	if _, err := StreamRowOf[row](WithStreamDecoder(StreamInt32), IgnoreExtraFields()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := UDTCodecOf[row](UDTOptions{Name: "u"}, codec); err != nil {
+	if _, err := UDTCodecOf[row](UDTName("", "u"), codec); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -195,7 +195,7 @@ func TestIgnoreExtraColumns(t *testing.T) {
 		Param("added", ByteSliceCodec, func(row) []byte { return []byte{1} }),
 		Param("name", StringCodec, func(row) string { return "n" }),
 	), row{})
-	if got := decodeTestRow(t, columns, MustRowOf[row](IgnoreExtraColumns()), chain); got != (row{ID: 7, Name: "n"}) {
+	if got := decodeTestRow(t, columns, MustRowOf[row](IgnoreExtraFields()), chain); got != (row{ID: 7, Name: "n"}) {
 		t.Fatalf("RowOf: %+v", got)
 	}
 
@@ -208,7 +208,7 @@ func TestIgnoreExtraColumns(t *testing.T) {
 	}
 	data := append(append(streamCellBytes([]byte{0, 0, 0, 7}), streamCellBytes([]byte{1})...), streamCellBytes([]byte("n"))...)
 	dst := streamed{Name: make([]byte, 0, 1)}
-	streamDecodeRow(t, columns, MustStreamRowOf[streamed](IgnoreExtraColumns()), data, &dst)
+	streamDecodeRow(t, columns, MustStreamRowOf[streamed](IgnoreExtraFields()), data, &dst)
 	if dst.ID != 7 || string(dst.Name) != "n" {
 		t.Fatalf("StreamRowOf: %+v", dst)
 	}
@@ -254,13 +254,13 @@ func TestUDTCodecOf(t *testing.T) {
 	value := udtPerson{Name: "n", Address: udtAddress{Street: "s", ZipCode: 12345}}
 	for _, keyspace := range []string{"ks1", "ks2"} {
 		columns := NewColumns(ColumnSpec{Name: "name", Type: rowTestType(t, KindText)}, ColumnSpec{Name: "address", Type: address(keyspace)})
-		opt := WithCodec(MustUDTCodecOf[udtAddress](UDTOptions{Name: "address"}))
+		opt := WithCodec(MustUDTCodecOf[udtAddress](UDTName("", "address")))
 		chain := encodeTestParams(t, columns, MustParamsOf[udtPerson](opt), value)
 		if got := decodeTestRow(t, columns, MustRowOf[udtPerson](opt), chain); got != value {
 			t.Fatalf("%s: got %+v", keyspace, got)
 		}
 	}
-	codec := MustUDTCodecOf[udtAddress](UDTOptions{Keyspace: "ks1", Name: "address"})
+	codec := MustUDTCodecOf[udtAddress](UDTName("ks1", "address"))
 	if err := codec.CheckType(address("ks1")); err != nil {
 		t.Fatal(err)
 	}
@@ -268,14 +268,14 @@ func TestUDTCodecOf(t *testing.T) {
 		t.Fatal("a codec naming ks1 accepted the UDT of ks2")
 	}
 	other := CodecTestMust(UDTType("ks1", "other", ColumnSpec{Name: "street", Type: rowTestType(t, KindText)}, ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)}))
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{Name: "address"}).CheckType(other); err == nil {
+	if err := MustUDTCodecOf[udtAddress](UDTName("", "address")).CheckType(other); err == nil {
 		t.Fatal("accepted a UDT of another name")
 	}
 	// Without a name, the options match a UDT of any name.
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{Keyspace: "ks1"}).CheckType(other); err != nil {
+	if err := MustUDTCodecOf[udtAddress](UDTName("ks1", "")).CheckType(other); err != nil {
 		t.Fatal("options without a name rejected a UDT:", err)
 	}
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{}).CheckType(address("ks2")); err != nil {
+	if err := MustUDTCodecOf[udtAddress]().CheckType(address("ks2")); err != nil {
 		t.Fatal("zero options rejected a UDT:", err)
 	}
 	// The struct's fields and the UDT's must match unless options relax it.
@@ -283,7 +283,7 @@ func TestUDTCodecOf(t *testing.T) {
 	if err := codec.CheckType(narrow); err == nil {
 		t.Fatal("accepted a UDT without a struct field's field")
 	}
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{Name: "address", AllowMissingFields: true}).CheckType(narrow); err != nil {
+	if err := MustUDTCodecOf[udtAddress](UDTName("", "address"), AllowMissingFields()).CheckType(narrow); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -309,7 +309,7 @@ func TestTupleCodec(t *testing.T) {
 }
 
 // WithCodec of a UDT codec also maps []T, *T and map values of T, and
-// UDTCodecOf takes IgnoreExtraColumns for extra UDT fields.
+// UDTCodecOf takes IgnoreExtraFields for extra UDT fields.
 func TestUDTCodecCollections(t *testing.T) {
 	address := CodecTestMust(UDTType("ks", "address",
 		ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
@@ -332,7 +332,7 @@ func TestUDTCodecCollections(t *testing.T) {
 	)
 	a, b := udtAddress{Street: "a", ZipCode: 1}, udtAddress{Street: "b", ZipCode: 2}
 	value := holder{List: []udtAddress{a, b}, Set: []udtAddress{b}, Ptr: &a, ByID: map[int32]udtAddress{7: b}, ByN: map[int]udtAddress{-1: a}}
-	opt := WithCodec(MustUDTCodecOf[udtAddress](UDTOptions{}))
+	opt := WithCodec(MustUDTCodecOf[udtAddress]())
 	got := decodeTestRow(t, columns, MustRowOf[holder](opt), encodeTestParams(t, columns, MustParamsOf[holder](opt), value))
 	if len(got.List) != 2 || got.List[1] != b || len(got.Set) != 1 || got.Ptr == nil || *got.Ptr != a || got.None != nil || got.ByID[7] != b || got.ByN[-1] != a {
 		t.Fatalf("got %+v", got)
@@ -343,11 +343,11 @@ func TestUDTCodecCollections(t *testing.T) {
 		ColumnSpec{Name: "street", Type: rowTestType(t, KindText)},
 		ColumnSpec{Name: "zip_code", Type: rowTestType(t, KindInt)},
 		ColumnSpec{Name: "country", Type: rowTestType(t, KindText)}))
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{}).CheckType(wide); err == nil {
+	if err := MustUDTCodecOf[udtAddress]().CheckType(wide); err == nil {
 		t.Fatal("accepted an extra UDT field")
 	}
-	if err := MustUDTCodecOf[udtAddress](UDTOptions{}, IgnoreExtraColumns()).CheckType(wide); err != nil {
-		t.Fatal("IgnoreExtraColumns:", err)
+	if err := MustUDTCodecOf[udtAddress](IgnoreExtraFields()).CheckType(wide); err != nil {
+		t.Fatal("IgnoreExtraFields:", err)
 	}
 }
 

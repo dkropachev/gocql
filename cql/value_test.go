@@ -175,13 +175,13 @@ func TestValue(t *testing.T) {
 			}
 		})
 		t.Run("EmptyCodecClone", func(t *testing.T) {
-			codec := EmptyCodec(TextCodec)
+			codec := EmptyCodec(TextViewCodec)
 			payload := []byte("value")
 			value := MaybeEmpty[Text]{Value: Text{bytes: BorrowBytes(payload)}}
 			cloned := codec.Clone(value)
 			payload[0] = 'V'
-			if value.Value.String() != "Value" || cloned.Value.String() != "value" || cloned.Empty {
-				t.Fatalf("Clone shares the borrowed text: original %q clone %q", value.Value.String(), cloned.Value.String())
+			if value.Value.string() != "Value" || cloned.Value.string() != "value" || cloned.Empty {
+				t.Fatalf("Clone shares the borrowed text: original %q clone %q", value.Value.string(), cloned.Value.string())
 			}
 			if got := codec.Clone(MaybeEmpty[Text]{Empty: true, Value: value.Value}); !got.Empty || got.Value.Bytes().Len() != 0 {
 				t.Fatalf("Clone of an empty value = %+v, want only Empty set", got)
@@ -296,7 +296,7 @@ func TestValue(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := DecodeValue(BytesCodec, unset); err == nil {
+			if _, err := DecodeValue(BytesViewCodec, unset); err == nil {
 				t.Fatal("unset result accepted")
 			}
 			chain := FoundationChain(t, []byte("leased"))
@@ -307,14 +307,14 @@ func TestValue(t *testing.T) {
 			}
 			detached := leased.Clone()
 			lease.Release()
-			if _, err := DecodeValue(BytesCodec, leased); !errors.Is(err, ErrReleased) {
+			if _, err := DecodeValue(BytesViewCodec, leased); !errors.Is(err, ErrReleased) {
 				t.Fatalf("decode released: %v", err)
 			}
 			if _, err := newEncodedValue(blob, Present, leased.Bytes()); !errors.Is(err, ErrReleased) {
 				t.Fatalf("construct released: %v", err)
 			}
 			foundationPanicReleased(t, func() { leased.Clone() })
-			if got, err := DecodeValue(BytesCodec, detached); err != nil || string(got.ownedBytes()) != "leased" {
+			if got, err := DecodeValue(BytesViewCodec, detached); err != nil || string(got.ownedBytes()) != "leased" {
 				t.Fatalf("owned decode: %v", err)
 			}
 		})
@@ -325,7 +325,7 @@ func TestValue(t *testing.T) {
 			if _, ok := errors.AsType[*ValidationError](err); !ok {
 				t.Fatalf("invalid UTF-8: %v", err)
 			}
-			if _, err := TextValue(string([]byte{0xff})).Text(); !hasErrorType[*ValidationError](err) {
+			if _, err := TextValue(string([]byte{0xff})).TextView(); !hasErrorType[*ValidationError](err) {
 				t.Fatalf("invalid dynamic text: %v", err)
 			}
 		})
@@ -334,23 +334,23 @@ func TestValue(t *testing.T) {
 			chain := FoundationChain(t, data[:2], data[2:4], data[4:6], data[6:])
 			lease := wire.NewLease(chain, nil)
 			text := textView(bytesView(chain, wire.RefOf(lease)))
-			if got := text.String(); got != string(data) {
+			if got := text.string(); got != string(data) {
 				t.Fatalf("String: %q", got)
 			}
 			clone := text.Clone()
 			lease.Release()
-			if got := text.String(); got != "<released>" {
+			if got := text.string(); got != "<released>" {
 				t.Fatalf("String of a released view: %q", got)
 			}
 			if _, err := text.Copy(); !errors.Is(err, ErrReleased) {
 				t.Fatalf("Copy of a released view: %v", err)
 			}
 			foundationPanicReleased(t, func() { text.Clone() })
-			if clone.String() != string(data) {
+			if clone.string() != string(data) {
 				t.Fatal("text clone did not detach")
 			}
 			borrowed := CodecTestMust(BorrowText("source"))
-			if borrowed.String() != "source" {
+			if borrowed.string() != "source" {
 				t.Fatal("external string view failed")
 			}
 			if BorrowBytes(nil).Len() != 0 || BorrowBytes([]byte{}).Len() != 0 {

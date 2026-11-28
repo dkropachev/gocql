@@ -41,10 +41,10 @@ type position struct {
 	Padding  string
 }
 
-func positionFields(options cql.UDTOptions) cql.Codec[position] {
+func positionFields(options ...cql.StructOption) cql.Codec[position] {
 	return serializationUDT(
 		cql.Params(cql.Param("lat", cql.Int32Codec, func(p position) int32 { return p.Lat }), cql.Param("lon", cql.Int32Codec, func(p position) int32 { return p.Lon }), cql.Param("padding", serializationString, func(p position) string { return p.Padding })),
-		cql.Row(cql.Column("lat", cql.Int32Codec, func(p *position) *int32 { return &p.Lat }), cql.Column("lon", cql.Int32Codec, func(p *position) *int32 { return &p.Lon }), cql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options)
+		cql.Row(cql.Column("lat", cql.Int32Codec, func(p *position) *int32 { return &p.Lat }), cql.Column("lon", cql.Int32Codec, func(p *position) *int32 { return &p.Lon }), cql.Column("padding", serializationString, func(p *position) *string { return &p.Padding })), options...)
 }
 
 // The original per-member hooks become an application-owned typed Codec.
@@ -137,13 +137,13 @@ func TestUDT(t *testing.T) {
 			for _, f := range fields {
 				switch f.Name {
 				case "created_timestamp":
-					n, e := f.Value.Signed()
+					n, e := f.Value.Int64()
 					if e != nil || cql.Timestamp(n) != stamp {
 						t.Fatalf("timestamp: %d %v", n, e)
 					}
 				case "message":
-					v, e := f.Value.Text()
-					if e != nil || v.String() != want[0].Message {
+					v, e := f.Value.TextView()
+					if e != nil || fmt.Sprint(v) != want[0].Message {
 						t.Fatalf("message: %v %v", v, e)
 					}
 				default:
@@ -200,7 +200,7 @@ func TestUDT(t *testing.T) {
 			if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(strict), col{"test"}); err == nil {
 				t.Fatal("strict UDT accepted an unaccounted database field")
 			}
-			codec := serializationUDT(p, r, cql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowExtraDatabaseFields: true})
+			codec := serializationUDT(p, r, cql.UDTName(fixtureKeyspace(""), typ), cql.IgnoreExtraFields())
 			want := col{"test"}
 			got := serializationRoundTrip(t, s, table, "udt_col", 1, codec, want)
 			if got != want {
@@ -274,7 +274,7 @@ func TestUDT(t *testing.T) {
 		if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(cql.UDTEncoder(p, serializationUDTOptions(typ))), want); err == nil {
 			t.Fatal("unknown application field accepted without AllowMissingFields")
 		}
-		if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(cql.UDTEncoder(p, cql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: typ, AllowMissingFields: true})), want); err != nil {
+		if err := serializationExec(s, fmt.Sprintf("INSERT INTO %s(id,udt_col) VALUES(1,?)", table), cql.OneParam(cql.UDTEncoder(p, cql.UDTName(fixtureKeyspace(""), typ), cql.AllowMissingFields())), want); err != nil {
 			t.Fatal(err)
 		}
 		serializationDDL(t, s, fmt.Sprintf("ALTER TYPE %s ADD data text", typ))

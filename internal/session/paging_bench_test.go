@@ -38,7 +38,7 @@ func BenchmarkPaging(b *testing.B) {
 		}
 		typ := cql.BlobType
 		columns := cql.NewColumns(cql.ColumnSpec{Name: "value", Type: typ})
-		decoder := cql.Row(cql.Column("value", cql.BytesCodec, func(r *row) *cql.Bytes { return &r.Value }))
+		decoder := cql.Row(cql.Column("value", cql.BytesViewCodec, func(r *row) *cql.Bytes { return &r.Value }))
 		for _, fragments := range []int{1, 1024} {
 			b.Run(fmt.Sprintf("fragments=%d", fragments), func(b *testing.B) {
 				data := binary.BigEndian.AppendUint32(nil, 512000)
@@ -100,7 +100,7 @@ func BenchmarkPaging(b *testing.B) {
 		entry := &model.ResultSchemaIdentity{InternalColumns: columns}
 		response := &transport.InternalResponsePage{InternalMetadata: entry, ResponseData: model.ResponseData{Columns: columns}}
 		cache := &InternalResultPlanCache[cql.Bytes]{}
-		decoder := cql.OneColumn(cql.BytesCodec)
+		decoder := cql.OneColumn(cql.BytesViewCodec)
 		if _, err := cache.InternalSelectPlan(response, decoder); err != nil {
 			b.Fatal(err)
 		}

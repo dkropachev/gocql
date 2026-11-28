@@ -116,7 +116,7 @@ func (s *RowStream[R]) loadBufferedPage() error {
 // failed, so that a failed stream still names its traced attempts.
 func (s *RowStream[R]) mergeBufferedFailure(result cql.Result) {
 	p := &s.privateStorage
-	refs := slices.Clone(result.CQLTraces())
+	refs := result.CQLTraces()
 	for i := range refs {
 		refs[i].Failed = true
 	}

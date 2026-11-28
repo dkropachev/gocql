@@ -81,7 +81,7 @@ func TestTypes(t *testing.T) {
 			prepared := cassandraPrepared(t, session, cql.Statement[*float64, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,test) VALUES(?,?)", table), Params: params}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), &testNum)
 			require.NoError(t, err)
-			got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float()
+			got, err := cassandraField(t, cassandraRead(t, session, "SELECT test FROM "+table), "test").Float64()
 			require.NoError(t, err)
 			require.Equal(t, testNum, got)
 		})
@@ -130,7 +130,7 @@ func TestTypes(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, want, got.BigInt().Int64())
 			}
-			cassandraWrite(t, session, insert, cql.TextValue("id"), cql.NullValue(cql.VarintValue(cql.Varint{}).Type()))
+			cassandraWrite(t, session, insert, cql.TextValue("id"), cql.NullValue())
 			null := cassandraUnpreparedOne(t, session, selectCQL, cql.OneColumn(cql.NullableCodec(cql.VarintCodec)), exec.Options{})
 			require.False(t, null.Valid)
 			require.Zero(t, null.Value.BigInt().Sign())

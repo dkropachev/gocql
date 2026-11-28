@@ -136,8 +136,8 @@ func TestSelectWithoutFrom(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			text, err := greeting.Text()
-			if err != nil || text.String() != "hi" {
+			text, err := greeting.TextView()
+			if err != nil || fmt.Sprint(text) != "hi" {
 				t.Fatalf("named lookup=%v %v", text, err)
 			}
 		})

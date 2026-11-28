@@ -55,12 +55,12 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		name, err := value.Text()
+		name, err := value.TextView()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if matches(name.String()) {
-			names = append(names, name.String())
+		if matches(fmt.Sprint(name)) {
+			names = append(names, fmt.Sprint(name))
 		}
 	}
 	if err := rows.Close(); err != nil {
@@ -85,12 +85,12 @@ func cleanupNamespaces(t *testing.T, allowed []string) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		name, err := value.Text()
+		name, err := value.TextView()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if matches(name.String()) {
-			t.Errorf("owned namespace survived cleanup: %s", name.String())
+		if matches(fmt.Sprint(name)) {
+			t.Errorf("owned namespace survived cleanup: %s", fmt.Sprint(name))
 		}
 	}
 	if err := remaining.Close(); err != nil {
@@ -118,7 +118,7 @@ func checkAggregate(t *testing.T, s *gocql.Session, keyspace string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	average, err := value.Float()
+	average, err := value.Float64()
 	if err != nil || average != 5 {
 		t.Fatalf("equivalent average = %v, %v", average, err)
 	}

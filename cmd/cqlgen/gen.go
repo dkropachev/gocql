@@ -82,20 +82,37 @@ type builtinType struct {
 // reflect.Types, so an alias of cql.UUID maps like cql.UUID and a type
 // defined from it does not.
 type generator struct {
-	fset     *token.FileSet
-	info     *types.Info
-	pkg      *types.Package
-	files    []*ast.File
-	names    map[string]bool // every built-in codec and decoder name
-	imports  map[string]importRef
-	cqlName  string
-	builtins []builtinType
-	streams  []builtinType
+	fset        *token.FileSet
+	info        *types.Info
+	pkg         *types.Package
+	cqlPkg      *types.Package
+	files       []*ast.File
+	names       map[string]bool // every built-in buffered codec name
+	streamNames map[string]bool // every built-in stream decoder name
+	udts        map[string]bool // this package's types given a CQLCodec method now
+	imports     map[string]importRef
+	cqlName     string
+	builtins    []builtinType // the leaf types buffered codecs derive from
+	streams     []builtinType
 }
 
 // generate returns the output file name and source mapping typeNames, which
 // are struct types declared in the package in dir.
 func generate(dir string, typeNames []string) (string, []byte, error) {
+	return generateUDT(dir, typeNames, nil)
+}
+
+// generateUDT is generate that also gives each of udtNames, struct types
+// declared in the package in dir, a CQLCodec method that maps it as a UDT.
+func generateUDT(dir string, typeNames, udtNames []string) (string, []byte, error) {
+	udts := map[string]bool{}
+	for _, name := range udtNames {
+		name = strings.TrimSpace(name)
+		if !udts[name] && !contains(typeNames, name) {
+			typeNames = append(typeNames, name)
+		}
+		udts[name] = true
+	}
 	fset := token.NewFileSet()
 	files, err := parseDir(fset, dir)
 	if err != nil {
@@ -124,6 +141,7 @@ func generate(dir string, typeNames []string) (string, []byte, error) {
 	if err != nil {
 		return "", nil, err
 	}
+	g.udts = udts
 
 	var body bytes.Buffer
 	for _, s := range structs {
@@ -138,6 +156,13 @@ func generate(dir string, typeNames []string) (string, []byte, error) {
 			}
 		}
 		writeFieldsMethods(&body, s.name, g.cqlName, fields, buffered, stream)
+		if udts[s.name] {
+			if !buffered {
+				return "", nil, fmt.Errorf("type %s: -udt needs a buffered mapping of every field", s.name)
+			}
+			g.imports["sync"] = importRef{path: "sync", pkgName: "sync"}
+			writeUDTCodec(&body, s.name, g.cqlName)
+		}
 	}
 
 	var out bytes.Buffer
@@ -292,8 +317,11 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 		}
 		scratch.Scope().Insert(types.NewPkgName(token.NoPos, scratch, name, pkg))
 	}
-	g := &generator{fset: fset, info: info, pkg: pkg, files: files, names: map[string]bool{}, imports: map[string]importRef{}}
-	resolve := func(table []structmap.BuiltinFieldType) ([]builtinType, error) {
+	g := &generator{fset: fset, info: info, pkg: pkg, files: files, names: map[string]bool{}, streamNames: map[string]bool{}, imports: map[string]importRef{}}
+	if g.cqlPkg, err = imp.Import(cqlPath); err != nil {
+		return nil, err
+	}
+	resolve := func(table []structmap.BuiltinFieldType, names map[string]bool) ([]builtinType, error) {
 		out := make([]builtinType, len(table))
 		for i, b := range table {
 			tv, err := types.Eval(token.NewFileSet(), scratch, token.NoPos, b.TypeSrc)
@@ -302,15 +330,18 @@ func newGenerator(fset *token.FileSet, dir string, files []*ast.File) (*generato
 			}
 			out[i] = builtinType{BuiltinFieldType: b, typ: types.Unalias(tv.Type)}
 			for _, n := range b.Names {
-				g.names[n] = true
+				names[n] = true
 			}
 		}
 		return out, nil
 	}
-	if g.builtins, err = resolve(builtinFieldTypes(false)); err != nil {
+	if g.builtins, err = resolve(builtinFieldTypes(false), g.names); err != nil {
 		return nil, err
 	}
-	if g.streams, err = resolve(builtinFieldTypes(true)); err != nil {
+	for name := range sequenceTags {
+		g.names[name] = true
+	}
+	if g.streams, err = resolve(builtinFieldTypes(true), g.streamNames); err != nil {
 		return nil, err
 	}
 	g.cqlName = "cql"
@@ -378,8 +409,8 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 	st := g.pkg.Scope().Lookup(s.name).Type().Underlying().(*types.Struct)
 	type found struct {
 		v    *types.Var
-		tag  structmap.FieldTag
 		path string
+		tag  structmap.FieldTag
 	}
 	var fields []found
 	var candidates []structmap.FieldCandidate
@@ -440,7 +471,7 @@ func (g *generator) structFields(s structType) (_ []genField, buffered, stream b
 		if v.Pkg() == g.pkg {
 			file = g.fileOf(v.Pos())
 		}
-		enc, dec, convert, ok, err := g.codec(file, g.builtins, v.Type(), ft.Codec, "codec")
+		enc, dec, convert, ok, err := g.bufferedCodec(file, v.Type(), ft.Codec)
 		if err != nil {
 			return nil, false, false, fmt.Errorf("%s: %w", where, err)
 		}
@@ -547,12 +578,12 @@ func (g *generator) fileOf(pos token.Pos) *ast.File {
 	return nil
 }
 
-// codec picks a field's codec source from table: a built-in named by the tag,
-// else the tag's own Go expression, else the type's built-in default. A type
-// with no entry of its own that has a built-in type's layout, such as Status
-// or []Status for type Status string, maps like that type, as reflection
-// maps it; convert then spells the built-in type, which the field accessors
-// convert the field to.
+// codec picks a field's stream decoder source from table: a built-in named
+// by the tag, else the tag's own Go expression, else the type's built-in
+// default. A type with no entry of its own that has a built-in type's layout,
+// such as Status or []Status for type Status string, maps like that type, as
+// reflection maps it; convert then spells the built-in type, which the field
+// accessors convert the field to.
 func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, tag, key string) (enc, dec string, convert conversion, found bool, err error) {
 	typ = types.Unalias(typ)
 	var candidates []structmap.BuiltinFieldType
@@ -582,20 +613,51 @@ func (g *generator) codec(file *ast.File, table []builtinType, typ types.Type, t
 	if tag == "" {
 		return "", "", conversion{}, false, nil
 	}
-	if g.names[tag] {
+	if g.streamNames[tag] {
 		return "", "", conversion{}, false, fmt.Errorf("%s %q is not a built-in for %s", key, tag, types.TypeString(typ, nil))
 	}
 	if file == nil {
 		return "", "", conversion{}, false, fmt.Errorf("%s %q: a codec expression on a field of a struct from another package cannot be resolved here; use WithCodec or generate in that package", key, tag)
 	}
-	expr, err := parser.ParseExpr(tag)
+	src, err := g.expression(file, tag, key)
 	if err != nil {
-		return "", "", conversion{}, false, fmt.Errorf("%s %q: %w", key, tag, err)
-	}
-	if err := g.useExprImports(file, expr); err != nil {
 		return "", "", conversion{}, false, err
 	}
-	return tag, tag, conversion{}, true, nil
+	return src, src, conversion{}, true, nil
+}
+
+// expression checks a tag's Go expression and records the imports it names.
+func (g *generator) expression(file *ast.File, tag, key string) (string, error) {
+	expr, err := parser.ParseExpr(tag)
+	if err != nil {
+		return "", fmt.Errorf("%s %q: %w", key, tag, err)
+	}
+	if err := g.useExprImports(file, expr); err != nil {
+		return "", err
+	}
+	return tag, nil
+}
+
+func contains(list []string, s string) bool {
+	for _, v := range list {
+		if strings.TrimSpace(v) == s {
+			return true
+		}
+	}
+	return false
+}
+
+// writeUDTCodec writes typeName's CQLCodec method, which maps it as a UDT
+// with cql.UDTCodecOf, so that struct mappings map fields of typeName, and
+// of types derived from it, such as []typeName, without an option.
+func writeUDTCodec(b *bytes.Buffer, typeName, cql string) {
+	v := "cqlgenUDT" + typeName
+	fmt.Fprintf(b, "\n// CQLCodec returns the codec that maps %s as a UDT, matched by field\n", typeName)
+	fmt.Fprintf(b, "// names, which struct mappings use for fields of type %s, *%s, []%s\n", typeName, typeName, typeName)
+	fmt.Fprintf(b, "// and map values of %s. Pass %s.WithCodec(%s.MustUDTCodecOf[%s](%s.UDTName(keyspace, name)))\n", typeName, cql, cql, typeName, cql)
+	fmt.Fprintf(b, "// to a mapping to check the UDT's name too.\n")
+	fmt.Fprintf(b, "func (%s) CQLCodec() %s.Codec[%s] { return %s() }\n", typeName, cql, typeName, v)
+	fmt.Fprintf(b, "\nvar %s = sync.OnceValue(func() %s.Codec[%s] { return %s.MustUDTCodecOf[%s]() })\n", v, cql, typeName, cql, typeName)
 }
 
 // sameLayout reports whether field type t maps like the built-in type u, as

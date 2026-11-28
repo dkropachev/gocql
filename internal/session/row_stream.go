@@ -655,8 +655,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		if response != nil {
 			warnings, payload = response.InternalInfo.Warnings(), response.InternalInfo.CustomPayload()
 		}
-		// Info hands out clones, so the stream's own trace slice can grow in
-		// place instead of being copied on every page.
+		// CQLTraces returns a copy, which the new refs extend.
 		tracedOK := err == nil && len(traces) > 0
 		all := s.privateStorage.info.Result.CQLTraces()
 		for _, trace := range traces {
@@ -714,10 +713,12 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 			// The response failed validation after its refs were recorded as
 			// served: mark them failed, as the attempt now is.
 			s.privateStorage.mu.Lock()
-			refs := s.privateStorage.info.Result.CQLTraces()
+			result := &s.privateStorage.info.Result
+			refs := result.CQLTraces()
 			for i := len(refs) - len(traces); i < len(refs); i++ {
 				refs[i].Failed = true
 			}
+			codec.SetDiagnostics(result, result.Warnings(), refs, result.CustomPayload())
 			s.privateStorage.mu.Unlock()
 		}
 		attemptStatus := log.fail(err, conn, attempt, consistency, event.CQLTraceID, request.partialBatch())

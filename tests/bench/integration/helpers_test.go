@@ -273,16 +273,16 @@ func (cassandraRetry) Decide(a retry.Attempt) retry.Decision {
 // Custom values use explicit codecs; field discovery and reflection are absent.
 type fullNameCodec struct{}
 
-func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextCodec.CheckType(t) }
+func (fullNameCodec) CheckType(t cql.DataType) error { return cql.TextViewCodec.CheckType(t) }
 func (fullNameCodec) Encode(w *cql.ValueWriter, n FullName) error {
 	return cql.StringCodec.Encode(w, n.FirstName+" "+n.LastName)
 }
 func (fullNameCodec) Decode(r cql.ValueReader) (FullName, error) {
-	text, err := cql.TextCodec.Decode(r)
+	text, err := cql.TextViewCodec.Decode(r)
 	if err != nil {
 		return FullName{}, err
 	}
-	names := strings.SplitN(text.String(), " ", 2)
+	names := strings.SplitN(fmt.Sprint(text), " ", 2)
 	if len(names) != 2 {
 		return FullName{}, errors.New("full name requires two components")
 	}
@@ -628,11 +628,11 @@ func v2TabletsSupported(ctx context.Context, session *gocql.Session) (bool, erro
 		if value.State() == cql.Null {
 			return false, nil
 		}
-		features, err := value.Text()
+		features, err := value.TextView()
 		if err != nil {
 			return false, err
 		}
-		for _, feature := range strings.Split(features.String(), ",") {
+		for _, feature := range strings.Split(fmt.Sprint(features), ",") {
 			if feature == "TABLETS" {
 				return true, nil
 			}
@@ -899,7 +899,7 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], err
 	if d.hook != nil {
 		d.hook()
 	}
-	return cql.OneColumn(cql.BytesCodec).Compile(c)
+	return cql.OneColumn(cql.BytesViewCodec).Compile(c)
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 
@@ -1254,17 +1254,17 @@ func serializationOne[R any](s *gocql.Session, stmt string, decoder cql.RowDecod
 type serializationStringCodec struct{}
 
 func (serializationStringCodec) CheckType(t cql.DataType) error {
-	return cql.TextCodec.CheckType(t)
+	return cql.TextViewCodec.CheckType(t)
 }
 func (serializationStringCodec) Encode(w *cql.ValueWriter, s string) error {
 	return cql.StringCodec.Encode(w, s)
 }
 func (serializationStringCodec) Decode(r cql.ValueReader) (string, error) {
-	v, e := cql.TextCodec.Decode(r)
+	v, e := cql.TextViewCodec.Decode(r)
 	if e != nil {
 		return "", e
 	}
-	return v.String(), nil
+	return fmt.Sprint(v), nil
 }
 func (serializationStringCodec) Clone(s string) string { return s }
 
@@ -1568,17 +1568,19 @@ func (p person) String() string {
 	return fmt.Sprintf("Person{firstName: %s, lastName: %s, Age: %d}", p.FirstName, p.LastName, p.Age)
 }
 
-var serializationBlob = cql.ConvertCodec(cql.BytesCodec, func(v []byte) cql.Bytes { return cql.BorrowBytes(v) }, func(v cql.Bytes) []byte { return ownedBytesForTest(v) })
-var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) cql.Timestamp {
+var serializationBlob = cql.ConvertCodec(cql.BytesViewCodec, func(v []byte) (cql.Bytes, error) { return cql.BorrowBytes(v), nil }, func(v cql.Bytes) ([]byte, error) { return ownedBytesForTest(v), nil })
+var serializationTimestamp = cql.ConvertCodec(cql.TimestampCodec, func(v time.Time) (cql.Timestamp, error) {
 	n, e := cql.TimestampFromTime(v)
 	if e != nil {
 		panic(e)
 	}
-	return n
-}, func(v cql.Timestamp) time.Time {
-	return v.Time()
+	return n, nil
+}, func(v cql.Timestamp) (time.Time, error) {
+	return v.Time(), nil
 })
 
-var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) cql.Decimal {
-	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}
-}, func(v cql.Decimal) inf.Dec { return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)) })
+var serializationDecimal = cql.ConvertCodec(cql.DecimalCodec, func(v inf.Dec) (cql.Decimal, error) {
+	return cql.Decimal{Scale: int32(v.Scale()), Unscaled: cql.VarintFromBigInt(v.UnscaledBig())}, nil
+}, func(v cql.Decimal) (inf.Dec, error) {
+	return *inf.NewDecBig(v.Unscaled.BigInt(), inf.Scale(v.Scale)), nil
+})

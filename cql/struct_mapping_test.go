@@ -591,9 +591,15 @@ func TestStructMapping(t *testing.T) {
 			if _, err := MustStreamRowOf[pair]().Compile(wider); err == nil {
 				t.Fatal("unmapped streaming column accepted")
 			}
+			// A string field maps with the allocating StreamString; a map
+			// field still needs a decoder.
 			type text struct{ Name string }
-			if _, err := StreamRowOf[text](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamDecoder") {
+			if _, err := StreamRowOf[text](); err != nil {
 				t.Fatalf("string field: %v", err)
+			}
+			type mapped struct{ Tags map[string]string }
+			if _, err := StreamRowOf[mapped](); err == nil || !strings.Contains(err.Error(), "cql.WithStreamDecoder") {
+				t.Fatalf("map field: %v", err)
 			}
 			type badTag struct {
 				Name []byte `cql:"name,stream=Int32"`

@@ -19,7 +19,10 @@ type TimeOfDay int64
 // Timestamp counts milliseconds relative to the Unix epoch.
 type Timestamp int64
 
-// DateFromTime converts a time to a CQL date, rejecting dates outside the supported range.
+// DateFromTime converts a time to a CQL date: the calendar date of t in t's
+// own location, as t.Date returns it, not of the instant in UTC. Convert t
+// first, with t.UTC() or t.In(loc), for the date in another location. It
+// rejects a date outside the CQL date range.
 func DateFromTime(t time.Time) (Date, error) {
 	y, m, d := t.Date()
 	// Guard Unix against overflow for dates outside the CQL calendar's range.

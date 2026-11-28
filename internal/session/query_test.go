@@ -678,7 +678,7 @@ func TestQuery(t *testing.T) {
 			handle := new(Prepared[[]byte, cql.Bytes])
 			PreparedData(handle).InternalState = state
 			PreparedData(handle).params = codecTestMust(cql.OneParam(cql.ByteSliceCodec).Compile(columns))
-			PreparedData(handle).rows = cql.OneColumn(cql.BytesCodec)
+			PreparedData(handle).rows = cql.OneColumn(cql.BytesViewCodec)
 			PreparedData(handle).plans = &InternalResultPlanCache[cql.Bytes]{}
 			q := codecTestMust(handle.Query(Options{}))
 			defer q.Close()
@@ -1014,7 +1014,7 @@ func TestQuery(t *testing.T) {
 		// close.
 		t.Run("HandleGoesStaleOnNextExecution", func(t *testing.T) {
 			s, conns, peers := runtimeTestSession(t, 1)
-			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}, Options{}))
+			q := codecTestMust(unpreparedQuery(s, binding.Statement[cql.EmptyRow, cql.Bytes]{Kind: cql.OrdinaryStatement, CQL: "SELECT value FROM ks.tbl", Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, Options{}))
 			defer q.Close()
 			served := make(chan struct{})
 			go func() {

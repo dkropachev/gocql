@@ -87,6 +87,32 @@ func makeStreamColumn[R, V any](loc fieldLocation, decoder StreamDecoder[V], fie
 	}}
 }
 
+// nullZeroStream makes field reset its destination for a NULL cell instead
+// of failing (the nullzero tag).
+func nullZeroStream[R any](field StreamOutputField[R]) StreamOutputField[R] {
+	inner := field.streamDeclaration()
+	return &streamOutputField[R]{loc: inner.loc, resetMissing: inner.resetMissing, compile: func(t DataType) (streamFieldPlan[R], error) {
+		plan, err := inner.compile(t)
+		if err != nil {
+			return plan, err
+		}
+		return nullZeroPlan(plan), nil
+	}}
+}
+
+// nullZeroPlan makes plan's decode, which reads one column, reset the field
+// for a NULL cell.
+func nullZeroPlan[R any](plan streamFieldPlan[R]) streamFieldPlan[R] {
+	decode := plan.decode
+	plan.decode = func(r *StreamRowReader, dst *R) error {
+		r.nullZero = true
+		err := decode(r, dst)
+		r.nullZero = false
+		return err
+	}
+	return plan
+}
+
 // StreamIgnoreColumn skips the named result column, which a StreamRowInto
 // mapping must otherwise map, as IgnoreColumn does for RowInto.
 func StreamIgnoreColumn[R any](name string) StreamOutputField[R] {
@@ -101,8 +127,11 @@ type streamRowsCodec[R any] struct {
 	// structMapping maps like buffered struct rows: every column needs a
 	// field, and fields without a column are allowed.
 	structMapping bool
-	// ignoreExtra skips columns without a field (IgnoreExtraColumns).
+	// ignoreExtra skips columns without a field (IgnoreExtraFields).
 	ignoreExtra bool
+	// nullZero resets a field for a NULL cell instead of failing
+	// (NullAsZero).
+	nullZero bool
 }
 type streamRowsPlan[R any] struct {
 	reset   func(*R)
@@ -120,9 +149,13 @@ func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) Stream
 	return streamRowsCodec[R]{reset: reset, fields: streamDeclarations(fields)}
 }
 func (c streamRowsCodec[R]) Compile(columns Columns) (CompiledStreamRow[R], error) {
-	return c.compile(columns, false, UDTOptions{})
+	return c.compile(columns, false, udtOptions{}, false)
 }
-func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOptions) (CompiledStreamRow[R], error) {
+
+// compile compiles the plan for columns: a result's, or with strict a tuple's
+// or UDT's members, matched by options. With nullZero, as for a UDT, every
+// field decodes NULL as zero.
+func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options udtOptions, nullZero bool) (CompiledStreamRow[R], error) {
 	if err := checkDynamicColumns(columns); err != nil {
 		return nil, err
 	}
@@ -134,9 +167,9 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 		locations[i] = f.loc
 	}
 	// Rows are exact, as RowInto's are; struct mappings allow fields without
-	// a column, and IgnoreExtraColumns columns without a field. Records use
+	// a column, and IgnoreExtraFields columns without a field. Records use
 	// the same exact/missing/extra mapping policy as buffered records.
-	extra, missing := strict && options.AllowExtraDatabaseFields, strict && options.AllowMissingFields
+	extra, missing := strict && options.allowExtra, strict && options.allowMissing
 	if c.structMapping && !strict {
 		extra, missing = c.ignoreExtra, true
 	}
@@ -156,6 +189,9 @@ func (c streamRowsCodec[R]) compile(columns Columns, strict bool, options UDTOpt
 		compiled, err := c.fields[field].compile(columnSlice(columns)[index].Type)
 		if err != nil {
 			return nil, columnError(CodecStageStreamCompile, index, columnSlice(columns)[index].Name, err)
+		}
+		if nullZero || c.nullZero {
+			compiled = nullZeroPlan(compiled)
 		}
 		plan.ordered[index] = compiled
 		plan.resets[field] = compiled.reset
@@ -236,7 +272,8 @@ func (p streamOneColumnPlan[T]) DecodeInto(r *StreamRowReader, dst *T) error {
 
 type streamRecordCodec[R any] struct {
 	decoder StreamRowDecoder[R]
-	options UDTOptions
+	optErr  error
+	options udtOptions
 	kind    Kind
 }
 type streamRecordPlan[R any] struct {
@@ -251,11 +288,19 @@ func StreamTuple[R any](decoder StreamRowDecoder[R]) StreamDecoder[R] {
 	return streamRecordCodec[R]{kind: KindTuple, decoder: decoder}
 }
 
-// StreamUDT decodes UDT fields into caller storage with decoder and explicit matching options.
-func StreamUDT[R any](decoder StreamRowDecoder[R], options UDTOptions) StreamDecoder[R] {
-	return streamRecordCodec[R]{kind: KindUDT, options: options, decoder: decoder}
+// StreamUDT decodes UDT fields into caller storage with decoder, matched by
+// name as UDTDecoder matches them, with UDTName, IgnoreExtraFields and
+// AllowMissingFields; it rejects other options when it is compiled. With a
+// StreamRowInto or StreamRowOf decoder, a NULL or missing trailing field
+// resets its field, as UDTDecoder decodes it as zero.
+func StreamUDT[R any](decoder StreamRowDecoder[R], opts ...StructOption) StreamDecoder[R] {
+	options, err := udtOptionsOf(opts)
+	return streamRecordCodec[R]{kind: KindUDT, options: options, optErr: err, decoder: decoder}
 }
 func (c streamRecordCodec[R]) Compile(t DataType) (CompiledStreamValue[R], error) {
+	if c.optErr != nil {
+		return nil, c.optErr
+	}
 	columns, err := recordColumns(t, c.kind)
 	if err != nil {
 		return nil, err
@@ -270,10 +315,10 @@ func (c streamRecordCodec[R]) Compile(t DataType) (CompiledStreamValue[R], error
 	}
 	var plan CompiledStreamRow[R]
 	if builtin, ok := c.decoder.(streamRowsCodec[R]); ok {
-		plan, err = builtin.compile(columns, true, c.options)
+		plan, err = builtin.compile(columns, true, c.options, c.kind == KindUDT)
 	} else if single, ok := c.decoder.(streamOneColumn[R]); ok {
 		composed := streamRowsCodec[R]{fields: []*streamOutputField[R]{StreamColumnAt(0, single.decoder, func(value *R) *R { return value }).streamDeclaration()}}
-		plan, err = composed.compile(columns, true, c.options)
+		plan, err = composed.compile(columns, true, c.options, c.kind == KindUDT)
 	} else {
 		plan, err = compileStreamRow(c.decoder, columns)
 	}

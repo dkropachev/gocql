@@ -72,7 +72,7 @@ func sessionTestInt(t testing.TB, row cql.DynamicRow, name string) int64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	integer, err := value.Signed()
+	integer, err := value.Int64()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -285,7 +285,7 @@ func TestSession(t *testing.T) {
 				}
 			}
 			write(0x71)
-			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}, exec.PrepareOptions{}))
+			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesViewCodec)}, exec.PrepareOptions{}))
 			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
@@ -1046,7 +1046,7 @@ func TestSession(t *testing.T) {
 			Value cql.Bytes
 		}
 		inputs := cql.Params(cql.Param("id", cql.Int32Codec, func(v input) int32 { return v.ID }), cql.Param("value", cql.ByteSliceCodec, func(v input) []byte { return v.Value }))
-		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BytesCodec, func(v *output) *cql.Bytes { return &v.Value }))
+		rows := cql.Row(cql.Column("id", cql.Int32Codec, func(v *output) *int32 { return &v.ID }), cql.Column("value", cql.BytesViewCodec, func(v *output) *cql.Bytes { return &v.Value }))
 		prepared, err := session.Prepare(ctx, cql.Statement[input, cql.EmptyRow]{CQL: "INSERT INTO " + keyspace + ".values (id,value) VALUES (?,?)", Params: inputs}, exec.PrepareOptions{})
 		if err != nil {
 			t.Fatal(err)

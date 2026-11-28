@@ -654,7 +654,7 @@ func TestRouting(t *testing.T) {
 			var authoritative []metadata.TokenRange
 			var row cql.DynamicRow
 			for serverRows.NextInto(&row) {
-				last := codecTestMust(codecTestMust(row.Get("last_token")).Signed())
+				last := codecTestMust(codecTestMust(row.Get("last_token")).Int64())
 				list := codecTestMust(collectSeq(codecTestMust(row.Get("replicas")).Elements()))
 				r := metadata.TokenRange{End: last}
 				for _, replica := range list {
@@ -663,7 +663,7 @@ func TestRouting(t *testing.T) {
 						t.Fatal("missing host or shard")
 					}
 					host := codecTestMust(tuple[0].UUID())
-					shard := codecTestMust(tuple[1].Signed())
+					shard := codecTestMust(tuple[1].Int64())
 					r.Replicas = append(r.Replicas, metadata.Target{HostID: host, ShardID: cql.Option[uint32]{Value: uint32(shard), Set: true}})
 				}
 				authoritative = append(authoritative, r)

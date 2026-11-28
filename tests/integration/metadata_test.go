@@ -263,10 +263,10 @@ func TestMetadata(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			partitioner, err := value.Text()
+			partitioner, err := value.TextView()
 			tests.AssertTrue(t, "err == nil", err == nil)
 			tests.AssertEqual(t, "len(hosts)", len(clusterHosts), len(hosts))
-			tests.AssertTrue(t, "len(partitioner) != 0", len(partitioner.String()) != 0)
+			tests.AssertTrue(t, "len(partitioner) != 0", len(fmt.Sprint(partitioner)) != 0)
 		})
 		t.Run("InvalidPeer", func(t *testing.T) {
 			t.Parallel()

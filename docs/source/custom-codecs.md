@@ -3,7 +3,12 @@
 Most applications compose `Params`, `Row`, `cql.StreamRowInto`, or their struct-mapping
 counterparts. A type that converts to and from one a built-in codec maps
 needs no codec of its own: `cql.ConvertCodec(cql.Int32Codec, to, from)`
-maps it through `Int32Codec`. Custom implementations use the following public contracts from
+maps it through `Int32Codec`, where `to` and `from` return an error for a
+value that does not convert, which fails the encode or decode as a
+`CodecError`; `cql.ConvertEncoder` and `cql.ConvertDecoder` convert one
+direction. A type that is a field of struct mappings can carry its codec in
+a `CQLCodec() cql.Codec[T]` method, which the mappings find for `T`, `*T`,
+`[]T` and map values of `T`. Custom implementations use the following public contracts from
 `github.com/scylladb/gocql/v2/cql`; the streaming ones carry a `Stream`
 prefix.
 

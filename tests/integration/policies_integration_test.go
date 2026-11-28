@@ -61,8 +61,8 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 	if err != nil {
 		t.Fatal(err)
 	}
-	partitioner, err := partitionerValue.Text()
-	if err != nil || partitioner.String() == "" {
+	partitioner, err := partitionerValue.TextView()
+	if err != nil || fmt.Sprint(partitioner) == "" {
 		t.Fatalf("missing partitioner: %v", err)
 	}
 	// The no-keyspace bootstrap validates its original ring assertions above.

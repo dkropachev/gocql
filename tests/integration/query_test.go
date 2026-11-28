@@ -93,8 +93,8 @@ func TestQuery(t *testing.T) {
 			prepared := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.EmptyRow]{CQL: fmt.Sprintf("INSERT INTO %s(id,value) VALUES(:id,:value)", table), Params: cql.NamedDynamicParams}, exec.PrepareOptions{})
 			_, err := prepared.Exec(context.Background(), []cql.ValueField{{Name: "value", Value: cql.TextValue("i am a value")}, {Name: "id", Value: cql.IntValue(1)}})
 			require.NoError(t, err)
-			read := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: cql.NamedDynamicParams, Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
-			require.Equal(t, "i am a value", cassandraReadOne(t, session, read, []cql.ValueField{{Name: "id", Value: cql.IntValue(1)}}, exec.Options{}).String())
+			read := cassandraPrepared(t, session, cql.Statement[[]cql.ValueField, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=:id", table), Params: cql.NamedDynamicParams, Rows: cql.OneColumn(cql.TextViewCodec)}, exec.PrepareOptions{})
+			require.Equal(t, "i am a value", fmt.Sprint(cassandraReadOne(t, session, read, []cql.ValueField{{Name: "id", Value: cql.IntValue(1)}}, exec.Options{})))
 		})
 		// Tests to see that a nil value passed to a query is handled by Cassandra
 		// TODO validate the nil value by reading back the nil. Need to fix Unmarshalling.
@@ -104,7 +104,7 @@ func TestQuery(t *testing.T) {
 			defer session.Close()
 			table := testTableName(t)
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,count int)", table))
-			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(1), cql.NullValue(cql.IntValue(0).Type()))
+			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,count) VALUES(?,?)", table), cql.IntValue(1), cql.NullValue())
 			row := cassandraRead(t, session, "SELECT id,count FROM "+table)
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 			require.Equal(t, cql.Null, cassandraField(t, row, "count").State())
@@ -151,10 +151,10 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,value text)", table))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(23), cql.TextValue("quux"))
 			cassandraWrite(t, session, fmt.Sprintf("INSERT INTO %s(id,value) VALUES(?,?)", table), cql.IntValue(24), cql.TextValue("w00t"))
-			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
-			require.Equal(t, "quux", cassandraReadOne(t, session, prepared, int32(23), exec.Options{}).String())
-			require.Equal(t, "w00t", cassandraReadOne(t, session, prepared, int32(24), exec.Options{}).String())
-			require.Equal(t, "quux", cassandraReadOne(t, session, prepared, int32(23), exec.Options{}).String())
+			prepared := cassandraPrepared(t, session, cql.Statement[int32, cql.Text]{CQL: fmt.Sprintf("SELECT value FROM %s WHERE id=?", table), Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextViewCodec)}, exec.PrepareOptions{})
+			require.Equal(t, "quux", fmt.Sprint(cassandraReadOne(t, session, prepared, int32(23), exec.Options{})))
+			require.Equal(t, "w00t", fmt.Sprint(cassandraReadOne(t, session, prepared, int32(24), exec.Options{})))
+			require.Equal(t, "quux", fmt.Sprint(cassandraReadOne(t, session, prepared, int32(23), exec.Options{})))
 		})
 		// Checks to make sure the correct error is returned when the user tries to execute a use statement.
 		t.Run("RejectsUse", func(t *testing.T) {
@@ -208,7 +208,7 @@ func TestQuery(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
 			stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
 			cassandraWrite(t, session, stmt, cql.IntValue(1), cql.IntValue(2), cql.TextValue("3"))
-			cassandraWrite(t, session, stmt, cql.IntValue(1), cql.UnsetValue(cql.IntValue(0).Type()), cql.UnsetValue(cql.TextValue("").Type()))
+			cassandraWrite(t, session, stmt, cql.IntValue(1), cql.UnsetValue(), cql.UnsetValue())
 			row := cassandraRead(t, session, "SELECT id,my_int,my_text FROM "+table)
 			require.Equal(t, int64(1), cassandraInt(t, row, "id"))
 			require.Equal(t, int64(2), cassandraInt(t, row, "my_int"))

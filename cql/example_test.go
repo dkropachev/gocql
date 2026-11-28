@@ -47,7 +47,7 @@ func ExampleUDTCodecOf() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	address := cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"})
+	address := cql.MustUDTCodecOf[Address](cql.UDTName("", "address"))
 	encoded, err := cql.EncodeValue(typ, address, Address{Street: "Main St", ZipCode: 12345})
 	if err != nil {
 		log.Fatal(err)

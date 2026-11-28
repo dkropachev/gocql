@@ -32,7 +32,7 @@ func TestTupleUDT(t *testing.T) {
 		list, _ := ListType(text)
 		tuple, _ := TupleType(list)
 		encoder := TupleEncoder(OneParam(ListEncoder(StringCodec)))
-		decoder := TupleDecoder(OneColumn(ListDecoder(TextCodec)))
+		decoder := TupleDecoder(OneColumn(ListDecoder(TextViewCodec)))
 		encoded, err := encodeValueBorrowed(tuple, encoder, []string{"first", "second"})
 		if err != nil {
 			t.Fatal(err)
@@ -48,7 +48,7 @@ func TestTupleUDT(t *testing.T) {
 		if err := checkBytesAlive(textBytes(value[0])); !errors.Is(err, ErrReleased) {
 			t.Fatal("released nested element survived")
 		}
-		if clone[1].String() != "second" {
+		if clone[1].string() != "second" {
 			t.Fatal("nested clone failed")
 		}
 
@@ -101,7 +101,7 @@ func TestTupleUDT(t *testing.T) {
 			))
 			decoder := TupleDecoder(Row(
 				ColumnAt(0, Int32Codec, func(v *output) *int32 { return &v.ID }),
-				ColumnAt(1, NullableDecoder(TextCodec), func(v *output) *Nullable[Text] { return &v.Name }),
+				ColumnAt(1, NullableDecoder(TextViewCodec), func(v *output) *Nullable[Text] { return &v.Name }),
 			))
 			encoded := containerGolden(t, tuple, encoder, input{ID: 7}, "0000000400000007ffffffff")
 			decoded, err := DecodeValue(decoder, encoded)
@@ -113,7 +113,7 @@ func TestTupleUDT(t *testing.T) {
 			if err != nil || decoded.ID != 7 || decoded.Name.Valid {
 				t.Fatalf("short tuple=%+v err=%v", decoded, err)
 			}
-			nonnullable := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextCodec)))
+			nonnullable := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextViewCodec)))
 			if _, err := DecodeValue(nonnullable, containerValue(t, tuple, short)); err == nil {
 				t.Fatal("absent suffix became nonnullable zero value")
 			}
@@ -151,7 +151,7 @@ func TestTupleUDT(t *testing.T) {
 	t.Run("UDTDecoder", func(t *testing.T) {
 		t.Run("IgnoredSuffixValidatesFraming", func(t *testing.T) {
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "ignored", Type: rowTestType(t, KindBlob)})
-			decoder := UDTDecoder(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true})
+			decoder := UDTDecoder(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), UDTName("ks", "record"), IgnoreExtraFields())
 			for _, bad := range []string{"000000040000000700", "00000004000000070000000401", "0000000400000007fffffffe", "0000000400000007ffffffff00"} {
 				body, _ := hex.DecodeString(bad)
 				if _, err := DecodeValue(decoder, containerValue(t, typ, body)); err == nil {
@@ -167,12 +167,15 @@ func TestTupleUDT(t *testing.T) {
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: rowTestType(t, KindInt)}, ColumnSpec{Name: "body", Type: rowTestType(t, KindText)})
 			rows := Row(
 				Column("id", Int32Codec, func(v *record) *int32 { return &v.ID }),
-				Column("body", TextCodec, func(v *record) *Text { return &v.Body }),
+				Column("body", TextViewCodec, func(v *record) *Text { return &v.Body }),
 			)
 			short, _ := hex.DecodeString("0000000400000007")
-			for _, options := range []UDTOptions{{Keyspace: "ks", Name: "record"}, {Keyspace: "ks", Name: "record", AllowMissingFields: true}, {Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true, AllowMissingFields: true}} {
-				if _, err := DecodeValue(UDTDecoder(rows, options), containerValue(t, typ, short)); err == nil {
-					t.Fatal("missing serialized field became zero through AllowMissingFields")
+			// A trailing field the value predates, as after ALTER TYPE ADD,
+			// decodes as zero whatever the matching options.
+			for _, options := range [][]StructOption{{UDTName("ks", "record")}, {UDTName("ks", "record"), AllowMissingFields()}, {UDTName("ks", "record"), IgnoreExtraFields(), AllowMissingFields()}} {
+				got, err := DecodeValue(UDTDecoder(rows, options...), containerValue(t, typ, short))
+				if err != nil || got.ID != 7 || got.Body.Bytes().Len() != 0 {
+					t.Fatalf("missing serialized field: got %+v, %v; want it zero", got, err)
 				}
 			}
 			type nullableRecord struct {
@@ -181,9 +184,9 @@ func TestTupleUDT(t *testing.T) {
 			}
 			nullableRows := Row(
 				Column("id", Int32Codec, func(v *nullableRecord) *int32 { return &v.ID }),
-				Column("body", NullableDecoder(TextCodec), func(v *nullableRecord) *Nullable[Text] { return &v.Body }),
+				Column("body", NullableDecoder(TextViewCodec), func(v *nullableRecord) *Nullable[Text] { return &v.Body }),
 			)
-			got, err := DecodeValue(UDTDecoder(nullableRows, UDTOptions{Keyspace: "ks", Name: "record"}), containerValue(t, typ, short))
+			got, err := DecodeValue(UDTDecoder(nullableRows, UDTName("ks", "record")), containerValue(t, typ, short))
 			if err != nil || got.ID != 7 || got.Body.Valid {
 				t.Fatalf("nullable suffix=%+v err=%v", got, err)
 			}
@@ -198,44 +201,44 @@ func TestTupleUDT(t *testing.T) {
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "body", Type: text}, ColumnSpec{Name: "extra", Type: integer}, ColumnSpec{Name: "id", Type: integer})
 			params := Params(
 				Param("id", Int32Codec, func(v record) int32 { return v.ID }),
-				Param("body", TextCodec, func(v record) Text { return v.Body }),
+				Param("body", TextViewCodec, func(v record) Text { return v.Body }),
 			)
 			rows := Row(
 				Column("id", Int32Codec, func(v *record) *int32 { return &v.ID }),
-				Column("body", TextCodec, func(v *record) *Text { return &v.Body }),
+				Column("body", TextViewCodec, func(v *record) *Text { return &v.Body }),
 			)
-			if err := UDTEncoder(params, UDTOptions{Keyspace: "ks", Name: "record"}).CheckType(typ); err == nil {
+			if err := UDTEncoder(params, UDTName("ks", "record")).CheckType(typ); err == nil {
 				t.Fatal("extra database field accepted without option")
 			}
-			if err := UDTDecoder(rows, UDTOptions{Keyspace: "ks", Name: "record"}).CheckType(typ); err == nil {
+			if err := UDTDecoder(rows, UDTName("ks", "record")).CheckType(typ); err == nil {
 				t.Fatal("extra database field accepted without option")
 			}
-			options := UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true}
-			encoder, decoder := UDTEncoder(params, options), UDTDecoder(rows, options)
+			options := []StructOption{UDTName("ks", "record"), IgnoreExtraFields()}
+			encoder, decoder := UDTEncoder(params, options...), UDTDecoder(rows, options...)
 			encoded := containerGolden(t, typ, encoder, record{ID: 7, Body: CodecTestMust(BorrowText("x"))}, "0000000178ffffffff0000000400000007")
 			decoded, err := DecodeValue(decoder, encoded)
-			if err != nil || decoded.ID != 7 || decoded.Body.String() != "x" {
+			if err != nil || decoded.ID != 7 || decoded.Body.string() != "x" {
 				t.Fatalf("UDT=%+v err=%v", decoded, err)
 			}
 			missingRows := Row(
 				Column("id", Int32Codec, func(v *record) *int32 { return &v.ID }),
-				Column("body", TextCodec, func(v *record) *Text { return &v.Body }),
+				Column("body", TextViewCodec, func(v *record) *Text { return &v.Body }),
 				Column("gone", Int32Codec, func(v *record) *int32 { return &v.Missing }),
 			)
-			if err := UDTDecoder(missingRows, options).CheckType(typ); err == nil {
+			if err := UDTDecoder(missingRows, options...).CheckType(typ); err == nil {
 				t.Fatal("unknown application field accepted")
 			}
-			options.AllowMissingFields = true
-			decoded, err = DecodeValue(UDTDecoder(missingRows, options), encoded)
+			options = append(options, AllowMissingFields())
+			decoded, err = DecodeValue(UDTDecoder(missingRows, options...), encoded)
 			if err != nil || decoded.Missing != 0 || decoded.ID != 7 {
 				t.Fatalf("missing application field=%+v err=%v", decoded, err)
 			}
 			missingParams := Params(
 				Param("id", Int32Codec, func(v record) int32 { return v.ID }),
-				Param("body", TextCodec, func(v record) Text { return v.Body }),
+				Param("body", TextViewCodec, func(v record) Text { return v.Body }),
 				Param("gone", Int32Codec, func(v record) int32 { return v.Missing }),
 			)
-			containerGolden(t, typ, UDTEncoder(missingParams, options), record{ID: 7, Body: CodecTestMust(BorrowText("x")), Missing: 42}, "0000000178ffffffff0000000400000007")
+			containerGolden(t, typ, UDTEncoder(missingParams, options...), record{ID: 7, Body: CodecTestMust(BorrowText("x")), Missing: 42}, "0000000178ffffffff0000000400000007")
 			// The compiled identity includes the keyspace and UDT name, not just fields.
 			bound, err := compileValueDecoder(decoder, typ)
 			if err != nil {
@@ -251,7 +254,7 @@ func TestTupleUDT(t *testing.T) {
 		typ := CodecTestMust(UDTType("ks", "record", ColumnSpec{Name: "v", Type: FoundationScalar(t, KindInt)}))
 		params := Params(Param("v", Int32Codec, func(v int32) int32 { return v }))
 		rows := Row(Column("v", Int32Codec, func(v *int32) *int32 { return v }))
-		for _, options := range []UDTOptions{{Keyspace: "other"}, {Keyspace: "other", Name: "record"}, {Keyspace: "ks", Name: "wrong"}} {
+		for _, options := range []StructOption{UDTName("other", ""), UDTName("other", "record"), UDTName("ks", "wrong")} {
 			if _, err := encodeValueBorrowed(typ, NullableEncoder(UDTEncoder(params, options)), Nullable[int32]{}); err == nil {
 				t.Fatal("invalid UDT identity hidden by null")
 			}
@@ -260,37 +263,37 @@ func TestTupleUDT(t *testing.T) {
 			}
 		}
 	})
-	t.Run("UDTOptions", func(t *testing.T) {
+	t.Run("UDTName", func(t *testing.T) {
 		t.Run("ForDerivesIdentity", func(t *testing.T) {
 			typ, err := UDTType("ks", "record", ColumnSpec{Name: "id", Type: IntType})
 			if err != nil {
 				t.Fatal(err)
 			}
-			options, err := UDTOptionsFor(typ)
-			if err != nil || options != (UDTOptions{Keyspace: "ks", Name: "record"}) {
-				t.Fatalf("UDTOptionsFor=%+v err=%v", options, err)
+			options, err := UDTNameOf(typ)
+			if err != nil || options != (UDTName("ks", "record")) {
+				t.Fatalf("UDTNameOf=%+v err=%v", options, err)
 			}
 			encoded := containerGolden(t, typ, UDTEncoder(Params(Param("id", Int32Codec, func(v int32) int32 { return v })), options), int32(7), "0000000400000007")
 			decoded, err := DecodeValue(UDTDecoder(OneColumn(Int32Codec), options), encoded)
 			if err != nil || decoded != 7 {
 				t.Fatalf("decoded=%v err=%v", decoded, err)
 			}
-			if _, err := UDTOptionsFor(IntType); err == nil {
-				t.Fatal("UDTOptionsFor accepted a scalar type")
+			if _, err := UDTNameOf(IntType); err == nil {
+				t.Fatal("UDTNameOf accepted a scalar type")
 			}
 		})
 		t.Run("PropagateThroughComposition", func(t *testing.T) {
 			integer := rowTestType(t, KindInt)
 			typ, _ := UDTType("ks", "record", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "extra", Type: integer})
-			options := UDTOptions{Keyspace: "ks", Name: "record", AllowExtraDatabaseFields: true}
+			options := []StructOption{UDTName("ks", "record"), IgnoreExtraFields()}
 			params := ConvertParams(Params(Param("id", Int32Codec, func(v int32) int32 { return v })), func(v int64) int32 { return int32(v) })
 			rows := ConvertRows(Row(Column("id", Int32Codec, func(v *int32) *int32 { return v })), func(v int32) int64 { return int64(v) }, func(v int64) int64 { return v })
-			encoded := containerGolden(t, typ, UDTEncoder(params, options), int64(7), "0000000400000007ffffffff")
-			decoded, err := DecodeValue(UDTDecoder(rows, options), encoded)
+			encoded := containerGolden(t, typ, UDTEncoder(params, options...), int64(7), "0000000400000007ffffffff")
+			decoded, err := DecodeValue(UDTDecoder(rows, options...), encoded)
 			if err != nil || decoded != 7 {
 				t.Fatalf("mapped UDT=%v err=%v", decoded, err)
 			}
-			positional, err := DecodeValue(UDTDecoder(OneColumn(Int32Codec), options), encoded)
+			positional, err := DecodeValue(UDTDecoder(OneColumn(Int32Codec), options...), encoded)
 			if err != nil || positional != 7 {
 				t.Fatalf("single positional UDT=%v err=%v", positional, err)
 			}

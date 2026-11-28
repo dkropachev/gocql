@@ -302,15 +302,23 @@ func ParamsOf[P any](...StructOption) (ParamEncoder[P], error)
 func MustParamsOf[P any](...StructOption) ParamEncoder[P]
 func RowOf[R any](...StructOption) (RowDecoder[R], error)
 func MustRowOf[R any](...StructOption) RowDecoder[R]
-func UDTCodecOf[T any](UDTOptions, ...StructOption) (Codec[T], error)
-func MustUDTCodecOf[T any](UDTOptions, ...StructOption) Codec[T]
+func UDTCodecOf[T any](...StructOption) (Codec[T], error)
+func MustUDTCodecOf[T any](...StructOption) Codec[T]
 func TupleCodecOf[T any](...StructOption) (Codec[T], error) // members by field position
 func MustTupleCodecOf[T any](...StructOption) Codec[T]
 func PairCodec[A, B any](Codec[A], Codec[B]) Codec[Pair[A, B]] // tuple<a, b>
 func WithCodec[V any](Codec[V]) StructOption
 func WithEncoder[V any](Encoder[V]) StructOption
 func ReuseBuffers() StructOption
-func IgnoreExtraColumns() StructOption
+func IgnoreExtraFields() StructOption    // RowOf, StreamRowOf, UDTs: skip unmapped database fields
+func AllowMissingFields() StructOption   // UDTs: struct fields the UDT lacks
+func UDTName(keyspace, name string) StructOption
+func UDTNameOf(DataType) (StructOption, error)
+func NullAsZero() StructOption           // RowOf, StreamRowOf, TupleCodecOf: NULL leaves a field zero
+func NilAsUnset() StructOption           // ParamsOf: a nil pointer, slice or map binds UNSET
+func Bind[T any](T) BindValue[T]
+func BindNull[T any]() BindValue[T]
+func BindUnset[T any]() BindValue[T]
 ```
 
 `RowInto` calls its reset callback before decoding each row; the callback
@@ -320,18 +328,31 @@ name in snake_case as gocqlx maps it (`CreatedAt` is `created_at`, `UserID`
 `user_id`), `cql:"-"` to skip, `cql:"name,codec=..."` to pick a built-in
 codec. `ParamsOf` skips fields without a matching marker but requires a field
 for every marker; `RowOf` leaves fields of unselected columns zero and
-requires a field for every column unless given `IgnoreExtraColumns`. A
-`[]V` field maps a list, set or vector, whichever the column is; a named type
-maps like its underlying type; `int`, `*V`, `cql.Text` and `*big.Int` fields
-map with `IntCodec`, `PointerCodec`, `TextCodec` and `VarintBigIntCodec`. A
-`time.Time` field maps with `TimestampTimeCodec`; a `BindValue[V]` field binds
-parameters only, with V's built-in codec or the one `WithCodec`/`WithEncoder`
-gives. `UDTCodecOf` maps a UDT's fields to struct T the same way; an empty
-`UDTOptions.Name` matches any name, and `IgnoreExtraColumns` sets
-`AllowExtraDatabaseFields`. `WithCodec(c)` also maps `[]V`, `*V` and map
-values of V. `TupleCodecOf` maps a tuple's members to T's fields by position. Options are
-not generic, so `WithCodec(c)` infers V from c; a constructor rejects an
-option it does not apply with a ValidationError.
+requires a field for every column unless given `IgnoreExtraFields`. A
+field's codec is derived from its Go type recursively, by reflection and by
+cmd/cqlgen alike: a leaf type (the Go and cql scalars, `string`, `[]byte`,
+`cql.Text`, `cql.Bytes`, `netip.Addr`, `*big.Int`, `time.Time` as a
+timestamp and `time.Duration` as a duration, a named type defined from a
+predeclared one, and any `[16]byte` as a uuid) has a built-in codec; a type
+with a `CQLCodec() Codec[T]` method on T or *T has its own; and `[]V`,
+`[N]V` (list, set or vector), `*V`, `Nullable[V]`, `map[K]V`, `Pair[A, B]`
+(a two-member tuple) and, as a field's own type only, `BindValue[V]` are
+built from the codecs of their parts, nested to any depth. A `codec=` tag
+naming a leaf codec applies to the leaves it maps; `ListCodec`, `SetCodec`
+and `VectorCodec` fix the outermost collection's kind. `WithCodec(c)` maps V
+wherever a field's type is derived from it. A NULL cell fails a field that
+cannot hold it with `ErrNull` unless the field's tag has `nullzero` or the
+mapping `NullAsZero`; a nil pointer, slice or map binds NULL unless the tag
+has `nilunset` or the mapping `NilAsUnset`, which bind UNSET. `UDTCodecOf`
+maps a UDT's fields to struct T the same way, by name, with `UDTName`,
+`IgnoreExtraFields` and `AllowMissingFields`; its fields always decode NULL,
+and a trailing field the value predates, as zero. `TupleCodecOf` maps a
+tuple's members to T's fields by position. Options are not generic, so
+`WithCodec(c)` infers V from c; a constructor rejects an option it does not
+apply with a ValidationError. A struct mapping's parameters reject two
+`?` markers the server names alike, as it names both markers of
+`ck > ? AND ck < ?` `ck`, when the statement is prepared; named markers
+(`:from`, `:to`) bind distinct fields.
 
 `Column`/`ColumnAt` use a typed field-address accessor so decoding and recursive
 cloning both reach the same field without reflection. Accessors must return a
@@ -396,9 +417,16 @@ var VarintBigIntCodec Codec[*big.Int]    // varint; nil is NULL
 var DecimalCodec Codec[Decimal]
 var StringCodec Codec[string]                 // text and ascii; decodes an owned copy
 var ByteSliceCodec Codec[[]byte]               // blob; borrows input, decodes an owned copy
-var TextCodec Codec[Text]                     // text and ascii; borrowed view
-var BytesCodec Codec[Bytes]
-func ConvertCodec[A, B any](Codec[B], func(A) B, func(B) A) Codec[A]
+var TextViewCodec Codec[Text]                     // text and ascii; borrowed view
+var BytesViewCodec Codec[Bytes]
+func ConvertCodec[A, B any](Codec[B], func(A) (B, error), func(B) (A, error)) Codec[A]
+func ConvertEncoder[A, B any](Encoder[B], func(A) (B, error)) Encoder[A]
+func ConvertDecoder[A, B any](Decoder[B], func(B) (A, error)) Decoder[A]
+var TimeDurationCodec Codec[time.Duration] // duration without months or days
+func ParseDate(string) (Date, error)
+func ParseTimeOfDay(string) (TimeOfDay, error)
+func ParseTimestamp(string) (Timestamp, error)
+func ParseDuration(string) (Duration, error) // units, ISO 8601 and its alternative form
 func VarintFromBigInt(*big.Int) Varint
 func VarintFromInt64(int64) Varint
 func (v Varint) BigInt() *big.Int
@@ -406,7 +434,7 @@ func (v Varint) Int64() (int64, error) // fails when v does not fit
 func ParseDecimal(string) (Decimal, error) // "12.30", "-7", "1.23E+5"
 func (d Decimal) Rat() *big.Rat
 func VarintFromBytes([]byte) (Varint, error)
-func DateFromTime(time.Time) (Date, error)
+func DateFromTime(time.Time) (Date, error) // the date in t's own location
 func (d Date) Time() time.Time
 func TimestampFromTime(time.Time) (Timestamp, error)
 func (t Timestamp) Time() time.Time
@@ -452,15 +480,19 @@ boolean, integers/floats, date, time, timestamp, UUID/timeuuid, inet, varint,
 decimal and tuple, but never counter, duration, collection, UDT or vector. The
 outbound type remains checked even when null/unset skips payload encoding.
 
-Integers use exact widths. Fixed values reject wrong lengths. ASCII/UTF-8 are
+Integer codecs widen: a wider Go integer decodes a narrower integer column
+losslessly and encodes into one with a range check that fails with a
+CodecError; Float64Codec does the same for float, rounding to the nearest
+float32 and rejecting a finite value beyond its range. A narrower codec
+rejects a wider column. Fixed values reject wrong lengths. ASCII/UTF-8 are
 validated in both directions, including across chunks. Boolean accepts 0 and 1
 only. TimeOfDay must be within the day; TimeUUID must be version 1; duration
 components have compatible signs and int32/int32/int64 ranges. Checked signed
 vints consume the entire duration. Varint retains full signed precision; decimal
 preserves the signed scale and the exact unscaled integer. Explicit big.Int,
 calendar and owned-string conversions are allocation/representation operations,
-not implicit work in typed execution. No numeric coercion silently narrows
-values.
+not implicit work in typed execution. No numeric coercion silently narrows an
+integer.
 
 Public type descriptions use DataType and ColumnSpec only; protocol metadata
 descriptors are internal.
@@ -493,8 +525,8 @@ func (b Bytes) Clone() Bytes          // panics with cqlerr.ErrReleased on an ex
 func (b Bytes) Copy() ([]byte, error) // checked form: returns cqlerr.ErrReleased
 func (t Text) Bytes() Bytes
 func (t Text) Clone() Text
-func (t Text) String() string
-func (t Text) Copy() (string, error)
+func (t Text) Format(fmt.State, rune) // prints the text, or <released>; no String method
+func (t Text) Copy() (string, error)  // the one way to extract an owned string
 
 type Entry[K, V any] struct { Key K; Value V }
 func SliceCodec[T any](Codec[T]) Codec[[]T] // list, set or vector, per the column
@@ -515,14 +547,8 @@ func VectorDecoder[T any](Decoder[T]) Decoder[[]T]
 func TupleEncoder[T any](ParamEncoder[T]) Encoder[T]
 func TupleDecoder[T any](RowDecoder[T]) Decoder[T]
 func TupleCodec[T any](ParamEncoder[T], RowDecoder[T]) Codec[T]
-type UDTOptions struct {
-    Keyspace string // empty matches the UDT in any keyspace
-    Name     string // empty matches a UDT of any name
-    AllowExtraDatabaseFields, AllowMissingFields bool
-}
-func UDTOptionsFor(DataType) (UDTOptions, error) // identity from a UDT DataType
-func UDTEncoder[T any](ParamEncoder[T], UDTOptions) Encoder[T]
-func UDTDecoder[T any](RowDecoder[T], UDTOptions) Decoder[T]
+func UDTEncoder[T any](ParamEncoder[T], ...StructOption) Encoder[T] // UDTName, IgnoreExtraFields, AllowMissingFields
+func UDTDecoder[T any](RowDecoder[T], ...StructOption) Decoder[T]
 ```
 
 GoMapCodec decodes into a Go map: a repeated key fails decoding, NULL is an
@@ -533,7 +559,7 @@ whose key and value types have owning built-in codecs; MapCodec keeps
 
 BorrowText validates UTF-8 and returns ValidationError for invalid input.
 Value.Text likewise returns an error for invalid UTF-8. StringCodec and
-TextCodec return ordinary codec errors for invalid encoded input: UTF-8 for
+TextViewCodec return ordinary codec errors for invalid encoded input: UTF-8 for
 text, ASCII for ascii. Malformed
 input is never a reason for a constructor panic.
 
@@ -564,15 +590,18 @@ does not imply typed lazy collection decoders.
 
 Tuples preserve physical columns: they never expand implicitly into destination
 arguments. Missing serialized trailing tuple/UDT members are null only where the
-protocol permits; a nonnullable destination rejects them. UDT matching defaults
+protocol permits. A tuple's nonnullable destination rejects them, unless
+NullAsZero; a UDT field decodes them, and NULL, as its zero value through the
+built-in Row/RowOf mappings, since every field ALTER TYPE ADD adds is missing
+from older values. UDT matching defaults
 to exact field names and full identity/type validation. A non-empty
-UDTOptions.Name and Keyspace must match the UDT's name and keyspace, and equal
+UDTName name and keyspace must match the UDT's name and keyspace, and equal
 layouts under a different identity are then incompatible; an empty one matches
 any.
 Explicit options permit extra database fields (encode explicit null; decode
 checked skips) or application fields absent from the database (encode ignores
 those fields; decode sets explicit zero defaults only when allowed).
-Null-default behavior requires Nullable or a custom codec. Unknown application
+Unknown application
 fields are errors unless AllowMissingFields is explicitly set. All actual
 framing is consumed even for ignored suffixes. For a present tuple with an empty
 body, ordinary TupleDecoder applies the omitted nullable-suffix rule. Explicit
@@ -613,9 +642,10 @@ func (v Value) Type() DataType
 func (v Value) State() CellState
 func (v Value) Clone() Value
 func (v Value) Bool() (bool, error)
-func (v Value) Signed() (int64, error)
-func (v Value) Float() (float64, error)
-func (v Value) Text() (Text, error)
+func (v Value) Int64() (int64, error)
+func (v Value) Float64() (float64, error)
+func (v Value) Text() (string, error)            // owned copy of text or ascii
+func (v Value) TextView() (Text, error)          // borrowed view
 func (v Value) Bytes() (Bytes, error)
 func (v Value) UUID() (UUID, error)
 func (v Value) TimeUUID() (TimeUUID, error)
@@ -627,13 +657,12 @@ func (v Value) Varint() (Varint, error)
 func (v Value) Decimal() (Decimal, error)
 func (v Value) Len() int
 func (v Value) Field(string) (Value, error)     // UDT field
-func (v Value) Str() (string, error)            // owned copy of text or ascii
 func (v Value) String() string                  // CQL literal, for logs
 func (v Value) Elements() iter.Seq2[Value, error]
 func (v Value) Entries() iter.Seq2[Entry, error]
 func (v Value) Fields() iter.Seq2[Field, error]
-func Null(DataType) Value
-func Unset(DataType) Value
+func Null() Value  // untyped: NULL of whatever type it binds to
+func Unset() Value // untyped UNSET
 func Empty(DataType) (Value, error)
 func Bool(bool) Value
 func TinyInt(int8) Value
@@ -1097,7 +1126,7 @@ The user-facing description is docs/source/statements/streaming.md.
 
 ```go
 // Streaming is always prepared: Session.PrepareStream, then PreparedStream.Worker.
-func (s *Session) PrepareStream[P, R any](context.Context, stream.Statement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
+func (s *Session) PrepareStream[P, R any](context.Context, cql.StreamStatement[P, R], ...exec.PrepareOptions) (*PreparedStream[P, R], error)
 func (p *PreparedStream[P, R]) BindMarkers() cql.Columns
 func (p *PreparedStream[P, R]) Columns() cql.Columns
 func (p *PreparedStream[P, R]) Info() PreparedInfo
@@ -1133,92 +1162,99 @@ type StreamProgress struct {
     OutputStarted bool
 }
 
-// package stream
-type Statement[P, R any] struct { // fields in memory-layout order
-    Params cql.ParamEncoder[P] // nil when P is cql.EmptyParams
-    Rows RowDecoder[R]         // must not be nil
+// package cql: the streaming plans carry a Stream prefix.
+type StreamStatement[P, R any] struct { // fields in memory-layout order
+    Params ParamEncoder[P]     // nil when P is EmptyParams
+    Rows StreamRowDecoder[R]   // must not be nil
     CQL string
-    Kind cql.StatementKind
+    Kind StatementKind
     Idempotent bool
 }
-type RowDecoder[R any] interface {
+type StreamRowDecoder[R any] interface {
     Compile(Columns) (CompiledStreamRow[R], error)
 }
 type CompiledStreamRow[R any] interface {
     Reset(*R)
-    DecodeInto(*RowReader, *R) error
+    DecodeInto(*StreamRowReader, *R) error
 }
-type Decoder[T any] interface {
+type StreamDecoder[T any] interface {
     Compile(DataType) (CompiledStreamValue[T], error)
     Reset(*T) // no server DataType is needed
 }
 type CompiledStreamValue[T any] interface {
     Reset(*T)
-    DecodeInto(*ValueReader, *T) error
+    DecodeInto(*StreamValueReader, *T) error
 }
-type OutputField[R any] struct { /* immutable checked field declaration */ }
-func Column[R, V any](string, Decoder[V], func(*R) *V) OutputField[R]
-func ColumnAt[R, V any](int, Decoder[V], func(*R) *V) OutputField[R]
-func IgnoreColumn[R any](string) OutputField[R]
-func RowInto[R any](reset func(*R), fields ...OutputField[R]) RowDecoder[R] // reset may be nil
-func OneColumn[T any](Decoder[T]) RowDecoder[T]
-func RowOf[R any](...cql.StructOption) (RowDecoder[R], error)
-func MustRowOf[R any](...cql.StructOption) RowDecoder[R]
-func WithCodec[V any](Decoder[V]) cql.StructOption
+type StreamOutputField[R any] interface { /* immutable checked field declaration */ }
+func StreamColumn[R, V any](string, StreamDecoder[V], func(*R) *V) StreamOutputField[R]
+func StreamColumnAt[R, V any](int, StreamDecoder[V], func(*R) *V) StreamOutputField[R]
+func StreamIgnoreColumn[R any](string) StreamOutputField[R]
+func StreamRowInto[R any](reset func(*R), fields ...StreamOutputField[R]) StreamRowDecoder[R] // reset may be nil
+func StreamOneColumn[T any](StreamDecoder[T]) StreamRowDecoder[T]
+func StreamRowOf[R any](...StructOption) (StreamRowDecoder[R], error)
+func MustStreamRowOf[R any](...StructOption) StreamRowDecoder[R]
+func WithStreamDecoder[V any](StreamDecoder[V]) StructOption
 
 // Readers are scoped mutable limited readers, never retained-byte views.
-type RowReader struct { /* checked count and column cursor */ }
-func (r *RowReader) ReadColumn[T any](CompiledStreamValue[T], *T) error
-func (r *RowReader) Context() context.Context
-func (r *RowReader) SkipColumn() error
-func (r *RowReader) RequireEnd() error
+type StreamRowReader struct { /* checked count and column cursor */ }
+func (r *StreamRowReader) ReadColumn[T any](CompiledStreamValue[T], *T) error
+func (r *StreamRowReader) Context() context.Context
+func (r *StreamRowReader) SkipColumn() error
+func (r *StreamRowReader) RequireEnd() error
 
-type ValueReader struct { /* checked type/state and exact body boundary */ }
-func (r *ValueReader) Context() context.Context
-func (r *ValueReader) Type() DataType
-func (r *ValueReader) State() CellState
-func (r *ValueReader) Remaining() int64
-func (r *ValueReader) Read([]byte) (int, error)
-func (r *ValueReader) Uint8() (uint8, error)
-func (r *ValueReader) Uint16() (uint16, error)
-func (r *ValueReader) Uint32() (uint32, error)
-func (r *ValueReader) Uint64() (uint64, error)
-func (r *ValueReader) Child(DataType, func(*ValueReader) error) error
-func (r *ValueReader) Skip() error
-func (r *ValueReader) RequireEnd() error
+type StreamValueReader struct { /* checked type/state and exact body boundary */ }
+func (r *StreamValueReader) Context() context.Context
+func (r *StreamValueReader) Type() DataType
+func (r *StreamValueReader) State() CellState
+func (r *StreamValueReader) Remaining() int64
+func (r *StreamValueReader) Read([]byte) (int, error)
+func (r *StreamValueReader) Uint8() (uint8, error)
+func (r *StreamValueReader) Uint16() (uint16, error)
+func (r *StreamValueReader) Uint32() (uint32, error)
+func (r *StreamValueReader) Uint64() (uint64, error)
+func (r *StreamValueReader) Child(DataType, func(*StreamValueReader) error) error
+func (r *StreamValueReader) Skip() error
+func (r *StreamValueReader) RequireEnd() error
 
-var Bool Decoder[bool]
-var Int8 Decoder[int8]
-var Int16 Decoder[int16]
-var Int32 Decoder[int32]
-var Int64 Decoder[int64]
-var Float32 Decoder[float32]
-var Float64 Decoder[float64]
-var Date Decoder[Date]
-var Time Decoder[TimeOfDay]
-var Timestamp Decoder[Timestamp]
-var Duration Decoder[Duration]
-var UUID Decoder[UUID] // uuid and timeuuid
-var TimeUUID Decoder[TimeUUID]
-var Inet Decoder[netip.Addr]
-var Text Decoder[[]byte] // text and ascii; incremental UTF-8 or ASCII check
-var Blob Decoder[[]byte]
-var Varint Decoder[[]byte] // exact signed two's-complement bytes
+var StreamBool StreamDecoder[bool]
+var StreamInt8 StreamDecoder[int8]
+var StreamInt16 StreamDecoder[int16]   // widens tinyint
+var StreamInt32 StreamDecoder[int32]   // widens smallint and tinyint
+var StreamInt64 StreamDecoder[int64]   // bigint, counter; widens the narrower integers
+var StreamFloat32 StreamDecoder[float32]
+var StreamFloat64 StreamDecoder[float64] // widens float
+var StreamDate StreamDecoder[Date]
+var StreamTime StreamDecoder[TimeOfDay]
+var StreamTimestamp StreamDecoder[Timestamp]
+var StreamDuration StreamDecoder[Duration]
+var StreamUUID StreamDecoder[UUID] // uuid and timeuuid
+var StreamTimeUUID StreamDecoder[TimeUUID]
+var StreamInet StreamDecoder[netip.Addr]
+var StreamText StreamDecoder[[]byte] // text and ascii; incremental UTF-8 or ASCII check
+var StreamBlob StreamDecoder[[]byte]
+var StreamVarint StreamDecoder[[]byte] // exact signed two's-complement bytes
 // Decimal's unscaled bytes have the same caller-capacity rule.
 type DecimalParts struct { Scale int32; Unscaled []byte }
-var Decimal Decoder[DecimalParts]
-func Nullable[T any](Decoder[T]) Decoder[Nullable[T]]
-func Empty[T any](Decoder[T]) Decoder[MaybeEmpty[T]]
-func Slice[T any](Decoder[T]) Decoder[[]T] // list, set or vector, per the column
-func List[T any](Decoder[T]) Decoder[[]T]
-func Set[T any](Decoder[T]) Decoder[[]T]
-func Map[K, V any](Decoder[K], Decoder[V]) Decoder[[]Entry[K, V]]
-func Vector[T any](Decoder[T]) Decoder[[]T]
-func Tuple[R any](RowDecoder[R]) Decoder[R]
-func UDT[R any](RowDecoder[R], UDTOptions) Decoder[R]
+var StreamDecimal StreamDecoder[DecimalParts]
+// Allocating decoders: each value is newly allocated, never reusing a buffer.
+var StreamString StreamDecoder[string]
+var StreamTimestampTime StreamDecoder[time.Time]
+var StreamTimeDuration StreamDecoder[time.Duration]
+var StreamDecimalValue StreamDecoder[Decimal]
+func StreamPointer[T any](StreamDecoder[T]) StreamDecoder[*T]
+func StreamGoMap[K comparable, V any](StreamDecoder[K], StreamDecoder[V]) StreamDecoder[map[K]V]
+func StreamNullable[T any](StreamDecoder[T]) StreamDecoder[Nullable[T]]
+func StreamEmpty[T any](StreamDecoder[T]) StreamDecoder[MaybeEmpty[T]]
+func StreamSlice[T any](StreamDecoder[T]) StreamDecoder[[]T] // list, set or vector, per the column
+func StreamList[T any](StreamDecoder[T]) StreamDecoder[[]T]
+func StreamSet[T any](StreamDecoder[T]) StreamDecoder[[]T]
+func StreamMap[K, V any](StreamDecoder[K], StreamDecoder[V]) StreamDecoder[[]Entry[K, V]]
+func StreamVector[T any](StreamDecoder[T]) StreamDecoder[[]T]
+func StreamTuple[R any](StreamRowDecoder[R]) StreamDecoder[R]
+func StreamUDT[R any](StreamRowDecoder[R], ...StructOption) StreamDecoder[R]
 // Explicit final encoded storage for dynamic/custom representations.
 type StreamCell struct { Type DataType; State CellState; Bytes []byte }
-var Encoded Decoder[StreamCell]
+var StreamEncoded StreamDecoder[StreamCell]
 
 // package cqlerr
 type StreamCapabilityError struct { Protocol int; Compression config.Compression; Reason string }
@@ -1227,26 +1263,26 @@ func (e *StreamCapabilityError) Error() string
 func (e *StreamCapacityError) Error() string
 ```
 
-stream.OutputField[R] is opaque, as for OutputField[R]. Unmapped physical columns
+cql.StreamOutputField[R] is opaque, as for OutputField[R]. Unmapped physical columns
 are skipped with recursive structural/type validation; no ignore field is
-needed in stream.RowInto.
+needed in cql.StreamRowInto.
 Compile validates actual metadata recursively, including children of null and
 empty values, and returns immutable plans safe for independent cursors. Plans
 capture neither readers nor destinations. Scalar rules match the buffered
 codecs, including exact widths, UTF-8/ASCII, numeric ranges, null/unset and
-logical Empty. stream.Empty accepts exactly the types accepted by EmptyCodec.
+logical Empty. cql.StreamEmpty accepts exactly the types accepted by EmptyCodec.
 No adapter may run an arbitrary buffered Decoder by accumulating its input.
-stream.Encoded explicitly writes the entire encoded body into caller storage,
+cql.StreamEncoded explicitly writes the entire encoded body into caller storage,
 then exposes that caller-owned representation; nested framing/type validation
 runs incrementally and does not allocate a complete cell in driver storage.
 
 A streaming execution uses the same parameter encoding, routing, per-host
 prepared IDs, metadata revisions and Close/Wait admission as a buffered Worker.
-Actual streaming response metadata selects this worker's stream.CompiledStreamRow; cache
+Actual streaming response metadata selects this worker's cql.CompiledStreamRow; cache
 reuse is scoped to this decoder and exact metadata. Applications using both modes prepare the statement twice: Session.Prepare with
-an ordinary typed decoder, and Session.PrepareStream with a stream.RowInto decoder.
-Session.PrepareStream takes stream.Statement[P,R] (CQL, Params, Rows as a
-stream.RowDecoder, Kind, Idempotent) and returns an immutable PreparedStream[P,R]. Its
+an ordinary typed decoder, and Session.PrepareStream with a cql.StreamRowInto decoder.
+Session.PrepareStream takes cql.StreamStatement[P,R] (CQL, Params, Rows as a
+cql.StreamRowDecoder, Kind, Idempotent) and returns an immutable PreparedStream[P,R]. Its
 Worker(exec.StreamOptions) creates a worker-owned StreamWorker. Preparation validates
 the streaming plan against available metadata, deferring only absent conditional
 result metadata. No buffered decoder is needed. Worker-local caches revalidate
@@ -1271,20 +1307,20 @@ construction returns normally through the StreamWorker Run method's error result
 Reset is called on a non-nil destination before each active NextInto attempt;
 terminal/exhausted calls return false without touching it. Built-in value Reset
 clears logical values while preserving byte/element slice capacity and nested
-storage. stream.RowInto calls its application reset callback, when not nil, for
+storage. cql.StreamRowInto calls its application reset callback, when not nil, for
 unmapped Go state, then resets mapped fields through child plans. Like RowInto,
 it requires a field for every column and a column for every field;
 IgnoreColumn skips a column. The callback must
 preserve mapped storage. A custom plan has the same explicit responsibility;
 there is no promise to zero an arbitrary R while preserving its unknown storage.
 An application UDT field absent from database metadata has no DataType with
-which to compile its value plan. stream.Decoder.Reset resets it without one,
+which to compile its value plan. StreamDecoder.Reset resets it without one,
 preserving caller-seeded byte and nested storage; every decoder has it, so
-UDTOptions.AllowMissingFields accepts any absent field. Mapped fields use
-their compiled stream.CompiledStreamValue.Reset. A custom row declaration used
+AllowMissingFields accepts any absent field. Mapped fields use
+their compiled cql.CompiledStreamValue.Reset. A custom row declaration used
 as a tuple/UDT composition resets through its own Reset(*R) method, when it
 has one, or is zeroed.
-stream.RowInto's application callback retains responsibility for unmapped Go state
+cql.StreamRowInto's application callback retains responsibility for unmapped Go state
 and must preserve mapped storage; this optional capability does not shift that
 responsibility or relax the complete streaming type-support requirements.
 
@@ -2269,7 +2305,7 @@ and reconnect policy; it never extends the spent attempt or caller deadline.
 
 ## Struct mapping, documentation and stopping iteration
 
-Public Statement, stream.Statement, exec.Options, exec.PrepareOptions, exec.StreamOptions and
+Public Statement, cql.StreamStatement, exec.Options, exec.PrepareOptions, exec.StreamOptions and
 Profile records expose their fields directly in package documentation.
 exec.CompiledOptions.Values returns public exec.Options. The high-level codec and observer
 interfaces expose their methods; lower-level plan contracts are documented in
@@ -2278,17 +2314,22 @@ or codec plans, and introduce no serializer.
 
 cmd/cqlgen generates a struct mapping as a `func (T) CQLFields()
 cql.StructFields[T]` method, which ParamsOf and RowOf find in the method set
-of T or *T, and a `func (T) CQLStreamColumns() []stream.OutputField[T]`
-method, which stream.RowOf finds, so there is no registry and no dependence on
+of T or *T, and a `func (T) CQLStreamColumns() []cql.StreamOutputField[T]`
+method, which cql.StreamRowOf finds, so there is no registry and no dependence on
 package initialization order. Generated struct mappings honor cql.WithCodec and
-stream.WithCodec at construction.
+cql.WithStreamDecoder at construction. `cqlgen -udt=T` also generates a
+`func (T) CQLCodec() cql.Codec[T]` method returning `cql.MustUDTCodecOf[T]()`,
+built once, so every mapping finds T's codec for fields of T and of types
+derived from it, and emits nested codec expressions, such as
+`cql.SliceCodec(cql.PointerCodec(cql.Int32Codec))`, for derived field types.
 Recognized built-in tags take precedence over type overrides; overrides replace
 untagged and custom-expression defaults of the matching Go type. Unaffected
 custom-expression defaults retain their generated implementations. Each mapping
 is independent and generated defaults are never mutated. Option scopes:
 WithCodec applies to ParamsOf, RowOf and UDTCodecOf, WithEncoder to ParamsOf,
-ReuseBuffers to RowOf, IgnoreExtraColumns to RowOf and stream.RowOf, and
-stream.WithCodec to stream.RowOf; the other functions reject them with a
+ReuseBuffers to RowOf, IgnoreExtraFields to RowOf, cql.StreamRowOf and the
+UDT constructors, and cql.WithStreamDecoder to cql.StreamRowOf; the other
+functions reject them with a
 ValidationError. No per-row override resolution is permitted.
 
 All Each callbacks may return gocql.StopIteration or a chain of single-error

@@ -27,10 +27,7 @@ func Example_errors() {
 		log.Fatal(err)
 	}
 	defer session.Close()
-	insert, err := session.Prepare(ctx, cql.Statement[string, cql.EmptyRow]{
-		CQL:    "INSERT INTO example.log (line) VALUES (?)",
-		Params: cql.OneParam(cql.StringCodec),
-	})
+	insert, err := session.Prepare(ctx, cql.Write("INSERT INTO example.log (line) VALUES (?)", cql.OneParam(cql.StringCodec)))
 	if err != nil {
 		log.Fatal(err)
 	}

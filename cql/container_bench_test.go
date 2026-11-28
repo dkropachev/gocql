@@ -51,7 +51,7 @@ func BenchmarkContainer(b *testing.B) {
 				case "udt":
 					udt := CodecTestMust(UDTType("ks", "r", ColumnSpec{Name: "n", Type: integer}))
 					typ = CodecTestMust(ListType(udt))
-					opts := UDTOptions{Keyspace: "ks", Name: "r"}
+					opts := UDTName("ks", "r")
 					enc, dec = ListEncoder(UDTEncoder(OneParam(Int32Codec), opts)), ListDecoder(UDTDecoder(OneColumn(Int32Codec), opts))
 				}
 				encoded := CodecTestMust(encodeValueBorrowed(typ, enc, make([]int32, n)))

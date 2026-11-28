@@ -107,17 +107,17 @@ func serializationColumn(t testing.TB, s *gocql.Session, stmt string, values ...
 type serializationStringCodec struct{}
 
 func (serializationStringCodec) CheckType(t cql.DataType) error {
-	return cql.TextCodec.CheckType(t)
+	return cql.TextViewCodec.CheckType(t)
 }
 func (serializationStringCodec) Encode(w *cql.ValueWriter, s string) error {
 	return cql.StringCodec.Encode(w, s)
 }
 func (serializationStringCodec) Decode(r cql.ValueReader) (string, error) {
-	v, e := cql.TextCodec.Decode(r)
+	v, e := cql.TextViewCodec.Decode(r)
 	if e != nil {
 		return "", e
 	}
-	return v.String(), nil
+	return fmt.Sprint(v), nil
 }
 func (serializationStringCodec) Clone(s string) string { return s }
 
@@ -143,8 +143,8 @@ func (c serializationCodec[T]) CheckType(t cql.DataType) error {
 func serializationTuple[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T]) cql.Codec[T] {
 	return serializationCodec[T]{cql.TupleEncoder(p), cql.TupleDecoder(r)}
 }
-func serializationUDT[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T], opts cql.UDTOptions) cql.Codec[T] {
-	return serializationCodec[T]{cql.UDTEncoder(p, opts), cql.UDTDecoder(r, opts)}
+func serializationUDT[T any](p cql.ParamEncoder[T], r cql.RowDecoder[T], opts ...cql.StructOption) cql.Codec[T] {
+	return serializationCodec[T]{cql.UDTEncoder(p, opts...), cql.UDTDecoder(r, opts...)}
 }
 
 func serializationRoundTrip[T any](t testing.TB, s *gocql.Session, table, column string, id int32, codec cql.Codec[T], input T) T {
@@ -225,17 +225,17 @@ func assertSerializationValue(t testing.TB, want, got cql.Value) {
 		b, f := got.Bool()
 		equal = e == nil && f == nil && a == b
 	case cql.KindTinyInt, cql.KindSmallInt, cql.KindInt, cql.KindBigInt, cql.KindCounter, cql.KindDate, cql.KindTime, cql.KindTimestamp:
-		a, e := want.Signed()
-		b, f := got.Signed()
+		a, e := want.Int64()
+		b, f := got.Int64()
 		equal = e == nil && f == nil && a == b
 	case cql.KindFloat, cql.KindDouble:
-		a, e := want.Float()
-		b, f := got.Float()
+		a, e := want.Float64()
+		b, f := got.Float64()
 		equal = e == nil && f == nil && math.Float64bits(a) == math.Float64bits(b)
 	case cql.KindText, cql.KindASCII:
-		a, e := want.Text()
-		b, f := got.Text()
-		equal = e == nil && f == nil && a.String() == b.String()
+		a, e := want.TextView()
+		b, f := got.TextView()
+		equal = e == nil && f == nil && fmt.Sprint(a) == fmt.Sprint(b)
 	case cql.KindBlob:
 		a, e := want.Bytes()
 		b, f := got.Bytes()
@@ -335,7 +335,7 @@ func serializationFixtureValue(kind cql.Kind, input any) (cql.Value, error) {
 	// The corpus still names text by its pre-v3 wire ID 0x000A, which
 	// ScalarType maps to KindText; switch on the resolved kind.
 	kind = typ.Kind()
-	null := func() (cql.Value, error) { return cql.NullValue(typ), nil }
+	null := func() (cql.Value, error) { return cql.NullValue(), nil }
 	switch v := input.(type) {
 	case *bool:
 		if v == nil {
@@ -664,6 +664,6 @@ func serializationTypeName(t testing.TB, parts ...string) string {
 	return serializationTableName(t, parts...)
 }
 
-func serializationUDTOptions(name string) cql.UDTOptions {
-	return cql.UDTOptions{Keyspace: fixtureKeyspace(""), Name: name}
+func serializationUDTOptions(name string) cql.StructOption {
+	return cql.UDTName(fixtureKeyspace(""), name)
 }

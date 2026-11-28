@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -157,13 +158,13 @@ func TestFixture(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		version, err := value.Text()
+		version, err := value.TextView()
 		if err != nil {
 			t.Fatal(err)
 		}
-		t.Log("ACTUAL_SERVER_VERSION", version.String(), "PROTOCOL", (*implSession.Session)(s).Data().InternalCfg.ProtoVersion)
-		if !strings.HasPrefix(version.String(), strings.TrimPrefix(flagCassVersion.String(), "v")) {
-			t.Fatalf("unexpected server version %q", version.String())
+		t.Log("ACTUAL_SERVER_VERSION", fmt.Sprint(version), "PROTOCOL", (*implSession.Session)(s).Data().InternalCfg.ProtoVersion)
+		if !strings.HasPrefix(fmt.Sprint(version), strings.TrimPrefix(flagCassVersion.String(), "v")) {
+			t.Fatalf("unexpected server version %q", fmt.Sprint(version))
 		}
 	})
 

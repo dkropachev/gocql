@@ -15,6 +15,10 @@ type FieldTag struct {
 	Column string // column name; the field name in snake_case when untagged
 	Codec  string // codec override: a built-in codec name, or (cqlgen only) a Go expression
 	Stream string // streaming decoder override, like Codec, for StreamRowOf
+	// NullZero decodes a NULL cell as the field's zero value (nullzero).
+	NullZero bool
+	// NilUnset binds UNSET for a nil pointer, slice or map (nilunset).
+	NilUnset bool
 }
 
 // ParseFieldTag returns the column mapping of a struct field. ok is false for
@@ -44,6 +48,10 @@ func ParseFieldTag(fieldName string, exported bool, tag reflect.StructTag) (Fiel
 			result.Codec = val
 		case key == "stream" && val != "":
 			result.Stream = val
+		case option == "nullzero":
+			result.NullZero = true
+		case option == "nilunset":
+			result.NilUnset = true
 		default:
 			return FieldTag{}, false, fmt.Errorf("gocql: field %s: unknown cql tag option %q", fieldName, option)
 		}

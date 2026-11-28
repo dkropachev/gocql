@@ -10,7 +10,7 @@ import (
 // ByteSliceCodec encodes a []byte and decodes a blob into caller-owned
 // storage, the []byte counterpart of StringCodec. RowInto and ReuseBuffers
 // preserve a seeded slice when its capacity is sufficient. The decoded bytes
-// survive response release, including One returning. Use BytesCodec to decode
+// survive response release, including One returning. Use BytesViewCodec to decode
 // without copying.
 var ByteSliceCodec Codec[[]byte] = byteSliceCodec{}
 

@@ -43,7 +43,7 @@ func testPage(t *testing.T, values ...string) *Page[cql.Bytes] {
 		body = append(body, v...)
 	}
 	chain := typedTestChain(t, body)
-	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: cqltype.CompletePageState()}}, cql.OneColumn(cql.BytesCodec), nil))
+	return codecTestMust(InternalNewPage(&transport.InternalResponsePage{ResponseData: implModel.ResponseData{Columns: columns, Rows: chain, RowCount: int32(len(values)), Owner: wire.NewLease(chain, nil), State: cqltype.CompletePageState()}}, cql.OneColumn(cql.BytesViewCodec), nil))
 }
 
 type countingDecoder struct {
@@ -56,7 +56,7 @@ func (d countingDecoder) Compile(c cql.Columns) (cql.CompiledRow[cql.Bytes], err
 	if d.hook != nil {
 		d.hook()
 	}
-	return cql.OneColumn(cql.BytesCodec).Compile(c)
+	return cql.OneColumn(cql.BytesViewCodec).Compile(c)
 }
 func (d countingDecoder) Clone(v cql.Bytes) cql.Bytes { return v.Clone() }
 func preparedState(t *testing.T, s *cluster.Core, columns cql.Columns) (*InternalPreparedState, *InternalHostPrepared) {

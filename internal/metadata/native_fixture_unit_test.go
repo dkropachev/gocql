@@ -59,7 +59,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 	case cql.UUID:
 		return fixtureBody(typ, cql.UUIDCodec, v)
 	case []byte:
-		return fixtureBody(typ, cql.BytesCodec, cql.BorrowBytes(v))
+		return fixtureBody(typ, cql.BytesViewCodec, cql.BorrowBytes(v))
 	case int8:
 		return fixtureBody(typ, cql.Int8Codec, v)
 	case int16:
@@ -71,7 +71,7 @@ func encodeFixtureCell(info cqltype.TypeInfo, value any) ([]byte, error) {
 		for k, x := range v {
 			entries = append(entries, cql.Entry[string, cql.Bytes]{Key: k, Value: cql.BorrowBytes(x)})
 		}
-		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.BytesCodec), entries)
+		return fixtureBody(typ, cql.MapEncoder(cql.StringCodec, cql.BytesViewCodec), entries)
 	case bool:
 		return fixtureBody(typ, cql.BoolCodec, v)
 	case int:

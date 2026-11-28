@@ -79,7 +79,7 @@ func TestBatch(t *testing.T) {
 			cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY,my_int int,my_text text)", table))
 			stmt := fmt.Sprintf("INSERT INTO %s(id,my_int,my_text) VALUES(?,?,?)", table)
 			batch := &gocql.Batch{Kind: cql.LoggedBatch}
-			for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetValue(cql.TextValue("").Type())}, {cql.IntValue(1), cql.UnsetValue(cql.IntValue(0).Type()), cql.TextValue("")}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetValue(cql.TextValue("").Type())}} {
+			for _, values := range [][]cql.Value{{cql.IntValue(1), cql.IntValue(1), cql.UnsetValue()}, {cql.IntValue(1), cql.UnsetValue(), cql.TextValue("")}, {cql.IntValue(2), cql.IntValue(2), cql.UnsetValue()}} {
 				cassandraAdd(t, batch, cassandraWritePrepared(t, session, stmt, exec.PrepareOptions{}), values)
 			}
 			info := cassandraBatch(t, session, batch, exec.Options{})
@@ -202,7 +202,7 @@ func TestBatch(t *testing.T) {
 				CQL:         fmt.Sprintf(("SELECT * FROM " + fixtureKeyspace("") + ".%s WHERE id=2 AND val=?"), table),
 				Params:      cql.DynamicParams,
 				BindMarkers: cql.NewColumns(cql.ColumnSpec{Name: "val", Type: inet}),
-			}, []cql.Value{cql.NullValue(inet)}))
+			}, []cql.Value{cql.NullValue()}))
 			_, err := session.ExecBatch(ctx, batch)
 			require.Error(t, err, "expected to get error for invalid query in batch")
 			var server cqlerr.ServerError
@@ -274,9 +274,9 @@ func TestBatch(t *testing.T) {
 			for rows.NextInto(&row) {
 				value, err := row.Get("value")
 				require.NoError(t, err)
-				text, err := value.Text()
+				text, err := value.TextView()
 				require.NoError(t, err)
-				got[sessionTestInt(t, row, "id")] = text.String()
+				got[sessionTestInt(t, row, "id")] = fmt.Sprint(text)
 			}
 			require.NoError(t, rows.Err())
 			require.NoError(t, rows.Close())

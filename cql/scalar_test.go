@@ -114,11 +114,11 @@ func FuzzV2ScalarUTF8(f *testing.F) {
 	}
 	f.Fuzz(func(t *testing.T, data []byte, splitPoint uint32) {
 		split := int(uint64(splitPoint) % uint64(len(data)+1))
-		decoded, err := TextCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:]))
+		decoded, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:]))
 		if (err == nil) != utf8.Valid(data) {
 			t.Fatalf("UTF-8 validation disagreed at split %d: %x", split, data)
 		}
-		if err == nil && decoded.String() != string(data) {
+		if err == nil && decoded.string() != string(data) {
 			t.Fatal("valid text bytes changed")
 		}
 	})
@@ -130,7 +130,7 @@ func TestScalar(t *testing.T) {
 		if err != nil || !bytes.Equal(frame, []byte{0, 0, 0, 0}) {
 			t.Fatalf("nil blob should be present empty: %x %v", frame, err)
 		}
-		empty, err := BytesCodec.Decode(ScalarReader(t, KindBlob, Present))
+		empty, err := BytesViewCodec.Decode(ScalarReader(t, KindBlob, Present))
 		if err != nil || empty.Len() != 0 {
 			t.Fatal("empty blob rejected")
 		}
@@ -180,11 +180,11 @@ func TestScalar(t *testing.T) {
 				t.Fatalf("unexpected empty support for %s", kind)
 			}
 		}
-		if err := EmptyCodec(TextCodec).CheckType(scalarType(t, KindText)); err == nil {
+		if err := EmptyCodec(TextViewCodec).CheckType(scalarType(t, KindText)); err == nil {
 			t.Fatal("EmptyCodec accepted text")
 		}
 		type customID int32
-		named := ConvertCodec(Int32Codec, func(v customID) int32 { return int32(v) }, func(v int32) customID { return customID(v) })
+		named := ConvertCodec(Int32Codec, func(v customID) (int32, error) { return int32(v), nil }, func(v int32) (customID, error) { return customID(v), nil })
 		scalarGolden(t, named, KindInt, customID(-7), "fffffff9")
 	})
 	t.Run("CalendarBoundaries", func(t *testing.T) {
@@ -272,7 +272,7 @@ func TestScalar(t *testing.T) {
 				chain := CodecTestMust(wire.NewChain(wire.Borrow(input[:split]), wire.Borrow(input[split:])))
 				lease := wire.NewLease(chain, nil)
 				r := valueReaderFromLease(textType, Present, chain, lease)
-				v, e := TextCodec.Decode(r)
+				v, e := TextViewCodec.Decode(r)
 				if input[0] == 'v' {
 					if e != nil {
 						t.Fatal(e)
@@ -295,7 +295,7 @@ func TestScalar(t *testing.T) {
 					t.Fatalf("invalid UTF8 split%d", split)
 				}
 				lease.Release()
-				if _, e := TextCodec.Decode(r); !errors.Is(e, ErrReleased) {
+				if _, e := TextViewCodec.Decode(r); !errors.Is(e, ErrReleased) {
 					t.Fatal("expired text", e)
 				}
 			}
@@ -470,19 +470,19 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			lease := wire.NewLease(chain, nil)
-			value, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease))
+			value, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease))
 			if err != nil {
 				t.Fatal(err)
 			}
-			clone := TextCodec.Clone(value)
+			clone := TextViewCodec.Clone(value)
 			lease.Release()
 			if _, err := value.Bytes().At(0); !errors.Is(err, ErrReleased) {
 				t.Fatal("text lost page lease")
 			}
-			if clone.String() != "borrowed" {
+			if clone.string() != "borrowed" {
 				t.Fatal("clone did not detach")
 			}
-			if _, err := TextCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
+			if _, err := TextViewCodec.Decode(valueReaderFromLease(scalarType(t, KindText), Present, chain, lease)); !errors.Is(err, ErrReleased) {
 				t.Fatal("decode accepted released lease")
 			}
 			builder := wire.NewBuilder(16)
@@ -523,11 +523,11 @@ func TestScalar(t *testing.T) {
 				t.Fatal(err)
 			}
 			source[0] = 4
-			borrowedBytes, err := DecodeValue(BytesCodec, borrowed)
+			borrowedBytes, err := DecodeValue(BytesViewCodec, borrowed)
 			if err != nil {
 				t.Fatal(err)
 			}
-			ownedBytes, err := DecodeValue(BytesCodec, owned)
+			ownedBytes, err := DecodeValue(BytesViewCodec, owned)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -610,11 +610,11 @@ func TestScalar(t *testing.T) {
 			}
 		})
 	})
-	t.Run("TextCodec", func(t *testing.T) {
+	t.Run("TextViewCodec", func(t *testing.T) {
 		for _, s := range []string{"", "plain ASCII", "é€😀\x00", "\u007f\u0080\u07ff\u0800\ud7ff\ue000\uffff\U00010000\U0010ffff"} {
 			for split := 0; split <= len(s); split++ {
-				value, err := TextCodec.Decode(ScalarReader(t, Kind(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
-				if err != nil || value.String() != s {
+				value, err := TextViewCodec.Decode(ScalarReader(t, Kind(0x000A), Present, []byte(s[:split]), []byte(s[split:])))
+				if err != nil || value.string() != s {
 					t.Fatalf("valid UTF-8 split %d: %v", split, err)
 				}
 			}
@@ -625,7 +625,7 @@ func TestScalar(t *testing.T) {
 		}
 		for _, data := range [][]byte{{0x80}, {0xc0, 0x80}, {0xc1, 0xbf}, {0xe0, 0x9f, 0xbf}, {0xed, 0xa0, 0x80}, {0xf0, 0x8f, 0xbf, 0xbf}, {0xf4, 0x90, 0x80, 0x80}, {0xf5, 0x80, 0x80, 0x80}, {0xe2, 0x82}, {0xc2, 0x41}} {
 			for split := 0; split <= len(data); split++ {
-				if _, err := TextCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:])); err == nil {
+				if _, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, data[:split], data[split:])); err == nil {
 					t.Fatalf("accepted invalid UTF-8 %x split %d", data, split)
 				}
 			}
@@ -636,10 +636,10 @@ func TestScalar(t *testing.T) {
 		if _, err := scalarEncode(t, StringCodec, KindASCII, "café"); err == nil {
 			t.Fatal("encoded non-ASCII")
 		}
-		if _, err := TextCodec.Decode(ScalarReader(t, KindASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
+		if _, err := TextViewCodec.Decode(ScalarReader(t, KindASCII, Present, []byte{0x7f}, []byte{0x80})); err == nil {
 			t.Fatal("decoded non-ASCII")
 		}
-		if _, err := scalarEncode(t, TextCodec, KindASCII, CodecTestMust(BorrowText("é"))); err == nil {
+		if _, err := scalarEncode(t, TextViewCodec, KindASCII, CodecTestMust(BorrowText("é"))); err == nil {
 			t.Fatal("borrowed Text bypassed ASCII validation")
 		}
 		// The text codecs take ascii too, validating ASCII both ways.
@@ -656,13 +656,13 @@ func TestScalar(t *testing.T) {
 			t.Fatal("StringCodec rejected UTF-8 for text:", err)
 		}
 		source := []byte("hello")
-		value, err := TextCodec.Decode(ScalarReader(t, KindText, Present, source[:2], source[2:]))
+		value, err := TextViewCodec.Decode(ScalarReader(t, KindText, Present, source[:2], source[2:]))
 		if err != nil {
 			t.Fatal(err)
 		}
-		clone := TextCodec.Clone(value)
+		clone := TextViewCodec.Clone(value)
 		source[0] = 'j'
-		if value.String() != "jello" || clone.String() != "hello" {
+		if value.string() != "jello" || clone.string() != "hello" {
 			t.Fatal("text borrow or clone ownership wrong")
 		}
 	})

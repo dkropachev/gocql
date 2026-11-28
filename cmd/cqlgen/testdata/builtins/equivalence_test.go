@@ -7,8 +7,10 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"net/netip"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -28,8 +30,9 @@ type (
 )
 
 // scalarTypes returns every scalar column type. candidateTypes tries each of
-// them and its list, set and vector for a field, or for a map field every
-// map of two of them instead.
+// them for a leaf, and builds the column types of a derived field from them:
+// a list, set or vector of its element's, a map of its key's and value's, a
+// tuple of a Pair's members'.
 func scalarTypes(t *testing.T) []cql.DataType {
 	t.Helper()
 	var out []cql.DataType
@@ -45,6 +48,15 @@ func scalarTypes(t *testing.T) []cql.DataType {
 
 func candidateTypes(t *testing.T, field reflect.Type) []cql.DataType {
 	t.Helper()
+	return candidates(t, field, true)
+}
+
+// candidates returns the column types to try for Go type field; top is set
+// for a field's own type, whose leaves are tried against every scalar. A
+// nested leaf is tried against the scalars of its kind only, which keeps the
+// product of a map or a tuple small.
+func candidates(t *testing.T, field reflect.Type, top bool) []cql.DataType {
+	t.Helper()
 	scalars := scalarTypes(t)
 	must := func(typ cql.DataType, err error) cql.DataType {
 		t.Helper()
@@ -53,19 +65,95 @@ func candidateTypes(t *testing.T, field reflect.Type) []cql.DataType {
 		}
 		return typ
 	}
-	var out []cql.DataType
-	if field.Kind() == reflect.Map {
-		for _, k := range scalars {
-			for _, v := range scalars {
+	generic := func(name string) bool {
+		return field.PkgPath() == reflect.TypeFor[cql.Pair[int, int]]().PkgPath() && strings.HasPrefix(field.Name(), name+"[")
+	}
+	switch {
+	case field.Kind() == reflect.Array && field.Len() == 16 && field.Elem().Kind() == reflect.Uint8,
+		field == reflect.TypeFor[[]byte](), field == reflect.TypeFor[*big.Int]():
+		return leafCandidates(field, scalars, top)
+	case field.Kind() == reflect.Slice || field.Kind() == reflect.Array:
+		elems := candidates(t, field.Elem(), false)
+		if top && isLeaf(field.Elem()) {
+			elems = scalars
+		}
+		var out []cql.DataType
+		for _, e := range elems {
+			out = append(out, must(cql.ListType(e)), must(cql.SetType(e)))
+			if field.Kind() == reflect.Array {
+				out = append(out, must(cql.VectorType(e, uint16(field.Len()))))
+			} else {
+				out = append(out, must(cql.VectorType(e, 2)))
+			}
+		}
+		if top {
+			out = append(out, scalars...)
+		}
+		return out
+	case field.Kind() == reflect.Pointer:
+		return candidates(t, field.Elem(), top)
+	case field.Kind() == reflect.Map:
+		var out []cql.DataType
+		keys, values := candidates(t, field.Key(), false), candidates(t, field.Elem(), false)
+		if top && isLeaf(field.Key()) && isLeaf(field.Elem()) {
+			keys, values = scalars, scalars
+		}
+		for _, k := range keys {
+			for _, v := range values {
 				out = append(out, must(cql.MapType(k, v)))
 			}
 		}
 		return out
+	case generic("Nullable") || generic("BindValue"):
+		return candidates(t, field.Field(0).Type, top)
+	case generic("Pair"):
+		var out []cql.DataType
+		for _, a := range candidates(t, field.Field(0).Type, false) {
+			for _, b := range candidates(t, field.Field(1).Type, false) {
+				out = append(out, must(cql.TupleType(a, b)))
+			}
+		}
+		return out
 	}
+	return leafCandidates(field, scalars, top)
+}
+
+// isLeaf reports whether t is coded by a leaf codec, not derived.
+func isLeaf(t reflect.Type) bool {
+	switch t.Kind() {
+	case reflect.Slice:
+		return t == reflect.TypeFor[[]byte]()
+	case reflect.Map, reflect.Pointer:
+		return t == reflect.TypeFor[*big.Int]()
+	case reflect.Array:
+		return t.Len() == 16 && t.Elem().Kind() == reflect.Uint8
+	case reflect.Struct:
+		return !strings.Contains(t.Name(), "[")
+	}
+	return true
+}
+
+// leafCandidates returns every scalar at the top, or a nested leaf's own
+// scalar kinds: those its default codec accepts.
+func leafCandidates(field reflect.Type, scalars []cql.DataType, top bool) []cql.DataType {
+	if top {
+		return scalars
+	}
+	var out []cql.DataType
 	for _, s := range scalars {
-		out = append(out, s, must(cql.ListType(s)), must(cql.SetType(s)), must(cql.VectorType(s, 2)))
+		if nestedKinds[field] == nil || nestedKinds[field][s.Kind()] {
+			out = append(out, s)
+		}
 	}
 	return out
+}
+
+// nestedKinds narrows the scalars a nested leaf is tried against.
+var nestedKinds = map[reflect.Type]map[cql.Kind]bool{
+	reflect.TypeFor[int32]():    {cql.KindInt: true, cql.KindSmallInt: true, cql.KindBlob: true},
+	reflect.TypeFor[int64]():    {cql.KindBigInt: true, cql.KindInt: true, cql.KindBlob: true},
+	reflect.TypeFor[string]():   {cql.KindText: true, cql.KindASCII: true, cql.KindInt: true},
+	reflect.TypeFor[cql.UUID](): {cql.KindUUID: true, cql.KindTimeUUID: true, cql.KindInt: true},
 }
 
 // fill sets v to a value with every exported part nonzero where it can.
@@ -94,7 +182,11 @@ func fill(v reflect.Value) {
 		v.SetUint(1)
 	case reflect.Array:
 		for i := range v.Len() {
-			v.Index(i).SetUint(uint64(i + 1))
+			if v.Type().Elem().Kind() == reflect.Uint8 {
+				v.Index(i).SetUint(uint64(i + 1))
+			} else {
+				fill(v.Index(i))
+			}
 		}
 	case reflect.Slice:
 		s := reflect.MakeSlice(v.Type(), 2, 2)

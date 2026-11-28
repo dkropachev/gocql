@@ -57,7 +57,7 @@ warnings, trace IDs or custom payload. A nil `Params` or
 `cql.NewTimeUUID` and its range helpers return `cql.TimeUUID`, which supports
 canonical string/JSON/text formatting and timestamp extraction. Use
 `cql.TimeUUIDFromUUID` or `cql.ParseTimeUUID` for checked external input.
-`cql.StringCodec` decodes text into an owned `string`; `cql.TextCodec` decodes
+`cql.StringCodec` decodes text into an owned `string`; `cql.TextViewCodec` decodes
 a `cql.Text` view of the response without copying. `Params`/`Row` compose typed struct mappings, while `cql.DynamicRows` and
 `cql.DynamicParams` support metadata-driven applications. Custom codecs compile
 against immutable `DataType`/`Columns` metadata; execution does not infer codecs

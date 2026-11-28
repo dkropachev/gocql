@@ -17,148 +17,32 @@ import (
 // Reflection runs once, when the mapping is built; the field accessors read at
 // a fixed offset, so encoding and decoding stay reflection-free and keep the
 // built-in direct ops. cmd/cqlgen generates the same fields from source, using
-// the tag grammar and type table below, as a CQLFields method of the struct.
+// the tag grammar and the derivation rules of derive.go, as a CQLFields method
+// of the struct.
 
-type builtinField[P any] struct {
-	param  func(name string, offset uintptr) InputField[P]
-	column func(name string, offset uintptr) OutputField[P]
-	structmap.BuiltinFieldType
-}
-
-// builtinFields returns the built-in field types, each with its Nullable form.
-func builtinFields[P any]() []builtinField[P] {
-	erased := erasedBuiltins()
-	fields := make([]builtinField[P], 0, len(erased)+len(goMapBuiltins()))
-	for _, b := range erased {
-		entry := bindEntry[P](b.erasedEntry)
-		entry.BuiltinFieldType = b.BuiltinFieldType
-		fields = append(fields, entry)
-	}
-	return append(fields, goMapFields[P]()...)
-}
-
-// erasedBuiltin is a built-in field type with its fields built for
-// erasedBase, as an option's are.
-type erasedBuiltin struct {
-	erasedEntry
-	structmap.BuiltinFieldType
-}
-
-// erasedBuiltins returns the built-in field types other than Go maps, with
-// their fields built for erasedBase. The table does not depend on the mapped
-// struct type, so each field type's codecs and accessors are instantiated
-// once, not once per struct type: under coverage and race instrumentation,
-// instantiating them per struct made compiling a package with many mapped
-// structs take tens of gigabytes.
-func erasedBuiltins() []erasedBuiltin {
-	var fields []erasedBuiltin
-	add := func(entries ...erasedBuiltin) { fields = append(fields, entries...) }
-	add(builtin(BoolCodec, "bool", "BoolCodec", true)...)
-	add(builtin(Int8Codec, "int8", "Int8Codec", true)...)
-	add(builtin(Int16Codec, "int16", "Int16Codec", true)...)
-	add(builtin(Int32Codec, "int32", "Int32Codec", true)...)
-	add(builtin(Int64Codec, "int64", "Int64Codec", true)...)
-	add(builtin(IntCodec, "int", "IntCodec", true)...)
-	add(builtin(Float32Codec, "float32", "Float32Codec", true)...)
-	add(builtin(Float64Codec, "float64", "Float64Codec", true)...)
-	// ASCIIStringCodec names StringCodec, which maps ascii too, in a tag.
-	add(builtin(StringCodec, "string", "StringCodec", true, "ASCIIStringCodec")...)
-	add(builtin(TextCodec, "cql.Text", "TextCodec", true)...)
-	add(builtin(ByteSliceCodec, "[]byte", "ByteSliceCodec", true)...)
-	add(builtin(BytesCodec, "cql.Bytes", "BytesCodec", true)...)
-	add(builtin(UUIDCodec, "cql.UUID", "UUIDCodec", true)...)
-	add(builtin(TimeUUIDCodec, "cql.TimeUUID", "TimeUUIDCodec", true)...)
-	add(builtin(InetCodec, "netip.Addr", "InetCodec", true)...)
-	add(builtin(VarintCodec, "cql.Varint", "VarintCodec", true)...)
-	add(builtin(VarintBigIntCodec, "*big.Int", "VarintBigIntCodec", true)...)
-	add(builtin(DecimalCodec, "cql.Decimal", "DecimalCodec", true)...)
-	add(builtin(DateCodec, "cql.Date", "DateCodec", true)...)
-	add(builtin(TimeOfDayCodec, "cql.TimeOfDay", "TimeOfDayCodec", true)...)
-	add(builtin(TimestampCodec, "cql.Timestamp", "TimestampCodec", true)...)
-	add(builtin(DurationCodec, "cql.Duration", "DurationCodec", true)...)
-	add(builtin(TimestampTimeCodec, "time.Time", "TimestampTimeCodec", true)...)
-	return fields
-}
-
-// builtin returns the entries for V, Nullable[V], *V (unless V is a
-// pointer), BindValue[V] (parameters only), and []V as whichever of a list,
-// a set or a vector the column is (the default), or as a list
-// (`codec=ListCodec`), a set (`codec=SetCodec`) or a vector
-// (`codec=VectorCodec`) of c. name is c's exported name, which a `codec=`
-// tag selects it by, as it does each of aliases.
-func builtin[V any](c Codec[V], typeSrc, name string, def bool, aliases ...string) []erasedBuiltin {
-	names := append([]string{name}, aliases...)
-	plain := erasedBuiltin{
-		BuiltinFieldType: structmap.BuiltinFieldType{
-			Type: reflect.TypeFor[V](), TypeSrc: typeSrc,
-			EncoderSrc: "cql." + name, DecoderSrc: "cql." + name,
-			Names: names, Default: def,
-		},
-		erasedEntry: erasedEntry{param: erasedParamOf(Encoder[V](c)), column: erasedColumnOf(Decoder[V](c))},
-	}
-	nullable := erasedBuiltin{
-		BuiltinFieldType: structmap.BuiltinFieldType{
-			Type: reflect.TypeFor[Nullable[V]](), TypeSrc: "cql.Nullable[" + typeSrc + "]",
-			EncoderSrc: "cql.NullableEncoder(cql." + name + ")", DecoderSrc: "cql.NullableDecoder(cql." + name + ")",
-			Names: names, Default: def,
-		},
-		erasedEntry: erasedEntry{param: erasedParamOf(NullableEncoder[V](c)), column: erasedColumnOf(NullableDecoder[V](c))},
-	}
-	bind := erasedBuiltin{
-		BuiltinFieldType: structmap.BuiltinFieldType{
-			Type: reflect.TypeFor[BindValue[V]](), TypeSrc: "cql.BindValue[" + typeSrc + "]",
-			EncoderSrc: "cql.BindEncoder(cql." + name + ")",
-			Names:      names, Default: def,
-		},
-		erasedEntry: erasedEntry{param: erasedParamOf(BindEncoder[V](c))},
-	}
-	collection := func(codec Codec[[]V], src string, names []string, def bool) erasedBuiltin {
-		return erasedBuiltin{
-			BuiltinFieldType: structmap.BuiltinFieldType{
-				Type: reflect.TypeFor[[]V](), TypeSrc: "[]" + typeSrc,
-				EncoderSrc: src, DecoderSrc: src, Names: names, Default: def,
-			},
-			erasedEntry: erasedEntry{param: erasedParamOf(Encoder[[]V](codec)), column: erasedColumnOf(Decoder[[]V](codec))},
-		}
-	}
-	fields := []erasedBuiltin{plain, nullable, bind,
-		collection(SliceCodec(c), "cql.SliceCodec(cql."+name+")", names, def)}
-	if reflect.TypeFor[V]().Kind() != reflect.Pointer {
-		fields = append(fields, erasedBuiltin{
-			BuiltinFieldType: structmap.BuiltinFieldType{
-				Type: reflect.TypeFor[*V](), TypeSrc: "*" + typeSrc,
-				EncoderSrc: "cql.PointerCodec(cql." + name + ")", DecoderSrc: "cql.PointerCodec(cql." + name + ")",
-				Names: names, Default: def,
-			},
-			erasedEntry: erasedEntry{param: erasedParamOf(Encoder[*V](PointerCodec(c))), column: erasedColumnOf(Decoder[*V](PointerCodec(c)))},
-		})
-	}
-	if def {
-		fields = append(fields, collection(ListCodec(c), "cql.ListCodec(cql."+name+")", []string{"ListCodec"}, false))
-		fields = append(fields, collection(SetCodec(c), "cql.SetCodec(cql."+name+")", []string{"SetCodec"}, false))
-		fields = append(fields, collection(VectorCodec(c), "cql.VectorCodec(cql."+name+")", []string{"VectorCodec"}, false))
-	}
-	return fields
-}
-
-// BuiltinFieldTypes returns the Go field types mapped without configuration.
+// builtinFieldTypes returns the built-in leaf types, which struct mappings
+// derive every other field type from.
 func builtinFieldTypes() []structmap.BuiltinFieldType {
-	fields := builtinFields[struct{}]()
-	types := make([]structmap.BuiltinFieldType, len(fields))
-	for i, f := range fields {
-		types[i] = f.BuiltinFieldType
+	leaves := leafTypes()
+	types := make([]structmap.BuiltinFieldType, len(leaves))
+	for i, l := range leaves {
+		types[i] = l.BuiltinFieldType
 	}
 	return types
 }
 
 // StructOption configures a struct mapping: ParamsOf, RowOf, StreamRowOf,
-// UDTCodecOf or TupleCodecOf. Each option applies to some of them, and the others reject it
-// with a ValidationError rather than ignore it:
+// UDTCodecOf or TupleCodecOf, or the UDT a UDTEncoder, UDTDecoder or
+// StreamUDT expects. Each option applies to some of them, and the others
+// reject it with a ValidationError rather than ignore it:
 //
 //   - WithCodec: ParamsOf, RowOf, UDTCodecOf and TupleCodecOf.
-//   - WithEncoder: ParamsOf.
+//   - WithEncoder and NilAsUnset: ParamsOf.
 //   - ReuseBuffers: RowOf.
-//   - IgnoreExtraColumns: RowOf, StreamRowOf and UDTCodecOf.
+//   - NullAsZero: RowOf, StreamRowOf, UDTCodecOf and TupleCodecOf.
+//   - IgnoreExtraFields: RowOf, StreamRowOf, UDTCodecOf and the UDT
+//     constructors.
+//   - UDTName and AllowMissingFields: UDTCodecOf and the UDT constructors.
 //   - WithStreamDecoder: StreamRowOf.
 //
 // Each call builds an independent mapping; options never change a generated
@@ -178,6 +62,7 @@ const (
 	targetStream
 	targetUDT
 	targetTuple
+	targetUDTValue // UDTEncoder, UDTDecoder and StreamUDT
 )
 
 func (t structTarget) String() string {
@@ -190,6 +75,8 @@ func (t structTarget) String() string {
 		return "StreamRowOf"
 	case targetTuple:
 		return "TupleCodecOf"
+	case targetUDTValue:
+		return "UDTEncoder, UDTDecoder or StreamUDT"
 	default:
 		return "UDTCodecOf"
 	}
@@ -198,17 +85,21 @@ func (t structTarget) String() string {
 // structOptionSet is the options of one mapping, before they are bound to
 // its struct type.
 type structOptionSet struct {
-	codecs       map[reflect.Type]erasedEntry
+	codecs       map[reflect.Type]derived
 	streams      map[reflect.Type]erasedStreamEntry
+	udt          udtOptions
 	reuseBuffers bool
-	ignoreExtra  bool
+	nullZero     bool
+	nilUnset     bool
 }
 
 type structConfig[P any] struct {
-	codecs       map[reflect.Type]builtinField[P]
+	codecs       map[reflect.Type]derived
 	streams      map[reflect.Type]streamBuiltinField[P]
+	udt          udtOptions
 	reuseBuffers bool
-	ignoreExtra  bool
+	nullZero     bool
+	nilUnset     bool
 }
 
 // Built-in field types and options name a field type V but not the struct,
@@ -220,7 +111,7 @@ type structConfig[P any] struct {
 // unsafe: an erased accessor adds the field's reflect offset to the
 // struct's address; the struct is P or R, whose field at that offset has
 // type exactly V, or a type with V's layout that names a type where V has
-// the type's underlying type (resolveField, sameLayout). eachStructField
+// the type's underlying type (deriveField, sameLayout). eachStructField
 // sums the offsets of flattened value embeds and rejects pointer embeds, so
 // the offset stays inside the struct and the result is a typed pointer the
 // GC sees.
@@ -284,7 +175,7 @@ func (f erasedParam[P]) directParamOp() (paramOp[P], bool) {
 	if !ok {
 		return paramOp[P]{}, false
 	}
-	return paramOp[P]{field: f, get: op.get, width: op.width, columnKind: op.columnKind, alt: op.alt, kind: op.kind, erased: true}, true
+	return paramOp[P]{field: f, get: op.get, width: op.width, colWidth: op.colWidth, columnKind: op.columnKind, alt: op.alt, kind: op.kind, erased: true}, true
 }
 
 // structAddr returns p as the erasedBase pointer of an erased field, hiding
@@ -334,7 +225,7 @@ func (f erasedColumn[R]) directRowOp() (rowOp[R], bool) {
 	if !ok {
 		return rowOp[R]{}, false
 	}
-	out := rowOp[R]{access: op.access, width: op.width, columnKind: op.columnKind, alt: op.alt, kind: op.kind, compiled: op.compiled}
+	out := rowOp[R]{access: op.access, width: op.width, colWidth: op.colWidth, columnKind: op.columnKind, alt: op.alt, kind: op.kind, compiled: op.compiled}
 	if op.field != nil {
 		out.field = erasedColumn[R]{inner: op.field}
 	}
@@ -362,9 +253,15 @@ func erasedStreamColumn[R any](field StreamOutputField[erasedBase]) StreamOutput
 	}
 }
 
+// boundField is a field type's builders for struct P.
+type boundField[P any] struct {
+	param  func(name string, offset uintptr) InputField[P]
+	column func(name string, offset uintptr) OutputField[P]
+}
+
 // bindEntry returns e's fields for struct P.
-func bindEntry[P any](e erasedEntry) builtinField[P] {
-	var entry builtinField[P]
+func bindEntry[P any](e erasedEntry) boundField[P] {
+	var entry boundField[P]
 	if e.param != nil {
 		entry.param = func(name string, offset uintptr) InputField[P] {
 			return erasedParam[P]{inner: e.param(name, offset)}
@@ -392,62 +289,31 @@ func (o codecOption[V]) option() (string, structTarget) {
 }
 
 func (o codecOption[V]) apply(c *structOptionSet) {
-	plain, nullable := erasedEntry{param: erasedParamOf(o.enc)}, erasedEntry{param: erasedParamOf(NullableEncoder(o.enc))}
-	slice := erasedEntry{param: erasedParamOf(Encoder[[]V](sequenceEncoder[V]{kind: anySequence, element: o.enc}))}
 	if o.codec != nil {
-		plain.column, nullable.column = erasedColumnOf(Decoder[V](o.codec)), erasedColumnOf(NullableDecoder(Decoder[V](o.codec)))
-		slice.column = erasedColumnOf(Decoder[[]V](SliceCodec(o.codec)))
-		pointer := PointerCodec(o.codec)
-		c.codecs[reflect.TypeFor[*V]()] = erasedEntry{param: erasedParamOf(Encoder[*V](pointer)), column: erasedColumnOf(Decoder[*V](pointer))}
-		mapValues(c, o.codec)
+		c.codecs[reflect.TypeFor[V]()] = deriveCodec(o.codec)
+		return
 	}
-	c.codecs[reflect.TypeFor[V]()] = plain
-	c.codecs[reflect.TypeFor[Nullable[V]]()] = nullable
-	c.codecs[reflect.TypeFor[[]V]()] = slice
-	c.codecs[reflect.TypeFor[BindValue[V]]()] = erasedEntry{param: erasedParamOf(BindEncoder(o.enc))}
+	c.codecs[reflect.TypeFor[V]()] = deriveEncoder(o.enc)
 }
 
-// mapValues maps map[K]V fields with GoMapCodec for each built-in map key
-// type K, as the built-in map fields do.
-func mapValues[V any](c *structOptionSet, value Codec[V]) {
-	mapValue(c, BoolCodec, value)
-	mapValue(c, Int8Codec, value)
-	mapValue(c, Int16Codec, value)
-	mapValue(c, Int32Codec, value)
-	mapValue(c, Int64Codec, value)
-	mapValue(c, IntCodec, value)
-	mapValue(c, Float32Codec, value)
-	mapValue(c, Float64Codec, value)
-	mapValue(c, StringCodec, value)
-	mapValue(c, UUIDCodec, value)
-	mapValue(c, TimeUUIDCodec, value)
-	mapValue(c, InetCodec, value)
-	mapValue(c, DateCodec, value)
-	mapValue(c, TimeOfDayCodec, value)
-	mapValue(c, TimestampCodec, value)
-}
-
-func mapValue[K comparable, V any](c *structOptionSet, key Codec[K], value Codec[V]) {
-	m := GoMapCodec(key, value)
-	c.codecs[reflect.TypeFor[map[K]V]()] = erasedEntry{param: erasedParamOf(Encoder[map[K]V](m)), column: erasedColumnOf(Decoder[map[K]V](m))}
-}
-
-// WithCodec maps the struct's fields of type V, Nullable[V], *V, []V (a
-// list, set or vector), map[K]V for a built-in map key type K, and
-// BindValue[V] (a parameter only) with codec: a type with no built-in codec,
-// such as a UDT, or a replacement for V's default. V is inferred from codec,
-// as in WithCodec(statusCodec). Recognized built-in codec tags take
-// precedence. The option also applies to generated mappings; other
-// generated custom-expression codecs remain defaults. ParamsOf, RowOf,
-// UDTCodecOf and TupleCodecOf apply it; StreamRowOf decodes with stream
-// decoders, so it rejects it: use WithStreamDecoder.
+// WithCodec maps the struct's fields of type V with codec, and V wherever a
+// field's type is derived from it: []V and [N]V (a list, set or vector), *V,
+// Nullable[V], BindValue[V] (a parameter only), Pair members, map keys and
+// values, and nested forms such as [][]V or map[string][]V. Use it for a type
+// with no built-in codec and no CQLCodec method, such as a UDT from another
+// package, or to replace V's default. V is inferred from codec, as in
+// WithCodec(statusCodec). Recognized built-in codec tags take precedence. The
+// option also applies to generated mappings; other generated
+// custom-expression codecs remain defaults. ParamsOf, RowOf, UDTCodecOf and
+// TupleCodecOf apply it; StreamRowOf decodes with stream decoders, so it
+// rejects it: use WithStreamDecoder.
 func WithCodec[V any](codec Codec[V]) StructOption {
 	return codecOption[V]{enc: codec, codec: codec, name: "WithCodec"}
 }
 
-// WithEncoder maps the parameter fields of type V, Nullable[V], []V and
-// BindValue[V] with encoder, for a type that is only ever bound, as
-// WithCodec does for both directions. Only ParamsOf applies it.
+// WithEncoder maps the parameter fields whose type is V, or derived from V,
+// with encoder, for a type that is only ever bound, as WithCodec does for
+// both directions. Only ParamsOf applies it.
 func WithEncoder[V any](encoder Encoder[V]) StructOption {
 	return codecOption[V]{enc: encoder, name: "WithEncoder"}
 }
@@ -479,33 +345,32 @@ func generatedParams[P any](fields structFields[P], target structTarget, opts ..
 
 // GeneratedRow decodes rows with the generated mapping fields, with opts
 // applied to it, or reflects R when fields has no buffered mapping.
-func generatedRow[R any](fields structFields[R], target structTarget, opts ...StructOption) (RowDecoder[R], error) {
+func generatedRow[R any](fields structFields[R], target structTarget, opts ...StructOption) (rowCodec[R], error) {
 	config, err := structOptions[R](target, opts)
 	if err != nil {
-		return nil, err
+		return rowCodec[R]{}, err
 	}
 	if fields.Columns == nil {
 		return reflectRow(config)
 	}
 	fields, err = generatedStructOptions(fields, config)
 	if err != nil {
-		return nil, err
+		return rowCodec[R]{}, err
 	}
 	reset, err := bufferReset[R](config.reuseBuffers)
 	if err != nil {
-		return nil, err
+		return rowCodec[R]{}, err
 	}
-	return structRow(fields.Columns, reset, config.ignoreExtra), nil
+	return structRow(fields.Columns, reset, config), nil
 }
 
-// generatedStructOptions replaces only fields selected by type options. The
-// generated defaults may contain Go codec expressions that reflection cannot
-// evaluate, so rebuilding the entire mapping reflectively would lose them.
-// Field discovery and option resolution happen here, never during execution.
+// generatedStructOptions applies options and per-field tags to a generated
+// mapping. It replaces only the fields whose type a type option derives:
+// the generated defaults may contain Go codec expressions that reflection
+// cannot evaluate, so rebuilding the entire mapping reflectively would lose
+// them. Field discovery and option resolution happen here, never during
+// execution.
 func generatedStructOptions[P any](fields structFields[P], config structConfig[P]) (structFields[P], error) {
-	if len(config.codecs) == 0 && len(config.streams) == 0 {
-		return fields, nil
-	}
 	fields.Params = append([]InputField[P](nil), fields.Params...)
 	fields.Columns = append([]OutputField[P](nil), fields.Columns...)
 	fields.StreamColumns = append([]StreamOutputField[P](nil), fields.StreamColumns...)
@@ -525,21 +390,25 @@ func generatedStructOptions[P any](fields structFields[P], config structConfig[P
 			streams[field.streamDeclaration().loc.name] = i
 		}
 	}
-	var builtins []builtinField[P]
 	var streamBuiltins []streamBuiltinField[P]
-	if len(config.codecs) != 0 {
-		builtins = builtinFields[P]()
-	}
 	if len(config.streams) != 0 {
 		streamBuiltins = streamBuiltinFields[P]()
 	}
 	err := eachStructField(reflect.TypeFor[P](), func(sf reflect.StructField, tag structmap.FieldTag) error {
-		if entry, ok := config.codecs[sf.Type]; ok && !tagSelectsBuiltin(builtins, sf.Type, tag.Codec) {
-			if i, ok := params[tag.Column]; ok && entry.param != nil {
-				fields.Params[i] = entry.param(tag.Column, sf.Offset)
+		// An option replaces the generated codec of a field whose type is
+		// derived from the option's, unless a built-in tag selects the
+		// codec; a custom expression is replaced by the derived codec.
+		if len(config.codecs) != 0 && derivesFrom(sf.Type, config.codecs) {
+			d, err := deriveField(sf.Type, tag.Codec, config.codecs)
+			if err != nil {
+				return err
 			}
-			if i, ok := columns[tag.Column]; ok && entry.column != nil {
-				fields.Columns[i] = entry.column(tag.Column, sf.Offset)
+			bound := bindEntry[P](d.fieldEntry())
+			if i, ok := params[tag.Column]; ok && bound.param != nil {
+				fields.Params[i] = bound.param(tag.Column, sf.Offset)
+			}
+			if i, ok := columns[tag.Column]; ok && bound.column != nil {
+				fields.Columns[i] = bound.column(tag.Column, sf.Offset)
 			}
 		}
 		if entry, ok := config.streams[sf.Type]; ok && !tagSelectsBuiltin(streamBuiltins, sf.Type, tag.Stream) {
@@ -547,9 +416,46 @@ func generatedStructOptions[P any](fields structFields[P], config structConfig[P
 				fields.StreamColumns[i] = entry.column(tag.Column, sf.Offset)
 			}
 		}
+		if i, ok := params[tag.Column]; ok {
+			field, err := nilUnsetParam(fields.Params[i], sf, tag, config.nilUnset)
+			if err != nil {
+				return err
+			}
+			fields.Params[i] = field
+		}
+		if i, ok := columns[tag.Column]; ok && tag.NullZero {
+			fields.Columns[i] = nullZeroField[P]{fields.Columns[i]}
+		}
+		if i, ok := streams[tag.Column]; ok && tag.NullZero {
+			fields.StreamColumns[i] = nullZeroStream(fields.StreamColumns[i])
+		}
 		return nil
 	})
 	return fields, err
+}
+
+// derivesFrom reports whether a field of type t is derived from a type that
+// options map: t itself, an element, a pointer target, a map key or value,
+// or a member of a Nullable, BindValue or Pair.
+func derivesFrom(t reflect.Type, options map[reflect.Type]derived) bool {
+	if _, ok := options[t]; ok {
+		return true
+	}
+	switch t.Kind() {
+	case reflect.Slice, reflect.Array, reflect.Pointer:
+		return derivesFrom(t.Elem(), options)
+	case reflect.Map:
+		return derivesFrom(t.Key(), options) || derivesFrom(t.Elem(), options)
+	case reflect.Struct:
+		if genericOf(t, nullableName) || genericOf(t, bindName) || genericOf(t, pairName) {
+			for i := range t.NumField() {
+				if derivesFrom(t.Field(i).Type, options) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 func tagSelectsBuiltin[E interface {
@@ -599,37 +505,117 @@ func reflectParams[P any](config structConfig[P]) (ParamEncoder[P], error) {
 	}
 	params := make([]InputField[P], len(fields))
 	for i, f := range fields {
-		params[i] = f.entry.param(f.column, f.offset)
+		param, err := nilUnsetParam(f.entry.param(f.tag.Column, f.sf.Offset), f.sf, f.tag, config.nilUnset)
+		if err != nil {
+			return nil, fmt.Errorf("gocql: struct mapping of %s: field %s: %w", reflect.TypeFor[P](), f.sf.Name, err)
+		}
+		params[i] = param
 	}
 	return structParams(params), nil
 }
 
 // ReflectRow maps the fields of struct R by reflection, once, here.
-func reflectRow[R any](config structConfig[R]) (RowDecoder[R], error) {
+func reflectRow[R any](config structConfig[R]) (rowCodec[R], error) {
 	fields, err := reflectFields(config)
 	if err != nil {
-		return nil, err
+		return rowCodec[R]{}, err
 	}
 	columns := make([]OutputField[R], len(fields))
 	for i, f := range fields {
 		if f.entry.column == nil {
-			return nil, fmt.Errorf("gocql: struct mapping of %s: field %s: type %s only binds parameters", reflect.TypeFor[R](), f.name, f.typ)
+			return rowCodec[R]{}, fmt.Errorf("gocql: struct mapping of %s: field %s: type %s only binds parameters", reflect.TypeFor[R](), f.sf.Name, f.sf.Type)
 		}
-		columns[i] = f.entry.column(f.column, f.offset)
+		columns[i] = f.entry.column(f.tag.Column, f.sf.Offset)
+		if f.tag.NullZero {
+			columns[i] = nullZeroField[R]{columns[i]}
+		}
 	}
 	reset, err := bufferReset[R](config.reuseBuffers)
 	if err != nil {
-		return nil, err
+		return rowCodec[R]{}, err
 	}
-	return structRow(columns, reset, config.ignoreExtra), nil
+	return structRow(columns, reset, config), nil
 }
 
 func structParams[P any](fields []InputField[P]) ParamEncoder[P] {
 	return paramsCodec[P]{fields: append([]InputField[P](nil), fields...), optional: true}
 }
 
-func structRow[R any](fields []OutputField[R], reset func(*R), extra bool) RowDecoder[R] {
-	return rowCodec[R]{fields: append([]OutputField[R](nil), fields...), optional: true, extra: extra, reset: reset}
+func structRow[R any](fields []OutputField[R], reset func(*R), config structConfig[R]) rowCodec[R] {
+	return rowCodec[R]{fields: append([]OutputField[R](nil), fields...), optional: true, extra: config.udt.allowExtra, reset: reset, nullZero: config.nullZero}
+}
+
+// nilUnsetParam returns field, which binds struct field sf, binding UNSET
+// for a nil value when its tag has nilunset or when all is set (NilAsUnset).
+// A nilunset tag on a field that cannot be nil is an error; NilAsUnset skips
+// such fields.
+func nilUnsetParam[P any](field InputField[P], sf reflect.StructField, tag structmap.FieldTag, all bool) (InputField[P], error) {
+	switch sf.Type.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice:
+	default:
+		if tag.NilUnset {
+			return nil, fmt.Errorf("nilunset on a field of type %s, which cannot be nil", sf.Type)
+		}
+		return field, nil
+	}
+	if !tag.NilUnset && !all {
+		return field, nil
+	}
+	return nilUnsetField[P]{InputField: field, offset: sf.Offset, slice: sf.Type.Kind() == reflect.Slice}, nil
+}
+
+// nilUnsetField binds UNSET for a nil pointer, map or slice field, and the
+// field's value otherwise.
+type nilUnsetField[P any] struct {
+	InputField[P]
+	offset uintptr
+	slice  bool
+}
+
+func (f nilUnsetField[P]) compile(typ DataType) (InputField[P], error) {
+	inner, err := f.InputField.compile(typ)
+	if err != nil {
+		return nil, err
+	}
+	f.InputField = inner
+	return f, nil
+}
+
+func (f nilUnsetField[P]) encode(w *ParamWriter, value P) error {
+	// unsafe: offset is the reflect offset of a pointer, map or slice field
+	// of P (eachStructField); a pointer and a map are one pointer word, and
+	// every slice header has the same layout (see bufferReset).
+	p := unsafe.Add(unsafe.Pointer(structAddr(&value)), f.offset)
+	if f.slice && *(*[]byte)(p) == nil || !f.slice && *(*unsafe.Pointer)(p) == nil {
+		return w.WriteParam(Encoder[struct{}](unsetEncoder{}), struct{}{})
+	}
+	return f.InputField.encode(w, value)
+}
+
+// unsetEncoder binds UNSET for any column type.
+type unsetEncoder struct{}
+
+func (unsetEncoder) CheckType(DataType) error                { return nil }
+func (unsetEncoder) Encode(w *ValueWriter, _ struct{}) error { return w.Unset() }
+
+// nullZeroField decodes its field, leaving it zero for a NULL or missing
+// cell instead of failing (NullAsZero, the nullzero tag). The plans that
+// run it skip the cell themselves (rowOps).
+type nullZeroField[R any] struct{ OutputField[R] }
+
+func (f nullZeroField[R]) compile(typ DataType) (OutputField[R], error) {
+	inner, err := f.OutputField.compile(typ)
+	if err != nil {
+		return nil, err
+	}
+	return nullZeroField[R]{inner}, nil
+}
+
+func (f nullZeroField[R]) decode(r *RowReader, row *R) error {
+	if r.skipNullCell() {
+		return nil
+	}
+	return f.OutputField.decode(r, row)
 }
 
 type reuseBuffersOption struct{}
@@ -645,18 +631,83 @@ func (reuseBuffersOption) apply(c *structOptionSet)       { c.reuseBuffers = tru
 // reuses slice storage.
 func ReuseBuffers() StructOption { return reuseBuffersOption{} }
 
-type ignoreExtraColumnsOption struct{}
+type ignoreExtraFieldsOption struct{}
 
-func (ignoreExtraColumnsOption) option() (string, structTarget) {
-	return "IgnoreExtraColumns", targetRows | targetStream | targetUDT
+func (ignoreExtraFieldsOption) option() (string, structTarget) {
+	return "IgnoreExtraFields", targetRows | targetStream | targetUDT | targetUDTValue
 }
-func (ignoreExtraColumnsOption) apply(c *structOptionSet) { c.ignoreExtra = true }
+func (ignoreExtraFieldsOption) apply(c *structOptionSet) { c.udt.allowExtra = true }
 
-// IgnoreExtraColumns makes RowOf and StreamRowOf skip a result column that no
-// field maps, so that SELECT * keeps working after ALTER TABLE ADD. Without
-// it, every result column needs a field, which catches a misspelled tag.
-// UDTCodecOf takes it as UDTOptions.AllowExtraDatabaseFields.
-func IgnoreExtraColumns() StructOption { return ignoreExtraColumnsOption{} }
+// IgnoreExtraFields skips database fields that no struct field maps: a
+// result column in RowOf and StreamRowOf, so that SELECT * keeps working
+// after ALTER TABLE ADD, and a UDT field in UDTCodecOf, UDTEncoder,
+// UDTDecoder and StreamUDT, so that a UDT keeps decoding after ALTER TYPE
+// ADD; such a UDT field is bound as NULL. Without it every database field
+// needs a struct field, which catches a misspelled tag.
+func IgnoreExtraFields() StructOption { return ignoreExtraFieldsOption{} }
+
+type allowMissingFieldsOption struct{}
+
+func (allowMissingFieldsOption) option() (string, structTarget) {
+	return "AllowMissingFields", targetUDT | targetUDTValue
+}
+func (allowMissingFieldsOption) apply(c *structOptionSet) { c.udt.allowMissing = true }
+
+// AllowMissingFields accepts struct fields that the UDT does not have, in
+// UDTCodecOf, UDTEncoder, UDTDecoder and StreamUDT. It concerns fields absent
+// from the UDT's metadata, not NULL or absent serialized values, which decode
+// as zero.
+func AllowMissingFields() StructOption { return allowMissingFieldsOption{} }
+
+type udtNameOption struct{ keyspace, name string }
+
+func (udtNameOption) option() (string, structTarget) { return "UDTName", targetUDT | targetUDTValue }
+func (o udtNameOption) apply(c *structOptionSet)     { c.udt.keyspace, c.udt.name = o.keyspace, o.name }
+
+// UDTName names the UDT that UDTCodecOf, UDTEncoder, UDTDecoder or StreamUDT
+// expects. An empty keyspace matches the UDT in any keyspace, and an empty
+// name a UDT of any name; without the option the UDT matches by fields
+// alone.
+func UDTName(keyspace, name string) StructOption {
+	return udtNameOption{keyspace: keyspace, name: name}
+}
+
+// UDTNameOf returns the UDTName of typ's UDT. It fails when typ is not a
+// UDT.
+func UDTNameOf(typ DataType) (StructOption, error) {
+	keyspace, name, ok := typ.UDTName()
+	if !ok {
+		return nil, typeValidation("type", "%s is not a UDT", typ)
+	}
+	return UDTName(keyspace, name), nil
+}
+
+type nullAsZeroOption struct{}
+
+func (nullAsZeroOption) option() (string, structTarget) {
+	return "NullAsZero", targetRows | targetStream | targetUDT | targetTuple
+}
+func (nullAsZeroOption) apply(c *structOptionSet) { c.nullZero = true }
+
+// NullAsZero makes RowOf, StreamRowOf and TupleCodecOf leave a field at its
+// zero value for a NULL cell, or a tuple member the server left out, instead
+// of failing with an error matching ErrNull. The `cql:"name,nullzero"` tag
+// does the same for one field. A UDT's fields always decode so: the server
+// sends NULL for every field added by ALTER TYPE ADD since the value was
+// written, so UDTCodecOf accepts the option but needs none. A Nullable or
+// pointer field already decodes NULL, as invalid or nil.
+func NullAsZero() StructOption { return nullAsZeroOption{} }
+
+type nilAsUnsetOption struct{}
+
+func (nilAsUnsetOption) option() (string, structTarget) { return "NilAsUnset", targetParams }
+func (nilAsUnsetOption) apply(c *structOptionSet)       { c.nilUnset = true }
+
+// NilAsUnset makes ParamsOf bind UNSET, which leaves the column unchanged,
+// for every nil pointer, slice or map field, instead of NULL or an empty
+// collection. The `cql:"name,nilunset"` tag does the same for one field. A
+// BindValue field binds UNSET per value; see Bind, BindNull and BindUnset.
+func NilAsUnset() StructOption { return nilAsUnsetOption{} }
 
 // bufferReset returns the RowInto reset that keeps the storage of R's mapped
 // slice fields, or nil, which zeroes the row, when reuse is off or R has none.
@@ -690,19 +741,17 @@ func bufferReset[R any](reuse bool) (func(*R), error) {
 }
 
 type reflectedField[P any] struct {
-	typ          reflect.Type
-	column, name string
-	entry        builtinField[P]
-	offset       uintptr
+	entry boundField[P]
+	tag   structmap.FieldTag
+	sf    reflect.StructField
 }
 
 func reflectFields[P any](config structConfig[P]) ([]reflectedField[P], error) {
-	builtins := builtinFields[P]()
 	var fields []reflectedField[P]
 	err := eachStructField(reflect.TypeFor[P](), func(sf reflect.StructField, tag structmap.FieldTag) error {
-		entry, err := resolveField(builtins, config.codecs, sf.Type, tag.Codec, "cql.WithCodec")
+		d, err := deriveField(sf.Type, tag.Codec, config.codecs)
 		if err == nil {
-			fields = append(fields, reflectedField[P]{entry: entry, column: tag.Column, name: sf.Name, typ: sf.Type, offset: sf.Offset})
+			fields = append(fields, reflectedField[P]{sf: sf, tag: tag, entry: bindEntry[P](d.fieldEntry())})
 		}
 		return err
 	})
@@ -713,31 +762,43 @@ func reflectFields[P any](config structConfig[P]) ([]reflectedField[P], error) {
 // rejects an option it does not apply.
 func structOptions[P any](target structTarget, opts []StructOption) (structConfig[P], error) {
 	t := reflect.TypeFor[P]()
-	config := structConfig[P]{codecs: map[reflect.Type]builtinField[P]{}, streams: map[reflect.Type]streamBuiltinField[P]{}}
+	config := structConfig[P]{codecs: map[reflect.Type]derived{}, streams: map[reflect.Type]streamBuiltinField[P]{}}
 	if t.Kind() != reflect.Struct {
 		return config, typeValidation("struct", "%s is not a struct", t)
 	}
-	set := structOptionSet{codecs: map[reflect.Type]erasedEntry{}, streams: map[reflect.Type]erasedStreamEntry{}}
-	for _, opt := range opts {
-		if opt == nil {
-			return config, typeValidation("StructOption", "nil option for %s of %s", target, t)
-		}
-		if name, targets := opt.option(); targets&target == 0 {
-			return config, typeValidation(name, "%s does not apply it", target)
-		}
-		opt.apply(&set)
+	set, err := applyOptions(target, t.String(), opts)
+	if err != nil {
+		return config, err
 	}
-	for typ, e := range set.codecs {
-		config.codecs[typ] = bindEntry[P](e)
-	}
+	config.codecs = set.codecs
 	for typ, e := range set.streams {
 		column := e.column
 		config.streams[typ] = streamBuiltinField[P]{column: func(name string, offset uintptr) StreamOutputField[P] {
 			return erasedStreamColumn[P](column(name, offset))
 		}}
 	}
-	config.reuseBuffers, config.ignoreExtra = set.reuseBuffers, set.ignoreExtra
+	config.udt, config.reuseBuffers, config.nullZero, config.nilUnset = set.udt, set.reuseBuffers, set.nullZero, set.nilUnset
+	if target == targetUDT {
+		// A UDT's fields decode NULL as zero; see NullAsZero.
+		config.nullZero = true
+	}
 	return config, nil
+}
+
+// applyOptions applies opts for the target constructor of what, which
+// rejects an option it does not apply.
+func applyOptions(target structTarget, what string, opts []StructOption) (structOptionSet, error) {
+	set := structOptionSet{codecs: map[reflect.Type]derived{}, streams: map[reflect.Type]erasedStreamEntry{}}
+	for _, opt := range opts {
+		if opt == nil {
+			return set, typeValidation("StructOption", "nil option for %s of %s", target, what)
+		}
+		if name, targets := opt.option(); targets&target == 0 {
+			return set, typeValidation(name, "%s does not apply it", target)
+		}
+		opt.apply(&set)
+	}
+	return set, nil
 }
 
 // eachStructField calls fn for each mapped field of struct t, in order. The
@@ -796,16 +857,15 @@ func eachStructField(t reflect.Type, fn func(reflect.StructField, structmap.Fiel
 	return nil
 }
 
-// resolveField picks a field's codec: a built-in named by its tag, then an
-// option for its type, then the built-in default.
-func resolveField[E interface {
+// resolveStreamField picks a streamed field's decoder: a built-in named by
+// its tag, then an option for its type, then the built-in default.
+func resolveStreamField[E interface {
 	meta() structmap.BuiltinFieldType
 }](builtins []E, options map[reflect.Type]E, typ reflect.Type, codec, option string) (E, error) {
 	var zero E
 	// A named type maps like its underlying type when that has a built-in
-	// codec, and so do slices, pointers, maps and Nullable or BindValue
-	// wrappers of it. Their fields read the field as the built-in type,
-	// whose memory layout is the same.
+	// decoder, and so do slices and Nullable wrappers of it. Their fields
+	// read the field as the built-in type, whose memory layout is the same.
 	entries := builtinsFor(builtins, typ)
 	candidates := make([]structmap.BuiltinFieldType, len(entries))
 	for i, e := range entries {
@@ -828,8 +888,6 @@ func resolveField[E interface {
 	}
 	return zero, fmt.Errorf("no codec for type %s; pass %s or use a supported type", typ, option)
 }
-
-func (f builtinField[P]) meta() structmap.BuiltinFieldType { return f.BuiltinFieldType }
 
 // sameLayout reports whether field type t maps like the built-in field type
 // u: t is u with named types in place of the predeclared or unnamed types
@@ -949,6 +1007,11 @@ func erasedStreamBuiltins() []erasedStreamBuiltin {
 	add(streamBuiltin(StreamTime, "cql.TimeOfDay", "Time", true)...)
 	add(streamBuiltin(StreamTimestamp, "cql.Timestamp", "Timestamp", true)...)
 	add(streamBuiltin(StreamDuration, "cql.Duration", "Duration", true)...)
+	// The allocating decoders, for the types the seeded ones do not cover.
+	add(streamBuiltin(StreamString, "string", "String", true)...)
+	add(streamBuiltin(StreamTimestampTime, "time.Time", "TimestampTime", true)...)
+	add(streamBuiltin(StreamTimeDuration, "time.Duration", "TimeDuration", true)...)
+	add(streamBuiltin(StreamDecimalValue, "cql.Decimal", "DecimalValue", true)...)
 	return fields
 }
 
@@ -975,6 +1038,12 @@ func streamBuiltin[V any](dec StreamDecoder[V], typeSrc, name string, def bool, 
 	if !def {
 		return append(plain, entry(reflect.TypeFor[[]V](), "[]"+typeSrc, "cql.StreamSlice("+src+")",
 			names, false, erasedStreamColumnOf(StreamSlice(dec))))
+	}
+	// A pointer allocates its value, which a decoder of seeded storage
+	// cannot fill.
+	if t := reflect.TypeFor[V](); t.Kind() != reflect.Slice && t != reflect.TypeFor[DecimalParts]() {
+		plain = append(plain, entry(reflect.TypeFor[*V](), "*"+typeSrc, "cql.StreamPointer("+src+")",
+			names, def, erasedStreamColumnOf(StreamPointer(dec))))
 	}
 	return append(plain, []erasedStreamBuiltin{
 		// A slice takes its element's default decoder.
@@ -1033,7 +1102,7 @@ func generatedStreamRow[R any](columns []StreamOutputField[R], opts ...StructOpt
 	if err != nil {
 		return nil, err
 	}
-	return structStreamRow(fields.StreamColumns, config.ignoreExtra), nil
+	return structStreamRow(fields.StreamColumns, config), nil
 }
 
 // ReflectStreamRow maps the fields of struct R by reflection with the
@@ -1044,18 +1113,22 @@ func reflectStreamRow[R any](config structConfig[R]) (StreamRowDecoder[R], error
 	builtins := streamBuiltinFields[R]()
 	var columns []StreamOutputField[R]
 	err := eachStructField(reflect.TypeFor[R](), func(sf reflect.StructField, tag structmap.FieldTag) error {
-		entry, err := resolveField(builtins, config.streams, sf.Type, tag.Stream, "cql.WithStreamDecoder")
+		entry, err := resolveStreamField(builtins, config.streams, sf.Type, tag.Stream, "cql.WithStreamDecoder")
 		if err == nil {
-			columns = append(columns, entry.column(tag.Column, sf.Offset))
+			column := entry.column(tag.Column, sf.Offset)
+			if tag.NullZero {
+				column = nullZeroStream(column)
+			}
+			columns = append(columns, column)
 		}
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return structStreamRow(columns, config.ignoreExtra), nil
+	return structStreamRow(columns, config), nil
 }
 
-func structStreamRow[R any](fields []StreamOutputField[R], extra bool) StreamRowDecoder[R] {
-	return streamRowsCodec[R]{fields: streamDeclarations(fields), structMapping: true, ignoreExtra: extra}
+func structStreamRow[R any](fields []StreamOutputField[R], config structConfig[R]) StreamRowDecoder[R] {
+	return streamRowsCodec[R]{fields: streamDeclarations(fields), structMapping: true, ignoreExtra: config.udt.allowExtra, nullZero: config.nullZero}
 }

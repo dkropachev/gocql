@@ -170,7 +170,7 @@ func checkDynamicSerializationCases(t *testing.T, s *gocql.Session, table string
 				expected := tc.expected
 				if !present {
 					name, literal = "Null", "NULL"
-					expected = cql.NullValue(tc.expected.Type())
+					expected = cql.NullValue()
 				}
 				t.Run(name, func(t *testing.T) {
 					id := int32(i * 2)

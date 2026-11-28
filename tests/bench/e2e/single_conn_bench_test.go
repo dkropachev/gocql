@@ -111,7 +111,7 @@ func cleanupNamespace(s *gocql.Session) error {
 	if err := benchExec(ctx, s, "DROP KEYSPACE IF EXISTS "+corpus.Namespace); err != nil {
 		return err
 	}
-	p, err := s.Prepare(ctx, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
+	p, err := s.Prepare(ctx, cql.Statement[string, cql.Text]{CQL: "SELECT keyspace_name FROM system_schema.keyspaces WHERE keyspace_name = ?", Params: cql.OneParam(cql.StringCodec), Rows: cql.OneColumn(cql.TextViewCodec)}, exec.PrepareOptions{})
 	if err != nil {
 		return err
 	}
@@ -205,7 +205,7 @@ func benchRead(s *gocql.Session, id int32) error {
 	return benchReadContext(context.Background(), s, id)
 }
 func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
-	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextCodec)}, exec.PrepareOptions{})
+	p, e := s.Prepare(ctx, cql.Statement[int32, cql.Text]{CQL: "SELECT v FROM " + corpus.Namespace + ".table1 WHERE pk = ?;", Params: cql.OneParam(cql.Int32Codec), Rows: cql.OneColumn(cql.TextViewCodec)}, exec.PrepareOptions{})
 	if e != nil {
 		return e
 	}
@@ -223,7 +223,7 @@ func benchReadContext(ctx context.Context, s *gocql.Session, id int32) error {
 	var name cql.Text
 	for rows.NextInto(&name) {
 		count++
-		if got, want := name.String(), fmt.Sprintf("Name_%d", id); got != want {
+		if got, want := fmt.Sprint(name), fmt.Sprintf("Name_%d", id); got != want {
 			return fmt.Errorf("recorded name %q, want %q", got, want)
 		}
 	}

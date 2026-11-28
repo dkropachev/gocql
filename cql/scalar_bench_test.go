@@ -31,7 +31,7 @@ func BenchmarkScalar(b *testing.B) {
 			b.ReportAllocs()
 			b.ResetTimer()
 			for b.Loop() {
-				text, e := TextCodec.Decode(r)
+				text, e := TextViewCodec.Decode(r)
 				if e != nil {
 					b.Fatal(e)
 				}
@@ -60,7 +60,7 @@ func BenchmarkScalar(b *testing.B) {
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
 		for b.Loop() {
-			v, err := BytesCodec.Decode(r)
+			v, err := BytesViewCodec.Decode(r)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -119,13 +119,13 @@ func BenchmarkScalar(b *testing.B) {
 						b.SetBytes(int64(size))
 						for b.Loop() {
 							if text {
-								v, e := TextCodec.Decode(reader)
+								v, e := TextViewCodec.Decode(reader)
 								if e != nil {
 									b.Fatal(e)
 								}
 								scalarTextSink = v
 							} else {
-								v, e := BytesCodec.Decode(reader)
+								v, e := BytesViewCodec.Decode(reader)
 								if e != nil {
 									b.Fatal(e)
 								}
@@ -161,7 +161,7 @@ func BenchmarkScalar(b *testing.B) {
 		b.SetBytes(int64(len(data)))
 		b.ResetTimer()
 		for b.Loop() {
-			v, err := TextCodec.Decode(r)
+			v, err := TextViewCodec.Decode(r)
 			if err != nil {
 				b.Fatal(err)
 			}

@@ -37,10 +37,16 @@ import (
 type temperature float64
 
 // temperatureCodec maps a temperature through Int32Codec, converting it on
-// the way in and out.
+// the way in and out; a conversion error, here for a temperature below
+// absolute zero, fails the encode or decode.
 var temperatureCodec = cql.ConvertCodec(cql.Int32Codec,
-	func(t temperature) int32 { return int32(math.Round(float64(t) * 10)) },
-	func(v int32) temperature { return temperature(v) / 10 })
+	func(t temperature) (int32, error) {
+		if t < -273.15 {
+			return 0, fmt.Errorf("%v°C is below absolute zero", float64(t))
+		}
+		return int32(math.Round(float64(t) * 10)), nil
+	},
+	func(v int32) (temperature, error) { return temperature(v) / 10, nil })
 
 func Example_customCodec() {
 	encoded, err := cql.EncodeValue(cql.IntType, temperatureCodec, temperature(23.5))

@@ -4,6 +4,7 @@
 package codec
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -33,19 +34,19 @@ func TestDetachRowBuiltinPlans(t *testing.T) {
 	two := cql.NewColumns(cql.ColumnSpec{Name: "a", Type: cql.TextType}, cql.ColumnSpec{Name: "b", Type: cql.IntType})
 	type row struct{ A cql.Text }
 
-	structPlan, err := cql.RowInto(func(*row) {}, cql.Column("a", cql.TextCodec, func(r *row) *cql.Text { return &r.A })).Compile(one)
+	structPlan, err := cql.RowInto(func(*row) {}, cql.Column("a", cql.TextViewCodec, func(r *row) *cql.Text { return &r.A })).Compile(one)
 	if err != nil {
 		t.Fatal(err)
 	}
-	single, err := cql.OneColumn(cql.TextCodec).Compile(one)
+	single, err := cql.OneColumn(cql.TextViewCodec).Compile(one)
 	if err != nil {
 		t.Fatal(err)
 	}
-	paired, err := cql.PairRows(cql.OneColumn(cql.TextCodec), cql.OneColumn(cql.Int32Codec)).Compile(two)
+	paired, err := cql.PairRows(cql.OneColumn(cql.TextViewCodec), cql.OneColumn(cql.Int32Codec)).Compile(two)
 	if err != nil {
 		t.Fatal(err)
 	}
-	converted, err := cql.ConvertRows(cql.OneColumn(cql.TextCodec), func(v cql.Text) string { return v.String() }, func(s string) string { return s }).Compile(one)
+	converted, err := cql.ConvertRows(cql.OneColumn(cql.TextViewCodec), func(v cql.Text) string { return fmt.Sprint(v) }, func(s string) string { return s }).Compile(one)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -80,7 +80,7 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 	if !ok {
 		return nil, fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := cql.Statement[cql.EmptyParams, []cql.Entry[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextCodec, cql.TextCodec))}
+	statement := cql.Statement[cql.EmptyParams, []cql.Entry[cql.Text, cql.Text]]{CQL: stmt, Params: cql.NoParams, Rows: cql.OneColumn(cql.MapDecoder(cql.TextViewCodec, cql.TextViewCodec))}
 	rows, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyParams{})
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func readV2ClientOptions(ctx context.Context, session *gocql.Session, stmt strin
 	for _, row := range rows {
 		values := make(map[string]string)
 		for _, entry := range row {
-			values[entry.Key.String()] = entry.Value.String()
+			values[fmt.Sprint(entry.Key)] = fmt.Sprint(entry.Value)
 		}
 		result = append(result, values)
 	}
@@ -105,7 +105,7 @@ func queryV2ControlKey(ctx context.Context, session *gocql.Session) error {
 	if !ok {
 		return fmt.Errorf("control connection does not support typed queries")
 	}
-	statement := cql.Statement[cql.EmptyParams, cql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: cql.NoParams, Rows: cql.OneColumn(cql.TextCodec)}
+	statement := cql.Statement[cql.EmptyParams, cql.Text]{CQL: "SELECT key FROM system.local WHERE key='local'", Params: cql.NoParams, Rows: cql.OneColumn(cql.TextViewCodec)}
 	_, err := readV2SystemRows(ctx, conn, statement, cql.NewColumns(), cql.EmptyParams{})
 	return err
 }

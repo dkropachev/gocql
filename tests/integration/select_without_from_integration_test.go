@@ -53,7 +53,7 @@ func probeSelectWithoutFrom() {
 			selectWithoutFromProbeErr = e
 			return
 		}
-		number, e := value.Signed()
+		number, e := value.Int64()
 		if e != nil {
 			selectWithoutFromProbeErr = e
 			return
@@ -99,7 +99,7 @@ func noFromValue(t testing.TB, row cql.DynamicRow, index int) cql.Value {
 }
 func noFromInt(t testing.TB, row cql.DynamicRow, index int) int64 {
 	t.Helper()
-	n, err := noFromValue(t, row, index).Signed()
+	n, err := noFromValue(t, row, index).Int64()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,11 +107,11 @@ func noFromInt(t testing.TB, row cql.DynamicRow, index int) int64 {
 }
 func noFromText(t testing.TB, row cql.DynamicRow, index int) string {
 	t.Helper()
-	value, err := noFromValue(t, row, index).Text()
+	value, err := noFromValue(t, row, index).TextView()
 	if err != nil {
 		t.Fatal(err)
 	}
-	return value.String()
+	return fmt.Sprint(value)
 }
 func noFromRows(t testing.TB, s *gocql.Session, stmt string, values ...cql.Value) gocql.Rows[cql.DynamicRow] {
 	t.Helper()

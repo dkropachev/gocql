@@ -19,9 +19,9 @@ type textRow struct {
 
 var textRows = RowInto(nil,
 	Column("id", Int32Codec, func(r *textRow) *int32 { return &r.ID }),
-	Column("name", TextCodec, func(r *textRow) *Text { return &r.Name }),
-	Column("code", TextCodec, func(r *textRow) *Text { return &r.Code }),
-	Column("other", TextCodec, func(r *textRow) *Text { return &r.Other }),
+	Column("name", TextViewCodec, func(r *textRow) *Text { return &r.Name }),
+	Column("code", TextViewCodec, func(r *textRow) *Text { return &r.Code }),
+	Column("other", TextViewCodec, func(r *textRow) *Text { return &r.Other }),
 )
 
 func textColumns(t testing.TB, other Kind) Columns {

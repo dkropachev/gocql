@@ -16,7 +16,7 @@ func TestGenerator(t *testing.T) {
 	// -update after changing either.
 	t.Run("Generate", func(t *testing.T) {
 		dir := filepath.Join("internal", "fixture")
-		name, got, err := generate(dir, []string{"Fixture", "Point", "StreamFixture"})
+		name, got, err := generateUDT(dir, []string{"Fixture", "Point", "StreamFixture", "Customer"}, []string{"Address"})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,6 +48,37 @@ func TestGenerator(t *testing.T) {
 				`cql.Param("values", cql.VectorCodec(cql.Int32Codec),`,
 				`cql.Column("values", cql.VectorCodec(cql.Int32Codec),`,
 				`cql.StreamColumn("values", cql.StreamVector(cql.StreamInt32),`,
+			} {
+				if !strings.Contains(out, want) {
+					t.Errorf("missing %s in:\n%s", want, out)
+				}
+			}
+		})
+
+		// -udt gives a type a CQLCodec method, which the other mappings
+		// of the run use for fields of the type and of types derived from it.
+		t.Run("UDT", func(t *testing.T) {
+			dir, err := os.MkdirTemp(".", "_gentest")
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { os.RemoveAll(dir) })
+			src := "package x\n\ntype Addr struct{ Street string }\n\ntype T struct {\n\tHome Addr\n\tAll []Addr\n\tByName map[string]*Addr\n}\n"
+			if err := os.WriteFile(filepath.Join(dir, "x.go"), []byte(src), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			_, got, err := generateUDT(dir, []string{"T"}, []string{"Addr"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := string(got)
+			for _, want := range []string{
+				`func (Addr) CQLCodec() cql.Codec[Addr] { return cqlgenUDTAddr() }`,
+				`var cqlgenUDTAddr = sync.OnceValue(func() cql.Codec[Addr] { return cql.MustUDTCodecOf[Addr]() })`,
+				`func (Addr) CQLFields() cql.StructFields[Addr]`,
+				`cql.Param("home", new(Addr).CQLCodec(), func(v T) Addr { return v.Home })`,
+				`cql.Column("all", cql.SliceCodec(new(Addr).CQLCodec()), func(v *T) *[]Addr { return &v.All })`,
+				`cql.Column("by_name", cql.GoMapCodec(cql.StringCodec, cql.PointerCodec(new(Addr).CQLCodec())), func(v *T) *map[string]*Addr { return &v.ByName })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)
@@ -168,7 +199,7 @@ type T struct {
 			for want, src := range map[string]string{
 				"no codec for type uint":       "type T struct{ A uint }",
 				"is not a built-in for string": "type T struct{ A string `cql:\"a,codec=Int32Codec\"` }",
-				"no codec for type Defined":    "import \"github.com/scylladb/gocql/v2/cql\"\ntype Defined cql.UUID\ntype T struct{ A Defined }",
+				"no codec for type Defined":    "import \"github.com/scylladb/gocql/v2/cql\"\ntype Defined cql.Duration\ntype T struct{ A Defined }",
 				"embedded pointer field E":     "type E struct{ A int32 }\ntype T struct{ *E }",
 				"only the tag":                 "type E struct{ A int32 }\ntype T struct{ E `cql:\"e\"` }",
 				"tagged unexported field":      "type T struct{ a int32 `cql:\"a\"` }",
@@ -227,6 +258,7 @@ import "github.com/scylladb/gocql/v2/cql"
 type Status string
 type Tags []string
 type Count int
+type Blob []byte
 
 type T struct {
 	S Status
@@ -236,6 +268,7 @@ type T struct {
 	P *Status
 	N cql.Nullable[Status]
 	M map[Status]Count
+	B Blob
 }
 `, "T")
 			if err != nil {
@@ -253,6 +286,7 @@ type T struct {
 				`cql.Column("p", cql.PointerCodec(cql.StringCodec), func(v *T) **string { return (**string)(unsafe.Pointer(&v.P)) })`,
 				`cql.Column("n", cql.NullableDecoder(cql.StringCodec), func(v *T) *cql.Nullable[string] { return (*cql.Nullable[string])(unsafe.Pointer(&v.N)) })`,
 				`cql.Column("m", cql.GoMapCodec(cql.StringCodec, cql.IntCodec), func(v *T) *map[string]int { return (*map[string]int)(unsafe.Pointer(&v.M)) })`,
+				`cql.Column("b", cql.ByteSliceCodec, func(v *T) *[]byte { return (*[]byte)(&v.B) })`,
 			} {
 				if !strings.Contains(out, want) {
 					t.Errorf("missing %s in:\n%s", want, out)

@@ -36,8 +36,8 @@ packages are named `gocql`.
   (`*cqlerr.WriteTimeoutError`, `*cqlerr.UnavailableError`, ...), and
   `cqlerr.ExecutionStatusOf` reports whether a failed request may have
   changed data.
-- **Rows are borrowed.** Text and blob views returned by `cql.TextCodec` and
-  `cql.BytesCodec` point into the response page and expire when the iteration
+- **Rows are borrowed.** Text and blob views returned by `cql.TextViewCodec` and
+  `cql.BytesViewCodec` point into the response page and expire when the iteration
   moves on; `cql.StringCodec` and `cql.ByteSliceCodec` decode owned copies.
   See [streaming](statements/streaming.md) for the lifetime rules.
 - **Defaults differ.** The default profile uses `LOCAL_QUORUM` (v1 used
@@ -227,15 +227,18 @@ column named in one word (`createdat`).
 
 | gocqlx | v2 |
 | --- | --- |
-| a `time.Time` field | the same; `cql.TimestampTimeCodec` maps it by default |
+| a `time.Time` field | the same; `cql.TimestampTimeCodec` maps it by default, truncating to the millisecond as v1 did, and rejecting the zero `time.Time`, which v1 wrote as the year 1: bind a `cql.Nullable[time.Time]` or nil `*time.Time` for NULL |
+| a `time.Duration` field | a CQL duration (`cql.TimeDurationCodec`), where v1 wrote a bigint; map a bigint column to an `int64` field |
 | a `*T` field for a nullable column | the same: nil is NULL (`cql.PointerCodec`); `cql.Nullable[T]` also works |
 | a `[]T` field for a list, set or vector | the same; the column's kind picks the codec |
 | a named type, such as `type Status string` | the same: it maps like its underlying type, also as `[]Status`, `*Status`, `cql.Nullable[Status]` or a map key or value |
 | an `int` field | the same; it maps a bigint (`cql.IntCodec`) |
 | a `*big.Int` field for a varint | the same (`cql.VarintBigIntCodec`) |
-| a UDT struct implementing `gocqlx.UDT` | `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTOptions{Name: "address"}))`, which maps `[]Address`, `*Address` and map values too; `UDTOptions.Name` may be left empty |
+| a UDT struct implementing `gocqlx.UDT` | a `CQLCodec` method, which `cqlgen -udt=Address` generates, or `cql.WithCodec(cql.MustUDTCodecOf[Address](cql.UDTName("", "address")))`; either maps `[]Address`, `*Address`, map values and the other derived forms too |
+| a UDT value written before `ALTER TYPE ADD` | the same: a missing or NULL UDT field decodes as the zero value |
+| `WHERE ck > ? AND ck < ?` bound from one struct | named markers, `WHERE ck > :from AND ck < :to`: the server names both `?` markers `ck`, and `cql.ParamsOf` rejects binding one field to both |
 | a tuple scanned into a struct | `cql.WithCodec(cql.MustTupleCodecOf[Point]())`, by field position |
-| `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraColumns())`; without it every result column needs a field |
+| `SELECT *` into a struct missing a column | `cql.RowOf[T](cql.IgnoreExtraFields())`; without it every result column needs a field |
 
 `cql.Params(cql.Param(...))` and `cql.Row(cql.Column(...))` map fields
 explicitly. See [data types](data-types.md).
@@ -294,9 +297,9 @@ conditional statements in prepared metadata: set
 | `gocql.UUID.Time`, `Timestamp`, `Clock`, `Node` | the same methods on `cql.TimeUUID`, with `Clock` returning `uint16` and `Node` `[6]byte`; convert a `cql.UUID` with `cql.TimeUUIDFromUUID`, which checks it is version 1 |
 | `gocql.Consistency` constants (`gocql.Quorum`, ...) | `cql.Consistency` constants (`cql.Quorum`, ...); `cql.ParseConsistency` |
 | `gocql.Marshaler`, `gocql.Unmarshaler` | `cql.ConvertCodec` for a type that converts to a built-in one; otherwise `cql.Encoder[T]`, `cql.Decoder[T]`, `cql.Codec[T]`; see [custom codecs](custom-codecs.md) |
-| `gocql.UnsetValue` | the `Unset` binding state; see [data types](data-types.md) |
+| `gocql.UnsetValue` | `cql.BindUnset[T]()`, a `nilunset` field tag, `cql.NilAsUnset()`, or `cql.UnsetValue()` for dynamic values; see [data types](data-types.md) |
 | `*T` or `gocql.NullX` for NULL | `cql.NullableCodec` or `cql.Nullable[T]`, and `cql.PointerCodec` for a `*T`, which struct mappings also use; `cql.NonNull(v)` builds a present `Nullable` |
-| NULL scanned into a non-pointer, read as the zero value | an error matching `cql.ErrNull`: a column that may be NULL needs a `cql.Nullable[T]` or `*T` field |
+| NULL scanned into a non-pointer, read as the zero value | an error matching `cql.ErrNull`: a column that may be NULL needs a `cql.Nullable[T]` or `*T` field, a `nullzero` tag or `cql.NullAsZero()`; UDT fields still read NULL as the zero value |
 | `int64` for a counter column | `int64`, with `cql.Int64Codec`; `cql.BigIntValue` binds a counter increment |
 | `gocql.UUID.IsEmpty` | `cql.UUID.IsZero`, and `cql.TimeUUID.IsZero` |
 
@@ -343,7 +346,7 @@ whether a retry could apply a write twice. See [errors](errors.md).
 | `TableMetadataOptions.GcGraceSeconds`, `MemtableFlushPeriodInMs`, `DcLocalReadRepairChance`, `BloomFilterFpChance`, `CrcCheckChance` | `metadata.TableOptions.GCGraceSeconds`, `MemtableFlushPeriodInMS`, `DCLocalReadRepairChance`, `BloomFilterFPChance`, `CRCCheckChance` |
 | `ColumnMetadata.ClusteringOrder` (string) and `Order` (`ASC`/`DESC`) | `metadata.Column.ClusteringOrder`, a `metadata.ColumnOrder`: `ColumnOrderAsc`, `ColumnOrderDesc`, or `ColumnOrderNone` for a column that is not a clustering column |
 | `TableMetadata.ID`, `ViewMetadata.ID`, `BaseTableID` | `metadata.Table.ID`, `View.ID`, `View.BaseTableID` and `TableOptions.Version`, all `cql.UUID` |
-| `gocql.Type`, `gocql.TypeInt` and the other kind constants | `cql.Kind`, `cql.KindInt`, ...; `gocql.TypeAscii` is `cql.KindASCII`; an ascii column maps with `cql.StringCodec` or `cql.TextCodec`, which validate ASCII for it |
+| `gocql.Type`, `gocql.TypeInt` and the other kind constants | `cql.Kind`, `cql.KindInt`, ...; `gocql.TypeAscii` is `cql.KindASCII`; an ascii column maps with `cql.StringCodec` or `cql.TextViewCodec`, which validate ASCII for it |
 | `gocql.TypeVarchar` and `gocql.TypeText` | `cql.KindText`: text and varchar are one CQL type, and a column of either has that kind, so their types compare `Equal` |
 | `ColumnMetadata.Index` (`ColumnIndexMetadata`) | removed: it described the pre-3.0 schema tables, which v2 does not read; use `metadata.Keyspace.Indexes` |
 | `session.AwaitSchemaAgreement(ctx)` | `session.AwaitSchemaAgreement(ctx)` |

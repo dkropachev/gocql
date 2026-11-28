@@ -194,11 +194,11 @@ func TestConditional(t *testing.T) {
 			if selected == "foo" {
 				other = "bar"
 			}
-			decoder := cql.Row(cql.Column(selected, cql.TextCodec, func(v *result) *cql.Text { return &v.Text }), cql.IgnoreColumn[result](other))
+			decoder := cql.Row(cql.Column(selected, cql.TextViewCodec, func(v *result) *cql.Text { return &v.Text }), cql.IgnoreColumn[result](other))
 			got := cassandraReadOne(t, session, cassandraCASPrepared(t, session, stmt, decoder), values, exec.Options{})
 			require.False(t, got.Applied)
 			require.True(t, got.Previous.Set)
-			require.Equal(t, "baz", got.Previous.Value.Text.String())
+			require.Equal(t, "baz", fmt.Sprint(got.Previous.Value.Text))
 		}
 	})
 

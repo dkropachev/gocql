@@ -116,6 +116,7 @@ func mustBorrowText(t *testing.T, s string) cql.Text {
 
 type fieldStatuses []fieldStatus
 type fieldID cql.UUID
+type fieldDuration cql.Duration
 
 // namedFieldTypes holds named types inside slices, pointers, Nullable,
 // BindValue and maps, which map like the types they are defined from.
@@ -194,7 +195,7 @@ func TestStructNamedElementTypes(t *testing.T) {
 
 	// WithCodec for the named type replaces its slices, as it does the type.
 	upper := cql.WithCodec(cql.ConvertCodec(cql.StringCodec,
-		func(v fieldStatus) string { return string(v) + "!" }, func(v string) fieldStatus { return fieldStatus(v) }))
+		func(v fieldStatus) (string, error) { return string(v) + "!", nil }, func(v string) (fieldStatus, error) { return fieldStatus(v), nil }))
 	type listOnly struct{ List []fieldStatus }
 	lists := cql.NewColumns(cql.ColumnSpec{Name: "list", Type: must(cql.ListType(cql.TextType))})
 	got := ruleDecode(t, lists, cql.MustRowOf[listOnly](), ruleEncode(t, lists, cql.MustParamsOf[listOnly](upper), listOnly{List: []fieldStatus{"a"}}))
@@ -203,9 +204,14 @@ func TestStructNamedElementTypes(t *testing.T) {
 	}
 
 	// A type defined from a named type other than a predeclared one maps
-	// like neither, also as an element.
+	// like neither, also as an element...
+	type durations struct{ Durations []fieldDuration }
+	if _, err := cql.RowOf[durations](); err == nil {
+		t.Fatal("mapped a slice of a type defined from cql.Duration")
+	}
+	// ...but any array of 16 bytes maps a uuid, as UUID does.
 	type ids struct{ IDs []fieldID }
-	if _, err := cql.RowOf[ids](); err == nil {
-		t.Fatal("mapped a slice of a type defined from cql.UUID")
+	if _, err := cql.RowOf[ids](); err != nil {
+		t.Fatal("did not map a slice of a type defined from cql.UUID:", err)
 	}
 }

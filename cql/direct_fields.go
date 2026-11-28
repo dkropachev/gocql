@@ -21,9 +21,9 @@ type directKind uint8
 
 const (
 	directNone      directKind = iota
-	directInt                  // a built-in signed integer codec of width bytes
-	directBlob                 // BytesCodec: a view borrowing the response
-	directText                 // TextCodec: a validated view borrowing the response
+	directInt                  // a built-in signed integer codec of width bytes, widening colWidth
+	directBlob                 // BytesViewCodec: a view borrowing the response
+	directText                 // TextViewCodec: a validated view borrowing the response
 	directOwnedBlob            // ByteSliceCodec: a copy into the field's capacity
 	directBytes                // ByteSliceCodec
 	directString               // StringCodec
@@ -55,22 +55,6 @@ func integerWidth[V any]() int64 {
 	return 0
 }
 
-// isIntegerKind reports whether kind is a CQL type of a built-in integer
-// codec, whose width the codec fixes.
-func isIntegerKind(kind Kind, width int64) bool {
-	switch kind {
-	case KindTinyInt:
-		return width == 1
-	case KindSmallInt:
-		return width == 2
-	case KindInt:
-		return width == 4
-	case KindBigInt, KindCounter:
-		return width == 8
-	}
-	return false
-}
-
 // directRowField and directParamField are the fields that may compile into
 // direct ops.
 type directRowField[R any] interface {
@@ -80,13 +64,19 @@ type directParamField[P any] interface {
 	directParamOp() (paramOp[P], bool)
 }
 
-// rowOps returns the ops of a row plan's compiled fields.
+// rowOps returns the ops of a row plan's compiled fields. A nullZeroField
+// becomes its field's op, which skips a NULL cell.
 func rowOps[R any](ordered []OutputField[R]) []rowOp[R] {
 	ops := make([]rowOp[R], len(ordered))
 	for i, field := range ordered {
-		ops[i] = rowOp[R]{field: field}
+		zero := false
+		if z, ok := field.(nullZeroField[R]); ok {
+			field, zero = z.OutputField, true
+		}
+		ops[i] = rowOp[R]{field: field, nullZero: zero}
 		if d, ok := field.(directRowField[R]); ok {
 			if op, ok := d.directRowOp(); ok {
+				op.nullZero = zero
 				ops[i] = op
 			}
 		}
@@ -112,10 +102,12 @@ func paramOps[P any](ordered []InputField[P]) []paramOp[P] {
 type rowOp[R any] struct {
 	field           OutputField[R] // directNone: the field itself
 	access          unsafe.Pointer // the field accessor, a func(*R) *V
-	width           int64
+	width           int64          // directInt: the field's width
+	colWidth        int64          // directInt: the column's width, at most width
 	columnKind, alt Kind
 	kind            directKind
 	compiled        bool
+	nullZero        bool // a NULL cell leaves the field zero
 }
 
 // directRowOp compiles f, already compiled for its column, into a direct op
@@ -127,8 +119,8 @@ func (f outputField[R, V]) directRowOp() (rowOp[R], bool) {
 		if c.decodeRow == nil {
 			return rowOp[R]{}, false
 		}
-		if width := integerWidth[V](); width > 0 && isIntegerKind(c.kind, width) {
-			op.kind, op.width = directInt, width
+		if width, colWidth := integerWidth[V](), integerKindWidth(c.kind); width > 0 && colWidth > 0 && colWidth <= width {
+			op.kind, op.width, op.colWidth = directInt, width, colWidth
 		} else if _, blob := any(f.codec).(scalarCodec[Bytes]); blob && c.kind == KindBlob {
 			op.kind = directBlob
 		} else {
@@ -158,7 +150,7 @@ func (op *rowOp[R]) decodeDirect(reader *RowReader, dst *R) error {
 	}
 	switch op.kind {
 	case directInt:
-		v, err := integerColumn(reader, op.columnKind, op.alt, op.compiled, op.width)
+		v, err := integerColumn(reader, op.columnKind, op.alt, op.compiled, op.colWidth)
 		if err != nil {
 			return err
 		}
@@ -205,8 +197,9 @@ func (op *rowOp[R]) decodeText(reader *RowReader, dst *R, ptr unsafe.Pointer) er
 type paramOp[P any] struct {
 	field           InputField[P]  // directNone, or a precondition the op does not cover
 	get             unsafe.Pointer // the field getter, a func(P) V
-	width           int64
-	columnKind, alt Kind // directInt: the codec's types
+	width           int64          // directInt: the field's width
+	colWidth        int64          // directInt: the column's width, at most width
+	columnKind, alt Kind           // directInt: the codec's types
 	kind            directKind
 	// erased: get is a func(*erasedBase) V of a struct mapping's field,
 	// called with the parameter struct's address (erasedParam).
@@ -228,11 +221,11 @@ func (f inputField[P, V]) directParamOp() (paramOp[P], bool) {
 	op := paramOp[P]{get: funcPointer(&f.get), field: f}
 	switch c := any(f.codec).(type) {
 	case scalarCodec[V]:
-		width := integerWidth[V]()
-		if width == 0 || !isIntegerKind(c.kind, width) || !c.compiled {
+		width, colWidth := integerWidth[V](), integerKindWidth(c.kind)
+		if width == 0 || colWidth == 0 || colWidth > width || !c.compiled {
 			return paramOp[P]{}, false
 		}
-		op.kind, op.width, op.columnKind, op.alt = directInt, width, c.kind, c.alternative
+		op.kind, op.width, op.colWidth, op.columnKind, op.alt = directInt, width, colWidth, c.kind, c.alternative
 	case byteSliceCodec:
 		if !c.compiled {
 			return paramOp[P]{}, false
@@ -263,25 +256,29 @@ func (op *paramOp[P]) encodeDirect(w *ParamWriter, value P) error {
 		if checkScalarType(column.Type, op.columnKind, op.alt) != nil {
 			return op.field.encode(w, value)
 		}
-		p, err := w.builder.ScalarBytes(4 + int(op.width))
+		var v int64
+		switch op.width {
+		case 1:
+			v = int64(directGet[int8](op, &value))
+		case 2:
+			v = int64(directGet[int16](op, &value))
+		case 4:
+			v = int64(directGet[int32](op, &value))
+		default:
+			v = directGet[int64](op, &value)
+		}
+		if op.colWidth < op.width && !integerFits(v, op.colWidth) {
+			// The field's codec reports the range error.
+			return op.field.encode(w, value)
+		}
+		p, err := w.builder.ScalarBytes(4 + int(op.colWidth))
 		if err != nil {
 			return op.field.encode(w, value)
 		}
-		p[0], p[1], p[2], p[3] = 0, 0, 0, byte(op.width)
-		switch op.width {
-		case 1:
-			p[4] = byte(directGet[int8](op, &value))
-		case 2:
-			v := uint16(directGet[int16](op, &value))
-			p[4], p[5] = byte(v>>8), byte(v)
-		case 4:
-			v := uint32(directGet[int32](op, &value))
-			p[4], p[5], p[6], p[7] = byte(v>>24), byte(v>>16), byte(v>>8), byte(v)
-		default:
-			v := uint64(directGet[int64](op, &value))
-			for i := 0; i < 8; i++ {
-				p[4+i] = byte(v >> (56 - 8*i))
-			}
+		p[0], p[1], p[2], p[3] = 0, 0, 0, byte(op.colWidth)
+		u := uint64(v)
+		for i := int64(0); i < op.colWidth; i++ {
+			p[4+i] = byte(u >> (8 * (op.colWidth - 1 - i)))
 		}
 	case directBytes:
 		if column.Type.Kind() != KindBlob {

@@ -8,38 +8,26 @@ import (
 	"github.com/scylladb/gocql/v2/internal/wire"
 )
 
-// UDTOptions names the UDT a UDTEncoder, UDTDecoder or UDTCodecOf expects and
-// explicitly relaxes field matching. AllowMissingFields concerns fields
-// absent from metadata, not null or absent serialized field values. The zero
-// UDTOptions matches any UDT whose fields match exactly.
-type UDTOptions struct {
-	// Keyspace is the UDT's keyspace, or empty to match the UDT in any
-	// keyspace.
-	Keyspace string
-	// Name is the UDT's name, or empty to match a UDT of any name.
-	Name string
-	// AllowExtraDatabaseFields accepts UDT fields that no application field
-	// maps.
-	AllowExtraDatabaseFields bool
-	// AllowMissingFields accepts application fields the UDT does not have.
-	AllowMissingFields bool
+// udtOptions names the UDT a UDT codec expects and relaxes field matching:
+// UDTName, IgnoreExtraFields and AllowMissingFields.
+type udtOptions struct {
+	keyspace, name string
+	allowExtra     bool // UDT fields that no struct field maps
+	allowMissing   bool // struct fields the UDT does not have
 }
 
-// UDTOptionsFor returns options naming typ's UDT, with every relaxation off.
-// It fails when typ is not a UDT.
-func UDTOptionsFor(typ DataType) (UDTOptions, error) {
-	keyspace, name, ok := typ.UDTName()
-	if !ok {
-		return UDTOptions{}, typeValidation("type", "%s is not a UDT", typ)
-	}
-	return UDTOptions{Keyspace: keyspace, Name: name}, nil
+// udtOptionsOf applies opts for UDTEncoder, UDTDecoder or StreamUDT.
+func udtOptionsOf(opts []StructOption) (udtOptions, error) {
+	set, err := applyOptions(targetUDTValue, "a UDT", opts)
+	return set.udt, err
 }
 
 type recordEncoder[T any] struct {
 	codec   ParamEncoder[T]
 	plan    CompiledParams[T]
 	typ     DataType
-	options UDTOptions
+	options udtOptions
+	optErr  error
 	columns Columns
 	kind    Kind
 }
@@ -49,9 +37,12 @@ func TupleEncoder[T any](codec ParamEncoder[T]) Encoder[T] {
 	return recordEncoder[T]{kind: KindTuple, codec: codec}
 }
 
-// UDTEncoder matches fields against a complete UDT descriptor.
-func UDTEncoder[T any](codec ParamEncoder[T], options UDTOptions) Encoder[T] {
-	return recordEncoder[T]{kind: KindUDT, codec: codec, options: options}
+// UDTEncoder encodes a UDT's fields with codec, matched by name against the
+// UDT's metadata, as named by UDTName and relaxed by IgnoreExtraFields and
+// AllowMissingFields; it rejects other options when it is compiled.
+func UDTEncoder[T any](codec ParamEncoder[T], opts ...StructOption) Encoder[T] {
+	options, err := udtOptionsOf(opts)
+	return recordEncoder[T]{kind: KindUDT, codec: codec, options: options, optErr: err}
 }
 func recordColumns(typ DataType, kind Kind) (Columns, error) {
 	if err := validateDataType(typ); err != nil {
@@ -71,6 +62,9 @@ func (c recordEncoder[T]) CheckType(typ DataType) error {
 	return err
 }
 func (c recordEncoder[T]) compileValueEncoder(typ DataType) (Encoder[T], error) {
+	if c.optErr != nil {
+		return nil, c.optErr
+	}
 	if c.kind == KindUDT {
 		if err := checkUDTIdentity(typ, c.options); err != nil {
 			return nil, err
@@ -123,7 +117,8 @@ type recordDecoder[T any] struct {
 	typ     DataType
 	readers *syncx.Pool[*recordReaderState]
 	values  *syncx.Pool[*T]
-	options UDTOptions
+	options udtOptions
+	optErr  error
 	columns Columns
 	kind    Kind
 }
@@ -139,9 +134,15 @@ func TupleDecoder[T any](codec RowDecoder[T]) Decoder[T] {
 	return recordDecoder[T]{kind: KindTuple, codec: codec}
 }
 
-// UDTDecoder decodes UDT fields with codec and explicit identity and matching options.
-func UDTDecoder[T any](codec RowDecoder[T], options UDTOptions) Decoder[T] {
-	return recordDecoder[T]{kind: KindUDT, codec: codec, options: options}
+// UDTDecoder decodes a UDT's fields with codec, matched by name against the
+// UDT's metadata, as named by UDTName and relaxed by IgnoreExtraFields and
+// AllowMissingFields; it rejects other options when it is compiled. With a
+// Row or RowOf codec, a NULL field, and a trailing field the server left
+// out because it was added by ALTER TYPE ADD after the value was written,
+// decodes as the field's zero value.
+func UDTDecoder[T any](codec RowDecoder[T], opts ...StructOption) Decoder[T] {
+	options, err := udtOptionsOf(opts)
+	return recordDecoder[T]{kind: KindUDT, codec: codec, options: options, optErr: err}
 }
 func (c recordDecoder[T]) CheckType(typ DataType) error {
 	perfCheckType()
@@ -150,6 +151,9 @@ func (c recordDecoder[T]) CheckType(typ DataType) error {
 	return err
 }
 func (c recordDecoder[T]) compileValueDecoder(typ DataType) (Decoder[T], error) {
+	if c.optErr != nil {
+		return nil, c.optErr
+	}
 	if c.kind == KindUDT {
 		if err := checkUDTIdentity(typ, c.options); err != nil {
 			return nil, err
@@ -253,7 +257,7 @@ func validateRecordBody(r ValueReader, columns Columns) error {
 
 // udtFieldMapping resolves source fields once while distinguishing missing
 // application fields from unmatched database fields.
-func udtFieldMapping(columns Columns, locations []fieldLocation, options UDTOptions) ([]int, error) {
+func udtFieldMapping(columns Columns, locations []fieldLocation, options udtOptions) ([]int, error) {
 	mapping := make([]int, columns.Len())
 	for i := range mapping {
 		mapping[i] = -1
@@ -274,7 +278,7 @@ func udtFieldMapping(columns Columns, locations []fieldLocation, options UDTOpti
 			index, found = location.index, location.index >= 0 && location.index < columns.Len()
 		}
 		if !found {
-			if !options.AllowMissingFields {
+			if !options.allowMissing {
 				return nil, typeValidation("field", "application field %q at index %d is absent from UDT", location.name, location.index)
 			}
 			continue
@@ -285,7 +289,7 @@ func udtFieldMapping(columns Columns, locations []fieldLocation, options UDTOpti
 		mapping[index] = field
 	}
 	for index, field := range mapping {
-		if field == -1 && !options.AllowExtraDatabaseFields {
+		if field == -1 && !options.allowExtra {
 			return nil, typeValidation("field", "no accessor for UDT field %q", columnSlice(columns)[index].Name)
 		}
 	}
@@ -312,7 +316,7 @@ func (f nullUDTField[T]) encode(w *ParamWriter, _ T) error {
 	w.index++
 	return nil
 }
-func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTOptions) (CompiledParams[T], error) {
+func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options udtOptions) (CompiledParams[T], error) {
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
@@ -339,7 +343,7 @@ func compileUDTParams[T any](codec paramsCodec[T], columns Columns, options UDTO
 	plan.ops = paramOps(plan.ordered)
 	return plan, nil
 }
-func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOptions) (CompiledRow[T], error) {
+func compileUDTRows[T any](codec rowCodec[T], columns Columns, options udtOptions) (CompiledRow[T], error) {
 	locations := make([]fieldLocation, len(codec.fields))
 	for i, field := range codec.fields {
 		if field == nil {
@@ -364,19 +368,24 @@ func compileUDTRows[T any](codec rowCodec[T], columns Columns, options UDTOption
 		plan.ordered[index] = compiled
 	}
 	plan.ops = rowOps(plan.ordered)
+	// A UDT field decodes NULL, and a trailing field the value predates, as
+	// its zero value; see NullAsZero.
+	for i := range plan.ops {
+		plan.ops[i].nullZero = true
+	}
 	return plan, nil
 }
 
 // Preserve UDT matching policy through the public row/parameter composition
 // adapters. Arbitrary custom compilers retain their own metadata contract.
 type udtParamCompiler[T any] interface {
-	compileUDT(Columns, UDTOptions) (CompiledParams[T], error)
+	compileUDT(Columns, udtOptions) (CompiledParams[T], error)
 }
 type udtRowCompiler[T any] interface {
-	compileUDT(Columns, UDTOptions) (CompiledRow[T], error)
+	compileUDT(Columns, udtOptions) (CompiledRow[T], error)
 }
 
-func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, options UDTOptions) (CompiledParams[T], error) {
+func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, options udtOptions) (CompiledParams[T], error) {
 	if codec == nil {
 		return nil, typeValidation("encoder", "nil UDT parameter encoder")
 	}
@@ -385,7 +394,7 @@ func compileUDTParamEncoder[T any](codec ParamEncoder[T], columns Columns, optio
 	}
 	return compileParams(codec, columns)
 }
-func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options UDTOptions) (CompiledRow[T], error) {
+func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options udtOptions) (CompiledRow[T], error) {
 	if codec == nil {
 		return nil, typeValidation("decoder", "nil UDT row decoder")
 	}
@@ -394,20 +403,20 @@ func compileUDTRowDecoder[T any](codec RowDecoder[T], columns Columns, options U
 	}
 	return compileRow(codec, columns)
 }
-func (c paramsCodec[T]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[T], error) {
+func (c paramsCodec[T]) compileUDT(columns Columns, options udtOptions) (CompiledParams[T], error) {
 	return compileUDTParams(c, columns, options)
 }
-func (c rowCodec[T]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[T], error) {
+func (c rowCodec[T]) compileUDT(columns Columns, options udtOptions) (CompiledRow[T], error) {
 	return compileUDTRows(c, columns, options)
 }
-func (c singleColumnRows[T]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[T], error) {
+func (c singleColumnRows[T]) compileUDT(columns Columns, options udtOptions) (CompiledRow[T], error) {
 	if columns.Len() == 1 {
 		return c.Compile(columns)
 	}
 	codec := rowCodec[T]{fields: []OutputField[T]{ColumnAt(0, c.decoder, func(value *T) *T { return value })}}
 	return compileUDTRows(codec, columns, options)
 }
-func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[A], error) {
+func (c mappedParams[A, B]) compileUDT(columns Columns, options udtOptions) (CompiledParams[A], error) {
 	if c.mapValue == nil {
 		return nil, typeValidation("encoder", "nil UDT parameter mapping")
 	}
@@ -417,7 +426,7 @@ func (c mappedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Com
 	}
 	return compiledMappedParams[A, B]{plan: plan, mapValue: c.mapValue}, nil
 }
-func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[B], error) {
+func (c mappedRows[A, B]) compileUDT(columns Columns, options udtOptions) (CompiledRow[B], error) {
 	if c.mapValue == nil || c.cloneValue == nil {
 		return nil, typeValidation("decoder", "nil UDT row mapping")
 	}
@@ -427,7 +436,7 @@ func (c mappedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (Compi
 	}
 	return compiledMappedRow[A, B]{plan: plan, mapValue: c.mapValue, cloneValue: c.cloneValue}, nil
 }
-func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledParams[Pair[A, B]], error) {
+func (c pairedParams[A, B]) compileUDT(columns Columns, options udtOptions) (CompiledParams[Pair[A, B]], error) {
 	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
@@ -442,7 +451,7 @@ func (c pairedParams[A, B]) compileUDT(columns Columns, options UDTOptions) (Com
 	}
 	return compiledPairedParams[A, B]{left: left, right: right, a: a, b: b}, nil
 }
-func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (CompiledRow[Pair[A, B]], error) {
+func (c pairedRows[A, B]) compileUDT(columns Columns, options udtOptions) (CompiledRow[Pair[A, B]], error) {
 	left, right, err := pairSplit(c.a, columns)
 	if err != nil {
 		return nil, err
@@ -458,18 +467,18 @@ func (c pairedRows[A, B]) compileUDT(columns Columns, options UDTOptions) (Compi
 	return compiledPairedRow[A, B]{left: left, right: right, a: a, b: b, decoders: c}, nil
 }
 
-func checkUDTIdentity(typ DataType, options UDTOptions) error {
+func checkUDTIdentity(typ DataType, options udtOptions) error {
 	ks, name, ok := typ.UDTName()
 	if !ok {
 		return typeValidation("UDT identity", "expected a UDT, got %s", typ)
 	}
-	if options.Name != "" && name != options.Name || options.Keyspace != "" && ks != options.Keyspace {
-		want := options.Name
+	if options.name != "" && name != options.name || options.keyspace != "" && ks != options.keyspace {
+		want := options.name
 		if want == "" {
 			want = "*"
 		}
-		if options.Keyspace != "" {
-			want = options.Keyspace + "." + want
+		if options.keyspace != "" {
+			want = options.keyspace + "." + want
 		}
 		return typeValidation("UDT identity", "expected %s, got %s.%s", want, ks, name)
 	}
@@ -496,9 +505,9 @@ func TupleCodec[T any](enc ParamEncoder[T], dec RowDecoder[T]) Codec[T] {
 // position: the first mapped field is the first member, and so on, in
 // declaration order with the fields of a struct embedded by value in its
 // place. Field names and column tags do not matter, but a field's
-// `codec=` tag and `cql:"-"` apply as in RowOf. Every member needs a field
-// and every field a member. TupleCodecOf applies WithCodec, for T's own
-// fields, and rejects other options.
+// `codec=` and nullzero tags and `cql:"-"` apply as in RowOf. Every member
+// needs a field and every field a member. TupleCodecOf applies WithCodec, for
+// T's own fields, and NullAsZero, and rejects other options.
 func TupleCodecOf[T any](opts ...StructOption) (Codec[T], error) {
 	fields := generatedFields[T]()
 	params, err := generatedParams(fields, targetTuple, opts...)
@@ -509,7 +518,7 @@ func TupleCodecOf[T any](opts ...StructOption) (Codec[T], error) {
 	if err != nil {
 		return nil, err
 	}
-	p, r := params.(paramsCodec[T]), rows.(rowCodec[T])
+	p, r := params.(paramsCodec[T]), rows
 	positionalParams := make([]InputField[T], len(p.fields))
 	for i, f := range p.fields {
 		positionalParams[i] = positionalInput[T]{InputField: f, index: i}
@@ -518,7 +527,7 @@ func TupleCodecOf[T any](opts ...StructOption) (Codec[T], error) {
 	for i, f := range r.fields {
 		positionalRows[i] = positionalOutput[T]{OutputField: f, index: i}
 	}
-	return TupleCodec[T](paramsCodec[T]{fields: positionalParams}, rowCodec[T]{fields: positionalRows, reset: r.reset}), nil
+	return TupleCodec[T](paramsCodec[T]{fields: positionalParams}, rowCodec[T]{fields: positionalRows, reset: r.reset, nullZero: r.nullZero}), nil
 }
 
 // MustTupleCodecOf is TupleCodecOf that panics on error, for package-level

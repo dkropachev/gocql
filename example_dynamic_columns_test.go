@@ -46,7 +46,7 @@ func Example_dynamicColumns() {
 		log.Fatal(err)
 	}
 	defer s.Close()
-	p, err := s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT * FROM example.table1", Rows: cql.DynamicRows})
+	p, err := s.Prepare(ctx, cql.Select("SELECT * FROM example.table1", cql.NoParams, cql.DynamicRows))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,19 +70,19 @@ func Example_dynamicColumns() {
 			// Each accessor checks the value's type.
 			switch value.Type().Kind() {
 			case cql.KindTinyInt, cql.KindSmallInt, cql.KindInt, cql.KindBigInt:
-				n, err := value.Signed()
+				n, err := value.Int64()
 				if err != nil {
 					return err
 				}
 				fmt.Print(n, " ")
 			case cql.KindFloat, cql.KindDouble:
-				f, err := value.Float()
+				f, err := value.Float64()
 				if err != nil {
 					return err
 				}
 				fmt.Print(f, " ")
 			case cql.KindASCII, cql.KindText:
-				text, err := value.Str()
+				text, err := value.Text()
 				if err != nil {
 					return err
 				}

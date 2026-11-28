@@ -177,7 +177,7 @@ func TestStartTimestamps(t *testing.T) {
 
 func timestampQuery(t testing.TB, cql string) *Bound[implCql.Bytes] {
 	t.Helper()
-	b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
+	b, err := BindUnpreparedBorrowed(binding.Statement[implCql.EmptyRow, implCql.Bytes]{Kind: implCql.OrdinaryStatement, CQL: cql, Params: implCql.NoParams, Rows: implCql.OneColumn(implCql.BytesViewCodec)}, implCql.NewColumns(), implCql.EmptyRow{})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -177,6 +177,36 @@ func (r *RowReader) ReadColumn[T any](decoder Decoder[T]) (T, error) {
 	return result, nil
 }
 
+// skipNullCell advances past the next column and reports true when its cell
+// is NULL, or missing from a tuple or UDT value that predates its type's
+// last field; otherwise it leaves the reader as it is.
+func (r *RowReader) skipNullCell() bool {
+	if r == nil || r.cursor == nil || r.index >= r.columns.Len() {
+		return false
+	}
+	if r.allowMissing && r.cursor.Remaining() == 0 {
+		r.index++
+		return true
+	}
+	prefix, ok := r.cursor.PeekHeadUint32()
+	if !ok {
+		c := *r.cursor
+		v, err := c.Uint32()
+		if err != nil || int32(v) != -1 {
+			return false
+		}
+		*r.cursor = c
+		r.index++
+		return true
+	}
+	if int32(prefix) != -1 {
+		return false
+	}
+	r.cursor.AdvanceHead(4)
+	r.index++
+	return true
+}
+
 // SkipColumn advances past the next column without decoding it.
 func (r *RowReader) SkipColumn() error {
 	_, err := r.nextValue()
@@ -293,6 +323,44 @@ func mapColumnFields(columns Columns, locations []fieldLocation, repeatedNames, 
 		}
 	}
 	return ordered, nil
+}
+
+// checkRepeatedMarkers rejects one named field mapping two bind markers that
+// the server named alike after their column, as it names both markers of
+// WHERE a > ? AND a < ?: the statement never asked for one value twice, so
+// binding one field to both would silently bind the wrong value.
+func checkRepeatedMarkers[P any](columns Columns, mapping []int, fields []InputField[P]) error {
+	first := map[int]int{}
+	for index, field := range mapping {
+		if field < 0 || fields[field].location().positional {
+			continue
+		}
+		if prev, ok := first[field]; ok {
+			column, _ := columns.At(index)
+			return columnError(CodecStageCompile, index, column.Name, typeValidation("bind marker",
+				"markers %d and %d are both named %q by the server, which names a ? marker after its column, so one field would bind both; name them, as in :from and :to, or bind them by position with ParamAt", prev, index, column.Name))
+		}
+		first[field] = index
+	}
+	return nil
+}
+
+// repeatedMarkers rejects a named field that maps two of markers, named by
+// the server after their columns because the statement uses ? markers.
+// Compile reports a mapping that fails otherwise.
+func (c paramsCodec[P]) repeatedMarkers(markers Columns) error {
+	locations := make([]fieldLocation, len(c.fields))
+	for i, field := range c.fields {
+		if field == nil {
+			return nil
+		}
+		locations[i] = field.location()
+	}
+	mapping, err := mapFields(markers, locations, true, c.optional)
+	if err != nil {
+		return nil
+	}
+	return checkRepeatedMarkers(markers, mapping, c.fields)
 }
 
 func (c paramsCodec[P]) Compile(columns Columns) (CompiledParams[P], error) {
@@ -421,7 +489,8 @@ type rowCodec[R any] struct {
 	reset    func(*R)
 	fields   []OutputField[R]
 	optional bool // fields without a column are skipped (struct mappings)
-	extra    bool // columns without a field are skipped (IgnoreExtraColumns)
+	extra    bool // columns without a field are skipped (IgnoreExtraFields)
+	nullZero bool // a NULL cell leaves any field zero (NullAsZero)
 }
 type compiledRow[R any] struct {
 	reset   func(*R)
@@ -511,6 +580,11 @@ func (c rowCodec[R]) compile(columns Columns, optional, extra bool) (CompiledRow
 		plan.ordered[index] = compiled
 	}
 	plan.ops = rowOps(plan.ordered)
+	if c.nullZero {
+		for i := range plan.ops {
+			plan.ops[i].nullZero = true
+		}
+	}
 	return plan, nil
 }
 func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
@@ -526,6 +600,9 @@ func (p compiledRow[R]) DecodeInto(reader *RowReader, dst *R) error {
 	for i := range p.ops {
 		op := &p.ops[i]
 		at := reader.index
+		if op.nullZero && reader.skipNullCell() {
+			continue
+		}
 		var err error
 		if op.kind == directNone {
 			err = op.field.decode(reader, dst)

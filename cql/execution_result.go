@@ -109,30 +109,34 @@ type CQLTraceRef struct {
 	Speculative bool
 }
 
-// Warnings returns the server warnings of all attempts and pages.
+// Warnings returns the server warnings of all attempts and pages, as a copy
+// the caller may change.
 func (r Result) Warnings() []string {
 	if r.diag == nil {
 		return nil
 	}
-	return r.diag.warnings
+	return slices.Clone(r.diag.warnings)
 }
 
 // CQLTraces returns the server-side CQL trace sessions of the execution's
 // traced attempts, failed ones included, in the order they finished, page
-// after page; package cqltrace reads them.
+// after page; package cqltrace reads them. It returns a copy the caller may
+// change.
 func (r Result) CQLTraces() []CQLTraceRef {
 	if r.diag == nil {
 		return nil
 	}
-	return r.diag.traces
+	return slices.Clone(r.diag.traces)
 }
 
-// CustomPayload returns the custom payload entries of all responses.
+// CustomPayload returns the custom payload entries of all responses, as a
+// copy the caller may change; an entry's Value shares the response's bytes,
+// which the driver never writes to.
 func (r Result) CustomPayload() []PayloadEntry {
 	if r.diag == nil {
 		return nil
 	}
-	return r.diag.customPayload
+	return slices.Clone(r.diag.customPayload)
 }
 
 // own replaces r's diagnostics with a private copy before a change; slices are
@@ -197,9 +201,11 @@ func mergeResult(dst *Result, src Result) {
 	dst.Attempts += src.Attempts
 	dst.AttemptLatency += src.AttemptLatency
 	dst.FetchedRows += src.FetchedRows
-	dst.addWarnings(src.Warnings()...)
-	dst.addCQLTraces(src.CQLTraces()...)
-	dst.addCustomPayload(src.CustomPayload()...)
+	if src.diag != nil {
+		dst.addWarnings(src.diag.warnings...)
+		dst.addCQLTraces(src.diag.traces...)
+		dst.addCustomPayload(src.diag.customPayload...)
+	}
 	dst.AchievedConsistency = src.AchievedConsistency
 	if src.SpeculationSkipped != SpeculationNotSkipped {
 		dst.SpeculationSkipped = src.SpeculationSkipped

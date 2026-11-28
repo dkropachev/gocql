@@ -18,7 +18,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	cols, input := columns(t), value()
 	input.MaybeText = cql.Nullable[string]{Value: "nullable", Valid: true}
 	codecFor := func(prefix string) cql.Codec[string] {
-		return cql.ConvertCodec(cql.StringCodec, func(v string) string { return prefix + v }, func(v string) string { return strings.TrimPrefix(v, prefix) })
+		return cql.ConvertCodec(cql.StringCodec, func(v string) (string, error) { return prefix + v, nil }, func(v string) (string, error) { return strings.TrimPrefix(v, prefix), nil })
 	}
 	first := cql.WithCodec(codecFor("first/"))
 	second := cql.WithCodec(codecFor("second/"))
@@ -63,7 +63,7 @@ func TestGeneratedMappingCodecOptions(t *testing.T) {
 	// both declaration order and the physical order selected by the server.
 	subset := cql.NewColumns(cql.ColumnSpec{Name: "created_at", Type: cql.TimestampType}, cql.ColumnSpec{Name: "text", Type: cql.TextType})
 	shift := cql.WithCodec(cql.ConvertCodec(cql.TimestampCodec,
-		func(v cql.Timestamp) cql.Timestamp { return v + 100 }, func(v cql.Timestamp) cql.Timestamp { return v - 100 }))
+		func(v cql.Timestamp) (cql.Timestamp, error) { return v + 100, nil }, func(v cql.Timestamp) (cql.Timestamp, error) { return v - 100, nil }))
 	partial, _ := encode(t, subset, cql.MustParamsOf[Fixture](first, shift), input)
 	raw := decode(t, subset, cql.MustRowOf[Fixture](), partial)
 	if raw.CreatedAt != input.CreatedAt+100 || raw.Text != "first/"+input.Text || !raw.ID.IsZero() || raw.Skipped != "" {

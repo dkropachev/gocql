@@ -405,10 +405,10 @@ func TestStream(t *testing.T) {
 		t.Run("AbsentCustomResetterSucceeds", func(t *testing.T) {
 			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
-			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true, AllowExtraDatabaseFields: true}
+			options := []StructOption{UDTName("ks", "one"), IgnoreExtraFields(), AllowMissingFields()}
 			row := StreamRowInto(func(*int32) {}, StreamColumn("missing", customStreamResettable{}, func(value *int32) *int32 { return value }))
 			value := int32(42)
-			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options), streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7})), &value, 1); err != nil || value != 0 {
+			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options...), streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7})), &value, 1); err != nil || value != 0 {
 				t.Fatal("custom declaration reset", value, err)
 			}
 		})
@@ -422,14 +422,14 @@ func TestStream(t *testing.T) {
 			}
 			integer := FoundationScalar(t, KindInt)
 			udt := CodecTestMust(UDTType("ks", "one", ColumnSpec{Name: "id", Type: integer}))
-			options := UDTOptions{Keyspace: "ks", Name: "one", AllowMissingFields: true}
+			options := []StructOption{UDTName("ks", "one"), AllowMissingFields()}
 			row := StreamRowInto(func(*destination) {}, StreamColumn("id", StreamInt32, func(d *destination) *int32 { return &d.ID }), StreamColumn("payload", StreamBlob, func(d *destination) *[]byte { return &d.Payload }), StreamColumn("nested", StreamList(StreamBlob), func(d *destination) *[][]byte { return &d.Nested }))
 			backing, child := make([]byte, 16), make([]byte, 32)
 			out := destination{Payload: backing[:10], Nested: [][]byte{child[:12]}}
 			nestedStart := &out.Nested[0]
 			data := streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7}))
 			for i := 0; i < 2; i++ {
-				if err := StreamDecodeFixture(t, udt, StreamUDT(row, options), data, &out, 1); err != nil || out.ID != 7 || len(out.Payload) != 0 || cap(out.Payload) != 16 || len(out.Nested) != 0 || cap(out.Nested) != 1 {
+				if err := StreamDecodeFixture(t, udt, StreamUDT(row, options...), data, &out, 1); err != nil || out.ID != 7 || len(out.Payload) != 0 || cap(out.Payload) != 16 || len(out.Nested) != 0 || cap(out.Nested) != 1 {
 					t.Fatal("missing payload reset", out, err)
 				}
 				out.Payload = out.Payload[:1]
@@ -443,7 +443,7 @@ func TestStream(t *testing.T) {
 				StreamColumn("custom", StreamNullable(customStreamResettable{}), func(d *destination) *Nullable[int32] { return &d.Wrapped }),
 				StreamColumn("plain", customStreamResettable{}, func(d *destination) *int32 { return &d.Custom }))
 			out = destination{Custom: 5, Wrapped: Nullable[int32]{Value: 6, Valid: true}}
-			if err := StreamDecodeFixture(t, udt, StreamUDT(absent, options), data, &out, 1); err != nil || out.ID != 7 || out.Custom != 0 || out.Wrapped.Valid || out.Wrapped.Value != 0 {
+			if err := StreamDecodeFixture(t, udt, StreamUDT(absent, options...), data, &out, 1); err != nil || out.ID != 7 || out.Custom != 0 || out.Wrapped.Valid || out.Wrapped.Value != 0 {
 				t.Fatal("absent custom fields", out, err)
 			}
 		})
@@ -468,14 +468,14 @@ func TestStream(t *testing.T) {
 			udt := CodecTestMust(UDTType("ks", "entry", ColumnSpec{Name: "id", Type: integer}))
 			row := StreamRowInto(func(*value) {}, StreamColumn("id", StreamInt32, func(v *value) *int32 { return &v.ID }), StreamColumn("missing", StreamInt32, func(v *value) *int32 { return &v.Missing }))
 			out := value{Missing: 9}
-			options := UDTOptions{Keyspace: "ks", Name: "entry", AllowMissingFields: true}
-			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options), streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7})), &out, 1); err != nil || out.ID != 7 || out.Missing != 0 {
+			options := []StructOption{UDTName("ks", "entry"), AllowMissingFields()}
+			if err := StreamDecodeFixture(t, udt, StreamUDT(row, options...), streamCellBytes(streamCellBytes([]byte{0, 0, 0, 7})), &out, 1); err != nil || out.ID != 7 || out.Missing != 0 {
 				t.Fatal("missing application field reset", out, err)
 			}
 			extra := CodecTestMust(UDTType("ks", "entry", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "extra", Type: integer}))
-			options.AllowExtraDatabaseFields = true
+			options = append(options, IgnoreExtraFields())
 			var single int32
-			if err := StreamDecodeFixture(t, extra, StreamUDT(StreamOneColumn(StreamInt32), options), streamCellBytes(data), &single, 1); err != nil || single != 1 {
+			if err := StreamDecodeFixture(t, extra, StreamUDT(StreamOneColumn(StreamInt32), options...), streamCellBytes(data), &single, 1); err != nil || single != 1 {
 				t.Fatal("single-column UDT policy", single, err)
 			}
 		})
@@ -504,21 +504,21 @@ func TestStream(t *testing.T) {
 			}
 			udt := CodecTestMust(UDTType("ks", "entry", ColumnSpec{Name: "id", Type: integer}, ColumnSpec{Name: "name", Type: text}))
 			named := StreamRowInto(func(r *record) { r.Unmapped = 0 }, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }), StreamColumn("name", StreamNullable(StreamText), func(r *record) *Nullable[[]byte] { return &r.Name }))
-			decoder := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "entry"})
+			decoder := StreamUDT(named, UDTName("ks", "entry"))
 			if err := StreamDecodeFixture(t, udt, decoder, data, &out, 1); err != nil || out.ID != 7 {
 				t.Fatal("UDT", err)
 			}
-			if _, err := StreamUDT(named, UDTOptions{}).Compile(udt); err != nil {
+			if _, err := StreamUDT(named).Compile(udt); err != nil {
 				t.Fatal("zero options rejected a UDT:", err)
 			}
-			if _, err := StreamUDT(named, UDTOptions{Keyspace: "ks", Name: "wrong"}).Compile(udt); err == nil {
+			if _, err := StreamUDT(named, UDTName("ks", "wrong")).Compile(udt); err == nil {
 				t.Fatal("wrong identity accepted")
 			}
 			strict := StreamRowInto(func(r *record) {}, StreamColumn("id", StreamInt32, func(r *record) *int32 { return &r.ID }))
-			if _, err := StreamUDT(strict, UDTOptions{Keyspace: "ks", Name: "entry"}).Compile(udt); err == nil {
+			if _, err := StreamUDT(strict, UDTName("ks", "entry")).Compile(udt); err == nil {
 				t.Fatal("extra UDT field accepted without policy")
 			}
-			relaxed := StreamUDT(strict, UDTOptions{Keyspace: "ks", Name: "entry", AllowExtraDatabaseFields: true})
+			relaxed := StreamUDT(strict, UDTName("ks", "entry"), IgnoreExtraFields())
 			if err := StreamDecodeFixture(t, udt, relaxed, data, &out, 1); err != nil {
 				t.Fatal("checked UDT skip", err)
 			}

@@ -201,6 +201,24 @@ func InternalConditionalCQL(cql string) bool {
 	return conditional
 }
 
+// InternalNamedMarkers reports whether cql has a named bind marker, :name,
+// outside string literals, quoted identifiers and comments. The server names
+// a ? marker after its column instead, so two of them can share a name.
+func InternalNamedMarkers(cql string) bool {
+	named := false
+	visitCQL(cql, func(string) bool { return true }, func(i int) bool {
+		if i+1 < len(cql) {
+			c := cql[i+1]
+			if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '_' || c == '"' {
+				named = true
+				return false
+			}
+		}
+		return true
+	})
+	return named
+}
+
 // conditionalVerb reports whether word, the first word of a statement,
 // begins one that can be conditional: INSERT, UPDATE, DELETE or BEGIN, which
 // starts a BATCH.
@@ -219,7 +237,21 @@ func conditionalVerb(word string) bool {
 // and --, // and /* */ comments, so a word inside one is never visited. It
 // does not allocate.
 func visitCQLWords(cql string, visit func(string) bool) {
+	visitCQL(cql, visit, nil)
+}
+
+// visitCQL is visitCQLWords that also calls colon, when it is not nil,
+// with the index of each : outside literals and comments, until either
+// returns false.
+func visitCQL(cql string, visit func(string) bool, colon func(int) bool) {
 	for i := 0; i < len(cql); {
+		if cql[i] == ':' && colon != nil {
+			if !colon(i) {
+				return
+			}
+			i++
+			continue
+		}
 		if cql[i] == '\'' || cql[i] == '"' {
 			quote := cql[i]
 			i++

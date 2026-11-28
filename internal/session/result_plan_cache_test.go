@@ -55,7 +55,7 @@ func TestResultPlanCache(t *testing.T) {
 			if err := selectPreparedResponse(state, host, old, old.InternalMetadataID, true, response); err != nil {
 				t.Fatal(err)
 			}
-			p := codecTestMust(newPageWithPlans(response, cql.OneColumn(cql.BytesCodec), &InternalResultPlanCache[cql.Bytes]{}, nil))
+			p := codecTestMust(newPageWithPlans(response, cql.OneColumn(cql.BytesViewCodec), &InternalResultPlanCache[cql.Bytes]{}, nil))
 			defer p.Close()
 			var dst cql.Bytes
 			if !p.NextInto(&dst) || string(ownedBytesForTest(dst)) != "old" {

@@ -119,7 +119,7 @@ func TestClusterExamples(t *testing.T) {
 	count := func(t *testing.T, query string) int {
 		t.Helper()
 		var n int64
-		_, err := s.UnpreparedEach(ctx, cql.Statement[cql.EmptyParams, int64]{CQL: query, Rows: cql.OneColumn(cql.Int64Codec)},
+		_, err := s.UnpreparedEach(ctx, cql.Select(query, cql.NoParams, cql.OneColumn(cql.Int64Codec)),
 			cql.EmptyParams{}, &n, func(*int64) error { return nil })
 		if err != nil {
 			t.Fatalf("%s: %v", query, err)

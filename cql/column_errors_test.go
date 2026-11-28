@@ -205,11 +205,11 @@ func TestColumnErrorPaths(t *testing.T) {
 		inner := mustMatrixType(UDTType("ks", "inner", ColumnSpec{Name: "n", Type: intType}))
 		outer := mustMatrixType(UDTType("ks", "outer", ColumnSpec{Name: "in", Type: inner}))
 		columns := NewColumns(ColumnSpec{Name: "u", Type: outer})
-		innerOpts, err := UDTOptionsFor(inner)
+		innerOpts, err := UDTNameOf(inner)
 		if err != nil {
 			t.Fatal(err)
 		}
-		outerOpts, err := UDTOptionsFor(outer)
+		outerOpts, err := UDTNameOf(outer)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -242,7 +242,7 @@ func matrixRaw(cells ...[]byte) wire.Chain {
 // and the member's own error stays reachable through Unwrap.
 func TestMemberError(t *testing.T) {
 	tuple := mustMatrixType(TupleType(matrixType(KindInt), matrixType(KindText)))
-	decoder := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextCodec)))
+	decoder := TupleDecoder(PairRows(OneColumn(Int32Codec), OneColumn(TextViewCodec)))
 	for name, test := range map[string]struct {
 		body []byte
 		want string

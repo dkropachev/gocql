@@ -61,7 +61,7 @@ func v2SchemaRoutingInt(t testing.TB, row cql.DynamicRow, name string) int32 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := value.Signed()
+	result, err := value.Int64()
 	if err != nil {
 		t.Fatal(err)
 	}

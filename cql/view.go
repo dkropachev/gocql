@@ -4,6 +4,7 @@
 package cql
 
 import (
+	"fmt"
 	"io"
 	"strings"
 	"unicode/utf8"
@@ -25,12 +26,12 @@ type Bytes struct {
 	chain wire.Chain
 }
 
-// Text is a validated text view with the same lifetime as Bytes. String and
-// Copy materialize an owned string; cursor callers must do so before the view
+// Text is a validated text view with the same lifetime as Bytes. Copy
+// materializes an owned string; cursor callers must do so before the view
 // expires.
 //
 // On an expired view Clone panics with ErrReleased, Copy returns that error,
-// and String returns "<released>", so printing or logging one never fails.
+// and Format prints "<released>", so printing or logging one never fails.
 // Detection is best-effort, as for Bytes.
 //
 // The zero Text is empty.
@@ -164,10 +165,16 @@ func (t Text) Bytes() Bytes { return t.bytes }
 // once the view has expired.
 func (t Text) Clone() Text { return Text{bytes: t.bytes.Clone()} }
 
-// String returns the text, or "<released>" once the view has expired, so
-// that formatting and logging an expired view never panics. Copy is the
-// checked form.
-func (t Text) String() string {
+// Format writes the text for fmt verbs, as a string would print, or
+// "<released>" once the view has expired, so that formatting and logging an
+// expired view never panics. Text has no String method: Copy is the one way
+// to extract the text, and it reports an expired view.
+func (t Text) Format(f fmt.State, verb rune) {
+	fmt.Fprintf(f, fmt.FormatString(f, verb), t.string())
+}
+
+// string is Copy for diagnostics: "<released>" once the view has expired.
+func (t Text) string() string {
 	s, err := t.Copy()
 	if err != nil {
 		return "<released>"

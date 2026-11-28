@@ -446,6 +446,9 @@ type StreamRowReader struct {
 	index, depth int
 	allowMissing bool
 	active       bool
+	// nullZero makes the next ReadColumn reset its destination for a NULL
+	// or missing cell instead of failing (NullAsZero).
+	nullZero bool
 }
 
 // streamReaderWorkingStorageBytes reports the actual retained byte
@@ -565,6 +568,16 @@ func (r *StreamRowReader) column(fn func(*StreamValueReader) error) error {
 func (r *StreamRowReader) ReadColumn[T any](plan CompiledStreamValue[T], dst *T) error {
 	if plan == nil || dst == nil {
 		return typeValidation("stream column", "nil plan or destination")
+	}
+	if r.nullZero {
+		r.nullZero = false
+		return r.column(func(value *StreamValueReader) error {
+			if value.State() == Null {
+				plan.Reset(dst)
+				return nil
+			}
+			return plan.DecodeInto(value, dst)
+		})
 	}
 	return r.column(func(value *StreamValueReader) error { return plan.DecodeInto(value, dst) })
 }
