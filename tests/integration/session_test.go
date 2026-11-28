@@ -111,7 +111,7 @@ func (o *sessionTestObserver) started() []observe.RequestStart {
 	defer o.mu.Unlock()
 	return append([]observe.RequestStart(nil), o.starts...)
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {

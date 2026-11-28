@@ -102,10 +102,23 @@ type AttemptFailure struct {
 	Consistency cql.Consistency
 	// CQLTraceID is the CQL trace session the server recorded for the
 	// attempt, when it ran with CQL tracing and the server answered with an
-	// error. Read it with package cqltrace.
+	// error. Read it with package cqltrace, through CQLTrace.
 	CQLTraceID cql.Option[cql.UUID]
 	// ExecutionStatus reports what the attempt may have done on the cluster.
 	ExecutionStatus ExecutionStatus
+}
+
+// CQLTrace returns the reference to the attempt's CQL trace session for
+// cqltrace.Fetch: the session ID, the target host as its coordinator, the
+// attempt number and Failed set. An AttemptFailure records neither the page
+// nor whether the attempt was speculative, so Page is zero and Speculative
+// false; the reference cql.Result.CQLTraces lists for the same session has
+// both. It returns false when CQLTraceID is unset.
+func (a AttemptFailure) CQLTrace() (cql.CQLTraceRef, bool) {
+	if !a.CQLTraceID.Set {
+		return cql.CQLTraceRef{}, false
+	}
+	return cql.CQLTraceRef{ID: a.CQLTraceID.Value, HostID: a.Target.HostID, Attempt: a.Attempt, Failed: true}, true
 }
 
 // String returns the attempt's number, its host, its shard on a shard-aware

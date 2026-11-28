@@ -1584,9 +1584,9 @@ type Info struct {
     Token cql.Option[int64]
     Kind cql.StatementKind
     Consistency cql.Consistency
-    HostID cql.Option[cql.UUID]
-    ShardID cql.Option[uint32]
-    AnyShardFallback bool
+    HostID cql.Option[cql.UUID]  // HostID, ShardID and AnyShardFallback pin a request, which the
+    ShardID cql.Option[uint32]   // session routes without the Policy: Pick and Fallback never
+    AnyShardFallback bool        // see them set; observers and the CQL trace sampler do
 }
 // Route and Target are metadata.Route and metadata.Target, below.
 type Plan interface { Next() (metadata.Route, bool) }
@@ -1622,18 +1622,19 @@ type AttemptEvent struct {
     CQLTraceID cql.Option[cql.UUID]
     Canceled, TimedOut, Speculative bool // by cqlerr.KindOf(Err)
 }
-
-// package observe
-type AttemptStart struct {
+func (AttemptEvent) CQLTrace() (cql.CQLTraceRef, bool) // the reference cqltrace.Fetch takes; false without CQLTraceID
+type AttemptStart struct { // here, not in observe, beside AttemptEvent: observe imports routing
     RequestID uint64
     Page, Attempt int
-    Target Target
+    Target metadata.Target
     Address string
     AddrPort netip.AddrPort
     Consistency cql.Consistency
     Started time.Time
     Speculative bool
 }
+
+// package observe
 type SpeculationPolicy interface { Delay(Speculation) (time.Duration, bool) }
 type SpeculationPolicyFunc func(Speculation) (time.Duration, bool)
 type NoSpeculation struct{} // for execopt.Options.Speculation: disables it
@@ -1647,7 +1648,7 @@ type Speculation struct {
 }
 type Hooks struct { // a nil hook is skipped; later hooks are new fields
     Request func(context.Context, RequestStart) (context.Context, func(RequestEvent))
-    Attempt func(context.Context, AttemptStart) func(routing.AttemptEvent)
+    Attempt func(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
 }
 func (Hooks) IsZero() bool
 type RequestStart struct {
@@ -1656,8 +1657,7 @@ type RequestStart struct {
     Started time.Time
     Statement string
     BatchStatements []BatchStatement
-    Parameters cql.Columns
-    Values BoundValues // borrowed until the request's end function returns
+    Values BoundValues // At(i) returns the i-th bind marker with its value // borrowed until the request's end function returns
     Routing routing.Info
     PageSize int
     CQLTrace bool // CQLTrace option or the profile's CQLTraceSampler
@@ -1751,11 +1751,15 @@ type LatencyOptions struct {
     MinimumSamples int
     Scale, RetryPeriod, UpdateInterval time.Duration
 }
-func NewPolicy(Options) (*Builtin, error)        // Builtin implements Policy, Validator and Learner
+func NewPolicy(Options) *Builtin // Builtin implements Policy, Validator and Learner
+// Invalid Options fail ProfileBuilder.Build, ConfigBuilder.Build and Validate
+// with a cql.ValidationError of Field "Options.MaxRemoteHostsPerDC" or
+// "Options.Latency.<field>".
 func SingleTarget(metadata.Target) *Builtin
 type PartitionKey struct { /* logical canonical encoded component stream */ }
 func (k PartitionKey) Len() int64
 func (k PartitionKey) ForEach(func(cql.Bytes) error) error
+func (k PartitionKey) WriteTo(io.Writer) (int64, error) // io.WriterTo, for a hash.Hash
 type TokenPartitioner interface { Token(PartitionKey) (int64, error) }
 type TokenPartitionerFunc func(PartitionKey) (int64, error)
 var Murmur3TokenPartitioner TokenPartitioner
@@ -1774,6 +1778,7 @@ type Cluster struct {
 type Table struct { Keyspace, Name string }
 func NewSnapshot(Cluster) (*metadata.Snapshot, error) // links the built-in policies' engine; rejects duplicate hosts, unknown replicas, overlapping tablets
 func Host(id cql.UUID, datacenter, rack string) metadata.HostSnapshot // enabled, up, connected
+func Request(keyspace, table string, token int64) routing.Info        // Kind OrdinaryStatement
 ```
 
 Tablet v2 takes precedence over v1 when both are negotiated. Every EXECUTE on a
@@ -1819,7 +1824,8 @@ started attempt, including cancellation and speculative losers, for each
 configured observer, delivered through the functions the start hooks return.
 observe.Hooks is the seam for client-side tracing such as OpenTelemetry, which lives
 outside the core module; AttemptEvent.CQLTraceID links an attempt to the
-server-side CQL trace session it produced. When no observer is configured, skip event
+server-side CQL trace session it produced, and AttemptEvent.CQLTrace and
+AttemptFailure.CQLTrace return it as the cql.CQLTraceRef cqltrace.Fetch takes. When no observer is configured, skip event
 construction, batch-statement arrays and diagnostic formatting. Required policy
 Learn feedback, metrics and Result accounting still run. Latency percentile
 snapshots are maintained outside individual request completion, from each
@@ -1830,8 +1836,9 @@ IDs/warnings are preserved per response; Result aggregates across consumed
 pages. Failed attempts keep their CQL trace references, marked Failed, on the
 returned Result and ExecutionError.Result, and their trace IDs on
 AttemptFailure.CQLTraceID. Package cqltrace reads trace sessions through the
-public Session API with context-bounded readiness polling; a session is ready
-once its duration and at least one event are visible.
+public Session API with readiness polling bounded by the context and by
+Fetcher.MaxWait, 10s by default; a session is ready once its duration and at
+least one event are visible.
 
 The safe retry policy only retries unknown-outcome writes when explicitly
 idempotent. Read timeout/unavailable repair follows server evidence with bounded
@@ -1884,6 +1891,7 @@ func (i Info) String() string
 type Fetcher struct {
     Poll time.Duration          // 0: 100ms
     Settle time.Duration        // 0: 200ms; <0: return once ready
+    MaxWait time.Duration       // 0: 10s; <0: only ctx bounds the wait; past it: ErrNotReady
     Consistency cql.Consistency // 0 (Any): One
 }
 // Fetch reads from ref.HostID, then from any replica once a read there fails;
@@ -1980,7 +1988,7 @@ type Snapshot struct {
     ErrorsByKind map[cqlerr.Kind]uint64
     Retries, Speculations uint64
     Orphans uint64
-    InFlight int64
+    InFlight int
     Connections int // of every host pool, the control connection not included
     LatencyP50, LatencyP95, LatencyP99 time.Duration // of successful pages, send to response
 }

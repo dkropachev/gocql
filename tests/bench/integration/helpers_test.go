@@ -246,7 +246,7 @@ func (o *cassandraObserver) ObserveAttempt(e routing.AttemptEvent) {
 func (o *cassandraObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {
@@ -1407,7 +1407,7 @@ func (o *sessionTestObserver) ObserveAttempt(e routing.AttemptEvent) {
 func (o *sessionTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *sessionTestObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *sessionTestObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *sessionTestObserver) snapshot() ([]observe.RequestEvent, []routing.AttemptEvent) {
@@ -1536,7 +1536,7 @@ func (o *v2TabletAttemptObserver) ObserveAttempt(event routing.AttemptEvent) {
 func (o *v2TabletAttemptObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *v2TabletAttemptObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *v2TabletAttemptObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *v2TabletAttemptObserver) snapshot() []metadata.Target {

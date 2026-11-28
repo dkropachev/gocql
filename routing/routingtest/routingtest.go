@@ -8,7 +8,8 @@
 // cql.UnknownStatement, which the built-in policies route as possibly
 // conditional: in replica order, without shuffling or Pick, and to a
 // replica's shard only. Set Kind to cql.OrdinaryStatement, as a session does
-// for a statement known not to be conditional, to test the usual plan.
+// for a statement known not to be conditional, to test the usual plan;
+// Request returns such an Info.
 //
 // A program that imports it links the engine behind the built-in policies,
 // so a routing.NewPolicy or routing.SingleTarget policy routes over its
@@ -181,6 +182,14 @@ func (c *Cluster) holds(t Table) bool {
 	}
 	ks := c.Keyspaces[t.Keyspace]
 	return ks != nil && (ks.Tables[t.Name] != nil || ks.Views[t.Name] != nil)
+}
+
+// Request returns the routing.Info of an ordinary, not conditional, request
+// for the partition of token in keyspace's table: Kind is
+// cql.OrdinaryStatement, so a built-in policy routes it with its usual plan.
+// Its Consistency is zero, cql.Any; set it to test a LOCAL_* consistency.
+func Request(keyspace, table string, token int64) routing.Info {
+	return routing.Info{Keyspace: keyspace, Table: table, Token: cql.Some(token), Kind: cql.OrdinaryStatement}
 }
 
 // Host returns a host of the cluster with id, in datacenter and rack, that

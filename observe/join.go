@@ -23,7 +23,7 @@ import (
 // returned one, for the panic to be raised.
 func Join(hooks ...Hooks) Hooks {
 	var requests []func(context.Context, RequestStart) (context.Context, func(RequestEvent))
-	var attempts []func(context.Context, AttemptStart) func(routing.AttemptEvent)
+	var attempts []func(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
 	for _, h := range hooks {
 		if h.Request != nil {
 			requests = append(requests, h.Request)
@@ -47,7 +47,7 @@ func Join(hooks ...Hooks) Hooks {
 	case 1:
 		joined.Attempt = attempts[0]
 	default:
-		joined.Attempt = func(ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
+		joined.Attempt = func(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 			return startAttempt(attempts, ctx, start)
 		}
 	}
@@ -103,7 +103,7 @@ func startRequest(requests []func(context.Context, RequestStart) (context.Contex
 	}
 }
 
-func startAttempt(attempts []func(context.Context, AttemptStart) func(routing.AttemptEvent), ctx context.Context, start AttemptStart) func(routing.AttemptEvent) {
+func startAttempt(attempts []func(context.Context, routing.AttemptStart) func(routing.AttemptEvent), ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 	var started hookPanic
 	ends := make([]func(routing.AttemptEvent), 0, len(attempts))
 	for _, a := range attempts {

@@ -150,28 +150,41 @@ type InternalRoutingPolicy struct {
 	minimumBits       atomic.Uint64
 }
 
+// NewRoutingPolicy returns the policy routing.NewPolicy describes, with the
+// latency defaults applied, or a cql.ValidationError naming the invalid
+// routing.Options field.
 func NewRoutingPolicy(o routing2.Options) (RoutingPolicy, error) {
 	if o.MaxRemoteHostsPerDC < 0 {
-		return nil, cqltype.TypeValidation("routing remote hosts", "must not be negative")
+		return nil, cqltype.TypeValidation("Options.MaxRemoteHostsPerDC", "must not be negative, got %d", o.MaxRemoteHostsPerDC)
 	}
 	if o.Latency.Enabled {
-		if o.Latency.ExclusionThreshold == 0 {
-			o.Latency.ExclusionThreshold = 2
+		l := &o.Latency
+		if l.ExclusionThreshold == 0 {
+			l.ExclusionThreshold = 2
 		}
-		if o.Latency.MinimumSamples == 0 {
-			o.Latency.MinimumSamples = 50
+		if l.MinimumSamples == 0 {
+			l.MinimumSamples = 50
 		}
-		if o.Latency.Scale == 0 {
-			o.Latency.Scale = 100 * time.Millisecond
+		if l.Scale == 0 {
+			l.Scale = 100 * time.Millisecond
 		}
-		if o.Latency.RetryPeriod == 0 {
-			o.Latency.RetryPeriod = 10 * time.Second
+		if l.RetryPeriod == 0 {
+			l.RetryPeriod = 10 * time.Second
 		}
-		if o.Latency.UpdateInterval == 0 {
-			o.Latency.UpdateInterval = time.Second
+		if l.UpdateInterval == 0 {
+			l.UpdateInterval = time.Second
 		}
-		if o.Latency.ExclusionThreshold < 1 || math.IsNaN(o.Latency.ExclusionThreshold) || math.IsInf(o.Latency.ExclusionThreshold, 0) || o.Latency.MinimumSamples < 1 || o.Latency.Scale <= 0 || o.Latency.RetryPeriod <= 0 || o.Latency.UpdateInterval <= 0 {
-			return nil, cqltype.TypeValidation("latency routing", "invalid configuration")
+		switch {
+		case l.ExclusionThreshold < 1 || math.IsNaN(l.ExclusionThreshold) || math.IsInf(l.ExclusionThreshold, 0):
+			return nil, cqltype.TypeValidation("Options.Latency.ExclusionThreshold", "must be a finite number of at least 1, got %v", l.ExclusionThreshold)
+		case l.MinimumSamples < 1:
+			return nil, cqltype.TypeValidation("Options.Latency.MinimumSamples", "must be positive, got %d", l.MinimumSamples)
+		case l.Scale <= 0:
+			return nil, cqltype.TypeValidation("Options.Latency.Scale", "must be positive, got %v", l.Scale)
+		case l.RetryPeriod <= 0:
+			return nil, cqltype.TypeValidation("Options.Latency.RetryPeriod", "must be positive, got %v", l.RetryPeriod)
+		case l.UpdateInterval <= 0:
+			return nil, cqltype.TypeValidation("Options.Latency.UpdateInterval", "must be positive, got %v", l.UpdateInterval)
 		}
 	}
 	p := &InternalRoutingPolicy{InternalOptions: o, seed: rand.Uint64()}

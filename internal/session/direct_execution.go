@@ -16,7 +16,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/settings"
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	routing2 "github.com/scylladb/gocql/v2/routing"
 )
@@ -265,7 +264,7 @@ func attemptTarget(request *InternalExecutionRequest, conn *transport.Conn) meta
 func startDirectAttempt(request *InternalExecutionRequest, conn *transport.Conn, attempt int, consistency cql.Consistency) (func(routing2.AttemptEvent), time.Time) {
 	l := request.InternalLogical
 	started := time.Now()
-	return l.startAttempt(observe.AttemptStart{RequestID: l.id, Page: int(request.page), Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started}), started
+	return l.startAttempt(routing2.AttemptStart{RequestID: l.id, Page: int(request.page), Attempt: attempt, Target: attemptTarget(request, conn), Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started}), started
 }
 
 // endDirectAttempt reports one finished direct attempt to the observer's end

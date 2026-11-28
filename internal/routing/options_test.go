@@ -185,10 +185,7 @@ func TestPolicyOptions(t *testing.T) {
 					if variant.slow {
 						options.Latency = routing.LatencyOptions{Enabled: true, MinimumSamples: 1, RetryPeriod: time.Hour, UpdateInterval: time.Hour}
 					}
-					policy, err := routing.NewPolicy(options)
-					if err != nil {
-						t.Fatal(err)
-					}
+					policy := routing.NewPolicy(options)
 					m := optionsSnapshot(t, variant.hosts)
 					if err := policy.Validate(m.Public()); err != nil {
 						t.Fatal(err)
@@ -213,7 +210,7 @@ func TestPolicyOptions(t *testing.T) {
 	t.Run("ReplicaShards", func(t *testing.T) {
 		// A tablet replica's route goes to the tablet's shard, then to any
 		// shard of the host; a vnode replica's to the shard owning the token.
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		policy := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, nil)
 		routes := planRoutes(policy, tablet, m)
 		if len(routes) < 4 || routes[0] != [2]int{4, 2} || routes[1] != [2]int{4, -1} || routes[2] != [2]int{5, 1} || routes[3] != [2]int{5, -1} {
@@ -247,10 +244,7 @@ func TestPolicyOptions(t *testing.T) {
 			{"datacenter down", routing.Options{Datacenter: "b", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true}, func(h []metadata.HostSnapshot) { h[2].Up, h[4].Up = false, false }, true},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				policy, err := routing.NewPolicy(test.options)
-				if err != nil {
-					t.Fatal(err)
-				}
+				policy := routing.NewPolicy(test.options)
 				if err := policy.Validate(optionsSnapshot(t, test.hosts).Public()); (err == nil) != test.valid {
 					t.Fatalf("Validate = %v, want valid %v", err, test.valid)
 				}
@@ -258,20 +252,14 @@ func TestPolicyOptions(t *testing.T) {
 		}
 		// A rack without a datacenter is a rack of the session's local
 		// datacenter; without one it fails validation.
-		policy, err := routing.NewPolicy(routing.Options{Rack: "r1"})
-		if err != nil {
-			t.Fatal(err)
-		}
+		policy := routing.NewPolicy(routing.Options{Rack: "r1"})
 		if err := policy.Validate(optionsSnapshot(t, nil).Public()); err == nil {
 			t.Fatal("a rack without a datacenter validated in a session without one")
 		}
 	})
 
 	t.Run("RackOfSessionDatacenter", func(t *testing.T) {
-		policy, err := routing.NewPolicy(routing.Options{Rack: "r1", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
-		if err != nil {
-			t.Fatal(err)
-		}
+		policy := routing.NewPolicy(routing.Options{Rack: "r1", NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, nil)
 		implRouting.SnapshotData(m).InternalHostIndex.InternalSetLocal("a", "r2")
 		if err := policy.Validate(m.Public()); err != nil {
@@ -284,32 +272,33 @@ func TestPolicyOptions(t *testing.T) {
 
 	t.Run("LocalConsistencyStaysLocal", func(t *testing.T) {
 		local := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](1), Kind: cql.OrdinaryStatement, Consistency: cql.LocalQuorum}
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		policy := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, nil)
 		if hosts := policyHosts(policy, local, m); !inTiers(hosts, [][]byte{{1, 2}, {4}}) {
 			t.Fatalf("LOCAL_QUORUM plan %v, want datacenter a only", hosts)
 		}
-		policy, _ = routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, RemoteForLocalConsistency: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		policy = routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, RemoteForLocalConsistency: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		if hosts := policyHosts(policy, local, m); !inTiers(hosts, [][]byte{{1, 2}, {3}, {4}, {5}}) {
 			t.Fatalf("LOCAL_QUORUM plan with RemoteForLocalConsistency %v, want a's replicas, the remote replica, then the other hosts", hosts)
 		}
 	})
 
 	t.Run("MaxRemoteHostsPerDC", func(t *testing.T) {
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, MaxRemoteHostsPerDC: 1, FixedReplicaOrder: true, NoLeaderAware: true})
+		policy := routing.NewPolicy(routing.Options{Datacenter: "a", AllowRemote: true, MaxRemoteHostsPerDC: 1, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, nil)
 		if hosts := policyHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{1, 2}, {3}, {4}}) {
 			t.Fatalf("plan %v, want a's replicas, one host of b, then a's other host", hosts)
 		}
-		if _, err := routing.NewPolicy(routing.Options{MaxRemoteHostsPerDC: -1}); err == nil {
-			t.Fatal("a negative MaxRemoteHostsPerDC was accepted")
+		var invalid *cql.ValidationError
+		if err := routing.NewPolicy(routing.Options{MaxRemoteHostsPerDC: -1}).Validate(m.Public()); !errors.As(err, &invalid) || invalid.Field != "Options.MaxRemoteHostsPerDC" {
+			t.Fatalf("Validate of a negative MaxRemoteHostsPerDC = %v, want a cql.ValidationError of Options.MaxRemoteHostsPerDC", err)
 		}
 	})
 
 	t.Run("Unreachable", func(t *testing.T) {
 		// Hosts that are down or not connected come after every reachable
 		// host of the plan's tiers, replicas among them.
-		policy, _ := routing.NewPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
+		policy := routing.NewPolicy(routing.Options{Datacenter: "a", Rack: "r1", AllowRemote: true, FixedReplicaOrder: true, NoLeaderAware: true})
 		m := optionsSnapshot(t, func(h []metadata.HostSnapshot) { h[0].Connected, h[1].Up = false, false })
 		if hosts := policyHosts(policy, vnode, m); !inTiers(hosts, [][]byte{{3}, {4}, {5}, {1, 2}}) {
 			t.Fatalf("plan %v, want reachable 3, 4, 5, then 1 and 2", hosts)
@@ -363,7 +352,7 @@ func TestSingleTarget(t *testing.T) {
 // each hint replaces every tablet it overlaps, and later plans route by it,
 // while plans of the snapshot before it keep the replicas they had.
 func TestTabletMigration(t *testing.T) {
-	policy, _ := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
+	policy := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 	m := optionsSnapshot(t, nil)
 	for _, step := range []struct {
 		name string

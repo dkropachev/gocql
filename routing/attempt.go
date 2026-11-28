@@ -15,6 +15,12 @@ import (
 // Info describes a request for routing: what it reads or writes, and any
 // host or shard it must go to.
 //
+// HostID, ShardID and AnyShardFallback describe a request pinned with
+// execopt.Options.HostID. The session routes such a request to that host
+// itself, without consulting the Policy, so a Policy's Pick and Fallback never
+// see them set; observe.RequestStart.Routing and a
+// config.Profile.CQLTraceSampler do.
+//
 // The driver fills it; its zero value describes a request with no keyspace,
 // token or target.
 type Info struct {
@@ -38,6 +44,34 @@ type Info struct {
 	// as execopt.Options.AnyShardFallback sets it; without it the request stays
 	// on ShardID.
 	AnyShardFallback bool
+}
+
+// AttemptStart describes an attempt as it is sent to its target.
+//
+// The driver fills it; its zero value is empty.
+type AttemptStart struct {
+	// Started is when the attempt was sent.
+	Started time.Time
+	// Address is the host:port of the connection the attempt is sent on, or
+	// the socket path of a Unix socket connection.
+	Address string
+	// AddrPort is Address as an IP address and port, as an OpenTelemetry
+	// span's server.address and server.port take it, and is the zero
+	// AddrPort for a Unix socket connection.
+	AddrPort netip.AddrPort
+	// RequestID is the ID of the attempt's request.
+	RequestID uint64
+	// Page is the 1-based number of the page the attempt fetches within
+	// its request.
+	Page int
+	// Attempt is the 1-based number of the attempt within its page.
+	Attempt int
+	// Target is the host, and shard, the attempt was sent to.
+	Target metadata.Target
+	// Consistency is the consistency level the attempt uses.
+	Consistency cql.Consistency
+	// Speculative reports a speculative attempt.
+	Speculative bool
 }
 
 // AttemptEvent describes how an attempt ended.
@@ -72,7 +106,8 @@ type AttemptEvent struct {
 	// Target is the host, and shard, the attempt was sent to.
 	Target metadata.Target
 	// CQLTraceID is the CQL trace session the attempt's response named, when
-	// the execution ran with CQL tracing and a response arrived.
+	// the execution ran with CQL tracing and a response arrived. CQLTrace
+	// returns it as the reference package cqltrace reads.
 	CQLTraceID cql.Option[cql.UUID]
 	// Consistency is the consistency level the attempt used.
 	Consistency cql.Consistency
@@ -86,4 +121,15 @@ type AttemptEvent struct {
 	// TimedOut reports one whose error is cqlerr.KindTimeout: the server or
 	// the driver gave up waiting. Speculative reports a speculative attempt.
 	Canceled, TimedOut, Speculative bool
+}
+
+// CQLTrace returns the reference to the attempt's CQL trace session, as
+// cql.Result.CQLTraces lists it, for cqltrace.Fetch: the session ID, the
+// target host as its coordinator, the page, the attempt, whether it failed
+// and whether it was speculative. It returns false when CQLTraceID is unset.
+func (e AttemptEvent) CQLTrace() (cql.CQLTraceRef, bool) {
+	if !e.CQLTraceID.Set {
+		return cql.CQLTraceRef{}, false
+	}
+	return cql.CQLTraceRef{ID: e.CQLTraceID.Value, HostID: e.Target.HostID, Page: e.Page, Attempt: e.Attempt, Failed: e.Err != nil, Speculative: e.Speculative}, true
 }

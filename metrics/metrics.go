@@ -60,7 +60,7 @@ type Snapshot struct {
 	// until the answer arrives or the connection closes.
 	Orphans uint64
 	// InFlight is the number of executions started and not yet finished.
-	InFlight int64
+	InFlight int
 	// Connections is the number of connections the session's pools hold to
 	// nodes, the control connection not included. Session.Metrics counts
 	// them host by host, so reading it costs a lock per host.

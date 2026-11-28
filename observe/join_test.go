@@ -27,7 +27,7 @@ func requestHook(name string, log *[]string) observe.Hooks {
 }
 
 func attemptHook(name string, log *[]string) observe.Hooks {
-	return observe.Hooks{Attempt: func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent) {
+	return observe.Hooks{Attempt: func(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 		*log = append(*log, fmt.Sprintf("%s attempt %d parent=%v", name, start.Attempt, ctx.Value(ctxKey("span"))))
 		return func(e routing.AttemptEvent) { *log = append(*log, fmt.Sprintf("%s attempt end %d", name, e.Attempt)) }
 	}}
@@ -45,7 +45,7 @@ func TestJoin(t *testing.T) {
 			t.Fatal("joined hooks lack a hook")
 		}
 		ctx, endRequest := o.Request(context.Background(), observe.RequestStart{ID: 7})
-		endAttempt := o.Attempt(ctx, observe.AttemptStart{Attempt: 1})
+		endAttempt := o.Attempt(ctx, routing.AttemptStart{Attempt: 1})
 		endAttempt(routing.AttemptEvent{Attempt: 1})
 		endRequest(observe.RequestEvent{})
 		want := []string{
@@ -83,7 +83,7 @@ func TestJoin(t *testing.T) {
 		if o.Request != nil || o.Attempt == nil {
 			t.Fatal("a join of attempt hooks has a request hook or no attempt hook")
 		}
-		end := o.Attempt(context.Background(), observe.AttemptStart{Attempt: 2})
+		end := o.Attempt(context.Background(), routing.AttemptStart{Attempt: 2})
 		end(routing.AttemptEvent{Attempt: 2})
 		want := []string{"a attempt 2 parent=<nil>", "b attempt 2 parent=<nil>", "a attempt end 2", "b attempt end 2"}
 		if !slices.Equal(log, want) {
@@ -117,7 +117,7 @@ func TestJoin(t *testing.T) {
 		bad := observe.Hooks{Request: func(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 			panic("start")
 		}}
-		badEnd := observe.Hooks{Attempt: func(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+		badEnd := observe.Hooks{Attempt: func(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 			return func(routing.AttemptEvent) { panic("end") }
 		}}
 		o := observe.Join(bad, requestHook("a", &log), badEnd, attemptHook("b", &log))
@@ -131,7 +131,7 @@ func TestJoin(t *testing.T) {
 			t.Fatalf("end raised %v, want the start panic", v)
 		}
 		// A panic in an end function still ends the others.
-		endAttempt := o.Attempt(context.Background(), observe.AttemptStart{Attempt: 2})
+		endAttempt := o.Attempt(context.Background(), routing.AttemptStart{Attempt: 2})
 		if v := recovered(func() { endAttempt(routing.AttemptEvent{Attempt: 2}) }); v != "end" {
 			t.Fatalf("attempt end raised %v, want the end panic", v)
 		}

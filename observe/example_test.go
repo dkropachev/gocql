@@ -28,7 +28,7 @@ func ExampleJoin() {
 			}
 		}
 	}}
-	retries := observe.Hooks{Attempt: func(_ context.Context, start observe.AttemptStart) func(routing.AttemptEvent) {
+	retries := observe.Hooks{Attempt: func(_ context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 		if start.Attempt == 1 {
 			return nil
 		}
@@ -73,7 +73,7 @@ func Example_prometheus() {
 				histogramFor(outcome).Observe(e.Finished.Sub(start.Started).Seconds())
 			}
 		},
-		Attempt: func(_ context.Context, start observe.AttemptStart) func(routing.AttemptEvent) {
+		Attempt: func(_ context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 			attemptsOn(start.Address).Inc()
 			return nil
 		},
@@ -86,8 +86,10 @@ func Example_prometheus() {
 }
 
 // A Request hook that logs each statement with its bound values, the column
-// named password redacted. The values are borrowed, so the hook formats them
-// before it returns, not in the end function.
+// named password redacted. The values are borrowed from the request and
+// valid until the request's end function returns, so a hook may format them
+// in the start hook, as here, or in the end function, but must copy what it
+// keeps longer, such as for a goroutine of its own.
 func ExampleBoundValues_Format() {
 	redact := func(column cql.ColumnSpec) bool { return column.Name == "password" }
 	hooks := observe.Hooks{Request: func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent)) {

@@ -43,10 +43,7 @@ func BenchmarkConn(b *testing.B) {
 		const workers = 16
 		ctx := context.Background()
 		session := createV2Session(b, func(cfg *config.ConfigBuilder) {
-			policy, err := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
-			if err != nil {
-				b.Fatal(err)
-			}
+			policy := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 			editDefaultProfile(cfg.WithPool(config.PerHost{Connections: 1}), func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 		})
 		defer session.Close()

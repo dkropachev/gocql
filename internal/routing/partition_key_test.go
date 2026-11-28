@@ -73,6 +73,13 @@ func TestPartitionKey(t *testing.T) {
 		if !bytes.Equal(output.Bytes(), []byte{0, 1, 3, 0, 0, 2, 1, 2, 0}) {
 			t.Fatal(output.Bytes())
 		}
+		var written bytes.Buffer
+		if n, err := key.WriteTo(&written); err != nil || n != key.Len() || !bytes.Equal(written.Bytes(), output.Bytes()) {
+			t.Fatalf("WriteTo = %d, %v, wrote %v, want %v", n, err, written.Bytes(), output.Bytes())
+		}
+		if _, err := key.WriteTo(nil); err == nil {
+			t.Fatal("WriteTo accepted a nil writer")
+		}
 		// Input payload spans are reused; the caller's borrowing contract is real.
 		first[0] = 9
 		output.Reset()

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sync/atomic"
 	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
@@ -16,6 +17,8 @@ import (
 	"github.com/scylladb/gocql/v2/cqlerr"
 	"github.com/scylladb/gocql/v2/cqltrace"
 	"github.com/scylladb/gocql/v2/execopt"
+	"github.com/scylladb/gocql/v2/observe"
+	"github.com/scylladb/gocql/v2/routing"
 )
 
 func ExampleFetch() {
@@ -43,9 +46,8 @@ func ExampleFetch() {
 		log.Fatal(err)
 	}
 	for _, trace := range result.CQLTraces() {
-		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		// Fetch waits at most Fetcher.MaxWait, 10s by default.
 		info, err := cqltrace.Fetch(ctx, session, trace)
-		cancel()
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -89,4 +91,45 @@ func ExampleFetchAll() {
 	for _, info := range infos {
 		fmt.Print(info)
 	}
+}
+
+// Example_slowQueries traces one request in a hundred and prints the CQL
+// trace of each traced attempt slower than 100ms. Hooks receive no session,
+// and the session that runs them does not exist until Connect returns, so
+// the hook reads it through an atomic.Pointer stored after Connect; an
+// attempt that ends before then is not fetched. The fetch runs on a
+// goroutine of its own, since a hook that blocks delays the request.
+func Example_slowQueries() {
+	ctx := context.Background()
+	var current atomic.Pointer[gocql.Session]
+	var requests atomic.Uint64
+	hooks := observe.Hooks{Attempt: func(_ context.Context, _ routing.AttemptStart) func(routing.AttemptEvent) {
+		return func(e routing.AttemptEvent) {
+			ref, traced := e.CQLTrace()
+			session := current.Load()
+			if !traced || session == nil || e.Latency < 100*time.Millisecond {
+				return
+			}
+			go func() {
+				info, err := cqltrace.Fetch(context.Background(), session, ref)
+				if err != nil {
+					log.Printf("trace %s: %v", ref.ID, err)
+					return
+				}
+				log.Printf("slow attempt %d of page %d took %v:\n%s", ref.Attempt, ref.Page, e.Latency, info)
+			}()
+		}
+	}}
+	profile := config.NewProfile().WithCQLTraceSampler(func(routing.Info) bool { return requests.Add(1)%100 == 0 })
+	cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithObserver(hooks).WithDefaultProfile(profile).Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	session, err := gocql.Connect(ctx, cfg)
+	if err != nil {
+		log.Fatal(err)
+	}
+	current.Store(session)
+	defer session.Close()
+	// Run the application's requests with session.
 }

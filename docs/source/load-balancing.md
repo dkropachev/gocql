@@ -11,7 +11,12 @@ leader-aware with shuffled replicas, and `WithRouting(nil)` restores it.
 datacenter/rack preference, remote fallback, latency ordering, and turns off
 token awareness (`NoTokenAware`), replica shuffling (`FixedReplicaOrder`) or
 leader-aware routing (`NoLeaderAware`). The zero `routing.Options` is the
-default policy. `routing.SingleTarget` pins a typed host/shard target.
+default policy. Invalid options, such as a negative `MaxRemoteHostsPerDC`,
+fail `ProfileBuilder.Build` and `ConfigBuilder.Build` with a
+`cql.ValidationError` whose `Field` names the option
+(`Options.MaxRemoteHostsPerDC`, `Options.Latency.ExclusionThreshold`), and
+so does the policy's `Validate`. `routing.SingleTarget` pins a typed
+host/shard target.
 
 ## Local datacenter
 
@@ -63,8 +68,15 @@ A policy may also implement two optional interfaces:
 
 Package `routing/routingtest` builds snapshots from hosts, schema, token
 ranges and tablets, so a policy can be tested without a cluster;
-`routingtest.Host` makes an up, connected host and `Cluster.Tables` adds
-tables without writing their schema.
+`routingtest.Host` makes an up, connected host, `Cluster.Tables` adds
+tables without writing their schema, and `routingtest.Request(ks, table,
+token)` describes an ordinary request: a `routing.Info` whose zero `Kind`,
+`cql.UnknownStatement`, routes as possibly conditional, in replica order
+without `Pick`.
+
+A request pinned with `execopt.Options.HostID` goes to that host without
+consulting the policy, so `Pick` and `Fallback` never see the `HostID`,
+`ShardID` and `AnyShardFallback` of a `routing.Info` set.
 
 The session combines Pick and Fallback into the plan a request follows.
 `Plan.Next` lazily returns `metadata.Route` values; Pick and Next must not
@@ -96,14 +108,10 @@ each policy's routes in turn, skipping repeats:
 ```go
 // notDC2 is the default policy, except that it never routes to a host in
 // dc2.
-func notDC2() (routing.Policy, error) {
-	builtin, err := routing.NewPolicy(routing.Options{})
-	if err != nil {
-		return nil, err
-	}
-	return routing.Filter(builtin, func(r metadata.Route) bool {
+func notDC2() routing.Policy {
+	return routing.Filter(routing.NewPolicy(routing.Options{}), func(r metadata.Route) bool {
 		return r.Datacenter() != "dc2"
-	}), nil
+	})
 }
 ```
 
@@ -166,8 +174,9 @@ still answer from them.
 `config.ConfigBuilder.WithPartitioner(name, partitioner)` maps a partitioner
 class name to a `routing.TokenPartitioner`, next to the built-in
 `routing.Murmur3TokenPartitioner` and `routing.CDCTokenPartitioner`.
-PartitionKey.ForEach streams canonical encoded components without gathering;
-consume borrowed spans synchronously. Unknown partitioners disable token routing
+`PartitionKey.ForEach` streams canonical encoded components without
+gathering, and `PartitionKey.WriteTo` writes them to an `io.Writer`, such as
+a `hash.Hash`; consume borrowed spans synchronously. Unknown partitioners disable token routing
 with a diagnostic. Tablet placement and opaque version identities survive in
 immutable snapshots; retained snapshots remain valid after refresh.
 

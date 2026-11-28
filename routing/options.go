@@ -3,15 +3,15 @@
 
 package routing
 
-import (
-	"errors"
-	"math"
-	"time"
-
-	"github.com/scylladb/gocql/v2/cql"
-)
+import "time"
 
 // Options configures NewPolicy.
+//
+// Invalid options, such as a negative MaxRemoteHostsPerDC or a
+// LatencyOptions field out of range, fail config.ProfileBuilder.Build,
+// config.ConfigBuilder.Build and the policy's Validate with a
+// cql.ValidationError whose Field names the option, such as
+// "Options.MaxRemoteHostsPerDC" or "Options.Latency.ExclusionThreshold".
 //
 // The zero Options is the session's default policy: token-aware, with
 // replicas shuffled per request and leader-aware for strongly consistent
@@ -28,7 +28,7 @@ type Options struct {
 	Latency LatencyOptions
 	// MaxRemoteHostsPerDC, when positive, is the most hosts of each other
 	// datacenter a plan tries, replicas included, when AllowRemote is set.
-	// Zero tries every one; a negative value is rejected.
+	// Zero tries every one; a negative value is invalid.
 	MaxRemoteHostsPerDC int
 	// NoTokenAware routes a request without regard to the replicas of its
 	// partition. It also turns leader-aware routing off.
@@ -78,35 +78,4 @@ type LatencyOptions struct {
 	// UpdateInterval is how often the fastest latency is recomputed.
 	// Default 1s.
 	UpdateInterval time.Duration
-}
-
-// normalized returns o with latency defaults applied, or a validation error.
-func (o Options) normalized() (Options, error) {
-	if o.MaxRemoteHostsPerDC < 0 {
-		return o, &cql.ValidationError{Field: "routing remote hosts", Err: errors.New("must not be negative")}
-	}
-	if !o.Latency.Enabled {
-		return o, nil
-	}
-	l := &o.Latency
-	if l.ExclusionThreshold == 0 {
-		l.ExclusionThreshold = 2
-	}
-	if l.MinimumSamples == 0 {
-		l.MinimumSamples = 50
-	}
-	if l.Scale == 0 {
-		l.Scale = 100 * time.Millisecond
-	}
-	if l.RetryPeriod == 0 {
-		l.RetryPeriod = 10 * time.Second
-	}
-	if l.UpdateInterval == 0 {
-		l.UpdateInterval = time.Second
-	}
-	if l.ExclusionThreshold < 1 || math.IsNaN(l.ExclusionThreshold) || math.IsInf(l.ExclusionThreshold, 0) ||
-		l.MinimumSamples < 1 || l.Scale <= 0 || l.RetryPeriod <= 0 || l.UpdateInterval <= 0 {
-		return o, &cql.ValidationError{Field: "latency routing", Err: errors.New("invalid configuration")}
-	}
-	return o, nil
 }

@@ -259,6 +259,32 @@ func TestFetchReadiness(t *testing.T) {
 			t.Fatalf("info %+v", info)
 		}
 	})
+	// MaxWait bounds the wait when ctx does not: a session never ready
+	// fails with ErrNotReady once it passes.
+	t.Run("MaxWait", func(t *testing.T) {
+		readSession, _ := reader(sessionRead{row: notYet, found: true})
+		readEvents, _ := events(0)
+		f := fast
+		f.MaxWait = 20 * time.Millisecond
+		start := time.Now()
+		info, err := f.fetch(context.Background(), id, readSession, readEvents)
+		if !errors.Is(err, ErrNotReady) || !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err %v, want ErrNotReady and context.DeadlineExceeded", err)
+		}
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Fatalf("waited %v past MaxWait", elapsed)
+		}
+		if info.ID != id {
+			t.Fatalf("info %+v", info)
+		}
+		// A negative MaxWait leaves ctx alone to bound the wait.
+		f.MaxWait = -1
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+		if _, err := f.fetch(ctx, id, readSession, readEvents); !errors.Is(err, ErrNotReady) || ctx.Err() == nil {
+			t.Fatalf("err %v before ctx ended", err)
+		}
+	})
 	// A read the ended context fails reports ErrNotReady too.
 	t.Run("ReadFailsAsContextEnds", func(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())

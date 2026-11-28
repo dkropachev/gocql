@@ -107,13 +107,13 @@ func TestOverlayOptions(t *testing.T) {
 	}
 	var calls []string
 	hooks := func(name string) observe.Hooks {
-		return observe.Hooks{Attempt: func(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+		return observe.Hooks{Attempt: func(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 			calls = append(calls, name)
 			return nil
 		}}
 	}
 	joined := overlayOptions(Options{Observer: hooks("view")}, Options{Observer: hooks("call")})
-	joined.Observer.Attempt(t.Context(), observe.AttemptStart{})
+	joined.Observer.Attempt(t.Context(), routing.AttemptStart{})
 	if len(calls) != 2 || calls[0] != "view" || calls[1] != "call" {
 		t.Fatalf("joined observers ran %v, want view then call", calls)
 	}

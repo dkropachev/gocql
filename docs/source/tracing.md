@@ -17,7 +17,9 @@ coordinator `HostID`, the `Page` it fetched, its `Attempt` number within
 that page, and whether it `Failed` or was `Speculative`. The `Result` of a failed request lists its failed attempts'
 sessions too, so tracing a timeout needs no error unwrapping. The IDs also
 come back on each `cqlerr.AttemptFailure.CQLTraceID` and each
-`routing.AttemptEvent.CQLTraceID`. Package `cqltrace` reads a session:
+`routing.AttemptEvent.CQLTraceID`, whose `CQLTrace()` methods return them as
+the `cql.CQLTraceRef` `cqltrace.Fetch` takes. Package `cqltrace` reads a
+session:
 
 ```go
 insert := cql.Statement[int32, cql.EmptyRow]{
@@ -43,13 +45,16 @@ for _, trace := range result.CQLTraces() {
 ```
 
 The cluster writes a trace session after it answers, so `Fetch` polls until
-the session's duration and at least one event are visible, within `ctx`.
-Events can still arrive after that, so `Fetch` then waits until the event
-count stays the same for 200ms; `Info.Settled` reports whether it did, and is
-false when `ctx` ended first. A `cqltrace.Fetcher` changes that wait with
-`Settle` (negative skips it), the poll interval and the read consistency.
-When `ctx` ends before the session is ready, the error matches
-`cqltrace.ErrNotReady`. `Fetch` reads from the reference's `HostID`, the
+the session's duration and at least one event are visible, within `ctx` and
+at most 10s. Events can still arrive after that, so `Fetch` then waits until
+the event count stays the same for 200ms; `Info.Settled` reports whether it
+did, and is false when `ctx` or the 10s ended first. A `cqltrace.Fetcher`
+changes that wait with `Settle` (negative skips it), `MaxWait` (negative
+leaves only `ctx` to bound it), the poll interval and the read consistency.
+When `ctx` ends or `MaxWait` passes before the session is ready, the error
+matches `cqltrace.ErrNotReady`, since a session the cluster never wrote, as
+when tracing failed on the server, would otherwise be polled for as long as
+`ctx` lasts. `Fetch` reads from the reference's `HostID`, the
 coordinator, which has the session's row and its own events first; once a
 read there fails, as when the host is down, it reads from any replica. Its
 reads run without the session's hooks and stay out of `Session.Metrics` and
@@ -102,7 +107,7 @@ hooks as new fields, so existing `Hooks` keep compiling.
 
 ```go
 hooks := observe.Hooks{
-	Attempt: func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent) {
+	Attempt: func(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent) {
 		return func(e routing.AttemptEvent) {
 			log.Printf("attempt %d on %s at %v: %v (%v)", e.Attempt, e.Address, e.Consistency, e.Err, e.ExecutionStatus)
 		}
@@ -155,6 +160,42 @@ hooks.Request = func(ctx context.Context, start observe.RequestStart) (context.C
 The driver itself depends on no tracing library. To link the two kinds, an
 `Attempt` hook can record `AttemptEvent.CQLTraceID` on its attempt span when
 the request runs with `CQLTrace`.
+
+Hooks receive no session: the configuration that holds them is built before
+`gocql.Connect` returns the session. A hook that reads CQL traces, such as one
+that prints the trace of every slow attempt, binds the session once Connect
+returns it, through an `atomic.Pointer`, and fetches on a goroutine of its
+own so that it does not delay the request (`cqltrace`'s `Example_slowQueries`
+has the whole program):
+
+```go
+var current atomic.Pointer[gocql.Session]
+hooks := observe.Hooks{Attempt: func(_ context.Context, _ routing.AttemptStart) func(routing.AttemptEvent) {
+	return func(e routing.AttemptEvent) {
+		ref, traced := e.CQLTrace()
+		if s := current.Load(); traced && s != nil && e.Latency > 100*time.Millisecond {
+			go func() {
+				if info, err := cqltrace.Fetch(context.Background(), s, ref); err == nil {
+					log.Printf("slow attempt:\n%s", info)
+				}
+			}()
+		}
+	}
+}}
+cfg, err := config.New(config.ScyllaV4, "localhost:9042").WithObserver(hooks).Build()
+if err != nil {
+	return err
+}
+session, err := gocql.Connect(ctx, cfg)
+if err != nil {
+	return err
+}
+current.Store(session)
+```
+
+`cqltrace.Fetcher.MaxWait`, 10s by default, bounds how long `Fetch` waits for
+a session the cluster has not written, so a hook's goroutine ends even when
+its context has no deadline.
 
 ## Metrics
 

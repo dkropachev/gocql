@@ -4,6 +4,7 @@
 package routing_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -11,13 +12,22 @@ import (
 	"github.com/scylladb/gocql/v2/routing"
 )
 
+func TestAttemptEventCQLTrace(t *testing.T) {
+	if _, ok := (routing.AttemptEvent{}).CQLTrace(); ok {
+		t.Error("an attempt without a trace session has a reference")
+	}
+	id, host := cql.RandomUUID(), cql.RandomUUID()
+	e := routing.AttemptEvent{CQLTraceID: cql.Some(id), Target: metadata.Target{HostID: host}, Page: 2, Attempt: 3, Speculative: true, Err: errors.New("unavailable")}
+	ref, ok := e.CQLTrace()
+	if want := (cql.CQLTraceRef{ID: id, HostID: host, Page: 2, Attempt: 3, Failed: true, Speculative: true}); !ok || ref != want {
+		t.Errorf("CQLTrace = %+v, %v, want %+v", ref, ok, want)
+	}
+}
+
 // TestWithoutSession runs where no session is linked: this package's test
 // binary leaves out the engine that implements the built-in policies.
 func TestWithoutSession(t *testing.T) {
-	p, err := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	p := routing.NewPolicy(routing.Options{FixedReplicaOrder: true, NoLeaderAware: true})
 	if err := p.Validate(nil); err == nil {
 		t.Error("Validate succeeded without a session")
 	}
@@ -39,13 +49,7 @@ func TestWithoutSession(t *testing.T) {
 	}
 }
 
-func TestNewPolicyValidates(t *testing.T) {
-	if _, err := routing.NewPolicy(routing.Options{MaxRemoteHostsPerDC: -1}); err == nil {
-		t.Error("NewPolicy accepted a negative MaxRemoteHostsPerDC")
-	}
-	if _, err := routing.NewPolicy(routing.Options{Datacenter: "dc", Latency: routing.LatencyOptions{Enabled: true, ExclusionThreshold: 0.5}}); err == nil {
-		t.Error("NewPolicy accepted an exclusion threshold below 1")
-	}
+func TestZeroRoute(t *testing.T) {
 	var zero metadata.Route
 	if zero.Usable() || zero.HostID() != zero.Target().HostID || zero.ShardOf(1).Set || zero.ShardID().Set {
 		t.Error("the zero Route has a host")

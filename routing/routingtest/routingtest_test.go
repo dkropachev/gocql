@@ -35,7 +35,7 @@ func cluster() routingtest.Cluster {
 	}
 }
 
-var info = routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](42), Kind: cql.OrdinaryStatement}
+var info = routingtest.Request("ks", "t", 42)
 
 // planHosts follows the plan of policy and returns the last byte of each
 // host it routes to, once each.
@@ -101,10 +101,7 @@ func TestNewSnapshot(t *testing.T) {
 // locality when its options name no datacenter of their own.
 func TestLocalDatacenter(t *testing.T) {
 	newPolicy := func(o routing.Options) routing.Policy {
-		p, err := routing.NewPolicy(o)
-		if err != nil {
-			t.Fatal(err)
-		}
+		p := routing.NewPolicy(o)
 		return p
 	}
 	global := mustSnapshot(t, cluster())
@@ -154,10 +151,7 @@ func (w wrapped) Pick(routing.Info, *metadata.Snapshot) (metadata.Route, bool) {
 // the built-in Validate and Learn, and that the zero Builtin routes as the
 // default policy.
 func TestEmbeddedBuiltin(t *testing.T) {
-	builtin, err := routing.NewPolicy(routing.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	builtin := routing.NewPolicy(routing.Options{})
 	var policy routing.Policy = wrapped{builtin}
 	validator, ok := policy.(routing.Validator)
 	if !ok {
@@ -203,7 +197,7 @@ func TestVnodeReplicaShards(t *testing.T) {
 	if !want.Set || want.Value >= 8 {
 		t.Fatalf("ShardOf without connections = %v", want)
 	}
-	routes := routing.ReplicaRoutes(m, routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some(token), Kind: cql.OrdinaryStatement})
+	routes := routing.ReplicaRoutes(m, routingtest.Request("ks", "t", token))
 	if len(routes) != 4 {
 		t.Fatalf("ReplicaRoutes = %v", routes)
 	}
@@ -234,10 +228,7 @@ func TestReplicaRoutesWithoutTableSchema(t *testing.T) {
 	if routes := routing.ReplicaRoutes(m, info); len(routes) != 1 || routes[0].HostID()[15] != 3 {
 		t.Fatalf("ReplicaRoutes without table schema = %v", routes)
 	}
-	policy, err := routing.NewPolicy(routing.Options{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	policy := routing.NewPolicy(routing.Options{})
 	for range 10 {
 		if got := planHosts(t, policy, m); len(got) == 0 || got[0] != 3 {
 			t.Fatalf("built-in plan without table schema: %v", got)
@@ -343,10 +334,7 @@ func TestCombinedPolicies(t *testing.T) {
 	c := cluster()
 	c.LocalDatacenter = "a"
 	m := mustSnapshot(t, c)
-	builtin, err := routing.NewPolicy(routing.Options{AllowRemote: true})
-	if err != nil {
-		t.Fatal(err)
-	}
+	builtin := routing.NewPolicy(routing.Options{AllowRemote: true})
 	notOne := func(r metadata.Route) bool { return r.HostID()[15] != 1 }
 	for range 20 {
 		if got := planHosts(t, routing.Filter(builtin, notOne), m); len(got) != 3 || slices.Contains(got, 1) {

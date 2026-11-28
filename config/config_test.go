@@ -856,6 +856,33 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("InvalidRoutingOptions", func(t *testing.T) {
+		for field, options := range map[string]routing.Options{
+			"Options.MaxRemoteHostsPerDC":        {MaxRemoteHostsPerDC: -1},
+			"Options.Latency.ExclusionThreshold": {Latency: routing.LatencyOptions{Enabled: true, ExclusionThreshold: 0.5}},
+			"Options.Latency.MinimumSamples":     {Latency: routing.LatencyOptions{Enabled: true, MinimumSamples: -1}},
+			"Options.Latency.Scale":              {Latency: routing.LatencyOptions{Enabled: true, Scale: -1}},
+			"Options.Latency.RetryPeriod":        {Latency: routing.LatencyOptions{Enabled: true, RetryPeriod: -1}},
+			"Options.Latency.UpdateInterval":     {Latency: routing.LatencyOptions{Enabled: true, UpdateInterval: -1}},
+		} {
+			policy := routing.NewPolicy(options)
+			profile := NewProfile().WithRouting(policy)
+			var invalid *cql.ValidationError
+			if _, err := profile.Build(); !errors.As(err, &invalid) || invalid.Field != field {
+				t.Errorf("ProfileBuilder.Build with %+v = %v, want a cql.ValidationError of %s", options, err, field)
+			}
+			if _, err := New(ScyllaV4, "h").WithDefaultProfile(profile).Build(); !errors.As(err, &invalid) || invalid.Field != field {
+				t.Errorf("ConfigBuilder.Build with %+v = %v, want a cql.ValidationError of %s", options, err, field)
+			}
+			if err := policy.Validate(nil); !errors.As(err, &invalid) || invalid.Field != field {
+				t.Errorf("Validate with %+v = %v, want a cql.ValidationError of %s", options, err, field)
+			}
+		}
+		if _, err := NewProfile().WithRouting(routing.NewPolicy(routing.Options{Latency: routing.LatencyOptions{Enabled: true}})).Build(); err != nil {
+			t.Errorf("default latency options: %v", err)
+		}
+	})
+
 	t.Run("ReconnectProbedOnceInBuild", func(t *testing.T) {
 		policy := &countingReconnect{delay: 2 * time.Second, again: true}
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(policy)).settings

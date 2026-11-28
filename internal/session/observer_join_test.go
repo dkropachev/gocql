@@ -53,7 +53,7 @@ func (o *orderObserver) StartRequest(ctx context.Context, _ observe.RequestStart
 	return context.WithValue(ctx, orderCtxKey{}, o.name), func(observe.RequestEvent) { o.log.add(o.name + " request end") }
 }
 
-func (o *orderObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o *orderObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	o.log.add(o.name + " attempt")
 	return func(routing2.AttemptEvent) { o.log.add(o.name + " attempt end") }
 }

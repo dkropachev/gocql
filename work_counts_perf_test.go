@@ -287,7 +287,7 @@ func TestWorkCountsPerf(t *testing.T) {
 						if kind == "latency" {
 							opts.Latency.Enabled = true
 						}
-						policy := codecTestMust(routing.NewPolicy(opts))
+						policy := routing.NewPolicy(opts)
 						if kind == "latency" {
 							builtinPolicy(policy).InternalDecisions.Store(&routingDecisions{InternalSlow: map[cql.UUID]time.Time{storage.InternalHosts[2].HostID: time.Now().Add(time.Hour)}})
 						}
@@ -421,7 +421,7 @@ func (o *testObserver) ObserveAttempt(routing.AttemptEvent) { o.attempts.Add(1) 
 func (o *testObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *testObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *testObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

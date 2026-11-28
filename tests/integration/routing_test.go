@@ -85,10 +85,7 @@ func TestRouting(t *testing.T) {
 		}
 		hostIDStatement := cql.Statement[cql.EmptyParams, cql.DynamicRow]{CQL: "SELECT host_id FROM system.local", Params: cql.NoParams, Rows: cql.DynamicRows}
 		for i, options := range policies {
-			policy, err := routing.NewPolicy(options)
-			if err != nil {
-				t.Fatal(err)
-			}
+			policy := routing.NewPolicy(options)
 			for _, oneHost := range []bool{false, true} {
 				builder := config.NewProfile()
 				fixtureProfile(builder)
@@ -270,10 +267,7 @@ func TestRouting(t *testing.T) {
 				t.Skip("skipping because we don't have 2 or more hosts")
 			}
 			cluster := newFixtureConfig(clusterHosts[:1], 0)
-			rr, err := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
-			if err != nil {
-				t.Fatal(err)
-			}
+			rr := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			editDefaultProfile(cluster, func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
@@ -306,10 +300,7 @@ func TestRouting(t *testing.T) {
 				t.Skip("skipping because we don't have 2 or more hosts")
 			}
 			cluster := createV2Cluster()
-			rr, err := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
-			if err != nil {
-				t.Fatal(err)
-			}
+			rr := routing.NewPolicy(routing.Options{NoTokenAware: true, FixedReplicaOrder: true, NoLeaderAware: true})
 			editDefaultProfile(cluster, func(p *config.ProfileBuilder) { p.WithRouting(rr) })
 			// we'll filter out the second host
 			filtered := clusterHosts[1]
