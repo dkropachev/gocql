@@ -25,7 +25,7 @@ import (
 // events.
 type pageObserver struct {
 	mu       sync.Mutex
-	starts   []observe.AttemptStart
+	starts   []routing2.AttemptStart
 	attempts []routing2.AttemptEvent
 	requests []observe.RequestEvent
 }
@@ -38,7 +38,7 @@ func (o *pageObserver) StartRequest(ctx context.Context, _ observe.RequestStart)
 	}
 }
 
-func (o *pageObserver) StartAttempt(_ context.Context, start observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o *pageObserver) StartAttempt(_ context.Context, start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.starts = append(o.starts, start)

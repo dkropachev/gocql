@@ -45,7 +45,7 @@ func TestRequestLogContext(t *testing.T) {
 	b := runtimeQuery(t)
 	defer b.Close()
 	ctx := context.WithValue(context.Background(), logCtxKey{}, "caller")
-	panics := observe.Hooks{Attempt: func(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+	panics := observe.Hooks{Attempt: func(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 		return func(routing.AttemptEvent) { panic("attempt end") }
 	}}
 	withRequest := observe.Hooks{

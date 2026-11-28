@@ -29,16 +29,14 @@ func ExampleNewSnapshot() {
 	if err != nil {
 		panic(err)
 	}
-	builtin, err := routing.NewPolicy(routing.Options{})
-	if err != nil {
-		panic(err)
-	}
+	builtin := routing.NewPolicy(routing.Options{})
 	// The policy under test never routes to host 1. Filter keeps the
 	// built-in policy's validation and latency tracking.
 	policy := routing.Filter(builtin, func(r metadata.Route) bool { return r.HostID() != hosts[0].HostID })
-	// Kind defaults to cql.UnknownStatement, which routes as a conditional
-	// request would; a test of the usual plan sets OrdinaryStatement.
-	info := routing.Info{Keyspace: "ks", Table: "t", Token: cql.Some[int64](42), Kind: cql.OrdinaryStatement}
+	// A routing.Info's Kind defaults to cql.UnknownStatement, which routes
+	// as a conditional request would; Request sets OrdinaryStatement, for
+	// the usual plan.
+	info := routingtest.Request("ks", "t", 42)
 	for r := range routing.Routes(policy.Fallback(info, m)) {
 		fmt.Println(r.HostID()[15], r.Datacenter(), r.ShardID().Set)
 	}

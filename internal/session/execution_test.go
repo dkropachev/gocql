@@ -64,7 +64,7 @@ func (panicObserver) ObserveAttempt(routing2.AttemptEvent) { panic("attempt") }
 func (o panicObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o panicObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o panicObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 
@@ -74,7 +74,7 @@ type panicStartObserver struct{}
 func (panicStartObserver) StartRequest(context.Context, observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	panic("request start")
 }
-func (panicStartObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (panicStartObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	panic("attempt start")
 }
 
@@ -109,7 +109,7 @@ func (o *pairingObserver) StartRequest(ctx context.Context, start observe.Reques
 	}
 }
 
-func (o *pairingObserver) StartAttempt(ctx context.Context, start observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o *pairingObserver) StartAttempt(ctx context.Context, start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if ctx.Value(observerKey{}) != "span" {
 		o.mu.Lock()
 		o.ctxErr = true

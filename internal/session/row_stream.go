@@ -39,7 +39,6 @@ import (
 	"github.com/scylladb/gocql/v2/internal/transport"
 	"github.com/scylladb/gocql/v2/internal/wire"
 	"github.com/scylladb/gocql/v2/metadata"
-	"github.com/scylladb/gocql/v2/observe"
 	"github.com/scylladb/gocql/v2/retry"
 	"github.com/scylladb/gocql/v2/routing"
 )
@@ -617,7 +616,7 @@ func rowStreamLoadPage[R any](s *RowStream[R], log *attemptLog) error {
 		started := time.Now()
 		var end func(routing.AttemptEvent)
 		if request.InternalLogical.observesAttempts() {
-			end = request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: request.InternalLogical.id, Page: int(request.page), Attempt: attempt, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started})
+			end = request.InternalLogical.startAttempt(routing.AttemptStart{RequestID: request.InternalLogical.id, Page: int(request.page), Attempt: attempt, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started})
 		}
 		response, err := s.privateStorage.reservation.InternalExchange(pagectx, wireRequest)
 		wireRequest.Lease.Release()

@@ -18,10 +18,7 @@ func ExampleConfigBuilder_WithLocalDatacenter() {
 	if err != nil {
 		panic(err)
 	}
-	analytics, err := routing.NewPolicy(routing.Options{Datacenter: "dc2"})
-	if err != nil {
-		panic(err)
-	}
+	analytics := routing.NewPolicy(routing.Options{Datacenter: "dc2"})
 	// Derive the profile from the session's, so only its routing differs;
 	// with a session, start from session.DefaultProfile().Builder().
 	profile, err := cfg.DefaultProfile().Builder().WithRouting(analytics).Build()

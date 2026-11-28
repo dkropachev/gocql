@@ -19,7 +19,7 @@ func (directTestObserver) ObserveAttempt(routing2.AttemptEvent) {}
 func (o directTestObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o directTestObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o directTestObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

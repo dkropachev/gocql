@@ -290,7 +290,7 @@ func (o *cassandraObserver) started() ([]observe.RequestStart, []string) {
 	defer o.mu.Unlock()
 	return append([]observe.RequestStart(nil), o.starts...), append([]string(nil), o.values...)
 }
-func (o *cassandraObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent) {
+func (o *cassandraObserver) StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent) {
 	return o.ObserveAttempt
 }
 func (o *cassandraObserver) reset() {

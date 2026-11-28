@@ -21,7 +21,7 @@ func (o *countingObserver) ObserveAttempt(routing2.AttemptEvent) {}
 func (o *countingObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, o.ObserveRequest
 }
-func (o *countingObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o *countingObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return o.ObserveAttempt
 }
 

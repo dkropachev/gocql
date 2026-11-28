@@ -918,6 +918,7 @@ package cqlerr
 		cqlerr.AttemptFailure field Consistency cql.Consistency
 		cqlerr.AttemptFailure field CQLTraceID cql.Option[cql.UUID]
 		cqlerr.AttemptFailure field ExecutionStatus cqlerr.ExecutionStatus
+		cqlerr.AttemptFailure method (T) CQLTrace() (cql.CQLTraceRef, bool)
 		cqlerr.AttemptFailure method (T) String() string
 	func cqlerr.AttemptIs(err error, target error) bool
 	type cqlerr.CASWriteUnknownError struct
@@ -1197,6 +1198,7 @@ package cqltrace
 	func cqltrace.Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRef) (cqltrace.Info, error)
 	func cqltrace.FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]cqltrace.Info, error)
 	type cqltrace.Fetcher struct
+		cqltrace.Fetcher field MaxWait time.Duration
 		cqltrace.Fetcher field Poll time.Duration
 		cqltrace.Fetcher field Settle time.Duration
 		cqltrace.Fetcher field Consistency cql.Consistency
@@ -1583,7 +1585,7 @@ package metrics
 		metrics.Snapshot field Retries uint64
 		metrics.Snapshot field Speculations uint64
 		metrics.Snapshot field Orphans uint64
-		metrics.Snapshot field InFlight int64
+		metrics.Snapshot field InFlight int
 		metrics.Snapshot field Connections int
 		metrics.Snapshot field LatencyP50 time.Duration
 		metrics.Snapshot field LatencyP95 time.Duration
@@ -1591,16 +1593,6 @@ package metrics
 		metrics.Snapshot method (T) ErrorsOf(kind cqlerr.Kind) uint64
 
 package observe
-	type observe.AttemptStart struct
-		observe.AttemptStart field Started time.Time
-		observe.AttemptStart field Address string
-		observe.AttemptStart field AddrPort net/netip.AddrPort
-		observe.AttemptStart field RequestID uint64
-		observe.AttemptStart field Page int
-		observe.AttemptStart field Attempt int
-		observe.AttemptStart field Target metadata.Target
-		observe.AttemptStart field Consistency cql.Consistency
-		observe.AttemptStart field Speculative bool
 	type observe.BatchStatement struct
 		observe.BatchStatement field Statement string
 		observe.BatchStatement field Values observe.BoundValues
@@ -1610,7 +1602,7 @@ package observe
 		observe.BoundValues method (T) Len() int
 	type observe.Hooks struct
 		observe.Hooks field Request func(ctx context.Context, start observe.RequestStart) (context.Context, func(observe.RequestEvent))
-		observe.Hooks field Attempt func(ctx context.Context, start observe.AttemptStart) func(routing.AttemptEvent)
+		observe.Hooks field Attempt func(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent)
 		observe.Hooks method (T) IsZero() bool
 	func observe.Join(hooks ...observe.Hooks) observe.Hooks
 	type observe.RequestEvent struct
@@ -1622,7 +1614,6 @@ package observe
 		observe.RequestStart field Started time.Time
 		observe.RequestStart field Statement string
 		observe.RequestStart field BatchStatements []observe.BatchStatement
-		observe.RequestStart field Parameters cql.Columns
 		observe.RequestStart field Values observe.BoundValues
 		observe.RequestStart field Routing routing.Info
 		observe.RequestStart field SessionID cql.UUID
@@ -1702,6 +1693,17 @@ package routing
 		routing.AttemptEvent field Canceled bool
 		routing.AttemptEvent field TimedOut bool
 		routing.AttemptEvent field Speculative bool
+		routing.AttemptEvent method (T) CQLTrace() (cql.CQLTraceRef, bool)
+	type routing.AttemptStart struct
+		routing.AttemptStart field Started time.Time
+		routing.AttemptStart field Address string
+		routing.AttemptStart field AddrPort net/netip.AddrPort
+		routing.AttemptStart field RequestID uint64
+		routing.AttemptStart field Page int
+		routing.AttemptStart field Attempt int
+		routing.AttemptStart field Target metadata.Target
+		routing.AttemptStart field Consistency cql.Consistency
+		routing.AttemptStart field Speculative bool
 	type routing.Builtin struct
 		routing.Builtin method (*T) Fallback(info routing.Info, m *metadata.Snapshot) routing.Plan
 		routing.Builtin method (*T) Learn(e routing.AttemptEvent)
@@ -1731,7 +1733,7 @@ package routing
 	type routing.Learner interface
 		routing.Learner method Learn(routing.AttemptEvent)
 	var routing.Murmur3TokenPartitioner routing.TokenPartitioner
-	func routing.NewPolicy(options routing.Options) (*routing.Builtin, error)
+	func routing.NewPolicy(options routing.Options) *routing.Builtin
 	type routing.Options struct
 		routing.Options field Datacenter string
 		routing.Options field Rack string
@@ -1745,6 +1747,7 @@ package routing
 	type routing.PartitionKey struct
 		routing.PartitionKey method (T) ForEach(fn func(cql.Bytes) error) error
 		routing.PartitionKey method (T) Len() int64
+		routing.PartitionKey method (T) WriteTo(w io.Writer) (int64, error)
 	type routing.Plan interface
 		routing.Plan method Next() (metadata.Route, bool)
 	func routing.PlanOf(routes ...metadata.Route) routing.Plan
@@ -1775,6 +1778,7 @@ package routing/routingtest
 		routing/routingtest.Cluster field Generation uint64
 	func routing/routingtest.Host(id cql.UUID, datacenter string, rack string) metadata.HostSnapshot
 	func routing/routingtest.NewSnapshot(c routing/routingtest.Cluster) (*metadata.Snapshot, error)
+	func routing/routingtest.Request(keyspace string, table string, token int64) routing.Info
 	type routing/routingtest.Table struct
 		routing/routingtest.Table field Keyspace string
 		routing/routingtest.Table field Name string

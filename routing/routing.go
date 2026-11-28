@@ -69,16 +69,14 @@ type Learner interface {
 	Learn(AttemptEvent)
 }
 
-// NewPolicy builds the default token- and tablet-aware policy with options.
-// It reports invalid options at once; the session builds the policy itself
-// when it first uses it. Its Validate checks that the local datacenter and
-// rack have eligible hosts.
-func NewPolicy(options Options) (*Builtin, error) {
-	options, err := options.normalized()
-	if err != nil {
-		return nil, err
-	}
-	return &Builtin{options: options}, nil
+// NewPolicy builds the default token- and tablet-aware policy with options;
+// the session builds the policy itself when it first uses it. Invalid
+// options are reported, as a cql.ValidationError naming the field, by
+// config.ProfileBuilder.Build and config.ConfigBuilder.Build for a profile
+// that uses the policy, and by its Validate, which also checks that the
+// local datacenter and rack have eligible hosts.
+func NewPolicy(options Options) *Builtin {
+	return &Builtin{options: options}
 }
 
 // SingleTarget routes every request to target: to target's shard only when

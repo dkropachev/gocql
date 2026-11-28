@@ -87,6 +87,9 @@ func (p Profile) ValidateProfile() error {
 	if p.Prefetch < 0 || p.Prefetch > 1 {
 		return cqltype.TypeValidation("WithPrefetch", "must be zero or one, got %d", p.Prefetch)
 	}
+	if err := routing.OptionsError(p.Routing); err != nil {
+		return err
+	}
 	return nil
 }
 func InternalValidConsistency(c cql.Consistency) bool {

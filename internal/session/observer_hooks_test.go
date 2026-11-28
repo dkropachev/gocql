@@ -23,7 +23,7 @@ type attemptHookOnly struct {
 	sawCtx   atomic.Bool
 }
 
-func (o *attemptHookOnly) StartAttempt(ctx context.Context, _ observe.AttemptStart) func(routing2.AttemptEvent) {
+func (o *attemptHookOnly) StartAttempt(ctx context.Context, _ routing2.AttemptStart) func(routing2.AttemptEvent) {
 	o.attempts.Add(1)
 	o.sawCtx.Store(ctx.Value(observerCtxKey{}) == "caller")
 	return nil
@@ -85,9 +85,9 @@ func TestAttemptFields(t *testing.T) {
 	b := runtimeQuery(t)
 	defer b.Close()
 	for _, general := range []bool{false, true} {
-		var start observe.AttemptStart
+		var start routing2.AttemptStart
 		var end routing2.AttemptEvent
-		o := observe.Hooks{Attempt: func(_ context.Context, s observe.AttemptStart) func(routing2.AttemptEvent) {
+		o := observe.Hooks{Attempt: func(_ context.Context, s routing2.AttemptStart) func(routing2.AttemptEvent) {
 			start = s
 			return func(e routing2.AttemptEvent) { end = e }
 		}}

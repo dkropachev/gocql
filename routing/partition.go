@@ -5,6 +5,7 @@ package routing
 
 import (
 	"errors"
+	"io"
 	"math"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -36,6 +37,24 @@ func (k PartitionKey) ForEach(fn func(cql.Bytes) error) error {
 	}
 	return k.state.chain.Each(func(s wire.Span) error { return fn(cql.BorrowBytes(s.Bytes())) })
 }
+
+// WriteTo writes the key's bytes to w, as io.WriterTo does, so that a
+// TokenPartitioner can hash the key with a hash.Hash in one call. It returns
+// the bytes written and the first error of w.
+func (k PartitionKey) WriteTo(w io.Writer) (int64, error) {
+	if w == nil {
+		return 0, &cql.ValidationError{Field: "partition key", Err: errors.New("nil writer")}
+	}
+	var n int64
+	err := k.state.chain.Each(func(s wire.Span) error {
+		m, err := w.Write(s.Bytes())
+		n += int64(m)
+		return err
+	})
+	return n, err
+}
+
+var _ io.WriterTo = PartitionKey{}
 
 // TokenPartitioner computes the token of a partition key.
 type TokenPartitioner interface {

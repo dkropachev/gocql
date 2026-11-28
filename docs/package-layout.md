@@ -249,12 +249,13 @@ documented methods.
 - **Contains:** the `Policy`, `Plan` and `TokenPartitioner` interfaces, the
   optional `Validator` and `Learner` interfaces of a policy,
   `TokenPartitionerFunc`, `Options`, `LatencyOptions`, `Info`, `PartitionKey`
-  and `AttemptEvent` (which `Learner.Learn` consumes), the built-in policy
+  `AttemptEvent` (which `Learner.Learn` consumes) and the `AttemptStart` the
+  `observe.Hooks.Attempt` hook takes with it, the built-in policy
   constructors (`NewPolicy`, `SingleTarget`) and the `*Builtin` they return,
   and the functions a custom policy picks with (`PlanOf`, `HostRoutes`,
   `ReplicaRoutes`). The built-in policies are the session's: `NewPolicy`
-  validates its options and returns a `*Builtin` that builds the session's
-  policy on first use.
+  returns a `*Builtin` that builds the session's policy on first use, and
+  invalid options fail the profile's `Build` and the policy's `Validate`.
 - **Must not contain:** pool handles or connection state.
 - **Future:** vector-search or other workload-specific placement as further
   `Options` or policies.
@@ -280,9 +281,11 @@ documented methods.
 
 - **Contains:** `Hooks`, a struct of the hook functions `Request` and
   `Attempt`; `Join`, which combines several; and their event payloads
-  (`RequestStart`, `RequestEvent`, `AttemptStart`). The `Attempt` hook ends with
-  `routing.AttemptEvent`, which routing policies also learn from, and
-  `endpoint.ConvictionEvent` stays with the conviction policy.
+  (`RequestStart`, `RequestEvent`). The `Attempt` hook takes
+  `routing.AttemptStart` and ends with `routing.AttemptEvent`, which routing
+  policies also learn from: both stay in `routing`, which `observe` imports,
+  so the pair is in one package. `endpoint.ConvictionEvent` stays with the
+  conviction policy.
 - **Must not contain:** exporters. OpenTelemetry and Prometheus integrations
   are `contrib/` modules that fill these hooks.
 - **Future:** new hooks as new fields of `Hooks`, which a zero value leaves

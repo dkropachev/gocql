@@ -78,11 +78,11 @@ func TestObserverPanicsLogged(t *testing.T) {
 	panicRequestEnd := func(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 		return ctx, func(observe.RequestEvent) { panic("request end") }
 	}
-	okAttempt := func(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+	okAttempt := func(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 		return func(routing2.AttemptEvent) {}
 	}
-	panicAttempt := func(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) { panic("attempt start") }
-	panicAttemptEnd := func(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+	panicAttempt := func(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) { panic("attempt start") }
+	panicAttemptEnd := func(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 		return func(routing2.AttemptEvent) { panic("attempt end") }
 	}
 
@@ -137,7 +137,7 @@ func TestObserverPanicsLogged(t *testing.T) {
 		profile.Speculation = runtimeSpeculation{}
 		// The first attempt's start panics; it loses to the speculative one
 		// and ends only after its request has.
-		panicFirst := func(_ context.Context, start observe.AttemptStart) func(routing2.AttemptEvent) {
+		panicFirst := func(_ context.Context, start routing2.AttemptStart) func(routing2.AttemptEvent) {
 			if start.Attempt == 1 {
 				panic("attempt start")
 			}

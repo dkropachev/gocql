@@ -112,8 +112,9 @@ A failed request returns `*cqlerr.ExecutionError`. `Err` is why it stopped: the
 last attempt's error, the caller's cancellation, or a failure before any
 attempt. `Attempts` lists every failed attempt with its host address, shard,
 consistency, execution status, error and, when the request ran with
-`execopt.Options.CQLTrace`, the `CQLTraceID` of the server's trace session. The
-error wraps `Err` only, so `errors.Is` and `errors.As` see why the request
+`execopt.Options.CQLTrace`, the `CQLTraceID` of the server's trace session,
+which `AttemptFailure.CQLTrace()` returns as the reference `cqltrace.Fetch`
+reads. The error wraps `Err` only, so `errors.Is` and `errors.As` see why the request
 stopped, the error `KindOf` classifies; read an earlier attempt's error from
 `Attempts`, or find one by type with `cqlerr.AttemptAs`, which searches `err`
 and then the attempts, newest first: a request that failed Unavailable and

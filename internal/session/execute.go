@@ -166,7 +166,7 @@ func InternalRuntimeFor(s *implCluster.Core) *InternalSessionRuntime {
 func (rt *InternalSessionRuntime) sessionDone() <-chan struct{} { return rt.closing }
 
 func (rt *InternalSessionRuntime) metricsSnapshot() metrics.Snapshot {
-	m := metrics.Snapshot{Requests: rt.requests.Load(), Pages: rt.pages.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), InFlight: rt.inflight.Load()}
+	m := metrics.Snapshot{Requests: rt.requests.Load(), Pages: rt.pages.Load(), Attempts: rt.attempts.Load(), Errors: rt.errors.Load(), Retries: rt.retries.Load(), Speculations: rt.speculations.Load(), InFlight: int(rt.inflight.Load())}
 	for kind := range rt.errorKinds {
 		if n := rt.errorKinds[kind].Load(); n > 0 {
 			if m.ErrorsByKind == nil {
@@ -638,7 +638,7 @@ func (l *logicalExecution) nextPage() int32 {
 func (l *logicalExecution) startRequest(ctx context.Context) {
 	l.observerCtx = ctx
 	request := l.request
-	start := observe.RequestStart{ID: l.id, SessionID: l.rt.ID(), Started: l.started, Statement: request.statement, Parameters: l.requestParameters(), Routing: request.routing, PageSize: requestPageSize(request), CQLTrace: request.cqlTrace}
+	start := observe.RequestStart{ID: l.id, SessionID: l.rt.ID(), Started: l.started, Statement: request.statement, Routing: request.routing, PageSize: requestPageSize(request), CQLTrace: request.cqlTrace}
 	if request.batch == nil {
 		start.Values = encodedBoundValues(&request.InternalValues)
 	} else {
@@ -669,20 +669,13 @@ func (l *logicalExecution) observesAttempts() bool {
 
 // startAttempt calls the observer's StartAttempt, returning the function to
 // call with the completed attempt, or nil.
-func (l *logicalExecution) startAttempt(start observe.AttemptStart) func(routing2.AttemptEvent) {
+func (l *logicalExecution) startAttempt(start routing2.AttemptStart) func(routing2.AttemptEvent) {
 	if l == nil || l.hooks == nil || l.hooks.Attempt == nil {
 		return nil
 	}
 	var end func(routing2.AttemptEvent)
 	l.rt.ObserveSafely(l.observerCtx, func() { end = l.hooks.Attempt(l.observerCtx, start) })
 	return end
-}
-
-func (l *logicalExecution) requestParameters() cql.Columns {
-	if state := l.request.InternalPrepared(); state != nil {
-		return state.InternalParameters
-	}
-	return l.request.InternalValues.Columns
 }
 
 // runtimeOf returns s's runtime, or nil for a nil session so that the
@@ -1188,7 +1181,7 @@ func (s *InternalSessionRuntime) beginAttempt(request *InternalExecutionRequest,
 	if !request.InternalLogical.observesAttempts() {
 		return target, started, nil
 	}
-	end := request.InternalLogical.startAttempt(observe.AttemptStart{RequestID: requestID, Page: int(request.page), Attempt: index, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Speculative: speculative})
+	end := request.InternalLogical.startAttempt(routing2.AttemptStart{RequestID: requestID, Page: int(request.page), Attempt: index, Target: target, Address: conn.Address(), AddrPort: conn.AddrPort(), Consistency: consistency, Started: started, Speculative: speculative})
 	return target, started, end
 }
 

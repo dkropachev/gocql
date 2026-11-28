@@ -19,7 +19,7 @@ func hooksOf(o any) observe.Hooks {
 		h.Request = r.StartRequest
 	}
 	if a, ok := o.(interface {
-		StartAttempt(context.Context, observe.AttemptStart) func(routing.AttemptEvent)
+		StartAttempt(context.Context, routing.AttemptStart) func(routing.AttemptEvent)
 	}); ok {
 		h.Attempt = a.StartAttempt
 	}

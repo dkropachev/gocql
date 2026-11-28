@@ -9,7 +9,9 @@
 //
 // CQL tracing is unrelated to client-side tracing such as OpenTelemetry,
 // which instruments the driver through observe.Hooks. An Attempt hook can link
-// the two through routing.AttemptEvent.CQLTraceID.
+// the two through routing.AttemptEvent.CQLTrace, and read the session with
+// Fetch; hooks receive no session, so one that reads traces binds the session
+// once Connect returns it, as Example_slowQueries shows.
 //
 // The reads of a trace session are the package's own: the session's
 // observe.Hooks do not see them, and its metrics do not count them, so
@@ -118,8 +120,15 @@ func addr(a netip.Addr) string {
 }
 
 // Fetcher reads CQL trace sessions. Its zero value reads at consistency ONE,
-// polls every 100ms and settles for 200ms.
+// polls every 100ms, settles for 200ms and waits at most 10s.
 type Fetcher struct {
+	// MaxWait bounds how long Fetch waits for a trace session, settling
+	// included, so that a session the cluster never writes, as when it
+	// sampled the request out or tracing failed, does not keep Fetch polling
+	// until ctx ends. Zero means 10s; negative leaves only ctx to bound the
+	// wait. A session not ready within it fails with ErrNotReady, which
+	// errors.Is also matches with context.DeadlineExceeded.
+	MaxWait time.Duration
 	// Poll is the wait between readiness checks. Zero means 100ms.
 	Poll time.Duration
 	// Settle is how long a ready trace session's event count must stay the
@@ -133,9 +142,9 @@ type Fetcher struct {
 	Consistency cql.Consistency
 }
 
-// ErrNotReady is returned when ctx ends before the trace session is ready.
-// errors.Is also matches the error that ended the wait, such as
-// context.DeadlineExceeded.
+// ErrNotReady is returned when ctx ends, or Fetcher.MaxWait passes, before
+// the trace session is ready. errors.Is also matches the error that ended
+// the wait, such as context.DeadlineExceeded.
 var ErrNotReady = errors.New("gocql: CQL trace session not ready")
 
 // Fetch reads the trace session ref names with a zero Fetcher.
@@ -154,7 +163,8 @@ func FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]
 // reference, also for a session it could not read, which holds only its ID,
 // and the errors of those sessions joined, each naming its session; a
 // session that fails does not keep the later ones from being read. Once ctx
-// ends, the remaining sessions fail with ErrNotReady.
+// ends, the remaining sessions fail with ErrNotReady; f.MaxWait bounds each
+// session's wait apart.
 func (f Fetcher) FetchAll(ctx context.Context, s *gocql.Session, refs []cql.CQLTraceRef) ([]Info, error) {
 	return fetchAll(ctx, refs, func(ctx context.Context, ref cql.CQLTraceRef) (Info, error) { return f.Fetch(ctx, s, ref) })
 }
@@ -184,9 +194,9 @@ var compileUntracked = link.Get[func(*gocql.Session, execopt.Options) (execopt.C
 // The cluster writes a trace session asynchronously, after it answers the
 // traced request. A session is ready once its row records a duration and at
 // least one event is visible. Events can still arrive after that, so Fetch
-// then waits for them to settle; Info.Settled reports whether they did. Only
-// ctx bounds the wait; each read also uses the session's default profile
-// timeout.
+// then waits for them to settle; Info.Settled reports whether they did. ctx
+// and f.MaxWait bound the wait; each read also uses the session's default
+// profile timeout.
 //
 // The reads go to ref.HostID, the coordinator of the traced attempt, which
 // writes the session's row and its own events first, so that a read at a
@@ -253,6 +263,15 @@ func (f Fetcher) Fetch(ctx context.Context, s *gocql.Session, ref cql.CQLTraceRe
 // with readEvents.
 func (f Fetcher) fetch(ctx context.Context, id cql.UUID, readSession func(context.Context) (sessionRow, bool, error), readEvents func(context.Context) ([]Event, error)) (Info, error) {
 	info := Info{ID: id}
+	maxWait := f.MaxWait
+	if maxWait == 0 {
+		maxWait = 10 * time.Second
+	}
+	if maxWait > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, maxWait)
+		defer cancel()
+	}
 	poll := f.Poll
 	if poll <= 0 {
 		poll = 100 * time.Millisecond

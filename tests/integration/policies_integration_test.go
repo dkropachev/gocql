@@ -108,10 +108,7 @@ func testIfPolicyInitializedProperly(t *testing.T, cluster config.Config, keyspa
 		{Datacenter: hosts[0].Datacenter, FixedReplicaOrder: true, NoLeaderAware: true},
 		{Datacenter: hosts[0].Datacenter, Rack: hosts[0].Rack, FixedReplicaOrder: true, NoLeaderAware: true},
 	} {
-		policy, err := routing.NewPolicy(options)
-		if err != nil {
-			t.Fatal(err)
-		}
+		policy := routing.NewPolicy(options)
 		builder := config.NewProfile()
 		fixtureProfile(builder)
 		profile, err := builder.WithRouting(policy).Build()

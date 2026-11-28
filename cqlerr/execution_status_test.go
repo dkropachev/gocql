@@ -14,6 +14,17 @@ import (
 	"github.com/scylladb/gocql/v2/metadata"
 )
 
+func TestAttemptFailureCQLTrace(t *testing.T) {
+	if _, ok := (AttemptFailure{}).CQLTrace(); ok {
+		t.Error("an attempt without a trace session has a reference")
+	}
+	id, host := cql.RandomUUID(), cql.RandomUUID()
+	ref, ok := AttemptFailure{CQLTraceID: cql.Some(id), Target: metadata.Target{HostID: host}, Attempt: 2}.CQLTrace()
+	if want := (cql.CQLTraceRef{ID: id, HostID: host, Attempt: 2, Failed: true}); !ok || ref != want {
+		t.Errorf("CQLTrace = %+v, %v, want %+v", ref, ok, want)
+	}
+}
+
 func TestServerErrorExecutionStatus(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

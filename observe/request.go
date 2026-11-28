@@ -5,11 +5,9 @@ package observe
 
 import (
 	"context"
-	"net/netip"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
-	"github.com/scylladb/gocql/v2/metadata"
 	"github.com/scylladb/gocql/v2/routing"
 )
 
@@ -51,42 +49,14 @@ type Hooks struct {
 	// Attempt is called as each attempt, retry or speculative attempt is
 	// sent, with the context Request returned, or the caller's context
 	// without a Request hook. The function it returns, if not nil, is called
-	// once with the completed attempt; routing.AttemptEvent.CQLTraceID links
+	// once with the completed attempt; routing.AttemptEvent.CQLTrace links
 	// it to the server-side CQL trace session when the request runs with
 	// CQL tracing.
-	Attempt func(ctx context.Context, start AttemptStart) func(routing.AttemptEvent)
+	Attempt func(ctx context.Context, start routing.AttemptStart) func(routing.AttemptEvent)
 }
 
 // IsZero reports whether h has no hook.
 func (h Hooks) IsZero() bool { return h.Request == nil && h.Attempt == nil }
-
-// AttemptStart describes an attempt as it is sent to its target.
-//
-// The driver fills it; its zero value is empty.
-type AttemptStart struct {
-	// Started is when the attempt was sent.
-	Started time.Time
-	// Address is the host:port of the connection the attempt is sent on, or
-	// the socket path of a Unix socket connection.
-	Address string
-	// AddrPort is Address as an IP address and port, as an OpenTelemetry
-	// span's server.address and server.port take it, and is the zero
-	// AddrPort for a Unix socket connection.
-	AddrPort netip.AddrPort
-	// RequestID is the ID of the attempt's request.
-	RequestID uint64
-	// Page is the 1-based number of the page the attempt fetches within
-	// its request.
-	Page int
-	// Attempt is the 1-based number of the attempt within its page.
-	Attempt int
-	// Target is the host, and shard, the attempt was sent to.
-	Target metadata.Target
-	// Consistency is the consistency level the attempt uses.
-	Consistency cql.Consistency
-	// Speculative reports a speculative attempt.
-	Speculative bool
-}
 
 // RequestStart describes a request as it is admitted, before its first attempt.
 //
@@ -100,11 +70,9 @@ type RequestStart struct {
 	// BatchStatements lists the statements of a batch, in order, and is nil
 	// otherwise.
 	BatchStatements []BatchStatement
-	// Parameters describes the statement's bind markers.
-	Parameters cql.Columns
 	// Values are the values bound to the statement, and empty for a batch,
-	// whose BatchStatements carry them. They are a borrowed view: see
-	// BoundValues.
+	// whose BatchStatements carry them; Values.At returns each one's bind
+	// marker with it. They are a borrowed view: see BoundValues.
 	Values BoundValues
 	// Routing describes the request for routing. A field the driver does
 	// not know is empty or unset, such as Token when it cannot compute the

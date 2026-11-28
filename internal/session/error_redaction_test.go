@@ -37,7 +37,7 @@ type panickingObserver struct{}
 func (panickingObserver) StartRequest(ctx context.Context, _ observe.RequestStart) (context.Context, func(observe.RequestEvent)) {
 	return ctx, func(e observe.RequestEvent) { panic(e) }
 }
-func (panickingObserver) StartAttempt(context.Context, observe.AttemptStart) func(routing2.AttemptEvent) {
+func (panickingObserver) StartAttempt(context.Context, routing2.AttemptStart) func(routing2.AttemptEvent) {
 	return func(e routing2.AttemptEvent) { panic(e) }
 }
 

@@ -347,10 +347,7 @@ func newReportRouting(t *testing.T) routing.Policy {
 
 func newReportRoutingWith(t *testing.T, options routing.Options) routing.Policy {
 	t.Helper()
-	policy, err := routing.NewPolicy(options)
-	if err != nil {
-		t.Fatal(err)
-	}
+	policy := routing.NewPolicy(options)
 	return policy
 }
 

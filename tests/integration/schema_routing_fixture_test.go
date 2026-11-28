@@ -22,10 +22,7 @@ func v2SchemaRoutingName(t testing.TB) string {
 
 func v2ConfigureRouting(t testing.TB, cfg *config.ConfigBuilder, options routing.Options) routing.Policy {
 	t.Helper()
-	policy, err := routing.NewPolicy(options)
-	if err != nil {
-		t.Fatal(err)
-	}
+	policy := routing.NewPolicy(options)
 	editDefaultProfile(cfg, func(p *config.ProfileBuilder) { p.WithRouting(policy) })
 	return policy
 }

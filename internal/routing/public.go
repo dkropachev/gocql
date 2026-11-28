@@ -83,8 +83,7 @@ func init() {
 		}
 		p, err := NewRoutingPolicy(options)
 		if err != nil {
-			// routing.NewPolicy validated the options already.
-			panic(err)
+			return publicPolicy{invalidPolicy{err}}
 		}
 		return publicPolicy{p}
 	})
@@ -111,6 +110,32 @@ func init() {
 	link.Set(link.RouteShardOf, func(host unsafe.Pointer, token int64) int32 {
 		return (*pool.HostRoute)(host).ShardOf(token)
 	})
+}
+
+// invalidPolicy is the engine policy of a routing.NewPolicy given invalid
+// options: it validates with their error and routes nowhere.
+type invalidPolicy struct{ err error }
+
+func (p invalidPolicy) Validate(*MetadataSnapshot) error { return p.err }
+
+func (invalidPolicy) Pick(routing.Info, *MetadataSnapshot) (Route, bool) { return Route{}, false }
+
+func (invalidPolicy) Fallback(routing.Info, *MetadataSnapshot) QueryPlan { return emptyQueryPlan{} }
+
+func (invalidPolicy) Learn(routing.AttemptEvent) {}
+
+type emptyQueryPlan struct{}
+
+func (emptyQueryPlan) Next() (Route, bool) { return Route{}, false }
+
+// OptionsError returns the error of the options a policy routing.NewPolicy
+// built was given, and nil for any other policy, so that building a profile
+// reports them without a snapshot.
+func OptionsError(p RoutingPolicy) error {
+	if v, ok := p.(invalidPolicy); ok {
+		return v.err
+	}
+	return nil
 }
 
 // publicPolicy is an engine policy seen as a routing.Policy.
