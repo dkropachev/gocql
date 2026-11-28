@@ -421,7 +421,7 @@ func TestPaging(t *testing.T) {
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		rows, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}}))
+		rows, err := selectPrepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)}))
 		if err != nil {
 			t.Fatal(err)
 		}

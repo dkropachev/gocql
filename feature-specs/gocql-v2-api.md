@@ -710,7 +710,7 @@ owns its type:
 |---|---|
 | `config.New(dialect config.Dialect, contactPoints ...string) *config.ConfigBuilder` | starts a configuration for a dialect |
 | `config.NewProfile() *config.ProfileBuilder` | starts an execution profile |
-| `config.NewTLSFileSource(*tls.Config, config.TLSFiles) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files |
+| `config.NewTLSFileSource(*tls.Config, config.TLSFiles, time.Duration) (*config.TLSFileSource, error)` | a TLS configuration reloaded from files, checked at most once an interval |
 | `config.LoadTLSFiles(*tls.Config, config.TLSFiles) (*tls.Config, error)` | a TLS configuration loaded from files once, for `WithTLS` |
 | `cql.ParsePageState(string) (cql.PageState, error)` | a state from a `MarshalText` cursor, start and completion included; `PageState` fields are private |
 
@@ -1056,8 +1056,8 @@ checks, giving expected O(token bytes) insertion/lookup rather than scanning all
 prior states on every page. Retain one immutable owned token representation for
 history, next-page sending and PageState. Count the history entry/index storage under the count
 budget and token bytes under the byte budget.
-Retained history is bounded by ConfigBuilder.WithMaxPagingStates (default
-65,536) and WithMaxPagingStateSize (default 16 MiB);
+Retained history is bounded by config.Limits.MaxPagingStates (default
+65,536) and Limits.MaxPagingStateBytes (default 16 MiB), set by WithLimits;
 exhausting either returns terminal cqlerr.ErrPagingStateLimit before storing/fetching
 the next state. Both budgets must be positive. Manual RunPage keeps no
 cross-call history. RunPage returns an empty page and its continuation as-is.
@@ -1310,8 +1310,8 @@ destination. Skip and SkipColumn validate discarded values with bounded
 scratch, including nested structure, rather than trusting lengths alone.
 
 The mode disables inherited prefetch and speculation regardless of profile
-defaults. Explicit nonzero exec.Options.Prefetch fails validation before submission;
-zero or inherited Prefetch is accepted. Retry and reprepare are permitted only
+defaults. An explicit exec.Options.Prefetch of true fails validation before submission;
+false or inherited Prefetch is accepted. Retry and reprepare are permitted only
 before OutputStarted and any delivered row, under the ordinary safe-request
 rules. A row decoder/reset error or later I/O failure is terminal, with no
 transparent replay. StreamWorker.Close() stops the cursor and StreamWorker.Wait(ctx) covers final transport and callback drain;
@@ -1323,7 +1323,7 @@ metadata/control bytes,
 (two maximum 131,071-byte v5 units plus 16 bytes of framing). Negative/overflowing
 values fail validation. Positive values are upper bounds, never a reason to
 grow with a response. Limits are copied at admission; lower configured protocol limits
-(WithMaxFrameSize, WithMaxDecompressedSize, WithMaxMetadataDepth and the paging
+(config.Limits MaxFrameBytes, MaxDecompressedBytes, MaxMetadataDepth and the paging
 state limits) still apply to total frame/decompressed work, nesting, counts and paging history.
 MaxMetadataBytes bounds simultaneously retained current-page metadata/control,
 including old data still live while replacement metadata is allocated or
@@ -1392,7 +1392,7 @@ type Options struct {
     Timeout cql.Option[time.Duration]             // replaces the profile timeout; Some(0): no limit
     PageTimeout cql.Option[time.Duration]         // replaces the profile page timeout; Some(0): no limit
     PageSize int                                  // 0 inherits; cql.Unpaged: whole result; above it rejected
-    Prefetch cql.Option[int]                      // 0 or 1 page
+    Prefetch cql.Option[bool]                     // replaces the profile's prefetch
     Idempotent cql.Option[bool]                   // overrides cql.Statement.Idempotent and Profile.Idempotent
     Timestamp cql.Option[time.Time]               // sent in microseconds; workers reject it
     NowInSeconds cql.Option[int32]
@@ -1420,8 +1420,8 @@ type Profile struct {
     Consistency cql.Consistency
     SerialConsistency cql.Option[cql.Consistency]
     Timeout, PageTimeout time.Duration
-    PageSize int32
-    Prefetch int
+    PageSize int // 1 to cql.Unpaged
+    Prefetch bool // Rows request the next page as soon as a page arrives
     Retry retry.Policy
     Routing routing.Policy
     Speculation SpeculationPolicy
@@ -1433,7 +1433,7 @@ func (*ProfileBuilder) MustBuild() Profile // Build that panics on error
 func (*ProfileBuilder) Build() (Profile, error)
 // With* setters: WithConsistency, WithSerialConsistency, WithTimeout,
 // WithPageTimeout, WithPageSize, WithPrefetch, WithRetry, WithRouting,
-// WithSpeculation, WithIdempotent; zero turns WithTimeout and WithPrefetch off, and
+// WithSpeculation, WithIdempotent; zero turns WithTimeout off, WithPrefetch(false) turns prefetch off, and
 // NoSerialConsistency clears the serial consistency. A nil WithRetry or
 // WithRouting, or a nil Retry or Routing field, is the default policy;
 // retry.Never{} disables retries.
@@ -1983,7 +1983,7 @@ and `Clone`. An on/off setting takes a bool
 (`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
 interval whose zero has no other meaning turns its feature off at zero
 (`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
-and on a `ProfileBuilder` `WithTimeout(0)` and `WithPrefetch(0)`) or keeps the
+and on a `ProfileBuilder` `WithTimeout(0)`) or keeps the
 OS's value (`WithReceiveBuffer(0)`, `WithSendBuffer(0)`), so no setting has a
 separate `No*` twin; the one exception clears a setting zero cannot
 (`ProfileBuilder.NoSerialConsistency`). A nil provider or policy restores the
@@ -2002,7 +2002,7 @@ delay. `WithPort` is also the port of discovered nodes whose metadata reports
 none. Without it, contact points that all name one port make that port the
 default; with it, `Build` rejects contact points that all name one other port,
 unless discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
-list. `WithDefaultProfile(Profile)` replaces the complete execution profile;
+list. `WithDefaultProfile(*ProfileBuilder)` copies a builder and replaces the complete execution profile, which `Build` validates, naming the profile setter in the error's `Field`;
 `Config.DefaultProfile()` reads a built configuration's profile back, and
 `Profile.Builder()` starts a builder from a profile's values to derive another.
 `Config.Observer()` returns the hooks, as `Session.Observer` does. Slice inputs are copied; Build snapshots
@@ -2014,7 +2014,7 @@ These functions are the entry points:
 func New(dialect Dialect, contactPoints ...string) *ConfigBuilder
 func (*ConfigBuilder) Build() (Config, error)
 func (*ConfigBuilder) Clone() *ConfigBuilder // an independent copy to specialize
-func (*ConfigBuilder) WithDefaultProfile(Profile) *ConfigBuilder
+func (*ConfigBuilder) WithDefaultProfile(*ProfileBuilder) *ConfigBuilder // nil: the default
 func (Config) DefaultProfile() Profile
 func (Config) Observer() observe.Hooks
 func (Profile) Builder() *ProfileBuilder
@@ -2028,7 +2028,7 @@ func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
 func (*ConfigBuilder) WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity) *ConfigBuilder
 func (*ConfigBuilder) WithTLSPort(uint16) *ConfigBuilder        // TLS on its own port (native_transport_port_ssl)
-func (*ConfigBuilder) WithTLSFallback(bool) *ConfigBuilder      // one-way plaintext fallback while enabling TLS
+func (*ConfigBuilder) WithTLSFallback(on bool) *ConfigBuilder   // one-way plaintext fallback while enabling TLS
 func (*ConfigBuilder) WithClientRoutes(routes ...ClientRoute) *ConfigBuilder // replaces all; none removes
 func (*ConfigBuilder) WithAuth(auth.Provider) *ConfigBuilder
 func (*ConfigBuilder) WithResolver(endpoint.Resolver) *ConfigBuilder
@@ -2040,7 +2040,16 @@ func (*ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder
 func (*ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder // default 49152-65535
 func (*ConfigBuilder) WithReceiveBuffer(bytes int) *ConfigBuilder // 0 keeps the OS's
 func (*ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder    // 0 keeps the OS's
+func (*ConfigBuilder) WithReadStallTimeout(time.Duration) *ConfigBuilder  // a socket that delivers nothing; not a request timeout
+func (*ConfigBuilder) WithWriteStallTimeout(time.Duration) *ConfigBuilder // a socket that accepts nothing; not a request timeout
+func (*ConfigBuilder) WithLimits(Limits) *ConfigBuilder // a zero field keeps its default
+func (*ConfigBuilder) WithTimestampGenerator(next func() time.Time) *ConfigBuilder // sent in microseconds; nil: none
+type Limits struct {
+    MaxFrameBytes, MaxDecompressedBytes, MaxPagingStateBytes int64 // 256 MiB, 256 MiB, 16 MiB
+    MaxMetadataDepth, MaxPagingStates int                         // 64, 65536
+}
 func NewProfile() *ProfileBuilder
+func NewTLSFileSource(base *tls.Config, files TLSFiles, interval time.Duration) (*TLSFileSource, error) // 0: one minute
 type ClientRoute struct { ConnectionID, Hostname string }
 
 // package gocql
@@ -2066,13 +2075,19 @@ of its own over the `tls.ConnectionState`; a contact point's target has a zero
 host ID. Session tickets are keyed by node. Each
 auth exchange is per connection; providers are concurrency-safe. One TLS
 configuration serves every node; without an explicit ServerName each
-connection verifies the node's IP address. `ConfigBuilder.WithTLS` copies a
+connection verifies the name it dials by: a contact point's configured name,
+a DNS name the address translator returns, and otherwise the node's IP
+address. A contact point verified by name therefore says nothing of the
+discovered nodes, which are verified by IP: when no pool opens, `Connect`
+fails with a `cqlerr.ConnectError` (stage "connection pools") carrying each
+pool's error, and a certificate that does not name the IP says to set
+`ServerName` or `WithTLSIdentity`. `ConfigBuilder.WithTLS` copies a
 fixed `*tls.Config`; `WithTLSSource` takes a `TLSSource`
 (`TLSConfig() *tls.Config`) that the dialer asks for the config of every new
 connection; open connections keep theirs, and a nil result
-fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFileSource(base, TLSFiles)`) loads the client
+fails the dial. Build validates the source's config at that time. `TLSFileSource` (`NewTLSFileSource(base, TLSFiles, interval)`) loads the client
 certificate/key and CA from files over base, fails if they cannot be loaded,
-and rechecks them during a dial once `Interval` has passed, keeping the current
+and rechecks them during a dial once interval has passed, keeping the current
 files when a check fails. Context-taking hooks honor cancellation; synchronous callbacks are
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
@@ -2166,11 +2181,19 @@ type Peer struct {
     Port, ShardAwarePort, ShardAwarePortTLS uint16
 }
 type Translator interface {
-    Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
+    Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (Address, error)
 }
-type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (netip.AddrPort, error)
+type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (Address, error)
+type Address struct { Host string; Port uint16 } // Host: an IP address or a DNS name
+func AddressOf(netip.AddrPort) Address
+func (Address) String() string
 
 // package auth
+const (
+    PasswordAuthenticator           = "org.apache.cassandra.auth.PasswordAuthenticator"
+    ScyllaTransitionalAuthenticator = "com.scylladb.auth.TransitionalAuthenticator"
+    ScyllaSaslauthdAuthenticator    = "com.scylladb.auth.SaslauthdAuthenticator"
+)
 type Provider interface {
     Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error)
 }
@@ -2184,8 +2207,13 @@ func Password(username, password string, allowed ...string) Provider // none all
 
 The context-aware endpoint.Dialer contract applies to all new connections.
 DefaultDialer implements the raw target contract; DialerFunc adapts a
-function. A Translator returns addr unchanged when no translation applies;
-an error fails that connection attempt like a dial error. TCP endpoints and source ranges are selected before hooks;
+function. A Translator returns `AddressOf(addr)` when no translation applies;
+an error fails that connection attempt like a dial error. A DNS host is
+resolved on every dial through the session resolver within the DNS timeout,
+as client route names are, keeping the address the node was dialed on while
+the name still resolves to it, and becomes the default TLS name. Exchange
+bytes are borrowed both ways: a server message is valid during the call, and
+a returned response stays unchanged until the exchange is called again. TCP endpoints and source ranges are selected before hooks;
 TLS containers,
 trust-pool containers and certificate byte arrays are snapshotted. Private keys,
 callbacks, parsed trust-certificate objects and session caches/providers retain

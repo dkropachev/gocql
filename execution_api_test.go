@@ -340,7 +340,7 @@ func TestPreparedWith(t *testing.T) {
 	}
 	// A combination the options do not allow fails before sending.
 	unpaged := f.p.With(f.s.MustCompileOptions(exec.Options{PageSize: cql.Unpaged}))
-	prefetch := f.s.MustCompileOptions(exec.Options{Prefetch: cql.Some(1)})
+	prefetch := f.s.MustCompileOptions(exec.Options{Prefetch: cql.Some(true)})
 	before := len(f.srv.sent())
 	if _, _, err := unpaged.One(f.ctx, gridKey, &dst, prefetch); !errors.As(err, new(*cqlerr.UnsupportedSettingError)) || len(f.srv.sent()) != before {
 		t.Fatalf("unpaged view with a prefetch = %v, sent %d; want an UnsupportedSettingError before sending", err, len(f.srv.sent())-before)

@@ -72,7 +72,7 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
 	WithKeyspace("app").
 	WithAuth(auth.Password("u", "p")).
 	WithLocalDatacenter("dc1").
-	WithDefaultProfile(config.NewProfile().WithConsistency(cql.LocalQuorum).MustBuild()).
+	WithDefaultProfile(config.NewProfile().WithConsistency(cql.LocalQuorum)).
 	Build()
 if err != nil {
 	return err
@@ -93,9 +93,11 @@ defer session.Close()
 | `cluster.Consistency`, `SerialConsistency`, `PageSize`, `Timeout` | `WithDefaultProfile` with a profile from `config.NewProfile()` and `WithConsistency`, `WithSerialConsistency`, `WithPageSize`, `WithTimeout` |
 | `cluster.DefaultIdempotence` | `WithIdempotent(true)` on the default profile's `config.NewProfile()` builder: every statement the profile runs is idempotent unless `exec.Options.Idempotent` says otherwise |
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
+| `cluster.WriteTimeout`, `cluster.ReadTimeout` | `WithWriteStallTimeout(d)` and `WithReadStallTimeout(d)`, which drop a connection whose socket accepts or delivers no bytes for d. They are not request timeouts: v1's `Timeout` is the profile's `WithTimeout` |
+| limits on frame sizes, metadata depth and paging state (none in v1) | `WithLimits(config.Limits{...})`; a zero field keeps its default |
 | `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
 | `cluster.Port` | `WithPort(port)` |
-| `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; v1's `AllowedAuthenticators` follow the password, `auth.Password(user, password, allowed...)`, and as in v1 none allows any. Other mechanisms implement `auth.Provider` |
+| `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; v1's `AllowedAuthenticators` follow the password, `auth.Password(user, password, allowed...)`, with constants such as `auth.PasswordAuthenticator` for the classes, and as in v1 none allows any. Other mechanisms implement `auth.Provider` |
 | `cluster.SslOpts` | `WithTLS(*tls.Config)`; `config.LoadTLSFiles(base, config.TLSFiles{CertFile, KeyFile, CAFile})` reads v1's `CertPath`, `KeyPath` and `CaPath`, and `WithTLSSource` with a source from `config.NewTLSFileSource` reloads them. v1 skipped verification unless `EnableHostVerification` was set; v2 verifies by default: without a `ServerName` each connection checks that the node's certificate names its IP address, so a node certificate without its IP address needs the base's `ServerName` set to a name it carries, or `WithTLSIdentity` returning a `VerifyName` per node, or `ChainOnly` to check the chain alone. `InsecureSkipVerify` reproduces v1's default and is not recommended |
 | `cluster.Compressor` | `WithCompression(cql.LZ4Compression)` or `cql.SnappyCompression` |
 | `cluster.PoolConfig.HostSelectionPolicy` | the default policy is token-aware; `WithLocalDatacenter(dc)` and `WithLocalRack(rack)` set its locality, and `routing.NewPolicy(routing.Options{...})` in the profile's `WithRouting` changes the rest; see [load balancing](load-balancing.md) |
@@ -103,7 +105,7 @@ defer session.Close()
 | `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`, or `endpoint.ReconnectFunc` for a function; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
 | `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
-| `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)` |
+| `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)`; `Translate` returns an `endpoint.Address`, `endpoint.AddressOf(addr)` for an address unchanged, whose host may be a DNS name: the driver resolves it on every dial and verifies TLS against it |
 | `cluster.Dialer` | `WithDialer(endpoint.Dialer)`; wrap `endpoint.DefaultDialer{}` to keep the default dial |
 | `cluster.SocketKeepalive` | `WithTCPKeepalive(period)` |
 | `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
@@ -172,6 +174,7 @@ if !found {
 | `query.Consistency(c)` | `exec.Options{Consistency: cql.Some(c)}` |
 | `query.SerialConsistency(gocql.LocalSerial)` | `exec.Options{SerialConsistency: exec.SerialLocal}` |
 | `query.PageSize(n)` | `exec.Options{PageSize: n}`, or the page size argument of `RunPage` |
+| `query.Prefetch(threshold)` | `exec.Options{Prefetch: cql.Some(on)}`: prefetch is on or off, and when on `Rows` request the next page as soon as a page arrives; the profile's `WithPrefetch(on)` sets the default, true |
 | `query.Idempotent(true)` | `Idempotent: true` on the `cql.Statement`, or `exec.Options{Idempotent: cql.Some(true)}` for one execution |
 | a time limit for one query other than the default | `exec.Options{Timeout: cql.Some(d)}`, which replaces the profile's limit (30s by default) for that execution; `cql.Some(time.Duration(0))` removes it |
 | `query.RetryPolicy(p)` | `exec.Options{Retry: p}` |

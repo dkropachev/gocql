@@ -287,14 +287,14 @@ func TestShardAwarePool(t *testing.T) {
 		translated := map[uint16]bool{}
 		s := connect(t, n, func(c *settings.Config) {
 			c.ContactPoints = []string{fmt.Sprintf("127.0.0.2:%d", n.port(regularPort))}
-			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
 				if addr.Addr() != netip.MustParseAddr("127.0.0.2") {
-					return addr, nil
+					return endpoint.AddressOf(addr), nil
 				}
 				mu.Lock()
 				translated[addr.Port()] = true
 				mu.Unlock()
-				return netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), addr.Port()), nil
+				return endpoint.AddressOf(netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), addr.Port())), nil
 			})
 		})
 		waitFull(t, s, n)

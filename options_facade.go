@@ -17,7 +17,7 @@ func internalOptions(o exec.Options) implSession.Options {
 	v := implSession.Options{
 		Retry: o.Retry, Speculation: o.Speculation, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
-		Prefetch: o.Prefetch, PageSize: o.PageSize,
+		Prefetch: prefetchPages(o.Prefetch), PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: implSession.SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
@@ -121,4 +121,15 @@ func internalStatement[P, R any](s cql.Statement[P, R]) implBinding.Statement[P,
 
 func internalStreamStatement[P, R any](s cql.StreamStatement[P, R]) implSession.StreamStatement[P, R] {
 	return implSession.StreamStatement[P, R]{CQL: s.CQL, Params: s.Params, Rows: s.Rows, Kind: s.Kind, Idempotent: s.Idempotent}
+}
+
+// prefetchPages is the internal prefetch depth of a public override.
+func prefetchPages(on cql.Option[bool]) cql.Option[int] {
+	if !on.Set {
+		return cql.Option[int]{}
+	}
+	if on.Value {
+		return cql.Some(1)
+	}
+	return cql.Some(0)
 }

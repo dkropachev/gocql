@@ -21,9 +21,10 @@ type passwordAuth struct {
 	allowed            []string
 }
 
-// Password authenticates with PasswordAuthenticator credentials. When
-// allowed names authenticator classes, such as
-// "org.apache.cassandra.auth.PasswordAuthenticator", a connection whose
+// Password authenticates with a username and password, as
+// PasswordAuthenticator, ScyllaTransitionalAuthenticator and
+// ScyllaSaslauthdAuthenticator expect. When allowed names authenticator
+// classes, such as PasswordAuthenticator, a connection whose
 // server asks for any other class fails before the credentials are sent, so
 // they reach only servers that are expected to check them; no allowed class
 // sends them to any server that asks, as v1's PasswordAuthenticator did with

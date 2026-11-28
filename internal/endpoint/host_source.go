@@ -149,6 +149,10 @@ type InternalTranslatedAddresses struct {
 	CQLTLS        netip.AddrPort
 	ShardAware    netip.AddrPort
 	ShardAwareTLS netip.AddrPort
+	// TLSName is the DNS name the address translator returned for the
+	// endpoint TLS connections dial first (CQLTLS when set, else CQL), which
+	// they then send and verify by default; empty when it returned an IP.
+	TLSName string
 }
 
 func (h InternalTranslatedAddresses) Equal(o *InternalTranslatedAddresses) bool {

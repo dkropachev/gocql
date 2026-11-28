@@ -119,8 +119,9 @@ segment integrity and LZ4 use bounded staging/transform units. Protocol 4 LZ4
 or Snappy frame compression is explicitly rejected with StreamCapabilityError
 before streaming submission. Incremental mode reports its capability error explicitly.
 Set exec.StreamOptions.Limits for metadata, read-ahead, discard and transform budgets;
-The configuration builder's `WithMaxFrameSize`, `WithMaxDecompressedSize`
-and `WithMaxMetadataDepth` bound response sizes and nesting. A limit error is terminal. `stream.Result()` reports the delivered rows and
+The `MaxFrameBytes`, `MaxDecompressedBytes` and `MaxMetadataDepth` fields of
+`config.Limits`, which the configuration builder's `WithLimits` sets, bound
+response sizes and nesting. A limit error is terminal. `stream.Result()` reports the delivered rows and
 the attempts, and `stream.Progress()` the pages read.
 
 Lists, sets, and maps decode NULL as empty, matching buffered decoding, while

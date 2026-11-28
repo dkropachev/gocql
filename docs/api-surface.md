@@ -135,7 +135,9 @@ page state. Explicit paging is the pages column only.
   exception: it is a `RunPage` argument, because a paginated endpoint takes it
   from each request, and an option would mean compiling options per request.
   Zero uses the resolved page size. Unpaged execution is the page size
-  `cql.Unpaged`, as an option or as that argument.
+  `cql.Unpaged`, as an option, as that argument or as a profile's `PageSize`;
+  all three are `int`. Prefetch, in `config.Profile` and `exec.Options`, is an
+  on/off `bool`.
 - The none column (`Exec`, `UnpreparedExec`, `ExecBatch`) rejects a statement
   or batch the driver knows to be conditional with `cqlerr.ErrConditionalExec`
   before sending it. A conditional result reports whether the write applied,

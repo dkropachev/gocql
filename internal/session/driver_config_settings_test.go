@@ -150,7 +150,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 		{
 			name: "Tuned",
 			// The fields the ConfigBuilder setters WithAuth, WithDialer,
-			// WithConnectTimeout, WithReadTimeout, WithWriteTimeout,
+			// WithConnectTimeout, WithReadStallTimeout, WithWriteStallTimeout,
 			// WithNagle(true), WithTCPKeepalive, WithReceiveBuffer,
 			// WithSendBuffer, WithLinger, WithConnectionsPerHost,
 			// WithMaxRequestsPerConnection, WithMaxOrphanedStreams, no reconnect

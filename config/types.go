@@ -38,11 +38,9 @@ type Profile struct {
 	// Timeout bounds one execution, retries included, and PageTimeout the
 	// fetch of one page. Zero means no limit.
 	Timeout, PageTimeout time.Duration
-	// Prefetch is how many continuation pages Rows prefetch: zero or one.
-	Prefetch int
-	// PageSize is the rows per page; cql.Unpaged requests the whole result
-	// in one response.
-	PageSize int32
+	// PageSize is the rows per page, 1 to cql.Unpaged; cql.Unpaged requests
+	// the whole result in one response.
+	PageSize int
 	// SerialConsistency is the serial consistency of conditional statements,
 	// SERIAL or LOCAL_SERIAL; unset sends none.
 	SerialConsistency cql.Option[cql.Consistency]
@@ -56,6 +54,9 @@ type Profile struct {
 	// exec.Options.Idempotent marks those. exec.Options.Idempotent
 	// overrides it for one execution.
 	Idempotent bool
+	// Prefetch makes Rows request the next page as soon as a page arrives,
+	// as ProfileBuilder.WithPrefetch describes.
+	Prefetch bool
 	// built reports that ProfileBuilder.Build made the profile.
 	built bool
 }
@@ -70,6 +71,27 @@ type Profile struct {
 // or the zero Profile, as WithDefaultProfile rejects that Profile.
 func (p Profile) Builder() *ProfileBuilder {
 	return &ProfileBuilder{profile: internalProfile(p), started: true}
+}
+
+// Limits caps what a session accepts from servers and keeps for paging, as
+// ConfigBuilder.WithLimits sets. A zero field keeps the driver's default for
+// that limit, so the zero Limits is the defaults.
+type Limits struct {
+	// MaxFrameBytes caps a received frame's size, at most 2 GiB - 1.
+	// Default 256 MiB.
+	MaxFrameBytes int64
+	// MaxDecompressedBytes caps a frame's decompressed size, at most
+	// 2 GiB - 1. Default 256 MiB.
+	MaxDecompressedBytes int64
+	// MaxPagingStateBytes caps the paging states one execution keeps to
+	// detect a server that repeats a state, and the token a RunPage call may
+	// resume from. Default 16 MiB.
+	MaxPagingStateBytes int64
+	// MaxMetadataDepth caps the nesting depth of result type metadata, at
+	// most 128. Default 64.
+	MaxMetadataDepth int
+	// MaxPagingStates caps the paging states a session keeps. Default 65536.
+	MaxPagingStates int
 }
 
 // SchemaChangeWait is what a statement that changes the schema waits for
@@ -114,8 +136,9 @@ var defaultRouting = sync.OnceValue(implSettings.DefaultRouting)
 
 func internalProfile(p Profile) implSettings.Profile {
 	v := implSettings.Profile{Retry: p.Retry, Routing: implRouting.EngineOf(p.Routing), Speculation: p.Speculation,
-		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
-		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency, Idempotent: p.Idempotent}
+		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: prefetchPages(p.Prefetch),
+		SerialConsistency: p.SerialConsistency, Consistency: p.Consistency, Idempotent: p.Idempotent}
+	v.InternalSetPageSize(p.PageSize)
 	if v.Retry == nil {
 		v.Retry = defaultRetry
 	}
@@ -133,9 +156,17 @@ var defaultRetry = implSettings.InternalDefaultProfile().Retry
 
 func publicProfile(p implSettings.Profile) Profile {
 	return Profile{Retry: p.Retry, Routing: implRouting.PublicPolicy(p.Routing), Speculation: p.Speculation,
-		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch,
-		PageSize: p.PageSize, SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
+		Timeout: p.Timeout, PageTimeout: p.PageTimeout, Prefetch: p.Prefetch != 0,
+		PageSize: int(p.PageSize), SerialConsistency: p.SerialConsistency, Consistency: p.Consistency,
 		Idempotent: p.Idempotent, built: p.InternalBuilt()}
+}
+
+// prefetchPages is the internal prefetch depth of the public flag.
+func prefetchPages(on bool) int {
+	if on {
+		return 1
+	}
+	return 0
 }
 
 func init() {

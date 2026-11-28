@@ -140,9 +140,9 @@ func TestConnectionSetup(t *testing.T) {
 			session := func() *cluster.Core {
 				opaqueStorageValuexxxxxxxx := new(cluster.Core)
 				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalLogger = logging.Nop()
-				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+				implCluster.SessionData(opaqueStorageValuexxxxxxxx).InternalAddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort) (endpoint2.Address, error) {
 					time.Sleep(20 * time.Millisecond)
-					return addr, nil
+					return endpoint2.AddressOf(addr), nil
 				})
 				return opaqueStorageValuexxxxxxxx
 			}()

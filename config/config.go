@@ -41,6 +41,9 @@ type Config struct {
 // Zero durations disable optional timeouts and background work. A nil
 // provider or policy restores the driver's default; the one exception is
 // WithTimestampGenerator, where nil sends no client timestamp.
+// The timeouts set here bound connections, lookups and metadata requests; a
+// request's own time limit is an execution default, ProfileBuilder.WithTimeout
+// on the profile WithDefaultProfile sets.
 // A ConfigBuilder is not safe for concurrent use. Start one with New: Build
 // rejects a zero ConfigBuilder with a cql.ValidationError.
 type ConfigBuilder struct {
@@ -104,6 +107,9 @@ func (b *ConfigBuilder) Build() (Config, error) {
 		if port, ok := implSettings.CommonContactPort(settings.ContactPoints); ok {
 			settings.Port = port
 		}
+	}
+	if b.profile == nil || !b.profile.started {
+		return Config{}, &cql.ValidationError{Field: "WithDefaultProfile", Err: errors.New("zero ProfileBuilder; start one with config.NewProfile")}
 	}
 	profile := b.profile.profile
 	settings.DefaultProfile = &profile
@@ -298,8 +304,8 @@ func (b *ConfigBuilder) WithTLSPort(port uint16) *ConfigBuilder {
 // An attacker on the network can still downgrade a node that has not yet
 // answered TLS, so turn it off once the rollout is done. It requires WithTLS
 // or WithTLSSource. Default false: a TLS session never dials in plaintext.
-func (b *ConfigBuilder) WithTLSFallback(fallback bool) *ConfigBuilder {
-	b.settings.TLSFallback = fallback
+func (b *ConfigBuilder) WithTLSFallback(on bool) *ConfigBuilder {
+	b.settings.TLSFallback = on
 	return b
 }
 
@@ -315,38 +321,25 @@ func (b *ConfigBuilder) WithCQLVersion(version string) *ConfigBuilder {
 	return b
 }
 
-// WithMaxFrameSize caps a received frame's size in bytes, at most 2 GiB - 1.
-// Default 256 MiB.
-func (b *ConfigBuilder) WithMaxFrameSize(bytes int64) *ConfigBuilder {
-	b.settings.Limits.MaxFrameBytes = bytes
-	return b
-}
-
-// WithMaxDecompressedSize caps a frame's decompressed size in bytes, at most
-// 2 GiB - 1. Default 256 MiB.
-func (b *ConfigBuilder) WithMaxDecompressedSize(bytes int64) *ConfigBuilder {
-	b.settings.Limits.MaxDecompressedBytes = bytes
-	return b
-}
-
-// WithMaxMetadataDepth caps the nesting depth of result type metadata, at most
-// 128. Default 64.
-func (b *ConfigBuilder) WithMaxMetadataDepth(depth int) *ConfigBuilder {
-	b.settings.Limits.MaxMetadataDepth = depth
-	return b
-}
-
-// WithMaxPagingStates caps the paging states a session keeps. Default 65536.
-func (b *ConfigBuilder) WithMaxPagingStates(n int) *ConfigBuilder {
-	b.settings.Limits.MaxPagingStates = n
-	return b
-}
-
-// WithMaxPagingStateSize caps, in bytes, the paging states one execution keeps
-// to detect a server that repeats a state, and the token a RunPage call may
-// resume from. Default 16 MiB.
-func (b *ConfigBuilder) WithMaxPagingStateSize(bytes int64) *ConfigBuilder {
-	b.settings.Limits.MaxPagingStateBytes = bytes
+// WithLimits caps what the session accepts from servers and keeps for paging.
+// A zero field keeps the driver's default for that limit; Build rejects a
+// negative one, or one above its maximum. Each call replaces the complete
+// limits setting. Default the zero Limits.
+func (b *ConfigBuilder) WithLimits(limits Limits) *ConfigBuilder {
+	defaults := implSettings.DefaultConfig().Limits
+	pick := func(set, def int64) int64 {
+		if set == 0 {
+			return def
+		}
+		return set
+	}
+	b.settings.Limits = implSettings.ProtocolLimits{
+		MaxFrameBytes:        pick(limits.MaxFrameBytes, defaults.MaxFrameBytes),
+		MaxDecompressedBytes: pick(limits.MaxDecompressedBytes, defaults.MaxDecompressedBytes),
+		MaxMetadataDepth:     int(pick(int64(limits.MaxMetadataDepth), int64(defaults.MaxMetadataDepth))),
+		MaxPagingStates:      int(pick(int64(limits.MaxPagingStates), int64(defaults.MaxPagingStates))),
+		MaxPagingStateBytes:  pick(limits.MaxPagingStateBytes, defaults.MaxPagingStateBytes),
+	}
 	return b
 }
 
@@ -441,14 +434,19 @@ func (b *ConfigBuilder) WithLinger(d time.Duration) *ConfigBuilder {
 	return b
 }
 
-// WithReadTimeout drops a connection that delivers no bytes for d. Default none.
-func (b *ConfigBuilder) WithReadTimeout(d time.Duration) *ConfigBuilder {
+// WithReadStallTimeout drops a connection that delivers no bytes for d, so
+// the requests waiting on a node that stopped answering fail and can retry
+// elsewhere. It bounds a stalled socket, not a request: a request's time
+// limit is the profile's ProfileBuilder.WithTimeout. Default none.
+func (b *ConfigBuilder) WithReadStallTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.ReadTimeout = d
 	return b
 }
 
-// WithWriteTimeout drops a connection that accepts no bytes for d. Default none.
-func (b *ConfigBuilder) WithWriteTimeout(d time.Duration) *ConfigBuilder {
+// WithWriteStallTimeout drops a connection that accepts no bytes for d. It
+// bounds a stalled socket, not a request: a request's time limit is the
+// profile's ProfileBuilder.WithTimeout. Default none.
+func (b *ConfigBuilder) WithWriteStallTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.WriteTimeout = d
 	return b
 }
@@ -675,7 +673,10 @@ func (b *ConfigBuilder) WithMetadataRefresh(interval time.Duration) *ConfigBuild
 }
 
 // WithMetadataTimeout bounds one metadata request; Build rejects zero.
-// Default 31s.
+// Default 31s: one second above the 30s USING TIMEOUT that
+// WithMetadataServerTimeout derives from it by default, so that on ScyllaDB
+// a slow metadata query ends with the server's own error, which names the
+// cause, before the driver gives up on it.
 func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 	b.settings.Metadata.RequestTimeout = d
 	return b
@@ -722,14 +723,26 @@ func (b *ConfigBuilder) WithSchemaChangeWait(wait SchemaChangeWait) *ConfigBuild
 }
 
 // WithDefaultProfile replaces the complete execution defaults for statements
-// that pass no Profile. The profile is copied now; policy objects stay shared.
-// Build validates the final settings and rejects a profile that
-// ProfileBuilder.Build did not make; start one with NewProfile. To change a
-// few fields of a built configuration's profile, derive it with
-// Config.DefaultProfile and Profile.Builder. Default the profile NewProfile
-// builds.
-func (b *ConfigBuilder) WithDefaultProfile(profile Profile) *ConfigBuilder {
-	b.profile = &ProfileBuilder{profile: internalProfile(profile), started: true}
+// that pass no Profile with the ones profile has chosen so far:
+//
+//	config.New(config.ScyllaV4, "10.0.0.1").
+//		WithDefaultProfile(config.NewProfile().WithConsistency(cql.One))
+//
+// The builder is copied now, so later calls on it do not reach this
+// configuration; policy objects stay shared. Build validates the profile as
+// ProfileBuilder.Build does, and the cql.ValidationError it returns names the
+// profile's setter, such as "WithPageSize", in its Field; a zero
+// ProfileBuilder fails with Field "WithDefaultProfile". To change a few
+// fields of a built configuration's profile, derive the builder with
+// Config.DefaultProfile and Profile.Builder. A nil profile restores the
+// default, the profile NewProfile starts.
+func (b *ConfigBuilder) WithDefaultProfile(profile *ProfileBuilder) *ConfigBuilder {
+	if profile == nil {
+		b.profile = NewProfile()
+		return b
+	}
+	copied := *profile
+	b.profile = &copied
 	return b
 }
 
@@ -741,16 +754,23 @@ func (b *ConfigBuilder) WithPreparedCacheSize(n int) *ConfigBuilder {
 	return b
 }
 
-// WithTimestampGenerator supplies client timestamps in microseconds. A nil
-// next sends no client timestamp, so the server assigns one: unlike every
-// other setter, nil does not restore the default. By default the
+// WithTimestampGenerator supplies client timestamps: the driver calls next
+// once per stamped request and sends the time it returns, truncated to the
+// microsecond, as CQL's write timestamps are. Return strictly increasing
+// times when two writes of one session to a cell must keep their order. A
+// nil next sends no client timestamp, so the server assigns one: unlike
+// every other setter, nil does not restore the default. By default the
 // driver stamps each request with the time it was admitted, strictly
 // increasing per session. Only ordinary statements, and batches of them, are
 // stamped: a conditional one, declared or inferred (cql.UnknownStatement), a
 // counter write and a request with exec.Options.Timestamp set take no
 // generated timestamp.
-func (b *ConfigBuilder) WithTimestampGenerator(next func() int64) *ConfigBuilder {
-	b.settings.Timestamps = implSettings.GeneratedTimestamps(next)
+func (b *ConfigBuilder) WithTimestampGenerator(next func() time.Time) *ConfigBuilder {
+	if next == nil {
+		b.settings.Timestamps = implSettings.GeneratedTimestamps(nil)
+		return b
+	}
+	b.settings.Timestamps = implSettings.GeneratedTimestamps(func() int64 { return next().UnixMicro() })
 	return b
 }
 
@@ -834,7 +854,10 @@ func (c Config) String() string {
 	var w strings.Builder
 	fmt.Fprintf(&w, "dialect=%v contact points=%v port=%d keyspace=%q compression=%v", Dialect(implSettings.DialectOf(s.Server, s.Protocol)), s.ContactPoints, s.Port, s.Keyspace, s.Compression)
 	fmt.Fprintf(&w, " local datacenter=%q local rack=%q", s.LocalDatacenter, s.LocalRack)
-	fmt.Fprintf(&w, " tls=%t auth=%t", s.TLS != nil, s.Auth != nil)
+	fmt.Fprintf(&w, " tls=%t tls port=%d tls fallback=%t auth=%t", s.TLS != nil, s.TLSPort, s.TLSFallback, s.Auth != nil)
+	fmt.Fprintf(&w, " address translator=%t client routes=%d", s.AddressTranslator != nil, clientRouteCount(s.ClientRoutes))
+	fmt.Fprintf(&w, " connect timeout=%v dns timeout=%v read stall timeout=%v write stall timeout=%v", s.ConnectTimeout, s.DNSTimeout, s.ReadTimeout, s.WriteTimeout)
+	fmt.Fprintf(&w, " heartbeat=%v/%v metadata timeout=%v", s.KeepaliveInterval, s.KeepaliveTimeout, s.Metadata.RequestTimeout)
 	fmt.Fprintf(&w, " connections per shard=%d per host=%d advanced shard awareness=%t", s.Pool.ConnectionsPerShard, s.Pool.ConnectionsPerHost, s.Pool.AdvancedShardAwareness.Enabled)
 	fmt.Fprintf(&w, " discovery=%t metadata=%v prepared cache=%d", s.Metadata.InitialDiscovery, s.Metadata.Mode, s.PreparedCacheSize)
 	if p := s.DefaultProfile; p != nil {
@@ -951,19 +974,20 @@ func (p *ProfileBuilder) WithPageTimeout(d time.Duration) *ProfileBuilder {
 	return p
 }
 
-// WithPageSize sets the rows per page. Default 5000.
-func (p *ProfileBuilder) WithPageSize(rows int32) *ProfileBuilder {
-	p.profile.PageSize = rows
+// WithPageSize sets the rows per page, 1 to cql.Unpaged; cql.Unpaged requests
+// the whole result in one response. Build rejects any other value. Default
+// 5000.
+func (p *ProfileBuilder) WithPageSize(rows int) *ProfileBuilder {
+	p.profile.InternalSetPageSize(rows)
 	return p
 }
 
-// WithPrefetch sets how many continuation pages to prefetch: zero or one.
-// With zero, the next page is fetched only when the current one is consumed.
-// Default one. With one, Rows request the next page as
-// soon as a page arrives, so they hold at most two response pages; Each, All,
-// One, RunPage and streams never prefetch.
-func (p *ProfileBuilder) WithPrefetch(pages int) *ProfileBuilder {
-	p.profile.Prefetch = pages
+// WithPrefetch chooses whether Rows request the next page as soon as a page
+// arrives (true), so they hold at most two response pages, or only when the
+// current one is consumed (false). Each, All, One, RunPage and streams never
+// prefetch. Default true.
+func (p *ProfileBuilder) WithPrefetch(on bool) *ProfileBuilder {
+	p.profile.Prefetch = prefetchPages(on)
 	return p
 }
 

@@ -155,7 +155,7 @@ func TestPerformance(t *testing.T) {
 								return nil
 							}
 							run := func() error {
-								options := exec.Options{PageSize: 128, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+								options := exec.Options{PageSize: 128, Prefetch: cql.Some(false)}
 								if api == "stream" {
 									query, e := streamPrepared.With(bindOptions(s, options)).Worker(exec.StreamOptions{Incremental: true})
 									if e != nil {
@@ -400,7 +400,7 @@ func TestPerformance(t *testing.T) {
 					for i := range outputs {
 						outputs[i] = testOutput{Payload: make([]byte, 0, shape.Cell), Pieces: [][]byte{make([]byte, 0, 5), make([]byte, 0, 6)}}
 					}
-					options := exec.Options{PageSize: shape.Page, Prefetch: cql.Option[int]{Set: true, Value: 0}}
+					options := exec.Options{PageSize: shape.Page, Prefetch: cql.Some(false)}
 					run := func(worker int, sample func()) (int64, int64, error) {
 						dst := &outputs[worker]
 						backing := unsafe.SliceData(dst.Payload[:cap(dst.Payload)])

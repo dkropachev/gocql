@@ -337,7 +337,7 @@ func TestClientRoutes(t *testing.T) {
 					return opaqueStorageValuexxxxxxx
 				}()
 
-				res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
+				res, err := translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -355,7 +355,7 @@ func TestClientRoutes(t *testing.T) {
 					return opaqueStorageValuexxxxxxxx
 				}()
 
-				res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
+				res, err := translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
@@ -391,7 +391,7 @@ func TestClientRoutes(t *testing.T) {
 				// First call picks the first route in the record.
 			}()
 
-			res1, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
+			res1, err := translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -402,7 +402,7 @@ func TestClientRoutes(t *testing.T) {
 				{InternalConnectionID: "c2", InternalHostID: hostH1, InternalAddress: "addr-c2", InternalPort: 9042},
 			})
 
-			res2, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
+			res2, err := translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -466,7 +466,7 @@ func TestClientRoutes(t *testing.T) {
 					handler := newHandler()
 					tc.replace(&ClientRoutesHandlerData(handler).InternalRouteCache)
 
-					res, err := handler.Translate(context.Background(), routePeer(hostH1), addr)
+					res, err := translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 					if err != nil {
 						t.Fatalf("unexpected error: %v", err)
 					}
@@ -532,7 +532,7 @@ func TestClientRoutes(t *testing.T) {
 				return opaqueStorageValuex
 			}()
 
-			res, err := handler.Translate(context.Background(), noHost, addr)
+			res, err := translateAddr(handler.Translate(context.Background(), noHost, addr))
 			if err != nil {
 				t.Fatalf("unexpected error for empty hostID: %v", err)
 			}
@@ -548,7 +548,7 @@ func TestClientRoutes(t *testing.T) {
 				hostH1: newCacheEntry(InternalClientRoute{InternalConnectionID: "c1", InternalHostID: hostH1, InternalPort: 9042}),
 			})
 
-			res, err = handler.Translate(context.Background(), routePeer(hostH1), addr)
+			res, err = translateAddr(handler.Translate(context.Background(), routePeer(hostH1), addr))
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -622,7 +622,7 @@ func TestClientRoutes(t *testing.T) {
 			h.StartUpdateWorker()
 			defer h.Stop()
 
-			before, err := h.Translate(context.Background(), routePeer(hostH1), addr)
+			before, err := translateAddr(h.Translate(context.Background(), routePeer(hostH1), addr))
 			if err != nil {
 				t.Fatalf("unexpected error before query failure: %v", err)
 			}
@@ -632,7 +632,7 @@ func TestClientRoutes(t *testing.T) {
 				t.Fatal("expected query error")
 			}
 
-			after, err := h.Translate(context.Background(), routePeer(hostH1), addr)
+			after, err := translateAddr(h.Translate(context.Background(), routePeer(hostH1), addr))
 			if err != nil {
 				t.Fatalf("unexpected error after query failure: %v", err)
 			}

@@ -93,8 +93,6 @@ type Options struct {
 	// Timeout bounds the whole execution, retries and pages included, and
 	// PageTimeout each page fetch. A set zero means no limit.
 	Timeout, PageTimeout cql.Option[time.Duration]
-	// Prefetch replaces the profile's prefetch, zero or one, when set.
-	Prefetch cql.Option[int]
 	// PageSize is the rows per page; zero keeps the profile's, and
 	// cql.Unpaged requests the whole result in one response. A negative
 	// value, or one above cql.Unpaged, the largest the protocol carries, is
@@ -131,6 +129,9 @@ type Options struct {
 	// execution is idempotent when its statement or its profile is, and a
 	// batch when every member is or its profile is.
 	Idempotent cql.Option[bool]
+	// Prefetch replaces the profile's prefetch, config.ProfileBuilder.WithPrefetch,
+	// when set.
+	Prefetch cql.Option[bool]
 	// CQLTrace asks the cluster to record a CQL trace session of every
 	// attempt in system_traces. cql.Result.CQLTraces names the sessions, failed
 	// attempts' included; package cqltrace reads them. This is server-side tracing, unrelated to client-side
@@ -272,7 +273,7 @@ func publicOptions(o implSession.Options) Options {
 	v := Options{
 		Retry: o.Retry, Speculation: o.Speculation, Observer: o.Observer, Keyspace: o.Keyspace,
 		CustomPayload: o.CustomPayload, Timeout: o.Timeout, PageTimeout: o.PageTimeout,
-		Prefetch: o.Prefetch, PageSize: o.PageSize,
+		Prefetch: prefetchFlag(o.Prefetch), PageSize: o.PageSize,
 		NowInSeconds: o.NowInSeconds, ShardID: o.ShardID,
 		SerialConsistency: SerialOverride(o.SerialConsistency), Consistency: o.Consistency,
 		HostID: o.HostID, IncludeMetadata: o.IncludeMetadata,
@@ -287,4 +288,9 @@ func publicOptions(o implSession.Options) Options {
 		v.Profile = &profile
 	}
 	return v
+}
+
+// prefetchFlag is the public form of an internal prefetch override.
+func prefetchFlag(pages cql.Option[int]) cql.Option[bool] {
+	return cql.Option[bool]{Value: pages.Value != 0, Set: pages.Set}
 }

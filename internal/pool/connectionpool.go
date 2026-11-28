@@ -224,8 +224,16 @@ func (p *InternalPolicyConnPool) InternalEnsureHost(host *implEndpoint.HostInfo)
 
 	return pool
 }
-func (p *InternalPolicyConnPool) InternalAddHost(host *implEndpoint.HostInfo) {
-	p.InternalEnsureHost(host).InternalFill_debounce()
+
+// InternalAddHost opens host's pool and fills it. It returns the error of a
+// fill that left the pool with no connection, which the session reports
+// when no pool opened.
+func (p *InternalPolicyConnPool) InternalAddHost(host *implEndpoint.HostInfo) error {
+	pool := p.InternalEnsureHost(host)
+	pool.InternalFill_debounce()
+	pool.InternalMu.RLock()
+	defer pool.InternalMu.RUnlock()
+	return pool.emptyErr
 }
 
 func (p *InternalPolicyConnPool) InternalRemoveHost(hostID cql.UUID) {
@@ -253,6 +261,10 @@ type InternalHostConnPool struct {
 	typed              atomic.Pointer[InternalTypedConnPicker]
 	InternalLogger     *slog.Logger
 	InternalRepairCtx  context.Context
+	// emptyErr, guarded by InternalMu, is the error of the last fill that
+	// left the pool with no connection, cleared once one opens; Connect
+	// reports it when no pool opened any.
+	emptyErr           error
 	InternalHost       *implEndpoint.HostInfo
 	InternalDebouncer  *debounce.SimpleDebouncer
 	reservationChanged chan struct{}
@@ -552,6 +564,10 @@ func (pool *InternalHostConnPool) fillingStopped(err error) {
 	pool.InternalMu.Lock()
 	count, missing := pool.InternalConnPicker.Size()
 	if !pool.InternalClosed {
+		pool.emptyErr = nil
+		if count == 0 {
+			pool.emptyErr = err
+		}
 		if count > 0 {
 			pool.InternalState = InternalPoolReady
 			if err == nil && missing == 0 {

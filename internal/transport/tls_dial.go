@@ -24,6 +24,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/netip"
@@ -123,6 +124,22 @@ func notTLS(err error, tlsPort bool) bool {
 		return tlsPort
 	}
 	return false
+}
+
+// explainTLSName adds what to change to a handshake that failed because the
+// node's certificate does not name the IP address it was verified by. That is
+// how a discovered node is verified by default, while a contact point is
+// verified by the name it was configured with, so a session whose contact
+// point verified fails on every other node.
+func explainTLSName(err error) error {
+	var hostErr x509.HostnameError
+	if !errors.As(err, &hostErr) {
+		return err
+	}
+	if _, parseErr := netip.ParseAddr(hostErr.Host); parseErr != nil {
+		return err
+	}
+	return fmt.Errorf("%w (the node was verified by its IP address, as nodes the driver discovers are, while a contact point is verified by the name it is configured with: set tls.Config.ServerName to a name every node's certificate carries, or choose a VerifyName or ChainOnly per node with config.ConfigBuilder.WithTLSIdentity)", err)
 }
 
 // connectionTLS returns the configuration of one connection to target: the
@@ -429,6 +446,12 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 	if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQL) {
 		address = translated.CQL.String()
 	}
+	// A DNS name the address translator returned is the TLS identity the
+	// connection sends and verifies by default, as a contact point's name is.
+	tlsAddress := logicalAddress
+	if translated != nil && translated.TLSName != "" {
+		tlsAddress = net.JoinHostPort(translated.TLSName, strconv.Itoa(host.Port()))
+	}
 	if port := d.InternalConfig.TLSPort; tlsConfig != nil && port != 0 {
 		address = net.JoinHostPort(host.ConnectAddress().String(), strconv.Itoa(int(port)))
 		if translated != nil && implEndpoint.InternalUsableAddrPort(translated.CQLTLS) {
@@ -494,15 +517,15 @@ func (d *InternalV2TLSHostDialer) dialWith(ctx context.Context, host *implEndpoi
 		}
 	}
 	if tlsConfig != nil {
-		tlsConfig = d.connectionTLS(tlsConfig, dialed, logicalAddress)
+		tlsConfig = d.connectionTLS(tlsConfig, dialed, tlsAddress)
 		if tlsConfig.ServerName == "" && !tlsConfig.InsecureSkipVerify && !snapshot.Address.IsValid() {
 			c.Close()
 			return nil, cqltype.TypeValidation("TLS identity", "missing logical host name")
 		}
 	}
-	result, err := WrapTLS(ctx, c, logicalAddress, tlsConfig)
+	result, err := WrapTLS(ctx, c, tlsAddress, tlsConfig)
 	if err != nil {
-		return nil, err
+		return nil, explainTLSName(err)
 	}
 	DialedHostData(result).InternalShardTarget = selectedShard
 	DialedHostData(result).InternalTargetEpoch = epoch

@@ -9,13 +9,11 @@ returns an immutable `Config` or the first validation error. A later setting
 replaces an earlier one even if it was invalid:
 
 ```go
-profile, err := config.NewProfile().
-    WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second).Build()
-if err != nil { return err }
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1", "10.0.0.2").
     WithKeyspace("app").
     WithConnectionsPerShard(2).
-    WithDefaultProfile(profile).
+    WithDefaultProfile(config.NewProfile().
+        WithConsistency(cql.LocalQuorum).WithTimeout(5 * time.Second)).
     Build()
 ```
 
@@ -76,18 +74,20 @@ what a schema change waits for before it returns: `config.SchemaChangeWaitNone`,
 `SchemaChangeWaitAgreement` among the nodes, or, the default,
 `SchemaChangeWaitRefresh`, agreement and then a metadata reload. `WithReceiveBuffer(0)` and
 `WithSendBuffer(0)` keep the OS's buffer sizes.
-`ProfileBuilder.WithPrefetch(0)` disables prefetch and `WithPrefetch(1)` restores it.
+`ProfileBuilder.WithPrefetch(false)` disables prefetch and `WithPrefetch(true)` restores it.
 Zero optional timeouts disable their budget. A nil provider or policy restores
 the driver's default: `WithTLS(nil)` is plaintext, `WithReconnect(nil)` the
 default backoff, `ProfileBuilder.WithRetry(nil)` `retry.Safe{MaxAttempts: 3}`
 and `WithRouting(nil)` the default routing policy. Turning a policy off takes
 an explicit value: `retry.Never{}`, or a reconnect policy (`endpoint.ReconnectFunc` adapts a function) whose `Delay` returns
 false. The one exception is `WithTimestampGenerator(nil)`, which sends no
-client timestamp so the server assigns one. `WithDefaultProfile(profile)`
-copies and replaces the complete profile. Build profiles with `NewProfile` to
-start from driver defaults; a `config.Profile{...}` literal would leave every
+client timestamp so the server assigns one. `WithDefaultProfile(builder)`
+copies a `ProfileBuilder` and replaces the complete profile with it; the
+configuration's `Build` validates it, and a `cql.ValidationError` names the
+profile's setter, such as `WithPageSize`, in its `Field`. `NewProfile` starts
+a builder from the driver's defaults; a `config.Profile{...}` literal would leave every
 unset field zero, so `Build` rejects it. A built profile may be copied and its
-fields edited. Later edits to a supplied profile do not affect the
+fields edited. Later calls on a supplied builder do not affect the
 configuration. To change a few fields of a profile, derive a builder from it
 with `Profile.Builder`; `Config.DefaultProfile` reads a built configuration's
 default profile back:
@@ -126,8 +126,8 @@ setup. Hooks honor context cancellation and the selected endpoint/source.
 independent extension points. Synchronous callbacks must be prompt and must
 not reenter blocking Close/Wait.
 
-`WithResolver` takes an `endpoint.Resolver`, which resolves contact point and
-client route host names. `*net.Resolver` satisfies it; the default is
+`WithResolver` takes an `endpoint.Resolver`, which resolves contact point,
+client route and translated host names. `*net.Resolver` satisfies it; the default is
 `net.DefaultResolver`. Each lookup runs on the calling goroutine with a context
 bounded by `WithDNSTimeout`, so a resolver must return once that context is
 done. To prefer or require IPv4, wrap a `*net.Resolver` and filter its result
@@ -137,8 +137,13 @@ or pass `"ip4"` as the network.
 attempt it is called with the setup context, the node's `endpoint.Peer` (host ID,
 datacenter, rack, advertised addresses and ports) and each endpoint to dial as a
 `netip.AddrPort`: the CQL port and, on ScyllaDB, the shard-aware ports. It
-returns the address to dial, or the input unchanged. A translation error fails
-that connection attempt like a dial error.
+returns the `endpoint.Address` to dial, a host and a port, or
+`endpoint.AddressOf(addr)` for the input unchanged. A host that is a DNS name,
+such as a load balancer's, is resolved on every dial through `WithResolver`
+within `WithDNSTimeout`, as client route host names are, and the first
+address it resolves to is dialed. That name is then the default name a TLS
+connection sends and verifies, in place of the node's IP address. A
+translation or lookup error fails that connection attempt like a dial error.
 `endpoint.TranslatorFunc` adapts a function.
 
 `WithOnlyHost(id)` restricts a session to the node with that host ID, for

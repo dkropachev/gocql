@@ -26,7 +26,7 @@ func TestPublicOptionsSnapshot(t *testing.T) {
 		Profile: &profile, Retry: retry.Safe{MaxAttempts: 7}, Speculation: retry.NoSpeculation{}, Keyspace: "ks",
 		CustomPayload: []cql.PayloadEntry{{Key: "key", Value: cql.Nullable[cql.Bytes]{Valid: true, Value: cql.BorrowBytes(payload)}}},
 		Timeout:       cql.Some(time.Second), PageTimeout: cql.Some(2 * time.Second),
-		Prefetch: cql.Some(0), Timestamp: cql.Some(time.UnixMicro(123).UTC()), PageSize: 5,
+		Prefetch: cql.Some(false), Timestamp: cql.Some(time.UnixMicro(123).UTC()), PageSize: 5,
 		NowInSeconds: cql.Some[int32](456), ShardID: cql.Some[uint32](2), AnyShardFallback: true,
 		SerialConsistency: exec.SerialSerial, Consistency: cql.Some(cql.One),
 		HostID:          cql.Some(cql.MustParseUUID("00112233-4455-4677-8899-aabbccddeeff")),

@@ -30,18 +30,13 @@ type TLSFiles struct {
 	CertFile, KeyFile string
 	// CAFile holds the CA certificates that verify nodes. It replaces RootCAs.
 	CAFile string
-	// Interval is the least time between two checks of the files of a
-	// TLSFileSource. Zero means one minute. LoadTLSFiles reads the files
-	// once and does not use it, but rejects a negative one as
-	// NewTLSFileSource does.
-	Interval time.Duration
 }
 
 // TLSFileSource is an endpoint.TLSSource that loads the client certificate and key, and
 // the CA certificates that replace RootCAs, from files over a base
 // configuration, and reloads them when their content changes. It runs no
-// goroutine: a dial checks the files when Interval has passed since the last
-// check, so a change reaches the first connection dialed after it. A check
+// goroutine: a dial checks the files when the interval given to
+// NewTLSFileSource has passed since the last check, so a change reaches the first connection dialed after it. A check
 // that fails keeps the current files. It is safe for concurrent use.
 //
 // Start one with NewTLSFileSource. A zero TLSFileSource names no files: its
@@ -50,8 +45,8 @@ type TLSFiles struct {
 type TLSFileSource struct {
 	current atomic.Pointer[tls.Config]
 
-	// base, sessionCache, err and digest are guarded by mu; files
-	// does not change after NewTLSFileSource.
+	// base, sessionCache, err and digest are guarded by mu; files and
+	// interval do not change after NewTLSFileSource.
 
 	base *tls.Config
 	// sessionCache replaces base's ClientSessionCache after the files changed,
@@ -60,6 +55,7 @@ type TLSFileSource struct {
 	err          error
 	files        TLSFiles
 	next         atomic.Int64 // UnixNano of the next due check
+	interval     time.Duration
 	mu           sync.Mutex
 	digest       [sha256.Size]byte
 }
@@ -93,8 +89,6 @@ func checkTLSFiles(function string, base *tls.Config, files TLSFiles) error {
 		return invalid("cert and key files must be set together")
 	case files.CertFile == "" && files.CAFile == "":
 		return invalid("a cert and key pair or a CA file is required")
-	case files.Interval < 0:
-		return invalid("interval must not be negative")
 	case base != nil && files.CertFile != "" && base.GetClientCertificate != nil:
 		return invalid("base sets GetClientCertificate, which would ignore CertFile")
 	}
@@ -102,16 +96,20 @@ func checkTLSFiles(function string, base *tls.Config, files TLSFiles) error {
 }
 
 // NewTLSFileSource loads files over a copy of base, or over TLS 1.2+ defaults when
-// base is nil, and returns a source serving the result. It fails if the files
-// cannot be loaded.
-func NewTLSFileSource(base *tls.Config, files TLSFiles) (*TLSFileSource, error) {
+// base is nil, and returns a source serving the result. interval is the least
+// time between two checks of the files; zero means one minute, and a negative
+// one is rejected. It fails if the files cannot be loaded.
+func NewTLSFileSource(base *tls.Config, files TLSFiles, interval time.Duration) (*TLSFileSource, error) {
 	if err := checkTLSFiles("NewTLSFileSource", base, files); err != nil {
 		return nil, err
 	}
-	if files.Interval == 0 {
-		files.Interval = time.Minute
+	if interval < 0 {
+		return nil, &cql.ValidationError{Field: "NewTLSFileSource", Err: errors.New("interval must not be negative")}
 	}
-	s := &TLSFileSource{files: files}
+	if interval == 0 {
+		interval = time.Minute
+	}
+	s := &TLSFileSource{files: files, interval: interval}
 	if base != nil {
 		s.base = implSettings.InternalCloneV2TLSConfig(base)
 	}
@@ -124,7 +122,7 @@ func NewTLSFileSource(base *tls.Config, files TLSFiles) (*TLSFileSource, error) 
 }
 
 // TLSConfig returns the current configuration, checking the files first when
-// Interval has passed. Callers must not modify the result.
+// the interval has passed. Callers must not modify the result.
 func (s *TLSFileSource) TLSConfig() *tls.Config {
 	if time.Now().UnixNano() >= s.next.Load() && s.mu.TryLock() {
 		_ = s.reloadLocked(false)
@@ -153,7 +151,7 @@ func (s *TLSFileSource) reloadLocked(first bool) error {
 		s.err = &cql.ValidationError{Field: "TLSFileSource", Err: errors.New("zero source; start one with config.NewTLSFileSource")}
 		return s.err
 	}
-	s.next.Store(time.Now().Add(s.files.Interval).UnixNano())
+	s.next.Store(time.Now().Add(s.interval).UnixNano())
 	s.err = s.loadLocked(first)
 	return s.err
 }

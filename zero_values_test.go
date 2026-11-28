@@ -124,15 +124,15 @@ func TestZeroValuesRejected(t *testing.T) {
 	_, err = new(config.ConfigBuilder).Build()
 	requireValidation(t, "zero ConfigBuilder.Build", err)
 	_, err = new(config.ConfigBuilder).
-		WithDefaultProfile(config.NewProfile().WithPageSize(10).MustBuild()).
+		WithDefaultProfile(config.NewProfile().WithPageSize(10)).
 		WithPartitioner("p", nil).
 		Build()
 	requireValidation(t, "zero ConfigBuilder with settings", err)
 	_, err = new(config.ProfileBuilder).WithPageSize(10).Build()
 	requireValidation(t, "zero ProfileBuilder.Build", err)
-	_, err = config.New(config.ScyllaV4, "127.0.0.1").WithDefaultProfile(config.Profile{}).Build()
+	_, err = config.New(config.ScyllaV4, "127.0.0.1").WithDefaultProfile(config.Profile{}.Builder()).Build()
 	requireValidation(t, "WithDefaultProfile(zero Profile)", err)
-	_, err = config.NewTLSFileSource(nil, config.TLSFiles{})
+	_, err = config.NewTLSFileSource(nil, config.TLSFiles{}, 0)
 	requireValidation(t, "NewTLSFileSource(zero TLSFiles)", err)
 
 	var source config.TLSFileSource

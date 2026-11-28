@@ -33,6 +33,9 @@ import (
 	"io"
 	"log/slog"
 	mrand "math/rand/v2"
+	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -341,6 +344,9 @@ func (s *Core) init() error {
 	// done looping and the decerement code might be reached before we've looped
 	// again
 	atomic.AddInt64(&left, 1)
+	// poolErrs holds why each pool that opened no connection failed.
+	var poolErrsMu sync.Mutex
+	var poolErrs []cqlerr.HostError
 	for _, host := range hostMap {
 		host := s.privateStorage.InternalHostSource.InternalAddOrUpdate(host)
 		if s.privateStorage.InternalCfg.FilterHost(host) {
@@ -349,7 +355,11 @@ func (s *Core) init() error {
 
 		atomic.AddInt64(&left, 1)
 		go func() {
-			s.privateStorage.InternalPool.InternalAddHost(host)
+			if err := s.privateStorage.InternalPool.InternalAddHost(host); err != nil {
+				poolErrsMu.Lock()
+				poolErrs = append(poolErrs, cqlerr.HostError{Address: host.ConnectAddressAndPort(), Err: err})
+				poolErrsMu.Unlock()
+			}
 			connectedCh <- struct{}{}
 
 			// if there are no hosts left, then close the hostCh to unblock the loop
@@ -380,8 +390,15 @@ func (s *Core) init() error {
 	s.startReconnectingDownedHosts()
 
 	// The control connection reached a node, but the session still needs a
-	// pooled connection to run requests on.
+	// pooled connection to run requests on. Report why each pool failed:
+	// the control connection may have reached a node that no pool can, such
+	// as a contact point whose certificate was verified by name where the
+	// discovered nodes are verified by IP.
 	if s.privateStorage.InternalPool.Size() == 0 {
+		if len(poolErrs) > 0 {
+			slices.SortFunc(poolErrs, func(a, b cqlerr.HostError) int { return strings.Compare(a.Address, b.Address) })
+			return &cqlerr.ConnectError{Stage: "connection pools", Hosts: poolErrs}
+		}
 		return ErrNoConnectionsStarted
 	}
 

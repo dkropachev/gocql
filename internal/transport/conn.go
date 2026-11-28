@@ -400,39 +400,46 @@ func (c *Conn) InternalGetScyllaSupported() implEndpoint.ScyllaConnectionFeature
 
 // InternalTranslateHostAddresses translates the addresses the session dials
 // on host: its CQL port, its shard-aware ports and, when tlsPort is not zero,
-// that TLS port.
-func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, host *implEndpoint.HostInfo, tlsPort uint16, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
+// that TLS port. A translator's DNS names are resolved through resolver,
+// keeping the addresses of current, the host's previous translation, while
+// the names still resolve to them.
+func InternalTranslateHostAddresses(ctx context.Context, addressTranslator endpoint.Translator, resolver endpoint.Resolver, host *implEndpoint.HostInfo, tlsPort uint16, current *implEndpoint.InternalTranslatedAddresses, logger *slog.Logger) (implEndpoint.InternalTranslatedAddresses, error) {
 	logger = logging.Or(logger)
 	port := host.Port()
 	if port < 1 || port > 65535 {
 		return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("invalid CQL port %d for host %s: port must be between 1 and 65535", port, host.UntranslatedConnectAddress())
 	}
+	var previous implEndpoint.InternalTranslatedAddresses
+	if current != nil {
+		previous = *current
+	}
 	peer := implEndpoint.InternalPeerOf(host)
 	ip := implEndpoint.InternalNetIPAddr(host.UntranslatedConnectAddress())
-	addr, err := implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, uint16(port)), logger)
+	addr, name, err := implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, resolver, peer, netip.AddrPortFrom(ip, uint16(port)), previous.CQL, logger)
 	if err != nil {
 		return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("unable to translate regular cql address: %w", err)
 	}
 	resultedInfo := implEndpoint.InternalTranslatedAddresses{
-		CQL: addr,
+		CQL:     addr,
+		TLSName: name,
 	}
 
 	if tlsPort != 0 {
-		addr, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, tlsPort), logger)
+		addr, name, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, resolver, peer, netip.AddrPortFrom(ip, tlsPort), previous.CQLTLS, logger)
 		if err != nil {
 			return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("unable to translate tls cql address: %w", err)
 		}
-		resultedInfo.CQLTLS = addr
+		resultedInfo.CQLTLS, resultedInfo.TLSName = addr, name
 	}
 	if port := peer.ShardAwarePort; port != 0 {
-		addr, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, port), logger)
+		addr, _, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, resolver, peer, netip.AddrPortFrom(ip, port), previous.ShardAware, logger)
 		if err != nil {
 			return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("unable to translate shard aware address: %w", err)
 		}
 		resultedInfo.ShardAware = addr
 	}
 	if port := peer.ShardAwarePortTLS; port != 0 {
-		addr, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, peer, netip.AddrPortFrom(ip, port), logger)
+		addr, _, err = implEndpoint.InternalTranslateAddressPort(ctx, addressTranslator, resolver, peer, netip.AddrPortFrom(ip, port), previous.ShardAwareTLS, logger)
 		if err != nil {
 			return implEndpoint.InternalTranslatedAddresses{}, fmt.Errorf("unable to translate shard aware tls address: %w", err)
 		}

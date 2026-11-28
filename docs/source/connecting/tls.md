@@ -26,8 +26,31 @@ cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLS(tlsConfig).Build()
 ```
 
 Standard verification remains enabled: unless the config sets `ServerName` or
-skips verification, each connection verifies the node's IP address. One
+skips verification, each connection verifies the name it dials by. One
 configuration serves every node; customize checks with `VerifyConnection`.
+
+## Contact points by name, nodes by IP
+
+A contact point is dialed by the name it is configured with, and its
+certificate is verified against that name. The nodes the driver then
+discovers are dialed by the IP address the cluster reports, and verified
+against that IP address. With certificates that name only DNS names, the
+contact point passes and every discovered node fails, the contact node's own
+pool included, so `Connect` fails with a `cqlerr.ConnectError` for the
+"connection pools" stage. Each host's error is an `x509.HostnameError` that
+says to set `ServerName` or use `WithTLSIdentity`. Choose one:
+
+- Set the `tls.Config`'s `ServerName` to a name every node's certificate
+  carries, such as a wildcard's.
+- Return a `VerifyName` per node from `WithTLSIdentity` (see below), or
+  `ChainOnly` with a check of your own.
+- Translate each node to a DNS name its certificate carries with
+  `WithAddressTranslator`: a host name an `endpoint.Address` returns is
+  resolved on every dial and is the name the connection verifies.
+
+The address translator's name, like a contact point's, replaces only the
+default: a `ServerName` in the config or an identity from `WithTLSIdentity`
+takes precedence.
 Use `ClientSessionCache` for ticket resumption; the driver keys it by node,
 so nodes that share an SNI never resume each other's sessions. TLS failure
 never downgrades to plaintext unless `WithTLSFallback` allows it (see below).
@@ -120,14 +143,14 @@ files, err := config.NewTLSFileSource(&tls.Config{MinVersion: tls.VersionTLS13},
 	CertFile: "/etc/scylla-client/tls.crt",
 	KeyFile:  "/etc/scylla-client/tls.key",
 	CAFile:   "/etc/scylla-client/ca.crt",
-})
+}, time.Minute)
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").WithTLSSource(files).Build()
 ```
 
 The files replace `Certificates` and `RootCAs` of the base config, or of TLS
 1.2+ defaults when the base is nil. `NewTLSFileSource` fails if they cannot be
-loaded. The source runs no goroutine: a dial checks the files when `Interval`
-(one minute by default) has passed since the last check, and compares their
+loaded. The source runs no goroutine: a dial checks the files when the
+interval, its last argument (zero means one minute), has passed since the last check, and compares their
 content, so Kubernetes secret volumes that swap a symlink are seen. A check that
 fails, such as a key that does not match its certificate yet, keeps the current
 files; `Err` reports it and the next due check retries. `Reload` checks

@@ -36,3 +36,11 @@ func clientRoutesOptions(routes []ClientRoute) *implSettings.ClientRoutesOptions
 	}
 	return o
 }
+
+// clientRouteCount is the number of client routes routes configures.
+func clientRouteCount(routes *implSettings.ClientRoutesOptions) int {
+	if routes == nil {
+		return 0
+	}
+	return len(routes.ConnectionIDs)
+}

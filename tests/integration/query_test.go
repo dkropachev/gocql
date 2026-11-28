@@ -421,7 +421,7 @@ func TestQuery(t *testing.T) {
 			require.Zero(t, zero.AttemptLatency)
 			retryPolicy := sessionTestRetry{action: retry.Next, maxAttempts: 3}
 			observer := new(sessionTestObserver)
-			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Option[int]{Value: 1, Set: true}, Retry: retryPolicy, CQLTrace: true, Observer: hooksOf(observer)}
+			options := exec.Options{Consistency: cql.Option[cql.Consistency]{Value: cql.All, Set: true}, SerialConsistency: exec.SerialLocal, PageSize: 10, Prefetch: cql.Some(true), Retry: retryPolicy, CQLTrace: true, Observer: hooksOf(observer)}
 			resolved, err := resolveOptions(session, options)
 			require.NoError(t, err)
 			require.Equal(t, cql.All, resolved.InternalProfile.Consistency)
@@ -724,7 +724,7 @@ func TestQuery(t *testing.T) {
 		}
 		decoder := cql.RowInto(func(*record) {}, cql.Column("c", cql.Int32Codec, func(r *record) *int32 { return &r.C }), cql.Column("p", cql.ByteSliceCodec, func(r *record) *[]byte { return &r.P }))
 		read := codecTestMust(session.Prepare(ctx, cql.Statement[int32, record]{Kind: cql.OrdinaryStatement, CQL: "SELECT c,p FROM " + table + " WHERE k=?", Params: cql.OneParam(cql.Int32Codec), Rows: decoder}, exec.PrepareOptions{}))
-		q := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: 2, Prefetch: cql.Option[int]{Set: true, Value: 0}})).Worker())
+		q := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: 2, Prefetch: cql.Some(false)})).Worker())
 		defer q.Close()
 		var previous gocql.Rows[record]
 		for range 2 {
@@ -781,7 +781,7 @@ func TestQuery(t *testing.T) {
 			t.Fatal("explicit paging count", pageRows)
 		}
 		t.Log("query reuse, stale cursors, owned destinations and explicit paging passed")
-		unpaged := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Option[int]{Set: true, Value: 0}})).Worker())
+		unpaged := codecTestMust(read.With(bindOptions(session, exec.Options{PageSize: cql.Unpaged, Prefetch: cql.Some(false)})).Worker())
 		defer unpaged.Close()
 		page := codecTestMust(unpaged.RunPage(ctx, int32(1), cql.StartPage(), 0))
 		n := 0

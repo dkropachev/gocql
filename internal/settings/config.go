@@ -217,10 +217,10 @@ func (config Config) Validate() error {
 		setter string
 		value  time.Duration
 	}{
-		{"WithReadTimeout", config.ReadTimeout},
+		{"WithReadStallTimeout", config.ReadTimeout},
 		{"WithConnectTimeout", config.ConnectTimeout},
 		{"WithDNSTimeout", config.DNSTimeout},
-		{"WithWriteTimeout", config.WriteTimeout},
+		{"WithWriteStallTimeout", config.WriteTimeout},
 		{"WithHeartbeat", config.KeepaliveInterval},
 		{"WithHeartbeat", config.KeepaliveTimeout},
 		{"WithTCPKeepalive", config.SocketKeepalive},
@@ -260,26 +260,26 @@ func (config Config) Validate() error {
 	}
 	const maxFrame = 1<<31 - 1
 	for _, l := range []struct {
-		setter    string
+		field     string
 		value     int64
 		max       int64
 		unitBytes bool
 	}{
-		{"WithMaxFrameSize", config.Limits.MaxFrameBytes, maxFrame, true},
-		{"WithMaxDecompressedSize", config.Limits.MaxDecompressedBytes, maxFrame, true},
-		{"WithMaxMetadataDepth", int64(config.Limits.MaxMetadataDepth), 128, false},
-		{"WithMaxPagingStates", int64(config.Limits.MaxPagingStates), math.MaxInt, false},
-		{"WithMaxPagingStateSize", config.Limits.MaxPagingStateBytes, math.MaxInt64, true},
+		{"MaxFrameBytes", config.Limits.MaxFrameBytes, maxFrame, true},
+		{"MaxDecompressedBytes", config.Limits.MaxDecompressedBytes, maxFrame, true},
+		{"MaxMetadataDepth", int64(config.Limits.MaxMetadataDepth), 128, false},
+		{"MaxPagingStates", int64(config.Limits.MaxPagingStates), math.MaxInt, false},
+		{"MaxPagingStateBytes", config.Limits.MaxPagingStateBytes, math.MaxInt64, true},
 	} {
 		if l.value <= 0 || l.value > l.max {
 			if l.max >= math.MaxInt {
-				return cqltype.TypeValidation(l.setter, "must be positive, got %d", l.value)
+				return cqltype.TypeValidation("WithLimits", "%s must not be negative, got %d", l.field, l.value)
 			}
 			unit := ""
 			if l.unitBytes {
 				unit = " bytes"
 			}
-			return cqltype.TypeValidation(l.setter, "must be 1 to %d%s, got %d", l.max, unit, l.value)
+			return cqltype.TypeValidation("WithLimits", "%s must be 0 (the default) or 1 to %d%s, got %d", l.field, l.max, unit, l.value)
 		}
 	}
 	if config.Linger.Set && (config.Linger.Value < 0 || config.Linger.Value%time.Second != 0 || config.Linger.Value/time.Second > math.MaxInt32) {

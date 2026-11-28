@@ -56,10 +56,9 @@ func connect(hosts []string) (adapter, error) {
 			WithTimeout(10 * time.Second).
 			WithPageTimeout(10 * time.Second).
 			WithPageSize(32).
-			WithPrefetch(0).
+			WithPrefetch(false).
 			WithRetry(retry.Safe{MaxAttempts: 1}).
-			WithRouting(policy). // no speculation: the default
-			MustBuild())
+			WithRouting(policy)) // no speculation: the default
 	if *metadataRefresh > 0 {
 		builder.WithMetadataRefresh(*metadataRefresh)
 	} else {

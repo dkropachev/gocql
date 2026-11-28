@@ -525,7 +525,7 @@ func (w *WriteStartupFrame) BuildFrame(f *Framer, streamID int) error {
 }
 
 // maxTypeInfoDepth bounds the nesting ReadTypeInfo follows. It is the
-// highest depth config.WithMaxMetadataDepth accepts; without a bound a peer
+// highest depth config.Limits.MaxMetadataDepth accepts; without a bound a peer
 // could nest list<list<...>> two bytes per level until the recursion
 // overflows the goroutine stack, a fatal error no recover catches. A
 // vector's element type is a string parsed by GetCassandraLongType instead,

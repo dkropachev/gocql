@@ -93,7 +93,7 @@ func (a *v2Adapter) Case(name string, id, n int) (op, error) {
 		opts := exec.Options{}
 		switch name {
 		case "B5":
-			opts = exec.Options{Prefetch: cql.Some(1)}
+			opts = exec.Options{Prefetch: cql.Some(true)}
 		case "B7":
 			opts = exec.Options{PageSize: 5000}
 		}

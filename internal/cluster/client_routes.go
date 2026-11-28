@@ -275,9 +275,9 @@ type ClientRoutesHandler struct {
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
-func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort) (endpoint2.Address, error) {
 	if peer.HostID.IsZero() {
-		return addr, nil
+		return endpoint2.AddressOf(addr), nil
 	}
 	hostID := peer.HostID.String()
 
@@ -289,10 +289,10 @@ func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer
 			continue
 		}
 		if p.BindRoute(route) {
-			return endpoints[0], nil
+			return endpoint2.AddressOf(endpoints[0]), nil
 		}
 	}
-	return netip.AddrPort{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
+	return endpoint2.Address{}, fmt.Errorf("no usable route for host %s: %w", hostID, errors.Join(causes...))
 }
 
 type InternalPair struct {

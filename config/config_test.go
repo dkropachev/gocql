@@ -67,7 +67,7 @@ func TestConfigReadBack(t *testing.T) {
 		return ctx, func(observe.RequestEvent) {}
 	}}
 	cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithObserver(observer).
-		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.Never{}).MustBuild()))
+		WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithRetry(retry.Never{})))
 	if cfg.Observer().Request == nil {
 		t.Fatal("Observer() = nil, want the configured observer")
 	}
@@ -79,7 +79,7 @@ func TestConfigReadBack(t *testing.T) {
 	if derived.Consistency != cql.One || derived.PageSize != 7 || derived.Retry != (retry.Never{}) || p.Consistency != cql.Quorum {
 		t.Fatalf("derived %+v from %+v", derived, p)
 	}
-	if again := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(derived)).DefaultProfile(); again.Consistency != cql.One || again.PageSize != 7 {
+	if again := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(derived.Builder())).DefaultProfile(); again.Consistency != cql.One || again.PageSize != 7 {
 		t.Fatalf("a derived profile did not round-trip: %+v", again)
 	}
 	if _, err := (Profile{}).Builder().Build(); err == nil {
@@ -186,8 +186,8 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("LastCallWins", func(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithConnectionsPerShard(3).WithConnectionsPerShard(4).
-			WithDefaultProfile(NewProfile().WithConsistency(cql.One).MustBuild()).
-			WithDefaultProfile(NewProfile().WithConsistency(cql.All).MustBuild()).
+			WithDefaultProfile(NewProfile().WithConsistency(cql.One)).
+			WithDefaultProfile(NewProfile().WithConsistency(cql.All)).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "a"}, ClientRoute{ConnectionID: "c2", Hostname: "x"}).
 			WithClientRoutes(ClientRoute{ConnectionID: "c1", Hostname: "b"}).
 			WithAdvancedShardAwareness(false)).settings
@@ -207,7 +207,7 @@ func TestConfigBuilder(t *testing.T) {
 			WithAdvancedShardAwareness(true).WithAdvancedShardAwareness(false).
 			WithMetadataRefresh(time.Second).WithMetadataRefresh(0).
 			WithPreparedCacheSize(10).WithPreparedCacheSize(0).
-			WithTimestampGenerator(func() int64 { return 1 }).WithTimestampGenerator(nil)).settings
+			WithTimestampGenerator(func() time.Time { return time.UnixMicro(1) }).WithTimestampGenerator(nil)).settings
 		if c.KeepaliveInterval != 0 || c.Pool.ConnectionsPerHost != 0 || c.Pool.ConnectionsPerShard != 2 || c.Pool.AdvancedShardAwareness.Enabled ||
 			c.Metadata.PeriodicRefresh != 0 || c.PreparedCacheSize != 0 || c.Timestamps.Mode() != implSettings.ServerTimestampMode {
 			t.Fatalf("a later call did not replace an earlier one: %+v", c)
@@ -215,7 +215,7 @@ func TestConfigBuilder(t *testing.T) {
 		if c := mustBuildConfig(t, New(ScyllaV4, "h")).settings; c.Timestamps.Mode() != implSettings.DriverTimestampMode {
 			t.Fatalf("default timestamps: mode %d", c.Timestamps.Mode())
 		}
-		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(func() int64 { return 7 })).settings; c.Timestamps.Mode() != implSettings.GeneratedTimestampMode || c.Timestamps.Generator()() != 7 {
+		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(func() time.Time { return time.UnixMicro(7).Add(999 * time.Nanosecond) })).settings; c.Timestamps.Mode() != implSettings.GeneratedTimestampMode || c.Timestamps.Generator()() != 7 {
 			t.Fatalf("a user timestamp generator: mode %d", c.Timestamps.Mode())
 		}
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithTimestampGenerator(nil)).settings; c.Timestamps.Mode() != implSettings.ServerTimestampMode {
@@ -233,47 +233,47 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h")).settings
 		p := c.DefaultProfile
 		for name, ok := range map[string]bool{
-			"WithPort 9042":                         c.Port == 9042,
-			"WithKeyspace none":                     c.Keyspace == "",
-			"WithAuth none":                         c.Auth == nil,
-			"WithTLS plaintext":                     c.TLS == nil && c.TLSSource == nil,
-			"WithCompression none":                  c.Compression == cql.NoCompression,
-			"WithCQLVersion 3.0.0":                  c.CQLVersion == "3.0.0",
-			"WithMaxFrameSize 256 MiB":              c.Limits.MaxFrameBytes == 256<<20,
-			"WithMaxDecompressedSize 256 MiB":       c.Limits.MaxDecompressedBytes == 256<<20,
-			"WithMaxMetadataDepth 64":               c.Limits.MaxMetadataDepth == 64,
-			"WithMaxPagingStates 65536":             c.Limits.MaxPagingStates == 65536,
-			"WithMaxPagingStateSize 16 MiB":         c.Limits.MaxPagingStateBytes == 16<<20,
-			"WithDialer net.Dialer":                 c.Dialer == nil,
-			"WithResolver net.DefaultResolver":      c.DNSResolver == nil,
-			"WithLocalAddress any":                  !c.LocalAddress.IsValid(),
-			"WithConnectTimeout 5s":                 c.ConnectTimeout == 5*time.Second,
-			"WithDNSTimeout 5s":                     c.DNSTimeout == 5*time.Second,
-			"WithNagle off":                         c.NoDelay,
-			"WithTCPKeepalive off":                  c.SocketKeepalive == 0,
-			"WithReceiveBuffer the OS's":            c.ReceiveBuffer == 0,
-			"WithSendBuffer the OS's":               c.SendBuffer == 0,
-			"WithLinger the OS's":                   !c.Linger.Set,
-			"WithReadTimeout none":                  c.ReadTimeout == 0,
-			"WithWriteTimeout none":                 c.WriteTimeout == 0,
-			"WithHeartbeat 30s and 30s":             c.KeepaliveInterval == 30*time.Second && c.KeepaliveTimeout == 30*time.Second,
-			"WithConnectionsPerShard 1":             c.Pool.ConnectionsPerShard == 1 && c.Pool.ConnectionsPerHost == 0,
-			"WithMaxExcessPerShard 2":               c.Pool.MaxExcessPerShard == 2,
-			"WithMaxRequestsPerConnection 32768":    c.Pool.MaxRequestsPerConnection == 32768,
-			"WithMaxOrphanedStreams 1024":           c.Pool.MaxOrphanedStreams == 1024,
-			"WithAdvancedShardAwareness true":       c.Pool.AdvancedShardAwareness.Enabled,
-			"WithShardAwareSourcePorts 49152-65535": c.Pool.AdvancedShardAwareness.SourcePortStart == 49152 && c.Pool.AdvancedShardAwareness.SourcePortEnd == 65535,
-			"WithDiscovery true":                    c.Metadata.InitialDiscovery,
-			"WithHostFilter all nodes":              c.HostFilter == nil,
-			"WithAddressTranslator identity":        c.AddressTranslator == nil,
-			"WithClientRoutes none":                 c.ClientRoutes == nil,
-			"WithReconnect jittered backoff":        implSettings.IsDefaultReconnect(c.Reconnect),
-			"WithConviction SimpleConvictionPolicy": c.Conviction == nil,
-			"WithMetadataMode ModeFull":             c.Metadata.Mode == metadata.ModeFull,
-			"WithMetadataKeyspaces all":             len(c.Metadata.Keyspaces) == 0,
-			"WithPartitioner built-ins only":        len(c.Partitioners) == 4,
-			"WithMetadataRefresh 60s":               c.Metadata.PeriodicRefresh == 60*time.Second,
-			"WithMetadataTimeout 31s":               c.Metadata.RequestTimeout == 31*time.Second,
+			"WithPort 9042":                           c.Port == 9042,
+			"WithKeyspace none":                       c.Keyspace == "",
+			"WithAuth none":                           c.Auth == nil,
+			"WithTLS plaintext":                       c.TLS == nil && c.TLSSource == nil,
+			"WithCompression none":                    c.Compression == cql.NoCompression,
+			"WithCQLVersion 3.0.0":                    c.CQLVersion == "3.0.0",
+			"WithLimits MaxFrameBytes 256 MiB":        c.Limits.MaxFrameBytes == 256<<20,
+			"WithLimits MaxDecompressedBytes 256 MiB": c.Limits.MaxDecompressedBytes == 256<<20,
+			"WithLimits MaxMetadataDepth 64":          c.Limits.MaxMetadataDepth == 64,
+			"WithLimits MaxPagingStates 65536":        c.Limits.MaxPagingStates == 65536,
+			"WithLimits MaxPagingStateBytes 16 MiB":   c.Limits.MaxPagingStateBytes == 16<<20,
+			"WithDialer net.Dialer":                   c.Dialer == nil,
+			"WithResolver net.DefaultResolver":        c.DNSResolver == nil,
+			"WithLocalAddress any":                    !c.LocalAddress.IsValid(),
+			"WithConnectTimeout 5s":                   c.ConnectTimeout == 5*time.Second,
+			"WithDNSTimeout 5s":                       c.DNSTimeout == 5*time.Second,
+			"WithNagle off":                           c.NoDelay,
+			"WithTCPKeepalive off":                    c.SocketKeepalive == 0,
+			"WithReceiveBuffer the OS's":              c.ReceiveBuffer == 0,
+			"WithSendBuffer the OS's":                 c.SendBuffer == 0,
+			"WithLinger the OS's":                     !c.Linger.Set,
+			"WithReadStallTimeout none":               c.ReadTimeout == 0,
+			"WithWriteStallTimeout none":              c.WriteTimeout == 0,
+			"WithHeartbeat 30s and 30s":               c.KeepaliveInterval == 30*time.Second && c.KeepaliveTimeout == 30*time.Second,
+			"WithConnectionsPerShard 1":               c.Pool.ConnectionsPerShard == 1 && c.Pool.ConnectionsPerHost == 0,
+			"WithMaxExcessPerShard 2":                 c.Pool.MaxExcessPerShard == 2,
+			"WithMaxRequestsPerConnection 32768":      c.Pool.MaxRequestsPerConnection == 32768,
+			"WithMaxOrphanedStreams 1024":             c.Pool.MaxOrphanedStreams == 1024,
+			"WithAdvancedShardAwareness true":         c.Pool.AdvancedShardAwareness.Enabled,
+			"WithShardAwareSourcePorts 49152-65535":   c.Pool.AdvancedShardAwareness.SourcePortStart == 49152 && c.Pool.AdvancedShardAwareness.SourcePortEnd == 65535,
+			"WithDiscovery true":                      c.Metadata.InitialDiscovery,
+			"WithHostFilter all nodes":                c.HostFilter == nil,
+			"WithAddressTranslator identity":          c.AddressTranslator == nil,
+			"WithClientRoutes none":                   c.ClientRoutes == nil,
+			"WithReconnect jittered backoff":          implSettings.IsDefaultReconnect(c.Reconnect),
+			"WithConviction SimpleConvictionPolicy":   c.Conviction == nil,
+			"WithMetadataMode ModeFull":               c.Metadata.Mode == metadata.ModeFull,
+			"WithMetadataKeyspaces all":               len(c.Metadata.Keyspaces) == 0,
+			"WithPartitioner built-ins only":          len(c.Partitioners) == 4,
+			"WithMetadataRefresh 60s":                 c.Metadata.PeriodicRefresh == 60*time.Second,
+			"WithMetadataTimeout 31s":                 c.Metadata.RequestTimeout == 31*time.Second,
 			"WithMetadataServerTimeout not chosen (30s on ScyllaDB, none on Cassandra)": !c.Metadata.ServerTimeout.Set,
 			"WithIgnoreEvents none ignored":                                             c.Metadata.TopologyEvents && c.Metadata.StatusEvents && c.Metadata.SchemaEvents && c.Metadata.ClientRouteEvents,
 			"WithSchemaAgreement 200ms and 60s":                                         c.Metadata.AgreementTimeout == 60*time.Second && c.Metadata.AgreementPoll == 200*time.Millisecond,
@@ -304,20 +304,20 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ProfileExclusiveOptionsReplace", func(t *testing.T) {
-		p := codecTestMust(NewProfile().NoSerialConsistency().WithSerialConsistency(cql.Serial).WithTimeout(0).WithTimeout(time.Second).WithPrefetch(0).WithPrefetch(1).Build())
-		if p.SerialConsistency != cql.Some(cql.Serial) || p.Timeout != time.Second || p.Prefetch != 1 {
+		p := codecTestMust(NewProfile().NoSerialConsistency().WithSerialConsistency(cql.Serial).WithTimeout(0).WithTimeout(time.Second).WithPrefetch(false).WithPrefetch(true).Build())
+		if p.SerialConsistency != cql.Some(cql.Serial) || p.Timeout != time.Second || !p.Prefetch {
 			t.Fatalf("a later call did not replace an earlier one: %+v", p)
 		}
-		p = codecTestMust(NewProfile().WithSerialConsistency(cql.Serial).NoSerialConsistency().WithTimeout(time.Second).WithTimeout(0).WithPrefetch(1).WithPrefetch(0).Build())
-		if p.SerialConsistency.Set || p.Timeout != 0 || p.Prefetch != 0 {
+		p = codecTestMust(NewProfile().WithSerialConsistency(cql.Serial).NoSerialConsistency().WithTimeout(time.Second).WithTimeout(0).WithPrefetch(true).WithPrefetch(false).Build())
+		if p.SerialConsistency.Set || p.Timeout != 0 || p.Prefetch {
 			t.Fatalf("a later clearing call did not replace an earlier one: %+v", p)
 		}
 	})
 
 	t.Run("ClientRoutesRejectAddressTranslator", func(t *testing.T) {
 		routes := ClientRoute{ConnectionID: "c1"}
-		translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
-			return addr, nil
+		translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+			return endpoint.AddressOf(addr), nil
 		})
 		for name, b := range map[string]*ConfigBuilder{
 			"RoutesFirst":     New(ScyllaV4, "h").WithClientRoutes(routes).WithAddressTranslator(translator),
@@ -356,14 +356,14 @@ func TestConfigBuilder(t *testing.T) {
 			WithDiscovery(false).WithDiscovery(true).
 			WithConfigReport(false).WithConfigReport(true).
 			WithSchemaChangeWait(SchemaChangeWaitNone).WithSchemaChangeWait(SchemaChangeWaitRefresh).
-			WithDefaultProfile(NewProfile().WithPageSize(0).WithPageSize(42).WithPrefetch(0).WithPrefetch(1).MustBuild())
+			WithDefaultProfile(NewProfile().WithPageSize(0).WithPageSize(42).WithPrefetch(false).WithPrefetch(true))
 		c := mustBuildConfig(t, b).settings
 		if c.TLS != nil || c.ClientRoutes != nil || !c.Metadata.InitialDiscovery || !c.ReportConfiguration ||
 			!c.Metadata.AutomaticAgreement || !c.Metadata.RefreshAfterAgreement ||
 			!c.Metadata.SchemaEvents || c.Metadata.StatusEvents || c.DefaultProfile.PageSize != 42 || c.DefaultProfile.Prefetch != 1 {
 			t.Fatalf("later settings did not replace previous choices: %+v", c)
 		}
-		b.WithIgnoreEvents().WithDefaultProfile(NewProfile().MustBuild())
+		b.WithIgnoreEvents().WithDefaultProfile(NewProfile())
 		reset := mustBuildConfig(t, b).settings
 		if !reset.Metadata.StatusEvents || reset.DefaultProfile.PageSize != 5000 {
 			t.Fatal("reset did not restore defaults")
@@ -585,7 +585,7 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("DefaultProfileMustBeBuilt", func(t *testing.T) {
-		_, err := New(ScyllaV4, "h").WithDefaultProfile(Profile{PageSize: 1000}).Build()
+		_, err := New(ScyllaV4, "h").WithDefaultProfile(Profile{PageSize: 1000}.Builder()).Build()
 		if v, ok := errors.AsType[*cql.ValidationError](err); !ok || v.Field != "Profile" || !strings.Contains(err.Error(), "NewProfile") {
 			t.Fatalf("Build with a Profile literal = %v, want a profile ValidationError naming NewProfile", err)
 		}
@@ -595,7 +595,7 @@ func TestConfigBuilder(t *testing.T) {
 		built := codecTestMust(NewProfile().Build())
 		edited := built
 		edited.PageSize = 1000
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(edited.Builder().WithConsistency(cql.One).MustBuild())).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(edited.Builder().WithConsistency(cql.One))).settings
 		if c.DefaultProfile.PageSize != 1000 || c.DefaultProfile.Consistency != cql.One || c.DefaultProfile.Retry == nil {
 			t.Fatalf("edited copy of a built profile: %+v", *c.DefaultProfile)
 		}
@@ -603,38 +603,48 @@ func TestConfigBuilder(t *testing.T) {
 
 	t.Run("DefaultProfileSnapshotsAndReplaces", func(t *testing.T) {
 		profile := codecTestMust(NewProfile().WithConsistency(cql.Quorum).WithPageSize(7).WithTimeout(0).Build())
-		b := New(ScyllaV4, "h").WithDefaultProfile(profile)
-		other := New(ScyllaV4, "h").WithDefaultProfile(profile)
+		b := New(ScyllaV4, "h").WithDefaultProfile(profile.Builder())
+		other := New(ScyllaV4, "h").WithDefaultProfile(profile.Builder())
 		profile.PageSize = 99
 		first := mustBuildConfig(t, b).settings
 		if first.DefaultProfile.PageSize != 7 || first.DefaultProfile.Timeout != 0 {
 			t.Fatal("WithDefaultProfile did not snapshot the complete profile")
 		}
-		b.WithDefaultProfile(mustBuildConfig(t, b).DefaultProfile().Builder().WithPageSize(11).MustBuild())
+		b.WithDefaultProfile(mustBuildConfig(t, b).DefaultProfile().Builder().WithPageSize(11))
 		if got := mustBuildConfig(t, other).settings.DefaultProfile.PageSize; got != 7 {
 			t.Fatalf("configuring another builder changed the shared profile: %d", got)
 		}
 		replacement := codecTestMust(NewProfile().WithConsistency(cql.One).Build())
-		replaced := mustBuildConfig(t, b.WithDefaultProfile(replacement)).settings.DefaultProfile
+		replaced := mustBuildConfig(t, b.WithDefaultProfile(replacement.Builder())).settings.DefaultProfile
 		if replaced.Consistency != cql.One || replaced.PageSize != 5000 || replaced.Timeout == 0 {
 			t.Fatalf("WithDefaultProfile merged instead of replacing: %+v", replaced)
 		}
 		invalid := replacement
 		invalid.PageSize = 0
-		if _, err := b.WithDefaultProfile(invalid).Build(); err == nil {
+		if _, err := b.WithDefaultProfile(invalid.Builder()).Build(); err == nil {
 			t.Fatal("invalid profile accepted")
 		}
-		mustBuildConfig(t, b.WithDefaultProfile(replacement))
+		mustBuildConfig(t, b.WithDefaultProfile(replacement.Builder()))
 		if first.DefaultProfile.PageSize != 7 {
 			t.Fatal("later changes reached the built configuration")
+		}
+		// The builder is copied: later calls on it do not reach b.
+		builder := NewProfile().WithPageSize(13)
+		b.WithDefaultProfile(builder)
+		builder.WithPageSize(14)
+		if got := mustBuildConfig(t, b).settings.DefaultProfile.PageSize; got != 13 {
+			t.Fatalf("a later call on the builder reached the configuration: page size %d", got)
+		}
+		if got := mustBuildConfig(t, b.WithDefaultProfile(nil)).settings.DefaultProfile.PageSize; got != 5000 {
+			t.Fatalf("WithDefaultProfile(nil) page size %d, want the default 5000", got)
 		}
 	})
 
 	t.Run("DefaultProfileDerives", func(t *testing.T) {
-		b := New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum).MustBuild())
+		b := New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithConsistency(cql.Quorum))
 		base := mustBuildConfig(t, b)
 		derived := base.DefaultProfile().Builder().WithPageSize(7)
-		c := mustBuildConfig(t, b.WithDefaultProfile(derived.MustBuild())).settings
+		c := mustBuildConfig(t, b.WithDefaultProfile(derived)).settings
 		if c.DefaultProfile.Consistency != cql.Quorum || c.DefaultProfile.PageSize != 7 {
 			t.Fatalf("profile = %+v", *c.DefaultProfile)
 		}
@@ -677,6 +687,21 @@ func TestConfigBuilder(t *testing.T) {
 		}
 	})
 
+	t.Run("StringShowsConnectionSettings", func(t *testing.T) {
+		s := mustBuildConfig(t, New(ScyllaV4, "h").WithTLS(&tls.Config{}).WithTLSPort(9142).WithTLSFallback(true).
+			WithReadStallTimeout(3*time.Second).WithWriteStallTimeout(4*time.Second).WithAddressTranslator(secretTranslator("x"))).String()
+		for _, want := range []string{"tls=true tls port=9142 tls fallback=true", "address translator=true client routes=0",
+			"connect timeout=5s dns timeout=5s read stall timeout=3s write stall timeout=4s", "heartbeat=30s/30s metadata timeout=31s"} {
+			if !strings.Contains(s, want) {
+				t.Errorf("String() = %q, want it to contain %q", s, want)
+			}
+		}
+		s = mustBuildConfig(t, New(ScyllaV4, "h").WithClientRoutes(ClientRoute{ConnectionID: "a"}, ClientRoute{ConnectionID: "b"})).String()
+		if !strings.Contains(s, "address translator=false client routes=2") {
+			t.Errorf("String() = %q, want two client routes", s)
+		}
+	})
+
 	t.Run("StringHidesCredentials", func(t *testing.T) {
 		s := mustBuildConfig(t, New(ScyllaV4, "h").WithAuth(auth.Password("user", "secret-password"))).String()
 		if strings.Contains(s, "secret-password") || !strings.Contains(s, "auth=true") {
@@ -714,11 +739,7 @@ func TestConfigBuilder(t *testing.T) {
 	t.Run("SettersStoreValues", func(t *testing.T) {
 		addr := netip.MustParseAddr("192.0.2.7")
 		c := mustBuildConfig(t, New(ScyllaV4, "h").
-			WithMaxFrameSize(1<<20).
-			WithMaxDecompressedSize(2<<20).
-			WithMaxMetadataDepth(32).
-			WithMaxPagingStates(100).
-			WithMaxPagingStateSize(4096).
+			WithLimits(Limits{MaxFrameBytes: 1 << 20, MaxDecompressedBytes: 2 << 20, MaxMetadataDepth: 32, MaxPagingStates: 100, MaxPagingStateBytes: 4096}).
 			WithLocalAddress(addr).
 			WithDNSTimeout(3*time.Second).
 			WithTCPKeepalive(15*time.Second).
@@ -728,23 +749,29 @@ func TestConfigBuilder(t *testing.T) {
 			WithMaxRequestsPerConnection(128).
 			WithMaxOrphanedStreams(0)).settings
 		for name, ok := range map[string]bool{
-			"WithMaxFrameSize":             c.Limits.MaxFrameBytes == 1<<20,
-			"WithMaxDecompressedSize":      c.Limits.MaxDecompressedBytes == 2<<20,
-			"WithMaxMetadataDepth":         c.Limits.MaxMetadataDepth == 32,
-			"WithMaxPagingStates":          c.Limits.MaxPagingStates == 100,
-			"WithMaxPagingStateSize":       c.Limits.MaxPagingStateBytes == 4096,
-			"WithLocalAddress":             c.LocalAddress == addr,
-			"WithDNSTimeout":               c.DNSTimeout == 3*time.Second,
-			"WithTCPKeepalive":             c.SocketKeepalive == 15*time.Second,
-			"WithReceiveBuffer":            c.ReceiveBuffer == 1024,
-			"WithSendBuffer":               c.SendBuffer == 2048,
-			"WithLinger":                   c.Linger == cql.Some(2*time.Second),
-			"WithMaxRequestsPerConnection": c.Pool.MaxRequestsPerConnection == 128,
-			"WithMaxOrphanedStreams":       c.Pool.MaxOrphanedStreams == 0,
+			"WithLimits MaxFrameBytes":        c.Limits.MaxFrameBytes == 1<<20,
+			"WithLimits MaxDecompressedBytes": c.Limits.MaxDecompressedBytes == 2<<20,
+			"WithLimits MaxMetadataDepth":     c.Limits.MaxMetadataDepth == 32,
+			"WithLimits MaxPagingStates":      c.Limits.MaxPagingStates == 100,
+			"WithLimits MaxPagingStateBytes":  c.Limits.MaxPagingStateBytes == 4096,
+			"WithLocalAddress":                c.LocalAddress == addr,
+			"WithDNSTimeout":                  c.DNSTimeout == 3*time.Second,
+			"WithTCPKeepalive":                c.SocketKeepalive == 15*time.Second,
+			"WithReceiveBuffer":               c.ReceiveBuffer == 1024,
+			"WithSendBuffer":                  c.SendBuffer == 2048,
+			"WithLinger":                      c.Linger == cql.Some(2*time.Second),
+			"WithMaxRequestsPerConnection":    c.Pool.MaxRequestsPerConnection == 128,
+			"WithMaxOrphanedStreams":          c.Pool.MaxOrphanedStreams == 0,
 		} {
 			if !ok {
 				t.Errorf("%s: the built configuration does not carry the chosen value", name)
 			}
+		}
+		// A zero field keeps the default, and each call replaces the whole
+		// setting.
+		c = mustBuildConfig(t, New(ScyllaV4, "h").WithLimits(Limits{MaxFrameBytes: 1 << 20, MaxPagingStates: 3}).WithLimits(Limits{MaxMetadataDepth: 8})).settings
+		if want := (implSettings.ProtocolLimits{MaxFrameBytes: 256 << 20, MaxDecompressedBytes: 256 << 20, MaxMetadataDepth: 8, MaxPagingStates: 65536, MaxPagingStateBytes: 16 << 20}); c.Limits != want {
+			t.Errorf("WithLimits with zero fields = %+v, want %+v", c.Limits, want)
 		}
 		if c := mustBuildConfig(t, New(ScyllaV4, "h").WithLinger(0)).settings; c.Linger != cql.Some(time.Duration(0)) {
 			t.Errorf("WithLinger(0) = %+v, want a chosen zero linger", c.Linger)
@@ -759,14 +786,14 @@ func TestConfigBuilder(t *testing.T) {
 			setter string
 			limit  string
 		}{
-			"MaxFrameSizeZero":                 {New(ScyllaV4, "h").WithMaxFrameSize(0), "WithMaxFrameSize", "1 to 2147483647 bytes"},
-			"MaxFrameSizeOver2GiB":             {New(ScyllaV4, "h").WithMaxFrameSize(1 << 31), "WithMaxFrameSize", "1 to 2147483647 bytes"},
-			"MaxDecompressedSizeNegative":      {New(ScyllaV4, "h").WithMaxDecompressedSize(-1), "WithMaxDecompressedSize", "1 to 2147483647 bytes"},
-			"MaxDecompressedSizeOver2GiB":      {New(ScyllaV4, "h").WithMaxDecompressedSize(1 << 31), "WithMaxDecompressedSize", "1 to 2147483647 bytes"},
-			"MaxMetadataDepthZero":             {New(ScyllaV4, "h").WithMaxMetadataDepth(0), "WithMaxMetadataDepth", "1 to 128"},
-			"MaxMetadataDepthOver128":          {New(ScyllaV4, "h").WithMaxMetadataDepth(129), "WithMaxMetadataDepth", "1 to 128"},
-			"MaxPagingStatesZero":              {New(ScyllaV4, "h").WithMaxPagingStates(0), "WithMaxPagingStates", "positive"},
-			"MaxPagingStateSizeZero":           {New(ScyllaV4, "h").WithMaxPagingStateSize(0), "WithMaxPagingStateSize", "positive"},
+			"MaxFrameBytesNegative":            {New(ScyllaV4, "h").WithLimits(Limits{MaxFrameBytes: -1}), "WithLimits", "MaxFrameBytes must be 0 (the default) or 1 to 2147483647 bytes"},
+			"MaxFrameBytesOver2GiB":            {New(ScyllaV4, "h").WithLimits(Limits{MaxFrameBytes: 1 << 31}), "WithLimits", "MaxFrameBytes must be 0 (the default) or 1 to 2147483647 bytes"},
+			"MaxDecompressedBytesNegative":     {New(ScyllaV4, "h").WithLimits(Limits{MaxDecompressedBytes: -1}), "WithLimits", "MaxDecompressedBytes must be 0 (the default) or 1 to 2147483647 bytes"},
+			"MaxDecompressedBytesOver2GiB":     {New(ScyllaV4, "h").WithLimits(Limits{MaxDecompressedBytes: 1 << 31}), "WithLimits", "MaxDecompressedBytes must be 0 (the default) or 1 to 2147483647 bytes"},
+			"MaxMetadataDepthNegative":         {New(ScyllaV4, "h").WithLimits(Limits{MaxMetadataDepth: -1}), "WithLimits", "MaxMetadataDepth must be 0 (the default) or 1 to 128"},
+			"MaxMetadataDepthOver128":          {New(ScyllaV4, "h").WithLimits(Limits{MaxMetadataDepth: 129}), "WithLimits", "MaxMetadataDepth must be 0 (the default) or 1 to 128"},
+			"MaxPagingStatesNegative":          {New(ScyllaV4, "h").WithLimits(Limits{MaxPagingStates: -1}), "WithLimits", "MaxPagingStates must not be negative"},
+			"MaxPagingStateBytesNegative":      {New(ScyllaV4, "h").WithLimits(Limits{MaxPagingStateBytes: -1}), "WithLimits", "MaxPagingStateBytes must not be negative"},
 			"DNSTimeoutNegative":               {New(ScyllaV4, "h").WithDNSTimeout(-time.Second), "WithDNSTimeout", "negative"},
 			"ConnectTimeoutNegative":           {New(ScyllaV4, "h").WithConnectTimeout(-time.Second), "WithConnectTimeout", "negative"},
 			"TCPKeepaliveNegative":             {New(ScyllaV4, "h").WithTCPKeepalive(-time.Second), "WithTCPKeepalive", "negative"},
@@ -784,8 +811,11 @@ func TestConfigBuilder(t *testing.T) {
 			"MetadataKeyspacesRepeated":        {New(ScyllaV4, "h").WithMetadataKeyspaces("ks", "ks"), "WithMetadataKeyspaces", "repeated"},
 			"SchemaAgreementZero":              {New(ScyllaV4, "h").WithSchemaAgreement(0, time.Second), "WithSchemaAgreement", "positive"},
 			"HeartbeatWithoutTimeout":          {New(ScyllaV4, "h").WithHeartbeat(time.Second, 0), "WithHeartbeat", "positive"},
-			"ProfilePageSize":                  {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.PageSize = -1 })), "WithPageSize", "positive"},
-			"ProfileTimeout":                   {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.Timeout = -1 })), "WithTimeout", "negative"},
+			"ProfilePageSize":                  {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.PageSize = -1 }).Builder()), "WithPageSize", "positive"},
+			"ProfileTimeout":                   {New(ScyllaV4, "h").WithDefaultProfile(editedProfile(func(p *Profile) { p.Timeout = -1 }).Builder()), "WithTimeout", "negative"},
+			"ProfilePageSizeOverInt32":         {New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithPageSize(pageSizeOverInt32())), "WithPageSize", "got"},
+			"ProfileBuilderPageSize":           {New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithPageSize(-3)), "WithPageSize", "positive"},
+			"ZeroProfileBuilder":               {New(ScyllaV4, "h").WithDefaultProfile(&ProfileBuilder{}), "WithDefaultProfile", "zero ProfileBuilder"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				_, err := tc.b.Build()
@@ -794,7 +824,7 @@ func TestConfigBuilder(t *testing.T) {
 				}
 			})
 		}
-		mustBuildConfig(t, New(ScyllaV4, "h").WithMaxFrameSize(1<<31-1).WithMaxDecompressedSize(1<<31-1).WithMaxMetadataDepth(128).WithMaxRequestsPerConnection(32768))
+		mustBuildConfig(t, New(ScyllaV4, "h").WithLimits(Limits{MaxFrameBytes: 1<<31 - 1, MaxDecompressedBytes: 1<<31 - 1, MaxMetadataDepth: 128}).WithMaxRequestsPerConnection(32768))
 	})
 
 	// NilRestoresDefault checks that a nil policy means the driver's default
@@ -803,7 +833,7 @@ func TestConfigBuilder(t *testing.T) {
 		c := mustBuildConfig(t, New(ScyllaV4, "h").WithReconnect(declineReconnect{}).WithReconnect(nil).
 			WithConviction(endpoint.SimpleConvictionPolicy{}).WithConviction(nil).
 			WithDialer(secretDialer{}).WithDialer(nil).
-			WithDefaultProfile(NewProfile().WithRetry(retry.Never{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil).MustBuild())).settings
+			WithDefaultProfile(NewProfile().WithRetry(retry.Never{}).WithRetry(nil).WithRouting(routing.SingleTarget(metadata.Target{})).WithRouting(nil))).settings
 		if !implSettings.IsDefaultReconnect(c.Reconnect) || c.Conviction != nil || c.Dialer != nil {
 			t.Fatalf("nil did not restore the default: reconnect %T, conviction %T, dialer %T", c.Reconnect, c.Conviction, c.Dialer)
 		}
@@ -915,7 +945,7 @@ func TestConfigBuilder(t *testing.T) {
 		if _, err := NewProfile().WithPageTimeout(-time.Second).Build(); err == nil {
 			t.Fatal("negative page timeout accepted")
 		}
-		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithPageTimeout(time.Second).MustBuild())).settings
+		c := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(NewProfile().WithPageTimeout(time.Second))).settings
 		if c.DefaultProfile.PageTimeout != time.Second {
 			t.Fatalf("default profile PageTimeout = %v", c.DefaultProfile.PageTimeout)
 		}
@@ -923,7 +953,7 @@ func TestConfigBuilder(t *testing.T) {
 			t.Fatal("a profile is idempotent by default")
 		}
 		idempotent := NewProfile().WithIdempotent(true).MustBuild()
-		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(idempotent))
+		cfg := mustBuildConfig(t, New(ScyllaV4, "h").WithDefaultProfile(idempotent.Builder()))
 		if !idempotent.Idempotent || !cfg.settings.DefaultProfile.Idempotent || !cfg.DefaultProfile().Idempotent {
 			t.Fatal("WithIdempotent(true) was not kept")
 		}
@@ -933,11 +963,11 @@ func TestConfigBuilder(t *testing.T) {
 	})
 
 	t.Run("ProfileBuild", func(t *testing.T) {
-		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().WithPrefetch(0).Build()
+		p, err := NewProfile().WithConsistency(cql.One).NoSerialConsistency().WithPrefetch(false).Build()
 		if err != nil {
 			t.Fatal(err)
 		}
-		if p.Consistency != cql.One || p.SerialConsistency.Set || p.Prefetch != 0 || p.Routing == nil {
+		if p.Consistency != cql.One || p.SerialConsistency.Set || p.Prefetch || p.Routing == nil {
 			t.Fatalf("profile = %+v", p)
 		}
 		if _, err := NewProfile().WithSerialConsistency(cql.Quorum).Build(); err == nil {
@@ -953,9 +983,9 @@ func (secretDialer) DialContext(context.Context, endpoint.DialTarget) (net.Conn,
 }
 
 func secretTranslator(secret string) endpoint.Translator {
-	return endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+	return endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
 		_ = secret
-		return addr, nil
+		return endpoint.AddressOf(addr), nil
 	})
 }
 
@@ -993,7 +1023,7 @@ func codecTestMust[T any](v T, err error) T {
 func TestConfigBuilderClone(t *testing.T) {
 	base := New(ScyllaV4, "a", "b").WithKeyspace("ks").WithMetadataKeyspaces("ks").
 		WithIgnoreEvents(event.KindStatus).WithClientRoutes(ClientRoute{ConnectionID: "c1"}).
-		WithDefaultProfile(NewProfile().WithPageSize(7).MustBuild())
+		WithDefaultProfile(NewProfile().WithPageSize(7))
 	clone := base.Clone().WithKeyspace("other").WithContactPoints("c").WithMetadataKeyspaces("other").
 		WithIgnoreEvents().WithClientRoutes(ClientRoute{ConnectionID: "c2"}).
 		WithPartitioner("custom", routing.Murmur3TokenPartitioner)
@@ -1085,4 +1115,12 @@ func TestUnixSocketSettingErrors(t *testing.T) {
 			t.Errorf("Build = %v, want an UnsupportedSettingError naming %s", err, setter)
 		}
 	}
+}
+
+// pageSizeOverInt32 is one row more than cql.Unpaged, which an int32 cannot
+// carry where int is wider.
+func pageSizeOverInt32() int {
+	n := cql.Unpaged
+	n++
+	return n
 }

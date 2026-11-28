@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,6 +22,7 @@ import (
 	"github.com/scylladb/gocql/v2/config"
 	"github.com/scylladb/gocql/v2/cql"
 	"github.com/scylladb/gocql/v2/cqlerr"
+	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/exec"
 )
 
@@ -55,7 +55,6 @@ func run() (resultErr error) {
 	flag.Parse()
 	builder := config.New(d, strings.Split(*hosts, ",")...).
 		WithConnectionsPerHost(1).
-		WithAdvancedShardAwareness(false).
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0)
 	if *password == "" {
@@ -71,30 +70,22 @@ func run() (resultErr error) {
 		if err != nil {
 			return err
 		}
-		if *uri != "" {
-			roots := tlsConfig.RootCAs
-			// Explicit URI identity verification also verifies the complete CA chain.
-			tlsConfig.InsecureSkipVerify = true
-			tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
-				if len(state.PeerCertificates) == 0 {
-					return fmt.Errorf("missing peer certificate")
-				}
-				intermediates := x509.NewCertPool()
-				for _, c := range state.PeerCertificates[1:] {
-					intermediates.AddCert(c)
-				}
-				if _, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediates, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
-					return err
-				}
-				for _, id := range state.PeerCertificates[0].URIs {
-					if id.String() == *uri {
-						return nil
-					}
-				}
-				return fmt.Errorf("missing expected TLS URI %q", *uri)
-			}
-		}
 		builder.WithTLS(tlsConfig)
+		if *uri != "" {
+			// The driver verifies the certificate chain against the CA; the
+			// node is identified by a URI in its certificate, not a name.
+			want := *uri
+			builder.WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity {
+				return endpoint.TLSIdentity{ChainOnly: true, Verify: func(state tls.ConnectionState) error {
+					for _, id := range state.PeerCertificates[0].URIs {
+						if id.String() == want {
+							return nil
+						}
+					}
+					return fmt.Errorf("missing expected TLS URI %q", want)
+				}}
+			})
+		}
 	}
 	cfg, err := builder.Build()
 	if err != nil {

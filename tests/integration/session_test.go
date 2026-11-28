@@ -274,7 +274,7 @@ func TestSession(t *testing.T) {
 			}
 			write(0x71)
 			prepared := codecTestMust(s.Prepare(ctx, cql.Statement[cql.EmptyParams, cql.Bytes]{CQL: "SELECT value FROM " + ks + ".records WHERE id=1", Kind: cql.OrdinaryStatement, Params: cql.NoParams, Rows: cql.OneColumn(cql.BytesCodec)}, exec.PrepareOptions{}))
-			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+			rows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)})))
 			var old cql.Bytes
 			if !rows.NextInto(&old) {
 				t.Fatal(rows.Err())
@@ -295,7 +295,7 @@ func TestSession(t *testing.T) {
 			})
 			for generation := 0; generation < 8; generation++ {
 				write(byte(0x72 + generation))
-				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Option[int]{Set: true, Value: 0}})))
+				freshRows := codecTestMust(prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, exec.Options{Prefetch: cql.Some(false)})))
 				var view cql.Bytes
 				if !freshRows.NextInto(&view) {
 					t.Fatal(freshRows.Err())
@@ -510,12 +510,12 @@ func TestSession(t *testing.T) {
 					clusterHosts = append(clusterHosts, fromAddress.String())
 				}
 
-				translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+				translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
 					if to, ok := toAddresses[addr.Addr()]; ok {
-						return netip.AddrPortFrom(to, addr.Port()), nil
+						return endpoint.AddressOf(netip.AddrPortFrom(to, addr.Port())), nil
 					}
 					if knownAddresses[addr.Addr()] {
-						return addr, nil
+						return endpoint.AddressOf(addr), nil
 					}
 					panic("failed to translate address")
 				})
@@ -682,7 +682,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "WriteTimeout",
 							getCluster: func() config.Config {
-								return mustBuild(t, createV2Cluster().WithWriteTimeout(lowTimeout))
+								return mustBuild(t, createV2Cluster().WithWriteStallTimeout(lowTimeout))
 							},
 							connect:      Pass,
 							regularQuery: canPassOnHighTimeout,
@@ -694,7 +694,7 @@ func TestSession(t *testing.T) {
 						{
 							name: "ReadTimeout",
 							getCluster: func() config.Config {
-								return mustBuild(t, createV2Cluster().WithReadTimeout(lowTimeout))
+								return mustBuild(t, createV2Cluster().WithReadStallTimeout(lowTimeout))
 							},
 							connect: Pass,
 							// When data is available immediately reading from socket is not failing,
@@ -710,8 +710,8 @@ func TestSession(t *testing.T) {
 							name: "AllTimeouts",
 							getCluster: func() config.Config {
 								return mustBuild(t, editDefaultProfile(createV2ClusterWithout(fixtureTimeout), func(p *config.ProfileBuilder) { p.WithTimeout(lowTimeout) }).
-									WithReadTimeout(lowTimeout).
-									WithWriteTimeout(lowTimeout).
+									WithReadStallTimeout(lowTimeout).
+									WithWriteStallTimeout(lowTimeout).
 									WithMetadataTimeout(lowTimeout))
 							},
 							connect:                    Pass,
@@ -867,7 +867,7 @@ func TestSession(t *testing.T) {
 			c := config.New(testDialect, "unix:"+socketFiles[0]).
 				WithCQLVersion(*flagCQL).
 				WithSchemaAgreement(200*time.Millisecond, 2*time.Minute).
-				WithDefaultProfile(config.NewProfile().WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)}).MustBuild()).
+				WithDefaultProfile(config.NewProfile().WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})).
 				WithConnectionsPerHost(1).
 				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
@@ -958,7 +958,7 @@ func TestSession(t *testing.T) {
 		// The smoke cluster speaks the dialect the suite is built for.
 		cfg := config.New(testDialect, strings.Split(v2SmokeOption("cluster", "127.0.20.1,127.0.20.2,127.0.20.3"), ",")...).
 			WithConfigReport(false).
-			WithDefaultProfile(config.NewProfile().WithTimeout(30 * time.Second).WithConsistency(cql.LocalQuorum).MustBuild())
+			WithDefaultProfile(config.NewProfile().WithTimeout(30 * time.Second).WithConsistency(cql.LocalQuorum))
 		switch v2SmokeOption("compressor", "no-compression") {
 		case "lz4":
 			cfg.WithCompression(cql.LZ4Compression)

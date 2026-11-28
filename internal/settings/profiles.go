@@ -4,6 +4,7 @@
 package settings
 
 import (
+	"math"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
@@ -27,6 +28,21 @@ type Profile struct {
 	// such as a struct literal: its unset fields are zero, not the driver's
 	// defaults, so validation rejects it.
 	unbuilt bool
+	// badPageSize is a public page size that PageSize cannot carry, which
+	// validation rejects; zero when PageSize holds the chosen size.
+	badPageSize int
+}
+
+// InternalSetPageSize sets the page size from the public int, recording one
+// that an int32 cannot carry for ValidateProfile to reject.
+func (p *Profile) InternalSetPageSize(rows int) {
+	p.badPageSize = 0
+	if rows < math.MinInt32 || rows > math.MaxInt32 {
+		p.badPageSize = rows
+		p.PageSize = 0
+		return
+	}
+	p.PageSize = int32(rows)
 }
 
 // InternalMarkUnbuilt records that p comes from a public Profile that
@@ -57,6 +73,9 @@ func (p Profile) ValidateProfile() error {
 	}
 	if p.PageTimeout < 0 {
 		return cqltype.TypeValidation("WithPageTimeout", "must not be negative, got %v", p.PageTimeout)
+	}
+	if p.badPageSize != 0 {
+		return cqltype.TypeValidation("WithPageSize", "must be 1 to %d (cql.Unpaged), got %d", cql.Unpaged, p.badPageSize)
 	}
 	if p.PageSize <= 0 {
 		return cqltype.TypeValidation("WithPageSize", "must be positive, got %d", p.PageSize)

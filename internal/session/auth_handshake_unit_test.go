@@ -72,9 +72,9 @@ func (srv *authTestServer) received() []string {
 }
 
 // cluster returns a config for one connection to srv that gives up after a
-// single attempt. testCluster has no control connection, so open
-// reports a failed handshake only as ErrNoConnectionsStarted; the cause is in
-// the pool's log, which lands in the returned logger.
+// single attempt. testCluster has no control connection, so open reports
+// a failed handshake as the pool's cqlerr.ConnectError, which carries the
+// cause; the pool also logs it to the returned logger.
 func (srv *authTestServer) cluster(auth transport.Authenticator) (*implCluster.InternalClusterSettings, *logging.Capture) {
 	cfg := testCluster(protocol.ProtoVersion4, srv.Address)
 	cfg.NumConns = 1
@@ -86,8 +86,8 @@ func (srv *authTestServer) cluster(auth transport.Authenticator) (*implCluster.I
 	return cfg, out
 }
 
-// requireHandshakeError fails t unless open failed and the pool
-// logged a cause containing want.
+// requireHandshakeError fails t unless open failed with an error that
+// carries a cause containing want.
 func requireHandshakeError(t *testing.T, cfg *implCluster.InternalClusterSettings, log *logging.Capture, want string) {
 	t.Helper()
 	s, err := cfg.Open()
@@ -95,7 +95,7 @@ func requireHandshakeError(t *testing.T, cfg *implCluster.InternalClusterSetting
 		s.Close()
 		t.Fatal("open succeeded, want an authentication error")
 	}
-	if !strings.Contains(err.Error(), want) && !log.Contains(want) {
+	if !strings.Contains(err.Error(), want) {
 		t.Fatalf("open error = %v, log = %q; want the cause %q", err, log.String(), want)
 	}
 }

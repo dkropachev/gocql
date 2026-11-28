@@ -5,6 +5,7 @@ package endpoint_test
 
 import (
 	"context"
+	"crypto/tls"
 	"log"
 	"net"
 	"net/netip"
@@ -55,13 +56,34 @@ func ExampleTranslator() {
 		netip.MustParseAddr("203.0.113.10"): netip.MustParseAddr("10.0.0.10"),
 		netip.MustParseAddr("203.0.113.11"): netip.MustParseAddr("10.0.0.11"),
 	}
-	translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (netip.AddrPort, error) {
+	translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
 		if ip, ok := private[addr.Addr()]; ok {
-			return netip.AddrPortFrom(ip, addr.Port()), nil
+			return endpoint.AddressOf(netip.AddrPortFrom(ip, addr.Port())), nil
 		}
-		return addr, nil
+		return endpoint.AddressOf(addr), nil
 	})
 	cfg, err := config.New(config.ScyllaV4, "10.0.0.10:9042").
+		WithAddressTranslator(translator).
+		Build()
+	if err != nil {
+		log.Fatal(err)
+	}
+	_ = cfg
+}
+
+// ExampleAddress dials every node through a per-node DNS name, such as one
+// a Kubernetes service or a load balancer publishes. The driver resolves the
+// name on every dial and, over TLS, verifies the node's certificate against
+// the name instead of the node's IP address.
+func ExampleAddress() {
+	translator := endpoint.TranslatorFunc(func(_ context.Context, peer endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+		if peer.HostID.IsZero() {
+			return endpoint.AddressOf(addr), nil // a contact point, dialed as configured
+		}
+		return endpoint.Address{Host: peer.HostID.String() + ".nodes.example.com", Port: addr.Port()}, nil
+	})
+	cfg, err := config.New(config.ScyllaV4, "db.example.com:9042").
+		WithTLS(&tls.Config{MinVersion: tls.VersionTLS13}).
 		WithAddressTranslator(translator).
 		Build()
 	if err != nil {

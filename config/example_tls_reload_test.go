@@ -10,6 +10,7 @@ import (
 	"log"
 	"os"
 	"sync/atomic"
+	"time"
 
 	gocql "github.com/scylladb/gocql/v2"
 	"github.com/scylladb/gocql/v2/config"
@@ -21,7 +22,7 @@ func ExampleNewTLSFileSource() {
 		CertFile: "/etc/scylla-client/tls.crt",
 		KeyFile:  "/etc/scylla-client/tls.key",
 		CAFile:   "/etc/scylla-client/ca.crt",
-	})
+	}, time.Minute) // check the files at most once a minute
 	if err != nil {
 		log.Fatal(err)
 	}

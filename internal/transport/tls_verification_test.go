@@ -18,6 +18,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -192,6 +193,63 @@ func TestTLSVerification(t *testing.T) {
 	})
 }
 
+// A node whose certificate names only its DNS name fails a dial that verifies
+// its IP address, as discovered nodes are verified, with an error that says
+// to set ServerName or WithTLSIdentity; a name that fails gets no such hint.
+// A DNS name the address translator returned is verified instead of the IP.
+func TestTLSNameOfDiscoveredNodes(t *testing.T) {
+	cert, clientTLS := tlsServerCert(t, []string{"node1.test"}, nil)
+	serve := func(t *testing.T) net.Listener {
+		t.Helper()
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { listener.Close() })
+		go func() {
+			for {
+				raw, err := listener.Accept()
+				if err != nil {
+					return
+				}
+				go func() {
+					defer raw.Close()
+					server := tls.Server(raw, &tls.Config{Certificates: []tls.Certificate{cert}})
+					if server.Handshake() == nil {
+						io.Copy(io.Discard, server)
+					}
+				}()
+			}
+		}()
+		return listener
+	}
+	t.Run("ByIP", func(t *testing.T) {
+		_, err := dialTLS(t, tlsTestHost(t, serve(t).Addr(), ""), clientTLS)
+		var hostnameErr x509.HostnameError
+		if !errors.As(err, &hostnameErr) || !strings.Contains(err.Error(), "ServerName") || !strings.Contains(err.Error(), "WithTLSIdentity") {
+			t.Fatalf("dial by IP = %v, want an x509.HostnameError naming ServerName and WithTLSIdentity", err)
+		}
+	})
+	t.Run("ByOtherName", func(t *testing.T) {
+		_, err := dialTLS(t, tlsTestHost(t, serve(t).Addr(), "node2.test"), clientTLS)
+		var hostnameErr x509.HostnameError
+		if !errors.As(err, &hostnameErr) || strings.Contains(err.Error(), "WithTLSIdentity") {
+			t.Fatalf("dial by another name = %v, want an x509.HostnameError without the IP hint", err)
+		}
+	})
+	t.Run("TranslatedName", func(t *testing.T) {
+		host := tlsTestHost(t, serve(t).Addr(), "")
+		translated := *implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
+		translated.TLSName = "node1.test"
+		implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, translated)
+		conn, err := dialTLS(t, host, clientTLS)
+		if err != nil {
+			t.Fatalf("dial by the translated name: %v", err)
+		}
+		conn.Conn.Close()
+	})
+}
+
 // A dial takes the TLS source's configuration at that time: after a
 // TLSFileSource reloads a rotated CA file, the next dial trusts the new CA
 // and no longer the old one.
@@ -207,7 +265,7 @@ func TestTLSFileSourceReloadReachesDials(t *testing.T) {
 		}
 	}
 	writeCA(oldCert)
-	source, err := config.NewTLSFileSource(nil, config.TLSFiles{CAFile: caFile, Interval: time.Hour})
+	source, err := config.NewTLSFileSource(nil, config.TLSFiles{CAFile: caFile}, time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}

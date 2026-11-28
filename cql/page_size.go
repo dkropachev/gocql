@@ -10,6 +10,6 @@ import "math"
 // carries no page size, so the server returns the whole result in one
 // response, within its own result size limits. Use it for results known to be
 // small; a large unpaged result costs server and client memory at once. It is
-// untyped, the largest int32, so it fits both exec.Options.PageSize, an int,
-// and config.Profile.PageSize, an int32.
+// the largest int32, the largest page size the protocol carries, and the
+// largest that exec.Options.PageSize and config.Profile.PageSize accept.
 const Unpaged = math.MaxInt32

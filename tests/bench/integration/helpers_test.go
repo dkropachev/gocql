@@ -412,7 +412,7 @@ func newFixtureConfig(hosts []string, skip fixtureParts, opts ...func(*config.Co
 	}
 	profile := config.NewProfile()
 	fixtureProfileExcept(profile, skip)
-	b.WithDefaultProfile(profile.MustBuild())
+	b.WithDefaultProfile(profile)
 	if *flagRunAuthTest && skip&fixtureAuth == 0 {
 		b.WithAuth(auth.Password("cassandra", "cassandra"))
 	}
@@ -454,7 +454,7 @@ func editDefaultProfile(b *config.ConfigBuilder, edit func(*config.ProfileBuilde
 	}
 	p := cfg.DefaultProfile().Builder()
 	edit(p)
-	return b.WithDefaultProfile(p.MustBuild())
+	return b.WithDefaultProfile(p)
 }
 
 // fixtureProfileExcept applies the fixture's profile choices, except skip.

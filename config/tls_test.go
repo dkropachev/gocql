@@ -25,10 +25,11 @@ import (
 )
 
 type tlsTestFiles struct {
-	t     *testing.T
-	dir   string
-	pairs map[int64][2][]byte
-	files TLSFiles
+	t        *testing.T
+	dir      string
+	pairs    map[int64][2][]byte
+	files    TLSFiles
+	interval time.Duration
 }
 
 func newTLSTestFiles(t *testing.T) *tlsTestFiles {
@@ -77,7 +78,7 @@ func (f *tlsTestFiles) set(serial, caSerial int64) {
 
 func (f *tlsTestFiles) source(base *tls.Config) *TLSFileSource {
 	f.t.Helper()
-	s, err := NewTLSFileSource(base, f.files)
+	s, err := NewTLSFileSource(base, f.files, f.interval)
 	if err != nil {
 		f.t.Fatal(err)
 	}
@@ -112,26 +113,27 @@ func TestTLSSource(t *testing.T) {
 		pki := TLSFiles{CertFile: "../testdata/pki/gocql.crt", KeyFile: "../testdata/pki/gocql.key", CAFile: "../testdata/pki/ca.crt"}
 		getCert := &tls.Config{GetClientCertificate: func(*tls.CertificateRequestInfo) (*tls.Certificate, error) { return nil, nil }}
 		for name, tc := range map[string]struct {
-			base  *tls.Config
-			files TLSFiles
-			want  string
+			base     *tls.Config
+			files    TLSFiles
+			interval time.Duration
+			want     string
 		}{
-			"CertWithoutKey":       {nil, TLSFiles{CertFile: pki.CertFile}, "set together"},
-			"Empty":                {nil, TLSFiles{}, "pair or a CA file is required"},
-			"NegativeInterval":     {nil, TLSFiles{CAFile: pki.CAFile, Interval: -time.Second}, "must not be negative"},
-			"GetClientCertificate": {getCert, pki, "GetClientCertificate"},
-			"MissingFile":          {nil, TLSFiles{CAFile: "../testdata/pki/missing.crt"}, "missing.crt"},
-			"MismatchedPair":       {nil, TLSFiles{CertFile: pki.CertFile, KeyFile: "../testdata/pki/cassandra.key"}, "cert and key"},
-			"NotPEM":               {nil, TLSFiles{CAFile: "../testdata/pki/ca.cnf"}, "no PEM certificates"},
+			"CertWithoutKey":       {nil, TLSFiles{CertFile: pki.CertFile}, 0, "set together"},
+			"Empty":                {nil, TLSFiles{}, 0, "pair or a CA file is required"},
+			"NegativeInterval":     {nil, TLSFiles{CAFile: pki.CAFile}, -time.Second, "must not be negative"},
+			"GetClientCertificate": {getCert, pki, 0, "GetClientCertificate"},
+			"MissingFile":          {nil, TLSFiles{CAFile: "../testdata/pki/missing.crt"}, 0, "missing.crt"},
+			"MismatchedPair":       {nil, TLSFiles{CertFile: pki.CertFile, KeyFile: "../testdata/pki/cassandra.key"}, 0, "cert and key"},
+			"NotPEM":               {nil, TLSFiles{CAFile: "../testdata/pki/ca.cnf"}, 0, "no PEM certificates"},
 		} {
 			t.Run(name, func(t *testing.T) {
-				if _, err := NewTLSFileSource(tc.base, tc.files); err == nil || !strings.Contains(err.Error(), tc.want) {
+				if _, err := NewTLSFileSource(tc.base, tc.files, tc.interval); err == nil || !strings.Contains(err.Error(), tc.want) {
 					t.Fatalf("NewTLSFileSource = %v, want an error containing %q", err, tc.want)
 				}
 			})
 		}
 		base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
-		s, err := NewTLSFileSource(base, pki)
+		s, err := NewTLSFileSource(base, pki, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -141,7 +143,7 @@ func TestTLSSource(t *testing.T) {
 		if len(base.Certificates) != 0 || base.RootCAs != nil {
 			t.Fatal("NewTLSFileSource modified the base")
 		}
-		s, err = NewTLSFileSource(nil, TLSFiles{CAFile: pki.CAFile})
+		s, err = NewTLSFileSource(nil, TLSFiles{CAFile: pki.CAFile}, 0)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -170,7 +172,7 @@ func TestTLSSource(t *testing.T) {
 
 	t.Run("Files/IntervalGatesChecks", func(t *testing.T) {
 		f := newTLSTestFiles(t)
-		f.files.Interval = time.Hour
+		f.interval = time.Hour
 		f.set(1, 10)
 		s := f.source(nil)
 		f.set(2, 10)
@@ -385,7 +387,7 @@ func TestTLSSource(t *testing.T) {
 
 	t.Run("Files/ConcurrentDials", func(t *testing.T) {
 		f := newTLSTestFiles(t)
-		f.files.Interval = time.Nanosecond
+		f.interval = time.Nanosecond
 		f.set(1, 10)
 		s := f.source(nil)
 		var wg sync.WaitGroup
@@ -406,12 +408,8 @@ func TestTLSSource(t *testing.T) {
 // TestLoadTLSFiles loads the files once over a base, which it leaves
 // unchanged, and rejects what NewTLSFileSource rejects, naming itself.
 func TestLoadTLSFiles(t *testing.T) {
-	pki := TLSFiles{CertFile: "../testdata/pki/gocql.crt", KeyFile: "../testdata/pki/gocql.key", CAFile: "../testdata/pki/ca.crt", Interval: -time.Second}
+	pki := TLSFiles{CertFile: "../testdata/pki/gocql.crt", KeyFile: "../testdata/pki/gocql.key", CAFile: "../testdata/pki/ca.crt"}
 	base := &tls.Config{ServerName: "node", MinVersion: tls.VersionTLS13}
-	if _, err := LoadTLSFiles(base, pki); err == nil {
-		t.Fatal("LoadTLSFiles accepted a negative interval")
-	}
-	pki.Interval = 0
 	c, err := LoadTLSFiles(base, pki)
 	if err != nil {
 		t.Fatal(err)
@@ -442,7 +440,7 @@ func TestLoadTLSFiles(t *testing.T) {
 	}
 	// A file that cannot be read fails the call that read it.
 	missing := TLSFiles{CAFile: "../testdata/pki/missing.crt"}
-	if _, err := NewTLSFileSource(nil, missing); err == nil {
+	if _, err := NewTLSFileSource(nil, missing, 0); err == nil {
 		t.Fatal("NewTLSFileSource accepted a missing file")
 	} else if verr, ok := errors.AsType[*cql.ValidationError](err); !ok || verr.Field != "NewTLSFileSource" {
 		t.Fatalf("NewTLSFileSource = %v, want a cql.ValidationError naming NewTLSFileSource", err)

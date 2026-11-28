@@ -44,7 +44,7 @@ func TestPasswordIsNotPrinted(t *testing.T) {
 // accepts the server's final message, and Close releases the exchange.
 func TestPasswordExchange(t *testing.T) {
 	ctx := context.Background()
-	exchange, response, err := Password("user", "pass").Start(ctx, metadata.HostSnapshot{}, "org.apache.cassandra.auth.PasswordAuthenticator")
+	exchange, response, err := Password("user", "pass").Start(ctx, metadata.HostSnapshot{}, PasswordAuthenticator)
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -73,8 +73,8 @@ func TestPasswordExchange(t *testing.T) {
 // authenticator class, and to any class when none is allowed.
 func TestPasswordAllowedAuthenticators(t *testing.T) {
 	ctx := context.Background()
-	const allowed = "org.apache.cassandra.auth.PasswordAuthenticator"
-	classes := []string{allowed, "com.scylladb.auth.TransitionalAuthenticator"}
+	const allowed = PasswordAuthenticator
+	classes := []string{allowed, ScyllaTransitionalAuthenticator}
 	p := Password("user", "pass", classes...)
 	classes[0] = "changed"
 	if _, response, err := p.Start(ctx, metadata.HostSnapshot{}, allowed); err != nil || !response.Valid {

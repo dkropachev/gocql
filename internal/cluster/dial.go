@@ -90,7 +90,7 @@ func (s *Core) DialShard(ctx context.Context, host *implEndpoint.HostInfo, connC
 	if typed := connConfig.TypedConfig; typed != nil && (typed.TLS != nil || typed.TLSSource != nil) {
 		tlsPort = typed.TLSPort
 	}
-	updated, err := implTransport.InternalTranslateHostAddresses(ctx, s.privateStorage.InternalAddressTranslator, host, tlsPort, s.privateStorage.InternalLogger)
+	updated, err := implTransport.InternalTranslateHostAddresses(ctx, s.privateStorage.InternalAddressTranslator, s.privateStorage.InternalCfg.DNSResolver, host, tlsPort, current, s.privateStorage.InternalLogger)
 	if err != nil {
 		return nil, err
 	}

@@ -109,7 +109,7 @@ func TestRunStreamCoordinatorStop(t *testing.T) {
 		t.Fatal(err)
 	}
 	probeOptions := pinned
-	probeOptions.Prefetch = cql.Option[int]{Set: true, Value: 0}
+	probeOptions.Prefetch = cql.Some(false)
 	deadline := time.Now().Add(40 * time.Second)
 	for {
 		probe, probeErr := prepared.Run(ctx, cql.EmptyParams{}, bindOptions(s, probeOptions))

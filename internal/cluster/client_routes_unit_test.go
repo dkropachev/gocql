@@ -107,3 +107,12 @@ func newCacheEntryWithCurrent(current InternalClientRoute, routes ...InternalCli
 	entry.BindCurrent(current.InternalConnectionID)
 	return entry
 }
+
+// translateAddr parses a translated address, which client routes return as
+// an IP.
+func translateAddr(a endpoint2.Address, err error) (netip.AddrPort, error) {
+	if err != nil {
+		return netip.AddrPort{}, err
+	}
+	return netip.ParseAddrPort(a.String())
+}

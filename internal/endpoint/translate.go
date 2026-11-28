@@ -30,6 +30,7 @@ import (
 	"log/slog"
 	"net"
 	"net/netip"
+	"strings"
 
 	"github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/logging"
@@ -65,25 +66,61 @@ func InternalUsableAddrPort(addr netip.AddrPort) bool {
 	return addr.Addr().IsValid() && !addr.Addr().IsUnspecified() && addr.Port() != 0
 }
 
-// InternalTranslateAddressPort applies addressTranslator to addr of peer. A nil
-// translator or an unusable addr returns addr unchanged.
-func InternalTranslateAddressPort(ctx context.Context, addressTranslator endpoint.Translator, peer endpoint.Peer, addr netip.AddrPort, logger *slog.Logger) (netip.AddrPort, error) {
+// InternalTranslateAddressPort applies addressTranslator to addr of peer and
+// returns the address to dial and, when the translator named a DNS host,
+// that name. A nil translator or an unusable addr returns addr unchanged. A
+// DNS name is resolved through resolver, net.DefaultResolver when nil, on
+// every call; prefer, an address the node was dialed on before, is kept
+// while the name still resolves to it, and the first usable address is
+// taken otherwise.
+func InternalTranslateAddressPort(ctx context.Context, addressTranslator endpoint.Translator, resolver endpoint.Resolver, peer endpoint.Peer, addr, prefer netip.AddrPort, logger *slog.Logger) (netip.AddrPort, string, error) {
 	logger = logging.Or(logger)
 	if addressTranslator == nil || !InternalUsableAddrPort(addr) {
-		return addr, nil
+		return addr, "", nil
 	}
-	newAddr, err := addressTranslator.Translate(ctx, peer, addr)
+	translated, err := addressTranslator.Translate(ctx, peer, addr)
 	if err != nil {
 		logger.Debug("address translation failed", "addr", addr.String(), logging.Err(err))
-		return addr, err
+		return addr, "", err
 	}
-	if newAddr.Port() == 0 {
-		return addr, fmt.Errorf("invalid translated port 0 for %q: port must be between 1 and 65535", addr)
+	if translated.Port == 0 {
+		return addr, "", fmt.Errorf("invalid translated port 0 for %q: port must be between 1 and 65535", addr)
 	}
-	if !newAddr.Addr().IsValid() || newAddr.Addr().IsUnspecified() {
-		return addr, fmt.Errorf("invalid translated address %q for %q", newAddr.Addr(), addr)
+	host := strings.TrimSuffix(strings.TrimPrefix(translated.Host, "["), "]")
+	if host == "" {
+		return addr, "", fmt.Errorf("invalid translated address for %q: no host", addr)
 	}
-	newAddr = netip.AddrPortFrom(newAddr.Addr().Unmap(), newAddr.Port())
-	logger.Debug("translated address", "addr", addr.String(), "translated", newAddr.String())
-	return newAddr, nil
+	if ip, err := netip.ParseAddr(host); err == nil {
+		if ip.IsUnspecified() {
+			return addr, "", fmt.Errorf("invalid translated address %q for %q", ip, addr)
+		}
+		newAddr := netip.AddrPortFrom(ip.Unmap(), translated.Port)
+		logger.Debug("translated address", "addr", addr.String(), "translated", newAddr.String())
+		return newAddr, "", nil
+	}
+	if resolver == nil {
+		resolver = net.DefaultResolver
+	}
+	ips, err := resolver.LookupNetIP(ctx, "ip", host)
+	if err != nil {
+		return addr, "", fmt.Errorf("resolve translated host %q for %q: %w", host, addr, err)
+	}
+	var chosen netip.AddrPort
+	for _, ip := range ips {
+		if ip = ip.Unmap(); !ip.IsValid() || ip.IsUnspecified() {
+			continue
+		}
+		candidate := netip.AddrPortFrom(ip, translated.Port)
+		if !chosen.IsValid() || candidate == prefer {
+			chosen = candidate
+		}
+		if candidate == prefer {
+			break
+		}
+	}
+	if !chosen.IsValid() {
+		return addr, "", fmt.Errorf("translated host %q for %q resolved to no usable address", host, addr)
+	}
+	logger.Debug("translated address", "addr", addr.String(), "translated", translated.String(), "resolved", chosen.String())
+	return chosen, host, nil
 }

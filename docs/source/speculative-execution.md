@@ -25,7 +25,7 @@ speculation := retry.SpeculationPolicyFunc(func(s retry.Speculation) (time.Durat
 	return delay, true
 })
 cfg, err := config.New(config.ScyllaV4, "10.0.0.1").
-	WithDefaultProfile(config.NewProfile().WithSpeculation(speculation).MustBuild()).
+	WithDefaultProfile(config.NewProfile().WithSpeculation(speculation)).
 	Build()
 ```
 
