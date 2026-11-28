@@ -1124,3 +1124,18 @@ func pageSizeOverInt32() int {
 	n++
 	return n
 }
+
+func TestProfileCQLTraceSampler(t *testing.T) {
+	sampled := false
+	p, err := NewProfile().WithCQLTraceSampler(func(routing.Info) bool { sampled = true; return true }).Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.CQLTraceSampler == nil || !p.CQLTraceSampler(routing.Info{}) || !sampled {
+		t.Fatal("WithCQLTraceSampler did not set the sampler")
+	}
+	p, err = p.Builder().WithCQLTraceSampler(nil).Build()
+	if err != nil || p.CQLTraceSampler != nil {
+		t.Fatalf("nil sampler: %v, %v", p.CQLTraceSampler != nil, err)
+	}
+}

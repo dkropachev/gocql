@@ -42,6 +42,31 @@ import (
 func TestConditional(t *testing.T) {
 	t.Parallel()
 
+	t.Run("Apply", func(t *testing.T) {
+		t.Parallel()
+		session := createV2SessionFromConfig(createV2Cluster(), t, true)
+		defer session.Close()
+		table := testTableName(t)
+		cassandraDDL(t, session, fmt.Sprintf("CREATE TABLE %s(id int PRIMARY KEY, v int)", table))
+		insert := cassandraCASPrepared(t, session, fmt.Sprintf("INSERT INTO %s(id,v) VALUES (?,?) IF NOT EXISTS", table), cql.DynamicRows)
+		// A per-call profile derived from the session's keeps its settings.
+		profile := session.DefaultProfile().Builder().WithSerialConsistency(cql.Serial).MustBuild()
+		options := session.MustCompileOptions(execopt.Options{Profile: &profile})
+		values := []cql.Value{cql.IntValue(1), cql.IntValue(2)}
+		applied, _, err := insert.Apply(t.Context(), values, options)
+		require.NoError(t, err)
+		require.True(t, applied)
+		applied, _, err = insert.Apply(t.Context(), values)
+		require.NoError(t, err)
+		require.False(t, applied)
+		worker, err := insert.Worker()
+		require.NoError(t, err)
+		defer worker.Close()
+		applied, _, err = worker.Apply(t.Context(), []cql.Value{cql.IntValue(2), cql.IntValue(3)})
+		require.NoError(t, err)
+		require.True(t, applied)
+	})
+
 	t.Run("Exec", func(t *testing.T) {
 		t.Parallel()
 		session := createV2SessionFromConfig(createV2Cluster(), t, true)
