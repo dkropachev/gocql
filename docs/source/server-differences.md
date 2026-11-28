@@ -30,9 +30,9 @@ to a shard other than 0 finds no connection on Cassandra, which has no shards.
 Other ScyllaDB features do nothing on Cassandra, where they have nothing to
 act on, and fail nothing: the shard-aware port settings, tablet routing
 (including `routing.Options.NoLeaderAware`), CDC log table partitioning,
-rate-limit errors and client route events. `WithConnectionsPerShard` and
-`WithMaxExcessPerShard` count a Cassandra node as one shard, so there they
-apply per node.
+rate-limit errors and client route events. `config.PerShard`'s `Connections`
+and `MaxExcess` count a Cassandra node as one shard, so there they apply per
+node.
 
 ## Partitioners
 

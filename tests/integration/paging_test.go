@@ -278,7 +278,7 @@ func TestPaging(t *testing.T) {
 
 	t.Run("Stream", func(t *testing.T) {
 		cfg := mustBuild(t, createV2Cluster(func(c *config.ConfigBuilder) {
-			c.WithConnectionsPerHost(1).WithHeartbeat(0, 0).WithMetadataRefresh(0)
+			c.WithPool(config.PerHost{Connections: 1}).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 		}))
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()

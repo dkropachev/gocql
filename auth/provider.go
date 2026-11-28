@@ -28,6 +28,12 @@ const (
 
 // Provider authenticates connections, starting an Exchange for each.
 // Connections open concurrently, so Start must be safe for concurrent use.
+//
+// A Provider that can tell its settings are wrong before any connection,
+// such as credentials that cannot be sent, may have a Validate() error
+// method: config.ConfigBuilder.Build calls it once and fails with its error,
+// as a cql.ValidationError whose Field is "WithAuth" unless the error is a
+// cql.ValidationError already. Password has one.
 type Provider interface {
 	// Start begins the exchange for a connection to host, whose server named
 	// its authenticator class in authenticator, and returns the exchange and
@@ -47,10 +53,10 @@ type Provider interface {
 type Exchange interface {
 	// Challenge answers one server challenge, which may be null, and returns
 	// the response to send.
-	Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
+	Challenge(context.Context, cql.Nullable[[]byte]) (cql.Nullable[[]byte], error)
 	// Success receives the server's final message, which may be null. An
 	// error fails the connection.
-	Success(context.Context, cql.Nullable[cql.Bytes]) error
+	Success(context.Context, cql.Nullable[[]byte]) error
 	// Close releases the exchange. The driver calls it once, however the
 	// exchange ended.
 	Close()

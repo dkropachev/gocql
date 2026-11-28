@@ -27,15 +27,19 @@ package cluster
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/netip"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/scylladb/gocql/v2/cql"
+	"github.com/scylladb/gocql/v2/cqlerr"
+	endpoint2 "github.com/scylladb/gocql/v2/endpoint"
 	"github.com/scylladb/gocql/v2/internal/endpoint"
 	implEndpoint "github.com/scylladb/gocql/v2/internal/endpoint"
 	"github.com/scylladb/gocql/v2/internal/eventbus"
@@ -361,6 +365,38 @@ func TestSession(t *testing.T) {
 					}
 				}
 			})
+		}
+	})
+
+	t.Run("ConnectRetry", func(t *testing.T) {
+		t.Parallel()
+
+		var asked []int
+		cfg := InternalNewClusterSettings("127.0.0.1")
+		cfg.Port = 1 // refused, so an attempt fails fast
+		cfg.Logger = logging.Nop()
+		cfg.ConnectRetry = endpoint2.ReconnectFunc(func(attempt int) (time.Duration, bool) {
+			asked = append(asked, attempt)
+			return 0, attempt < 3
+		})
+		s, err := connectSettings(*cfg)
+		if err == nil {
+			s.Close()
+			t.Fatal("connectSettings() = nil error, want one")
+		}
+		if !errors.Is(err, ErrNoConnectionsStarted) || !reflect.DeepEqual(asked, []int{1, 2, 3}) {
+			t.Fatalf("connectSettings() = %v after asking for attempts %v, want ErrNoConnectionsStarted after 1, 2 and 3", err, asked)
+		}
+
+		for err, want := range map[error]bool{
+			&cqlerr.ConnectError{Hosts: []cqlerr.HostError{{Err: errors.New("refused")}}}:                                                 true,
+			&cqlerr.ConnectError{Hosts: []cqlerr.HostError{{Err: cqlerr.NewOtherServerError(cqlerr.CodeBadCredentials, "bad password")}}}: false,
+			fmt.Errorf("connect: %w", &cqlerr.ServerMismatchError{}):                                                                      false,
+			&cqlerr.ConnectError{Hosts: []cqlerr.HostError{{Err: &cql.ValidationError{Field: "WithAuth"}}}}:                               false,
+		} {
+			if got := connectRetryable(err); got != want {
+				t.Errorf("connectRetryable(%v) = %v, want %v", err, got, want)
+			}
 		}
 	})
 

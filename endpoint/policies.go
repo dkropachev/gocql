@@ -22,11 +22,15 @@ type ReconnectPolicy interface {
 	// attempt 1: a negative delay there fails Build with a validation error,
 	// and false means down nodes are not reconnected at all. A policy that
 	// always returns false turns reconnection off.
+	//
+	// config.ConfigBuilder.WithConnectRetry uses a policy for Connect instead:
+	// attempt counts its failed rounds of contact points, and Build does not
+	// call it.
 	Delay(attempt int) (time.Duration, bool)
 }
 
 // ReconnectFunc adapts a function to ReconnectPolicy, for
-// config.ConfigBuilder.WithReconnect:
+// config.ConfigBuilder.WithReconnect and WithConnectRetry:
 //
 //	endpoint.ReconnectFunc(func(attempt int) (time.Duration, bool) {
 //		return min(time.Duration(attempt)*time.Second, 10*time.Second), true

@@ -95,7 +95,9 @@ defer session.Close()
 | `cluster.ConnectTimeout` | `WithConnectTimeout(d)` |
 | `cluster.WriteTimeout`, `cluster.ReadTimeout` | `WithWriteStallTimeout(d)` and `WithReadStallTimeout(d)`, which drop a connection whose socket accepts or delivers no bytes for d. They are not request timeouts: v1's `Timeout` is the profile's `WithTimeout` |
 | limits on frame sizes, metadata depth and paging state (none in v1) | `WithLimits(config.Limits{...})`; a zero field keeps its default |
-| `cluster.NumConns` | `WithConnectionsPerShard(n)` keeps shard awareness on ScyllaDB; `WithConnectionsPerHost(n)` keeps n per node |
+| `cluster.NumConns` | `WithPool(config.PerShard{Connections: n})` keeps shard awareness on ScyllaDB; `WithPool(config.PerHost{Connections: n})` keeps n per node |
+| `cluster.MaxExcessShardConnectionsRate` | `WithPool(config.PerShard{MaxExcess: cql.Some(n)})`, a number of connections per shard rather than a rate |
+| `cluster.MaxRequestsPerConn` | `WithMaxRequestsPerConnection(n)` |
 | `cluster.Port` | `WithPort(port)` |
 | `cluster.Authenticator = gocql.PasswordAuthenticator{...}` | `WithAuth(auth.Password(user, password))`; v1's `AllowedAuthenticators` follow the password, `auth.Password(user, password, allowed...)`, with constants such as `auth.PasswordAuthenticator` for the classes, and as in v1 none allows any. Other mechanisms implement `auth.Provider` |
 | `cluster.SslOpts` | `WithTLS(*tls.Config)`; `config.LoadTLSFiles(base, config.TLSFiles{CertFile, KeyFile, CAFile})` reads v1's `CertPath`, `KeyPath` and `CaPath`, and `WithTLSSource` with a source from `config.NewTLSFileSource` reloads them. v1 skipped verification unless `EnableHostVerification` was set; v2 verifies by default: without a `ServerName` each connection checks that the node's certificate names its IP address, so a node certificate without its IP address needs the base's `ServerName` set to a name it carries, or `WithTLSIdentity` returning a `VerifyName` per node, or `ChainOnly` to check the chain alone. `InsecureSkipVerify` reproduces v1's default and is not recommended |
@@ -105,15 +107,33 @@ defer session.Close()
 | `cluster.ReconnectionPolicy` | `WithReconnect(endpoint.ReconnectPolicy)`, or `endpoint.ReconnectFunc` for a function; its `Delay(attempt)` counts from 1, where v1's `GetInterval(currentRetry)` counted from 0. `WithReconnect(nil)` is the default backoff; a policy whose `Delay` returns false never reconnects |
 | `cluster.ConvictionPolicy` | `WithConviction(endpoint.ConvictionPolicy)`; the default is `endpoint.SimpleConvictionPolicy{}` |
 | `cluster.HostFilter` | `WithHostFilter(func(metadata.HostSnapshot) bool)` |
-| `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)`; `Translate` returns an `endpoint.Address`, `endpoint.AddressOf(addr)` for an address unchanged, whose host may be a DNS name: the driver resolves it on every dial and verifies TLS against it |
+| `cluster.AddressTranslator` | `WithAddressTranslator(endpoint.Translator)`; `Translate` is asked for the one endpoint a dial opens, its `endpoint.PortKind` saying which (`PortCQL`, `PortTLS`, `PortShardAware`, `PortShardAwareTLS`), and returns an `endpoint.Address`, `endpoint.AddressOf(addr)` for an address unchanged, whose host may be a DNS name: the driver resolves it once per dial and verifies TLS against it |
+| `cluster.DNSResolver` | `WithResolver(endpoint.Resolver)`; `*net.Resolver` satisfies it |
 | `cluster.Dialer` | `WithDialer(endpoint.Dialer)`; wrap `endpoint.DefaultDialer{}` to keep the default dial |
 | `cluster.SocketKeepalive` | `WithTCPKeepalive(period)` |
-| `cluster.DisableShardAwarePort` | `WithAdvancedShardAwareness(false)`; `WithShardAwareSourcePorts(first, last)` sets the source ports |
+| `cluster.DisableShardAwarePort` | `WithPool(config.PerShard{ShardAwarePort: cql.Some(false)})`; `PerShard.SourcePorts` sets the source ports |
 | `cluster.ClientRoutesConfig` | `WithClientRoutes(config.ClientRoute{ConnectionID: id, Hostname: host}, ...)` |
 | `cluster.Logger` | `WithLogger(*slog.Logger)`; `WithLogRateLimit(d)` sets how repeated records are collapsed, zero for none |
 | `cluster.QueryObserver`, `BatchObserver` | `WithObserver(observe.Hooks{...})` |
 | `cluster.DisableInitialHostLookup` (contact points only) | `WithDiscovery(false)` |
 | `cluster.DefaultTimestamp = false` | `WithTimestampGenerator(nil)` |
+| `cluster.CQLVersion` | `WithCQLVersion(version)` |
+| `cluster.MaxPreparedStmts` | `WithPreparedCacheSize(n)` |
+| `cluster.MaxWaitSchemaAgreement` | `WithSchemaAgreement(poll, timeout)`; `WithSchemaChangeWait` chooses whether a schema change waits for agreement |
+| `cluster.MetadataSchemaRequestTimeout` | `WithMetadataTimeout(d)`; on ScyllaDB `WithMetadataServerTimeout(d)` sets the `USING TIMEOUT` of metadata queries |
+| `cluster.ApplicationInfo` | `WithApplication(name, version)` and `WithClientID(id)` |
+| `cluster.Events.DisableNodeStatusEvents`, `DisableTopologyEvents`, `DisableSchemaEvents` | `WithIgnoreEvents(event.KindStatus, event.KindTopology, event.KindSchema)` |
+| `cluster.DisableDriverConfigReporting` | `WithConfigReport(false)` |
+| `cluster.InitialReconnectionPolicy` | `WithConnectRetry(endpoint.ReconnectPolicy)`; without it `Connect` tries once. It never retries rejected credentials, an invalid request or a `cqlerr.ServerMismatchError` |
+| `cluster.ReconnectInterval` | no equivalent: a down node's pool is reopened under `WithReconnect` |
+| `cluster.WriteCoalesceWaitTime` | no equivalent: a connection's writer sends every request queued while it was busy in one write |
+| `cluster.IgnorePeerAddr` | no equivalent: use `WithAddressTranslator` to dial nodes elsewhere than they advertise |
+| `cluster.MaxRoutingKeyInfo` | no equivalent: routing key information comes from each prepared statement's metadata, cached with it under `WithPreparedCacheSize` |
+| `cluster.DisableSkipMetadata` | no equivalent: the driver decides for each execution whether to ask for result metadata |
+| `cluster.HostDialer` | no equivalent: `WithDialer(endpoint.Dialer)` dials an `endpoint.DialTarget`, and the driver applies TLS (`WithTLS`, `WithTLSSource`, `WithTLSIdentity`) on top |
+| `cluster.AuthProvider` | no equivalent: an `auth.Provider` passed to `WithAuth` gets each connection's host in `Start` |
+| `cluster.WarningsHandlerBuilder` | no equivalent: `cql.Result.Warnings()` returns a request's warnings, and `cqlerr.ExecutionError.Result.Warnings()` those of a failed one |
+| `cluster.FrameHeaderObserver`, `cluster.StreamObserver`, `cluster.ConnectObserver` | no equivalent: `WithObserver(observe.Hooks{...})` observes requests and attempts, and `WithLogger` logs connection events |
 
 Settings v1 spread over `ClusterConfig` fields are all builder methods in
 v2; `go doc github.com/scylladb/gocql/v2/config.ConfigBuilder` lists them with

@@ -246,7 +246,14 @@ func InternalValidIpAddr(addr net.IP) bool {
 func hostInfoConnectAddressLocked(h *HostInfo) (net.IP, string) {
 	if h.privateStorage.InternalTranslatedAddresses != nil && InternalUsableAddrPort(h.privateStorage.InternalTranslatedAddresses.CQL) {
 		return h.privateStorage.InternalTranslatedAddresses.CQL.Addr().AsSlice(), "connect_address"
-	} else if InternalValidIpAddr(h.privateStorage.InternalConnectAddress) {
+	}
+	return untranslatedConnectAddressLocked(h)
+}
+
+// untranslatedConnectAddressLocked is hostInfoConnectAddressLocked before
+// address translation.
+func untranslatedConnectAddressLocked(h *HostInfo) (net.IP, string) {
+	if InternalValidIpAddr(h.privateStorage.InternalConnectAddress) {
 		return h.privateStorage.InternalConnectAddress, "connect_address"
 	} else if InternalValidIpAddr(h.privateStorage.InternalRpcAddress) {
 		return h.privateStorage.InternalRpcAddress, "rpc_adress"

@@ -28,7 +28,9 @@ type passwordAuth struct {
 // server asks for any other class fails before the credentials are sent, so
 // they reach only servers that are expected to check them; no allowed class
 // sends them to any server that asks, as v1's PasswordAuthenticator did with
-// no AllowedAuthenticators. Classes are compared exactly.
+// no AllowedAuthenticators. Classes are compared exactly. Credentials that
+// contain NUL cannot be sent, and config.ConfigBuilder.Build rejects them
+// through Validate.
 func Password(username, password string, allowed ...string) Provider {
 	return passwordAuth{username: username, password: password, allowed: slices.Clone(allowed)}
 }
@@ -45,6 +47,15 @@ func (p passwordAuth) GoString() string { return p.String() }
 // LogValue is String, for log/slog.
 func (p passwordAuth) LogValue() slog.Value { return slog.StringValue(p.String()) }
 
+// Validate rejects a username or password that contains NUL, which the
+// PLAIN response cannot carry, with a cql.ValidationError for "WithAuth".
+func (p passwordAuth) Validate() error {
+	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
+		return &cql.ValidationError{Field: "WithAuth", Err: errors.New("auth.Password credentials contain NUL")}
+	}
+	return nil
+}
+
 func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return nil, cql.Nullable[[]byte]{}, err
@@ -52,8 +63,8 @@ func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, authen
 	if len(p.allowed) > 0 && !slices.Contains(p.allowed, authenticator) {
 		return nil, cql.Nullable[[]byte]{}, fmt.Errorf("gocql: the server's authenticator %q is not one auth.Password allows, %q", authenticator, p.allowed)
 	}
-	if strings.ContainsRune(p.username, 0) || strings.ContainsRune(p.password, 0) {
-		return nil, cql.Nullable[[]byte]{}, &cql.ValidationError{Field: "password authentication", Err: errors.New("credentials contain NUL")}
+	if err := p.Validate(); err != nil {
+		return nil, cql.Nullable[[]byte]{}, err
 	}
 	response := make([]byte, len(p.username)+len(p.password)+2)
 	copy(response[1:], p.username)
@@ -63,14 +74,14 @@ func (p passwordAuth) Start(ctx context.Context, _ metadata.HostSnapshot, authen
 
 type passwordExchange struct{}
 
-func (*passwordExchange) Challenge(ctx context.Context, _ cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error) {
+func (*passwordExchange) Challenge(ctx context.Context, _ cql.Nullable[[]byte]) (cql.Nullable[[]byte], error) {
 	if err := ctx.Err(); err != nil {
 		return cql.Nullable[[]byte]{}, err
 	}
 	return cql.Nullable[[]byte]{}, errors.New("gocql: password authenticator received an unexpected challenge")
 }
 
-func (*passwordExchange) Success(ctx context.Context, _ cql.Nullable[cql.Bytes]) error {
+func (*passwordExchange) Success(ctx context.Context, _ cql.Nullable[[]byte]) error {
 	return ctx.Err()
 }
 

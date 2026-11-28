@@ -89,7 +89,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("EmptyAddr", func(t *testing.T) {
 			t.Parallel()
 
-			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), nil, endpoint2.Peer{}, netip.AddrPort{}, netip.AddrPort{}, nil)
+			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), nil, endpoint2.Peer{}, netip.AddrPort{}, netip.AddrPort{}, endpoint2.PortCQL, nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated address is still empty", netip.AddrPort{}, newAddr)
 		})
@@ -97,7 +97,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("NilTranslator", func(t *testing.T) {
 			t.Parallel()
 			addr := netip.MustParseAddrPort("10.0.0.1:1234")
-			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, nil, nil, endpoint2.Peer{}, addr, netip.AddrPort{}, nil)
+			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, nil, nil, endpoint2.Peer{}, addr, netip.AddrPort{}, endpoint2.PortCQL, nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "same address as provided", addr, newAddr)
 		})
@@ -105,7 +105,7 @@ func TestClusterSettings(t *testing.T) {
 		t.Run("Success", func(t *testing.T) {
 			t.Parallel()
 
-			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), nil, endpoint2.Peer{}, netip.MustParseAddrPort("10.0.0.1:2345"), netip.AddrPort{}, nil)
+			newAddr, _, err := endpoint.InternalTranslateAddressPort(ctx, staticAddressTranslator(translated), nil, endpoint2.Peer{}, netip.MustParseAddrPort("10.0.0.1:2345"), netip.AddrPort{}, endpoint2.PortCQL, nil)
 			tests.AssertNil(t, "should return no error", err)
 			tests.AssertEqual(t, "translated address", translated, newAddr)
 		})
@@ -285,7 +285,7 @@ func TestClusterSettings(t *testing.T) {
 				{"NegativeMaxExcessShardConnectionsRate", func(c *InternalClusterSettings) { c.MaxExcessShardConnectionsRate = -1 }, "MaxExcessShardConnectionsRate"},
 				{"ClientRoutesWithAddressTranslator", func(c *InternalClusterSettings) {
 					c.ClientRoutesConfig = &ClientRoutesConfig{}
-					c.AddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort) (endpoint2.Address, error) {
+					c.AddressTranslator = endpoint2.TranslatorFunc(func(_ context.Context, _ endpoint2.Peer, addr netip.AddrPort, _ endpoint2.PortKind) (endpoint2.Address, error) {
 						return endpoint2.AddressOf(addr), nil
 					})
 				}, "invalid AddressTranslator: cannot be combined with ClientRoutesConfig"},

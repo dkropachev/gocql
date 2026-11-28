@@ -47,19 +47,16 @@ type Config struct {
 // A ConfigBuilder is not safe for concurrent use. Start one with New: Build
 // rejects a zero ConfigBuilder with a cql.ValidationError.
 type ConfigBuilder struct {
-	profile              *ProfileBuilder
-	ignoredEvents        []event.Kind
-	routes               []ClientRoute
-	settings             implSettings.Config
-	onlyHost             cql.Option[cql.UUID]
-	discoveryChosen      bool
-	shardAwarenessChosen bool
-	sourcePortsChosen    bool
-	maxExcessChosen      bool
-	portChosen           bool
-	schemaChangeWait     SchemaChangeWait
-	perHost              bool
-	dialect              Dialect
+	profile          *ProfileBuilder
+	pool             Pool
+	ignoredEvents    []event.Kind
+	routes           []ClientRoute
+	settings         implSettings.Config
+	onlyHost         cql.Option[cql.UUID]
+	discoveryChosen  bool
+	portChosen       bool
+	schemaChangeWait SchemaChangeWait
+	dialect          Dialect
 	// started reports that New made the builder.
 	started bool
 }
@@ -119,6 +116,14 @@ func (b *ConfigBuilder) Build() (Config, error) {
 			settings.Metadata.InitialDiscovery = false
 		}
 	}
+	if v, ok := settings.Auth.(interface{ Validate() error }); ok {
+		if err := v.Validate(); err != nil {
+			if _, ok := errors.AsType[*cql.ValidationError](err); !ok {
+				err = &cql.ValidationError{Field: "WithAuth", Err: err}
+			}
+			return Config{}, err
+		}
+	}
 	if settings.Identity.ApplicationVersion != "" && settings.Identity.ApplicationName == "" {
 		return Config{}, &cql.ValidationError{Field: "WithApplication", Err: errors.New("a version requires a name")}
 	}
@@ -141,35 +146,8 @@ func (b *ConfigBuilder) Build() (Config, error) {
 	if settings.TLSPort != 0 && settings.ClientRoutes != nil {
 		return Config{}, &cql.ValidationError{Field: "WithTLSPort", Err: errors.New("client routes choose their own ports")}
 	}
-	if settings.ClientRoutes != nil && !b.shardAwarenessChosen {
-		settings.Pool.AdvancedShardAwareness.Enabled = false
-	}
-	if b.perHost {
-		if b.shardAwarenessChosen && settings.Pool.AdvancedShardAwareness.Enabled {
-			return Config{}, &cql.ValidationError{Field: "WithConnectionsPerHost", Err: errors.New("dials no shard-aware port; drop WithAdvancedShardAwareness(true) or use WithConnectionsPerShard")}
-		}
-		if b.maxExcessChosen {
-			return Config{}, &cql.ValidationError{Field: "WithConnectionsPerHost", Err: errors.New("keeps no per-shard excess connections; drop WithMaxExcessPerShard or use WithConnectionsPerShard")}
-		}
-		settings.Pool.AdvancedShardAwareness.Enabled = false
-	}
-	if sa := settings.Pool.AdvancedShardAwareness; b.sourcePortsChosen && (sa.SourcePortStart < 1024 || sa.SourcePortStart > sa.SourcePortEnd) {
-		return Config{}, &cql.ValidationError{Field: "WithShardAwareSourcePorts", Err: fmt.Errorf("%d-%d is not a range within 1024-65535", sa.SourcePortStart, sa.SourcePortEnd)}
-	}
-	if b.sourcePortsChosen {
-		if err := implSettings.ScyllaOnly(&settings, "WithShardAwareSourcePorts"); err != nil {
-			return Config{}, err
-		}
-		if !settings.Pool.AdvancedShardAwareness.Enabled {
-			reason := "WithAdvancedShardAwareness(false)"
-			switch {
-			case b.perHost:
-				reason = "WithConnectionsPerHost"
-			case settings.ClientRoutes != nil && !b.shardAwarenessChosen:
-				reason = "WithClientRoutes"
-			}
-			return Config{}, &cql.ValidationError{Field: "WithShardAwareSourcePorts", Err: fmt.Errorf("has no effect: %s turns advanced shard awareness off", reason)}
-		}
+	if err := applyPool(&settings, b.pool); err != nil {
+		return Config{}, err
 	}
 	if b.onlyHost.Set {
 		id := b.onlyHost.Value
@@ -283,8 +261,8 @@ func (b *ConfigBuilder) WithTLSIdentity(identity func(target endpoint.DialTarget
 
 // WithTLSPort dials TLS connections on port of every node instead of its CQL
 // port: ScyllaDB's and Cassandra's native_transport_port_ssl, which serves
-// TLS beside the plaintext port. The address translator translates it as it
-// does the CQL port. Shard-aware TLS connections keep the port each node
+// TLS beside the plaintext port. The address translator is asked for it as
+// endpoint.PortTLS. Shard-aware TLS connections keep the port each node
 // advertises. It requires WithTLS or WithTLSSource; client routes choose
 // their own ports and reject it. Zero, the default, dials the CQL port.
 func (b *ConfigBuilder) WithTLSPort(port uint16) *ConfigBuilder {
@@ -427,10 +405,11 @@ func (b *ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder {
 	return b
 }
 
-// WithLinger sets SO_LINGER in whole seconds; WithLinger(0) resets connections on
-// close. Default the OS's.
+// WithLinger sets SO_LINGER, which counts whole seconds: a fraction of a
+// second rounds up, so WithLinger(1500*time.Millisecond) lingers for 2s.
+// WithLinger(0) resets connections on close. Default the OS's.
 func (b *ConfigBuilder) WithLinger(d time.Duration) *ConfigBuilder {
-	b.settings.Linger = cql.Some(d)
+	b.settings.Linger = cql.Some(implSettings.CeilDuration(d, time.Second))
 	return b
 }
 
@@ -461,39 +440,16 @@ func (b *ConfigBuilder) WithHeartbeat(interval, timeout time.Duration) *ConfigBu
 	return b
 }
 
-// WithConnectionsPerShard keeps n connections to every shard of each node, so
-// each request goes out on a connection of the shard that owns its data. A
-// node that reports no shards, such as Cassandra, counts as one shard. n must
-// be positive. It replaces WithConnectionsPerHost. Default 1.
-func (b *ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder {
-	b.perHost = false
-	b.settings.Pool.ConnectionsPerShard, b.settings.Pool.ConnectionsPerHost = n, 0
-	return b
-}
-
-// WithConnectionsPerHost keeps n connections to each node regardless of its
-// shard count. n must be positive. It replaces WithConnectionsPerShard.
-//
-// On ScyllaDB it turns shard-aware connection management off: connections are
-// dialed through the regular port only, never the shard-aware port (as with
-// WithAdvancedShardAwareness(false)), so the node assigns each connection's shard and
-// some shards may get none. A request whose shard has no connection goes out
-// on another shard's connection and costs the node a cross-shard hop. There
-// are no per-shard excess connections, so WithMaxExcessPerShard does not
-// apply. Build rejects it together with WithAdvancedShardAwareness(true) or
-// WithMaxExcessPerShard.
-func (b *ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder {
-	b.perHost = true
-	b.settings.Pool.ConnectionsPerHost, b.settings.Pool.ConnectionsPerShard = n, 0
-	return b
-}
-
-// WithMaxExcessPerShard caps connections opened beyond the target per shard.
-// It applies to WithConnectionsPerShard pools only. A Cassandra node counts
-// as one shard, so there it caps the excess per node. Default 2.
-func (b *ConfigBuilder) WithMaxExcessPerShard(n int) *ConfigBuilder {
-	b.maxExcessChosen = true
-	b.settings.Pool.MaxExcessPerShard = n
+// WithPool sets how many connections the session keeps to each node:
+// PerShard, connections to every shard, or PerHost, connections to each node
+// whatever its shards. Each call replaces the whole setting, and nil
+// restores the default, the zero PerShard: one connection per shard, at most
+// two excess, dialing ScyllaDB's shard-aware port except under
+// WithClientRoutes. Build rejects a negative field, and the field that is
+// wrong is named in the cql.ValidationError's message, its Field being
+// "WithPool".
+func (b *ConfigBuilder) WithPool(pool Pool) *ConfigBuilder {
+	b.pool = pool
 	return b
 }
 
@@ -508,36 +464,6 @@ func (b *ConfigBuilder) WithMaxRequestsPerConnection(n int) *ConfigBuilder {
 // connection is recycled; zero recycles it on the first. Default 1024.
 func (b *ConfigBuilder) WithMaxOrphanedStreams(n int) *ConfigBuilder {
 	b.settings.Pool.MaxOrphanedStreams = n
-	return b
-}
-
-// WithAdvancedShardAwareness chooses whether each new connection picks its
-// shard by dialing the node's shard-aware port from a local source port of
-// that shard, taken from WithShardAwareSourcePorts (true), or connects through
-// the regular port and lets the node assign the shard, the pool dialing until
-// every shard is covered (false). Default true, except under
-// WithConnectionsPerHost and WithClientRoutes, where it is false unless
-// chosen. Choose true under WithClientRoutes only when every route endpoint
-// forwards to ScyllaDB's Proxy Protocol v2 shard-aware listener and passes
-// the client's source port, since NAT rewrites the port and loses the shard.
-// Cassandra has no shards, so there it has no effect.
-func (b *ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder {
-	b.shardAwarenessChosen = true
-	b.settings.Pool.AdvancedShardAwareness.Enabled = on
-	return b
-}
-
-// WithShardAwareSourcePorts sets the local source ports, first to last,
-// that advanced shard awareness dials from. Build rejects a range that is
-// empty or starts below 1024. It does not turn advanced shard awareness on:
-// Build rejects it where advanced shard awareness is off, under
-// WithConnectionsPerHost, WithAdvancedShardAwareness(false) or
-// WithClientRoutes, and with a Cassandra dialect, which has no shards, as a
-// cqlerr.UnsupportedSettingError. Default 49152-65535.
-func (b *ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder {
-	b.sourcePortsChosen = true
-	b.settings.Pool.AdvancedShardAwareness.SourcePortStart = first
-	b.settings.Pool.AdvancedShardAwareness.SourcePortEnd = last
 	return b
 }
 
@@ -588,11 +514,11 @@ func (b *ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder {
 	return b
 }
 
-// WithAddressTranslator rewrites node addresses before dialing. It is called
-// for the CQL and any shard-aware endpoint of a node with the node's
-// endpoint.Peer; an error fails that connection attempt. Build rejects it
-// together with WithClientRoutes, which translates addresses itself. Default
-// identity.
+// WithAddressTranslator rewrites node addresses before dialing. Each dial
+// asks it for the one endpoint it opens, with the node's endpoint.Peer and the
+// endpoint's endpoint.PortKind; see endpoint.Translator for errors. Build
+// rejects it together with WithClientRoutes, which translates addresses
+// itself. Default identity.
 func (b *ConfigBuilder) WithAddressTranslator(translator endpoint.Translator) *ConfigBuilder {
 	b.settings.AddressTranslator = translator
 	return b
@@ -623,6 +549,21 @@ func (b *ConfigBuilder) WithReconnect(policy endpoint.ReconnectPolicy) *ConfigBu
 		policy = implSettings.DefaultReconnect()
 	}
 	b.settings.Reconnect = policy
+	return b
+}
+
+// WithConnectRetry retries opening the session's first connection, the
+// control connection gocql.Connect opens to a contact point, when every
+// contact point failed: after the nth failed round, Connect waits
+// policy.Delay(n) and tries again, until Delay declines or Connect's context
+// ends. A failure no retry can fix ends Connect at once: rejected
+// credentials (cqlerr.KindUnauthorized), an invalid request or protocol
+// violation (cqlerr.KindInvalid, cqlerr.KindProtocol), and a
+// cqlerr.ServerMismatchError. A negative delay gives up, as false does. nil, the
+// default, tries once; WithReconnect, which reopens the connections of a
+// session that is running, does not apply to Connect.
+func (b *ConfigBuilder) WithConnectRetry(policy endpoint.ReconnectPolicy) *ConfigBuilder {
+	b.settings.ConnectRetry = policy
 	return b
 }
 
@@ -683,14 +624,15 @@ func (b *ConfigBuilder) WithMetadataTimeout(d time.Duration) *ConfigBuilder {
 }
 
 // WithMetadataServerTimeout asks ScyllaDB to bound metadata queries with USING
-// TIMEOUT, in whole milliseconds; zero sends none. It must be below
+// TIMEOUT, which counts whole milliseconds: a fraction of a millisecond
+// rounds up. Zero sends none. It must be below
 // WithMetadataTimeout, so that the server gives up first and answers with its
 // own error; Build rejects it otherwise. Cassandra has no USING TIMEOUT, so
 // Build with a Cassandra dialect fails on a positive value with a
 // cqlerr.UnsupportedSettingError. Default one second below WithMetadataTimeout
 // (half of it at 2s or less) on ScyllaDB, none on Cassandra.
 func (b *ConfigBuilder) WithMetadataServerTimeout(d time.Duration) *ConfigBuilder {
-	b.settings.Metadata.ServerTimeout = cql.Some(d)
+	b.settings.Metadata.ServerTimeout = cql.Some(implSettings.CeilDuration(d, time.Millisecond))
 	return b
 }
 

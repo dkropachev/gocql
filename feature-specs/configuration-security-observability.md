@@ -120,9 +120,9 @@ cast to an unsigned 32-bit size and passed to the socket API without a range
 check. On platforms with a wider configuration integer, values above 2³²−1
 lose their high bits; for example, 2³² reaches the socket API as zero. This is
 truncation, not rejection or saturation, and OS adjustment is also possible.
-Explicit zero differs from leaving the option unspecified. Linger is truncated
-to whole seconds: zero and positive values below one second request reset-on-close;
-values of at least one second request timed lingering. The TCP
+Explicit zero differs from leaving the option unspecified. Linger is rounded up
+to whole seconds: zero requests reset-on-close, and any positive value requests
+timed lingering of at least one second. The TCP
 keepalive setting means idle time before probes begin, not the interval between
 probes. Where supported by the target OS, probes are one second apart and the
 retry count is ten; the platform-specific branches do not promise identical

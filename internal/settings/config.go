@@ -31,11 +31,14 @@ import (
 )
 
 type Config struct {
-	LocalAddress      netip.Addr
-	Dialer            endpoint.Dialer
-	DNSResolver       endpoint.Resolver
-	Auth              auth.Provider
-	Reconnect         ReconnectPolicy
+	LocalAddress netip.Addr
+	Dialer       endpoint.Dialer
+	DNSResolver  endpoint.Resolver
+	Auth         auth.Provider
+	Reconnect    ReconnectPolicy
+	// ConnectRetry, when set, retries opening the session's first
+	// connection; nil tries it once.
+	ConnectRetry      ReconnectPolicy
 	Conviction        endpoint.ConvictionPolicy
 	AddressTranslator endpoint.Translator
 	Observer          observe.Hooks
@@ -282,8 +285,8 @@ func (config Config) Validate() error {
 			return cqltype.TypeValidation("WithLimits", "%s must be 0 (the default) or 1 to %d%s, got %d", l.field, l.max, unit, l.value)
 		}
 	}
-	if config.Linger.Set && (config.Linger.Value < 0 || config.Linger.Value%time.Second != 0 || config.Linger.Value/time.Second > math.MaxInt32) {
-		return cqltype.TypeValidation("WithLinger", "must be whole seconds from 0 to %d, got %v", math.MaxInt32, config.Linger.Value)
+	if config.Linger.Set && (config.Linger.Value < 0 || config.Linger.Value/time.Second > math.MaxInt32) {
+		return cqltype.TypeValidation("WithLinger", "must be from 0 to %d seconds, got %v", math.MaxInt32, config.Linger.Value)
 	}
 	if config.ReceiveBuffer < 0 {
 		return cqltype.TypeValidation("WithReceiveBuffer", "must not be negative, got %d", config.ReceiveBuffer)
@@ -294,8 +297,8 @@ func (config Config) Validate() error {
 	if config.Metadata.AgreementTimeout <= 0 || config.Metadata.AgreementPoll <= 0 {
 		return cqltype.TypeValidation("WithSchemaAgreement", "poll and timeout must be positive")
 	}
-	if timeout := config.Metadata.ServerTimeout; timeout.Set && (timeout.Value < 0 || timeout.Value%time.Millisecond != 0) {
-		return cqltype.TypeValidation("WithMetadataServerTimeout", "must be whole milliseconds, not negative, got %v", timeout.Value)
+	if timeout := config.Metadata.ServerTimeout; timeout.Set && timeout.Value < 0 {
+		return cqltype.TypeValidation("WithMetadataServerTimeout", "must not be negative, got %v", timeout.Value)
 	}
 	if timeout := config.Metadata.ServerTimeout; timeout.Set && timeout.Value > 0 && timeout.Value >= config.Metadata.RequestTimeout {
 		return cqltype.TypeValidation("WithMetadataServerTimeout", "must be below WithMetadataTimeout (%v), so the server gives up first, got %v", config.Metadata.RequestTimeout, timeout.Value)
@@ -352,21 +355,17 @@ func (config Config) Validate() error {
 	}
 	pool := config.Pool
 	switch {
-	case pool.ConnectionsPerHost < 0:
-		return cqltype.TypeValidation("WithConnectionsPerHost", "must be positive, got %d", pool.ConnectionsPerHost)
-	case pool.ConnectionsPerShard < 0:
-		return cqltype.TypeValidation("WithConnectionsPerShard", "must be positive, got %d", pool.ConnectionsPerShard)
-	case pool.ConnectionsPerHost == 0 && pool.ConnectionsPerShard == 0:
-		return cqltype.TypeValidation("WithConnectionsPerShard", "WithConnectionsPerShard or WithConnectionsPerHost must be positive")
+	case pool.ConnectionsPerHost < 0 || pool.ConnectionsPerShard < 0 || pool.ConnectionsPerHost == 0 && pool.ConnectionsPerShard == 0:
+		return cqltype.TypeValidation("WithPool", "connections must be positive, got %d per host and %d per shard", pool.ConnectionsPerHost, pool.ConnectionsPerShard)
 	case pool.MaxExcessPerShard < 0:
-		return cqltype.TypeValidation("WithMaxExcessPerShard", "must not be negative, got %d", pool.MaxExcessPerShard)
+		return cqltype.TypeValidation("WithPool", "MaxExcess must not be negative, got %d", pool.MaxExcessPerShard)
 	case pool.MaxRequestsPerConnection <= 0 || pool.MaxRequestsPerConnection > 32768:
 		return cqltype.TypeValidation("WithMaxRequestsPerConnection", "must be 1 to 32768, got %d", pool.MaxRequestsPerConnection)
 	case pool.MaxOrphanedStreams < 0:
 		return cqltype.TypeValidation("WithMaxOrphanedStreams", "must not be negative, got %d", pool.MaxOrphanedStreams)
 	}
 	if sa := pool.AdvancedShardAwareness; sa.Enabled && (sa.SourcePortStart < 1024 || sa.SourcePortStart > sa.SourcePortEnd) {
-		return cqltype.TypeValidation("WithShardAwareSourcePorts", "%d-%d is not a range within 1024-65535", sa.SourcePortStart, sa.SourcePortEnd)
+		return cqltype.TypeValidation("WithPool", "SourcePorts %d-%d is not a range within 1024-65535", sa.SourcePortStart, sa.SourcePortEnd)
 	}
 	return nil
 }
@@ -377,6 +376,9 @@ func (config Config) Validate() error {
 func (config Config) validateContactPorts() error {
 	common, allNamed := 0, true
 	for _, point := range config.ContactPoints {
+		if strings.ContainsAny(point, ", \t\r\n") {
+			return cqltype.TypeValidation("WithContactPoints", "%q holds a comma or whitespace; pass each contact point as its own argument, such as strings.Split(list, \",\")... with each part trimmed", point)
+		}
 		host, portText, err := net.SplitHostPort(point)
 		if err != nil {
 			// No port: a host name or address, an IPv6 address unbracketed.
@@ -400,6 +402,15 @@ func (config Config) validateContactPorts() error {
 		return cqltype.TypeValidation("WithPort", "is %d, but every contact point names port %d; discovered nodes are dialed on WithPort, so set WithPort(%d) or name no port", config.Port, common, common)
 	}
 	return nil
+}
+
+// CeilDuration rounds d up to a whole multiple of unit. Zero, a negative d
+// and one too large to round are returned unchanged, for Validate to judge.
+func CeilDuration(d, unit time.Duration) time.Duration {
+	if rem := d % unit; d > 0 && rem != 0 && d <= math.MaxInt64-unit {
+		return d - rem + unit
+	}
+	return d
 }
 
 // CommonContactPort returns the port every TCP contact point names, and

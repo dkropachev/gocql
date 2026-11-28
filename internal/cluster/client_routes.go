@@ -275,7 +275,7 @@ type ClientRoutesHandler struct {
 // It resolves DNS on every call rather than caching resolved addresses.
 // If the user provided a ConnectionAddr for the route's connectionID,
 // that address is used instead of the one from the system.client_routes table.
-func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort) (endpoint2.Address, error) {
+func (p *ClientRoutesHandler) Translate(ctx context.Context, peer endpoint2.Peer, addr netip.AddrPort, _ endpoint2.PortKind) (endpoint2.Address, error) {
 	if peer.HostID.IsZero() {
 		return endpoint2.AddressOf(addr), nil
 	}

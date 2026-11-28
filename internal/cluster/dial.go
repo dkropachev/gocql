@@ -85,18 +85,13 @@ func (s *Core) DialShard(ctx context.Context, host *implEndpoint.HostInfo, connC
 	}
 	var obs ObservedConnect
 
-	current := implEndpoint.InternalHostInfoGetTranslatedConnectionInfo(host)
-	var tlsPort uint16
-	if typed := connConfig.TypedConfig; typed != nil && (typed.TLS != nil || typed.TLSSource != nil) {
-		tlsPort = typed.TLSPort
-	}
-	updated, err := implTransport.InternalTranslateHostAddresses(ctx, s.privateStorage.InternalAddressTranslator, s.privateStorage.InternalCfg.DNSResolver, host, tlsPort, current, s.privateStorage.InternalLogger)
-	if err != nil {
-		return nil, err
-	}
-	if current == nil || !updated.Equal(current) {
-		implEndpoint.InternalHostInfoSetTranslatedConnectionInfo(host, updated)
-	}
+	// The host dialer translates only the endpoints this dial opens, and
+	// resolves a translated DNS name once for all of them.
+	ctx = implEndpoint.InternalWithDialTranslation(ctx, &implEndpoint.InternalDialTranslation{
+		Translator: s.privateStorage.InternalAddressTranslator,
+		Resolver:   s.privateStorage.InternalCfg.DNSResolver,
+		Logger:     s.privateStorage.InternalLogger,
+	})
 
 	if s.privateStorage.connectObserver != nil {
 		obs.Host = host

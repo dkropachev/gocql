@@ -80,7 +80,7 @@ func benchConfig(d endpoint.Dialer) config.Config {
 		WithHeartbeat(0, 0).
 		WithMetadataRefresh(0).
 		WithConfigReport(false).
-		WithConnectionsPerHost(1).
+		WithPool(config.PerHost{Connections: 1}).
 		WithDiscovery(false).
 		WithDialer(d).
 		Build()

@@ -239,7 +239,7 @@ func TestSession(t *testing.T) {
 		// retained delivered pages, and a late lease cannot repopulate the closed cache.
 		t.Run("PageCacheOwnership", func(t *testing.T) {
 			cfg := mustBuild(t, createV2Cluster(func(c *config.ConfigBuilder) {
-				c.WithConnectionsPerHost(1).WithHeartbeat(0, 0).WithMetadataRefresh(0)
+				c.WithPool(config.PerHost{Connections: 1}).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 			}))
 			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 			defer cancel()
@@ -522,7 +522,7 @@ func TestSession(t *testing.T) {
 					clusterHosts = append(clusterHosts, fromAddress.String())
 				}
 
-				translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+				translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 					if to, ok := toAddresses[addr.Addr()]; ok {
 						return endpoint.AddressOf(netip.AddrPortFrom(to, addr.Port())), nil
 					}
@@ -880,7 +880,7 @@ func TestSession(t *testing.T) {
 				WithCQLVersion(*flagCQL).
 				WithSchemaAgreement(200*time.Millisecond, 2*time.Minute).
 				WithDefaultProfile(config.NewProfile().WithConsistency(cql.Quorum).WithTimeout(*flagTimeout).WithRetry(retry.Safe{MaxAttempts: max(1, *flagRetry+1)})).
-				WithConnectionsPerHost(1).
+				WithPool(config.PerHost{Connections: 1}).
 				WithDiscovery(false).
 				WithReconnect(unixSocketNoReconnect{}).
 				WithIgnoreEvents(event.KindStatus, event.KindTopology, event.KindSchema).

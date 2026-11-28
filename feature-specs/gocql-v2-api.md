@@ -2071,7 +2071,7 @@ opaque, immutable value made only by `ConfigBuilder.Build`; users never write a
 `Config` literal or assign its fields. Each builder method sets one setting
 and is named `With*` (`WithPort`, `WithTLS`, `WithConnectTimeout`), except `Build`
 and `Clone`. An on/off setting takes a bool
-(`WithDiscovery(false)`, `WithAdvancedShardAwareness(false)`), and a size or
+(`WithDiscovery(false)`, `WithNagle(true)`), and a size or
 interval whose zero has no other meaning turns its feature off at zero
 (`WithHeartbeat(0, 0)`, `WithMetadataRefresh(0)`, `WithPreparedCacheSize(0)`,
 and on a `ProfileBuilder` `WithTimeout(0)`) or keeps the
@@ -2088,8 +2088,12 @@ call wins. Setters store the latest value without validation or call history.
 error; a `cql.ValidationError`'s `Field` names the setter to fix and its
 message the limit. Correcting a setting clears the error on the next Build.
 Optional zero durations disable their budget. `Build` parses the contact
-points and asks the reconnect policy for `Delay(1)` once, rejecting a negative
-delay. `WithPort` is also the port of discovered nodes whose metadata reports
+points, rejecting one that holds a comma or whitespace (a list passed as one
+string), calls an auth provider's optional `Validate() error` (`auth.Password`
+rejects credentials with NUL; `Field` "WithAuth"), and asks the reconnect
+policy for `Delay(1)` once, rejecting a negative delay. A setting the server
+or the socket counts in whole units rounds up: `WithLinger` to seconds,
+`WithMetadataServerTimeout` to milliseconds. `WithPort` is also the port of discovered nodes whose metadata reports
 none. Without it, contact points that all name one port make that port the
 default; with it, `Build` rejects contact points that all name one other port,
 unless discovery is off or client routes are set. `WithIgnoreEvents` replaces its complete
@@ -2113,8 +2117,8 @@ func (*ConfigBuilder) WithLocalDatacenter(dc string) *ConfigBuilder
 func (*ConfigBuilder) WithLocalRack(rack string) *ConfigBuilder
 func (*ConfigBuilder) WithOnlyHost(id cql.UUID) *ConfigBuilder
 func (*ConfigBuilder) WithHostFilter(keep func(metadata.HostSnapshot) bool) *ConfigBuilder
-func (*ConfigBuilder) WithConnectionsPerShard(n int) *ConfigBuilder
-func (*ConfigBuilder) WithConnectionsPerHost(n int) *ConfigBuilder
+func (*ConfigBuilder) WithPool(Pool) *ConfigBuilder // PerShard or PerHost; nil: PerShard{}
+func (*ConfigBuilder) WithConnectRetry(endpoint.ReconnectPolicy) *ConfigBuilder // nil: Connect tries once
 func (*ConfigBuilder) WithTLS(*tls.Config) *ConfigBuilder
 func (*ConfigBuilder) WithTLSSource(TLSSource) *ConfigBuilder
 func (*ConfigBuilder) WithTLSIdentity(func(endpoint.DialTarget) endpoint.TLSIdentity) *ConfigBuilder
@@ -2127,8 +2131,6 @@ func (*ConfigBuilder) WithAddressTranslator(endpoint.Translator) *ConfigBuilder
 func (*ConfigBuilder) WithDialer(endpoint.Dialer) *ConfigBuilder
 func (*ConfigBuilder) WithPartitioner(name string, routing.TokenPartitioner) *ConfigBuilder
 func (*ConfigBuilder) WithMetadataMode(metadata.Mode) *ConfigBuilder
-func (*ConfigBuilder) WithAdvancedShardAwareness(on bool) *ConfigBuilder
-func (*ConfigBuilder) WithShardAwareSourcePorts(first, last uint16) *ConfigBuilder // default 49152-65535
 func (*ConfigBuilder) WithReceiveBuffer(bytes int) *ConfigBuilder // 0 keeps the OS's
 func (*ConfigBuilder) WithSendBuffer(bytes int) *ConfigBuilder    // 0 keeps the OS's
 func (*ConfigBuilder) WithReadStallTimeout(time.Duration) *ConfigBuilder  // a socket that delivers nothing; not a request timeout
@@ -2139,6 +2141,15 @@ type Limits struct {
     MaxFrameBytes, MaxDecompressedBytes, MaxPagingStateBytes int64 // 256 MiB, 256 MiB, 16 MiB
     MaxMetadataDepth, MaxPagingStates int                         // 64, 65536
 }
+type Pool interface{ /* sealed: PerShard, PerHost */ }
+type PerShard struct {
+    Connections    int              // 0: 1
+    MaxExcess      cql.Option[int]  // unset: 2
+    SourcePorts    PortRange        // zero: 49152-65535
+    ShardAwarePort cql.Option[bool] // unset: true, false under WithClientRoutes
+}
+type PerHost struct{ Connections int } // 0: 1; never the shard-aware port
+type PortRange struct{ First, Last uint16 }
 func NewProfile() *ProfileBuilder
 func NewTLSFileSource(base *tls.Config, files TLSFiles, interval time.Duration) (*TLSFileSource, error) // 0: one minute
 type ClientRoute struct { ConnectionID, Hostname string }
@@ -2183,11 +2194,14 @@ files when a check fails. Context-taking hooks honor cancellation; synchronous c
 prompt/nonblocking and cannot reenter blocking Close/Wait. Client
 routes supply per-connection-ID endpoint overrides and disable advanced shard
 awareness (shard selection by source port through the shard-aware port), which
-their proxy breaks, unless `WithAdvancedShardAwareness(true)` is called. `WithConnectionsPerShard(n)` (default 1) and
-`WithConnectionsPerHost(n)` size the pool, the later call winning;
-`WithConnectionsPerHost` dials the regular port only and keeps no per-shard
-excess, so Build rejects it with `WithAdvancedShardAwareness(true)` or
-`WithMaxExcessPerShard`. Keepalive, orphan-stream budget, connection repair and
+their proxy breaks, unless `PerShard.ShardAwarePort` is set true.
+`WithPool(config.PerShard{...})` (the default) or `WithPool(config.PerHost{...})`
+sizes the pool, the later call replacing the whole setting; `PerHost` dials
+the regular port only and keeps no per-shard excess, which its type, not a
+cross-setter rule, expresses. `Build` rejects `PerShard.SourcePorts` where
+no shard-aware port is dialed. `WithConnectRetry` retries `Connect`'s first
+connection under an `endpoint.ReconnectPolicy`, never after rejected
+credentials, an invalid request or a `ServerMismatchError`. Keepalive, orphan-stream budget, connection repair and
 graceful close remain separate from user-request timeout.
 
 Errors live in package `cqlerr` and preserve `errors.Is`/`errors.As` and
@@ -2274,12 +2288,13 @@ type Peer struct {
     RPCAddress, BroadcastAddress, ListenAddress, PreferredIP netip.Addr
     Datacenter, Rack string
     HostID cql.UUID
-    Port, ShardAwarePort, ShardAwarePortTLS uint16
+    Port, TLSPort, ShardAwarePort, ShardAwarePortTLS uint16 // TLSPort: WithTLSPort
 }
 type Translator interface {
-    Translate(ctx context.Context, peer Peer, addr netip.AddrPort) (Address, error)
+    Translate(ctx context.Context, peer Peer, addr netip.AddrPort, kind PortKind) (Address, error)
 }
-type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort) (Address, error)
+type TranslatorFunc func(ctx context.Context, peer Peer, addr netip.AddrPort, kind PortKind) (Address, error)
+type PortKind uint8 // PortCQL, PortTLS, PortShardAware, PortShardAwareTLS
 type Address struct { Host string; Port uint16 } // Host: an IP address or a DNS name
 func AddressOf(netip.AddrPort) Address
 func (Address) String() string
@@ -2294,8 +2309,8 @@ type Provider interface {
     Start(ctx context.Context, host metadata.HostSnapshot, authenticator string) (Exchange, cql.Nullable[[]byte], error)
 }
 type Exchange interface {
-    Challenge(context.Context, cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error)
-    Success(context.Context, cql.Nullable[cql.Bytes]) error
+    Challenge(context.Context, cql.Nullable[[]byte]) (cql.Nullable[[]byte], error)
+    Success(context.Context, cql.Nullable[[]byte]) error
     Close()
 }
 func Password(username, password string, allowed ...string) Provider // none allowed: any authenticator class
@@ -2303,11 +2318,15 @@ func Password(username, password string, allowed ...string) Provider // none all
 
 The context-aware endpoint.Dialer contract applies to all new connections.
 DefaultDialer implements the raw target contract; DialerFunc adapts a
-function. A Translator returns `AddressOf(addr)` when no translation applies;
-an error fails that connection attempt like a dial error. A DNS host is
-resolved on every dial through the session resolver within the DNS timeout,
-as client route names are, keeping the address the node was dialed on while
-the name still resolves to it, and becomes the default TLS name. Exchange
+function. A Translator returns `AddressOf(addr)` when no translation applies.
+The driver asks it, on every dial, only for the endpoint that dial opens,
+named by its `PortKind`: a shard-aware port when the connection picks its
+shard by port, else the CQL or TLS port. An error fails the dial of a CQL or
+TLS port like a dial error; for a shard-aware port the dial falls back to the
+CQL or TLS port. A DNS host is resolved once per dial through the session
+resolver within the DNS timeout, as client route names are, keeping the
+address the node was dialed on while the name still resolves to it, and
+becomes the default TLS name of a TLS connection dialed on that endpoint. Exchange
 bytes are borrowed both ways: a server message is valid during the call, and
 a returned response stays unchanged until the exchange is called again. TCP endpoints and source ranges are selected before hooks;
 TLS containers,

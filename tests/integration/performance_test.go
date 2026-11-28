@@ -46,7 +46,7 @@ func TestPerformance(t *testing.T) {
 		runtime.GC()
 		initial := mem().HeapAlloc
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
-			c.WithConnectionsPerHost(8).WithHeartbeat(0, 0).WithMetadataRefresh(0)
+			c.WithPool(config.PerHost{Connections: 8}).WithHeartbeat(0, 0).WithMetadataRefresh(0)
 		})
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 		defer cancel()
@@ -325,8 +325,7 @@ func TestPerformance(t *testing.T) {
 			t.Fatal(e)
 		}
 		cfg := createV2Cluster(func(c *config.ConfigBuilder) {
-			c.WithConnectionsPerShard(1).
-				WithAdvancedShardAwareness(true).WithShardAwareSourcePorts(32768, 65535).
+			c.WithPool(config.PerShard{Connections: 1, ShardAwarePort: cql.Some(true), SourcePorts: config.PortRange{First: 32768, Last: 65535}}).
 				WithHeartbeat(30*time.Second, 30*time.Second).
 				WithMetadataRefresh(0)
 			c.WithDialer(endpoint.DialerFunc(func(ctx context.Context, target endpoint.DialTarget) (net.Conn, error) {

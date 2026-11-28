@@ -56,7 +56,7 @@ func ExampleTranslator() {
 		netip.MustParseAddr("203.0.113.10"): netip.MustParseAddr("10.0.0.10"),
 		netip.MustParseAddr("203.0.113.11"): netip.MustParseAddr("10.0.0.11"),
 	}
-	translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+	translator := endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 		if ip, ok := private[addr.Addr()]; ok {
 			return endpoint.AddressOf(netip.AddrPortFrom(ip, addr.Port())), nil
 		}
@@ -76,7 +76,7 @@ func ExampleTranslator() {
 // name on every dial and, over TLS, verifies the node's certificate against
 // the name instead of the node's IP address.
 func ExampleAddress() {
-	translator := endpoint.TranslatorFunc(func(_ context.Context, peer endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+	translator := endpoint.TranslatorFunc(func(_ context.Context, peer endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 		if peer.HostID.IsZero() {
 			return endpoint.AddressOf(addr), nil // a contact point, dialed as configured
 		}

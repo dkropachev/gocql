@@ -96,7 +96,7 @@ func TestTLSNameOfDiscoveredNode(t *testing.T) {
 	t.Run("TranslatedName", func(t *testing.T) {
 		connect(t, n, func(c *settings.Config) {
 			configure(c)
-			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort) (endpoint.Address, error) {
+			c.AddressTranslator = endpoint.TranslatorFunc(func(_ context.Context, _ endpoint.Peer, addr netip.AddrPort, _ endpoint.PortKind) (endpoint.Address, error) {
 				return endpoint.Address{Host: name, Port: addr.Port()}, nil
 			})
 		})

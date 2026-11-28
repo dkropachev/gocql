@@ -105,7 +105,7 @@ func testTableName(t testing.TB, parts ...string) string {
 }
 
 func staticAddressTranslator(newAddr netip.AddrPort) endpoint2.Translator {
-	return endpoint2.TranslatorFunc(func(context.Context, endpoint2.Peer, netip.AddrPort) (endpoint2.Address, error) {
+	return endpoint2.TranslatorFunc(func(context.Context, endpoint2.Peer, netip.AddrPort, endpoint2.PortKind) (endpoint2.Address, error) {
 		return endpoint2.AddressOf(newAddr), nil
 	})
 }

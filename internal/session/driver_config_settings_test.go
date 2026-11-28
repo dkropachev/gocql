@@ -152,7 +152,7 @@ func TestDriverConfigReportFromSettings(t *testing.T) {
 			// The fields the ConfigBuilder setters WithAuth, WithDialer,
 			// WithConnectTimeout, WithReadStallTimeout, WithWriteStallTimeout,
 			// WithNagle(true), WithTCPKeepalive, WithReceiveBuffer,
-			// WithSendBuffer, WithLinger, WithConnectionsPerHost,
+			// WithSendBuffer, WithLinger, WithPool(PerHost),
 			// WithMaxRequestsPerConnection, WithMaxOrphanedStreams, no reconnect
 			// policy (internal settings only), WithMetadataTimeout,
 			// WithSchemaAgreement and WithTimestampGenerator(nil) set, and a default

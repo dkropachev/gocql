@@ -46,7 +46,8 @@ says to set `ServerName` or use `WithTLSIdentity`. Choose one:
   `ChainOnly` with a check of your own.
 - Translate each node to a DNS name its certificate carries with
   `WithAddressTranslator`: a host name an `endpoint.Address` returns is
-  resolved on every dial and is the name the connection verifies.
+  resolved once per dial and is the name a connection dialed on that endpoint
+  verifies, so return names for the shard-aware `endpoint.PortKind`s too.
 
 The address translator's name, like a contact point's, replaces only the
 default: a `ServerName` in the config or an identity from `WithTLSIdentity`

@@ -102,6 +102,9 @@ type InternalClusterSettings struct {
 	ReconnectionPolicy pool.ReconnectionPolicy
 	// A reconnection policy to use for reconnecting when connecting to the cluster first time.
 	InitialReconnectionPolicy pool.ReconnectionPolicy
+	// ConnectRetry, when set, replaces InitialReconnectionPolicy: it gives
+	// the delay before each new attempt to open the control connection.
+	ConnectRetry endpoint2.ReconnectPolicy
 	// SslOpts configures TLS use when HostDialer is not set.
 	// SslOpts is ignored if HostDialer is set.
 	SslOpts *transport.SslOptions

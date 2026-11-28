@@ -63,7 +63,7 @@ func TestConfig(t *testing.T) {
 			}
 			for _, change := range []func(*settings.Config){func(c *settings.Config) { c.Pool.ConnectionsPerShard = 0 }, func(c *settings.Config) { c.Pool.MaxRequestsPerConnection = 0 }, func(c *settings.Config) { c.Pool.MaxOrphanedStreams = -1 }, func(c *settings.Config) { c.Pool.AdvancedShardAwareness.SourcePortStart = 0 }, func(c *settings.Config) {
 				c.Pool.AdvancedShardAwareness = settings.AdvancedShardAwarenessOptions{Enabled: true, SourcePortStart: 65535, SourcePortEnd: 49152}
-			}, func(c *settings.Config) { c.Linger = implCql.Option[time.Duration]{Value: time.Millisecond, Set: true} }} {
+			}, func(c *settings.Config) { c.Linger = implCql.Option[time.Duration]{Value: -time.Second, Set: true} }} {
 				invalid := settings.DefaultConfig("localhost")
 				change(&invalid)
 				if err := invalid.Validate(); err == nil {
@@ -93,7 +93,7 @@ func TestConfig(t *testing.T) {
 				t.Fatal(c.Metadata, p)
 			}
 			for _, edit := range []func(*settings.Config){func(c *settings.Config) { c.Metadata.AgreementTimeout = 0 }, func(c *settings.Config) { c.Metadata.AgreementPoll = 0 }, func(c *settings.Config) {
-				c.Metadata.ServerTimeout = implCql.Option[time.Duration]{Set: true, Value: time.Nanosecond}
+				c.Metadata.ServerTimeout = implCql.Option[time.Duration]{Set: true, Value: -time.Millisecond}
 			}} {
 				invalid := settings.DefaultConfig("localhost")
 				edit(&invalid)

@@ -47,7 +47,7 @@ func TestAuthAPI(t *testing.T) {
 			if err != nil || !token.Valid || !bytes.Equal(token.Value, []byte("\x00alice\x00secret")) {
 				t.Fatal(token, err)
 			}
-			if _, err := exchange.Challenge(context.Background(), cql.Nullable[cql.Bytes]{}); err == nil {
+			if _, err := exchange.Challenge(context.Background(), cql.Nullable[[]byte]{}); err == nil {
 				t.Fatal("unexpected challenge accepted")
 			}
 			exchange.Close()
@@ -71,11 +71,11 @@ func (p *v2TestAuthProvider) Start(context.Context, metadata.HostSnapshot, strin
 	p.exchanges = append(p.exchanges, e)
 	return e, cql.Nullable[[]byte]{Valid: true}, nil
 }
-func (e *v2TestAuthExchange) Challenge(_ context.Context, b cql.Nullable[cql.Bytes]) (cql.Nullable[[]byte], error) {
+func (e *v2TestAuthExchange) Challenge(_ context.Context, b cql.Nullable[[]byte]) (cql.Nullable[[]byte], error) {
 	e.challengeNull = !b.Valid
 	return cql.Nullable[[]byte]{}, nil
 }
-func (e *v2TestAuthExchange) Success(context.Context, cql.Nullable[cql.Bytes]) error {
+func (e *v2TestAuthExchange) Success(context.Context, cql.Nullable[[]byte]) error {
 	e.success = true
 	return nil
 }
